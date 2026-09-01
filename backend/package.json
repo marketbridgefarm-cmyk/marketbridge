@@ -1,10 +1,14 @@
 {
   "name": "marketbridge-backend",
   "version": "1.0.0",
-  "description": "MarketBridge API \u2014 Ethiopian agricultural & digital marketplace",
+  "description": "MarketBridge API — Ethiopian agricultural & digital marketplace",
   "main": "src/index.js",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
     "prisma:generate": "prisma generate",
