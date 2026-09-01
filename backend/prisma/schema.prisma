@@ -214,8 +214,6 @@ model Listing {
   inspectionRequests InspectionRequest[]
   orders Order[]
   ads Advertisement[]
-  payments Payment[]
-  digitalPurchases DigitalPurchase[]
   @@index([sellerId])
   @@index([category])
   @@index([status])
