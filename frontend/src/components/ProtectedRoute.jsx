@@ -1,0 +1,2 @@
+import React from 'react';import{Navigate}from'react-router-dom';import{useAuth}from'../context/AuthContext.jsx';
+export default function ProtectedRoute({children,role}){const{user,loading}=useAuth();if(loading)return <main className="section"><div className="container-wide loading">Loading account…</div></main>;if(!user)return <Navigate to="/login" replace/>;if(role&&!user.roles?.includes(role))return <Navigate to="/" replace/>;return children;}
