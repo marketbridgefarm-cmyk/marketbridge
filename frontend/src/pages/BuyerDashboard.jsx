@@ -517,6 +517,22 @@ export default function BuyerDashboard() {
                 <h2>
                   Offers I've made
                 </h2>
+                {acceptedOffers.length > 0 && (
+                  <div className="sd-notice" style={{ marginTop: 12 }}>
+                    {acceptedOffers.length === 1
+                      ? 'Your offer was accepted and an order was created.'
+                      : `${acceptedOffers.length} of your offers were accepted and orders were created.`}
+                    {' '}
+                    <button
+                      type="button"
+                      className="sd-btn sd-btn-primary"
+                      style={{ marginLeft: 8 }}
+                      onClick={() => setActiveTab('orders')}
+                    >
+                      View Orders
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -572,12 +588,29 @@ export default function BuyerDashboard() {
                         </td>
 
                         <td>
-                          <Link
-                            to={`/listings/${offer.listingId}`}
-                            className="sd-btn sd-btn-outline"
-                          >
-                            View listing
-                          </Link>
+                          {offer.status === 'ACCEPTED' && (() => {
+                            const matchingOrder = orders.find(
+                              (order) => order.listingId === offer.listingId && order.buyerId === user.id
+                            );
+                            return matchingOrder ? (
+                              <Link
+                                to={`/orders/${matchingOrder.id}`}
+                                className="sd-btn sd-btn-primary"
+                              >
+                                View Order
+                              </Link>
+                            ) : (
+                              <span className="sd-muted">Order is being created…</span>
+                            );
+                          })()}
+                          {offer.status !== 'ACCEPTED' && (
+                            <Link
+                              to={`/listings/${offer.listingId}`}
+                              className="sd-btn sd-btn-outline"
+                            >
+                              View listing
+                            </Link>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -677,6 +710,13 @@ export default function BuyerDashboard() {
                         </td>
 
                         <td>
+                          <Link
+                            to={`/orders/${order.id}`}
+                            className="sd-btn sd-btn-primary"
+                            style={{ marginRight: 6 }}
+                          >
+                            View Order
+                          </Link>
                           {renderTransportButtons(
                             order
                           )}
