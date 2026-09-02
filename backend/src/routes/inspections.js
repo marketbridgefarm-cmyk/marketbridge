@@ -1,568 +1,353 @@
-const express = require('express');
-const { body, validationResult } = require('express-validator');
-const prisma = require('../config/db');
-const { authenticate } = require('../middleware/auth');
-const { requireRole } = require('../middleware/roleCheck');
+const express = require("express");
+const { PrismaClient } = require("@prisma/client");
+const { requireAuth } = require("../middleware/auth");
+const { requireRole } = require("../middleware/roleCheck");
 
 const router = express.Router();
-
-const inspectionInclude = {
-  listing: {
-    select: {
-      id: true,
-      title: true,
-      cropType: true,
-      quantity: true,
-      unit: true,
-      location: true,
-      status: true,
-    },
-  },
-
-  requestedBy: {
-    select: {
-      id: true,
-      name: true,
-      location: true,
-      rating: true,
-    },
-  },
-
-  inspector: {
-    select: {
-      id: true,
-      name: true,
-      location: true,
-      rating: true,
-      verificationStatus: true,
-    },
-  },
-
-  report: true,
-};
+const prisma = new PrismaClient();
 
 
-// ============================================================
-// BUYER/SELLER INSPECTIONS
-// ============================================================
-
+/*
+  BUYER/SELLER INSPECTION REQUESTS
+*/
 router.get(
-  '/mine',
-  authenticate,
-  requireRole('BUYER', 'SELLER'),
+  "/mine",
+  requireAuth,
+  requireRole("BUYER", "SELLER"),
   async (req, res) => {
     try {
-      const orders =
-        await prisma.order.findMany({
-          where: {
-            OR: [
-              {
-                buyerId:
-                  req.user.id,
+      const requests = await prisma.inspectionRequest.findMany({
+        where: {
+          OR: [
+            {
+              requestedById: req.user.id,
+            },
+            {
+              listing: {
+                sellerId: req.user.id,
               },
-              {
-                sellerId:
-                  req.user.id,
-              },
-            ],
+            },
+            {
+              inspectorId: req.user.id,
+            },
+          ],
+        },
+        include: {
+          listing: true,
+          requestedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
           },
-
-          select: {
-            listingId: true,
+          inspector: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
           },
-        });
-
-      const listingIds =
-        orders.map(
-          (order) =>
-            order.listingId
-        );
-
-      const requests =
-        await prisma.inspectionRequest.findMany({
-          where: {
-            OR: [
-              {
-                requestedById:
-                  req.user.id,
-              },
-
-              ...(listingIds.length
-                ? [
-                    {
-                      listingId: {
-                        in: listingIds,
-                      },
-                    },
-                  ]
-                : []),
-            ],
-          },
-
-          include:
-            inspectionInclude,
-
-          orderBy: {
-            createdAt: 'desc',
-          },
-        });
-
-      res.json({
-        requests,
-        count:
-          requests.length,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
       });
-    } catch (error) {
-      console.error(
-        'MY INSPECTIONS ERROR:',
-        error
-      );
 
-      res.status(500).json({
-        error:
-          'Could not load your inspection requests',
+      return res.json(requests);
+    } catch (error) {
+      console.error("Get inspections error:", error);
+
+      return res.status(500).json({
+        error: "Failed to load inspections",
       });
     }
   }
 );
 
 
-// ============================================================
-// CREATE INSPECTION REQUEST
-// ============================================================
-
+/*
+  CREATE INSPECTION REQUEST
+*/
 router.post(
-  '/',
-  authenticate,
-  requireRole('SELLER', 'BUYER'),
-
-  [
-    body('listingId')
-      .notEmpty(),
-
-    body('mode')
-      .isIn([
-        'SELLER_REQUESTED',
-        'BUYER_REQUESTED',
-        'JOINT',
-      ]),
-  ],
-
+  "/",
+  requireAuth,
+  requireRole("BUYER", "SELLER"),
   async (req, res) => {
-    const errors =
-      validationResult(req);
-
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        errors:
-          errors.array(),
-      });
-    }
-
     try {
       const {
         listingId,
-        mode,
+        mode = "BUYER_REQUESTED",
         inspectorId,
       } = req.body;
 
-      const listing =
-        await prisma.listing.findUnique({
-          where: {
-            id: listingId,
-          },
+      if (!listingId) {
+        return res.status(400).json({
+          error: "listingId is required",
         });
+      }
+
+      const listing = await prisma.listing.findUnique({
+        where: {
+          id: listingId,
+        },
+      });
 
       if (!listing) {
         return res.status(404).json({
-          error:
-            'Listing not found',
+          error: "Listing not found",
+        });
+      }
+
+      if (!["SELLER_REQUESTED", "BUYER_REQUESTED", "JOINT"].includes(mode)) {
+        return res.status(400).json({
+          error: "Invalid inspection mode",
+        });
+      }
+
+      if (
+        mode === "SELLER_REQUESTED" &&
+        listing.sellerId !== req.user.id
+      ) {
+        return res.status(403).json({
+          error: "Only the seller can create a seller-requested inspection",
         });
       }
 
       if (inspectorId) {
-        const inspector =
-          await prisma.user.findUnique({
-            where: {
-              id: inspectorId,
-            },
-          });
+        const inspector = await prisma.user.findUnique({
+          where: {
+            id: inspectorId,
+          },
+        });
 
-        if (
-          !inspector ||
-          !inspector.roles.includes(
-            'INSPECTOR'
-          )
-        ) {
+        if (!inspector) {
+          return res.status(404).json({
+            error: "Inspector not found",
+          });
+        }
+
+        if (!inspector.roles?.includes("INSPECTOR")) {
           return res.status(400).json({
-            error:
-              'inspectorId does not belong to a registered inspector',
+            error: "Selected user is not an inspector",
           });
         }
       }
 
-      if (
-        mode ===
-          'SELLER_REQUESTED' &&
-        listing.sellerId !==
-          req.user.id
-      ) {
-        return res.status(403).json({
-          error:
-            'Only the listing seller can create a seller-requested inspection',
-        });
-      }
-
-      const request =
-        await prisma.inspectionRequest.create({
-          data: {
-            listingId,
-
-            requestedById:
-              req.user.id,
-
-            mode,
-
-            inspectorId:
-              inspectorId ||
-              null,
-
-            status:
-              inspectorId
-                ? 'ACCEPTED'
-                : 'REQUESTED',
-          },
-
-          include:
-            inspectionInclude,
-        });
-
-      res.status(201).json({
-        request,
-      });
-    } catch (error) {
-      console.error(
-        'CREATE INSPECTION ERROR:',
-        error
-      );
-
-      res.status(500).json({
-        error:
-          'Could not create inspection request',
-      });
-    }
-  }
-);
-
-
-// ============================================================
-// FIND INSPECTORS
-// ============================================================
-
-router.get(
-  '/inspectors',
-  authenticate,
-  async (req, res) => {
-    try {
-      const {
-        location,
-      } = req.query;
-
-      const inspectors =
-        await prisma.user.findMany({
-          where: {
-            roles: {
-              has: 'INSPECTOR',
+      const request = await prisma.inspectionRequest.create({
+        data: {
+          listingId,
+          requestedById: req.user.id,
+          mode,
+          inspectorId: inspectorId || null,
+          status: "REQUESTED",
+        },
+        include: {
+          listing: true,
+          requestedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
             },
-
-            ...(location && {
-              location: {
-                contains:
-                  location,
-
-                mode:
-                  'insensitive',
-              },
-            }),
           },
-
-          select: {
-            id: true,
-            name: true,
-            rating: true,
-            location: true,
-            verificationStatus: true,
+          inspector: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
           },
-        });
-
-      res.json({
-        inspectors,
+        },
       });
-    } catch (error) {
-      console.error(
-        'GET INSPECTORS ERROR:',
-        error
-      );
 
-      res.status(500).json({
-        error:
-          'Could not load inspectors',
+      return res.status(201).json(request);
+    } catch (error) {
+      console.error("Create inspection error:", error);
+
+      return res.status(500).json({
+        error: "Failed to create inspection request",
       });
     }
   }
 );
 
 
-// ============================================================
-// INSPECTOR ACCEPTS
-// ============================================================
+/*
+  GET AVAILABLE INSPECTORS
+*/
+router.get(
+  "/inspectors",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const inspectors = await prisma.user.findMany({
+        where: {
+          roles: {
+            has: "INSPECTOR",
+          },
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
 
+      return res.json(inspectors);
+    } catch (error) {
+      console.error("Get inspectors error:", error);
+
+      return res.status(500).json({
+        error: "Failed to load inspectors",
+      });
+    }
+  }
+);
+
+
+/*
+  INSPECTOR ACCEPTS REQUEST
+*/
 router.patch(
-  '/:id/accept',
-  authenticate,
-  requireRole('INSPECTOR'),
+  "/:id/accept",
+  requireAuth,
+  requireRole("INSPECTOR"),
   async (req, res) => {
     try {
-      const request =
-        await prisma.inspectionRequest.findUnique({
-          where: {
-            id: req.params.id,
-          },
-        });
+      const inspection = await prisma.inspectionRequest.findUnique({
+        where: {
+          id: req.params.id,
+        },
+      });
 
-      if (!request) {
+      if (!inspection) {
         return res.status(404).json({
-          error:
-            'Request not found',
+          error: "Inspection request not found",
         });
       }
 
       if (
-        request.status !==
-          'REQUESTED' ||
-        request.inspectorId
-      ) {
-        return res.status(400).json({
-          error:
-            `This request is already ${request.inspectorId ? 'assigned' : request.status.toLowerCase()} and cannot be accepted`,
-        });
-      }
-
-      const claim =
-        await prisma.inspectionRequest.updateMany({
-          where: {
-            id: req.params.id,
-            status: 'REQUESTED',
-            inspectorId: null,
-          },
-
-          data: {
-            inspectorId:
-              req.user.id,
-
-            status:
-              'ACCEPTED',
-          },
-        });
-
-      if (
-        claim.count === 0
+        inspection.status !== "REQUESTED"
       ) {
         return res.status(409).json({
-          error:
-            'This request was just claimed by another inspector',
+          error: "Inspection request is no longer available",
         });
       }
 
-      const updated =
-        await prisma.inspectionRequest.findUnique({
-          where: {
-            id: req.params.id,
+      const updated = await prisma.inspectionRequest.update({
+        where: {
+          id: inspection.id,
+        },
+        data: {
+          inspectorId: req.user.id,
+          status: "ACCEPTED",
+        },
+        include: {
+          listing: true,
+          requestedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
           },
-
-          include:
-            inspectionInclude,
-        });
-
-      res.json({
-        request: updated,
+          inspector: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
       });
-    } catch (error) {
-      console.error(
-        'ACCEPT INSPECTION ERROR:',
-        error
-      );
 
-      res.status(500).json({
-        error:
-          'Could not accept inspection request',
+      return res.json(updated);
+    } catch (error) {
+      console.error("Accept inspection error:", error);
+
+      return res.status(500).json({
+        error: "Failed to accept inspection",
       });
     }
   }
 );
 
 
-// ============================================================
-// INSPECTION REPORT
-// ============================================================
-
+/*
+  INSPECTOR SUBMITS REPORT
+*/
 router.post(
-  '/:id/report',
-  authenticate,
-  requireRole('INSPECTOR'),
-
-  [
-    body('quantity')
-      .isFloat({ gt: 0 }),
-  ],
-
+  "/:id/report",
+  requireAuth,
+  requireRole("INSPECTOR"),
   async (req, res) => {
-    const errors =
-      validationResult(req);
-
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        errors:
-          errors.array(),
-      });
-    }
-
     try {
-      const request =
-        await prisma.inspectionRequest.findUnique({
-          where: {
-            id: req.params.id,
-          },
-        });
+      const { report } = req.body;
 
-      if (!request) {
-        return res.status(404).json({
-          error:
-            'Request not found',
+      if (!report || !String(report).trim()) {
+        return res.status(400).json({
+          error: "Inspection report is required",
         });
       }
 
-      if (
-        request.inspectorId !==
-        req.user.id
-      ) {
-        return res.status(403).json({
-          error:
-            'Only the assigned inspector can submit this report',
-        });
-      }
-
-      if (
-        request.status ===
-        'COMPLETED'
-      ) {
-        return res.status(409).json({
-          error:
-            'Inspection is already completed',
-        });
-      }
-
-      const {
-        quantity,
-        grade,
-        moisture,
-        visibleDefects,
-        damageNotes,
-        packagingNotes,
-        photos,
-        videos,
-        gpsLocation,
-      } = req.body;
-
-      const report =
-        await prisma.$transaction(
-          async (tx) => {
-            const created =
-              await tx.inspectionReport.create({
-                data: {
-                  requestId:
-                    request.id,
-
-                  quantity:
-                    Number(quantity),
-
-                  grade:
-                    grade ||
-                    null,
-
-                  moisture:
-                    moisture ===
-                      undefined ||
-                    moisture === ''
-                      ? null
-                      : Number(
-                          moisture
-                        ),
-
-                  visibleDefects:
-                    visibleDefects ||
-                    null,
-
-                  damageNotes:
-                    damageNotes ||
-                    null,
-
-                  packagingNotes:
-                    packagingNotes ||
-                    null,
-
-                  photos:
-                    Array.isArray(
-                      photos
-                    )
-                      ? photos
-                      : [],
-
-                  videos:
-                    Array.isArray(
-                      videos
-                    )
-                      ? videos
-                      : [],
-
-                  gpsLocation:
-                    gpsLocation ||
-                    null,
-                },
-              });
-
-            await tx.inspectionRequest.update({
-              where: {
-                id:
-                  request.id,
-              },
-
-              data: {
-                status:
-                  'COMPLETED',
-              },
-            });
-
-            return created;
-          }
-        );
-
-      res.status(201).json({
-        report,
+      const inspection = await prisma.inspectionRequest.findUnique({
+        where: {
+          id: req.params.id,
+        },
       });
-    } catch (error) {
-      console.error(
-        'INSPECTION REPORT ERROR:',
-        error
-      );
 
-      res.status(500).json({
-        error:
-          'Could not submit inspection report',
+      if (!inspection) {
+        return res.status(404).json({
+          error: "Inspection request not found",
+        });
+      }
+
+      if (inspection.inspectorId !== req.user.id) {
+        return res.status(403).json({
+          error: "You are not assigned to this inspection",
+        });
+      }
+
+      const updated = await prisma.inspectionRequest.update({
+        where: {
+          id: inspection.id,
+        },
+        data: {
+          report: String(report).trim(),
+          status: "COMPLETED",
+        },
+        include: {
+          listing: true,
+          requestedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          inspector: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      return res.json(updated);
+    } catch (error) {
+      console.error("Submit inspection report error:", error);
+
+      return res.status(500).json({
+        error: "Failed to submit inspection report",
       });
     }
   }
 );
-
 
 module.exports = router;
