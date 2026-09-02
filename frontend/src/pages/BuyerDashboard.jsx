@@ -1,782 +1,1263 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import api from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import api from '../api/client';
+import { useAuth } from '../context/AuthContext.jsx';
+
+const TABS = [
+  { id: 'offers', label: 'My Offers' },
+  { id: 'orders', label: 'My Orders' },
+  { id: 'transport', label: 'Transport' },
+];
+
+const EMPTY_TRANSPORT_FORM = {
+  party: 'Buyer',
+  destination: '',
+  capacity: '',
+  requirements: '',
+  truckId: '',
+};
+
+function formatETB(value) {
+  const number = Number(value || 0);
+  return `${number.toLocaleString()} ETB`;
+}
+
+function shortId(id) {
+  return id ? id.slice(0, 8) : '—';
+}
+
+function transportLabel(job) {
+  if (!job) return 'Not arranged';
+
+  const party =
+    job.arrangingParty === 'JOINT'
+      ? 'Joint'
+      : job.arrangingParty === 'BUYER'
+        ? 'Buyer'
+        : 'Seller';
+
+  const method =
+    job.method === 'OWN_TRUCK'
+      ? 'Own truck'
+      : 'Hired transporter';
+
+  return `${party} — ${method}`;
+}
+
+function statusClass(status) {
+  if (status === 'COMPLETED' || status === 'DELIVERED') return '';
+  if (status === 'CANCELLED' || status === 'DISPUTED') return 'sd-warn';
+  return 'sd-blue';
+}
 
 export default function BuyerDashboard() {
   const { user } = useAuth();
 
   const [offers, setOffers] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [inspections, setInspections] = useState([]);
   const [trucks, setTrucks] = useState([]);
 
-  const [activeTab, setActiveTab] = useState("offers");
+  const [activeTab, setActiveTab] = useState('offers');
+
+  const [toastMsg, setToastMsg] = useState('');
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const loadDashboard = useCallback(
-    async (silent = false) => {
-      if (!user?.id) {
-        return;
-      }
+  const [transportTarget, setTransportTarget] = useState(null);
+  const [transportForm, setTransportForm] = useState(EMPTY_TRANSPORT_FORM);
 
-      if (silent) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+  const transportModalRef = useRef(null);
 
-      setError("");
+  const toast = useCallback((msg) => {
+    setToastMsg(msg);
 
-      try {
-        /*
-          Load the critical buyer data independently.
-
-          Offers and orders are more important than inspections.
-          A failure in inspections must NOT blank the dashboard.
-        */
-        const [offersResult, ordersResult] = await Promise.allSettled([
-          api.get("/offers/mine"),
-          api.get("/orders"),
-        ]);
-
-        let hadCriticalError = false;
-
-        if (offersResult.status === "fulfilled") {
-          const data = offersResult.value?.data;
-
-          setOffers(
-            Array.isArray(data)
-              ? data
-              : Array.isArray(data?.offers)
-                ? data.offers
-                : []
-          );
-        } else {
-          hadCriticalError = true;
-          console.error("Failed to load offers:", offersResult.reason);
-        }
-
-        if (ordersResult.status === "fulfilled") {
-          const data = ordersResult.value?.data;
-
-          setOrders(
-            Array.isArray(data)
-              ? data
-              : Array.isArray(data?.orders)
-                ? data.orders
-                : []
-          );
-        } else {
-          hadCriticalError = true;
-          console.error("Failed to load orders:", ordersResult.reason);
-        }
-
-        /*
-          Inspection data is optional.
-        */
-        try {
-          const inspectionResponse = await api.get("/inspections/mine");
-
-          const data = inspectionResponse?.data;
-
-          setInspections(
-            Array.isArray(data)
-              ? data
-              : Array.isArray(data?.inspections)
-                ? data.inspections
-                : []
-          );
-        } catch (inspectionError) {
-          console.warn(
-            "Inspection endpoint unavailable:",
-            inspectionError
-          );
-
-          /*
-            Do not destroy the dashboard because inspection loading
-            failed.
-          */
-          setInspections([]);
-        }
-
-        /*
-          Transport/truck information is optional.
-        */
-        try {
-          const truckResponse = await api.get("/transport/trucks/mine");
-
-          const data = truckResponse?.data;
-
-          setTrucks(
-            Array.isArray(data)
-              ? data
-              : Array.isArray(data?.trucks)
-                ? data.trucks
-                : []
-          );
-        } catch (truckError) {
-          console.warn(
-            "Truck information unavailable:",
-            truckError
-          );
-
-          setTrucks([]);
-        }
-
-        if (hadCriticalError) {
-          setError(
-            "Some dashboard information could not be loaded. Please refresh."
-          );
-        }
-      } catch (err) {
-        console.error("Buyer dashboard error:", err);
-
-        setError(
-          err?.response?.data?.error ||
-            err?.message ||
-            "Failed to load buyer dashboard"
-        );
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [user?.id]
-  );
-
-
-  useEffect(() => {
-    loadDashboard(false);
-  }, [loadDashboard]);
-
+    window.setTimeout(() => {
+      setToastMsg('');
+    }, 2500);
+  }, []);
 
   /*
-    Automatically refresh every 10 seconds.
+   * Load buyer data.
+   *
+   * Orders are filtered again on the frontend for safety, although
+   * /orders already returns orders belonging to the authenticated user.
+   */
+  const loadAll = useCallback(async () => {
+    if (!user?.id) return;
 
-    This means the buyer does not need to logout/login after the
-    seller accepts the offer.
-  */
+    setLoading(true);
+
+    try {
+      const requests = [
+        api.get('/offers/mine'),
+        api.get('/orders'),
+      ];
+
+      /*
+       * A buyer can also be a TRUCK_OWNER. In that case the same
+       * account may have trucks that can be used for OWN_TRUCK.
+       *
+       * If the account is not a TRUCK_OWNER, don't call the protected
+       * truck-owner endpoint.
+       */
+      if (user.roles?.includes('TRUCK_OWNER')) {
+        requests.push(api.get('/transport/trucks/mine'));
+      }
+
+      const results = await Promise.all(requests);
+
+      const offersRes = results[0];
+      const ordersRes = results[1];
+      const trucksRes = results[2];
+
+      setOffers(offersRes.data?.offers || []);
+
+      const buyerOrders = (ordersRes.data?.orders || []).filter(
+        (order) => order.buyerId === user.id
+      );
+
+      setOrders(buyerOrders);
+
+      if (trucksRes) {
+        setTrucks(trucksRes.data?.trucks || []);
+      } else {
+        setTrucks([]);
+      }
+    } catch (err) {
+      console.error('Buyer dashboard load error:', err);
+      toast(
+        err.response?.data?.error ||
+          'Could not load your buyer dashboard.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id, user?.roles, toast]);
+
   useEffect(() => {
-    if (!user?.id) {
-      return undefined;
+    loadAll();
+  }, [loadAll]);
+
+  const pendingOffers = offers.filter(
+    (offer) =>
+      offer.status === 'PENDING' ||
+      offer.status === 'COUNTERED'
+  );
+
+  const acceptedOffers = offers.filter(
+    (offer) => offer.status === 'ACCEPTED'
+  );
+
+  const activeOrders = orders.filter(
+    (order) =>
+      !['COMPLETED', 'CANCELLED'].includes(order.status)
+  );
+
+  const completedOrders = orders.filter(
+    (order) => order.status === 'COMPLETED'
+  );
+
+  const totalSpend = completedOrders.reduce(
+    (sum, order) => sum + Number(order.finalPrice || 0),
+    0
+  );
+
+  const ordersWithoutTransport = orders.filter(
+    (order) => !order.transportJob
+  );
+
+  /*
+   * Open transport modal.
+   *
+   * method:
+   *   hire = HIRE_TRANSPORTER
+   *   own  = OWN_TRUCK
+   */
+  function openTransportModal(order, method) {
+    if (!order) return;
+
+    const defaultDestination =
+      order.destination ||
+      '';
+
+    setTransportTarget({
+      order,
+      method,
+    });
+
+    setTransportForm({
+      ...EMPTY_TRANSPORT_FORM,
+      party: 'Buyer',
+      destination: defaultDestination,
+    });
+
+    window.setTimeout(() => {
+      transportModalRef.current?.showModal();
+    }, 0);
+  }
+
+  function closeTransportModal() {
+    transportModalRef.current?.close();
+    setTransportTarget(null);
+    setTransportForm(EMPTY_TRANSPORT_FORM);
+  }
+
+  function handleTransportChange(event) {
+    const { name, value } = event.target;
+
+    setTransportForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+  }
+
+  /*
+   * Create the transport record.
+   *
+   * IMPORTANT:
+   *
+   * Buyer -> Hire Transport:
+   *   method = HIRE_TRANSPORTER
+   *   truckOwnerId is NOT selected here.
+   *
+   * The request becomes REQUESTED and appears in the Truck Owner
+   * Dashboard under "Available Jobs".
+   *
+   * Buyer -> Own Truck:
+   *   method = OWN_TRUCK
+   *   selected truckId is sent.
+   */
+  async function submitTransport(event) {
+    event.preventDefault();
+
+    if (!transportTarget?.order) {
+      toast('No order selected.');
+      return;
     }
 
-    const timer = setInterval(() => {
-      loadDashboard(true);
-    }, 10000);
+    const order = transportTarget.order;
 
-    return () => clearInterval(timer);
-  }, [user?.id, loadDashboard]);
-
-
-  const buyerOrders = useMemo(() => {
-    return orders.filter((order) => {
-      return !order.buyerId || order.buyerId === user?.id;
-    });
-  }, [orders, user?.id]);
-
-
-  const acceptedOffers = useMemo(() => {
-    return offers.filter(
-      (offer) => offer.status === "ACCEPTED"
-    );
-  }, [offers]);
-
-
-  const pendingOffers = useMemo(() => {
-    return offers.filter(
-      (offer) =>
-        offer.status === "PENDING" ||
-        offer.status === "COUNTERED"
-    );
-  }, [offers]);
-
-
-  const activeInspections = useMemo(() => {
-    return inspections.filter(
-      (inspection) =>
-        inspection.status !== "COMPLETED" &&
-        inspection.status !== "CANCELLED"
-    );
-  }, [inspections]);
-
-
-  const formatMoney = (value) => {
-    const amount = Number(value);
-
-    if (!Number.isFinite(amount)) {
-      return "—";
+    if (!transportForm.destination.trim()) {
+      toast('Please enter the delivery destination.');
+      return;
     }
 
-    return amount.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  };
+    if (
+      transportTarget.method === 'own' &&
+      !transportForm.truckId
+    ) {
+      toast('Please select your truck.');
+      return;
+    }
 
+    const partyMap = {
+      Buyer: 'BUYER',
+      Seller: 'SELLER',
+      'Joint-agreed': 'JOINT',
+    };
 
-  const getListingTitle = (item) => {
-    return (
-      item?.listing?.title ||
-      item?.listing?.name ||
-      item?.title ||
-      "Listing"
+    const isHire =
+      transportTarget.method === 'hire';
+
+    const method = isHire
+      ? 'HIRE_TRANSPORTER'
+      : 'OWN_TRUCK';
+
+    const payload = {
+      orderId: order.id,
+
+      arrangingParty:
+        partyMap[transportForm.party] || 'BUYER',
+
+      method,
+
+      pickupLocation:
+        order.listing?.location ||
+        'Farm / seller location',
+
+      destination:
+        transportForm.destination.trim(),
+
+      load:
+        order.listing?.cropType ||
+        'Agricultural produce',
+
+      requiredCapacity:
+        transportForm.capacity
+          ? Number(transportForm.capacity)
+          : undefined,
+
+      specialRequirements:
+        transportForm.requirements.trim() ||
+        undefined,
+    };
+
+    /*
+     * Only OWN_TRUCK receives a truckId.
+     *
+     * HIRE_TRANSPORTER deliberately leaves truckId null.
+     * A registered truck owner will later accept the open request.
+     */
+    if (!isHire) {
+      payload.truckId = transportForm.truckId;
+    }
+
+    try {
+      setSubmitting(true);
+
+      await api.post('/transport', payload);
+
+      closeTransportModal();
+
+      toast(
+        isHire
+          ? 'Transport request sent to registered truck owners.'
+          : 'Your own-truck transport record was created.'
+      );
+
+      await loadAll();
+    } catch (err) {
+      console.error('Transport creation error:', err);
+
+      toast(
+        err.response?.data?.error ||
+          'Could not create transport request.'
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function confirmReceipt(orderId) {
+    if (!orderId) return;
+
+    const confirmed = window.confirm(
+      'Confirm that you received this order? This will mark the order as COMPLETED.'
     );
-  };
 
+    if (!confirmed) return;
 
-  const getListingImage = (item) => {
+    try {
+      setSubmitting(true);
+
+      await api.patch(
+        `/orders/${orderId}/confirm-receipt`
+      );
+
+      toast(
+        'Receipt confirmed. Order completed.'
+      );
+
+      await loadAll();
+    } catch (err) {
+      console.error('Receipt confirmation error:', err);
+
+      toast(
+        err.response?.data?.error ||
+          'Could not confirm receipt.'
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  /*
+   * Only orders where transport has not yet been arranged can
+   * receive a new transport record.
+   */
+  function renderTransportButtons(order) {
+    if (order.transportJob) {
+      return (
+        <span className="sd-muted">
+          Transport already arranged
+        </span>
+      );
+    }
+
+    const canUseOwnTruck =
+      user?.roles?.includes('TRUCK_OWNER') &&
+      trucks.length > 0;
+
     return (
-      item?.listing?.imageUrl ||
-      item?.listing?.images?.[0]?.url ||
-      item?.listing?.images?.[0] ||
-      null
-    );
-  };
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+        }}
+      >
+        <button
+          type="button"
+          className="sd-btn sd-btn-primary"
+          onClick={() =>
+            openTransportModal(order, 'hire')
+          }
+          disabled={submitting}
+        >
+          Hire Transport
+        </button>
 
-
-  if (loading) {
-    return (
-      <div className="dashboard-page">
-        <div className="sd-panel">
-          <p>Loading your buyer dashboard...</p>
-        </div>
+        {canUseOwnTruck && (
+          <button
+            type="button"
+            className="sd-btn sd-btn-outline"
+            onClick={() =>
+              openTransportModal(order, 'own')
+            }
+            disabled={submitting}
+          >
+            Use My Truck
+          </button>
+        )}
       </div>
     );
   }
 
-
   return (
-    <div className="dashboard-page">
-      <div className="dashboard-shell">
+    <div className="sd-dashboard">
+      {/* =========================================================
+          HEADER / SUMMARY
+      ========================================================== */}
 
-        <div className="dashboard-header">
-          <div>
-            <div className="sd-eyebrow">
-              MARKETBRIDGE
-            </div>
+      <section>
+        <span className="sd-eyebrow">
+          BUYER DASHBOARD
+        </span>
 
-            <h1>Buyer Dashboard</h1>
+        <h1>
+          Your offers, orders and deliveries in one place.
+        </h1>
 
-            <p>
-              Welcome{user?.name ? `, ${user.name}` : ""}.
-              Manage your offers, purchases, inspections and transport.
-            </p>
-          </div>
+        <p
+          className="sd-muted"
+          style={{ maxWidth: 780 }}
+        >
+          Track negotiations, manage purchases, arrange
+          transport through MarketBridge, and confirm receipt
+          when your produce arrives.
+        </p>
 
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => loadDashboard(true)}
-            disabled={refreshing}
+        <div className="sd-actions">
+          <Link
+            to="/listings"
+            className="sd-btn sd-btn-primary"
           >
-            {refreshing ? "Refreshing..." : "Refresh"}
-          </button>
+            Browse listings
+          </Link>
+
+          <Link
+            to="/digital"
+            className="sd-btn sd-btn-outline"
+          >
+            Browse digital
+          </Link>
         </div>
 
-
-        {error && (
-          <div className="alert alert-warning">
-            {error}
-          </div>
-        )}
-
-
-        {/* IMPORTANT ACCEPTED OFFER NOTICE */}
-        {acceptedOffers.length > 0 && (
-          <div className="alert alert-success">
-            <strong>Offer accepted.</strong>{" "}
-            {acceptedOffers.map((offer) => {
-              const order = offer.order;
-
-              return (
-                <div key={offer.id} style={{ marginTop: 8 }}>
-                  <span>
-                    {getListingTitle(offer)}
-                  </span>
-
-                  {order ? (
-                    <>
-                      {" — "}
-                      <strong>Order created.</strong>{" "}
-
-                      <Link
-                        to={`/orders/${order.id}`}
-                        className="btn btn-sm btn-primary"
-                      >
-                        View Order
-                      </Link>
-                    </>
-                  ) : (
-                    <span>
-                      {" — "}Creating your order...
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-
-        {/* STATS */}
-        <div className="dashboard-stats">
-
-          <div className="sd-panel">
-            <div className="sd-eyebrow">
-              OFFERS
-            </div>
-
-            <h2>{offers.length}</h2>
-
-            <p>Total offers</p>
+        <div className="sd-stat-grid">
+          <div className="sd-stat">
+            <span>PENDING OFFERS</span>
+            <b>{pendingOffers.length}</b>
           </div>
 
-
-          <div className="sd-panel">
-            <div className="sd-eyebrow">
-              PENDING
-            </div>
-
-            <h2>{pendingOffers.length}</h2>
-
-            <p>Offers awaiting response</p>
+          <div className="sd-stat">
+            <span>ACCEPTED OFFERS</span>
+            <b>{acceptedOffers.length}</b>
           </div>
 
-
-          <div className="sd-panel">
-            <div className="sd-eyebrow">
-              PURCHASES
-            </div>
-
-            <h2>{buyerOrders.length}</h2>
-
-            <p>Your orders</p>
+          <div className="sd-stat">
+            <span>ACTIVE ORDERS</span>
+            <b>{activeOrders.length}</b>
           </div>
 
-
-          <div className="sd-panel">
-            <div className="sd-eyebrow">
-              INSPECTIONS
-            </div>
-
-            <h2>{activeInspections.length}</h2>
-
-            <p>Active inspections</p>
+          <div className="sd-stat">
+            <span>TOTAL SPEND (ETB)</span>
+            <b>
+              {totalSpend.toLocaleString()}
+            </b>
           </div>
+        </div>
+      </section>
 
+      {/* =========================================================
+          MAIN TABS
+      ========================================================== */}
+
+      <section>
+        <div className="sd-tabs">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`sd-tab ${
+                activeTab === tab.id
+                  ? 'sd-active'
+                  : ''
+              }`}
+              onClick={() =>
+                setActiveTab(tab.id)
+              }
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
+        {/* =======================================================
+            OFFERS
+        ======================================================== */}
 
-        {/* TABS */}
-        <div className="sd-panel">
+        {activeTab === 'offers' && (
+          <div>
+            <div className="sd-toolbar">
+              <div>
+                <span className="sd-eyebrow">
+                  NEGOTIATIONS
+                </span>
 
-          <div className="sd-tabs">
+                <h2>
+                  Offers I've made
+                </h2>
+              </div>
+            </div>
 
-            <button
-              type="button"
-              className={
-                activeTab === "offers"
-                  ? "sd-tab active"
-                  : "sd-tab"
-              }
-              onClick={() => setActiveTab("offers")}
-            >
-              Offers
-            </button>
-
-
-            <button
-              type="button"
-              className={
-                activeTab === "orders"
-                  ? "sd-tab active"
-                  : "sd-tab"
-              }
-              onClick={() => setActiveTab("orders")}
-            >
-              Orders
-            </button>
-
-
-            <button
-              type="button"
-              className={
-                activeTab === "inspections"
-                  ? "sd-tab active"
-                  : "sd-tab"
-              }
-              onClick={() => setActiveTab("inspections")}
-            >
-              Inspections
-            </button>
-
-
-            <button
-              type="button"
-              className={
-                activeTab === "transport"
-                  ? "sd-tab active"
-                  : "sd-tab"
-              }
-              onClick={() => setActiveTab("transport")}
-            >
-              Transport
-            </button>
-
-          </div>
-
-
-          {/* OFFERS */}
-          {activeTab === "offers" && (
-            <div>
-
-              <h2>My Offers</h2>
-
-              {offers.length === 0 ? (
-                <div className="empty-state">
-                  <p>You have not made any offers yet.</p>
-
-                  <Link
-                    to="/listings"
-                    className="btn btn-primary"
-                  >
-                    Browse Listings
-                  </Link>
-                </div>
+            <div className="sd-panel sd-table-wrap">
+              {loading ? (
+                <p>Loading offers...</p>
               ) : (
-                <div className="dashboard-list">
+                <table className="sd-table">
+                  <thead>
+                    <tr>
+                      <th>Produce</th>
+                      <th>My Offer</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
 
-                  {offers.map((offer) => {
-                    const image = getListingImage(offer);
+                  <tbody>
+                    {offers.map((offer) => (
+                      <tr key={offer.id}>
+                        <td>
+                          {offer.listing?.cropType ||
+                            'Produce'}
+                        </td>
 
-                    return (
-                      <div
-                        className="dashboard-list-item"
-                        key={offer.id}
-                      >
-
-                        {image && (
-                          <img
-                            src={image}
-                            alt={getListingTitle(offer)}
-                            className="dashboard-thumb"
-                          />
-                        )}
-
-                        <div className="dashboard-list-content">
-
-                          <h3>
-                            {getListingTitle(offer)}
-                          </h3>
-
-                          <p>
-                            Your offer:{" "}
-                            <strong>
-                              {formatMoney(offer.amount)}
-                            </strong>
-                          </p>
+                        <td>
+                          {formatETB(offer.amount)}
 
                           {offer.counterAmount != null && (
-                            <p>
-                              Counter offer:{" "}
-                              <strong>
-                                {formatMoney(
+                            <>
+                              {' '}
+                              <span className="sd-muted">
+                                (countered:{' '}
+                                {formatETB(
                                   offer.counterAmount
                                 )}
-                              </strong>
-                            </p>
-                          )}
-
-                          <p>
-                            Status:{" "}
-                            <strong>
-                              {offer.status}
-                            </strong>
-                          </p>
-
-                        </div>
-
-
-                        <div className="dashboard-list-actions">
-
-                          {offer.status === "ACCEPTED" && (
-                            offer.order ? (
-                              <Link
-                                to={`/orders/${offer.order.id}`}
-                                className="btn btn-primary"
-                              >
-                                View Order
-                              </Link>
-                            ) : (
-                              <span className="badge badge-success">
-                                Order being created
+                                )
                               </span>
-                            )
+                            </>
+                          )}
+                        </td>
+
+                        <td>
+                          <span
+                            className={`sd-badge ${
+                              statusClass(
+                                offer.status
+                              )
+                            }`}
+                          >
+                            {offer.status}
+                          </span>
+                        </td>
+
+                        <td>
+                          <Link
+                            to={`/listings/${offer.listingId}`}
+                            className="sd-btn sd-btn-outline"
+                          >
+                            View listing
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+
+                    {offers.length === 0 && (
+                      <tr>
+                        <td colSpan="4">
+                          No offers yet.{' '}
+                          <Link to="/listings">
+                            Browse listings
+                          </Link>{' '}
+                          to make one.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* =======================================================
+            ORDERS
+        ======================================================== */}
+
+        {activeTab === 'orders' && (
+          <div>
+            <div className="sd-toolbar">
+              <div>
+                <span className="sd-eyebrow">
+                  ORDERS
+                </span>
+
+                <h2>
+                  My purchases
+                </h2>
+              </div>
+            </div>
+
+            <div className="sd-panel sd-table-wrap">
+              {loading ? (
+                <p>Loading orders...</p>
+              ) : (
+                <table className="sd-table">
+                  <thead>
+                    <tr>
+                      <th>Order</th>
+                      <th>Produce</th>
+                      <th>Seller</th>
+                      <th>Value</th>
+                      <th>Transport</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {orders.map((order) => (
+                      <tr key={order.id}>
+                        <td>
+                          {shortId(order.id)}
+                        </td>
+
+                        <td>
+                          {order.listing?.cropType ||
+                            'Produce'}
+                        </td>
+
+                        <td>
+                          {order.seller?.name ||
+                            '—'}
+                        </td>
+
+                        <td>
+                          {formatETB(
+                            order.finalPrice
+                          )}
+                        </td>
+
+                        <td>
+                          {order.transportJob
+                            ? transportLabel(
+                                order.transportJob
+                              )
+                            : 'Not arranged'}
+                        </td>
+
+                        <td>
+                          <span
+                            className={`sd-badge ${statusClass(
+                              order.status
+                            )}`}
+                          >
+                            {order.status}
+                          </span>
+                        </td>
+
+                        <td>
+                          {renderTransportButtons(
+                            order
                           )}
 
-                        </div>
-
-                      </div>
-                    );
-                  })}
-
-                </div>
-              )}
-
-            </div>
-          )}
-
-
-          {/* ORDERS */}
-          {activeTab === "orders" && (
-            <div>
-
-              <h2>My Orders</h2>
-
-              {buyerOrders.length === 0 ? (
-                <div className="empty-state">
-                  <p>
-                    No orders yet. When a seller accepts one
-                    of your offers, your order will appear here.
-                  </p>
-                </div>
-              ) : (
-                <div className="dashboard-list">
-
-                  {buyerOrders.map((order) => {
-
-                    const title =
-                      order?.listing?.title ||
-                      order?.listing?.name ||
-                      "Order";
-
-                    return (
-                      <div
-                        className="dashboard-list-item"
-                        key={order.id}
-                      >
-
-                        <div className="dashboard-list-content">
-
-                          <h3>{title}</h3>
-
-                          <p>
-                            Order ID:{" "}
-                            <strong>
-                              {order.id}
-                            </strong>
-                          </p>
-
-                          <p>
-                            Price:{" "}
-                            <strong>
-                              {formatMoney(
-                                order.finalPrice
-                              )}
-                            </strong>
-                          </p>
-
-                          <p>
-                            Status:{" "}
-                            <strong>
-                              {order.status}
-                            </strong>
-                          </p>
-
-                        </div>
-
-
-                        <div className="dashboard-list-actions">
-
-                          <Link
-                            to={`/orders/${order.id}`}
-                            className="btn btn-primary"
-                          >
-                            View Order
-                          </Link>
-
-
-                          {order.status !== "CANCELLED" &&
-                            order.status !== "COMPLETED" && (
-                              <Link
-                                to={`/orders/${order.id}/transport`}
-                                className="btn btn-secondary"
-                              >
-                                Arrange Transport
-                              </Link>
-                            )}
-
-                        </div>
-
-                      </div>
-                    );
-                  })}
-
-                </div>
-              )}
-
-            </div>
-          )}
-
-
-          {/* INSPECTIONS */}
-          {activeTab === "inspections" && (
-            <div>
-
-              <h2>Inspections</h2>
-
-              {inspections.length === 0 ? (
-                <div className="empty-state">
-                  <p>
-                    No inspection requests yet.
-                  </p>
-
-                  {buyerOrders.length > 0 && (
-                    <p>
-                      Open an order to request an inspection.
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="dashboard-list">
-
-                  {inspections.map((inspection) => (
-
-                    <div
-                      className="dashboard-list-item"
-                      key={inspection.id}
-                    >
-
-                      <div className="dashboard-list-content">
-
-                        <h3>
-                          {getListingTitle(inspection)}
-                        </h3>
-
-                        <p>
-                          Mode:{" "}
-                          <strong>
-                            {inspection.mode || "—"}
-                          </strong>
-                        </p>
-
-                        <p>
-                          Status:{" "}
-                          <strong>
-                            {inspection.status}
-                          </strong>
-                        </p>
-
-                        {inspection.inspector && (
-                          <p>
-                            Inspector:{" "}
-                            {inspection.inspector.name ||
-                              inspection.inspector.email}
-                          </p>
-                        )}
-
-                      </div>
-
-                    </div>
-
-                  ))}
-
-                </div>
-              )}
-
-            </div>
-          )}
-
-
-          {/* TRANSPORT */}
-          {activeTab === "transport" && (
-            <div>
-
-              <h2>Transport</h2>
-
-              {buyerOrders.length === 0 ? (
-                <div className="empty-state">
-                  <p>
-                    Transport becomes available after an
-                    offer is accepted and an order is created.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <p>
-                    Choose an order below to arrange transport.
-                    Transport is separate from inspection.
-                  </p>
-
-                  <div className="dashboard-list">
-
-                    {buyerOrders
-                      .filter(
-                        (order) =>
-                          order.status !== "CANCELLED" &&
-                          order.status !== "COMPLETED"
-                      )
-                      .map((order) => (
-
-                        <div
-                          className="dashboard-list-item"
-                          key={order.id}
-                        >
-
-                          <div className="dashboard-list-content">
-
-                            <h3>
-                              {order?.listing?.title ||
-                                order?.listing?.name ||
-                                "Order"}
-                            </h3>
-
-                            <p>
-                              Order status:{" "}
-                              <strong>
-                                {order.status}
-                              </strong>
-                            </p>
-
-                          </div>
-
-
-                          <div className="dashboard-list-actions">
-
-                            <Link
-                              to={`/orders/${order.id}/transport`}
-                              className="btn btn-primary"
+                          {order.status ===
+                            'DELIVERED' && (
+                            <button
+                              type="button"
+                              className="sd-btn sd-btn-primary"
+                              style={{
+                                marginTop: 6,
+                              }}
+                              onClick={() =>
+                                confirmReceipt(
+                                  order.id
+                                )
+                              }
+                              disabled={submitting}
                             >
-                              Find Transport
-                            </Link>
+                              Confirm Receipt
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
 
-                          </div>
-
-                        </div>
-
-                      ))}
-
-                  </div>
-
-                  {trucks.length > 0 && (
-                    <p style={{ marginTop: 16 }}>
-                      You have access to {trucks.length} transport
-                      option{trucks.length === 1 ? "" : "s"}.
-                    </p>
-                  )}
-                </>
+                    {orders.length === 0 && (
+                      <tr>
+                        <td colSpan="7">
+                          No orders yet.{' '}
+                          <Link to="/listings">
+                            Browse agricultural
+                            listings
+                          </Link>
+                          .
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               )}
-
             </div>
+          </div>
+        )}
+
+        {/* =======================================================
+            TRANSPORT
+        ======================================================== */}
+
+        {activeTab === 'transport' && (
+          <div>
+            <div className="sd-toolbar">
+              <div>
+                <span className="sd-eyebrow">
+                  TRANSPORT
+                </span>
+
+                <h2>
+                  Buyer-controlled transport
+                </h2>
+              </div>
+            </div>
+
+            {/* Transport explanation */}
+
+            <div
+              className="sd-panel"
+              style={{ marginBottom: 20 }}
+            >
+              <h3>
+                How MarketBridge transport works
+              </h3>
+
+              <p className="sd-muted">
+                Transportation is not automatically assigned
+                after a purchase. You decide how the order will
+                move.
+              </p>
+
+              <ul
+                className="sd-muted"
+                style={{
+                  lineHeight: 1.8,
+                  paddingLeft: 22,
+                }}
+              >
+                <li>
+                  <strong>Hire Transport:</strong>{' '}
+                  MarketBridge creates a transport request
+                  that registered truck owners can claim.
+                </li>
+
+                <li>
+                  <strong>Use My Truck:</strong>{' '}
+                  Use one of your registered trucks if your
+                  account is also a Truck Owner.
+                </li>
+
+                <li>
+                  <strong>Seller Arranges:</strong>{' '}
+                  The seller may arrange transport separately
+                  when agreed with you.
+                </li>
+              </ul>
+            </div>
+
+            {/* Buyer transport actions */}
+
+            <div className="sd-flow">
+              <div className="sd-panel">
+                <h3>
+                  🚚 Hire Transport
+                </h3>
+
+                <p className="sd-muted">
+                  Send a transport request to registered
+                  truck owners on MarketBridge.
+                </p>
+
+                {ordersWithoutTransport.length === 0 ? (
+                  <p className="sd-muted">
+                    No orders are waiting for transport.
+                  </p>
+                ) : (
+                  ordersWithoutTransport.map(
+                    (order) => (
+                      <button
+                        key={order.id}
+                        type="button"
+                        className="sd-btn sd-btn-primary"
+                        style={{
+                          marginTop: 8,
+                          display: 'block',
+                          width: '100%',
+                        }}
+                        onClick={() =>
+                          openTransportModal(
+                            order,
+                            'hire'
+                          )
+                        }
+                      >
+                        {order.listing?.cropType ||
+                          'Produce'}{' '}
+                        — {shortId(order.id)}
+                      </button>
+                    )
+                  )
+                )}
+              </div>
+
+              <div className="sd-panel">
+                <h3>
+                  🚛 Use My Own Truck
+                </h3>
+
+                <p className="sd-muted">
+                  Use your own registered vehicle. This option
+                  does not create a hired-transporter request.
+                </p>
+
+                {!user?.roles?.includes(
+                  'TRUCK_OWNER'
+                ) ? (
+                  <p className="sd-muted">
+                    Your account is not registered as a
+                    Truck Owner.
+                  </p>
+                ) : trucks.length === 0 ? (
+                  <p className="sd-muted">
+                    You have no registered trucks.
+                  </p>
+                ) : ordersWithoutTransport.length ===
+                  0 ? (
+                  <p className="sd-muted">
+                    No orders are waiting for transport.
+                  </p>
+                ) : (
+                  ordersWithoutTransport.map(
+                    (order) => (
+                      <button
+                        key={order.id}
+                        type="button"
+                        className="sd-btn sd-btn-outline"
+                        style={{
+                          marginTop: 8,
+                          display: 'block',
+                          width: '100%',
+                        }}
+                        onClick={() =>
+                          openTransportModal(
+                            order,
+                            'own'
+                          )
+                        }
+                      >
+                        {order.listing?.cropType ||
+                          'Produce'}{' '}
+                        — {shortId(order.id)}
+                      </button>
+                    )
+                  )
+                )}
+              </div>
+
+              <div className="sd-panel">
+                <h3>
+                  🤝 Seller Arranges
+                </h3>
+
+                <p className="sd-muted">
+                  If you and the seller agree that the seller
+                  will handle transportation, the seller should
+                  create the transport arrangement from their
+                  Seller Dashboard.
+                </p>
+
+                <p className="sd-muted">
+                  The buyer does not create a fake "own truck"
+                  record for the seller.
+                </p>
+              </div>
+            </div>
+
+            {/* Existing transport records */}
+
+            <div
+              className="sd-panel"
+              style={{ marginTop: 20 }}
+            >
+              <div className="sd-toolbar">
+                <div>
+                  <span className="sd-eyebrow">
+                    TRANSPORT RECORDS
+                  </span>
+
+                  <h2>
+                    Current deliveries
+                  </h2>
+                </div>
+              </div>
+
+              {orders.filter(
+                (order) => order.transportJob
+              ).length === 0 ? (
+                <p>
+                  No transport records yet.
+                </p>
+              ) : (
+                orders
+                  .filter(
+                    (order) =>
+                      order.transportJob
+                  )
+                  .map((order) => (
+                    <div
+                      className="sd-notice"
+                      key={order.id}
+                      style={{
+                        marginBottom: 10,
+                      }}
+                    >
+                      <b>
+                        Order {shortId(order.id)}
+                      </b>
+
+                      <div
+                        className="sd-muted"
+                        style={{
+                          marginTop: 4,
+                        }}
+                      >
+                        {order.listing?.cropType ||
+                          'Produce'}{' '}
+                        ·{' '}
+                        {order.transportJob
+                          .pickupLocation ||
+                          'Pickup location'}{' '}
+                        →{' '}
+                        {order.transportJob
+                          .destination ||
+                          'Destination'}
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: 6,
+                        }}
+                      >
+                        <span className="sd-badge sd-blue">
+                          {
+                            order.transportJob
+                              .status
+                          }
+                        </span>{' '}
+                        <span className="sd-muted">
+                          {transportLabel(
+                            order.transportJob
+                          )}
+                        </span>
+                      </div>
+
+                      {order.status ===
+                        'DELIVERED' && (
+                        <button
+                          type="button"
+                          className="sd-btn sd-btn-primary"
+                          style={{
+                            marginTop: 10,
+                          }}
+                          onClick={() =>
+                            confirmReceipt(
+                              order.id
+                            )
+                          }
+                          disabled={submitting}
+                        >
+                          Confirm Receipt
+                        </button>
+                      )}
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* =========================================================
+          TRANSPORT MODAL
+      ========================================================== */}
+
+      <dialog
+        ref={transportModalRef}
+        className="sd-dialog"
+        onCancel={() => {
+          setTransportTarget(null);
+          setTransportForm(
+            EMPTY_TRANSPORT_FORM
+          );
+        }}
+      >
+        <div className="sd-modal">
+          <button
+            type="button"
+            className="sd-close"
+            onClick={closeTransportModal}
+            disabled={submitting}
+          >
+            ×
+          </button>
+
+          <span className="sd-eyebrow">
+            TRANSPORT
+          </span>
+
+          <h2>
+            {transportTarget?.method === 'hire'
+              ? 'Hire Transport'
+              : 'Use My Own Truck'}
+          </h2>
+
+          {transportTarget?.method === 'hire' ? (
+            <p className="sd-muted">
+              Your request will become an open MarketBridge
+              transport job. Registered truck owners can see
+              it in their Available Jobs dashboard and accept
+              it.
+            </p>
+          ) : (
+            <p className="sd-muted">
+              Select one of your registered trucks. No
+              transporter-hiring commission is generated for
+              an own-truck arrangement.
+            </p>
           )}
 
-        </div>
+          <form onSubmit={submitTransport}>
+            <div className="sd-form-grid">
+              {/* Order */}
 
-      </div>
+              <div>
+                <label htmlFor="transport-order">
+                  Order
+                </label>
+
+                <input
+                  id="transport-order"
+                  value={
+                    shortId(
+                      transportTarget?.order?.id
+                    )
+                  }
+                  disabled
+                />
+              </div>
+
+              {/* Produce */}
+
+              <div>
+                <label htmlFor="transport-load">
+                  Load
+                </label>
+
+                <input
+                  id="transport-load"
+                  value={
+                    transportTarget?.order?.listing
+                      ?.cropType || 'Produce'
+                  }
+                  disabled
+                />
+              </div>
+
+              {/* Arranging party */}
+
+              <div>
+                <label htmlFor="transport-party">
+                  Arranging party
+                </label>
+
+                <select
+                  id="transport-party"
+                  name="party"
+                  value={transportForm.party}
+                  onChange={handleTransportChange}
+                >
+                  <option value="Buyer">
+                    Buyer
+                  </option>
+
+                  <option value="Joint-agreed">
+                    Joint-agreed
+                  </option>
+
+                  <option value="Seller">
+                    Seller
+                  </option>
+                </select>
+              </div>
+
+              {/* Destination */}
+
+              <div>
+                <label htmlFor="transport-destination">
+                  Destination
+                </label>
+
+                <input
+                  id="transport-destination"
+                  name="destination"
+                  required
+                  value={
+                    transportForm.destination
+                  }
+                  onChange={
+                    handleTransportChange
+                  }
+                  placeholder="Delivery destination"
+                />
+              </div>
+
+              {/* Own truck selector */}
+
+              {transportTarget?.method === 'own' && (
+                <div>
+                  <label htmlFor="transport-truck">
+                    My truck
+                  </label>
+
+                  <select
+                    id="transport-truck"
+                    name="truckId"
+                    required
+                    value={transportForm.truckId}
+                    onChange={
+                      handleTransportChange
+                    }
+                  >
+                    <option value="">
+                      Select a truck
+                    </option>
+
+                    {trucks.map((truck) => (
+                      <option
+                        key={truck.id}
+                        value={truck.id}
+                      >
+                        {truck.registration} —{' '}
+                        {truck.truckType} —{' '}
+                        {truck.capacity}t
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Capacity */}
+
+              <div>
+                <label htmlFor="transport-capacity">
+                  Required capacity (tons)
+                </label>
+
+                <input
+                  id="transport-capacity"
+                  name="capacity"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={
+                    transportForm.capacity
+                  }
+                  onChange={
+                    handleTransportChange
+                  }
+                  placeholder="e.g. 20"
+                />
+              </div>
+
+              {/* Requirements */}
+
+              <div className="sd-full">
+                <label htmlFor="transport-requirements">
+                  Access / special requirements
+                </label>
+
+                <textarea
+                  id="transport-requirements"
+                  name="requirements"
+                  rows="4"
+                  value={
+                    transportForm.requirements
+                  }
+                  onChange={
+                    handleTransportChange
+                  }
+                  placeholder="Loading requirements, road conditions, delivery instructions, etc."
+                />
+              </div>
+            </div>
+
+            <div
+              className="sd-modal-actions"
+              style={{ marginTop: 20 }}
+            >
+              <button
+                type="button"
+                className="sd-btn sd-btn-outline"
+                onClick={closeTransportModal}
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="sd-btn sd-btn-primary"
+                disabled={submitting}
+              >
+                {submitting
+                  ? 'Saving...'
+                  : transportTarget?.method ===
+                    'hire'
+                    ? 'Request Transport'
+                    : 'Use This Truck'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </dialog>
+
+      {/* =========================================================
+          TOAST
+      ========================================================== */}
+
+      {toastMsg && (
+        <div className="sd-toast">
+          {toastMsg}
+        </div>
+      )}
     </div>
   );
 }
