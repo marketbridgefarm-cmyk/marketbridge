@@ -1,542 +1,642 @@
-const express = require("express");
-const { PrismaClient } = require("@prisma/client");
-const { requireAuth } = require("../middleware/auth");
-const { requireRole } = require("../middleware/roleCheck");
+const express = require('express');
+const { body, validationResult } = require('express-validator');
+
+const prisma = require('../config/db');
+const { authenticate } = require('../middleware/auth');
+const { requireRole } = require('../middleware/roleCheck');
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
-/*
-  Buyer creates an offer.
-  IMPORTANT:
-  - Only ACTIVE listings can receive new offers.
-  - Creating a pending/countered offer does NOT remove the listing.
-*/
+
+// ============================================================
+// BUYER MAKES AN OFFER
+// POST /api/offers
+// ============================================================
+
 router.post(
-  "/",
-  requireAuth,
-  requireRole("BUYER"),
+  '/',
+  authenticate,
+  requireRole('BUYER'),
+  [
+    body('listingId')
+      .notEmpty()
+      .withMessage('listingId is required'),
+
+    body('amount')
+      .isFloat({ gt: 0 })
+      .withMessage('amount must be greater than zero'),
+
+    body('message')
+      .optional()
+      .isString()
+      .trim(),
+  ],
   async (req, res) => {
     try {
-      const { listingId, amount } = req.body;
+      const errors = validationResult(req);
 
-      if (!listingId || amount === undefined || amount === null) {
+      if (!errors.isEmpty()) {
         return res.status(400).json({
-          error: "listingId and amount are required",
+          error: 'Validation failed',
+          errors: errors.array(),
         });
       }
 
-      const numericAmount = Number(amount);
-
-      if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-        return res.status(400).json({
-          error: "Offer amount must be greater than zero",
-        });
-      }
+      const listingId = req.body.listingId;
+      const amount = Number(req.body.amount);
+      const message = req.body.message || null;
 
       const listing = await prisma.listing.findUnique({
-        where: { id: listingId },
+        where: {
+          id: listingId,
+        },
       });
 
       if (!listing) {
         return res.status(404).json({
-          error: "Listing not found",
+          error: 'Listing not found',
         });
       }
 
-      if (listing.status !== "ACTIVE") {
-        return res.status(409).json({
-          error: "This listing is currently unavailable",
+      if (listing.category !== 'AGRICULTURAL') {
+        return res.status(400).json({
+          error: 'Offers are currently available for agricultural listings only',
+        });
+      }
+
+      if (!['ACTIVE', 'UNDER_NEGOTIATION'].includes(listing.status)) {
+        return res.status(400).json({
+          error: 'Listing is not open for offers',
         });
       }
 
       if (listing.sellerId === req.user.id) {
-        return res.status(400).json({
-          error: "You cannot make an offer on your own listing",
+        return res.status(403).json({
+          error: 'You cannot make an offer on your own listing',
         });
       }
 
+      // Prevent another offer if this buyer already has
+      // an active offer on this listing.
       const existingOffer = await prisma.offer.findFirst({
         where: {
           listingId,
           buyerId: req.user.id,
           status: {
-            in: ["PENDING", "COUNTERED"],
+            in: ['PENDING', 'COUNTERED'],
           },
         },
       });
 
       if (existingOffer) {
         return res.status(409).json({
-          error: "You already have an active offer on this listing",
+          error: 'You already have an active offer on this listing',
+          offer: existingOffer,
         });
       }
 
-      const offer = await prisma.offer.create({
-        data: {
-          listingId,
-          buyerId: req.user.id,
-          amount: numericAmount,
-          status: "PENDING",
-        },
-        include: {
-          listing: true,
-          buyer: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
+      const offer = await prisma.$transaction(async (tx) => {
+        const createdOffer = await tx.offer.create({
+          data: {
+            listingId,
+            buyerId: req.user.id,
+            amount,
+            message,
+            status: 'PENDING',
           },
-        },
+        });
+
+        await tx.listing.update({
+          where: {
+            id: listingId,
+          },
+          data: {
+            status: 'UNDER_NEGOTIATION',
+          },
+        });
+
+        return createdOffer;
       });
 
-      /*
-        DO NOT change listing status here.
+      return res.status(201).json({
+        message: 'Offer submitted successfully',
+        offer,
+      });
 
-        Pending offers must NOT make the listing disappear
-        from buyer availability.
-      */
-
-      return res.status(201).json(offer);
     } catch (error) {
-      console.error("Create offer error:", error);
+      console.error('CREATE OFFER ERROR:', error);
 
       return res.status(500).json({
-        error: "Failed to create offer",
+        error: 'Could not create offer',
+        details:
+          process.env.NODE_ENV === 'development'
+            ? error.message
+            : undefined,
       });
     }
   }
 );
 
 
-/*
-  Get current buyer's/seller's offers.
+// ============================================================
+// BUYER — MY OFFERS
+// GET /api/offers/mine
+// ============================================================
 
-  For ACCEPTED buyer offers, also attach the corresponding order.
-  This makes the buyer dashboard immediately aware that an order
-  was created after acceptance.
-*/
 router.get(
-  "/mine",
-  requireAuth,
+  '/mine',
+  authenticate,
   async (req, res) => {
     try {
-      const isBuyer = req.user.roles?.includes("BUYER");
-      const isSeller = req.user.roles?.includes("SELLER");
-
-      let where = {};
-
-      if (isBuyer && !isSeller) {
-        where = {
+      const offers = await prisma.offer.findMany({
+        where: {
           buyerId: req.user.id,
-        };
-      } else if (isSeller && !isBuyer) {
-        where = {
-          listing: {
-            sellerId: req.user.id,
-          },
-        };
-      } else {
-        where = {
-          OR: [
-            {
-              buyerId: req.user.id,
-            },
-            {
-              listing: {
-                sellerId: req.user.id,
-              },
-            },
-          ],
-        };
+        },
+
+        include: {
+          listing: true,
+        },
+
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      return res.json({
+        offers,
+        count: offers.length,
+      });
+
+    } catch (error) {
+      console.error('MY OFFERS ERROR:', error);
+
+      return res.status(500).json({
+        error: 'Could not load your offers',
+      });
+    }
+  }
+);
+
+
+// ============================================================
+// GET OFFERS FOR A LISTING
+//
+// IMPORTANT:
+// This route MUST appear before /:id.
+//
+// Seller:
+//   sees all offers on own listing.
+//
+// Buyer:
+//   sees only their own offer on the listing.
+//
+// Admin:
+//   sees all offers.
+//
+// GET /api/offers/listing/:listingId
+// ============================================================
+
+router.get(
+  '/listing/:listingId',
+  authenticate,
+  async (req, res) => {
+    try {
+      const listing = await prisma.listing.findUnique({
+        where: {
+          id: req.params.listingId,
+        },
+      });
+
+      if (!listing) {
+        return res.status(404).json({
+          error: 'Listing not found',
+        });
       }
 
-      const offers = await prisma.offer.findMany({
-        where,
-        include: {
-          listing: {
-            include: {
-              seller: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                },
+      const isSeller =
+        listing.sellerId === req.user.id;
+
+      const isAdmin =
+        Array.isArray(req.user.roles) &&
+        req.user.roles.includes('ADMIN');
+
+      if (isAdmin || isSeller) {
+        const offers = await prisma.offer.findMany({
+          where: {
+            listingId: req.params.listingId,
+          },
+
+          include: {
+            buyer: {
+              select: {
+                id: true,
+                name: true,
+                phone: true,
+                rating: true,
+                verificationStatus: true,
               },
             },
           },
+
+          orderBy: {
+            createdAt: 'desc',
+          },
+        });
+
+        return res.json({
+          offers,
+          count: offers.length,
+        });
+      }
+
+      // Buyer can only see their own offer.
+      const offers = await prisma.offer.findMany({
+        where: {
+          listingId: req.params.listingId,
+          buyerId: req.user.id,
+        },
+
+        include: {
           buyer: {
             select: {
               id: true,
               name: true,
-              email: true,
+              rating: true,
+              verificationStatus: true,
             },
           },
         },
+
         orderBy: {
-          createdAt: "desc",
+          createdAt: 'desc',
         },
       });
 
-      /*
-        Find this user's orders and match accepted offers
-        by listingId.
-      */
-      const orders = await prisma.order.findMany({
-        where: {
-          OR: [
-            {
-              buyerId: req.user.id,
-            },
-            {
-              sellerId: req.user.id,
-            },
-          ],
-        },
-        include: {
-          listing: true,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
+      return res.json({
+        offers,
+        count: offers.length,
       });
 
-      const ordersByListing = new Map();
-
-      for (const order of orders) {
-        if (!ordersByListing.has(order.listingId)) {
-          ordersByListing.set(order.listingId, order);
-        }
-      }
-
-      const result = offers.map((offer) => {
-        if (offer.status !== "ACCEPTED") {
-          return {
-            ...offer,
-            order: null,
-          };
-        }
-
-        return {
-          ...offer,
-          order: ordersByListing.get(offer.listingId) || null,
-        };
-      });
-
-      return res.json(result);
     } catch (error) {
-      console.error("Get my offers error:", error);
+      console.error(
+        'GET LISTING OFFERS ERROR:',
+        error
+      );
 
       return res.status(500).json({
-        error: "Failed to load offers",
+        error: 'Could not load listing offers',
       });
     }
   }
 );
 
 
-/*
-  Seller accepts/rejects/counters an offer.
+// ============================================================
+// SELLER — RESPOND TO OFFER
+//
+// PATCH /api/offers/:id
+//
+// Actions:
+//
+// ACCEPT
+// REJECT
+// COUNTER
+//
+// Seller is the price authority.
+// ============================================================
 
-  ACCEPT:
-  - Must be PENDING or COUNTERED.
-  - Listing must still be available.
-  - Listing becomes UNDER_NEGOTIATION temporarily.
-  - Selected offer becomes ACCEPTED.
-  - Competing active offers are rejected.
-  - An Order is created for the buyer.
-*/
 router.patch(
-  "/:id",
-  requireAuth,
-  requireRole("SELLER"),
+  '/:id',
+  authenticate,
+  requireRole('SELLER'),
   async (req, res) => {
-    const offerId = req.params.id;
-    const { action, counterAmount } = req.body;
-
-    if (!["ACCEPT", "REJECT", "COUNTER"].includes(action)) {
-      return res.status(400).json({
-        error: "Invalid action",
-      });
-    }
-
     try {
-      const existingOffer = await prisma.offer.findUnique({
+      const {
+        action,
+        counterAmount,
+      } = req.body;
+
+      if (
+        !['ACCEPT', 'REJECT', 'COUNTER'].includes(action)
+      ) {
+        return res.status(400).json({
+          error:
+            'Invalid action. Use ACCEPT, REJECT, or COUNTER.',
+        });
+      }
+
+      const offer = await prisma.offer.findUnique({
         where: {
-          id: offerId,
+          id: req.params.id,
         },
+
         include: {
           listing: true,
         },
       });
 
-      if (!existingOffer) {
+      if (!offer) {
         return res.status(404).json({
-          error: "Offer not found",
+          error: 'Offer not found',
         });
       }
 
-      if (existingOffer.listing.sellerId !== req.user.id) {
+      // --------------------------------------------------------
+      // Verify seller owns listing
+      // --------------------------------------------------------
+
+      if (
+        offer.listing.sellerId !== req.user.id
+      ) {
         return res.status(403).json({
-          error: "You are not authorized to manage this offer",
-        });
-      }
-
-      if (!["PENDING", "COUNTERED"].includes(existingOffer.status)) {
-        return res.status(409).json({
-          error: `Offer is already ${existingOffer.status.toLowerCase()}`,
+          error:
+            'Only the farmer who owns this listing can respond to offers',
         });
       }
 
 
-      /*
-        ACCEPT
-      */
-      if (action === "ACCEPT") {
-        const result = await prisma.$transaction(async (tx) => {
-          /*
-            ACTIVE is the normal available state.
+      // ========================================================
+      // ACCEPT OFFER
+      // ========================================================
 
-            UNDER_NEGOTIATION is also accepted here only when there
-            is no existing order/accepted offer. This protects against
-            listings that were left in UNDER_NEGOTIATION by the old
-            buggy implementation.
-          */
-          const currentListing = await tx.listing.findUnique({
-            where: {
-              id: existingOffer.listingId,
-            },
+      if (action === 'ACCEPT') {
+
+        if (
+          !['PENDING', 'COUNTERED'].includes(
+            offer.status
+          )
+        ) {
+          return res.status(400).json({
+            error:
+              `Offer cannot be accepted because it is ${offer.status}`,
           });
+        }
 
-          if (!currentListing) {
-            throw new Error("LISTING_NOT_FOUND");
-          }
+        // If seller countered, the counter price is final.
+        const finalPrice =
+          offer.status === 'COUNTERED' &&
+          offer.counterAmount !== null &&
+          offer.counterAmount !== undefined
+            ? Number(offer.counterAmount)
+            : Number(offer.amount);
 
-          if (
-            currentListing.status !== "ACTIVE" &&
-            currentListing.status !== "UNDER_NEGOTIATION"
-          ) {
-            throw new Error("LISTING_UNAVAILABLE");
-          }
+        const result = await prisma.$transaction(
+          async (tx) => {
 
-          const existingOrder = await tx.order.findFirst({
-            where: {
-              listingId: existingOffer.listingId,
-              status: {
-                notIn: ["CANCELLED", "COMPLETED"],
-              },
-            },
-          });
+            // --------------------------------------------------
+            // Make sure no order already exists for listing.
+            // --------------------------------------------------
 
-          if (existingOrder) {
-            throw new Error("ORDER_ALREADY_EXISTS");
-          }
+            const existingOrder =
+              await tx.order.findFirst({
+                where: {
+                  listingId: offer.listingId,
+                },
+              });
 
-          const acceptedOffer = await tx.offer.findFirst({
-            where: {
-              listingId: existingOffer.listingId,
-              status: "ACCEPTED",
-            },
-          });
+            if (existingOrder) {
+              throw new Error(
+                'An order already exists for this listing'
+              );
+            }
 
-          if (acceptedOffer && acceptedOffer.id !== offerId) {
-            throw new Error("ANOTHER_OFFER_ALREADY_ACCEPTED");
-          }
+            // --------------------------------------------------
+            // Accept selected offer
+            // --------------------------------------------------
 
-          /*
-            Concurrency guard:
-            reserve the listing only if it is still ACTIVE or the
-            legacy UNDER_NEGOTIATION state without an order.
-          */
-          await tx.listing.update({
-            where: {
-              id: existingOffer.listingId,
-            },
-            data: {
-              status: "UNDER_NEGOTIATION",
-            },
-          });
+            const updatedOffer =
+              await tx.offer.update({
+                where: {
+                  id: offer.id,
+                },
 
-          const updatedOffer = await tx.offer.update({
-            where: {
-              id: offerId,
-            },
-            data: {
-              status: "ACCEPTED",
-            },
-            include: {
-              listing: true,
-              buyer: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
+                data: {
+                  status: 'ACCEPTED',
+                },
+              });
+
+            // --------------------------------------------------
+            // Reject all competing offers
+            // --------------------------------------------------
+
+            await tx.offer.updateMany({
+              where: {
+                listingId: offer.listingId,
+
+                id: {
+                  not: offer.id,
+                },
+
+                status: {
+                  in: [
+                    'PENDING',
+                    'COUNTERED',
+                  ],
                 },
               },
-            },
-          });
 
-          /*
-            Reject all other active offers for this listing.
-          */
-          await tx.offer.updateMany({
-            where: {
-              listingId: existingOffer.listingId,
-              id: {
-                not: offerId,
+              data: {
+                status: 'REJECTED',
               },
-              status: {
-                in: ["PENDING", "COUNTERED"],
+            });
+
+            // --------------------------------------------------
+            // Listing is now sold/reserved.
+            // --------------------------------------------------
+
+            await tx.listing.update({
+              where: {
+                id: offer.listingId,
               },
-            },
-            data: {
-              status: "REJECTED",
-            },
-          });
 
-          /*
-            Create the buyer's Order immediately.
-          */
-          const order = await tx.order.create({
-            data: {
-              listingId: existingOffer.listingId,
-              buyerId: existingOffer.buyerId,
-              sellerId: existingOffer.listing.sellerId,
-              finalPrice: existingOffer.counterAmount ?? existingOffer.amount,
-              status: "PENDING_PAYMENT",
-            },
-            include: {
-              listing: true,
-            },
-          });
+              data: {
+                status: 'SOLD',
+              },
+            });
 
-          return {
-            offer: updatedOffer,
-            order,
-          };
-        });
+            // --------------------------------------------------
+            // Create order.
+            //
+            // Payment remains pending.
+            // Transport is NOT automatically assigned.
+            // --------------------------------------------------
+
+            const order =
+              await tx.order.create({
+                data: {
+                  listingId: offer.listingId,
+                  buyerId: offer.buyerId,
+                  sellerId: req.user.id,
+                  finalPrice,
+                  status: 'PENDING_PAYMENT',
+                },
+              });
+
+            return {
+              offer: updatedOffer,
+              order,
+            };
+          }
+        );
 
         return res.json({
-          success: true,
-          message: "Offer accepted and order created",
+          message:
+            'Offer accepted and order created successfully',
+
           offer: result.offer,
+
           order: result.order,
+
+          transportAutomaticallyAssigned: false,
         });
       }
 
 
-      /*
-        REJECT
-      */
-      if (action === "REJECT") {
-        const updatedOffer = await prisma.offer.update({
-          where: {
-            id: offerId,
-          },
-          data: {
-            status: "REJECTED",
-          },
-          include: {
-            listing: true,
-            buyer: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-        });
+      // ========================================================
+      // REJECT OFFER
+      // ========================================================
 
-        /*
-          IMPORTANT:
-          Rejecting an offer does NOT change listing status.
-        */
+      if (action === 'REJECT') {
 
-        return res.json({
-          success: true,
-          message: "Offer rejected",
-          offer: updatedOffer,
-        });
-      }
-
-
-      /*
-        COUNTER
-      */
-      if (action === "COUNTER") {
-        const numericCounter = Number(counterAmount);
-
-        if (!Number.isFinite(numericCounter) || numericCounter <= 0) {
+        if (
+          !['PENDING', 'COUNTERED'].includes(
+            offer.status
+          )
+        ) {
           return res.status(400).json({
-            error: "A valid counter amount is required",
+            error:
+              `Offer cannot be rejected because it is ${offer.status}`,
           });
         }
 
-        const updatedOffer = await prisma.offer.update({
-          where: {
-            id: offerId,
-          },
-          data: {
-            status: "COUNTERED",
-            counterAmount: numericCounter,
-          },
-          include: {
-            listing: true,
-            buyer: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-        });
+        const result =
+          await prisma.$transaction(
+            async (tx) => {
 
-        /*
-          IMPORTANT:
-          Countering an offer does NOT remove the listing.
-        */
+              const updatedOffer =
+                await tx.offer.update({
+                  where: {
+                    id: offer.id,
+                  },
+
+                  data: {
+                    status: 'REJECTED',
+                  },
+                });
+
+              // Check whether another active offer exists.
+              const remainingOffers =
+                await tx.offer.count({
+                  where: {
+                    listingId: offer.listingId,
+
+                    status: {
+                      in: [
+                        'PENDING',
+                        'COUNTERED',
+                      ],
+                    },
+                  },
+                });
+
+              // If nobody is negotiating anymore,
+              // reopen the listing.
+              if (remainingOffers === 0) {
+                await tx.listing.update({
+                  where: {
+                    id: offer.listingId,
+                  },
+
+                  data: {
+                    status: 'ACTIVE',
+                  },
+                });
+              }
+
+              return updatedOffer;
+            }
+          );
 
         return res.json({
-          success: true,
-          message: "Counter offer sent",
-          offer: updatedOffer,
+          message: 'Offer rejected',
+          offer: result,
         });
       }
+
+
+      // ========================================================
+      // COUNTER OFFER
+      // ========================================================
+
+      if (action === 'COUNTER') {
+
+        const numericCounter =
+          Number(counterAmount);
+
+        if (
+          counterAmount === undefined ||
+          counterAmount === null ||
+          !Number.isFinite(numericCounter) ||
+          numericCounter <= 0
+        ) {
+          return res.status(400).json({
+            error:
+              'counterAmount must be greater than zero',
+          });
+        }
+
+        if (
+          !['PENDING', 'COUNTERED'].includes(
+            offer.status
+          )
+        ) {
+          return res.status(400).json({
+            error:
+              `Offer cannot be countered because it is ${offer.status}`,
+          });
+        }
+
+        const updated =
+          await prisma.offer.update({
+            where: {
+              id: offer.id,
+            },
+
+            data: {
+              status: 'COUNTERED',
+
+              counterAmount:
+                numericCounter,
+            },
+          });
+
+        return res.json({
+          message: 'Counter-offer submitted',
+          offer: updated,
+        });
+      }
+
     } catch (error) {
-      console.error("Update offer error:", error);
-
-      if (error.message === "LISTING_NOT_FOUND") {
-        return res.status(404).json({
-          error: "Listing not found",
-        });
-      }
-
-      if (error.message === "LISTING_UNAVAILABLE") {
-        return res.status(409).json({
-          error: "This listing is no longer available",
-        });
-      }
-
-      if (error.message === "ORDER_ALREADY_EXISTS") {
-        return res.status(409).json({
-          error: "An order already exists for this listing",
-        });
-      }
-
-      if (error.message === "ANOTHER_OFFER_ALREADY_ACCEPTED") {
-        return res.status(409).json({
-          error: "Another offer has already been accepted for this listing",
-        });
-      }
+      console.error(
+        'RESPOND TO OFFER ERROR:',
+        error
+      );
 
       return res.status(500).json({
-        error: "Failed to update offer",
+        error: 'Could not respond to offer',
+
+        details:
+          process.env.NODE_ENV === 'development'
+            ? error.message
+            : undefined,
       });
     }
   }
 );
+
+
+// ============================================================
+// EXPORT ROUTER
+// ============================================================
 
 module.exports = router;
