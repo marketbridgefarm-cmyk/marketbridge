@@ -1,1488 +1,782 @@
-import React, {
-  useCallback,
-  useEffect,
-  useState,
-} from 'react';
-
-import {
-  Link,
-} from 'react-router-dom';
-
-import api from '../api/client';
-
-import {
-  useAuth,
-} from '../context/AuthContext.jsx';
-
-
-const TABS = [
-  {
-    id: 'offers',
-    label: 'My Offers',
-  },
-
-  {
-    id: 'orders',
-    label: 'My Orders',
-  },
-
-  {
-    id: 'inspections',
-    label: 'Inspections',
-  },
-
-  {
-    id: 'transport',
-    label: 'Transport',
-  },
-];
-
-
-const money = (value) =>
-  `${Number(
-    value || 0
-  ).toLocaleString()} ETB`;
-
-
-const shortId = (id) =>
-  id
-    ? id.slice(0, 8)
-    : '—';
-
-
-function badgeClass(status) {
-  if (
-    [
-      'COMPLETED',
-      'DELIVERED',
-      'ACCEPTED',
-    ].includes(status)
-  ) {
-    return '';
-  }
-
-  if (
-    [
-      'CANCELLED',
-      'REJECTED',
-      'DISPUTED',
-    ].includes(status)
-  ) {
-    return 'sd-warn';
-  }
-
-  return 'sd-blue';
-}
-
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import api from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 
 export default function BuyerDashboard() {
-  const {
-    user,
-  } = useAuth();
+  const { user } = useAuth();
 
+  const [offers, setOffers] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [inspections, setInspections] = useState([]);
+  const [trucks, setTrucks] = useState([]);
 
-  const [
-    offers,
-    setOffers,
-  ] = useState([]);
+  const [activeTab, setActiveTab] = useState("offers");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
 
+  const loadDashboard = useCallback(
+    async (silent = false) => {
+      if (!user?.id) {
+        return;
+      }
 
-  const [
-    orders,
-    setOrders,
-  ] = useState([]);
-
-
-  const [
-    inspections,
-    setInspections,
-  ] = useState([]);
-
-
-  const [
-    trucks,
-    setTrucks,
-  ] = useState([]);
-
-
-  const [
-    activeTab,
-    setActiveTab,
-  ] = useState(
-    'offers'
-  );
-
-
-  const [
-    loading,
-    setLoading,
-  ] = useState(true);
-
-
-  const [
-    busyInspection,
-    setBusyInspection,
-  ] = useState('');
-
-
-  const [
-    message,
-    setMessage,
-  ] = useState('');
-
-
-  const [
-    error,
-    setError,
-  ] = useState('');
-
-
-  const loadAll =
-    useCallback(
-      async () => {
-        if (!user?.id) {
-          return;
-        }
-
+      if (silent) {
+        setRefreshing(true);
+      } else {
         setLoading(true);
-        setError('');
+      }
 
-        try {
-          const requests = [
-            api.get(
-              '/offers/mine'
-            ),
+      setError("");
 
-            api.get(
-              '/orders'
-            ),
+      try {
+        /*
+          Load the critical buyer data independently.
 
-            api.get(
-              '/inspections/mine'
-            ),
-          ];
+          Offers and orders are more important than inspections.
+          A failure in inspections must NOT blank the dashboard.
+        */
+        const [offersResult, ordersResult] = await Promise.allSettled([
+          api.get("/offers/mine"),
+          api.get("/orders"),
+        ]);
 
+        let hadCriticalError = false;
 
-          if (
-            user.roles?.includes(
-              'TRUCK_OWNER'
-            )
-          ) {
-            requests.push(
-              api.get(
-                '/transport/trucks/mine'
-              )
-            );
-          }
-
-
-          const results =
-            await Promise.all(
-              requests
-            );
-
+        if (offersResult.status === "fulfilled") {
+          const data = offersResult.value?.data;
 
           setOffers(
-            results[0].data
-              ?.offers || []
+            Array.isArray(data)
+              ? data
+              : Array.isArray(data?.offers)
+                ? data.offers
+                : []
           );
+        } else {
+          hadCriticalError = true;
+          console.error("Failed to load offers:", offersResult.reason);
+        }
 
+        if (ordersResult.status === "fulfilled") {
+          const data = ordersResult.value?.data;
 
           setOrders(
-            (
-              results[1].data
-                ?.orders || []
-            ).filter(
-              (order) =>
-                order.buyerId ===
-                user.id
-            )
+            Array.isArray(data)
+              ? data
+              : Array.isArray(data?.orders)
+                ? data.orders
+                : []
           );
+        } else {
+          hadCriticalError = true;
+          console.error("Failed to load orders:", ordersResult.reason);
+        }
 
+        /*
+          Inspection data is optional.
+        */
+        try {
+          const inspectionResponse = await api.get("/inspections/mine");
+
+          const data = inspectionResponse?.data;
 
           setInspections(
-            results[2].data
-              ?.requests || []
+            Array.isArray(data)
+              ? data
+              : Array.isArray(data?.inspections)
+                ? data.inspections
+                : []
+          );
+        } catch (inspectionError) {
+          console.warn(
+            "Inspection endpoint unavailable:",
+            inspectionError
           );
 
+          /*
+            Do not destroy the dashboard because inspection loading
+            failed.
+          */
+          setInspections([]);
+        }
+
+        /*
+          Transport/truck information is optional.
+        */
+        try {
+          const truckResponse = await api.get("/transport/trucks/mine");
+
+          const data = truckResponse?.data;
 
           setTrucks(
-            results[3]
-              ?.data?.trucks ||
-              []
+            Array.isArray(data)
+              ? data
+              : Array.isArray(data?.trucks)
+                ? data.trucks
+                : []
           );
-        } catch (e) {
-          console.error(
-            'Buyer dashboard load error:',
-            e
+        } catch (truckError) {
+          console.warn(
+            "Truck information unavailable:",
+            truckError
           );
 
-          setError(
-            e.response?.data
-              ?.error ||
-            'Could not load your buyer dashboard.'
-          );
-        } finally {
-          setLoading(false);
+          setTrucks([]);
         }
-      },
-      [
-        user?.id,
-        user?.roles,
-      ]
-    );
 
+        if (hadCriticalError) {
+          setError(
+            "Some dashboard information could not be loaded. Please refresh."
+          );
+        }
+      } catch (err) {
+        console.error("Buyer dashboard error:", err);
 
-  useEffect(
-    () => {
-      loadAll();
+        setError(
+          err?.response?.data?.error ||
+            err?.message ||
+            "Failed to load buyer dashboard"
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
     },
-    [loadAll]
+    [user?.id]
   );
 
 
-  const pendingOffers =
-    offers.filter(
-      (offer) =>
-        [
-          'PENDING',
-          'COUNTERED',
-        ].includes(
-          offer.status
-        )
-    );
+  useEffect(() => {
+    loadDashboard(false);
+  }, [loadDashboard]);
 
 
-  const acceptedOffers =
-    offers.filter(
-      (offer) =>
-        offer.status ===
-        'ACCEPTED'
-    );
+  /*
+    Automatically refresh every 10 seconds.
 
-
-  const activeOrders =
-    orders.filter(
-      (order) =>
-        ![
-          'COMPLETED',
-          'CANCELLED',
-        ].includes(
-          order.status
-        )
-    );
-
-
-  const completedOrders =
-    orders.filter(
-      (order) =>
-        order.status ===
-        'COMPLETED'
-    );
-
-
-  const totalSpend =
-    completedOrders.reduce(
-      (
-        sum,
-        order
-      ) =>
-        sum +
-        Number(
-          order.finalPrice ||
-          0
-        ),
-      0
-    );
-
-
-  const ordersWithoutTransport =
-    activeOrders.filter(
-      (order) =>
-        !order.transportJob
-    );
-
-
-  function showMessage(
-    text
-  ) {
-    setMessage(text);
-    setError('');
-
-    window.setTimeout(
-      () =>
-        setMessage(''),
-      3000
-    );
-  }
-
-
-  async function requestInspection(
-    order
-  ) {
-    if (!order?.listingId) {
-      return;
+    This means the buyer does not need to logout/login after the
+    seller accepts the offer.
+  */
+  useEffect(() => {
+    if (!user?.id) {
+      return undefined;
     }
 
-    setBusyInspection(
-      order.id
+    const timer = setInterval(() => {
+      loadDashboard(true);
+    }, 10000);
+
+    return () => clearInterval(timer);
+  }, [user?.id, loadDashboard]);
+
+
+  const buyerOrders = useMemo(() => {
+    return orders.filter((order) => {
+      return !order.buyerId || order.buyerId === user?.id;
+    });
+  }, [orders, user?.id]);
+
+
+  const acceptedOffers = useMemo(() => {
+    return offers.filter(
+      (offer) => offer.status === "ACCEPTED"
     );
-
-    setError('');
-
-    try {
-      await api.post(
-        '/inspections',
-        {
-          listingId:
-            order.listingId,
-
-          mode:
-            'BUYER_REQUESTED',
-        }
-      );
-
-      showMessage(
-        'Inspection request created. Registered inspectors can accept it.'
-      );
-
-      await loadAll();
-
-      setActiveTab(
-        'inspections'
-      );
-    } catch (e) {
-      setError(
-        e.response?.data
-          ?.error ||
-        'Could not request inspection.'
-      );
-    } finally {
-      setBusyInspection('');
-    }
-  }
+  }, [offers]);
 
 
-  function inspectionForOrder(
-    order
-  ) {
+  const pendingOffers = useMemo(() => {
+    return offers.filter(
+      (offer) =>
+        offer.status === "PENDING" ||
+        offer.status === "COUNTERED"
+    );
+  }, [offers]);
+
+
+  const activeInspections = useMemo(() => {
     return inspections.filter(
-      (item) =>
-        item.listingId ===
-          order.listingId ||
-        item.listing?.id ===
-          order.listingId
+      (inspection) =>
+        inspection.status !== "COMPLETED" &&
+        inspection.status !== "CANCELLED"
+    );
+  }, [inspections]);
+
+
+  const formatMoney = (value) => {
+    const amount = Number(value);
+
+    if (!Number.isFinite(amount)) {
+      return "—";
+    }
+
+    return amount.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+
+  const getListingTitle = (item) => {
+    return (
+      item?.listing?.title ||
+      item?.listing?.name ||
+      item?.title ||
+      "Listing"
+    );
+  };
+
+
+  const getListingImage = (item) => {
+    return (
+      item?.listing?.imageUrl ||
+      item?.listing?.images?.[0]?.url ||
+      item?.listing?.images?.[0] ||
+      null
+    );
+  };
+
+
+  if (loading) {
+    return (
+      <div className="dashboard-page">
+        <div className="sd-panel">
+          <p>Loading your buyer dashboard...</p>
+        </div>
+      </div>
     );
   }
 
 
   return (
-    <main className="section">
-      <div className="container-wide">
+    <div className="dashboard-page">
+      <div className="dashboard-shell">
 
-        <section>
-          <span className="sd-eyebrow">
-            BUYER DASHBOARD
-          </span>
+        <div className="dashboard-header">
+          <div>
+            <div className="sd-eyebrow">
+              MARKETBRIDGE
+            </div>
 
-          <h1>
-            Your offers, orders and
-            deliveries in one place.
-          </h1>
+            <h1>Buyer Dashboard</h1>
 
-          <p
-            className="sd-muted"
-            style={{
-              maxWidth: 780,
-            }}
+            <p>
+              Welcome{user?.name ? `, ${user.name}` : ""}.
+              Manage your offers, purchases, inspections and transport.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => loadDashboard(true)}
+            disabled={refreshing}
           >
-            Track negotiations,
-            inspect purchased
-            produce, arrange
-            transport, and confirm
-            delivery.
-          </p>
-
-
-          <div className="sd-actions">
-
-            <Link
-              to="/listings"
-              className="sd-btn sd-btn-primary"
-            >
-              Browse listings
-            </Link>
-
-            <Link
-              to="/digital"
-              className="sd-btn sd-btn-outline"
-            >
-              Browse digital
-            </Link>
-
-          </div>
-
-
-          <div className="sd-stat-grid">
-
-            <div className="sd-stat">
-              <span>
-                PENDING OFFERS
-              </span>
-
-              <b>
-                {
-                  pendingOffers.length
-                }
-              </b>
-            </div>
-
-
-            <div className="sd-stat">
-              <span>
-                ACCEPTED OFFERS
-              </span>
-
-              <b>
-                {
-                  acceptedOffers.length
-                }
-              </b>
-            </div>
-
-
-            <div className="sd-stat">
-              <span>
-                ACTIVE ORDERS
-              </span>
-
-              <b>
-                {
-                  activeOrders.length
-                }
-              </b>
-            </div>
-
-
-            <div className="sd-stat">
-              <span>
-                TOTAL SPEND (ETB)
-              </span>
-
-              <b>
-                {
-                  totalSpend.toLocaleString()
-                }
-              </b>
-            </div>
-
-          </div>
-        </section>
-
-
-        {message && (
-          <div className="alert success">
-            {message}
-          </div>
-        )}
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
 
 
         {error && (
-          <div className="alert error">
+          <div className="alert alert-warning">
             {error}
           </div>
         )}
 
 
-        <section>
+        {/* IMPORTANT ACCEPTED OFFER NOTICE */}
+        {acceptedOffers.length > 0 && (
+          <div className="alert alert-success">
+            <strong>Offer accepted.</strong>{" "}
+            {acceptedOffers.map((offer) => {
+              const order = offer.order;
+
+              return (
+                <div key={offer.id} style={{ marginTop: 8 }}>
+                  <span>
+                    {getListingTitle(offer)}
+                  </span>
+
+                  {order ? (
+                    <>
+                      {" — "}
+                      <strong>Order created.</strong>{" "}
+
+                      <Link
+                        to={`/orders/${order.id}`}
+                        className="btn btn-sm btn-primary"
+                      >
+                        View Order
+                      </Link>
+                    </>
+                  ) : (
+                    <span>
+                      {" — "}Creating your order...
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+
+        {/* STATS */}
+        <div className="dashboard-stats">
+
+          <div className="sd-panel">
+            <div className="sd-eyebrow">
+              OFFERS
+            </div>
+
+            <h2>{offers.length}</h2>
+
+            <p>Total offers</p>
+          </div>
+
+
+          <div className="sd-panel">
+            <div className="sd-eyebrow">
+              PENDING
+            </div>
+
+            <h2>{pendingOffers.length}</h2>
+
+            <p>Offers awaiting response</p>
+          </div>
+
+
+          <div className="sd-panel">
+            <div className="sd-eyebrow">
+              PURCHASES
+            </div>
+
+            <h2>{buyerOrders.length}</h2>
+
+            <p>Your orders</p>
+          </div>
+
+
+          <div className="sd-panel">
+            <div className="sd-eyebrow">
+              INSPECTIONS
+            </div>
+
+            <h2>{activeInspections.length}</h2>
+
+            <p>Active inspections</p>
+          </div>
+
+        </div>
+
+
+        {/* TABS */}
+        <div className="sd-panel">
 
           <div className="sd-tabs">
 
-            {TABS.map(
-              (tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  className={
-                    `sd-tab ${
-                      activeTab ===
-                      tab.id
-                        ? 'sd-active'
-                        : ''
-                    }`
-                  }
-                  onClick={() =>
-                    setActiveTab(
-                      tab.id
-                    )
-                  }
-                >
-                  {tab.label}
-                </button>
-              )
-            )}
+            <button
+              type="button"
+              className={
+                activeTab === "offers"
+                  ? "sd-tab active"
+                  : "sd-tab"
+              }
+              onClick={() => setActiveTab("offers")}
+            >
+              Offers
+            </button>
+
+
+            <button
+              type="button"
+              className={
+                activeTab === "orders"
+                  ? "sd-tab active"
+                  : "sd-tab"
+              }
+              onClick={() => setActiveTab("orders")}
+            >
+              Orders
+            </button>
+
+
+            <button
+              type="button"
+              className={
+                activeTab === "inspections"
+                  ? "sd-tab active"
+                  : "sd-tab"
+              }
+              onClick={() => setActiveTab("inspections")}
+            >
+              Inspections
+            </button>
+
+
+            <button
+              type="button"
+              className={
+                activeTab === "transport"
+                  ? "sd-tab active"
+                  : "sd-tab"
+              }
+              onClick={() => setActiveTab("transport")}
+            >
+              Transport
+            </button>
 
           </div>
 
 
-          {loading ? (
-
-            <div className="sd-panel">
-              Loading your buyer
-              workspace…
-            </div>
-
-          ) : (
-
-            <>
-
-              {/* OFFERS */}
-
-              {activeTab ===
-                'offers' && (
-
-                <div className="sd-panel sd-table-wrap">
-
-                  <div className="sd-toolbar">
-                    <div>
-                      <span className="sd-eyebrow">
-                        NEGOTIATIONS
-                      </span>
-
-                      <h2>
-                        Offers I've made
-                      </h2>
-                    </div>
-                  </div>
-
-
-                  <table className="sd-table">
-
-                    <thead>
-                      <tr>
-                        <th>
-                          Listing
-                        </th>
-
-                        <th>
-                          My Offer
-                        </th>
-
-                        <th>
-                          Status
-                        </th>
-
-                        <th>
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-
-
-                    <tbody>
-
-                      {offers.map(
-                        (offer) => {
-
-                          const order =
-                            orders.find(
-                              (item) =>
-                                item.listingId ===
-                                offer.listingId
-                            );
-
-                          return (
-                            <tr
-                              key={
-                                offer.id
-                              }
-                            >
-
-                              <td>
-                                {
-                                  offer
-                                    .listing
-                                    ?.title ||
-                                  offer
-                                    .listing
-                                    ?.cropType ||
-                                  'Listing'
-                                }
-                              </td>
-
-
-                              <td>
-                                {
-                                  money(
-                                    offer.amount
-                                  )
-                                }
-                              </td>
-
-
-                              <td>
-                                <span
-                                  className={
-                                    `sd-badge ${
-                                      badgeClass(
-                                        offer.status
-                                      )
-                                    }`
-                                  }
-                                >
-                                  {
-                                    offer.status
-                                  }
-                                </span>
-                              </td>
-
-
-                              <td>
-
-                                {
-                                  offer.status ===
-                                    'ACCEPTED' &&
-                                  order ? (
-
-                                    <Link
-                                      className="sd-btn sd-btn-primary"
-                                      to={`/orders/${order.id}`}
-                                    >
-                                      View Order
-                                    </Link>
-
-                                  ) : (
-
-                                    <Link
-                                      className="sd-btn sd-btn-outline"
-                                      to={`/listings/${offer.listingId}`}
-                                    >
-                                      View Listing
-                                    </Link>
-
-                                  )
-                                }
-
-                              </td>
-
-                            </tr>
-                          );
-                        }
-                      )}
-
-
-                      {!offers.length && (
-                        <tr>
-                          <td colSpan="4">
-                            No offers yet.{' '}
-
-                            <Link to="/listings">
-                              Browse listings
-                            </Link>
-                            .
-                          </td>
-                        </tr>
-                      )}
-
-                    </tbody>
-
-                  </table>
-
-                </div>
-              )}
-
-
-              {/* ORDERS */}
-
-              {activeTab ===
-                'orders' && (
-
-                <div className="sd-panel sd-table-wrap">
-
-                  <div className="sd-toolbar">
-                    <div>
-                      <span className="sd-eyebrow">
-                        ORDERS
-                      </span>
-
-                      <h2>
-                        My purchases
-                      </h2>
-                    </div>
-                  </div>
-
-
-                  <table className="sd-table">
-
-                    <thead>
-                      <tr>
-                        <th>
-                          Order
-                        </th>
-
-                        <th>
-                          Produce
-                        </th>
-
-                        <th>
-                          Value
-                        </th>
-
-                        <th>
-                          Status
-                        </th>
-
-                        <th>
-                          Inspection
-                        </th>
-
-                        <th>
-                          Transport
-                        </th>
-
-                        <th>
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-
-
-                    <tbody>
-
-                      {orders.map(
-                        (order) => {
-
-                          const orderInspections =
-                            inspectionForOrder(
-                              order
-                            );
-
-                          const hasInspection =
-                            orderInspections.some(
-                              (item) =>
-                                item.status !==
-                                'CANCELLED'
-                            );
-
-                          return (
-                            <tr
-                              key={
-                                order.id
-                              }
-                            >
-
-                              <td>
-                                {
-                                  shortId(
-                                    order.id
-                                  )
-                                }
-                              </td>
-
-
-                              <td>
-                                {
-                                  order
-                                    .listing
-                                    ?.title ||
-                                  order
-                                    .listing
-                                    ?.cropType ||
-                                  'Produce'
-                                }
-                              </td>
-
-
-                              <td>
-                                {
-                                  money(
-                                    order.finalPrice
-                                  )
-                                }
-                              </td>
-
-
-                              <td>
-                                <span
-                                  className={
-                                    `sd-badge ${
-                                      badgeClass(
-                                        order.status
-                                      )
-                                    }`
-                                  }
-                                >
-                                  {
-                                    order.status
-                                  }
-                                </span>
-                              </td>
-
-
-                              <td>
-                                {
-                                  hasInspection
-                                    ? orderInspections[0]
-                                        ?.status
-                                    : 'Not requested'
-                                }
-                              </td>
-
-
-                              <td>
-                                {
-                                  order.transportJob
-                                    ? order
-                                        .transportJob
-                                        .status
-                                    : 'Not arranged'
-                                }
-                              </td>
-
-
-                              <td>
-
-                                <div
-                                  style={{
-                                    display:
-                                      'flex',
-                                    gap: 8,
-                                    flexWrap:
-                                      'wrap',
-                                  }}
-                                >
-
-                                  <Link
-                                    className="sd-btn sd-btn-primary"
-                                    to={`/orders/${order.id}`}
-                                  >
-                                    View Order
-                                  </Link>
-
-
-                                  {
-                                    order.status !==
-                                      'COMPLETED' &&
-                                    order.status !==
-                                      'CANCELLED' &&
-                                    !hasInspection && (
-
-                                      <button
-                                        className="sd-btn sd-btn-outline"
-                                        disabled={
-                                          busyInspection ===
-                                          order.id
-                                        }
-                                        onClick={() =>
-                                          requestInspection(
-                                            order
-                                          )
-                                        }
-                                      >
-                                        {
-                                          busyInspection ===
-                                          order.id
-                                            ? 'Requesting…'
-                                            : 'Request Inspection'
-                                        }
-                                      </button>
-
-                                    )
-                                  }
-
-
-                                  {
-                                    !order.transportJob &&
-                                    ![
-                                      'COMPLETED',
-                                      'CANCELLED',
-                                    ].includes(
-                                      order.status
-                                    ) && (
-
-                                      <Link
-                                        className="sd-btn sd-btn-outline"
-                                        to={`/orders/${order.id}/transport`}
-                                      >
-                                        Arrange Transport
-                                      </Link>
-
-                                    )
-                                  }
-
-                                </div>
-
-                              </td>
-
-                            </tr>
-                          );
-                        }
-                      )}
-
-
-                      {!orders.length && (
-                        <tr>
-                          <td colSpan="7">
-                            No orders yet.
-                          </td>
-                        </tr>
-                      )}
-
-                    </tbody>
-
-                  </table>
-
-                </div>
-              )}
-
-
-              {/* INSPECTIONS */}
-
-              {activeTab ===
-                'inspections' && (
-
-                <div>
-
-                  <div
-                    className="sd-panel"
-                    style={{
-                      marginBottom:
-                        16,
-                    }}
+          {/* OFFERS */}
+          {activeTab === "offers" && (
+            <div>
+
+              <h2>My Offers</h2>
+
+              {offers.length === 0 ? (
+                <div className="empty-state">
+                  <p>You have not made any offers yet.</p>
+
+                  <Link
+                    to="/listings"
+                    className="btn btn-primary"
                   >
-                    <span className="sd-eyebrow">
-                      QUALITY VERIFICATION
-                    </span>
-
-                    <h2>
-                      Inspections for
-                      your purchases
-                    </h2>
-
-                    <p className="sd-muted">
-                      Inspectors verify
-                      quantity and
-                      condition.
-                      Inspectors never
-                      arrange transport.
-                    </p>
-                  </div>
-
-
-                  {orders.map(
-                    (order) => {
-
-                      const items =
-                        inspectionForOrder(
-                          order
-                        );
-
-                      return (
-                        <div
-                          className="sd-panel"
-                          key={order.id}
-                          style={{
-                            marginBottom:
-                              12,
-                          }}
-                        >
-
-                          <div className="row-between">
-
-                            <div>
-
-                              <h3>
-                                {
-                                  order
-                                    .listing
-                                    ?.title ||
-                                  order
-                                    .listing
-                                    ?.cropType ||
-                                  'Produce'
-                                }
-                              </h3>
-
-                              <p className="sd-muted">
-                                Order{' '}
-                                {
-                                  shortId(
-                                    order.id
-                                  )
-                                }
-                                {' · '}
-                                {
-                                  order
-                                    .listing
-                                    ?.location ||
-                                  'Location not provided'
-                                }
-                              </p>
-
-                            </div>
-
-
-                            {
-                              !items.some(
-                                (item) =>
-                                  item.status !==
-                                  'CANCELLED'
-                              ) &&
-                              ![
-                                'COMPLETED',
-                                'CANCELLED',
-                              ].includes(
-                                order.status
-                              ) && (
-
-                                <button
-                                  className="sd-btn sd-btn-primary"
-                                  disabled={
-                                    busyInspection ===
-                                    order.id
-                                  }
-                                  onClick={() =>
-                                    requestInspection(
-                                      order
-                                    )
-                                  }
-                                >
-                                  {
-                                    busyInspection ===
-                                    order.id
-                                      ? 'Requesting…'
-                                      : 'Request Inspection'
-                                  }
-                                </button>
-
-                              )
-                            }
-
-                          </div>
-
-
-                          {
-                            items.length
-                              ? items.map(
-                                  (
-                                    item
-                                  ) => (
-
-                                    <div
-                                      className="sd-notice"
-                                      key={
-                                        item.id
-                                      }
-                                      style={{
-                                        marginTop:
-                                          12,
-                                      }}
-                                    >
-
-                                      <strong>
-                                        {
-                                          item.mode?.replaceAll(
-                                            '_',
-                                            ' '
-                                          )
-                                        }
-                                      </strong>
-
-
-                                      <span
-                                        className={
-                                          `sd-badge ${
-                                            badgeClass(
-                                              item.status
-                                            )
-                                          }`
-                                        }
-                                        style={{
-                                          marginLeft:
-                                            8,
-                                        }}
-                                      >
-                                        {
-                                          item.status
-                                        }
-                                      </span>
-
-
-                                      <p
-                                        className="sd-muted"
-                                        style={{
-                                          marginBottom:
-                                            0,
-                                        }}
-                                      >
-                                        {
-                                          item.inspector
-                                            ? `Inspector: ${item.inspector.name}`
-                                            : 'Waiting for a registered inspector to accept this request.'
-                                        }
-
-                                        {
-                                          item.report
-                                            ? ` · Verified quantity: ${item.report.quantity} ${order.listing?.unit || ''}`
-                                            : ''
-                                        }
-                                      </p>
-
-                                    </div>
-
-                                  )
-                                )
-                              : (
-
-                                <p className="sd-muted">
-                                  No inspection
-                                  request yet.
-                                </p>
-
-                              )
-                          }
-
-                        </div>
-                      );
-                    }
-                  )}
-
-
-                  {!orders.length && (
-                    <div className="sd-panel">
-                      Inspection requests
-                      become available
-                      here after you
-                      have an order.
-                    </div>
-                  )}
-
+                    Browse Listings
+                  </Link>
                 </div>
-              )}
+              ) : (
+                <div className="dashboard-list">
 
+                  {offers.map((offer) => {
+                    const image = getListingImage(offer);
 
-              {/* TRANSPORT */}
-
-              {activeTab ===
-                'transport' && (
-
-                <div>
-
-                  <div
-                    className="sd-panel"
-                    style={{
-                      marginBottom:
-                        16,
-                    }}
-                  >
-
-                    <span className="sd-eyebrow">
-                      PARTY-CONTROLLED TRANSPORT
-                    </span>
-
-                    <h2>
-                      Arrange transport
-                      for an order
-                    </h2>
-
-                    <p className="sd-muted">
-                      The buyer or seller
-                      arranges transport.
-                      Inspectors do not
-                      arrange trucks.
-                    </p>
-
-                  </div>
-
-
-                  {
-                    ordersWithoutTransport.map(
-                      (order) => (
-
-                        <div
-                          className="sd-panel"
-                          key={order.id}
-                          style={{
-                            marginBottom:
-                              12,
-                          }}
-                        >
-
-                          <div className="row-between">
-
-                            <div>
-
-                              <h3>
-                                {
-                                  order
-                                    .listing
-                                    ?.title ||
-                                  order
-                                    .listing
-                                    ?.cropType ||
-                                  'Produce'
-                                }
-                              </h3>
-
-                              <p className="sd-muted">
-                                Order{' '}
-                                {
-                                  shortId(
-                                    order.id
-                                  )
-                                }
-                                {' · '}
-                                {
-                                  order
-                                    .listing
-                                    ?.location ||
-                                  'Pickup location not provided'
-                                }
-                              </p>
-
-                            </div>
-
-
-                            <Link
-                              className="sd-btn sd-btn-primary"
-                              to={`/orders/${order.id}/transport`}
-                            >
-                              Arrange Transport
-                            </Link>
-
-                          </div>
-
-                        </div>
-
-                      )
-                    )
-                  }
-
-
-                  {!ordersWithoutTransport.length && (
-                    <div className="sd-panel">
-                      No active orders are
-                      waiting for buyer
-                      transport
-                      arrangement.
-                    </div>
-                  )}
-
-
-                  <div
-                    className="sd-panel"
-                    style={{
-                      marginTop:
-                        16,
-                    }}
-                  >
-
-                    <h3>
-                      Your transport
-                      records
-                    </h3>
-
-
-                    {
-                      orders
-                        .filter(
-                          (order) =>
-                            order.transportJob
-                        )
-                        .map(
-                          (order) => (
-
-                            <div
-                              className="sd-notice"
-                              key={
-                                order.id
-                              }
-                              style={{
-                                marginTop:
-                                  10,
-                              }}
-                            >
-
-                              <strong>
-                                {
-                                  order
-                                    .listing
-                                    ?.title ||
-                                  order
-                                    .listing
-                                    ?.cropType ||
-                                  'Produce'
-                                }
-                              </strong>
-
-
-                              <span
-                                className="sd-badge sd-blue"
-                                style={{
-                                  marginLeft:
-                                    8,
-                                }}
-                              >
-                                {
-                                  order
-                                    .transportJob
-                                    .status
-                                }
-                              </span>
-
-
-                              <p
-                                className="sd-muted"
-                                style={{
-                                  marginBottom:
-                                    0,
-                                }}
-                              >
-                                {
-                                  order
-                                    .transportJob
-                                    .pickupLocation
-                                }
-
-                                {' → '}
-
-                                {
-                                  order
-                                    .transportJob
-                                    .destination
-                                }
-                              </p>
-
-
-                              <Link
-                                className="sd-btn sd-btn-outline"
-                                to={`/orders/${order.id}/transport`}
-                                style={{
-                                  marginTop:
-                                    8,
-                                }}
-                              >
-                                View Transport
-                              </Link>
-
-                            </div>
-
-                          )
-                        )
-                    }
-
-
-                    {!orders.some(
-                      (order) =>
-                        order.transportJob
-                    ) && (
-                      <p className="sd-muted">
-                        No transport
-                        records yet.
-                      </p>
-                    )}
-
-                  </div>
-
-
-                  {
-                    user?.roles?.includes(
-                      'TRUCK_OWNER'
-                    ) && (
-
+                    return (
                       <div
-                        className="sd-panel"
-                        style={{
-                          marginTop:
-                            16,
-                        }}
+                        className="dashboard-list-item"
+                        key={offer.id}
                       >
 
+                        {image && (
+                          <img
+                            src={image}
+                            alt={getListingTitle(offer)}
+                            className="dashboard-thumb"
+                          />
+                        )}
+
+                        <div className="dashboard-list-content">
+
+                          <h3>
+                            {getListingTitle(offer)}
+                          </h3>
+
+                          <p>
+                            Your offer:{" "}
+                            <strong>
+                              {formatMoney(offer.amount)}
+                            </strong>
+                          </p>
+
+                          {offer.counterAmount != null && (
+                            <p>
+                              Counter offer:{" "}
+                              <strong>
+                                {formatMoney(
+                                  offer.counterAmount
+                                )}
+                              </strong>
+                            </p>
+                          )}
+
+                          <p>
+                            Status:{" "}
+                            <strong>
+                              {offer.status}
+                            </strong>
+                          </p>
+
+                        </div>
+
+
+                        <div className="dashboard-list-actions">
+
+                          {offer.status === "ACCEPTED" && (
+                            offer.order ? (
+                              <Link
+                                to={`/orders/${offer.order.id}`}
+                                className="btn btn-primary"
+                              >
+                                View Order
+                              </Link>
+                            ) : (
+                              <span className="badge badge-success">
+                                Order being created
+                              </span>
+                            )
+                          )}
+
+                        </div>
+
+                      </div>
+                    );
+                  })}
+
+                </div>
+              )}
+
+            </div>
+          )}
+
+
+          {/* ORDERS */}
+          {activeTab === "orders" && (
+            <div>
+
+              <h2>My Orders</h2>
+
+              {buyerOrders.length === 0 ? (
+                <div className="empty-state">
+                  <p>
+                    No orders yet. When a seller accepts one
+                    of your offers, your order will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="dashboard-list">
+
+                  {buyerOrders.map((order) => {
+
+                    const title =
+                      order?.listing?.title ||
+                      order?.listing?.name ||
+                      "Order";
+
+                    return (
+                      <div
+                        className="dashboard-list-item"
+                        key={order.id}
+                      >
+
+                        <div className="dashboard-list-content">
+
+                          <h3>{title}</h3>
+
+                          <p>
+                            Order ID:{" "}
+                            <strong>
+                              {order.id}
+                            </strong>
+                          </p>
+
+                          <p>
+                            Price:{" "}
+                            <strong>
+                              {formatMoney(
+                                order.finalPrice
+                              )}
+                            </strong>
+                          </p>
+
+                          <p>
+                            Status:{" "}
+                            <strong>
+                              {order.status}
+                            </strong>
+                          </p>
+
+                        </div>
+
+
+                        <div className="dashboard-list-actions">
+
+                          <Link
+                            to={`/orders/${order.id}`}
+                            className="btn btn-primary"
+                          >
+                            View Order
+                          </Link>
+
+
+                          {order.status !== "CANCELLED" &&
+                            order.status !== "COMPLETED" && (
+                              <Link
+                                to={`/orders/${order.id}/transport`}
+                                className="btn btn-secondary"
+                              >
+                                Arrange Transport
+                              </Link>
+                            )}
+
+                        </div>
+
+                      </div>
+                    );
+                  })}
+
+                </div>
+              )}
+
+            </div>
+          )}
+
+
+          {/* INSPECTIONS */}
+          {activeTab === "inspections" && (
+            <div>
+
+              <h2>Inspections</h2>
+
+              {inspections.length === 0 ? (
+                <div className="empty-state">
+                  <p>
+                    No inspection requests yet.
+                  </p>
+
+                  {buyerOrders.length > 0 && (
+                    <p>
+                      Open an order to request an inspection.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="dashboard-list">
+
+                  {inspections.map((inspection) => (
+
+                    <div
+                      className="dashboard-list-item"
+                      key={inspection.id}
+                    >
+
+                      <div className="dashboard-list-content">
+
                         <h3>
-                          Your available
-                          trucks
+                          {getListingTitle(inspection)}
                         </h3>
 
+                        <p>
+                          Mode:{" "}
+                          <strong>
+                            {inspection.mode || "—"}
+                          </strong>
+                        </p>
 
-                        {
-                          trucks
-                            .filter(
-                              (truck) =>
-                                truck.availability ===
-                                'AVAILABLE'
-                            )
-                            .map(
-                              (truck) => (
+                        <p>
+                          Status:{" "}
+                          <strong>
+                            {inspection.status}
+                          </strong>
+                        </p>
 
-                                <div
-                                  className="sd-notice"
-                                  key={
-                                    truck.id
-                                  }
-                                  style={{
-                                    marginTop:
-                                      8,
-                                  }}
-                                >
-
-                                  <strong>
-                                    {
-                                      truck.registration
-                                    }
-                                  </strong>
-
-                                  {' · '}
-
-                                  {
-                                    truck.truckType
-                                  }
-
-                                  {' · '}
-
-                                  {
-                                    truck.capacity
-                                  }
-                                  t
-
-                                  {' · '}
-
-                                  {
-                                    truck.operatingArea
-                                  }
-
-                                </div>
-
-                              )
-                            )
-                        }
-
-
-                        {!trucks.filter(
-                          (truck) =>
-                            truck.availability ===
-                            'AVAILABLE'
-                        ).length && (
-                          <p className="sd-muted">
-                            No available
-                            registered
-                            truck.
+                        {inspection.inspector && (
+                          <p>
+                            Inspector:{" "}
+                            {inspection.inspector.name ||
+                              inspection.inspector.email}
                           </p>
                         )}
 
                       </div>
 
-                    )
-                  }
+                    </div>
+
+                  ))}
 
                 </div>
               )}
 
-            </>
+            </div>
           )}
 
-        </section>
+
+          {/* TRANSPORT */}
+          {activeTab === "transport" && (
+            <div>
+
+              <h2>Transport</h2>
+
+              {buyerOrders.length === 0 ? (
+                <div className="empty-state">
+                  <p>
+                    Transport becomes available after an
+                    offer is accepted and an order is created.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p>
+                    Choose an order below to arrange transport.
+                    Transport is separate from inspection.
+                  </p>
+
+                  <div className="dashboard-list">
+
+                    {buyerOrders
+                      .filter(
+                        (order) =>
+                          order.status !== "CANCELLED" &&
+                          order.status !== "COMPLETED"
+                      )
+                      .map((order) => (
+
+                        <div
+                          className="dashboard-list-item"
+                          key={order.id}
+                        >
+
+                          <div className="dashboard-list-content">
+
+                            <h3>
+                              {order?.listing?.title ||
+                                order?.listing?.name ||
+                                "Order"}
+                            </h3>
+
+                            <p>
+                              Order status:{" "}
+                              <strong>
+                                {order.status}
+                              </strong>
+                            </p>
+
+                          </div>
+
+
+                          <div className="dashboard-list-actions">
+
+                            <Link
+                              to={`/orders/${order.id}/transport`}
+                              className="btn btn-primary"
+                            >
+                              Find Transport
+                            </Link>
+
+                          </div>
+
+                        </div>
+
+                      ))}
+
+                  </div>
+
+                  {trucks.length > 0 && (
+                    <p style={{ marginTop: 16 }}>
+                      You have access to {trucks.length} transport
+                      option{trucks.length === 1 ? "" : "s"}.
+                    </p>
+                  )}
+                </>
+              )}
+
+            </div>
+          )}
+
+        </div>
 
       </div>
-    </main>
+    </div>
   );
 }
