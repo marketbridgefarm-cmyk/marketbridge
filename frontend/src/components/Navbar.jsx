@@ -29,6 +29,7 @@ export default function Navbar() {
           {user && roleLinks.filter(([r]) => user.roles?.includes(r)).map(([r, href, label]) => (
             <Link key={r} className={location.pathname === href ? 'active' : ''} to={href}>{label}</Link>
           ))}
+          {user && <Link className={location.pathname.startsWith('/orders') ? 'active' : ''} to="/orders">Orders</Link>}
           {user ? (
             <button className="nav-user" onClick={() => navigate(roleLinks.find(([r]) => user.roles?.includes(r))?.[1] || '/')}>
               <span className="avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
