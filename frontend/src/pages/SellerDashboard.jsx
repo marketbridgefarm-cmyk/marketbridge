@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -14,6 +14,7 @@ const TABS = [
 
 export default function SellerDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [listings, setListings] = useState([]);
   const [offersByListing, setOffersByListing] = useState({});
   const [inspectionsByListing, setInspectionsByListing] = useState({});
@@ -107,7 +108,14 @@ export default function SellerDashboard() {
         await api.patch(`/offers/${selectedOffer.id}`, { action: 'COUNTER', counterAmount: Number(v) });
         toast('Counteroffer sent: ' + Number(v).toLocaleString() + ' ETB');
       } else {
-        await api.patch(`/offers/${selectedOffer.id}`, { action });
+        const response = await api.patch(`/offers/${selectedOffer.id}`, { action });
+        if (action === 'ACCEPT' && response.data?.order?.id) {
+          offerModalRef.current.close();
+          toast('Offer accepted. Opening the new order…');
+          await loadAll();
+          navigate(`/orders/${response.data.order.id}`);
+          return;
+        }
         toast(action === 'ACCEPT' ? 'Offer accepted. Order created.' : 'Offer rejected.');
       }
       offerModalRef.current.close();
@@ -241,7 +249,7 @@ export default function SellerDashboard() {
                       <td>{o.finalPrice.toLocaleString()} ETB</td>
                       <td>{o.transportJob ? `${o.transportJob.arrangingParty} — ${o.transportJob.method === 'OWN_TRUCK' ? 'Own Truck' : 'Hire Transport'}` : '—'}</td>
                       <td><span className="sd-badge sd-blue">{o.status}</span></td>
-                      <td>{!o.transportJob && <button className="sd-btn sd-btn-outline" onClick={() => openTransportModal(o, 'hire')}>Arrange</button>}</td>
+                      <td><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Link to={`/orders/${o.id}`} className="sd-btn sd-btn-primary">View Order</Link>{!o.transportJob && <button className="sd-btn sd-btn-outline" onClick={() => openTransportModal(o, 'hire')}>Arrange</button>}</div></td>
                     </tr>
                   ))}
                   {orders.length === 0 && <tr><td colSpan="7">No orders yet.</td></tr>}
