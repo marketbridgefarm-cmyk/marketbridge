@@ -21,6 +21,11 @@ function client() {
     endpoint: c.endpoint,
     forcePathStyle: c.forcePathStyle,
     credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID, secretAccessKey: process.env.S3_SECRET_ACCESS_KEY },
+    // Cloudflare R2's S3-compatible API returns 501 NotImplemented for the
+    // checksum headers newer AWS SDK versions attach by default, and does
+    // not support AWS's SSE-S3 parameter (R2 encrypts at rest regardless).
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
   });
 }
 function safeExtension(name='') {
@@ -32,7 +37,7 @@ function makeDigitalKey(productId, originalName) {
 }
 async function uploadPrivateObject({ key, buffer, contentType }) {
   const c = config();
-  await client().send(new PutObjectCommand({ Bucket: c.bucket, Key: key, Body: buffer, ContentType: contentType || 'application/octet-stream', ServerSideEncryption: 'AES256' }));
+  await client().send(new PutObjectCommand({ Bucket: c.bucket, Key: key, Body: buffer, ContentType: contentType || 'application/octet-stream' }));
 }
 async function deletePrivateObject(key) {
   if (!key) return;
@@ -42,7 +47,7 @@ async function deletePrivateObject(key) {
 async function signedDownloadUrl({ key, fileName, contentType }) {
   const c = config();
   const expires = Math.min(Math.max(Number(process.env.DIGITAL_DOWNLOAD_EXPIRES_SECONDS || 300), 60), 900);
-  const safeName = String(fileName || 'download').replace(/["\\\r\n]/g, '_').slice(0, 180);
+  const safeName = String(fileName || 'download').replace(/[\"\\\r\n]/g, '_').slice(0, 180);
   const command = new (require('@aws-sdk/client-s3').GetObjectCommand)({
     Bucket: c.bucket,
     Key: key,
