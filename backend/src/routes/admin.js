@@ -146,7 +146,7 @@ router.get('/users/:id', async (req, res) => {
         select: {
           id: true,
           status: true,
-          totalAmount: true,
+          finalPrice: true,
           createdAt: true,
         },
         orderBy: {
@@ -159,7 +159,7 @@ router.get('/users/:id', async (req, res) => {
         select: {
           id: true,
           status: true,
-          totalAmount: true,
+          finalPrice: true,
           createdAt: true,
         },
         orderBy: {
@@ -172,7 +172,8 @@ router.get('/users/:id', async (req, res) => {
         select: {
           id: true,
           status: true,
-          reason: true,
+          disputeType: true,
+          description: true,
           createdAt: true,
         },
         orderBy: {
@@ -185,7 +186,8 @@ router.get('/users/:id', async (req, res) => {
         select: {
           id: true,
           status: true,
-          reason: true,
+          disputeType: true,
+          description: true,
           createdAt: true,
         },
         orderBy: {
