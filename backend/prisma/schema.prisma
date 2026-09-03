@@ -16,6 +16,10 @@ enum Role {
   ADVERTISER
   ADMIN
 }
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+}
 
 enum ListingCategory {
   AGRICULTURAL
@@ -165,6 +169,7 @@ model User {
   roles Role[] @default([BUYER, SELLER])
   location String?
   verificationStatus VerificationStatus @default(UNVERIFIED)
+accountStatus AccountStatus @default(ACTIVE)
   rating Float @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
