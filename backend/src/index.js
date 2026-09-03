@@ -23,6 +23,10 @@ const adminRoutes = require('./routes/admin');
 
 const app = express();
 
+// Railway runs the app behind a reverse proxy.
+// Trust the first proxy so Express can correctly read X-Forwarded-For.
+app.set('trust proxy', 1);
+
 /*
 |--------------------------------------------------------------------------
 | Security / Middleware
