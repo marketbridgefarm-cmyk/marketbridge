@@ -56,6 +56,38 @@ router.get('/inspectors', authenticate, async (req, res) => {
   res.json({ inspectors });
 });
 
+// Inspector browses open (unassigned) inspection requests
+router.get('/available', authenticate, requireRole('INSPECTOR'), async (req, res) => {
+  const { location } = req.query;
+  const requests = await prisma.inspectionRequest.findMany({
+    where: {
+      status: 'REQUESTED',
+      inspectorId: null,
+      ...(location && { listing: { location: { contains: location, mode: 'insensitive' } } }),
+    },
+    include: {
+      listing: { select: { id: true, cropType: true, quantity: true, unit: true, location: true, category: true } },
+      requestedBy: { select: { id: true, name: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json({ requests });
+});
+
+// Inspector views their own accepted/completed jobs
+router.get('/mine', authenticate, requireRole('INSPECTOR'), async (req, res) => {
+  const requests = await prisma.inspectionRequest.findMany({
+    where: { inspectorId: req.user.id },
+    include: {
+      listing: { select: { id: true, cropType: true, quantity: true, unit: true, location: true, category: true } },
+      requestedBy: { select: { id: true, name: true } },
+      report: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json({ requests });
+});
+
 // Inspector accepts a pending request
 router.patch('/:id/accept', authenticate, requireRole('INSPECTOR'), async (req, res) => {
   const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id } });
