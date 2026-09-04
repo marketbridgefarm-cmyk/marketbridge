@@ -21,6 +21,7 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [disputes, setDisputes] = useState([]);
   const [suspiciousUsers, setSuspiciousUsers] = useState([]);
+  const [ads, setAds] = useState([]);
 
   const [userSearch, setUserSearch] = useState('');
   const [roleSelections, setRoleSelections] = useState({});
@@ -40,17 +41,20 @@ export default function AdminDashboard() {
         usersRes,
         disputesRes,
         fraudRes,
+        adsRes,
       ] = await Promise.all([
         api.get('/admin/overview'),
         api.get('/admin/users'),
         api.get('/disputes'),
         api.get('/admin/fraud-flags'),
+        api.get('/ads'),
       ]);
 
       setOverview(overviewRes.data);
       setUsers(usersRes.data?.users || []);
       setDisputes(disputesRes.data?.disputes || []);
       setSuspiciousUsers(fraudRes.data?.suspiciousUsers || []);
+      setAds(adsRes.data?.ads || []);
     } catch (err) {
       setError(
         err.response?.data?.error ||
@@ -226,6 +230,24 @@ export default function AdminDashboard() {
     }
   }
 
+  async function setAdStatus(adId, status) {
+    clearMessages();
+    setActionLoading(`ad-${adId}`);
+
+    try {
+      await api.patch(`/ads/${adId}/status`, { status });
+      setSuccess(`Campaign ${status.toLowerCase()} successfully.`);
+      await loadAll();
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+        'Could not update campaign status'
+      );
+    } finally {
+      setActionLoading('');
+    }
+  }
+
   const filteredUsers = useMemo(() => {
     const search = userSearch.trim().toLowerCase();
 
@@ -287,6 +309,14 @@ export default function AdminDashboard() {
 
   const resolvedDisputes = disputes.filter(
     (d) => d.status !== 'OPEN'
+  );
+
+  const pendingAds = ads.filter(
+    (a) => a.status === 'PENDING'
+  );
+
+  const reviewedAds = ads.filter(
+    (a) => a.status !== 'PENDING'
   );
 
   return (
@@ -401,6 +431,23 @@ export default function AdminDashboard() {
             {suspiciousUsers.length > 0 &&
               `(${suspiciousUsers.length})`}
           </button>
+
+          <button
+            type="button"
+            className={`sd-tab ${
+              tab === 'advertising'
+                ? 'sd-active'
+                : ''
+            }`}
+            onClick={() => {
+              clearMessages();
+              setTab('advertising');
+            }}
+          >
+            Advertising{' '}
+            {pendingAds.length > 0 &&
+              `(${pendingAds.length})`}
+          </button>
         </div>
 
         {tab === 'overview' && (
@@ -447,7 +494,7 @@ export default function AdminDashboard() {
                 ],
                 [
                   'Advertising & sponsored listings approval',
-                  false,
+                  true,
                 ],
                 [
                   'Commissions & revenue records',
@@ -959,6 +1006,90 @@ export default function AdminDashboard() {
                 No flagged users right now.
               </p>
             )}
+
+          </div>
+        )}
+
+        {tab === 'advertising' && (
+          <div className="admin-grid">
+
+            <div className="card">
+              <h2>Pending review</h2>
+
+              {pendingAds.map((ad) => (
+                <div className="dispute" key={ad.id}>
+                  <strong>{ad.type.replace(/_/g, ' ')}</strong>
+
+                  <p className="muted">
+                    {ad.advertiser?.name} ({ad.advertiser?.email})
+                    {ad.listing && <> — featuring "{ad.listing.title || ad.listing.cropType}"</>}
+                  </p>
+
+                  <p className="muted">
+                    {new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}
+                    {' · '}
+                    {ad.amountPaid != null
+                      ? `${Number(ad.amountPaid).toLocaleString()} ETB paid`
+                      : 'No payment recorded yet'}
+                  </p>
+
+                  <div className="row-actions">
+                    <button
+                      className="btn btn-primary"
+                      disabled={
+                        actionLoading === `ad-${ad.id}` ||
+                        ad.amountPaid == null
+                      }
+                      title={ad.amountPaid == null ? 'Waiting on advertiser payment before approval' : undefined}
+                      onClick={() => setAdStatus(ad.id, 'ACTIVE')}
+                    >
+                      {actionLoading === `ad-${ad.id}` ? 'Working…' : 'Approve'}
+                    </button>
+
+                    <button
+                      className="btn btn-light"
+                      disabled={actionLoading === `ad-${ad.id}`}
+                      onClick={() => setAdStatus(ad.id, 'REJECTED')}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {pendingAds.length === 0 && (
+                <p className="muted">No campaigns waiting on review.</p>
+              )}
+            </div>
+
+            <div className="card">
+              <h2>Reviewed campaigns</h2>
+
+              {reviewedAds.slice(0, 15).map((ad) => (
+                <div className="dispute" key={ad.id}>
+                  <strong>{ad.type.replace(/_/g, ' ')}</strong>
+
+                  <p className="muted">
+                    {ad.advertiser?.name} —{' '}
+                    <span className="sd-badge">{ad.status}</span>
+                  </p>
+
+                  {ad.status === 'ACTIVE' && (
+                    <button
+                      className="btn btn-light"
+                      disabled={actionLoading === `ad-${ad.id}`}
+                      onClick={() => setAdStatus(ad.id, 'EXPIRED')}
+                    >
+                      {actionLoading === `ad-${ad.id}` ? 'Working…' : 'End campaign early'}
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              {reviewedAds.length === 0 && (
+                <p className="muted">Nothing reviewed yet.</p>
+              )}
+            </div>
 
           </div>
         )}
