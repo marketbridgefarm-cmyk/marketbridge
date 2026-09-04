@@ -22,11 +22,9 @@ export default function SellerDashboard() {
   const [activeTab, setActiveTab] = useState('listings');
   const [toastMsg, setToastMsg] = useState('');
   const [selectedOffer, setSelectedOffer] = useState(null);
-  const [transportTarget, setTransportTarget] = useState(null);
 
   const listingModalRef = useRef(null);
   const offerModalRef = useRef(null);
-  const transportModalRef = useRef(null);
 
   function toast(msg) {
     setToastMsg(msg);
@@ -125,35 +123,6 @@ export default function SellerDashboard() {
     }
   }
 
-  function openTransportModal(order, method) {
-    setTransportTarget({ order, method });
-    transportModalRef.current.showModal();
-  }
-
-  async function submitTransport(e) {
-    e.preventDefault();
-    if (!transportTarget) return;
-    const d = new FormData(e.target);
-    const partyMap = { Seller: 'SELLER', Buyer: 'BUYER', 'Joint-agreed': 'JOINT' };
-    const method = transportTarget.method === 'hire' ? 'HIRE_TRANSPORTER' : 'OWN_TRUCK';
-    try {
-      await api.post('/transport', {
-        orderId: transportTarget.order.id,
-        arrangingParty: partyMap[d.get('party')] || 'SELLER',
-        method,
-        pickupLocation: transportTarget.order.listing?.location || 'Farm location',
-        destination: d.get('destination'),
-        load: transportTarget.order.listing?.cropType || 'Produce',
-        specialRequirements: d.get('requirements') || undefined,
-      });
-      transportModalRef.current.close();
-      toast('Transport record saved.');
-      loadAll();
-    } catch (err) {
-      toast(err.response?.data?.error || 'Could not save transport record');
-    }
-  }
-
   return (
     <div className="sd-dashboard">
       <section id="overview">
@@ -249,7 +218,7 @@ export default function SellerDashboard() {
                       <td>{o.finalPrice.toLocaleString()} ETB</td>
                       <td>{o.transportJob ? `${o.transportJob.arrangingParty} — ${o.transportJob.method === 'OWN_TRUCK' ? 'Own Truck' : 'Hire Transport'}` : '—'}</td>
                       <td><span className="sd-badge sd-blue">{o.status}</span></td>
-                      <td><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Link to={`/orders/${o.id}`} className="sd-btn sd-btn-primary">View Order</Link>{!o.transportJob && <button className="sd-btn sd-btn-outline" onClick={() => openTransportModal(o, 'hire')}>Arrange</button>}</div></td>
+                      <td><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Link to={`/orders/${o.id}`} className="sd-btn sd-btn-primary">View Order</Link>{!o.transportJob && <Link to={`/orders/${o.id}/transport`} className="sd-btn sd-btn-outline">Arrange</Link>}</div></td>
                     </tr>
                   ))}
                   {orders.length === 0 && <tr><td colSpan="7">No orders yet.</td></tr>}
@@ -297,25 +266,16 @@ export default function SellerDashboard() {
             <div className="sd-toolbar"><div><span className="sd-eyebrow">TRANSPORT</span><h2>Seller-controlled transport options</h2></div></div>
             <div className="sd-flow">
               <div className="sd-panel">
-                <h3>🚛 Use My Own Truck</h3>
-                <p className="sd-muted">Record your own vehicle for an order without transport arranged yet.</p>
+                <h3>🚛 Arrange transport</h3>
+                <p className="sd-muted">Use your own truck, or hire a registered transporter — choose on the next screen.</p>
                 {orders.filter((o) => !o.transportJob).map((o) => (
-                  <button key={o.id} className="sd-btn sd-btn-outline" style={{ marginTop: 8, display: 'block' }} onClick={() => openTransportModal(o, 'own')}>{o.listing?.cropType} — {o.id.slice(0, 8)}</button>
+                  <Link key={o.id} className="sd-btn sd-btn-primary" style={{ marginTop: 8, display: 'block' }} to={`/orders/${o.id}/transport`}>{o.listing?.cropType} — {o.id.slice(0, 8)}</Link>
                 ))}
+                {orders.filter((o) => !o.transportJob).length === 0 && <p className="sd-muted">No orders currently need transport arranged.</p>}
               </div>
               <div className="sd-panel">
-                <h3>🚚 Hire Transport</h3>
-                <p className="sd-muted">Create a request and select a registered truck owner.</p>
-                {orders.filter((o) => !o.transportJob).map((o) => (
-                  <button key={o.id} className="sd-btn sd-btn-primary" style={{ marginTop: 8, display: 'block' }} onClick={() => openTransportModal(o, 'hire')}>{o.listing?.cropType} — {o.id.slice(0, 8)}</button>
-                ))}
-              </div>
-              <div className="sd-panel">
-                <h3>🤝 Buyer Arranges</h3>
-                <p className="sd-muted">Record that the buyer will handle transportation.</p>
-                {orders.filter((o) => !o.transportJob).map((o) => (
-                  <button key={o.id} className="sd-btn sd-btn-outline" style={{ marginTop: 8, display: 'block' }} onClick={() => openTransportModal(o, 'buyer')}>{o.listing?.cropType} — {o.id.slice(0, 8)}</button>
-                ))}
+                <h3>🤝 Buyer arranges</h3>
+                <p className="sd-muted">If the buyer is handling transport themselves, they can arrange it from their own order view — no action needed here. It'll show up below once recorded.</p>
               </div>
             </div>
             <div className="sd-panel" style={{ marginTop: 20 }}>
@@ -380,30 +340,6 @@ export default function SellerDashboard() {
             <button className="sd-btn sd-btn-outline" onClick={() => respondOffer('COUNTER')}>Counteroffer</button>
             <button className="sd-btn sd-btn-outline" onClick={() => respondOffer('REJECT')}>Reject</button>
           </div>
-        </div>
-      </dialog>
-
-      <dialog ref={transportModalRef} className="sd-dialog">
-        <div className="sd-modal">
-          <button className="sd-close" onClick={() => transportModalRef.current.close()}>×</button>
-          <span className="sd-eyebrow">TRANSPORT</span>
-          <h2>{transportTarget?.method === 'hire' ? 'Hire Transporter' : transportTarget?.method === 'own' ? 'Use My Own Truck' : 'Buyer Arranges'}</h2>
-          <form onSubmit={submitTransport}>
-            <div className="sd-form-grid">
-              <div><label>Order</label><input value={transportTarget?.order?.id?.slice(0, 8) || ''} disabled /></div>
-              <div><label>Arranging party</label>
-                <select name="party" defaultValue="Seller">
-                  <option>Seller</option><option>Buyer</option><option>Joint-agreed</option>
-                </select>
-              </div>
-              <div><label>Destination</label><input name="destination" required placeholder="Buyer / delivery destination" /></div>
-              <div><label>Capacity / truck type</label><input name="capacity" placeholder="e.g. 20t flatbed" /></div>
-              <div className="sd-full"><label>Access / special requirements</label><textarea name="requirements" rows="3"></textarea></div>
-            </div>
-            <div className="sd-modal-actions" style={{ marginTop: 20 }}>
-              <button className="sd-btn sd-btn-primary">Save Transport Record</button>
-            </div>
-          </form>
         </div>
       </dialog>
 
