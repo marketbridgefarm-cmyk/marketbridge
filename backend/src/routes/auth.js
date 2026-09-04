@@ -66,6 +66,10 @@ router.post('/login', authLimiter, [body('email').isEmail().normalizeEmail(), bo
   const match = await bcrypt.compare(password, user.passwordHash);
   if (!match) return res.status(401).json({ error: 'Invalid credentials' });
 
+  if (user.accountStatus === 'SUSPENDED') {
+    return res.status(403).json({ error: 'This account has been suspended. Contact support for assistance.' });
+  }
+
   res.json({ user: sanitize(user), token: signToken(user) });
 });
 
