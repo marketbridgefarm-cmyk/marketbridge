@@ -8,6 +8,7 @@ const roleLinks = [
   ['INSPECTOR', '/dashboard/inspector', 'Inspector'],
   ['TRUCK_OWNER', '/dashboard/truck-owner', 'Transport'],
   ['ADMIN', '/dashboard/admin', 'Admin'],
+  ['ADVERTISER', '/dashboard/advertiser', 'Advertising'],
 ];
 
 export default function Navbar() {
