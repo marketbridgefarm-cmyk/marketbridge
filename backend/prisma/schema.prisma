@@ -476,6 +476,7 @@ model Dispute {
   evidence String[]
   status DisputeStatus @default(OPEN)
   resolution String?
+  previousOrderStatus OrderStatus?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([orderId])
