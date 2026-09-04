@@ -3,6 +3,19 @@ const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
+// Refuse to run against production unless explicitly overridden. This seed
+// script creates demo accounts with a predictable email/password
+// (admin@example.com / password123, full ADMIN role) — safe for local
+// development, but must never land in a real database.
+if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PROD_SEED !== 'true') {
+  console.error(
+    'Refusing to run the seed script: NODE_ENV=production.\n' +
+    'This would create demo accounts (including a guessable admin login) in a real database.\n' +
+    'If you are absolutely sure, re-run with ALLOW_PROD_SEED=true.'
+  );
+  process.exit(1);
+}
+
 async function main() {
   const passwordHash = await bcrypt.hash('password123', 10);
 
