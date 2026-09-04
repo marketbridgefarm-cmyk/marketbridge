@@ -19,6 +19,9 @@ async function authenticate(req, res, next) {
     if (!payload.sub || typeof payload.sub !== 'string') return res.status(401).json({ error: 'Invalid token subject' });
     const user = await prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) return res.status(401).json({ error: 'User no longer exists' });
+    if (user.accountStatus === 'SUSPENDED') {
+      return res.status(403).json({ error: 'This account has been suspended. Contact support for assistance.' });
+    }
     req.user = user;
     next();
   } catch {
