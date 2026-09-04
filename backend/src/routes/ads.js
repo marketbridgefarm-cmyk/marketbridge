@@ -30,6 +30,18 @@ router.get('/active', async (req,res)=>{
   res.json({ads});
 });
 
+// Advertiser's own campaigns, any status.
+router.get('/mine', authenticate, requireRole('ADVERTISER'), async (req,res)=>{
+  const ads=await prisma.advertisement.findMany({where:{advertiserId:req.user.id},include:{listing:{select:{id:true,title:true,cropType:true}}},orderBy:{createdAt:'desc'}});
+  res.json({ads});
+});
+
+// Admin review queue — every campaign, any status.
+router.get('/', authenticate, requireRole('ADMIN'), async (req,res)=>{
+  const ads=await prisma.advertisement.findMany({include:{listing:{select:{id:true,title:true,cropType:true}},advertiser:{select:{id:true,name:true,email:true}}},orderBy:{createdAt:'desc'}});
+  res.json({ads});
+});
+
 router.patch('/:id/status', authenticate, requireRole('ADMIN'), [param('id').isUUID(),body('status').isIn(['ACTIVE','REJECTED','EXPIRED'])], validate, async(req,res)=>{
   const ad=await prisma.advertisement.findUnique({where:{id:req.params.id}});
   if(!ad)return res.status(404).json({error:'Advertisement not found'});
