@@ -8,13 +8,14 @@ const router = express.Router();
 
 // Public browse/search
 router.get('/', async (req, res) => {
-  const { cropType, title, location, status, minQuantity, category } = req.query;
+  const { cropType, title, location, status, minQuantity, category, sellerId } = req.query;
   const listings = await prisma.listing.findMany({
     where: {
       ...(cropType && { cropType: { contains: cropType, mode: 'insensitive' } }),
       ...(title && { title: { contains: title, mode: 'insensitive' } }),
       ...(location && { location: { contains: location, mode: 'insensitive' } }),
       ...(category && { category }),
+      ...(sellerId && { sellerId }),
       status: status || 'ACTIVE',
       ...(minQuantity && { quantity: { gte: Number(minQuantity) } }),
     },
