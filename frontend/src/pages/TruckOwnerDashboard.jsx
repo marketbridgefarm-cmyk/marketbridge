@@ -227,7 +227,7 @@ export default function TruckOwnerDashboard() {
   function renderJobActionButtons(job) {
     const busy = actionLoading?.startsWith(`status-${job.id}`);
 
-    if (job.status === 'ACCEPTED' || job.status === 'QUOTED') {
+    if (job.status === 'ACCEPTED') {
       return (
         <button
           className="sd-btn sd-btn-outline"
