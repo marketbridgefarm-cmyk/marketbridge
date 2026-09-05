@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import api from '../api/client';
 
 const TABS = [
@@ -300,6 +301,8 @@ export default function TruckOwnerDashboard() {
           requests created through MarketBridge, respond to jobs,
           and manage accepted trips through delivery.
         </p>
+
+        <RoleSwitchCTA current="TRUCK_OWNER" />
 
         <div className="sd-stat-grid">
 
