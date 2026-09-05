@@ -41,19 +41,34 @@ export default function Login() {
 
   return (
     <main className="section auth-section">
-      <div className="auth-card card">
-        <span className="eyebrow">WELCOME BACK</span>
-        <h1>Log in to MarketBridge.</h1>
-        {sessionMessage && !error && <div className="alert error">{sessionMessage}</div>}
-        {error && <div className="alert error">{error}</div>}
-        <form onSubmit={submit}>
-          <label>Email</label>
-          <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <label>Password</label>
-          <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <button className="btn btn-primary full" type="submit">Log in</button>
-        </form>
-        <p className="muted">New to MarketBridge? <Link to="/register">Create an account</Link></p>
+      <div className="auth-shell">
+        <aside className="auth-side">
+          <div className="auth-side-top">
+            <span className="brand-mark">MB</span>
+            <h2>Buy and sell across Ethiopia's farms, faster.</h2>
+            <p>One login for listings, orders, transport, and payments — all in one place.</p>
+          </div>
+          <ul className="auth-points">
+            <li><b>✓</b> Track every order from offer to delivery</li>
+            <li><b>✓</b> Arrange transport with verified truck owners</li>
+            <li><b>✓</b> Pay securely with Telebirr, CBE, or QR</li>
+          </ul>
+        </aside>
+
+        <div className="auth-card">
+          <span className="eyebrow">WELCOME BACK</span>
+          <h1>Log in to MarketBridge</h1>
+          {sessionMessage && !error && <div className="alert error">{sessionMessage}</div>}
+          {error && <div className="alert error">{error}</div>}
+          <form onSubmit={submit}>
+            <label>Email</label>
+            <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <label>Password</label>
+            <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <button className="btn btn-primary btn-lg full mt" type="submit">Log in</button>
+          </form>
+          <p className="muted mt">New to MarketBridge? <Link to="/register">Create an account</Link></p>
+        </div>
       </div>
     </main>
   );
