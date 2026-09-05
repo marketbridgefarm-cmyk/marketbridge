@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
+import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 
 const VERIFICATION_OPTIONS = ['PENDING', 'VERIFIED', 'REJECTED'];
 
@@ -339,6 +340,8 @@ export default function AdminDashboard() {
             </p>
           </div>
         </div>
+
+        <RoleSwitchCTA current="ADMIN" />
 
         {error && (
           <div className="alert error">
