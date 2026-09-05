@@ -256,6 +256,7 @@ model InspectionRequest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   report InspectionReport?
+  payments Payment[]
   @@index([listingId])
   @@index([requestedById])
   @@index([inspectorId])
@@ -406,6 +407,8 @@ model Payment {
   digitalProductId String?
   advertisement Advertisement? @relation(fields: [advertisementId], references: [id])
   advertisementId String?
+  inspectionRequest InspectionRequest? @relation(fields: [inspectionRequestId], references: [id])
+  inspectionRequestId String?
   digitalPurchase DigitalPurchase?
   type PaymentType
   amount Float
@@ -414,11 +417,14 @@ model Payment {
   reference String?
   provider String?
   providerTransactionId String?
+  commissionRate Float?
+  commissionAmount Float?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([orderId])
   @@index([createdById])
   @@index([digitalProductId])
+  @@index([inspectionRequestId])
   @@index([advertisementId])
   @@index([type])
   @@index([status])
@@ -476,7 +482,6 @@ model Dispute {
   evidence String[]
   status DisputeStatus @default(OPEN)
   resolution String?
-  previousOrderStatus OrderStatus?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([orderId])
