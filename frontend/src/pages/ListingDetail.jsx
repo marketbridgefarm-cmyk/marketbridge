@@ -66,6 +66,11 @@ export default function ListingDetail() {
     setInspector,
   ] = useState('');
 
+  const [
+    feeForInspector,
+    setFeeForInspector,
+  ] = useState('');
+
 
   async function load() {
     try {
@@ -138,6 +143,11 @@ export default function ListingDetail() {
   ) {
     setError('');
 
+    if (inspector && (!feeForInspector || Number(feeForInspector) <= 0)) {
+      setError('Enter the agreed inspection fee before requesting this inspector.');
+      return;
+    }
+
     try {
       const body = {
         listingId: id,
@@ -147,6 +157,7 @@ export default function ListingDetail() {
       if (inspector) {
         body.inspectorId =
           inspector;
+        body.fee = Number(feeForInspector);
       }
 
       await api.post(
@@ -158,6 +169,8 @@ export default function ListingDetail() {
         'Inspection request created.'
       );
 
+      setInspector('');
+      setFeeForInspector('');
       load();
     } catch (e) {
       setError(
@@ -741,6 +754,18 @@ export default function ListingDetail() {
                                 </p>
 
 
+                                {inspector && (
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    step="0.01"
+                                    placeholder="Agreed fee (ETB)"
+                                    value={feeForInspector}
+                                    onChange={(e) => setFeeForInspector(e.target.value)}
+                                    style={{ marginBottom: 8, width: '100%' }}
+                                  />
+                                )}
+
                                 <button
                                   className="btn btn-light full"
                                   onClick={() =>
@@ -802,6 +827,18 @@ export default function ListingDetail() {
                   {
                     isAgricultural && (
 
+                      {inspector && (
+                        <input
+                          type="number"
+                          min="1"
+                          step="0.01"
+                          placeholder="Agreed fee (ETB)"
+                          value={feeForInspector}
+                          onChange={(e) => setFeeForInspector(e.target.value)}
+                          style={{ marginBottom: 8, width: '100%' }}
+                        />
+                      )}
+
                       <button
                         className="btn btn-light full"
                         onClick={() =>
@@ -811,6 +848,14 @@ export default function ListingDetail() {
                         }
                       >
                         Request inspection
+                      </button>
+
+                      <button
+                        className="btn btn-light full"
+                        style={{ marginTop: 8 }}
+                        onClick={chooseInspector}
+                      >
+                        Find an inspector
                       </button>
 
                     )
