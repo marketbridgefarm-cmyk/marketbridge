@@ -18,14 +18,13 @@ const {
   directCharge,
   verifyPayment,
   chapaPaymentType,
-  CHAPA_MODE,
   getChapaConfig,
 } = require('../config/chapa');
 
 const router = express.Router();
 
 /* -------------------------------------------------------------------------- */
-/* Validation                                                                */
+/* Validation                                                                 */
 /* -------------------------------------------------------------------------- */
 
 const validate = (req, res, next) => {
@@ -51,6 +50,7 @@ function timingSafeEqual(a, b) {
 
   return (
     x.length === y.length &&
+    x.length > 0 &&
     crypto.timingSafeEqual(x, y)
   );
 }
@@ -58,82 +58,74 @@ function timingSafeEqual(a, b) {
 function normalizePhone(phone) {
   if (!phone) return null;
 
-  let value = String(phone).trim().replace(/\s+/g, '');
+  let value = String(phone).trim();
 
-  /*
-   * Chapa documentation accepts Ethiopian mobile numbers such as:
-   * 0912345678 / 0712345678
-   *
-   * If a user has stored 251912345678, convert it to 0912345678.
-   */
-  if (/^251[79]\d{8}$/.test(value)) {
-    value = `0${value.slice(3)}`;
+  value = value.replace(/[^\d+]/g, '');
+
+  if (value.startsWith('+251')) {
+    return `251${value.slice(4)}`;
+  }
+
+  if (value.startsWith('251')) {
+    return value;
+  }
+
+  if (value.startsWith('0')) {
+    return `251${value.slice(1)}`;
   }
 
   return value;
 }
 
-function validEthiopianMobile(phone) {
-  return /^(09|07)\d{8}$/.test(phone);
+function createTxRef(paymentId) {
+  return `MB-${paymentId}-${Date.now()}`;
 }
 
-function generateTxRef(paymentId) {
-  return `MB-${CHAPA_MODE}-${paymentId}-${Date.now()}-${crypto
-    .randomBytes(4)
-    .toString('hex')}`;
-}
+function getWebhookRawBody(req) {
+  if (req.rawBody) {
+    return Buffer.isBuffer(req.rawBody)
+      ? req.rawBody
+      : Buffer.from(String(req.rawBody), 'utf8');
+  }
 
-function getChapaWebhookSecret() {
-  return (
-    process.env.CHAPA_WEBHOOK_SECRET ||
-    process.env.PAYMENT_WEBHOOK_SECRET ||
-    ''
+  return Buffer.from(
+    JSON.stringify(req.body || {}),
+    'utf8'
   );
 }
 
-function verifyChapaWebhook(req) {
-  const secret = getChapaWebhookSecret();
+function verifyChapaWebhookSignature(req) {
+  const secret = process.env.CHAPA_WEBHOOK_SECRET;
 
   if (!secret) {
     return false;
   }
 
-  const payload = JSON.stringify(req.body);
+  const rawBody = getWebhookRawBody(req);
 
   const expected = crypto
     .createHmac('sha256', secret)
-    .update(payload)
+    .update(rawBody)
     .digest('hex');
 
   const chapaSignature =
-    req.headers['x-chapa-signature'];
-
-  const chapaSignatureLegacy =
     req.headers['chapa-signature'];
 
-  if (
-    typeof chapaSignature === 'string' &&
-    timingSafeEqual(chapaSignature, expected)
-  ) {
-    return true;
-  }
+  const xChapaSignature =
+    req.headers['x-chapa-signature'];
 
-  if (
-    typeof chapaSignatureLegacy === 'string' &&
-    timingSafeEqual(chapaSignatureLegacy, expected)
-  ) {
-    return true;
-  }
-
-  return false;
+  return (
+    (typeof chapaSignature === 'string' &&
+      timingSafeEqual(chapaSignature, expected)) ||
+    (typeof xChapaSignature === 'string' &&
+      timingSafeEqual(xChapaSignature, expected))
+  );
 }
 
 function mapChapaStatus(status) {
   const value = String(status || '').toLowerCase();
 
-  if (value === 'success') {
-    return 'PAID';
-  }
+  if (value === 'success') return 'PAID';
 
   if (
     value === 'failed' ||
@@ -143,93 +135,143 @@ function mapChapaStatus(status) {
     return 'FAILED';
   }
 
-  if (value === 'refunded') {
-    return 'REFUNDED';
-  }
+  if (value === 'refunded') return 'REFUNDED';
 
-  return 'PENDING';
+  if (value === 'reversed') return 'FAILED';
+
+  return null;
 }
 
 /* -------------------------------------------------------------------------- */
-/* Apply successful payment effects                                           */
+/* Payment finalization                                                       */
 /* -------------------------------------------------------------------------- */
 
-async function applySuccessfulPayment(tx, payment) {
-  const commission = commissionFor(
-    payment.type,
-    payment.amount
-  );
+async function finalizePayment(tx, payment, status, chapaData = {}) {
+  if (!payment) {
+    throw Object.assign(
+      new Error('Payment not found'),
+      { status: 404 }
+    );
+  }
+
+  if (
+    payment.status === 'PAID' &&
+    status === 'PAID'
+  ) {
+    return payment;
+  }
+
+  if (
+    payment.status === 'REFUNDED' &&
+    status !== 'REFUNDED'
+  ) {
+    throw Object.assign(
+      new Error('Refunded payment cannot be reopened'),
+      { status: 409 }
+    );
+  }
+
+  const commission =
+    status === 'PAID'
+      ? commissionFor(payment.type, payment.amount)
+      : {
+          rate: payment.commissionRate,
+          commissionAmount: payment.commissionAmount,
+        };
 
   const updated = await tx.payment.update({
     where: {
       id: payment.id,
     },
+
     data: {
-      status: 'PAID',
-      commissionRate: commission.rate,
-      commissionAmount: commission.commissionAmount,
+      status,
+
+      reference:
+        chapaData.reference ||
+        payment.reference ||
+        null,
+
+      provider:
+        chapaData.provider ||
+        payment.provider ||
+        'chapa',
+
+      providerTransactionId:
+        chapaData.providerTransactionId ||
+        chapaData.reference ||
+        payment.providerTransactionId ||
+        null,
+
+      ...(status === 'PAID'
+        ? {
+            commissionRate: commission.rate,
+            commissionAmount:
+              commission.commissionAmount,
+          }
+        : {}),
     },
   });
 
-  /*
-   * Marketplace payment:
-   *
-   * PENDING_PAYMENT -> CONFIRMED
-   */
-  if (
-    payment.type === 'MARKETPLACE' &&
-    payment.orderId
-  ) {
-    await tx.order.updateMany({
-      where: {
-        id: payment.orderId,
-        status: 'PENDING_PAYMENT',
-      },
-      data: {
-        status: 'CONFIRMED',
-      },
-    });
-  }
-
-  /*
-   * Digital product payment.
-   */
-  if (
-    payment.type === 'DIGITAL' &&
-    payment.digitalProductId
-  ) {
-    const purchase =
-      await tx.digitalPurchase.findUnique({
+  if (status === 'PAID') {
+    if (
+      payment.type === 'MARKETPLACE' &&
+      payment.orderId
+    ) {
+      await tx.order.updateMany({
         where: {
-          paymentId: payment.id,
+          id: payment.orderId,
+          status: 'PENDING_PAYMENT',
+        },
+
+        data: {
+          status: 'CONFIRMED',
         },
       });
+    }
 
-    if (purchase) {
+    if (
+      payment.type === 'DIGITAL' &&
+      payment.digitalPurchase
+    ) {
       await tx.digitalPurchase.update({
         where: {
-          id: purchase.id,
+          id: payment.digitalPurchase.id,
         },
+
         data: {
           status: 'COMPLETED',
         },
       });
     }
+
+    if (
+      payment.type === 'ADVERTISING' &&
+      payment.advertisementId
+    ) {
+      await tx.advertisement.update({
+        where: {
+          id: payment.advertisementId,
+        },
+
+        data: {
+          amountPaid: payment.amount,
+        },
+      });
+    }
   }
 
-  /*
-   * Advertisement payment.
-   */
   if (
-    payment.type === 'ADVERTISING' &&
-    payment.advertisementId
+    status === 'REFUNDED' &&
+    payment.digitalPurchase
   ) {
-    await tx.advertisement.update({
+    await tx.digitalPurchase.update({
       where: {
-        id: payment.advertisementId,
+        id: payment.digitalPurchase.id,
       },
+
       data: {
-        amountPaid: payment.amount,
+        status: 'REFUNDED',
       },
     });
   }
@@ -238,112 +280,36 @@ async function applySuccessfulPayment(tx, payment) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Create Chapa Direct Charge                                                 */
+/* Chapa Direct Charge                                                        */
 /* -------------------------------------------------------------------------- */
 
-async function startChapaPayment({
-  payment,
-  user,
-}) {
-  const chapaType =
-    chapaPaymentType(payment.method);
-
-  if (!chapaType) {
-    throw new Error(
-      'This payment method is not supported by Chapa Direct Charge'
-    );
-  }
-
-  const mobile = normalizePhone(user.phone);
-
-  if (!mobile) {
-    const error = new Error(
-      'Your account does not have a phone number. Add your Telebirr or CBE mobile number before paying.'
-    );
-
-    error.status = 400;
-
-    throw error;
-  }
-
-  if (!validEthiopianMobile(mobile)) {
-    const error = new Error(
-      'Invalid Ethiopian mobile number. Use a number such as 0912345678 or 0712345678.'
-    );
-
-    error.status = 400;
-
-    throw error;
-  }
-
-  const txRef = generateTxRef(payment.id);
-
-  /*
-   * Store the Chapa transaction reference before calling Chapa.
-   *
-   * This lets us correlate:
-   * MarketBridge Payment
-   *        ↓
-   * Chapa tx_ref
-   *        ↓
-   * Chapa webhook / verification
-   */
-  await prisma.payment.update({
-    where: {
-      id: payment.id,
-    },
-    data: {
-      reference: txRef,
-      provider: 'CHAPA',
-    },
-  });
-
-  try {
-    const response = await directCharge({
-      type: chapaType,
-      amount: payment.amount,
-      mobile,
-      txRef,
-      currency: 'ETB',
-    });
-
-    /*
-     * IMPORTANT:
-     *
-     * The Direct Charge request being accepted does NOT automatically
-     * mean the customer has paid.
-     *
-     * Payment remains PENDING until Chapa confirms it.
-     */
-
-    return {
-      txRef,
-      chapaType,
-      response,
-    };
-  } catch (error) {
-    await prisma.payment.update({
-      where: {
-        id: payment.id,
-      },
-      data: {
-        status: 'FAILED',
-        provider: 'CHAPA',
-        reference: txRef,
-      },
-    });
-
-    throw error;
-  }
-}
-
-/* -------------------------------------------------------------------------- */
-/* POST /payments                                                             */
-/* -------------------------------------------------------------------------- */
-
+/**
+ * Starts a Chapa Direct Charge for Telebirr or CBE Birr.
+ *
+ * Frontend sends:
+ *
+ * {
+ *   type: "MARKETPLACE",
+ *   orderId: "...",
+ *   amount: 100,
+ *   method: "TELEBIRR",
+ *   mobile: "0912345678"
+ * }
+ *
+ * OR:
+ *
+ * {
+ *   type: "MARKETPLACE",
+ *   orderId: "...",
+ *   amount: 100,
+ *   method: "CBE",
+ *   mobile: "0912345678"
+ * }
+ */
 router.post(
   '/',
   authenticate,
+
   [
     body('type').isIn([
       'MARKETPLACE',
@@ -363,6 +329,15 @@ router.post(
       'QR',
       'OTHER',
     ]),
+
+    body('mobile')
+      .optional()
+      .isString()
+      .trim()
+      .isLength({
+        min: 9,
+        max: 20,
+      }),
 
     body('orderId')
       .optional()
@@ -388,7 +363,9 @@ router.post(
         max: 200,
       }),
   ],
+
   validate,
+
   async (req, res) => {
     try {
       const {
@@ -401,11 +378,20 @@ router.post(
       } = req.body;
 
       const amount = Number(req.body.amount);
-      const method = String(req.body.method).toUpperCase();
 
-      /* ------------------------------------------------------------------ */
-      /* Marketplace / transport                                            */
-      /* ------------------------------------------------------------------ */
+      /*
+       * Telebirr/CBE Direct Charge needs the customer's mobile.
+       *
+       * If the frontend does not send it, we fall back to the
+       * authenticated user's registered phone number.
+       */
+      const requestedMobile =
+        req.body.mobile ||
+        req.user.phone;
+
+      /* -------------------------------------------------------------------- */
+      /* Resource validation                                                  */
+      /* -------------------------------------------------------------------- */
 
       if (
         type === 'MARKETPLACE' ||
@@ -422,6 +408,7 @@ router.post(
             where: {
               id: orderId,
             },
+
             include: {
               transportJob: true,
             },
@@ -469,6 +456,7 @@ router.post(
             return res.status(400).json({
               error:
                 'Amount must match order final price',
+
               expectedAmount:
                 Number(order.finalPrice),
             });
@@ -518,6 +506,7 @@ router.post(
             return res.status(400).json({
               error:
                 'Amount must match the accepted transport quote',
+
               expectedAmount:
                 Number(
                   order.transportJob
@@ -527,12 +516,18 @@ router.post(
           }
 
           const allowed =
-            order.arrangingParty === 'BUYER'
-              ? order.buyerId === req.user.id
-              : order.arrangingParty === 'SELLER'
-              ? order.sellerId === req.user.id
-              : order.buyerId === req.user.id ||
-                order.sellerId === req.user.id;
+            order.arrangingParty ===
+            'BUYER'
+              ? order.buyerId ===
+                req.user.id
+              : order.arrangingParty ===
+                'SELLER'
+              ? order.sellerId ===
+                req.user.id
+              : order.buyerId ===
+                  req.user.id ||
+                order.sellerId ===
+                  req.user.id;
 
           if (
             !allowed &&
@@ -546,9 +541,9 @@ router.post(
         }
       }
 
-      /* ------------------------------------------------------------------ */
-      /* Digital                                                             */
-      /* ------------------------------------------------------------------ */
+      /* -------------------------------------------------------------------- */
+      /* Digital payment                                                      */
+      /* -------------------------------------------------------------------- */
 
       else if (type === 'DIGITAL') {
         if (!digitalProductId) {
@@ -589,21 +584,23 @@ router.post(
 
         if (
           Math.abs(
-            amount - Number(product.price)
+            amount -
+              Number(product.price)
           ) > 0.01
         ) {
           return res.status(400).json({
             error:
               'Amount must match product price',
+
             expectedAmount:
               Number(product.price),
           });
         }
       }
 
-      /* ------------------------------------------------------------------ */
-      /* Advertising                                                        */
-      /* ------------------------------------------------------------------ */
+      /* -------------------------------------------------------------------- */
+      /* Advertising                                                          */
+      /* -------------------------------------------------------------------- */
 
       else if (type === 'ADVERTISING') {
         if (!advertisementId) {
@@ -630,7 +627,8 @@ router.post(
         }
 
         if (
-          ad.advertiserId !== req.user.id &&
+          ad.advertiserId !==
+            req.user.id &&
           !isAdmin(req.user)
         ) {
           return res.status(403).json({
@@ -641,21 +639,23 @@ router.post(
         if (
           ad.amountPaid != null &&
           Math.abs(
-            amount - Number(ad.amountPaid)
+            amount -
+              Number(ad.amountPaid)
           ) > 0.01
         ) {
           return res.status(400).json({
             error:
               'Amount must match advertisement amount',
+
             expectedAmount:
               Number(ad.amountPaid),
           });
         }
       }
 
-      /* ------------------------------------------------------------------ */
-      /* Inspection                                                         */
-      /* ------------------------------------------------------------------ */
+      /* -------------------------------------------------------------------- */
+      /* Inspection                                                           */
+      /* -------------------------------------------------------------------- */
 
       else if (type === 'INSPECTOR') {
         if (!inspectionRequestId) {
@@ -701,47 +701,83 @@ router.post(
 
         if (
           Math.abs(
-            amount - Number(request.fee)
+            amount -
+              Number(request.fee)
           ) > 0.01
         ) {
           return res.status(400).json({
             error:
               'Amount must match the agreed inspection fee',
+
             expectedAmount:
               Number(request.fee),
           });
         }
       }
 
-      /* ------------------------------------------------------------------ */
-      /* Resource ID protection                                              */
-      /* ------------------------------------------------------------------ */
+      /* -------------------------------------------------------------------- */
+      /* Resource mismatch protection                                         */
+      /* -------------------------------------------------------------------- */
 
-      else if (
-        orderId ||
-        digitalProductId ||
-        advertisementId ||
-        inspectionRequestId
+      if (
+        type !== 'MARKETPLACE' &&
+        type !== 'TRANSPORT' &&
+        type !== 'DIGITAL' &&
+        type !== 'ADVERTISING' &&
+        type !== 'INSPECTOR'
       ) {
         return res.status(400).json({
-          error:
-            'This payment type cannot use the supplied resource id',
+          error: 'Unsupported payment type',
         });
       }
 
-      /* ------------------------------------------------------------------ */
-      /* Only Chapa-supported methods use Direct Charge                     */
-      /* ------------------------------------------------------------------ */
+      /* -------------------------------------------------------------------- */
+      /* Determine whether this is a Chapa payment                            */
+      /* -------------------------------------------------------------------- */
 
-      const isChapaDirectCharge =
-        method === 'TELEBIRR' ||
-        method === 'CBE';
+      const chapaType =
+        chapaPaymentType(
+          req.body.method
+        );
 
       /*
-       * QR and OTHER remain pending manual/reconciliation payments.
+       * QR and OTHER remain supported as manual payment records.
        *
-       * They are NOT falsely marked as paid.
+       * TELEBIRR and CBE are sent to Chapa Direct Charge.
        */
+      const isChapaPayment =
+        Boolean(chapaType);
+
+      if (
+        isChapaPayment &&
+        !requestedMobile
+      ) {
+        return res.status(400).json({
+          error:
+            'A mobile number is required for Chapa Telebirr/CBE payment',
+        });
+      }
+
+      const mobile =
+        normalizePhone(
+          requestedMobile
+        );
+
+      if (
+        isChapaPayment &&
+        (!mobile ||
+          !/^251\d{9}$/.test(mobile))
+      ) {
+        return res.status(400).json({
+          error:
+            'Enter a valid Ethiopian mobile number, for example 0912345678 or +251912345678',
+        });
+      }
+
+      /* -------------------------------------------------------------------- */
+      /* Prevent duplicate active payments                                    */
+      /* -------------------------------------------------------------------- */
+
       const duplicate =
         await prisma.payment.findFirst({
           where: {
@@ -750,7 +786,10 @@ router.post(
             type,
 
             status: {
-              in: ['PENDING', 'PAID'],
+              in: [
+                'PENDING',
+                'PAID',
+              ],
             },
 
             ...(orderId && {
@@ -779,20 +818,22 @@ router.post(
         });
       }
 
-      /* ------------------------------------------------------------------ */
-      /* Create payment intent                                               */
-      /* ------------------------------------------------------------------ */
+      /* -------------------------------------------------------------------- */
+      /* Create local payment record first                                    */
+      /* -------------------------------------------------------------------- */
 
       const payment =
         await prisma.payment.create({
           data: {
-            createdById: req.user.id,
+            createdById:
+              req.user.id,
 
             type,
 
             amount,
 
-            method,
+            method:
+              req.body.method,
 
             reference:
               reference || null,
@@ -801,100 +842,163 @@ router.post(
               orderId || null,
 
             digitalProductId:
-              digitalProductId || null,
+              digitalProductId ||
+              null,
 
             advertisementId:
-              advertisementId || null,
+              advertisementId ||
+              null,
 
             inspectionRequestId:
-              inspectionRequestId || null,
-
-            provider:
-              isChapaDirectCharge
-                ? 'CHAPA'
-                : null,
+              inspectionRequestId ||
+              null,
 
             status: 'PENDING',
           },
         });
 
-      /* ------------------------------------------------------------------ */
-      /* Chapa Direct Charge                                                */
-      /* ------------------------------------------------------------------ */
+      /* -------------------------------------------------------------------- */
+      /* Manual payment                                                       */
+      /* -------------------------------------------------------------------- */
 
-      if (isChapaDirectCharge) {
-        try {
-          const chapaResult =
-            await startChapaPayment({
-              payment,
-              user: req.user,
-            });
+      if (!isChapaPayment) {
+        return res.status(201).json({
+          message:
+            'Payment intent created; it remains pending until manually reconciled or otherwise verified.',
 
-          const updatedPayment =
-            await prisma.payment.findUnique({
-              where: {
-                id: payment.id,
-              },
-            });
+          payment,
 
-          return res.status(201).json({
-            message:
-              'Chapa payment initiated. Complete the authorization on your phone.',
-            payment: updatedPayment,
-            paymentConfirmed: false,
+          paymentConfirmed:
+            false,
 
-            provider: 'CHAPA',
+          gateway:
+            req.body.method === 'QR'
+              ? 'QR'
+              : 'MANUAL',
 
-            mode: CHAPA_MODE,
-
-            chapa: {
-              type:
-                chapaResult.chapaType,
-
-              txRef:
-                chapaResult.txRef,
-
-              response:
-                chapaResult.response,
-            },
-          });
-        } catch (error) {
-          return res.status(
-            error.status || 502
-          ).json({
-            error:
-              error.message ||
-              'Chapa payment initiation failed',
-
-            provider: 'CHAPA',
-
-            mode: CHAPA_MODE,
-
-            details:
-              error.response || null,
-          });
-        }
+          chapa:
+            getChapaConfig(),
+        });
       }
 
-      /* ------------------------------------------------------------------ */
-      /* QR / OTHER                                                         */
-      /* ------------------------------------------------------------------ */
+      /* -------------------------------------------------------------------- */
+      /* Chapa Direct Charge                                                 */
+      /* -------------------------------------------------------------------- */
 
-      return res.status(201).json({
-        message:
-          'Payment intent created; it remains pending until verified or manually reconciled by an administrator.',
+      const txRef =
+        createTxRef(payment.id);
 
-        payment,
+      try {
+        const chapaResponse =
+          await directCharge({
+            type: chapaType,
 
-        paymentConfirmed: false,
+            amount,
 
-        provider: null,
+            mobile,
 
-        mode: CHAPA_MODE,
-      });
+            txRef,
+
+            currency: 'ETB',
+          });
+
+        /*
+         * The Payment.reference stores our transaction reference.
+         *
+         * providerTransactionId stores Chapa's reference when one
+         * is returned immediately.
+         */
+        const chapaReference =
+          chapaResponse?.data
+            ?.reference ||
+          chapaResponse?.reference ||
+          null;
+
+        const updatedPayment =
+          await prisma.payment.update({
+            where: {
+              id: payment.id,
+            },
+
+            data: {
+              reference: txRef,
+
+              provider: 'chapa',
+
+              providerTransactionId:
+                chapaReference,
+            },
+          });
+
+        return res.status(201).json({
+          message:
+            'Chapa payment request submitted.',
+
+          payment:
+            updatedPayment,
+
+          paymentConfirmed:
+            false,
+
+          gateway: 'CHAPA',
+
+          chapa: {
+            mode:
+              getChapaConfig().mode,
+
+            paymentMethod:
+              chapaType,
+
+            txRef,
+
+            response:
+              chapaResponse,
+          },
+        });
+      } catch (gatewayError) {
+        /*
+         * The local payment exists, but Chapa rejected the charge.
+         * Mark it failed instead of leaving an unusable PENDING record.
+         */
+
+        await prisma.payment.update({
+          where: {
+            id: payment.id,
+          },
+
+          data: {
+            status: 'FAILED',
+
+            reference: txRef,
+
+            provider: 'chapa',
+          },
+        });
+
+        return res.status(
+          gatewayError.status >= 400 &&
+          gatewayError.status < 600
+            ? gatewayError.status
+            : 502
+        ).json({
+          error:
+            gatewayError.message ||
+            'Chapa payment request failed',
+
+          paymentId:
+            payment.id,
+
+          gateway:
+            'CHAPA',
+
+          details:
+            gatewayError.response ||
+            null,
+        });
+      }
     } catch (error) {
       console.error(
-        'POST /payments error:',
+        'Payment creation error:',
         error
       );
 
@@ -907,47 +1011,52 @@ router.post(
 );
 
 /* -------------------------------------------------------------------------- */
-/* Verify a Chapa transaction                                                */
-/*                                                                            */
-/* POST /payments/chapa/verify                                                */
+/* Chapa transaction verification                                            */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Verify a payment directly against Chapa.
+ *
+ * This is useful for:
+ *
+ * - testing
+ * - recovering from missed webhooks
+ * - checking a pending payment
+ *
+ * The payment is only marked PAID if:
+ *
+ * - Chapa says success
+ * - amount matches
+ * - currency is ETB
+ * - tx_ref matches our payment reference
+ */
 router.post(
-  '/chapa/verify',
+  '/:id/chapa/verify',
   authenticate,
+
   [
-    body('txRef')
-      .isString()
-      .trim()
-      .isLength({
-        min: 5,
-        max: 200,
-      }),
+    param('id').isUUID(),
   ],
+
   validate,
+
   async (req, res) => {
     try {
-      const {
-        txRef,
-      } = req.body;
-
       const payment =
-        await prisma.payment.findFirst({
+        await prisma.payment.findUnique({
           where: {
-            reference: txRef,
-            provider: 'CHAPA',
+            id: req.params.id,
           },
+
           include: {
             order: true,
             digitalPurchase: true,
-            advertisement: true,
           },
         });
 
       if (!payment) {
         return res.status(404).json({
-          error:
-            'MarketBridge payment not found for this Chapa transaction reference',
+          error: 'Payment not found',
         });
       }
 
@@ -968,178 +1077,146 @@ router.post(
         !isAdmin(req.user)
       ) {
         return res.status(403).json({
+          error: 'Not authorized',
+        });
+      }
+
+      if (
+        payment.provider !==
+        'chapa'
+      ) {
+        return res.status(400).json({
           error:
-            'Not authorized to verify this payment',
+            'This payment was not created through Chapa',
+        });
+      }
+
+      if (!payment.reference) {
+        return res.status(400).json({
+          error:
+            'This Chapa payment has no transaction reference',
         });
       }
 
       const chapa =
-        await verifyPayment(txRef);
+        await verifyPayment(
+          payment.reference
+        );
 
       const chapaStatus =
         String(
           chapa?.data?.status ||
-            chapa?.status ||
-            ''
+          chapa?.status ||
+          ''
         ).toLowerCase();
 
-      const mappedStatus =
-        mapChapaStatus(chapaStatus);
+      const chapaAmount =
+        Number(
+          chapa?.data?.amount ??
+          chapa?.amount ??
+          0
+        );
 
-      /*
-       * Never trust only the status.
-       *
-       * For a successful payment, verify:
-       * - transaction reference
-       * - amount
-       * - currency
-       * - test/live mode
-       */
+      const chapaTxRef =
+        chapa?.data?.tx_ref ||
+        chapa?.tx_ref ||
+        null;
 
-      if (mappedStatus === 'PAID') {
-        const returnedTxRef =
-          chapa?.data?.tx_ref ||
-          chapa?.data?.trx_ref ||
-          chapa?.tx_ref ||
-          chapa?.trx_ref;
-
-        const returnedAmount =
-          Number(
-            chapa?.data?.amount ??
-              chapa?.amount
-          );
-
-        const returnedCurrency =
-          chapa?.data?.currency ||
-          chapa?.currency;
-
-        const returnedMode =
-          String(
-            chapa?.data?.mode ||
-              chapa?.mode ||
-              ''
-          ).toLowerCase();
-
-        if (
-          returnedTxRef &&
-          returnedTxRef !==
-            payment.reference
-        ) {
-          return res.status(409).json({
-            error:
-              'Chapa transaction reference does not match the MarketBridge payment',
-          });
-        }
-
-        if (
-          Number.isFinite(returnedAmount) &&
-          Math.abs(
-            returnedAmount -
-              Number(payment.amount)
-          ) > 0.01
-        ) {
-          return res.status(409).json({
-            error:
-              'Chapa payment amount does not match the MarketBridge payment',
-            expectedAmount:
-              Number(payment.amount),
-            receivedAmount:
-              returnedAmount,
-          });
-        }
-
-        if (
-          returnedCurrency &&
-          returnedCurrency !== 'ETB'
-        ) {
-          return res.status(409).json({
-            error:
-              'Chapa payment currency is not ETB',
-          });
-        }
-
-        if (
-          returnedMode &&
-          returnedMode !== CHAPA_MODE
-        ) {
-          return res.status(409).json({
-            error:
-              'Chapa payment mode does not match MarketBridge configuration',
-            expectedMode:
-              CHAPA_MODE,
-            receivedMode:
-              returnedMode,
-          });
-        }
-      }
-
-      let updatedPayment = payment;
-
-      if (mappedStatus === 'PAID') {
-        updatedPayment =
-          await prisma.$transaction(
-            async (tx) => {
-              const current =
-                await tx.payment.findUnique(
-                  {
-                    where: {
-                      id: payment.id,
-                    },
-                  }
-                );
-
-              if (!current) {
-                throw new Error(
-                  'Payment no longer exists'
-                );
-              }
-
-              if (
-                current.status ===
-                'PAID'
-              ) {
-                return current;
-              }
-
-              return applySuccessfulPayment(
-                tx,
-                current
-              );
-            }
-          );
-      } else if (
-        mappedStatus === 'FAILED' ||
-        mappedStatus === 'REFUNDED'
+      if (
+        chapaTxRef &&
+        chapaTxRef !==
+          payment.reference
       ) {
-        updatedPayment =
-          await prisma.payment.update({
-            where: {
-              id: payment.id,
-            },
-            data: {
-              status: mappedStatus,
-              provider:
-                'CHAPA',
-              providerTransactionId:
-                chapa?.data?.reference ||
-                chapa?.reference ||
-                null,
-            },
-          });
+        return res.status(409).json({
+          error:
+            'Chapa transaction reference does not match this payment',
+        });
       }
+
+      if (
+        chapaAmount > 0 &&
+        Math.abs(
+          chapaAmount -
+            Number(payment.amount)
+        ) > 0.01
+      ) {
+        return res.status(409).json({
+          error:
+            'Chapa payment amount does not match MarketBridge payment',
+
+          expectedAmount:
+            Number(payment.amount),
+
+          chapaAmount,
+        });
+      }
+
+      const newStatus =
+        mapChapaStatus(
+          chapaStatus
+        );
+
+      if (!newStatus) {
+        return res.json({
+          message:
+            'Chapa payment is still pending or returned an unrecognized status.',
+
+          payment,
+
+          chapa,
+        });
+      }
+
+      const updated =
+        await prisma.$transaction(
+          async (tx) => {
+            const current =
+              await tx.payment.findUnique(
+                {
+                  where: {
+                    id: payment.id,
+                  },
+
+                  include: {
+                    order: true,
+                    digitalPurchase:
+                      true,
+                    advertisement:
+                      true,
+                  },
+                }
+              );
+
+            return finalizePayment(
+              tx,
+              current,
+              newStatus,
+              {
+                provider:
+                  'chapa',
+
+                reference:
+                  chapa?.data
+                    ?.reference ||
+                  chapa?.reference ||
+                  payment.reference,
+
+                providerTransactionId:
+                  chapa?.data
+                    ?.reference ||
+                  chapa?.reference ||
+                  payment.providerTransactionId,
+              }
+            );
+          }
+        );
 
       return res.json({
         message:
-          'Chapa payment verification completed',
+          'Chapa payment verified.',
 
         payment:
-          updatedPayment,
-
-        chapaStatus,
-
-        paymentConfirmed:
-          updatedPayment.status ===
-          'PAID',
+          updated,
 
         chapa,
       });
@@ -1154,10 +1231,11 @@ router.post(
       ).json({
         error:
           error.message ||
-          'Could not verify Chapa payment',
+          'Could not verify payment with Chapa',
 
         details:
-          error.response || null,
+          error.response ||
+          null,
       });
     }
   }
@@ -1167,314 +1245,218 @@ router.post(
 /* Chapa webhook                                                             */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Chapa webhook.
+ *
+ * Configure this URL in Chapa Dashboard:
+ *
+ * /api/payments/webhooks/chapa
+ *
+ * depending on how payments.js is mounted.
+ */
 router.post(
   '/webhooks/chapa',
   express.json({
     limit: '100kb',
   }),
+
   async (req, res) => {
     try {
-      /*
-       * Chapa requires a configured webhook secret/signature.
-       *
-       * Do NOT accept unsigned payment notifications.
-       */
-      if (!verifyChapaWebhook(req)) {
+      if (
+        !verifyChapaWebhookSignature(
+          req
+        )
+      ) {
         return res.status(401).json({
           error:
             'Invalid Chapa webhook signature',
         });
       }
 
-      const event = req.body || {};
+      const event =
+        req.body || {};
+
+      const eventName =
+        String(
+          event.event || ''
+        ).toLowerCase();
 
       const txRef =
         event.tx_ref ||
-        event.trx_ref;
-
-      const status =
-        String(
-          event.status || ''
-        ).toLowerCase();
+        event.reference ||
+        null;
 
       if (!txRef) {
         return res.status(400).json({
           error:
-            'Chapa webhook does not contain tx_ref',
+            'Webhook transaction reference missing',
         });
       }
 
       const payment =
-        await prisma.payment.findFirst({
-          where: {
-            reference: txRef,
-            provider: 'CHAPA',
-          },
-        });
+        await prisma.payment.findFirst(
+          {
+            where: {
+              OR: [
+                {
+                  reference: txRef,
+                },
 
-      /*
-       * Return 200 for unknown events after authentication.
-       *
-       * This prevents repeated webhook retries for transactions
-       * that do not belong to MarketBridge.
-       */
+                {
+                  providerTransactionId:
+                    txRef,
+                },
+              ],
+            },
+
+            include: {
+              order: true,
+              digitalPurchase: true,
+              advertisement: true,
+            },
+          }
+        );
+
       if (!payment) {
-        return res.json({
+        /*
+         * Acknowledge the webhook so Chapa does not
+         * repeatedly retry an event for a transaction
+         * MarketBridge does not know.
+         */
+        return res.status(200).json({
           ok: true,
           ignored: true,
+          reason:
+            'Payment not found in MarketBridge',
         });
       }
 
       /*
-       * For successful events, re-query Chapa.
-       *
-       * Chapa specifically recommends verifying critical transaction
-       * data before giving value to the customer.
+       * Always verify the transaction with Chapa
+       * before granting value.
        */
-      if (status === 'success') {
-        const verified =
-          await verifyPayment(txRef);
+      let verified;
 
-        const verifiedStatus =
-          String(
-            verified?.data?.status ||
-              verified?.status ||
-              ''
-          ).toLowerCase();
-
-        if (
-          verifiedStatus !==
-          'success'
-        ) {
-          return res.status(409).json({
-            error:
-              'Chapa webhook reported success but transaction verification did not confirm success',
-          });
-        }
-
-        const verifiedAmount =
-          Number(
-            verified?.data?.amount ??
-              verified?.amount
-          );
-
-        if (
-          Number.isFinite(
-            verifiedAmount
-          ) &&
-          Math.abs(
-            verifiedAmount -
-              Number(payment.amount)
-          ) > 0.01
-        ) {
-          return res.status(409).json({
-            error:
-              'Verified Chapa amount does not match MarketBridge payment',
-          });
-        }
-
-        const verifiedTxRef =
-          verified?.data?.tx_ref ||
-          verified?.data?.trx_ref ||
-          verified?.tx_ref ||
-          verified?.trx_ref;
-
-        if (
-          verifiedTxRef &&
-          verifiedTxRef !==
+      try {
+        verified =
+          await verifyPayment(
             payment.reference
-        ) {
-          return res.status(409).json({
-            error:
-              'Verified Chapa reference does not match MarketBridge payment',
-          });
-        }
-
-        const result =
-          await prisma.$transaction(
-            async (tx) => {
-              const current =
-                await tx.payment.findUnique(
-                  {
-                    where: {
-                      id: payment.id,
-                    },
-                  }
-                );
-
-              if (!current) {
-                return null;
-              }
-
-              if (
-                current.status ===
-                'PAID'
-              ) {
-                return current;
-              }
-
-              const providerReference =
-                verified?.data
-                  ?.reference ||
-                verified?.reference ||
-                event.reference ||
-                null;
-
-              await tx.payment.update({
-                where: {
-                  id: current.id,
-                },
-                data: {
-                  provider:
-                    'CHAPA',
-
-                  providerTransactionId:
-                    providerReference,
-                },
-              });
-
-              const refreshed =
-                await tx.payment.findUnique(
-                  {
-                    where: {
-                      id: current.id,
-                    },
-                  }
-                );
-
-              return applySuccessfulPayment(
-                tx,
-                refreshed
-              );
-            }
           );
+      } catch (verificationError) {
+        console.error(
+          'Chapa webhook verification failed:',
+          verificationError
+        );
 
-        return res.json({
-          ok: true,
-          payment: result,
+        return res.status(502).json({
+          error:
+            'Could not verify Chapa transaction',
         });
       }
 
-      /* ------------------------------------------------------------------ */
-      /* Failed / cancelled                                                */
-      /* ------------------------------------------------------------------ */
+      const verifiedData =
+        verified?.data ||
+        verified ||
+        {};
+
+      const verifiedStatus =
+        String(
+          verifiedData.status ||
+          ''
+        ).toLowerCase();
+
+      const verifiedAmount =
+        Number(
+          verifiedData.amount ??
+          0
+        );
+
+      const verifiedTxRef =
+        verifiedData.tx_ref ||
+        null;
 
       if (
-        status === 'failed' ||
-        status === 'cancelled' ||
-        status === 'failed/cancelled'
+        verifiedTxRef &&
+        verifiedTxRef !==
+          payment.reference
       ) {
-        const updated =
-          await prisma.payment.update({
-            where: {
-              id: payment.id,
-            },
-            data: {
-              status: 'FAILED',
-
-              provider:
-                'CHAPA',
-
-              providerTransactionId:
-                event.reference ||
-                null,
-            },
-          });
-
-        return res.json({
-          ok: true,
-          payment: updated,
+        return res.status(409).json({
+          error:
+            'Verified transaction reference mismatch',
         });
       }
 
-      /* ------------------------------------------------------------------ */
-      /* Refunded                                                           */
-      /* ------------------------------------------------------------------ */
-
       if (
-        status === 'refunded'
+        verifiedAmount > 0 &&
+        Math.abs(
+          verifiedAmount -
+            Number(payment.amount)
+        ) > 0.01
       ) {
-        const updated =
-          await prisma.$transaction(
-            async (tx) => {
-              const current =
-                await tx.payment.findUnique(
-                  {
-                    where: {
-                      id: payment.id,
-                    },
-                  }
-                );
+        return res.status(409).json({
+          error:
+            'Verified payment amount mismatch',
+        });
+      }
 
-              if (!current) {
-                return null;
-              }
+      const mappedStatus =
+        mapChapaStatus(
+          verifiedStatus
+        );
 
-              const p =
-                await tx.payment.update({
+      if (!mappedStatus) {
+        return res.status(200).json({
+          ok: true,
+          paymentStatus:
+            payment.status,
+          chapaStatus:
+            verifiedStatus,
+        });
+      }
+
+      const updated =
+        await prisma.$transaction(
+          async (tx) => {
+            const current =
+              await tx.payment.findUnique(
+                {
                   where: {
-                    id: current.id,
+                    id: payment.id,
                   },
-                  data: {
-                    status:
-                      'REFUNDED',
 
-                    provider:
-                      'CHAPA',
-
-                    providerTransactionId:
-                      event.reference ||
-                      null,
+                  include: {
+                    order: true,
+                    digitalPurchase:
+                      true,
+                    advertisement:
+                      true,
                   },
-                });
-
-              if (
-                current.digitalProductId
-              ) {
-                const purchase =
-                  await tx.digitalPurchase.findUnique(
-                    {
-                      where: {
-                        paymentId:
-                          current.id,
-                      },
-                    }
-                  );
-
-                if (purchase) {
-                  await tx.digitalPurchase.update(
-                    {
-                      where: {
-                        id: purchase.id,
-                      },
-                      data: {
-                        status:
-                          'REFUNDED',
-                      },
-                    }
-                  );
                 }
+              );
+
+            return finalizePayment(
+              tx,
+              current,
+              mappedStatus,
+              {
+                provider:
+                  'chapa',
+
+                reference:
+                  verifiedData.reference ||
+                  payment.reference,
+
+                providerTransactionId:
+                  verifiedData.reference ||
+                  payment.providerTransactionId,
               }
+            );
+          }
+        );
 
-              return p;
-            }
-          );
-
-        return res.json({
-          ok: true,
-          payment: updated,
-        });
-      }
-
-      /*
-       * Pending or another event.
-       *
-       * Do not mark the payment paid.
-       */
-      return res.json({
+      return res.status(200).json({
         ok: true,
-        ignored: true,
-        status,
+        payment: updated,
       });
     } catch (error) {
       console.error(
@@ -1484,31 +1466,138 @@ router.post(
 
       return res.status(500).json({
         error:
-          'Chapa webhook processing failed',
+          'Webhook processing failed',
       });
     }
   }
 );
 
 /* -------------------------------------------------------------------------- */
-/* Chapa configuration status                                                 */
+/* Generic signed webhook                                                     */
 /* -------------------------------------------------------------------------- */
 
-router.get(
-  '/chapa/config',
-  authenticate,
-  (req, res) => {
-    if (!isAdmin(req.user)) {
-      return res.status(403).json({
+router.post(
+  '/webhooks/generic',
+  express.json({
+    limit: '100kb',
+  }),
+
+  async (req, res) => {
+    const secret =
+      process.env.PAYMENT_WEBHOOK_SECRET;
+
+    if (!secret) {
+      return res.status(401).json({
         error:
-          'Only an administrator can view Chapa configuration status',
+          'Payment webhook secret is not configured',
       });
     }
 
-    res.json({
-      chapa:
-        getChapaConfig(),
-    });
+    const rawBody =
+      req.rawBody ||
+      Buffer.from(
+        JSON.stringify(
+          req.body
+        )
+      );
+
+    const expected =
+      crypto
+        .createHmac(
+          'sha256',
+          secret
+        )
+        .update(rawBody)
+        .digest('hex');
+
+    const supplied =
+      req.headers[
+        'x-marketbridge-signature'
+      ];
+
+    if (
+      typeof supplied !==
+        'string' ||
+      !timingSafeEqual(
+        supplied,
+        expected
+      )
+    ) {
+      return res.status(401).json({
+        error:
+          'Invalid webhook signature',
+      });
+    }
+
+    const {
+      paymentId,
+      status,
+      reference,
+      provider,
+      providerTransactionId,
+    } = req.body;
+
+    if (
+      !paymentId ||
+      ![
+        'PAID',
+        'FAILED',
+        'REFUNDED',
+      ].includes(status)
+    ) {
+      return res.status(400).json({
+        error:
+          'Invalid webhook payload',
+      });
+    }
+
+    try {
+      const result =
+        await prisma.$transaction(
+          async (tx) => {
+            const payment =
+              await tx.payment.findUnique(
+                {
+                  where: {
+                    id: paymentId,
+                  },
+
+                  include: {
+                    order: true,
+                    digitalPurchase:
+                      true,
+                    advertisement: true,
+                  },
+                }
+              );
+
+            return finalizePayment(
+              tx,
+              payment,
+              status,
+              {
+                provider,
+                reference,
+                providerTransactionId,
+              }
+            );
+          }
+        );
+
+      return res.json({
+        ok: true,
+        payment: result,
+      });
+    } catch (error) {
+      return res.status(
+        error.status || 500
+      ).json({
+        error:
+          error.status
+            ? error.message
+            : 'Webhook processing failed',
+      });
+    }
   }
 );
 
@@ -1519,6 +1608,7 @@ router.get(
 router.get(
   '/',
   authenticate,
+
   async (req, res) => {
     if (!isAdmin(req.user)) {
       return res.status(403).json({
@@ -1545,6 +1635,7 @@ router.get(
               id: true,
               name: true,
               email: true,
+              phone: true,
             },
           },
 
@@ -1596,6 +1687,7 @@ router.get(
 router.get(
   '/commissions/summary',
   authenticate,
+
   async (req, res) => {
     if (!isAdmin(req.user)) {
       return res.status(403).json({
@@ -1622,35 +1714,34 @@ router.get(
     let totalCommission = 0;
     let totalVolume = 0;
 
-    for (const p of paid) {
-      const type = p.type;
-
-      const current =
-        byType[type] || {
+    for (const payment of paid) {
+      const type =
+        byType[payment.type] || {
           volume: 0,
           commission: 0,
           count: 0,
         };
 
-      current.volume +=
-        Number(p.amount);
+      type.volume += Number(
+        payment.amount
+      );
 
-      current.commission +=
-        Number(
-          p.commissionAmount || 0
-        );
+      type.commission += Number(
+        payment.commissionAmount || 0
+      );
 
-      current.count += 1;
+      type.count += 1;
 
-      byType[type] = current;
+      byType[payment.type] =
+        type;
 
-      totalVolume +=
-        Number(p.amount);
+      totalVolume += Number(
+        payment.amount
+      );
 
-      totalCommission +=
-        Number(
-          p.commissionAmount || 0
-        );
+      totalCommission += Number(
+        payment.commissionAmount || 0
+      );
     }
 
     return res.json({
@@ -1662,16 +1753,19 @@ router.get(
 );
 
 /* -------------------------------------------------------------------------- */
-/* Legacy admin manual confirmation                                           */
+/* Manual admin reconciliation                                               */
 /* -------------------------------------------------------------------------- */
 
 router.patch(
   '/:id/confirm',
   authenticate,
+
   [
     param('id').isUUID(),
   ],
+
   validate,
+
   async (req, res) => {
     if (!isAdmin(req.user)) {
       return res.status(403).json({
@@ -1685,60 +1779,84 @@ router.patch(
         where: {
           id: req.params.id,
         },
+
+        include: {
+          order: true,
+          digitalPurchase: true,
+          advertisement: true,
+        },
       });
 
     if (!payment) {
       return res.status(404).json({
-        error:
-          'Payment not found',
+        error: 'Payment not found',
       });
     }
 
-    if (payment.status !== 'PENDING') {
+    if (
+      payment.status !==
+      'PENDING'
+    ) {
       return res.status(409).json({
         error:
           `Payment is already ${payment.status}`,
       });
     }
 
-    /*
-     * Manual confirmation remains available for:
-     *
-     * - QR
-     * - OTHER
-     * - controlled reconciliation
-     *
-     * It should NOT normally be needed for Chapa payments.
-     */
-    const updated =
-      await prisma.$transaction(
-        async (tx) => {
-          return applySuccessfulPayment(
-            tx,
-            payment
-          );
-        }
-      );
+    try {
+      const updated =
+        await prisma.$transaction(
+          async (tx) => {
+            return finalizePayment(
+              tx,
+              payment,
+              'PAID',
+              {
+                provider:
+                  payment.provider ||
+                  'manual',
+                reference:
+                  payment.reference,
+                providerTransactionId:
+                  payment.providerTransactionId,
+              }
+            );
+          }
+        );
 
-    return res.json({
-      message:
-        'Payment manually reconciled. Prefer verified Chapa payments/webhooks in production.',
-      payment: updated,
-    });
+      return res.json({
+        message:
+          'Payment manually reconciled. Prefer signed provider webhooks or direct Chapa verification in production.',
+
+        payment:
+          updated,
+      });
+    } catch (error) {
+      return res.status(
+        error.status || 500
+      ).json({
+        error:
+          error.message ||
+          'Could not reconcile payment',
+      });
+    }
   }
 );
 
 /* -------------------------------------------------------------------------- */
-/* Order payments                                                             */
+/* Payments belonging to an order                                             */
 /* -------------------------------------------------------------------------- */
 
 router.get(
   '/order/:orderId',
   authenticate,
+
   [
     param('orderId').isUUID(),
   ],
+
   validate,
+
   async (req, res) => {
     const order =
       await prisma.order.findUnique({
@@ -1749,8 +1867,7 @@ router.get(
 
     if (!order) {
       return res.status(404).json({
-        error:
-          'Order not found',
+        error: 'Order not found',
       });
     }
 
@@ -1762,8 +1879,7 @@ router.get(
       !isAdmin(req.user)
     ) {
       return res.status(403).json({
-        error:
-          'Not authorized',
+        error: 'Not authorized',
       });
     }
 
@@ -1786,16 +1902,19 @@ router.get(
 );
 
 /* -------------------------------------------------------------------------- */
-/* Payment by ID                                                              */
+/* Single payment                                                             */
 /* -------------------------------------------------------------------------- */
 
 router.get(
   '/:id',
   authenticate,
+
   [
     param('id').isUUID(),
   ],
+
   validate,
+
   async (req, res) => {
     const payment =
       await prisma.payment.findUnique({
@@ -1811,8 +1930,7 @@ router.get(
 
     if (!payment) {
       return res.status(404).json({
-        error:
-          'Payment not found',
+        error: 'Payment not found',
       });
     }
 
@@ -1833,8 +1951,7 @@ router.get(
       !isAdmin(req.user)
     ) {
       return res.status(403).json({
-        error:
-          'Not authorized',
+        error: 'Not authorized',
       });
     }
 
