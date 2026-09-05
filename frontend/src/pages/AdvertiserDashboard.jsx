@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
+import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 
 const AD_TYPES = [
   { value: 'FEATURED_LISTING', label: 'Featured Listing' },
@@ -145,6 +146,8 @@ export default function AdvertiserDashboard() {
             <p>Promote a listing, or run a platform-wide banner or Telegram placement.</p>
           </div>
         </div>
+
+        <RoleSwitchCTA current="ADVERTISER" />
 
         {error && <div className="alert error">{error}</div>}
         {success && <div className="alert">{success}</div>}
