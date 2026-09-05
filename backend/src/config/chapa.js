@@ -1,7 +1,11 @@
-const CHAPA_MODE = String(process.env.CHAPA_MODE || 'test').toLowerCase();
+const CHAPA_MODE = String(
+  process.env.CHAPA_MODE || 'test'
+).toLowerCase();
 
 if (!['test', 'live'].includes(CHAPA_MODE)) {
-  throw new Error('CHAPA_MODE must be either "test" or "live"');
+  throw new Error(
+    'CHAPA_MODE must be either "test" or "live"'
+  );
 }
 
 const isLive = CHAPA_MODE === 'live';
@@ -19,13 +23,19 @@ const CHAPA_ENCRYPTION_KEY = isLive
   : process.env.CHAPA_TEST_ENCRYPTION_KEY;
 
 const CHAPA_BASE_URL =
-  process.env.CHAPA_BASE_URL || 'https://api.chapa.co';
+  process.env.CHAPA_BASE_URL ||
+  'https://api.chapa.co';
 
 const CHAPA_API_VERSION =
-  process.env.CHAPA_API_VERSION || 'v1';
+  process.env.CHAPA_API_VERSION ||
+  'v1';
 
 const CHAPA_API_URL =
   `${CHAPA_BASE_URL.replace(/\/$/, '')}/${CHAPA_API_VERSION}`;
+
+/* =========================================================
+   CONFIGURATION
+========================================================= */
 
 function requireSecretKey() {
   if (!CHAPA_SECRET_KEY) {
@@ -39,31 +49,80 @@ function requireSecretKey() {
 
 function getHeaders(extra = {}) {
   return {
-    Authorization: `Bearer ${requireSecretKey()}`,
+    Authorization:
+      `Bearer ${requireSecretKey()}`,
+
     ...extra,
   };
 }
 
 function getChapaConfig() {
   return {
-    mode: isLive ? 'live' : 'test',
-    baseUrl: CHAPA_API_URL,
-    publicKey: CHAPA_PUBLIC_KEY || null,
-    encryptionKeyConfigured: Boolean(CHAPA_ENCRYPTION_KEY),
-    secretKeyConfigured: Boolean(CHAPA_SECRET_KEY),
+    mode: isLive
+      ? 'live'
+      : 'test',
+
+    baseUrl:
+      CHAPA_API_URL,
+
+    publicKey:
+      CHAPA_PUBLIC_KEY || null,
+
+    encryptionKeyConfigured:
+      Boolean(
+        CHAPA_ENCRYPTION_KEY
+      ),
+
+    secretKeyConfigured:
+      Boolean(
+        CHAPA_SECRET_KEY
+      ),
   };
 }
+
+/* =========================================================
+   RESPONSE PARSER
+========================================================= */
+
+async function parseResponse(response) {
+  const text =
+    await response.text();
+
+  let data;
+
+  try {
+    data =
+      text
+        ? JSON.parse(text)
+        : {};
+  } catch {
+    data = {
+      raw: text,
+    };
+  }
+
+  return data;
+}
+
+/* =========================================================
+   DIRECT CHARGE
+========================================================= */
 
 /**
  * Chapa Direct Charge
  *
- * Supported payment types currently used by MarketBridge:
+ * MarketBridge currently supports:
  *
- *   TELEBIRR -> telebirr
- *   CBE      -> cbebirr
+ * TELEBIRR -> telebirr
+ * CBE      -> cbebirr
  *
- * Chapa expects this request as multipart/form-data.
+ * Chapa requires multipart/form-data for this endpoint.
+ *
+ * Endpoint:
+ * POST /v1/charges?type=telebirr
+ * POST /v1/charges?type=cbebirr
  */
+
 async function directCharge({
   type,
   amount,
@@ -71,63 +130,100 @@ async function directCharge({
   txRef,
   currency = 'ETB',
 }) {
-  if (!['telebirr', 'cbebirr'].includes(type)) {
+  if (
+    ![
+      'telebirr',
+      'cbebirr',
+    ].includes(type)
+  ) {
     throw new Error(
       'Unsupported Chapa Direct Charge type. Use telebirr or cbebirr.'
     );
   }
 
-  if (!amount || Number(amount) <= 0) {
-    throw new Error('A valid payment amount is required');
+  if (
+    !amount ||
+    Number(amount) <= 0
+  ) {
+    throw new Error(
+      'A valid payment amount is required'
+    );
   }
 
   if (!mobile) {
-    throw new Error('Customer mobile number is required');
+    throw new Error(
+      'Customer mobile number is required'
+    );
   }
 
   if (!txRef) {
-    throw new Error('Transaction reference is required');
+    throw new Error(
+      'Transaction reference is required'
+    );
   }
 
-  const form = new URLSearchParams();
+  /*
+   * Node.js 20 provides the global FormData
+   * implementation used by fetch().
+   */
 
-  form.append('amount', String(amount));
-  form.append('currency', currency);
-  form.append('tx_ref', txRef);
-  form.append('mobile', String(mobile));
+  const form =
+    new FormData();
 
-  const response = await fetch(
-    `${CHAPA_API_URL}/charges?type=${encodeURIComponent(type)}`,
-    {
-      method: 'POST',
-      headers: getHeaders({
-        'Content-Type': 'application/x-www-form-urlencoded',
-      }),
-      body: form.toString(),
-    }
+  form.append(
+    'amount',
+    String(amount)
   );
 
-  const text = await response.text();
+  form.append(
+    'currency',
+    currency
+  );
 
-  let data;
+  form.append(
+    'tx_ref',
+    txRef
+  );
 
-  try {
-    data = JSON.parse(text);
-  } catch {
-    data = {
-      raw: text,
-    };
-  }
+  form.append(
+    'mobile',
+    String(mobile)
+  );
 
-  if (!response.ok) {
-    const error = new Error(
-      data?.message ||
-        data?.error ||
-        `Chapa Direct Charge failed with HTTP ${response.status}`
+  const response =
+    await fetch(
+      `${CHAPA_API_URL}/charges?type=${encodeURIComponent(type)}`,
+      {
+        method: 'POST',
+
+        headers:
+          getHeaders({
+            Accept:
+              'application/json',
+          }),
+
+        body: form,
+      }
     );
 
-    error.status = response.status;
-    error.response = data;
+  const data =
+    await parseResponse(
+      response
+    );
+
+  if (!response.ok) {
+    const error =
+      new Error(
+        data?.message ||
+          data?.error ||
+          `Chapa Direct Charge failed with HTTP ${response.status}`
+      );
+
+    error.status =
+      response.status;
+
+    error.response =
+      data;
 
     throw error;
   }
@@ -135,49 +231,60 @@ async function directCharge({
   return data;
 }
 
+/* =========================================================
+   VERIFY TRANSACTION
+========================================================= */
+
 /**
- * Verify a Chapa transaction.
+ * Verify a Chapa transaction using tx_ref.
  *
- * Chapa verification uses the merchant transaction reference.
+ * Endpoint:
+ * GET /v1/transaction/verify/{tx_ref}
  */
-async function verifyPayment(txRef) {
+
+async function verifyPayment(
+  txRef
+) {
   if (!txRef) {
     throw new Error(
       'Transaction reference is required for Chapa verification'
     );
   }
 
-  const response = await fetch(
-    `${CHAPA_API_URL}/transaction/verify/${encodeURIComponent(txRef)}`,
-    {
-      method: 'GET',
-      headers: getHeaders({
-        Accept: 'application/json',
-      }),
-    }
-  );
+  const response =
+    await fetch(
+      `${CHAPA_API_URL}/transaction/verify/${encodeURIComponent(
+        txRef
+      )}`,
+      {
+        method: 'GET',
 
-  const text = await response.text();
-
-  let data;
-
-  try {
-    data = JSON.parse(text);
-  } catch {
-    data = {
-      raw: text,
-    };
-  }
-
-  if (!response.ok) {
-    const error = new Error(
-      data?.message ||
-        data?.error ||
-        `Chapa verification failed with HTTP ${response.status}`
+        headers:
+          getHeaders({
+            Accept:
+              'application/json',
+          }),
+      }
     );
 
-    error.status = response.status;
-    error.response = data;
+  const data =
+    await parseResponse(
+      response
+    );
+
+  if (!response.ok) {
+    const error =
+      new Error(
+        data?.message ||
+          data?.error ||
+          `Chapa verification failed with HTTP ${response.status}`
+      );
+
+    error.status =
+      response.status;
+
+    error.response =
+      data;
 
     throw error;
   }
@@ -185,12 +292,17 @@ async function verifyPayment(txRef) {
   return data;
 }
 
-/**
- * Normalize the MarketBridge payment method
- * to Chapa's Direct Charge method.
- */
-function chapaPaymentType(method) {
-  switch (String(method || '').toUpperCase()) {
+/* =========================================================
+   PAYMENT METHOD -> CHAPA DIRECT CHARGE TYPE
+========================================================= */
+
+function chapaPaymentType(
+  method
+) {
+  switch (
+    String(method || '')
+      .toUpperCase()
+  ) {
     case 'TELEBIRR':
       return 'telebirr';
 
@@ -202,17 +314,63 @@ function chapaPaymentType(method) {
   }
 }
 
+/* =========================================================
+   NORMALIZE CHAPA RESPONSE
+========================================================= */
+
+function getChapaStatus(
+  data
+) {
+  return String(
+    data?.status ||
+      data?.data?.status ||
+      ''
+  ).toLowerCase();
+}
+
+function getChapaReference(
+  data
+) {
+  return (
+    data?.reference ||
+    data?.data?.reference ||
+    null
+  );
+}
+
+function getChapaTxRef(
+  data
+) {
+  return (
+    data?.tx_ref ||
+    data?.data?.tx_ref ||
+    null
+  );
+}
+
+/* =========================================================
+   EXPORTS
+========================================================= */
+
 module.exports = {
   CHAPA_MODE,
   CHAPA_BASE_URL,
   CHAPA_API_VERSION,
   CHAPA_API_URL,
+
   CHAPA_PUBLIC_KEY,
   CHAPA_ENCRYPTION_KEY,
+
   isLive,
 
   getChapaConfig,
+
   directCharge,
   verifyPayment,
+
   chapaPaymentType,
+
+  getChapaStatus,
+  getChapaReference,
+  getChapaTxRef,
 };
