@@ -11,17 +11,24 @@ router.post(
   '/',
   authenticate,
   requireRole('SELLER', 'BUYER'),
-  [body('listingId').notEmpty(), body('mode').isIn(['SELLER_REQUESTED', 'BUYER_REQUESTED', 'JOINT'])],
+  [
+    body('listingId').notEmpty(),
+    body('mode').isIn(['SELLER_REQUESTED', 'BUYER_REQUESTED', 'JOINT']),
+    body('fee').if(body('inspectorId').notEmpty()).isFloat({ gt: 0 })
+      .withMessage('A fee is required when pre-selecting an inspector'),
+  ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { listingId, mode, inspectorId } = req.body;
+    const { listingId, mode, inspectorId, fee } = req.body;
     const listing = await prisma.listing.findUnique({ where: { id: listingId } });
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
     // If the requester pre-selected an inspector, confirm that account is
-    // actually an inspector before honoring it (and auto-accepting).
+    // actually an inspector before honoring it (and auto-accepting). A fee
+    // must be agreed upfront in this path since it skips /accept entirely,
+    // which is where the fee is normally set.
     if (inspectorId) {
       const inspector = await prisma.user.findUnique({ where: { id: inspectorId } });
       if (!inspector || !inspector.roles.includes('INSPECTOR')) {
@@ -36,6 +43,7 @@ router.post(
         mode,
         inspectorId: inspectorId || null,
         status: inspectorId ? 'ACCEPTED' : 'REQUESTED',
+        fee: inspectorId ? Number(fee) : null,
       },
     });
 
@@ -88,27 +96,36 @@ router.get('/mine', authenticate, requireRole('INSPECTOR'), async (req, res) => 
   res.json({ requests });
 });
 
-// Inspector accepts a pending request
-router.patch('/:id/accept', authenticate, requireRole('INSPECTOR'), async (req, res) => {
-  const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id } });
-  if (!request) return res.status(404).json({ error: 'Request not found' });
-  if (request.status !== 'REQUESTED' || request.inspectorId) {
-    return res.status(400).json({ error: `This request is already ${request.inspectorId ? 'assigned' : request.status.toLowerCase()} and cannot be accepted` });
-  }
+// Inspector accepts a pending request, setting the fee they're charging for it.
+router.patch(
+  '/:id/accept',
+  authenticate,
+  requireRole('INSPECTOR'),
+  [body('fee').isFloat({ gt: 0 }).withMessage('A fee greater than zero is required to accept a request')],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-  // Atomic claim: only succeeds if the request is still unassigned, so two
-  // inspectors racing to accept the same request can't both win.
-  const claim = await prisma.inspectionRequest.updateMany({
-    where: { id: req.params.id, status: 'REQUESTED', inspectorId: null },
-    data: { inspectorId: req.user.id, status: 'ACCEPTED' },
-  });
-  if (claim.count === 0) {
-    return res.status(409).json({ error: 'This request was just claimed by another inspector' });
-  }
+    const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id } });
+    if (!request) return res.status(404).json({ error: 'Request not found' });
+    if (request.status !== 'REQUESTED' || request.inspectorId) {
+      return res.status(400).json({ error: `This request is already ${request.inspectorId ? 'assigned' : request.status.toLowerCase()} and cannot be accepted` });
+    }
 
-  const updated = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id } });
-  res.json({ request: updated });
-});
+    // Atomic claim: only succeeds if the request is still unassigned, so two
+    // inspectors racing to accept the same request can't both win.
+    const claim = await prisma.inspectionRequest.updateMany({
+      where: { id: req.params.id, status: 'REQUESTED', inspectorId: null },
+      data: { inspectorId: req.user.id, status: 'ACCEPTED', fee: Number(req.body.fee) },
+    });
+    if (claim.count === 0) {
+      return res.status(409).json({ error: 'This request was just claimed by another inspector' });
+    }
+
+    const updated = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id } });
+    res.json({ request: updated });
+  }
+);
 
 // Inspector submits evidence/report — inspectors verify only, never arrange transport
 router.post(
