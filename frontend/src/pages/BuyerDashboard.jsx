@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -436,6 +437,8 @@ export default function BuyerDashboard() {
           transport through MarketBridge, and confirm receipt
           when your produce arrives.
         </p>
+
+        <RoleSwitchCTA current="BUYER" />
 
         <div className="sd-actions">
           <Link
