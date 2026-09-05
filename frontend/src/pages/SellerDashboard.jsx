@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
+import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 
 const TABS = [
   { id: 'listings', label: 'My Listings' },
@@ -131,6 +132,7 @@ export default function SellerDashboard() {
         <p className="sd-muted" style={{ maxWidth: 780 }}>
           Manage listings, compare buyer offers, authorize inspectors and decide whether you or the buyer will arrange transport.
         </p>
+        <RoleSwitchCTA current="SELLER" />
         <div className="sd-actions">
           <button className="sd-btn sd-btn-primary" onClick={() => listingModalRef.current.showModal()}>+ Create Listing</button>
           <button className="sd-btn sd-btn-outline" onClick={() => setActiveTab('transport')}>Transport</button>
