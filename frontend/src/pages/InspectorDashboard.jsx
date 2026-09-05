@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
-import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 
 const EMPTY_REPORT = {
   quantity: '',
@@ -27,6 +26,7 @@ export default function InspectorDashboard() {
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
 
+  const [feeInputs, setFeeInputs] = useState({});
   const [activeRequestId, setActiveRequestId] = useState('');
   const [report, setReport] = useState(EMPTY_REPORT);
 
@@ -57,8 +57,14 @@ export default function InspectorDashboard() {
     setError('');
     setMsg('');
 
+    const fee = Number(feeInputs[id]);
+    if (!fee || fee <= 0) {
+      setError('Enter your fee for this inspection before accepting.');
+      return;
+    }
+
     try {
-      await api.patch(`/inspections/${id}/accept`);
+      await api.patch(`/inspections/${id}/accept`, { fee });
       setMsg('Job accepted. It is now in "My Jobs" — submit your report once the inspection is complete.');
       setTab('mine');
       await loadAll();
@@ -115,8 +121,6 @@ export default function InspectorDashboard() {
           <span className="role-chip">VERIFICATION ROLE</span>
         </div>
 
-        <RoleSwitchCTA current="INSPECTOR" />
-
         {msg && <div className="alert success">{msg}</div>}
         {error && <div className="alert error">{error}</div>}
 
@@ -155,9 +159,20 @@ export default function InspectorDashboard() {
                           <p>{modeLabel(r.mode)} — requested for {r.listing?.location || 'location not set'}</p>
                           <p className="muted">Requested by {r.requestedBy?.name || 'user'}</p>
                         </div>
-                        <button type="button" className="btn btn-primary" onClick={() => accept(r.id)}>
-                          Accept job
-                        </button>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <input
+                            type="number"
+                            min="1"
+                            step="0.01"
+                            placeholder="Your fee (ETB)"
+                            style={{ width: 130 }}
+                            value={feeInputs[r.id] || ''}
+                            onChange={(e) => setFeeInputs((f) => ({ ...f, [r.id]: e.target.value }))}
+                          />
+                          <button type="button" className="btn btn-primary" onClick={() => accept(r.id)}>
+                            Accept job
+                          </button>
+                        </div>
                       </div>
                     ))}
 
