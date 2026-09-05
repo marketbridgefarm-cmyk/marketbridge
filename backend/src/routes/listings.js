@@ -31,7 +31,7 @@ router.get('/:id', async (req, res) => {
     include: {
       seller: { select: { id: true, name: true, rating: true, location: true } },
       offers: true,
-      inspectionRequests: { include: { report: true, inspector: { select: { id: true, name: true, rating: true } } } },
+      inspectionRequests: { include: { report: true, inspector: { select: { id: true, name: true, rating: true } }, payments: { select: { id: true, status: true } } } },
     },
   });
   if (!listing) return res.status(404).json({ error: 'Listing not found' });
