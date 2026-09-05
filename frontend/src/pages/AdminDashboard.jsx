@@ -23,6 +23,8 @@ export default function AdminDashboard() {
   const [disputes, setDisputes] = useState([]);
   const [suspiciousUsers, setSuspiciousUsers] = useState([]);
   const [ads, setAds] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [commissionSummary, setCommissionSummary] = useState(null);
 
   const [userSearch, setUserSearch] = useState('');
   const [roleSelections, setRoleSelections] = useState({});
@@ -43,12 +45,16 @@ export default function AdminDashboard() {
         disputesRes,
         fraudRes,
         adsRes,
+        paymentsRes,
+        commissionRes,
       ] = await Promise.all([
         api.get('/admin/overview'),
         api.get('/admin/users'),
         api.get('/disputes'),
         api.get('/admin/fraud-flags'),
         api.get('/ads'),
+        api.get('/payments', { params: { status: 'PENDING' } }),
+        api.get('/payments/commissions/summary'),
       ]);
 
       setOverview(overviewRes.data);
@@ -56,6 +62,8 @@ export default function AdminDashboard() {
       setDisputes(disputesRes.data?.disputes || []);
       setSuspiciousUsers(fraudRes.data?.suspiciousUsers || []);
       setAds(adsRes.data?.ads || []);
+      setPayments(paymentsRes.data?.payments || []);
+      setCommissionSummary(commissionRes.data);
     } catch (err) {
       setError(
         err.response?.data?.error ||
@@ -243,6 +251,24 @@ export default function AdminDashboard() {
       setError(
         err.response?.data?.error ||
         'Could not update campaign status'
+      );
+    } finally {
+      setActionLoading('');
+    }
+  }
+
+  async function confirmPayment(paymentId) {
+    clearMessages();
+    setActionLoading(`payment-${paymentId}`);
+
+    try {
+      await api.patch(`/payments/${paymentId}/confirm`);
+      setSuccess('Payment confirmed and reconciled.');
+      await loadAll();
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+        'Could not confirm payment'
       );
     } finally {
       setActionLoading('');
@@ -451,6 +477,23 @@ export default function AdminDashboard() {
             {pendingAds.length > 0 &&
               `(${pendingAds.length})`}
           </button>
+
+          <button
+            type="button"
+            className={`sd-tab ${
+              tab === 'payments'
+                ? 'sd-active'
+                : ''
+            }`}
+            onClick={() => {
+              clearMessages();
+              setTab('payments');
+            }}
+          >
+            Payments{' '}
+            {payments.length > 0 &&
+              `(${payments.length})`}
+          </button>
         </div>
 
         {tab === 'overview' && (
@@ -489,7 +532,7 @@ export default function AdminDashboard() {
                 ],
                 [
                   'Orders & payments oversight',
-                  false,
+                  true,
                 ],
                 [
                   'Transport jobs oversight',
@@ -501,7 +544,7 @@ export default function AdminDashboard() {
                 ],
                 [
                   'Commissions & revenue records',
-                  false,
+                  true,
                 ],
               ].map(([label, built]) => (
                 <div
@@ -1094,6 +1137,70 @@ export default function AdminDashboard() {
               )}
             </div>
 
+          </div>
+        )}
+
+        {tab === 'payments' && (
+          <div>
+            <div className="dashboard-grid" style={{ marginBottom: 20 }}>
+              <div className="stat-card">
+                <strong>{Number(commissionSummary?.totalVolume || 0).toLocaleString()} ETB</strong>
+                <span>Total confirmed volume</span>
+              </div>
+              <div className="stat-card">
+                <strong>{Number(commissionSummary?.totalCommission || 0).toLocaleString()} ETB</strong>
+                <span>Platform commission earned</span>
+              </div>
+              {Object.entries(commissionSummary?.byType || {}).map(([type, t]) => (
+                <div className="stat-card" key={type}>
+                  <strong>{Number(t.commission).toLocaleString()} ETB</strong>
+                  <span>{type} ({t.count} payment{t.count === 1 ? '' : 's'})</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="card">
+            <h2>Pending payment reconciliation</h2>
+            <p className="muted">
+              These are payment records waiting to be confirmed. Prefer a
+              signed provider webhook where available — use manual confirm
+              only once you've verified the funds arrived (e.g. checking a
+              Telebirr/CBE reference).
+            </p>
+
+            {payments.map((p) => (
+              <div className="dispute" key={p.id}>
+                <strong>
+                  {Number(p.amount).toLocaleString()} ETB — {p.type} via {p.method}
+                </strong>
+
+                <p className="muted">
+                  {p.createdBy?.name} ({p.createdBy?.email})
+                  {p.reference && <> · Ref: {p.reference}</>}
+                </p>
+
+                <p className="muted">
+                  {p.order && `Order ${p.order.id.slice(0, 8)}`}
+                  {p.digitalProduct && `Digital product: ${p.digitalProduct.title}`}
+                  {p.advertisement && `Ad campaign: ${p.advertisement.type.replace(/_/g, ' ')}`}
+                  {' · '}
+                  {new Date(p.createdAt).toLocaleString()}
+                </p>
+
+                <button
+                  className="btn btn-primary"
+                  disabled={actionLoading === `payment-${p.id}`}
+                  onClick={() => confirmPayment(p.id)}
+                >
+                  {actionLoading === `payment-${p.id}` ? 'Working…' : 'Confirm payment received'}
+                </button>
+              </div>
+            ))}
+
+            {payments.length === 0 && (
+              <p className="muted">No pending payments right now.</p>
+            )}
+            </div>
           </div>
         )}
 
