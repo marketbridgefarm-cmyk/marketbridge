@@ -794,7 +794,7 @@ router.patch('/quotes/:quoteId/accept', authenticate, async (req,res)=>{
       if(!currentTruck || currentTruck.availability!=='AVAILABLE') throw new Error('Selected truck is no longer available');
       const accepted=await tx.transportQuote.update({where:{id:quote.id},data:{status:'ACCEPTED'}});
       await tx.transportQuote.updateMany({where:{transportJobId:quote.transportJobId,id:{not:quote.id},status:'PENDING'},data:{status:'REJECTED'}});
-      const job=await tx.transportJob.update({where:{id:quote.transportJobId},data:{truckOwnerId:quote.truckOwnerId,truckId:quote.truckId,status:'ACCEPTED'}});
+      const job=await tx.transportJob.update({where:{id:quote.transportJobId},data:{truckOwnerId:quote.truckOwnerId,truckId:quote.truckId,status:'ACCEPTED',agreedAmount:quote.amount}});
       await tx.truck.update({where:{id:quote.truckId},data:{availability:'BUSY'}});
       await tx.order.update({where:{id:order.id},data:{status:'TRANSPORT_ARRANGED'}});
       return {accepted,job};
