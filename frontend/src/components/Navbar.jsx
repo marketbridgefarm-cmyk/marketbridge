@@ -2,19 +2,27 @@ import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
-const roleLinks = [
-  ['SELLER', '/dashboard/seller', 'Seller'],
-  ['BUYER', '/dashboard/buyer', 'Buyer'],
-  ['INSPECTOR', '/dashboard/inspector', 'Inspector'],
-  ['TRUCK_OWNER', '/dashboard/truck-owner', 'Transport'],
-  ['ADMIN', '/dashboard/admin', 'Admin'],
-  ['ADVERTISER', '/dashboard/advertiser', 'Advertising'],
+// Order of preference when resolving a single "Dashboard" destination for a
+// user with multiple roles. Per-role prompts to switch between capabilities
+// now live on the dashboards themselves (see RoleSwitchCTA), not here.
+const DASHBOARD_BY_ROLE = [
+  ['ADMIN', '/dashboard/admin'],
+  ['SELLER', '/dashboard/seller'],
+  ['BUYER', '/dashboard/buyer'],
+  ['INSPECTOR', '/dashboard/inspector'],
+  ['TRUCK_OWNER', '/dashboard/truck-owner'],
+  ['ADVERTISER', '/dashboard/advertiser'],
 ];
+
+function resolveDashboard(user) {
+  return DASHBOARD_BY_ROLE.find(([r]) => user?.roles?.includes(r))?.[1] || '/';
+}
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const dashboardHref = resolveDashboard(user);
 
   return (
     <header className="site-header">
@@ -27,12 +35,10 @@ export default function Navbar() {
           <Link className={location.pathname === '/agricultural' || location.pathname === '/listings' ? 'active' : ''} to="/agricultural">Agricultural</Link>
           <Link className={location.pathname.startsWith('/products') ? 'active' : ''} to="/products">Product</Link>
           <Link className={location.pathname.startsWith('/digital') ? 'active' : ''} to="/digital">Digital</Link>
-          {user && roleLinks.filter(([r]) => user.roles?.includes(r)).map(([r, href, label]) => (
-            <Link key={r} className={location.pathname === href ? 'active' : ''} to={href}>{label}</Link>
-          ))}
+          {user && <Link className={location.pathname.startsWith('/dashboard') ? 'active' : ''} to={dashboardHref}>Dashboard</Link>}
           {user && <Link className={location.pathname.startsWith('/orders') ? 'active' : ''} to="/orders">Orders</Link>}
           {user ? (
-            <button className="nav-user" onClick={() => navigate(roleLinks.find(([r]) => user.roles?.includes(r))?.[1] || '/')}>
+            <button className="nav-user" onClick={() => navigate(dashboardHref)}>
               <span className="avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
               {user.name}
             </button>
