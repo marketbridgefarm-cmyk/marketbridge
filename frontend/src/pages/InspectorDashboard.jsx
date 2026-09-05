@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
+import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 
 const EMPTY_REPORT = {
   quantity: '',
@@ -113,6 +114,8 @@ export default function InspectorDashboard() {
           </div>
           <span className="role-chip">VERIFICATION ROLE</span>
         </div>
+
+        <RoleSwitchCTA current="INSPECTOR" />
 
         {msg && <div className="alert success">{msg}</div>}
         {error && <div className="alert error">{error}</div>}
