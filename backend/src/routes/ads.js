@@ -4,49 +4,148 @@ const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { isAdmin } = require('../utils/authorization');
+
 const router = express.Router();
-const validate = (req,res,next)=>{const e=validationResult(req); if(!e.isEmpty()) return res.status(400).json({error:'Validation failed',errors:e.array()}); next();};
 
-router.post('/', authenticate, requireRole('ADVERTISER'), [
-  body('type').isIn(['FEATURED_LISTING','TOP_OF_CATEGORY','SPONSORED_SEARCH','BANNER','TELEGRAM_PROMOTION']),
-  body('listingId').optional({values:'falsy'}).isUUID(),
-  body('startDate').isISO8601(), body('endDate').isISO8601(),
-  body('amountPaid').optional({values:'falsy'}).isFloat({min:0}),
-], validate, async (req,res)=>{
-  const startDate=new Date(req.body.startDate), endDate=new Date(req.body.endDate);
-  if (endDate <= startDate) return res.status(400).json({error:'endDate must be after startDate'});
-  if (req.body.listingId) {
-    const listing=await prisma.listing.findUnique({where:{id:req.body.listingId},select:{sellerId:true}});
-    if(!listing) return res.status(404).json({error:'Listing not found'});
-    if(listing.sellerId!==req.user.id && !isAdmin(req.user)) return res.status(403).json({error:'You may only advertise your own listing'});
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
+  next();
+};
+
+router.post(
+  '/',
+  authenticate,
+  requireRole('ADVERTISER'),
+  [
+    body('type').isIn(['FEATURED_LISTING', 'TOP_OF_CATEGORY', 'SPONSORED_SEARCH', 'BANNER', 'TELEGRAM_PROMOTION']),
+    body('listingId').optional({ values: 'falsy' }).isUUID(),
+    body('startDate').isISO8601(),
+    body('endDate').isISO8601(),
+    body('amountPaid').optional({ values: 'falsy' }).isFloat({ min: 0 }),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const startDate = new Date(req.body.startDate);
+      const endDate = new Date(req.body.endDate);
+
+      if (endDate <= startDate) return res.status(400).json({ error: 'endDate must be after startDate' });
+
+      if (req.body.listingId) {
+        const listing = await prisma.listing.findUnique({
+          where: { id: req.body.listingId },
+          select: { sellerId: true },
+        });
+
+        if (!listing) return res.status(404).json({ error: 'Listing not found' });
+
+        if (listing.sellerId !== req.user.id && !isAdmin(req.user)) {
+          return res.status(403).json({ error: 'You may only advertise your own listing' });
+        }
+      }
+
+      const ad = await prisma.advertisement.create({
+        data: {
+          advertiserId: req.user.id,
+          type: req.body.type,
+          listingId: req.body.listingId || null,
+          startDate,
+          endDate,
+          amountPaid: req.body.amountPaid == null ? null : Number(req.body.amountPaid),
+          status: 'PENDING',
+        },
+      });
+
+      return res.status(201).json({ ad });
+    } catch (error) {
+      console.error('CREATE AD ERROR:', error);
+      return res.status(500).json({ error: 'Could not create advertisement' });
+    }
   }
-  const ad=await prisma.advertisement.create({data:{advertiserId:req.user.id,type:req.body.type,listingId:req.body.listingId||null,startDate,endDate,amountPaid:req.body.amountPaid==null?null:Number(req.body.amountPaid),status:'PENDING'}});
-  res.status(201).json({ad});
+);
+
+router.get('/active', async (req, res) => {
+  try {
+    const now = new Date();
+    const ads = await prisma.advertisement.findMany({
+      where: {
+        status: 'ACTIVE',
+        startDate: { lte: now },
+        endDate: { gte: now },
+      },
+      include: { listing: true },
+      orderBy: { startDate: 'asc' },
+    });
+
+    return res.json({ ads });
+  } catch (error) {
+    console.error('ACTIVE ADS ERROR:', error);
+    return res.status(500).json({ error: 'Could not load active advertisements' });
+  }
 });
 
-router.get('/active', async (req,res)=>{
-  const now=new Date();
-  const ads=await prisma.advertisement.findMany({where:{status:'ACTIVE',startDate:{lte:now},endDate:{gte:now}},include:{listing:true},orderBy:{startDate:'asc'}});
-  res.json({ads});
+router.get('/mine', authenticate, requireRole('ADVERTISER'), async (req, res) => {
+  try {
+    const ads = await prisma.advertisement.findMany({
+      where: { advertiserId: req.user.id },
+      include: {
+        listing: { select: { id: true, title: true, cropType: true } },
+        payments: { select: { id: true, status: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.json({ ads });
+  } catch (error) {
+    console.error('MY ADS ERROR:', error);
+    return res.status(500).json({ error: 'Could not load your advertisements' });
+  }
 });
 
-// Advertiser's own campaigns, any status.
-router.get('/mine', authenticate, requireRole('ADVERTISER'), async (req,res)=>{
-  const ads=await prisma.advertisement.findMany({where:{advertiserId:req.user.id},include:{listing:{select:{id:true,title:true,cropType:true}},payments:{select:{id:true,status:true}}},orderBy:{createdAt:'desc'}});
-  res.json({ads});
+router.get('/', authenticate, requireRole('ADMIN'), async (req, res) => {
+  try {
+    const ads = await prisma.advertisement.findMany({
+      include: {
+        listing: { select: { id: true, title: true, cropType: true } },
+        advertiser: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.json({ ads });
+  } catch (error) {
+    console.error('LIST ADS ERROR:', error);
+    return res.status(500).json({ error: 'Could not load advertisements' });
+  }
 });
 
-// Admin review queue — every campaign, any status.
-router.get('/', authenticate, requireRole('ADMIN'), async (req,res)=>{
-  const ads=await prisma.advertisement.findMany({include:{listing:{select:{id:true,title:true,cropType:true}},advertiser:{select:{id:true,name:true,email:true}}},orderBy:{createdAt:'desc'}});
-  res.json({ads});
-});
+router.patch(
+  '/:id/status',
+  authenticate,
+  requireRole('ADMIN'),
+  [param('id').isUUID(), body('status').isIn(['ACTIVE', 'REJECTED', 'EXPIRED'])],
+  validate,
+  async (req, res) => {
+    try {
+      const ad = await prisma.advertisement.findUnique({ where: { id: req.params.id } });
+      if (!ad) return res.status(404).json({ error: 'Advertisement not found' });
 
-router.patch('/:id/status', authenticate, requireRole('ADMIN'), [param('id').isUUID(),body('status').isIn(['ACTIVE','REJECTED','EXPIRED'])], validate, async(req,res)=>{
-  const ad=await prisma.advertisement.findUnique({where:{id:req.params.id}});
-  if(!ad)return res.status(404).json({error:'Advertisement not found'});
-  if(req.body.status==='ACTIVE' && ad.endDate<=new Date()) return res.status(400).json({error:'Cannot activate an expired advertisement'});
-  const updated=await prisma.advertisement.update({where:{id:ad.id},data:{status:req.body.status}});
-  res.json({ad:updated});
-});
-module.exports=router;
+      if (req.body.status === 'ACTIVE' && ad.endDate <= new Date()) {
+        return res.status(400).json({ error: 'Cannot activate an expired advertisement' });
+      }
+
+      const updated = await prisma.advertisement.update({
+        where: { id: ad.id },
+        data: { status: req.body.status },
+      });
+
+      return res.json({ ad: updated });
+    } catch (error) {
+      console.error('UPDATE AD STATUS ERROR:', error);
+      return res.status(500).json({ error: 'Could not update advertisement status' });
+    }
+  }
+);
+
+module.exports = router;
