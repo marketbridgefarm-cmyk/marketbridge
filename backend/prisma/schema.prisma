@@ -482,6 +482,13 @@ model Dispute {
   evidence String[]
   status DisputeStatus @default(OPEN)
   resolution String?
+  // The order's status at the moment this dispute was raised, so it can be
+  // restored on resolution instead of leaving the order stuck at DISPUTED
+  // forever. Column already exists in the DB via migration
+  // 202609040001_add_dispute_previous_order_status — this field was
+  // missing from schema.prisma, which made Prisma Client reject any
+  // create/update that referenced it.
+  previousOrderStatus OrderStatus?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([orderId])
