@@ -1,416 +1,914 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import api from '../api/client';
-import { startChapaPayment, chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 import { useAuth } from '../context/AuthContext.jsx';
 
-const ROLE_LABEL = { BUYER: 'Buyer', SELLER: 'Seller', TRUCK_OWNER: 'Transporter' };
+const money = (value) =>
+  Number(value || 0).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+const shortId = (value) =>
+  value ? value.slice(0, 8).toUpperCase() : '—';
+
+const isPaid = (payment) =>
+  payment?.status === 'PAID';
+
+const getPayment = (payments, type) =>
+  payments?.find(
+    (payment) =>
+      payment.type === type &&
+      payment.status === 'PAID'
+  );
+
+const statusLabel = (status) =>
+  String(status || '')
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+function StatusBadge({ status }) {
+  return (
+    <span className={`badge status-${String(status || '').toLowerCase()}`}>
+      {statusLabel(status)}
+    </span>
+  );
+}
+
+function PaymentState({ payment, label }) {
+  if (!payment) {
+    return (
+      <div className="payment-state">
+        <span>{label}</span>
+        <StatusBadge status="PENDING" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="payment-state">
+      <span>{label}</span>
+      <StatusBadge status={payment.status} />
+    </div>
+  );
+}
 
 export default function OrderDetail() {
   const { orderId } = useParams();
-  const nav = useNavigate();
+  const navigate = useNavigate();
   const { user } = useAuth();
 
   const [order, setOrder] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
-  const [payMethod, setPayMethod] = useState('TELEBIRR');
-
-  const [ratingDrafts, setRatingDrafts] = useState({});
-  const [messageText, setMessageText] = useState('');
-  const [selectedReceiverId, setSelectedReceiverId] = useState('');
+  const [loading, setLoading] = useState(true);
 
   async function load() {
+    setLoading(true);
+    setError('');
+
     try {
-      const r = await api.get(`/orders/${orderId}`);
-      setOrder(r.data.order);
-    } catch (e) {
-      setError(e.response?.data?.error || 'Order not found');
+      const response = await api.get(`/orders/${orderId}`);
+      setOrder(response.data.order);
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+          'Could not load this order.'
+      );
+    } finally {
+      setLoading(false);
     }
   }
-  useEffect(() => { load(); }, [orderId]);
 
-  async function acceptQuote(id) {
-    setBusy(id);
-    try { await api.patch(`/transport/quotes/${id}/accept`); await load(); }
-    catch (e) { setError(e.response?.data?.error || 'Could not accept quote'); }
-    finally { setBusy(''); }
-  }
+  useEffect(() => {
+    load();
+  }, [orderId]);
 
-  async function payTransport() {
-    const t = order.transportJob;
-    setBusy('pay-transport'); setError('');
-    try { await startChapaPayment({ type: 'TRANSPORT', orderId, amount: t.agreedAmount, method: payMethod }); }
-    catch (e) { setError(e.response?.data?.error || e.message || 'Could not start payment'); setBusy(''); }
-  }
+  async function acceptQuote(quoteId) {
+    setBusy(quoteId);
+    setError('');
 
-  async function payMarketplace() {
-    setBusy('pay-marketplace'); setError('');
-    try { await startChapaPayment({ type: 'MARKETPLACE', orderId, amount: order.finalPrice, method: payMethod }); }
-    catch (e) { setError(e.response?.data?.error || e.message || 'Could not start payment'); setBusy(''); }
-  }
-
-  async function resumePayment(paymentId, busyKey) {
-    setBusy(busyKey); setError('');
-    try { await chapaInitializeAndRedirect(paymentId); }
-    catch (e) { setError(e.response?.data?.error || e.message || 'Could not resume payment'); setBusy(''); }
+    try {
+      await api.patch(`/transport/quotes/${quoteId}/accept`);
+      await load();
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+          'Could not accept the transport quote.'
+      );
+    } finally {
+      setBusy('');
+    }
   }
 
   async function confirmReceipt() {
     setBusy('receipt');
-    try { await api.patch(`/orders/${orderId}/confirm-receipt`); await load(); }
-    catch (e) { setError(e.response?.data?.error || 'Could not confirm receipt'); }
-    finally { setBusy(''); }
-  }
+    setError('');
 
-  // ---------------------------------------------------------------------
-  // RATINGS
-  // ---------------------------------------------------------------------
-  // Backend (ratings.js) only accepts ratings once an order is COMPLETED
-  // or DELIVERED, only from a real participant (buyer/seller/assigned
-  // truck owner), and only one rating per (order, target, role).
-  function ratingKey(targetId, role) { return `${targetId}-${role}`; }
-
-  function draftFor(key) {
-    return ratingDrafts[key] || { score: 0, comment: '' };
-  }
-
-  function setDraftScore(key, score) {
-    setRatingDrafts((d) => ({ ...d, [key]: { ...draftFor(key), score } }));
-  }
-
-  function setDraftComment(key, comment) {
-    setRatingDrafts((d) => ({ ...d, [key]: { ...draftFor(key), comment } }));
-  }
-
-  async function submitRating(target) {
-    const key = ratingKey(target.id, target.role);
-    const draft = draftFor(key);
-    if (!draft.score) { setError('Choose a star rating before submitting.'); return; }
-    setBusy(`rate-${key}`); setError('');
     try {
-      await api.post('/ratings', {
-        orderId,
-        toUserId: target.id,
-        role: target.role,
-        score: draft.score,
-        comment: draft.comment?.trim() || undefined,
-      });
+      await api.patch(`/orders/${orderId}/confirm-receipt`);
       await load();
-    } catch (e) {
-      setError(e.response?.data?.error || 'Could not submit rating');
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+          'Could not confirm receipt.'
+      );
     } finally {
       setBusy('');
     }
   }
 
-  // ---------------------------------------------------------------------
-  // MESSAGES
-  // ---------------------------------------------------------------------
-  async function sendMessage(receiverId) {
-    const content = messageText.trim();
-    if (!content) return;
-    if (!receiverId) { setError('Choose who to message.'); return; }
-    setBusy('send-message'); setError('');
-    try {
-      await api.post('/messages', { receiverId, content, orderId });
-      setMessageText('');
-      await load();
-    } catch (e) {
-      setError(e.response?.data?.error || 'Could not send message');
-    } finally {
-      setBusy('');
-    }
+  if (loading) {
+    return (
+      <main className="section">
+        <div className="container-narrow loading">
+          Loading order…
+        </div>
+      </main>
+    );
   }
 
   if (!order) {
-    return <main className="section"><div className="container-narrow loading">{error || 'Loading order…'}</div></main>;
+    return (
+      <main className="section">
+        <div className="container-narrow">
+          {error && (
+            <div className="alert error">
+              {error}
+            </div>
+          )}
+
+          <button
+            className="back-link"
+            type="button"
+            onClick={() => navigate(-1)}
+          >
+            ← Back
+          </button>
+        </div>
+      </main>
+    );
   }
 
-  const t = order.transportJob;
+  const transport = order.transportJob;
+  const payments = order.payments || [];
 
-  const canChooseQuote = t && ['BUYER', 'SELLER'].some((r) => user?.roles?.includes(r)) &&
-    (order.buyerId === user?.id || order.sellerId === user?.id) &&
-    ['REQUESTED', 'QUOTED'].includes(t.status) && !t.truckOwnerId;
+  const marketplacePayment = getPayment(
+    payments,
+    'MARKETPLACE'
+  );
 
-  const transportPayment = (order.payments || []).find((p) => p.type === 'TRANSPORT' && ['PENDING', 'PAID'].includes(p.status));
-  const canPayTransport = t && t.method === 'HIRE_TRANSPORTER' && t.truckOwnerId && t.agreedAmount != null &&
-    !transportPayment && (order.buyerId === user?.id || order.sellerId === user?.id);
-  const canResumeTransportPayment = transportPayment?.status === 'PENDING' && (order.buyerId === user?.id || order.sellerId === user?.id);
+  const transportPayment = getPayment(
+    payments,
+    'TRANSPORT'
+  );
 
-  const marketplacePayment = (order.payments || []).find((p) => p.type === 'MARKETPLACE' && ['PENDING', 'PAID'].includes(p.status));
-  const canPayMarketplace = order.status === 'PENDING_PAYMENT' && order.buyerId === user?.id && !marketplacePayment;
-  const canResumeMarketplacePayment = marketplacePayment?.status === 'PENDING' && order.buyerId === user?.id;
+  const isMarketplacePaid = isPaid(
+    marketplacePayment
+  );
 
-  const title = order.listing?.title || order.listing?.cropType || 'Order';
+  const isTransportPaid =
+    transport?.method === 'HIRE_TRANSPORTER' &&
+    isPaid(transportPayment);
 
-  // Everyone who can legitimately be rated or messaged on this order.
-  const participants = [
-    { id: order.buyerId, name: order.buyer?.name, role: 'BUYER' },
-    { id: order.sellerId, name: order.seller?.name, role: 'SELLER' },
-  ];
-  if (t?.truckOwnerId && t.truckOwner) {
-    participants.push({ id: t.truckOwnerId, name: t.truckOwner.name, role: 'TRUCK_OWNER' });
-  }
-  const nameById = Object.fromEntries(participants.map((p) => [p.id, p.name || 'MarketBridge user']));
-  const others = participants.filter((p) => p.id !== user?.id);
+  const requiresTransportPayment =
+    transport?.method === 'HIRE_TRANSPORTER';
 
-  const canRate = ['COMPLETED', 'DELIVERED'].includes(order.status) && others.length > 0;
-  const ratingsGiven = order.ratings || [];
+  const acceptedTransportAmount =
+    transport?.agreedAmount != null
+      ? Number(transport.agreedAmount)
+      : null;
 
-  const thread = order.messages || [];
-  const activeReceiverId = selectedReceiverId || others[0]?.id || '';
+  const transportPaymentAmount =
+    transportPayment?.amount != null
+      ? Number(transportPayment.amount)
+      : null;
+
+  const transportAmountMatches =
+    !requiresTransportPayment ||
+    (acceptedTransportAmount != null &&
+      transportPaymentAmount != null &&
+      Math.abs(
+        acceptedTransportAmount -
+          transportPaymentAmount
+      ) < 0.01);
+
+  const canChooseQuote =
+    transport &&
+    ['BUYER', 'SELLER'].some((role) =>
+      user?.roles?.includes(role)
+    ) &&
+    (order.buyerId === user?.id ||
+      order.sellerId === user?.id) &&
+    ['REQUESTED', 'QUOTED'].includes(
+      transport.status
+    ) &&
+    !transport.truckOwnerId;
+
+  const canArrangeTransport =
+    !transport &&
+    order.status !== 'CANCELLED' &&
+    order.status !== 'COMPLETED';
+
+  const canConfirmReceipt =
+    order.status === 'DELIVERED' &&
+    order.buyerId === user?.id &&
+    isMarketplacePaid &&
+    (!requiresTransportPayment ||
+      (isTransportPaid &&
+        transportAmountMatches));
+
+  const receiptBlockedReason =
+    order.status !== 'DELIVERED'
+      ? `Receipt can be confirmed after delivery. Current order status: ${statusLabel(
+          order.status
+        )}.`
+      : !isMarketplacePaid
+      ? 'Marketplace payment must be confirmed before receipt can be completed.'
+      : requiresTransportPayment &&
+        !isTransportPaid
+      ? 'Transport payment must be confirmed before receipt can be completed.'
+      : requiresTransportPayment &&
+        !transportAmountMatches
+      ? 'The transport payment amount does not match the accepted transport fee.'
+      : '';
+
+  const title =
+    order.listing?.title ||
+    order.listing?.cropType ||
+    'Order';
+
+  const quoteList = transport?.quotes || [];
+
+  const orderProgress = useMemo(() => {
+    const statuses = [
+      'PENDING_PAYMENT',
+      'CONFIRMED',
+      'TRANSPORT_ARRANGED',
+      'IN_TRANSIT',
+      'DELIVERED',
+      'COMPLETED',
+    ];
+
+    const currentIndex =
+      statuses.indexOf(order.status);
+
+    return statuses.map((status, index) => ({
+      status,
+      completed:
+        currentIndex >= 0 &&
+        index <= currentIndex,
+      current:
+        currentIndex >= 0 &&
+        index === currentIndex,
+    }));
+  }, [order.status]);
 
   return (
     <main className="section">
       <div className="container-narrow">
-        <button className="back-link" onClick={() => nav(-1)}>← Back</button>
-        {error && <div className="alert error">{error}</div>}
+        <button
+          className="back-link"
+          type="button"
+          onClick={() => navigate(-1)}
+        >
+          ← Back
+        </button>
 
+        {error && (
+          <div
+            className="alert error"
+            role="alert"
+          >
+            {error}
+          </div>
+        )}
+
+        {/* Header */}
         <div className="page-header compact-header">
           <div>
-            <span className="eyebrow">ORDER {order.id.slice(0, 8)}</span>
+            <span className="eyebrow">
+              ORDER {shortId(order.id)}
+            </span>
+
             <h1>{title}</h1>
-            <p><span className="badge">{order.status}</span> · {Number(order.finalPrice).toLocaleString()} ETB</p>
+
+            <p>
+              <StatusBadge status={order.status} />{' '}
+              · {money(order.finalPrice)} ETB
+            </p>
           </div>
         </div>
 
+        {/* Order lifecycle */}
+        <div className="card">
+          <h2>Order progress</h2>
+
+          <div className="order-progress">
+            {orderProgress.map((step) => (
+              <div
+                key={step.status}
+                className={`progress-step ${
+                  step.completed ? 'completed' : ''
+                } ${
+                  step.current ? 'current' : ''
+                }`}
+              >
+                <div className="progress-dot">
+                  {step.completed ? '✓' : ''}
+                </div>
+
+                <span>
+                  {statusLabel(step.status)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Parties */}
         <div className="card">
           <h2>Parties</h2>
+
           <div className="detail-facts">
-            <div><span>Buyer</span><strong>{order.buyer?.name}</strong></div>
-            <div><span>Seller</span><strong>{order.seller?.name}</strong></div>
-            <div><span>Amount</span><strong>{Number(order.finalPrice).toLocaleString()} ETB</strong></div>
+            <div>
+              <span>Buyer</span>
+              <strong>
+                {order.buyer?.name || '—'}
+              </strong>
+            </div>
+
+            <div>
+              <span>Seller</span>
+              <strong>
+                {order.seller?.name || '—'}
+              </strong>
+            </div>
+
+            <div>
+              <span>Order amount</span>
+              <strong>
+                {money(order.finalPrice)} ETB
+              </strong>
+            </div>
+
+            {order.quantity != null && (
+              <div>
+                <span>Quantity</span>
+                <strong>
+                  {order.quantity}
+                  {order.unit
+                    ? ` ${order.unit}`
+                    : ''}
+                </strong>
+              </div>
+            )}
           </div>
         </div>
 
-        {canPayMarketplace && (
-          <div className="card">
-            <h2>Payment</h2>
-            <p className="muted">This order is awaiting payment before the seller can proceed.</p>
-            <p>Amount due: <strong>{Number(order.finalPrice).toLocaleString()} ETB</strong></p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
-                <option value="TELEBIRR">Telebirr</option>
-                <option value="CBE">CBE</option>
-                <option value="QR">QR</option>
-                <option value="OTHER">Other</option>
-              </select>
-              <button className="btn btn-primary" disabled={busy === 'pay-marketplace'} onClick={payMarketplace}>
-                {busy === 'pay-marketplace' ? 'Submitting…' : 'Pay for this order'}
-              </button>
+        {/* Payment requirements */}
+        <div className="card">
+          <div className="row-between">
+            <div>
+              <h2>Payment status</h2>
+              <p className="muted">
+                Transport cannot progress until
+                the required payment has been
+                verified by the backend.
+              </p>
             </div>
+
+            {order.status ===
+              'PENDING_PAYMENT' && (
+              <span className="badge">
+                Payment required
+              </span>
+            )}
           </div>
-        )}
 
-        {canResumeMarketplacePayment && (
-          <div className="card">
-            <h2>Payment</h2>
-            <p className="muted">You started a payment for this order but it hasn't completed yet.</p>
-            <button className="btn btn-primary" disabled={busy === 'resume-marketplace'} onClick={() => resumePayment(marketplacePayment.id, 'resume-marketplace')}>
-              {busy === 'resume-marketplace' ? 'Redirecting…' : 'Resume payment'}
-            </button>
+          <div className="payment-summary">
+            <PaymentState
+              label="Marketplace payment"
+              payment={marketplacePayment}
+            />
+
+            {requiresTransportPayment && (
+              <PaymentState
+                label="Transport payment"
+                payment={transportPayment}
+              />
+            )}
           </div>
-        )}
 
-        {marketplacePayment?.status === 'PAID' && order.status === 'PENDING_PAYMENT' && (
-          <div className="card"><p className="muted">Payment confirmed — waiting for the order status to update.</p></div>
-        )}
+          {!isMarketplacePaid && (
+            <div className="notice">
+              <strong>
+                Marketplace payment pending.
+              </strong>
+              <p className="muted">
+                The order must have a verified
+                MARKETPLACE payment before
+                transport can proceed.
+              </p>
+            </div>
+          )}
 
+          {requiresTransportPayment &&
+            isMarketplacePaid &&
+            !isTransportPaid && (
+              <div className="notice">
+                <strong>
+                  Transport payment pending.
+                </strong>
+
+                {acceptedTransportAmount !=
+                  null && (
+                  <p className="muted">
+                    Accepted transport fee:{' '}
+                    <strong>
+                      {money(
+                        acceptedTransportAmount
+                      )}{' '}
+                      ETB
+                    </strong>
+                  </p>
+                )}
+              </div>
+            )}
+
+          {requiresTransportPayment &&
+            isTransportPaid &&
+            !transportAmountMatches && (
+              <div className="alert error">
+                The recorded transport payment
+                amount does not match the accepted
+                transport quote.
+              </div>
+            )}
+
+          {isMarketplacePaid &&
+            (!requiresTransportPayment ||
+              isTransportPaid) && (
+              <div className="notice success">
+                Required payment conditions are
+                satisfied for the current stage.
+              </div>
+            )}
+        </div>
+
+        {/* Transport */}
         <div className="card">
           <div className="row-between">
             <div>
               <h2>Transport</h2>
-              <p className="muted">The buyer or seller arranges transport. MarketBridge does not auto-assign a transporter.</p>
+
+              <p className="muted">
+                The buyer or seller arranges
+                transport. MarketBridge does not
+                automatically assign a transporter.
+              </p>
             </div>
-            {!t && order.status !== 'CANCELLED' && <Link className="btn btn-primary" to={`/orders/${order.id}/transport`}>Arrange transport</Link>}
+
+            {canArrangeTransport && (
+              <Link
+                className="btn btn-primary"
+                to={`/orders/${order.id}/transport`}
+              >
+                Arrange transport
+              </Link>
+            )}
           </div>
 
-          {t ? (
+          {!transport && (
+            <div className="notice">
+              No transport arrangement has been
+              recorded for this order yet.
+            </div>
+          )}
+
+          {transport && (
             <>
-              <p><strong>{t.arrangingParty}</strong> · {t.method} · <span className="badge">{t.status}</span></p>
-              <p>{t.pickupLocation} → {t.destination}</p>
-              {t.truckOwner && <p>Transporter: <strong>{t.truckOwner.name}</strong> · Truck {t.truck?.registration}</p>}
-
-              {canPayTransport && (
-                <div className="notice">
-                  <p>Transport fee due: <strong>{Number(t.agreedAmount).toLocaleString()} ETB</strong></p>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
-                      <option value="TELEBIRR">Telebirr</option>
-                      <option value="CBE">CBE</option>
-                      <option value="QR">QR</option>
-                      <option value="OTHER">Other</option>
-                    </select>
-                    <button className="btn btn-primary btn-sm" disabled={busy === 'pay-transport'} onClick={payTransport}>
-                      {busy === 'pay-transport' ? 'Submitting…' : 'Pay for transport'}
-                    </button>
-                  </div>
+              <div className="transport-overview">
+                <div>
+                  <span>Arranging party</span>
+                  <strong>
+                    {statusLabel(
+                      transport.arrangingParty
+                    )}
+                  </strong>
                 </div>
-              )}
 
-              {canResumeTransportPayment && (
-                <div className="notice">
-                  <p>Your transport payment hasn't completed yet.</p>
-                  <button className="btn btn-primary btn-sm" disabled={busy === 'resume-transport'} onClick={() => resumePayment(transportPayment.id, 'resume-transport')}>
-                    {busy === 'resume-transport' ? 'Redirecting…' : 'Resume payment'}
-                  </button>
+                <div>
+                  <span>Method</span>
+                  <strong>
+                    {statusLabel(
+                      transport.method
+                    )}
+                  </strong>
                 </div>
-              )}
 
-              {transportPayment?.status === 'PAID' && <p className="muted">Transport payment confirmed.</p>}
+                <div>
+                  <span>Status</span>
+                  <strong>
+                    <StatusBadge
+                      status={transport.status}
+                    />
+                  </strong>
+                </div>
+              </div>
 
-              {t.method === 'HIRE_TRANSPORTER' && !t.truckOwnerId && (
+              <div className="route-box">
+                <div>
+                  <span>Pickup</span>
+                  <strong>
+                    {transport.pickupLocation ||
+                      '—'}
+                  </strong>
+                </div>
+
+                <div className="route-arrow">
+                  →
+                </div>
+
+                <div>
+                  <span>Destination</span>
+                  <strong>
+                    {transport.destination ||
+                      '—'}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Assigned transporter */}
+              {transport.truckOwner && (
                 <div className="match-box">
-                  <h3>Transport quotes</h3>
-                  {t.quotes?.length ? t.quotes.map((q) => (
-                    <div className="transporter" key={q.id}>
+                  <h3>
+                    Assigned transporter
+                  </h3>
+
+                  <div className="transporter">
+                    <div>
+                      <strong>
+                        {transport.truckOwner
+                          .name || '—'}
+                      </strong>
+
+                      <p>
+                        Rating:{' '}
+                        {transport.truckOwner
+                          .rating != null
+                          ? Number(
+                              transport.truckOwner
+                                .rating
+                            ).toFixed(1)
+                          : '—'}
+                      </p>
+
+                      <p className="muted">
+                        {transport.truckOwner
+                          .phone || ''}
+                      </p>
+                    </div>
+
+                    {transport.truck && (
                       <div>
-                        <strong>{q.truckOwner?.name}</strong>
-                        <p>{q.truck?.truckType} · {q.truck?.capacity}t · {q.truck?.registration} · ★ {q.truckOwner?.rating?.toFixed?.(1) || '—'}</p>
-                        {q.message && <p className="muted">{q.message}</p>}
+                        <strong>
+                          {transport.truck
+                            .registration ||
+                            'Truck'}
+                        </strong>
+
+                        <p className="muted">
+                          {transport.truck
+                            .truckType || '—'}{' '}
+                          ·{' '}
+                          {transport.truck
+                            .capacity != null
+                            ? `${transport.truck.capacity}t`
+                            : 'Capacity —'}
+                        </p>
                       </div>
+                    )}
+                  </div>
+
+                  {transport.method ===
+                    'HIRE_TRANSPORTER' &&
+                    acceptedTransportAmount !=
+                      null && (
+                      <div className="notice">
+                        <strong>
+                          Accepted transport fee:{' '}
+                          {money(
+                            acceptedTransportAmount
+                          )}{' '}
+                          ETB
+                        </strong>
+
+                        <p className="muted">
+                          Transport payment must
+                          match this amount exactly
+                          within the system's
+                          currency precision.
+                        </p>
+                      </div>
+                    )}
+                </div>
+              )}
+
+              {/* Quotes */}
+              {transport.method ===
+                'HIRE_TRANSPORTER' &&
+                !transport.truckOwnerId && (
+                  <div className="match-box">
+                    <div className="row-between">
                       <div>
-                        <strong>{Number(q.amount).toLocaleString()} ETB</strong>
-                        {canChooseQuote && (
-                          <button className="btn btn-sm" disabled={busy === q.id} onClick={() => acceptQuote(q.id)}>
-                            {busy === q.id ? 'Accepting…' : 'Accept quote'}
-                          </button>
-                        )}
+                        <h3>
+                          Transport quotes
+                        </h3>
+
+                        <p className="muted">
+                          Select the transporter
+                          only after reviewing the
+                          available quotes.
+                        </p>
+                      </div>
+
+                      {!isMarketplacePaid && (
+                        <span className="badge">
+                          Payment pending
+                        </span>
+                      )}
+                    </div>
+
+                    {quoteList.length > 0 ? (
+                      quoteList.map((quote) => (
+                        <div
+                          className="transporter"
+                          key={quote.id}
+                        >
+                          <div>
+                            <strong>
+                              {quote.truckOwner
+                                ?.name ||
+                                'Truck owner'}
+                            </strong>
+
+                            <p>
+                              {quote.truck
+                                ?.truckType ||
+                                'Truck'}{' '}
+                              ·{' '}
+                              {quote.truck
+                                ?.capacity !=
+                              null
+                                ? `${quote.truck.capacity}t`
+                                : 'Capacity —'}{' '}
+                              ·{' '}
+                              {quote.truck
+                                ?.registration ||
+                                '—'}
+                            </p>
+
+                            <p>
+                              ★{' '}
+                              {quote.truckOwner
+                                ?.rating != null
+                                ? Number(
+                                    quote.truckOwner
+                                      .rating
+                                  ).toFixed(1)
+                                : '—'}
+                            </p>
+
+                            {quote.message && (
+                              <p className="muted">
+                                {quote.message}
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <strong>
+                              {money(
+                                quote.amount
+                              )}{' '}
+                              ETB
+                            </strong>
+
+                            {canChooseQuote && (
+                              <button
+                                className="btn btn-sm"
+                                type="button"
+                                disabled={
+                                  busy === quote.id
+                                }
+                                onClick={() =>
+                                  acceptQuote(
+                                    quote.id
+                                  )
+                                }
+                              >
+                                {busy === quote.id
+                                  ? 'Accepting…'
+                                  : 'Accept quote'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="muted">
+                        Waiting for registered truck
+                        owners to submit quotes.
+                      </p>
+                    )}
+
+                    {!isMarketplacePaid && (
+                      <div className="notice">
+                        Marketplace payment must be
+                        verified before transport
+                        operations can proceed.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              {/* Transport payment information */}
+              {transport.method ===
+                'HIRE_TRANSPORTER' &&
+                transport.truckOwnerId && (
+                  <div className="match-box">
+                    <h3>
+                      Transport payment
+                    </h3>
+
+                    <div className="detail-facts">
+                      <div>
+                        <span>
+                          Accepted fee
+                        </span>
+                        <strong>
+                          {acceptedTransportAmount !=
+                          null
+                            ? `${money(
+                                acceptedTransportAmount
+                              )} ETB`
+                            : 'Not recorded'}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          Payment status
+                        </span>
+                        <strong>
+                          <StatusBadge
+                            status={
+                              transportPayment
+                                ?.status ||
+                              'PENDING'
+                            }
+                          />
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          Paid amount
+                        </span>
+                        <strong>
+                          {transportPayment
+                            ? `${money(
+                                transportPayment.amount
+                              )} ETB`
+                            : '—'}
+                        </strong>
                       </div>
                     </div>
-                  )) : <p className="muted">Waiting for registered truck owners to submit quotes.</p>}
-                </div>
-              )}
+
+                    {!isTransportPaid && (
+                      <div className="notice">
+                        The accepted transporter
+                        must be paid before this
+                        transport can move to its
+                        physical delivery stages.
+                      </div>
+                    )}
+                  </div>
+                )}
             </>
-          ) : <div className="notice">No transport arrangement recorded yet.</div>}
+          )}
         </div>
 
-        {order.status === 'DELIVERED' && order.buyerId === user?.id && (
-          <div className="card">
-            <h2>Confirm receipt</h2>
-            <p className="muted">Confirm only after you have physically received the produce/product.</p>
-            <button className="btn btn-primary" disabled={busy === 'receipt'} onClick={confirmReceipt}>
-              {busy === 'receipt' ? 'Confirming…' : 'Confirm receipt & complete order'}
-            </button>
-          </div>
-        )}
+        {/* Receipt */}
+        {order.status === 'DELIVERED' &&
+          order.buyerId === user?.id && (
+            <div className="card">
+              <h2>Confirm receipt</h2>
 
-        {canRate && (
-          <div className="card">
-            <h2>Rate this order</h2>
-            <p className="muted">Leave a rating for the other people involved in this order.</p>
-            {others.map((target) => {
-              const key = ratingKey(target.id, target.role);
-              const given = ratingsGiven.find((r) => r.fromUserId === user?.id && r.toUserId === target.id && r.role === target.role);
-              const draft = draftFor(key);
+              <p className="muted">
+                Confirm only after you have
+                physically received the
+                produce/product.
+              </p>
 
-              return (
-                <div className="rating-row" key={key}>
+              {!canConfirmReceipt &&
+                receiptBlockedReason && (
+                  <div className="notice">
+                    {receiptBlockedReason}
+                  </div>
+                )}
+
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={
+                  busy === 'receipt' ||
+                  !canConfirmReceipt
+                }
+                onClick={confirmReceipt}
+              >
+                {busy === 'receipt'
+                  ? 'Confirming…'
+                  : 'Confirm receipt & complete order'}
+              </button>
+            </div>
+          )}
+
+        {/* Payment records */}
+        <div className="card">
+          <h2>Payment records</h2>
+
+          {payments.length > 0 ? (
+            <div className="payment-list">
+              {payments.map((payment) => (
+                <div
+                  className="payment-row"
+                  key={payment.id}
+                >
                   <div>
-                    <span className="rating-row-who">{target.name || 'MarketBridge user'}</span>
-                    <span className="rating-row-role">{ROLE_LABEL[target.role]}</span>
-                    {given && (
-                      <div className="rating-comment-box" style={{ marginTop: 6 }}>
-                        {given.comment && <p className="muted" style={{ margin: 0 }}>“{given.comment}”</p>}
-                      </div>
+                    <strong>
+                      {statusLabel(
+                        payment.type
+                      )}
+                    </strong>
+
+                    {payment.reference && (
+                      <p className="muted">
+                        Reference:{' '}
+                        {payment.reference}
+                      </p>
+                    )}
+
+                    {payment.provider && (
+                      <p className="muted">
+                        Provider:{' '}
+                        {payment.provider}
+                      </p>
                     )}
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    {given ? (
-                      <div className="rating-given">
-                        <span className="rating-stars">
-                          {[1, 2, 3, 4, 5].map((n) => (
-                            <span key={n} className={`star-btn ${n <= given.score ? 'filled' : ''}`}>★</span>
-                          ))}
-                        </span>
-                        Rated
-                      </div>
-                    ) : (
-                      <>
-                        <div className="rating-stars">
-                          {[1, 2, 3, 4, 5].map((n) => (
-                            <button
-                              key={n}
-                              type="button"
-                              className={`star-btn ${n <= draft.score ? 'filled' : ''}`}
-                              onClick={() => setDraftScore(key, n)}
-                              aria-label={`${n} star${n > 1 ? 's' : ''}`}
-                            >★</button>
-                          ))}
-                        </div>
-                        <div className="rating-comment-box">
-                          <input
-                            placeholder="Optional comment"
-                            value={draft.comment}
-                            onChange={(e) => setDraftComment(key, e.target.value)}
-                          />
-                          <button
-                            className="btn btn-primary btn-sm"
-                            disabled={busy === `rate-${key}`}
-                            onClick={() => submitRating(target)}
-                          >
-                            {busy === `rate-${key}` ? 'Submitting…' : 'Submit rating'}
-                          </button>
-                        </div>
-                      </>
+
+                  <strong>
+                    {money(payment.amount)}{' '}
+                    {payment.currency || 'ETB'}
+                  </strong>
+
+                  <span>
+                    {statusLabel(
+                      payment.method
                     )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {others.length > 0 && (
-          <div className="card msg-card">
-            <h2>Messages</h2>
-            {others.length > 1 && (
-              <div className="msg-recipient">
-                <label>Message</label>
-                <select value={activeReceiverId} onChange={(e) => setSelectedReceiverId(e.target.value)}>
-                  {others.map((o) => <option key={o.id} value={o.id}>{o.name} ({ROLE_LABEL[o.role]})</option>)}
-                </select>
-              </div>
-            )}
-
-            <div className="msg-thread">
-              {thread.length === 0 && <p className="msg-empty">No messages yet on this order.</p>}
-              {thread.map((m) => (
-                <div className={`msg-bubble ${m.senderId === user?.id ? 'mine' : 'theirs'}`} key={m.id}>
-                  {m.content}
-                  <span className="msg-meta">
-                    {m.senderId === user?.id ? 'You' : (nameById[m.senderId] || 'MarketBridge user')} · {new Date(m.createdAt).toLocaleString()}
                   </span>
+
+                  <StatusBadge
+                    status={payment.status}
+                  />
                 </div>
               ))}
             </div>
+          ) : (
+            <p className="muted">
+              No payment records are attached to
+              this order yet.
+            </p>
+          )}
+        </div>
 
-            <div className="msg-compose">
-              <textarea
-                rows={2}
-                placeholder={`Message ${nameById[activeReceiverId] || 'the other party'}…`}
-                value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-              />
-              <button className="btn btn-primary" disabled={busy === 'send-message' || !messageText.trim()} onClick={() => sendMessage(activeReceiverId)}>
-                {busy === 'send-message' ? 'Sending…' : 'Send'}
-              </button>
+        {/* Final state */}
+        {order.status === 'COMPLETED' && (
+          <div className="card">
+            <div className="notice success">
+              <strong>
+                Order completed successfully.
+              </strong>
+
+              <p className="muted">
+                The buyer has confirmed receipt and
+                the order is now complete.
+              </p>
             </div>
           </div>
         )}
-
-        <div className="card">
-          <h2>Payment records</h2>
-          {order.payments?.length ? order.payments.map((p) => (
-            <div className="payment-row" key={p.id}>
-              <span>{p.type}</span>
-              <strong>{Number(p.amount).toLocaleString()} ETB</strong>
-              <span>{p.method}</span>
-              <span className="badge">{p.status}</span>
-            </div>
-          )) : <p className="muted">No payment records attached to this order yet.</p>}
-        </div>
       </div>
     </main>
   );
