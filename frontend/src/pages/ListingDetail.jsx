@@ -9,6 +9,7 @@ import {
 } from 'react-router-dom';
 
 import api from '../api/client';
+import { startChapaPayment, chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 
 import {
   useAuth,
@@ -278,30 +279,45 @@ export default function ListingDetail() {
     );
 
     try {
-      await api.post(
-        '/payments',
-        {
-          type: 'INSPECTOR',
-          inspectionRequestId:
-            request.id,
-          amount: request.fee,
-          method:
-            inspectionPayMethod,
-        }
-      );
-
-      setMsg(
-        'Inspection payment submitted — awaiting admin confirmation.'
-      );
-
-      load();
+      await startChapaPayment({
+        type: 'INSPECTOR',
+        inspectionRequestId:
+          request.id,
+        amount: request.fee,
+        method:
+          inspectionPayMethod,
+      });
     } catch (e) {
       setError(
         e.response?.data
           ?.error ||
-        'Could not submit inspection payment'
+        e.message ||
+        'Could not start inspection payment'
       );
-    } finally {
+      setPayingInspectionId('');
+    }
+  }
+
+  async function resumeInspectionPayment(
+    paymentId,
+    requestId
+  ) {
+    setError('');
+    setPayingInspectionId(
+      requestId
+    );
+
+    try {
+      await chapaInitializeAndRedirect(
+        paymentId
+      );
+    } catch (e) {
+      setError(
+        e.response?.data
+          ?.error ||
+        e.message ||
+        'Could not resume payment'
+      );
       setPayingInspectionId('');
     }
   }
@@ -590,66 +606,81 @@ export default function ListingDetail() {
                                 }
 
                                 {
-                                  request.requestedById === user?.id &&
-                                  request.fee != null &&
-                                  !(request.payments || []).some(
-                                    (p) => ['PENDING', 'PAID'].includes(p.status)
-                                  ) &&
-                                  (
+                                  (() => {
+                                    if (request.requestedById !== user?.id || request.fee == null) return null;
 
-                                    <div style={{ marginTop: 8 }}>
-                                      <p>
-                                        Fee due:{' '}
-                                        <strong>
-                                          {Number(request.fee).toLocaleString()} ETB
-                                        </strong>
-                                      </p>
+                                    const existing = (request.payments || []).find((p) =>
+                                      ['PENDING', 'PAID'].includes(p.status)
+                                    );
 
-                                      <div
-                                        style={{
-                                          display: 'flex',
-                                          gap: 8,
-                                          flexWrap: 'wrap',
-                                        }}
-                                      >
-                                        <select
-                                          value={inspectionPayMethod}
-                                          onChange={(e) =>
-                                            setInspectionPayMethod(e.target.value)
-                                          }
+                                    if (existing?.status === 'PAID') {
+                                      return (
+                                        <p className="muted" style={{ marginTop: 8 }}>
+                                          Inspection fee paid.
+                                        </p>
+                                      );
+                                    }
+
+                                    if (existing?.status === 'PENDING') {
+                                      return (
+                                        <div style={{ marginTop: 8 }}>
+                                          <p className="muted">Your fee payment hasn't completed yet.</p>
+                                          <button
+                                            type="button"
+                                            className="btn btn-primary btn-sm"
+                                            disabled={payingInspectionId === request.id}
+                                            onClick={() => resumeInspectionPayment(existing.id, request.id)}
+                                          >
+                                            {payingInspectionId === request.id
+                                              ? 'Redirecting…'
+                                              : 'Resume payment'}
+                                          </button>
+                                        </div>
+                                      );
+                                    }
+
+                                    return (
+                                      <div style={{ marginTop: 8 }}>
+                                        <p>
+                                          Fee due:{' '}
+                                          <strong>
+                                            {Number(request.fee).toLocaleString()} ETB
+                                          </strong>
+                                        </p>
+
+                                        <div
+                                          style={{
+                                            display: 'flex',
+                                            gap: 8,
+                                            flexWrap: 'wrap',
+                                          }}
                                         >
-                                          <option value="TELEBIRR">Telebirr</option>
-                                          <option value="CBE">CBE</option>
-                                          <option value="QR">QR</option>
-                                          <option value="OTHER">Other</option>
-                                        </select>
+                                          <select
+                                            value={inspectionPayMethod}
+                                            onChange={(e) =>
+                                              setInspectionPayMethod(e.target.value)
+                                            }
+                                          >
+                                            <option value="TELEBIRR">Telebirr</option>
+                                            <option value="CBE">CBE</option>
+                                            <option value="QR">QR</option>
+                                            <option value="OTHER">Other</option>
+                                          </select>
 
-                                        <button
-                                          type="button"
-                                          className="btn btn-primary btn-sm"
-                                          disabled={payingInspectionId === request.id}
-                                          onClick={() => payInspection(request)}
-                                        >
-                                          {payingInspectionId === request.id
-                                            ? 'Submitting…'
-                                            : 'Pay inspection fee'}
-                                        </button>
+                                          <button
+                                            type="button"
+                                            className="btn btn-primary btn-sm"
+                                            disabled={payingInspectionId === request.id}
+                                            onClick={() => payInspection(request)}
+                                          >
+                                            {payingInspectionId === request.id
+                                              ? 'Submitting…'
+                                              : 'Pay inspection fee'}
+                                          </button>
+                                        </div>
                                       </div>
-                                    </div>
-
-                                  )
-                                }
-
-                                {
-                                  request.requestedById === user?.id &&
-                                  (request.payments || []).some(
-                                    (p) => ['PENDING', 'PAID'].includes(p.status)
-                                  ) &&
-                                  (
-                                    <p className="muted" style={{ marginTop: 8 }}>
-                                      Fee payment recorded.
-                                    </p>
-                                  )
+                                    );
+                                  })()
                                 }
 
 
