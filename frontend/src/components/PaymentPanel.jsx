@@ -1,110 +1,126 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/client';
 
-function formatMoney(value) {
-  const n = Number(value);
-  return Number.isFinite(n)
-    ? n.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })
-    : '0.00';
-}
-
 export default function PaymentPanel({
   type = 'MARKETPLACE',
   orderId,
+  amount,
   transportJobId,
   inspectionRequestId,
   digitalProductId,
   advertisementId,
-  amount,
   onPaid,
 }) {
   const [methods, setMethods] = useState([]);
   const [method, setMethod] = useState('TELEBIRR');
   const [phone, setPhone] = useState('');
-  const [busy, setBusy] = useState(false);
   const [loadingMethods, setLoadingMethods] = useState(true);
+  const [paying, setPaying] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
-    let cancelled = false;
+    let mounted = true;
 
     async function loadMethods() {
       try {
         const response = await api.get('/payments/methods');
 
-        if (cancelled) return;
+        if (!mounted) return;
 
-        const available = Array.isArray(response.data?.methods)
-          ? response.data.methods
-          : [];
+        const returnedMethods = Array.isArray(response.data)
+          ? response.data
+          : Array.isArray(response.data?.methods)
+            ? response.data.methods
+            : [];
 
-        setMethods(available);
+        setMethods(returnedMethods);
 
-        /*
-         * Telebirr is the current MarketBridge test payment method.
-         * Prefer it whenever the backend advertises it.
-         */
-        const telebirr = available.find(
+        const telebirr = returnedMethods.find(
           (item) =>
-            String(item.id || '').toUpperCase() === 'TELEBIRR'
+            String(item?.code || item?.value || item?.method || item)
+              .toUpperCase() === 'TELEBIRR'
         );
 
         if (telebirr) {
-          setMethod('TELEBIRR');
-        } else if (available.length > 0) {
-          setMethod(available[0].id);
+          setMethod(
+            telebirr.code ||
+            telebirr.value ||
+            telebirr.method ||
+            'TELEBIRR'
+          );
+        } else if (returnedMethods.length > 0) {
+          const first = returnedMethods[0];
+
+          setMethod(
+            typeof first === 'string'
+              ? first
+              : first.code || first.value || first.method || 'TELEBIRR'
+          );
         }
       } catch (err) {
         /*
-         * Do not hide the payment button merely because the methods
-         * discovery endpoint failed. The backend payment endpoint
-         * remains authoritative.
+         * The payment methods endpoint is useful for discovery,
+         * but Telebirr is the configured MarketBridge test method.
+         * Keep the UI usable if the discovery endpoint is unavailable.
          */
-        if (!cancelled) {
+        if (mounted) {
           setMethods([]);
           setMethod('TELEBIRR');
         }
       } finally {
-        if (!cancelled) {
-          setLoadingMethods(false);
-        }
+        if (mounted) setLoadingMethods(false);
       }
     }
 
     loadMethods();
 
     return () => {
-      cancelled = true;
+      mounted = false;
     };
   }, []);
 
-  const selectedMethod = methods.find(
-    (item) =>
-      String(item.id || '').toUpperCase() ===
-      String(method || '').toUpperCase()
-  );
+  function getMethodValue(item) {
+    if (typeof item === 'string') return item;
 
-  async function startPayment() {
-    if (busy) return;
+    return (
+      item?.code ||
+      item?.value ||
+      item?.method ||
+      item?.name ||
+      ''
+    );
+  }
 
-    setBusy(true);
+  async function pay() {
     setError('');
-    setNotice('');
+    setMessage('');
+
+    const numericAmount = Number(amount);
+
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setError('Invalid payment amount.');
+      return;
+    }
+
+    if (!orderId && type !== 'ADVERTISING' && type !== 'INSPECTOR') {
+      setError('Order information is missing.');
+      return;
+    }
+
+    setPaying(true);
 
     try {
       /*
        * Step 1:
-       * Create a PENDING payment record.
+       * Create a PENDING payment record on MarketBridge.
        *
-       * This request does NOT mark the payment as PAID.
+       * The server remains authoritative for payment status.
+       * The browser never marks the payment PAID.
        */
       const createResponse = await api.post('/payments', {
         type,
-        amount: Number(amount),
+        amount: numericAmount,
         method,
         orderId,
         transportJobId,
@@ -113,35 +129,44 @@ export default function PaymentPanel({
         advertisementId,
       });
 
-      const payment = createResponse.data?.payment;
+      const payment =
+        createResponse.data?.payment ||
+        createResponse.data;
 
       if (!payment?.id) {
-        throw new Error('Payment record was not created by the server.');
+        throw new Error('The server did not return a payment ID.');
       }
 
       /*
-       * Manual/record-only methods do not have a gateway checkout.
+       * QR/OTHER may only create a payment record.
+       * Chapa-backed methods continue to initiation below.
        */
-      if (method === 'QR' || method === 'OTHER') {
-        setNotice(
-          'Payment record created. This payment requires authorized reconciliation.'
+      if (
+        method === 'QR' ||
+        method === 'OTHER'
+      ) {
+        setMessage(
+          'Payment record created. Complete the configured payment process and wait for verification.'
         );
 
-        onPaid?.(payment);
+        if (typeof onPaid === 'function') {
+          await onPaid(payment);
+        }
+
         return;
       }
 
       /*
        * Step 2:
-       * Ask the backend to create the provider checkout.
-       *
-       * For Telebirr, the current backend integrates the provider
-       * through the configured payment service.
+       * Ask the backend to initiate the provider checkout.
        */
       const initiateResponse = await api.post(
         `/payments/${payment.id}/initiate`,
         {
-          phone: method === 'CBE' ? phone.trim() || undefined : undefined,
+          phone:
+            method === 'CBE'
+              ? phone.trim() || undefined
+              : undefined,
         }
       );
 
@@ -151,129 +176,85 @@ export default function PaymentPanel({
         data.checkoutUrl ||
         data.checkout_url ||
         data.paymentUrl ||
-        data.payment_url;
+        data.payment_url ||
+        data.data?.checkoutUrl ||
+        data.data?.checkout_url ||
+        data.data?.paymentUrl ||
+        data.data?.payment_url;
 
-      if (!checkoutUrl) {
+      if (checkoutUrl) {
         /*
-         * Some provider integrations may return the updated payment
-         * without a browser checkout URL.
+         * Leave the SPA and open the provider checkout.
+         * Chapa/Telebirr returns to the configured MarketBridge
+         * payment-return route after checkout.
          */
-        if (data.payment) {
-          onPaid?.(data.payment);
-        }
-
-        throw new Error(
-          'The payment was created, but the payment provider did not return a checkout URL.'
-        );
+        window.location.assign(checkoutUrl);
+        return;
       }
 
       /*
-       * Step 3:
-       * Leave MarketBridge and open the provider checkout.
-       *
-       * The provider/webhook must later confirm the payment.
+       * Some development/test providers may create the payment
+       * without returning a browser checkout URL.
        */
-      window.location.assign(checkoutUrl);
-    } catch (err) {
-      const serverError =
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        err.message ||
-        'Payment could not be started.';
+      setMessage(
+        data.message ||
+        'Payment was created successfully. Waiting for payment verification.'
+      );
 
-      setError(serverError);
+      if (typeof onPaid === 'function') {
+        await onPaid(payment);
+      }
+    } catch (err) {
+      const responseData = err.response?.data;
+
+      setError(
+        responseData?.error ||
+        responseData?.message ||
+        err.message ||
+        'Could not start the payment.'
+      );
     } finally {
-      setBusy(false);
+      setPaying(false);
     }
   }
 
-  const isChapaTestPayment =
-    String(method).toUpperCase() === 'TELEBIRR';
+  const numericAmount = Number(amount);
 
   return (
-    <div className="card payment-panel">
-      <span className="eyebrow">
-        {type === 'TRANSPORT' ? 'TRANSPORT PAYMENT' : 'PAYMENT REQUIRED'}
-      </span>
+    <div className="payment-panel">
+      <div className="row-between">
+        <div>
+          <h2>
+            {type === 'TRANSPORT'
+              ? 'Pay transport fee'
+              : type === 'MARKETPLACE'
+                ? 'Pay for your order'
+                : 'Make payment'}
+          </h2>
 
-      <h2>
-        {type === 'TRANSPORT'
-          ? 'Pay transport fee'
-          : 'Pay your order'}
-      </h2>
-
-      <p className="muted">
-        Amount:{' '}
-        <strong>{formatMoney(amount)} ETB</strong>
-      </p>
-
-      {type === 'MARKETPLACE' && (
-        <div className="notice">
-          Your order must be paid before transport can proceed.
-          MarketBridge will only confirm the order after the payment
-          provider verifies the transaction.
+          <p className="muted">
+            Amount:{' '}
+            <strong>
+              {Number.isFinite(numericAmount)
+                ? numericAmount.toLocaleString()
+                : '0'}{' '}
+              ETB
+            </strong>
+          </p>
         </div>
-      )}
 
-      {type === 'TRANSPORT' && (
-        <div className="notice">
-          This payment is for the accepted transporter quote. The
-          transporter cannot proceed until this payment is verified.
-        </div>
-      )}
+        <span className="badge">
+          {type}
+        </span>
+      </div>
 
-      <label>
-        Payment method
-        <select
-          value={method}
-          onChange={(event) => {
-            setMethod(event.target.value);
-            setError('');
-            setNotice('');
-          }}
-          disabled={busy}
-        >
-          {methods.length > 0 ? (
-            methods.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label || item.id}
-                {item.manual ? ' (manual)' : ''}
-              </option>
-            ))
-          ) : (
-            <option value="TELEBIRR">
-              Telebirr via Chapa
-            </option>
-          )}
-        </select>
-      </label>
-
-      {selectedMethod?.description && (
-        <p className="muted small">
-          {selectedMethod.description}
-        </p>
-      )}
-
-      {method === 'CBE' && (
-        <label>
-          Phone number
-          <input
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            placeholder="2519..."
-            inputMode="tel"
-            disabled={busy}
-          />
-        </label>
-      )}
-
-      {isChapaTestPayment && (
-        <div className="notice">
-          <strong>Test payment:</strong> Telebirr is being used
-          through the configured Chapa test integration. No live-money
-          payment should be assumed from this development flow.
-        </div>
-      )}
+      <div className="notice">
+        <strong>Test payment</strong>
+        <br />
+        Telebirr through Chapa is currently configured for
+        MarketBridge development/testing. No live-money payment
+        should be assumed from this test flow.
+      </div>
 
       {error && (
         <div className="alert error">
@@ -281,30 +262,94 @@ export default function PaymentPanel({
         </div>
       )}
 
-      {notice && (
+      {message && (
         <div className="alert success">
-          {notice}
+          {message}
+        </div>
+      )}
+
+      <div className="form-group">
+        <label htmlFor={`payment-method-${type}`}>
+          Payment method
+        </label>
+
+        {loadingMethods ? (
+          <div className="muted">
+            Loading payment methods…
+          </div>
+        ) : methods.length > 0 ? (
+          <select
+            id={`payment-method-${type}`}
+            value={method}
+            onChange={(event) =>
+              setMethod(event.target.value)
+            }
+            disabled={paying}
+          >
+            {methods.map((item, index) => {
+              const value = getMethodValue(item);
+
+              if (!value) return null;
+
+              return (
+                <option
+                  key={`${value}-${index}`}
+                  value={value}
+                >
+                  {value === 'TELEBIRR'
+                    ? 'Telebirr via Chapa'
+                    : value}
+                </option>
+              );
+            })}
+          </select>
+        ) : (
+          <select
+            id={`payment-method-${type}`}
+            value={method}
+            onChange={(event) =>
+              setMethod(event.target.value)
+            }
+            disabled={paying}
+          >
+            <option value="TELEBIRR">
+              Telebirr via Chapa
+            </option>
+          </select>
+        )}
+      </div>
+
+      {method === 'CBE' && (
+        <div className="form-group">
+          <label htmlFor={`payment-phone-${type}`}>
+            Phone number
+          </label>
+
+          <input
+            id={`payment-phone-${type}`}
+            type="tel"
+            value={phone}
+            onChange={(event) =>
+              setPhone(event.target.value)
+            }
+            placeholder="Optional phone number"
+            disabled={paying}
+          />
         </div>
       )}
 
       <button
         type="button"
-        className="btn btn-primary btn-lg full"
-        disabled={busy || loadingMethods || !method}
-        onClick={startPayment}
+        className="btn btn-primary"
+        onClick={pay}
+        disabled={paying || !Number.isFinite(numericAmount) || numericAmount <= 0}
       >
-        {busy
+        {paying
           ? 'Starting payment…'
           : type === 'TRANSPORT'
-          ? 'Pay transport fee'
-          : 'Pay your order'}
+            ? 'Pay transport fee'
+            : 'Pay your order'}
       </button>
-
-      <p className="muted small" style={{ marginTop: 12 }}>
-        Your payment is first recorded as pending. Only a verified
-        provider callback or authorized reconciliation can change it
-        to PAID.
-      </p>
     </div>
   );
 }
