@@ -81,13 +81,6 @@ function moneyEqual(a, b) {
 // ============================================================================
 // PAYMENT PAID — SINGLE SOURCE OF TRUTH
 // ============================================================================
-//
-// Every confirmation path eventually uses this function.
-//
-// It handles:
-// MARKETPLACE, TRANSPORT, DIGITAL, ADVERTISING, INSPECTOR
-//
-// ============================================================================
 
 async function markPaymentPaid(
   tx,
@@ -113,6 +106,7 @@ async function markPaymentPaid(
         digitalPurchase: true,
         advertisement: true,
         inspectionRequest: true,
+        digitalProduct: true,
       },
     });
 
@@ -309,7 +303,6 @@ async function markPaymentPaid(
   // --------------------------------------------------------------------------
 
   try {
-    // Platform commission
     if (commission.commissionAmount > 0) {
       await tx.paymentLedgerEntry.create({
         data: {
@@ -513,6 +506,9 @@ router.post(
         inspectionRequestId,
         reference,
       } = req.body;
+
+      // *** FIX: Destructure method from req.body ***
+      const { method } = req.body;
 
       const amount =
         Number(req.body.amount);
@@ -777,7 +773,7 @@ router.post(
             createdById: req.user.id,
             type,
             amount,
-            method,
+            method, // <-- Now method is defined
             reference: reference || null,
             orderId: orderId || null,
             digitalProductId: digitalProductId || null,
@@ -1028,7 +1024,6 @@ router.post(
         return res.json({ ok: true, payment: updated });
       }
 
-      // Handle FAILED / REFUNDED
       const result =
         await prisma.$transaction(
           async (tx) => {
@@ -1057,9 +1052,7 @@ router.post(
                 },
               });
 
-            // Handle refund effects
             if (status === 'REFUNDED') {
-              // Refund digital purchase
               if (payment.digitalPurchase) {
                 await tx.digitalPurchase.update({
                   where: { id: payment.digitalPurchase.id },
@@ -1067,7 +1060,6 @@ router.post(
                 });
               }
 
-              // Refund ledger entries
               await tx.paymentLedgerEntry.create({
                 data: {
                   paymentId: payment.id,
