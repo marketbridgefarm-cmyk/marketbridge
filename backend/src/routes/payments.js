@@ -133,10 +133,18 @@ router.get('/:id/chapa/verify',authenticate,[param('id').isUUID()],validate,asyn
 // here are best-effort; confirm against a real test event and adjust if
 // needed. tx_ref is assumed to be the Payment id, since that's what we
 // send as tx_ref when initializing.
-router.post('/webhooks/chapa',express.json({limit:'100kb'}),async(req,res)=>{
+router.post('/webhooks/chapa',async(req,res)=>{
  const signature=req.headers['chapa-signature']||req.headers['x-chapa-signature'];
- const rawBody=JSON.stringify(req.body);
- if(!chapa.verifyWebhookSignature(rawBody,signature)){
+ // req.rawBody is captured once, app-wide, by the express.json({verify:...})
+ // parser in index.js — those are the exact bytes Chapa signed. Re-deriving
+ // "raw" bytes from the already-parsed req.body via JSON.stringify() almost
+ // never reproduces the original wire bytes (key order, spacing, escaping
+ // can all differ), which made every legitimate webhook fail signature
+ // verification. Do NOT re-add a route-level express.json() here — it
+ // would just be a silent no-op (body-parser skips re-parsing once
+ // req._body is set) and invites this same bug to come back.
+ const rawBody=req.rawBody;
+ if(!rawBody||!chapa.verifyWebhookSignature(rawBody,signature)){
   console.error('CHAPA WEBHOOK: invalid signature, payload was:',rawBody);
   return res.status(401).json({error:'Invalid webhook signature'});
  }
