@@ -27,16 +27,14 @@ function isSeller(order, userId) {
 
 function hasRole(user, role) {
   return (
-    Array.isArray(user.roles) &&
+    Array.isArray(user?.roles) &&
     user.roles.includes(role)
   );
 }
 
 
 function normalizeRegistration(value) {
-  return String(
-    value || ''
-  )
+  return String(value || '')
     .trim()
     .toUpperCase();
 }
@@ -55,8 +53,7 @@ function normalizeString(value) {
 
 
 function positiveNumber(value) {
-  const number =
-    Number(value);
+  const number = Number(value);
 
   return Number.isFinite(number) &&
     number > 0
@@ -66,17 +63,54 @@ function positiveNumber(value) {
 
 
 function moneyEqual(a, b) {
+  const first = Number(a);
+  const second = Number(b);
+
   return (
-    Math.abs(
-      Number(a) -
-        Number(b)
-    ) < 0.01
+    Number.isFinite(first) &&
+    Number.isFinite(second) &&
+    Math.abs(first - second) < 0.01
   );
+}
+
+
+function httpError(message, status = 400) {
+  return Object.assign(
+    new Error(message),
+    { status }
+  );
+}
+
+
+function validationFailed(req, res) {
+  const errors = validationResult(req);
+
+  if (!errors.isEmpty()) {
+    res.status(400).json({
+      error: 'Validation failed',
+      errors: errors.array(),
+    });
+
+    return true;
+  }
+
+  return false;
 }
 
 
 // ============================================================================
 // PAYMENT HELPERS
+// ============================================================================
+//
+// IMPORTANT:
+// A payment is considered valid for transport only when the authoritative
+// Payment record is already PAID.
+//
+// The client must never be able to make a payment PAID merely by sending
+// { status: "PAID" }.
+//
+// Chapa/webhook/reconciliation code is responsible for creating/updating
+// the authoritative payment record.
 // ============================================================================
 
 async function getPaidMarketplacePayment(
@@ -86,17 +120,12 @@ async function getPaidMarketplacePayment(
   return client.payment.findFirst({
     where: {
       orderId,
-
-      type:
-        'MARKETPLACE',
-
-      status:
-        'PAID',
+      type: 'MARKETPLACE',
+      status: 'PAID',
     },
 
     orderBy: {
-      updatedAt:
-        'desc',
+      updatedAt: 'desc',
     },
   });
 }
@@ -109,19 +138,116 @@ async function getPaidTransportPayment(
   return client.payment.findFirst({
     where: {
       orderId,
-
-      type:
-        'TRANSPORT',
-
-      status:
-        'PAID',
+      type: 'TRANSPORT',
+      status: 'PAID',
     },
 
     orderBy: {
-      updatedAt:
-        'desc',
+      updatedAt: 'desc',
     },
   });
+}
+
+
+// ============================================================================
+// PAYMENT ASSERTIONS
+// ============================================================================
+
+async function requireMarketplacePayment(
+  orderId,
+  client = prisma
+) {
+  const payment =
+    await getPaidMarketplacePayment(
+      orderId,
+      client
+    );
+
+  if (!payment) {
+    throw httpError(
+      'Marketplace payment must be PAID before transport can proceed',
+      402
+    );
+  }
+
+  return payment;
+}
+
+
+async function requireTransportPayment(
+  job,
+  client = prisma
+) {
+  if (job.method !== 'HIRE_TRANSPORTER') {
+    return null;
+  }
+
+  if (
+    !job.truckOwnerId ||
+    !job.truckId ||
+    job.agreedAmount == null
+  ) {
+    throw httpError(
+      'Transport quote must be accepted before transport can proceed',
+      400
+    );
+  }
+
+  const payment =
+    await getPaidTransportPayment(
+      job.orderId,
+      client
+    );
+
+  if (!payment) {
+    throw httpError(
+      'Transport payment must be PAID before the transporter can proceed',
+      402
+    );
+  }
+
+  if (
+    !moneyEqual(
+      payment.amount,
+      job.agreedAmount
+    )
+  ) {
+    throw httpError(
+      'Transport payment amount does not match the accepted transport fee',
+      409
+    );
+  }
+
+  return payment;
+}
+
+
+// ============================================================================
+// TRANSPORT COMMISSION POLICY
+// ============================================================================
+//
+// OWN_TRUCK:
+//   No transporter-hiring commission.
+//
+// HIRE_TRANSPORTER:
+//   Applicable transport marketplace commission.
+//
+// IMPORTANT:
+// This route deliberately does NOT create a Commission record because the
+// currently verified project specification does not establish a concrete
+// Commission Prisma model/field contract.
+//
+// A future commission service can consume the transport payment / accepted
+// quote event without changing the transport lifecycle.
+// ============================================================================
+
+function transportCommissionApplicable(job) {
+  return (
+    job.method === 'HIRE_TRANSPORTER' &&
+    job.truckOwnerId !== null &&
+    job.truckId !== null &&
+    job.agreedAmount !== null
+  );
 }
 
 
@@ -195,23 +321,20 @@ router.post(
       .withMessage(
         'Required capacity must be greater than zero'
       ),
+
+    body('specialRequirements')
+      .optional()
+      .isString()
+      .withMessage(
+        'Special requirements must be text'
+      ),
   ],
 
   async (req, res) => {
     try {
-      const errors =
-        validationResult(req);
-
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          error:
-            'Validation failed',
-
-          errors:
-            errors.array(),
-        });
+      if (validationFailed(req, res)) {
+        return;
       }
-
 
       const {
         orderId,
@@ -227,44 +350,57 @@ router.post(
       } = req.body;
 
 
+      // ======================================================================
+      // LOAD ORDER
+      // ======================================================================
+
       const order =
         await prisma.order.findUnique({
           where: {
-            id:
-              orderId,
+            id: orderId,
           },
 
           include: {
-            transportJob:
-              true,
+            transportJob: true,
           },
         });
 
 
       if (!order) {
         return res.status(404).json({
-          error:
-            'Order not found',
+          error: 'Order not found',
         });
       }
 
 
-      if (
-        !isBuyer(
+      // ======================================================================
+      // ORDER PARTY AUTHORIZATION
+      // ======================================================================
+
+      const buyer =
+        isBuyer(
           order,
           req.user.id
-        ) &&
-        !isSeller(
+        );
+
+      const seller =
+        isSeller(
           order,
           req.user.id
-        )
-      ) {
+        );
+
+
+      if (!buyer && !seller) {
         return res.status(403).json({
           error:
             'Only the buyer or seller on this order may arrange transport',
         });
       }
 
+
+      // ======================================================================
+      // DUPLICATE TRANSPORT PROTECTION
+      // ======================================================================
 
       if (order.transportJob) {
         return res.status(409).json({
@@ -278,23 +414,11 @@ router.post(
 
 
       // ======================================================================
-      // PAYMENT GATE
-      // ======================================================================
-      //
-      // Transport cannot even be arranged until the marketplace transaction
-      // has actually been confirmed PAID.
-      //
-      // This prevents:
-      //
-      // PENDING_PAYMENT
-      //      ↓
-      // TRANSPORT
-      //
+      // MARKETPLACE PAYMENT GATE
       // ======================================================================
 
       if (
-        order.status !==
-        'CONFIRMED'
+        order.status !== 'CONFIRMED'
       ) {
         return res.status(400).json({
           error:
@@ -303,31 +427,18 @@ router.post(
       }
 
 
-      const marketplacePaid =
-        await getPaidMarketplacePayment(
-          order.id
-        );
-
-
-      if (!marketplacePaid) {
-        return res.status(402).json({
-          error:
-            'Marketplace payment must be PAID before transport can be arranged',
-        });
-      }
+      await requireMarketplacePayment(
+        order.id
+      );
 
 
       // ======================================================================
-      // ARRANGING PARTY
+      // ARRANGING PARTY AUTHORIZATION
       // ======================================================================
 
       if (
-        arrangingParty ===
-          'BUYER' &&
-        !isBuyer(
-          order,
-          req.user.id
-        )
+        arrangingParty === 'BUYER' &&
+        !buyer
       ) {
         return res.status(403).json({
           error:
@@ -337,12 +448,8 @@ router.post(
 
 
       if (
-        arrangingParty ===
-          'SELLER' &&
-        !isSeller(
-          order,
-          req.user.id
-        )
+        arrangingParty === 'SELLER' &&
+        !seller
       ) {
         return res.status(403).json({
           error:
@@ -351,35 +458,25 @@ router.post(
       }
 
 
+      // JOINT is allowed when the current user is either order party.
       if (
-        arrangingParty ===
-        'JOINT'
+        arrangingParty === 'JOINT' &&
+        !buyer &&
+        !seller
       ) {
-        if (
-          !isBuyer(
-            order,
-            req.user.id
-          ) &&
-          !isSeller(
-            order,
-            req.user.id
-          )
-        ) {
-          return res.status(403).json({
-            error:
-              'Only the buyer or seller may create a joint transport arrangement',
-          });
-        }
+        return res.status(403).json({
+          error:
+            'Only the buyer or seller may create a joint transport arrangement',
+        });
       }
 
 
       // ======================================================================
-      // OWN TRUCK
+      // OWN TRUCK VALIDATION
       // ======================================================================
 
       if (
-        method ===
-        'OWN_TRUCK'
+        method === 'OWN_TRUCK'
       ) {
         if (!truckId) {
           return res.status(400).json({
@@ -389,11 +486,19 @@ router.post(
         }
 
 
+        // Do not allow arbitrary truckOwnerId from the client.
+        if (truckOwnerId) {
+          return res.status(400).json({
+            error:
+              'truckOwnerId must not be supplied for OWN_TRUCK',
+          });
+        }
+
+
         const truck =
           await prisma.truck.findUnique({
             where: {
-              id:
-                truckId,
+              id: truckId,
             },
           });
 
@@ -430,19 +535,21 @@ router.post(
 
 
       // ======================================================================
-      // HIRE TRANSPORTER
+      // HIRE TRANSPORTER VALIDATION
       // ======================================================================
 
       if (
-        method ===
-          'HIRE_TRANSPORTER' &&
-        (truckOwnerId ||
-          truckId)
+        method === 'HIRE_TRANSPORTER'
       ) {
-        return res.status(400).json({
-          error:
-            'HIRE_TRANSPORTER uses the TransportQuote workflow; do not select a transporter or truck when creating the request',
-        });
+        if (
+          truckOwnerId ||
+          truckId
+        ) {
+          return res.status(400).json({
+            error:
+              'HIRE_TRANSPORTER uses the TransportQuote workflow; do not select a transporter or truck when creating the request',
+          });
+        }
       }
 
 
@@ -452,34 +559,142 @@ router.post(
         );
 
 
+      // ======================================================================
+      // TRANSACTION
+      // ======================================================================
+
       const job =
         await prisma.$transaction(
           async (tx) => {
-            // Recheck payment inside transaction.
-            const paid =
-              await getPaidMarketplacePayment(
-                order.id,
-                tx
-              );
+
+            // ---------------------------------------------------------------
+            // Recheck order state inside transaction.
+            // ---------------------------------------------------------------
+
+            const currentOrder =
+              await tx.order.findUnique({
+                where: {
+                  id: order.id,
+                },
+
+                include: {
+                  transportJob: true,
+                },
+              });
 
 
-            if (!paid) {
-              throw Object.assign(
-                new Error(
-                  'Marketplace payment must be PAID before transport can be arranged'
-                ),
-                {
-                  status: 402,
-                }
+            if (!currentOrder) {
+              throw httpError(
+                'Order not found',
+                404
               );
             }
 
+
+            if (
+              currentOrder.transportJob
+            ) {
+              throw httpError(
+                'Transport has already been arranged for this order',
+                409
+              );
+            }
+
+
+            if (
+              currentOrder.status !==
+              'CONFIRMED'
+            ) {
+              throw httpError(
+                'Marketplace payment must be confirmed before transport can be arranged',
+                400
+              );
+            }
+
+
+            // ---------------------------------------------------------------
+            // Recheck authoritative payment.
+            // ---------------------------------------------------------------
+
+            await requireMarketplacePayment(
+              currentOrder.id,
+              tx
+            );
+
+
+            // ---------------------------------------------------------------
+            // OWN TRUCK:
+            // Recheck availability inside the transaction.
+            // ---------------------------------------------------------------
+
+            let selectedTruck = null;
+
+
+            if (
+              method ===
+              'OWN_TRUCK'
+            ) {
+              selectedTruck =
+                await tx.truck.findUnique({
+                  where: {
+                    id: truckId,
+                  },
+                });
+
+
+              if (!selectedTruck) {
+                throw httpError(
+                  'Selected truck was not found',
+                  404
+                );
+              }
+
+
+              if (
+                selectedTruck.ownerId !==
+                req.user.id
+              ) {
+                throw httpError(
+                  'You can only use a truck registered under your own account',
+                  403
+                );
+              }
+
+
+              if (
+                selectedTruck.availability !==
+                'AVAILABLE'
+              ) {
+                throw httpError(
+                  'Selected truck is no longer available',
+                  409
+                );
+              }
+
+
+              if (
+                capacity &&
+                Number(
+                  selectedTruck.capacity
+                ) < capacity
+              ) {
+                throw httpError(
+                  'Selected truck does not meet required capacity',
+                  400
+                );
+              }
+            }
+
+
+            // ---------------------------------------------------------------
+            // CREATE JOB
+            // ---------------------------------------------------------------
 
             const createdJob =
               await tx.transportJob.create({
                 data: {
                   orderId:
-                    order.id,
+                    currentOrder.id,
 
                   arrangingParty,
 
@@ -529,10 +744,14 @@ router.post(
               });
 
 
+            // ---------------------------------------------------------------
+            // Update order.
+            // ---------------------------------------------------------------
+
             await tx.order.update({
               where: {
                 id:
-                  order.id,
+                  currentOrder.id,
               },
 
               data: {
@@ -544,22 +763,42 @@ router.post(
             });
 
 
+            // ---------------------------------------------------------------
+            // OWN TRUCK becomes BUSY.
+            // ---------------------------------------------------------------
+
             if (
               method ===
                 'OWN_TRUCK' &&
               truckId
             ) {
-              await tx.truck.update({
-                where: {
-                  id:
-                    truckId,
-                },
+              const truckUpdate =
+                await tx.truck.updateMany({
+                  where: {
+                    id: truckId,
 
-                data: {
-                  availability:
-                    'BUSY',
-                },
-              });
+                    ownerId:
+                      req.user.id,
+
+                    availability:
+                      'AVAILABLE',
+                  },
+
+                  data: {
+                    availability:
+                      'BUSY',
+                  },
+                });
+
+
+              if (
+                truckUpdate.count !== 1
+              ) {
+                throw httpError(
+                  'Selected truck is no longer available',
+                  409
+                );
+              }
             }
 
 
@@ -578,6 +817,10 @@ router.post(
         transportJob:
           job,
 
+        commissionApplicable:
+          method ===
+          'HIRE_TRANSPORTER',
+
         commissionGenerated:
           false,
       });
@@ -587,6 +830,17 @@ router.post(
         'CREATE TRANSPORT JOB ERROR:',
         error
       );
+
+
+      if (
+        error.code === 'P2002'
+      ) {
+        return res.status(409).json({
+          error:
+            'Transport has already been arranged for this order',
+        });
+      }
+
 
       return res.status(
         error.status || 500
@@ -614,6 +868,7 @@ router.post(
 router.get(
   '/match',
   authenticate,
+
   async (req, res) => {
     try {
       const area =
@@ -633,8 +888,7 @@ router.get(
       if (
         req.query.minCapacity !==
           undefined &&
-        req.query.minCapacity !==
-          ''
+        req.query.minCapacity !== ''
       ) {
         capacity =
           positiveNumber(
@@ -719,7 +973,6 @@ router.get(
 
       return res.json({
         trucks,
-
         count:
           trucks.length,
       });
@@ -770,21 +1023,21 @@ router.get(
 
         available:
           trucks.filter(
-            (truck) =>
+            truck =>
               truck.availability ===
               'AVAILABLE'
           ).length,
 
         busy:
           trucks.filter(
-            (truck) =>
+            truck =>
               truck.availability ===
               'BUSY'
           ).length,
 
         offline:
           trucks.filter(
-            (truck) =>
+            truck =>
               truck.availability ===
               'OFFLINE'
           ).length,
@@ -793,10 +1046,8 @@ router.get(
 
       return res.json({
         trucks,
-
         count:
           trucks.length,
-
         stats,
       });
 
@@ -870,7 +1121,6 @@ router.get(
 
       return res.json({
         jobs,
-
         count:
           jobs.length,
       });
@@ -952,7 +1202,6 @@ router.get(
 
       return res.json({
         jobs,
-
         count:
           jobs.length,
       });
@@ -1005,17 +1254,8 @@ router.post(
 
   async (req, res) => {
     try {
-      const errors =
-        validationResult(req);
-
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          error:
-            'Validation failed',
-
-          errors:
-            errors.array(),
-        });
+      if (validationFailed(req, res)) {
+        return;
       }
 
 
@@ -1050,6 +1290,12 @@ router.post(
             'This transport job is not open for quotes',
         });
       }
+
+
+      // A quote cannot be submitted for an unpaid marketplace order.
+      await requireMarketplacePayment(
+        job.orderId
+      );
 
 
       const truck =
@@ -1093,8 +1339,8 @@ router.post(
 
       if (
         job.requiredCapacity &&
-        truck.capacity <
-          job.requiredCapacity
+        Number(truck.capacity) <
+          Number(job.requiredCapacity)
       ) {
         return res.status(400).json({
           error:
@@ -1104,41 +1350,112 @@ router.post(
 
 
       const quote =
-        await prisma.transportQuote.create({
-          data: {
-            transportJobId:
-              job.id,
+        await prisma.$transaction(
+          async (tx) => {
 
-            truckOwnerId:
-              req.user.id,
+            await requireMarketplacePayment(
+              job.orderId,
+              tx
+            );
 
-            truckId:
-              truck.id,
 
-            amount:
+            // Recheck truck inside transaction.
+            const currentTruck =
+              await tx.truck.findUnique({
+                where: {
+                  id:
+                    truck.id,
+                },
+              });
+
+
+            if (!currentTruck) {
+              throw httpError(
+                'Truck not found',
+                404
+              );
+            }
+
+
+            if (
+              currentTruck.ownerId !==
+              req.user.id
+            ) {
+              throw httpError(
+                'You can only quote with your own truck',
+                403
+              );
+            }
+
+
+            if (
+              currentTruck.availability !==
+              'AVAILABLE'
+            ) {
+              throw httpError(
+                'Selected truck is no longer available',
+                409
+              );
+            }
+
+
+            if (
+              job.requiredCapacity &&
               Number(
-                req.body.amount
-              ),
+                currentTruck.capacity
+              ) <
+              Number(
+                job.requiredCapacity
+              )
+            ) {
+              throw httpError(
+                'Selected truck does not meet required capacity',
+                400
+              );
+            }
 
-            message:
-              req.body.message
-                ?.trim() ||
-              null,
-          },
-        });
+
+            const createdQuote =
+              await tx.transportQuote.create({
+                data: {
+                  transportJobId:
+                    job.id,
+
+                  truckOwnerId:
+                    req.user.id,
+
+                  truckId:
+                    currentTruck.id,
+
+                  amount:
+                    Number(
+                      req.body.amount
+                    ),
+
+                  message:
+                    req.body.message
+                      ?.trim() ||
+                    null,
+                },
+              });
 
 
-      await prisma.transportJob.update({
-        where: {
-          id:
-            job.id,
-        },
+            await tx.transportJob.update({
+              where: {
+                id:
+                  job.id,
+              },
 
-        data: {
-          status:
-            'QUOTED',
-        },
-      });
+              data: {
+                status:
+                  'QUOTED',
+              },
+            });
+
+
+            return createdQuote;
+          }
+        );
 
 
       return res.status(201).json({
@@ -1154,6 +1471,7 @@ router.post(
         error
       );
 
+
       if (
         error.code ===
         'P2002'
@@ -1164,9 +1482,14 @@ router.post(
         });
       }
 
-      return res.status(500).json({
+
+      return res.status(
+        error.status || 500
+      ).json({
         error:
-          'Could not submit transport quote',
+          error.status
+            ? error.message
+            : 'Could not submit transport quote',
       });
     }
   }
@@ -1206,7 +1529,8 @@ router.get(
 
 
       const allowed =
-        req.user.roles?.includes(
+        hasRole(
+          req.user,
           'ADMIN'
         ) ||
         job.order.buyerId ===
@@ -1257,7 +1581,6 @@ router.get(
 
       return res.json({
         quotes,
-
         count:
           quotes.length,
       });
@@ -1320,12 +1643,16 @@ router.patch(
         job.order;
 
 
-      if (
-        order.buyerId !==
-          req.user.id &&
-        order.sellerId !==
-          req.user.id
-      ) {
+      const buyer =
+        order.buyerId ===
+        req.user.id;
+
+      const seller =
+        order.sellerId ===
+        req.user.id;
+
+
+      if (!buyer && !seller) {
         return res.status(403).json({
           error:
             'Only the buyer or seller on the order can accept a transport quote',
@@ -1333,26 +1660,27 @@ router.patch(
       }
 
 
+      // Only the arranging party may select a transporter.
       if (
-        order.arrangingParty &&
-        (
-          (
-            order.arrangingParty ===
-              'BUYER' &&
-            order.buyerId !==
-              req.user.id
-          ) ||
-          (
-            order.arrangingParty ===
-              'SELLER' &&
-            order.sellerId !==
-              req.user.id
-          )
-        )
+        job.arrangingParty ===
+        'BUYER' &&
+        !buyer
       ) {
         return res.status(403).json({
           error:
-            'Only the party who arranged transport can accept the quote',
+            'Only the buyer who arranged transport can accept the quote',
+        });
+      }
+
+
+      if (
+        job.arrangingParty ===
+        'SELLER' &&
+        !seller
+      ) {
+        return res.status(403).json({
+          error:
+            'Only the seller who arranged transport can accept the quote',
         });
       }
 
@@ -1369,10 +1697,10 @@ router.patch(
 
 
       if (
-        job.status !==
-          'REQUESTED' &&
-        job.status !==
-          'QUOTED'
+        ![
+          'REQUESTED',
+          'QUOTED',
+        ].includes(job.status)
       ) {
         return res.status(400).json({
           error:
@@ -1385,43 +1713,103 @@ router.patch(
       // PAYMENT GATE
       // ======================================================================
 
-      const marketplacePaid =
-        await getPaidMarketplacePayment(
-          order.id
-        );
+      await requireMarketplacePayment(
+        order.id
+      );
 
 
-      if (!marketplacePaid) {
-        return res.status(402).json({
-          error:
-            'Marketplace payment must be PAID before accepting a transport quote',
-        });
-      }
-
+      // ======================================================================
+      // TRANSACTION
+      // ======================================================================
 
       const result =
         await prisma.$transaction(
           async (tx) => {
-            // Recheck marketplace payment in transaction.
-            const paid =
-              await getPaidMarketplacePayment(
-                order.id,
-                tx
-              );
+
+            // ---------------------------------------------------------------
+            // Recheck marketplace payment.
+            // ---------------------------------------------------------------
+
+            await requireMarketplacePayment(
+              order.id,
+              tx
+            );
 
 
-            if (!paid) {
-              throw Object.assign(
-                new Error(
-                  'Marketplace payment must be PAID before accepting a transport quote'
-                ),
-                {
-                  status:
-                    402,
-                }
+            // ---------------------------------------------------------------
+            // Recheck job.
+            // ---------------------------------------------------------------
+
+            const currentJob =
+              await tx.transportJob.findUnique({
+                where: {
+                  id:
+                    job.id,
+                },
+              });
+
+
+            if (!currentJob) {
+              throw httpError(
+                'Transport job not found',
+                404
               );
             }
 
+
+            if (
+              ![
+                'REQUESTED',
+                'QUOTED',
+              ].includes(
+                currentJob.status
+              ) ||
+              currentJob.truckOwnerId
+            ) {
+              throw httpError(
+                'Transport job is no longer available for quote acceptance',
+                409
+              );
+            }
+
+
+            // ---------------------------------------------------------------
+            // Recheck quote status.
+            //
+            // This prevents two simultaneous requests from both successfully
+            // accepting different quotes.
+            // ---------------------------------------------------------------
+
+            const quoteClaim =
+              await tx.transportQuote.updateMany({
+                where: {
+                  id:
+                    quote.id,
+
+                  status:
+                    'PENDING',
+                },
+
+                data: {
+                  status:
+                    'ACCEPTED',
+                },
+              });
+
+
+            if (
+              quoteClaim.count !== 1
+            ) {
+              throw httpError(
+                'This transport quote has already been accepted or rejected',
+                409
+              );
+            }
+
+
+            // ---------------------------------------------------------------
+            // Recheck truck.
+            // ---------------------------------------------------------------
 
             const currentTruck =
               await tx.truck.findUnique({
@@ -1432,30 +1820,55 @@ router.patch(
               });
 
 
-            if (
-              !currentTruck ||
-              currentTruck.availability !==
-                'AVAILABLE'
-            ) {
-              throw new Error(
-                'Selected truck is no longer available'
+            if (!currentTruck) {
+              throw httpError(
+                'Selected truck no longer exists',
+                409
               );
             }
 
 
-            const accepted =
-              await tx.transportQuote.update({
-                where: {
-                  id:
-                    quote.id,
-                },
+            if (
+              currentTruck.ownerId !==
+              quote.truckOwnerId
+            ) {
+              throw httpError(
+                'Selected truck is not owned by the quoted transporter',
+                409
+              );
+            }
 
-                data: {
-                  status:
-                    'ACCEPTED',
-                },
-              });
 
+            if (
+              currentTruck.availability !==
+              'AVAILABLE'
+            ) {
+              throw httpError(
+                'Selected truck is no longer available',
+                409
+              );
+            }
+
+
+            if (
+              currentJob.requiredCapacity &&
+              Number(
+                currentTruck.capacity
+              ) <
+              Number(
+                currentJob.requiredCapacity
+              )
+            ) {
+              throw httpError(
+                'Selected truck no longer meets the required capacity',
+                409
+              );
+            }
+
+
+            // ---------------------------------------------------------------
+            // Reject competing pending quotes.
+            // ---------------------------------------------------------------
 
             await tx.transportQuote.updateMany({
               where: {
@@ -1477,6 +1890,10 @@ router.patch(
               },
             });
 
+
+            // ---------------------------------------------------------------
+            // Assign transporter.
+            // ---------------------------------------------------------------
 
             const updatedJob =
               await tx.transportJob.update({
@@ -1501,18 +1918,43 @@ router.patch(
               });
 
 
-            await tx.truck.update({
-              where: {
-                id:
-                  quote.truckId,
-              },
+            // ---------------------------------------------------------------
+            // Atomically claim truck.
+            // ---------------------------------------------------------------
 
-              data: {
-                availability:
-                  'BUSY',
-              },
-            });
+            const truckClaim =
+              await tx.truck.updateMany({
+                where: {
+                  id:
+                    quote.truckId,
 
+                  ownerId:
+                    quote.truckOwnerId,
+
+                  availability:
+                    'AVAILABLE',
+                },
+
+                data: {
+                  availability:
+                    'BUSY',
+                },
+              });
+
+
+            if (
+              truckClaim.count !== 1
+            ) {
+              throw httpError(
+                'Selected truck is no longer available',
+                409
+              );
+            }
+
+
+            // ---------------------------------------------------------------
+            // Update order.
+            // ---------------------------------------------------------------
 
             await tx.order.update({
               where: {
@@ -1527,13 +1969,27 @@ router.patch(
             });
 
 
+            const accepted =
+              await tx.transportQuote.findUnique({
+                where: {
+                  id:
+                    quote.id,
+                },
+              });
+
+
             return {
               accepted,
-
               job:
                 updatedJob,
             };
           }
+        );
+
+
+      const commissionApplicable =
+        transportCommissionApplicable(
+          result.job
         );
 
 
@@ -1547,8 +2003,11 @@ router.patch(
         transportJob:
           result.job,
 
+        commissionApplicable,
+
+        // Deliberately false until a real Commission model/service is wired.
         commissionGenerated:
-          true,
+          false,
       });
 
     } catch (error) {
@@ -1557,18 +2016,14 @@ router.patch(
         error
       );
 
+
       return res.status(
-        error.status || 400
+        error.status || 500
       ).json({
         error:
           error.status
             ? error.message
-            : (
-                error.message ===
-                'Selected truck is no longer available'
-                  ? error.message
-                  : 'Could not accept transport quote'
-              ),
+            : 'Could not accept transport quote',
       });
     }
   }
@@ -1580,26 +2035,26 @@ router.patch(
 // ============================================================================
 //
 // REQUESTED
-//    ↓
+//     ↓
+// QUOTED
+//     ↓
 // ACCEPTED
-//    ↓
+//     ↓
 // PICKUP
-//    ↓
+//     ↓
 // IN_TRANSIT
-//    ↓
+//     ↓
 // DELIVERED
-//    ↓
-// BUYER CONFIRMS RECEIPT
-//    ↓
-// COMPLETED
 //
-// PAYMENT REQUIREMENTS:
+// CANCELLED is permitted from appropriate active states.
 //
-// MARKETPLACE:
-//   Must be PAID before physical transport begins.
+// PAYMENT:
+//
+// Marketplace:
+//   PAID before transport is allowed to proceed.
 //
 // HIRE_TRANSPORTER:
-//   TRANSPORT payment must also be PAID and match agreedAmount.
+//   Transport payment must also be PAID and must exactly match agreedAmount.
 //
 // OWN_TRUCK:
 //   No separate transport payment.
@@ -1621,21 +2076,19 @@ router.patch(
       .withMessage(
         'Invalid transport status'
       ),
+
+    body('incidentNotes')
+      .optional()
+      .isString()
+      .withMessage(
+        'Incident notes must be text'
+      ),
   ],
 
   async (req, res) => {
     try {
-      const errors =
-        validationResult(req);
-
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          error:
-            'Validation failed',
-
-          errors:
-            errors.array(),
-        });
+      if (validationFailed(req, res)) {
+        return;
       }
 
 
@@ -1764,13 +2217,19 @@ router.patch(
 
 
       // ======================================================================
-      // PAYMENT GATES
+      // CANCELLATION AUTHORIZATION
       // ======================================================================
       //
-      // CANCELLED does not require payment.
+      // Either order party or assigned transporter can cancel an active job.
       //
-      // PICKUP / IN_TRANSIT / DELIVERED do.
-      //
+      // ======================================================================
+
+      // No additional restriction required here because the resource-level
+      // authorization above has already confirmed the participant.
+
+
+      // ======================================================================
+      // PAYMENT GATES
       // ======================================================================
 
       if (
@@ -1780,62 +2239,18 @@ router.patch(
           'DELIVERED',
         ].includes(status)
       ) {
-        const marketplacePaid =
-          await getPaidMarketplacePayment(
-            job.orderId
-          );
-
-
-        if (!marketplacePaid) {
-          return res.status(402).json({
-            error:
-              'Marketplace payment must be PAID before transport can proceed',
-          });
-        }
+        await requireMarketplacePayment(
+          job.orderId
+        );
 
 
         if (
           job.method ===
           'HIRE_TRANSPORTER'
         ) {
-          if (
-            !job.truckOwnerId ||
-            !job.truckId ||
-            job.agreedAmount ==
-              null
-          ) {
-            return res.status(400).json({
-              error:
-                'Transport quote must be accepted before transport can proceed',
-            });
-          }
-
-
-          const transportPayment =
-            await getPaidTransportPayment(
-              job.orderId
-            );
-
-
-          if (!transportPayment) {
-            return res.status(402).json({
-              error:
-                'Transport payment must be PAID before the transporter can proceed',
-            });
-          }
-
-
-          if (
-            !moneyEqual(
-              transportPayment.amount,
-              job.agreedAmount
-            )
-          ) {
-            return res.status(409).json({
-              error:
-                'Transport payment amount does not match the accepted transport fee',
-            });
-          }
+          await requireTransportPayment(
+            job
+          );
         }
       }
 
@@ -1847,7 +2262,55 @@ router.patch(
       const updated =
         await prisma.$transaction(
           async (tx) => {
-            // Recheck payment immediately before physical state transition.
+
+            // ---------------------------------------------------------------
+            // Re-read job to prevent stale status transitions.
+            // ---------------------------------------------------------------
+
+            const currentJob =
+              await tx.transportJob.findUnique({
+                where: {
+                  id:
+                    job.id,
+                },
+
+                include: {
+                  order:
+                    true,
+                },
+              });
+
+
+            if (!currentJob) {
+              throw httpError(
+                'Transport job not found',
+                404
+              );
+            }
+
+
+            const currentAllowed =
+              allowedTransitions[
+                currentJob.status
+              ] || [];
+
+
+            if (
+              !currentAllowed.includes(
+                status
+              )
+            ) {
+              throw httpError(
+                `Cannot change transport status from ${currentJob.status} to ${status}`,
+                409
+              );
+            }
+
+
+            // ---------------------------------------------------------------
+            // Recheck payment inside transaction.
+            // ---------------------------------------------------------------
+
             if (
               [
                 'PICKUP',
@@ -1855,89 +2318,27 @@ router.patch(
                 'DELIVERED',
               ].includes(status)
             ) {
-              const marketplacePaidTx =
-                await getPaidMarketplacePayment(
-                  job.orderId,
-                  tx
-                );
-
-
-              if (!marketplacePaidTx) {
-                throw Object.assign(
-                  new Error(
-                    'Marketplace payment must be PAID before transport can proceed'
-                  ),
-                  {
-                    status:
-                      402,
-                  }
-                );
-              }
+              await requireMarketplacePayment(
+                currentJob.orderId,
+                tx
+              );
 
 
               if (
-                job.method ===
+                currentJob.method ===
                 'HIRE_TRANSPORTER'
               ) {
-                if (
-                  !job.truckOwnerId ||
-                  !job.truckId ||
-                  job.agreedAmount ==
-                    null
-                ) {
-                  throw Object.assign(
-                    new Error(
-                      'Transport quote must be accepted before transport can proceed'
-                    ),
-                    {
-                      status:
-                        400,
-                    }
-                  );
-                }
-
-
-                const transportPaymentTx =
-                  await getPaidTransportPayment(
-                    job.orderId,
-                    tx
-                  );
-
-
-                if (
-                  !transportPaymentTx
-                ) {
-                  throw Object.assign(
-                    new Error(
-                      'Transport payment must be PAID before the transporter can proceed'
-                    ),
-                    {
-                      status:
-                        402,
-                    }
-                  );
-                }
-
-
-                if (
-                  !moneyEqual(
-                    transportPaymentTx.amount,
-                    job.agreedAmount
-                  )
-                ) {
-                  throw Object.assign(
-                    new Error(
-                      'Transport payment amount does not match the accepted transport fee'
-                    ),
-                    {
-                      status:
-                        409,
-                    }
-                  );
-                }
+                await requireTransportPayment(
+                  currentJob,
+                  tx
+                );
               }
             }
 
+
+            // ---------------------------------------------------------------
+            // Build update.
+            // ---------------------------------------------------------------
 
             const data = {
               status,
@@ -1978,16 +2379,16 @@ router.patch(
               await tx.transportJob.update({
                 where: {
                   id:
-                    job.id,
+                    currentJob.id,
                 },
 
                 data,
               });
 
 
-            // ================================================================
+            // ---------------------------------------------------------------
             // ORDER STATUS
-            // ================================================================
+            // ---------------------------------------------------------------
 
             if (
               status ===
@@ -1996,7 +2397,7 @@ router.patch(
               await tx.order.update({
                 where: {
                   id:
-                    job.orderId,
+                    currentJob.orderId,
                 },
 
                 data: {
@@ -2014,7 +2415,7 @@ router.patch(
               await tx.order.update({
                 where: {
                   id:
-                    job.orderId,
+                    currentJob.orderId,
                 },
 
                 data: {
@@ -2032,7 +2433,7 @@ router.patch(
               await tx.order.update({
                 where: {
                   id:
-                    job.orderId,
+                    currentJob.orderId,
                 },
 
                 data: {
@@ -2043,21 +2444,24 @@ router.patch(
             }
 
 
-            // ================================================================
+            // ---------------------------------------------------------------
             // RELEASE TRUCK
-            // ================================================================
+            // ---------------------------------------------------------------
 
             if (
-              job.truckId &&
+              currentJob.truckId &&
               [
                 'DELIVERED',
                 'CANCELLED',
               ].includes(status)
             ) {
-              await tx.truck.update({
+              await tx.truck.updateMany({
                 where: {
                   id:
-                    job.truckId,
+                    currentJob.truckId,
+
+                  availability:
+                    'BUSY',
                 },
 
                 data: {
@@ -2086,6 +2490,7 @@ router.patch(
         'TRANSPORT STATUS ERROR:',
         error
       );
+
 
       return res.status(
         error.status || 500
@@ -2147,17 +2552,8 @@ router.post(
 
   async (req, res) => {
     try {
-      const errors =
-        validationResult(req);
-
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          error:
-            'Validation failed',
-
-          errors:
-            errors.array(),
-        });
+      if (validationFailed(req, res)) {
+        return;
       }
 
 
@@ -2252,21 +2648,21 @@ router.post(
 
         available:
           trucks.filter(
-            (t) =>
+            t =>
               t.availability ===
               'AVAILABLE'
           ).length,
 
         busy:
           trucks.filter(
-            (t) =>
+            t =>
               t.availability ===
               'BUSY'
           ).length,
 
         offline:
           trucks.filter(
-            (t) =>
+            t =>
               t.availability ===
               'OFFLINE'
           ).length,
@@ -2290,6 +2686,18 @@ router.post(
         'REGISTER TRUCK ERROR:',
         error
       );
+
+
+      if (
+        error.code ===
+        'P2002'
+      ) {
+        return res.status(409).json({
+          error:
+            'A truck with this registration is already registered',
+        });
+      }
+
 
       return res.status(500).json({
         error:
@@ -2329,17 +2737,8 @@ router.patch(
 
   async (req, res) => {
     try {
-      const errors =
-        validationResult(req);
-
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          error:
-            'Validation failed',
-
-          errors:
-            errors.array(),
-        });
+      if (validationFailed(req, res)) {
+        return;
       }
 
 
@@ -2408,6 +2807,37 @@ router.patch(
       }
 
 
+      // A truck involved in an active job cannot be manually forced BUSY
+      // unless it is actually assigned through the transport workflow.
+      if (
+        availability === 'BUSY'
+      ) {
+        const activeJob =
+          await prisma.transportJob.findFirst({
+            where: {
+              truckId:
+                truck.id,
+
+              status: {
+                in: [
+                  'ACCEPTED',
+                  'PICKUP',
+                  'IN_TRANSIT',
+                ],
+              },
+            },
+          });
+
+
+        if (!activeJob) {
+          return res.status(400).json({
+            error:
+              'A truck can only be marked BUSY when assigned to an active transport job',
+          });
+        }
+      }
+
+
       const updated =
         await prisma.truck.update({
           where: {
@@ -2436,21 +2866,21 @@ router.patch(
 
         available:
           trucks.filter(
-            (t) =>
+            t =>
               t.availability ===
               'AVAILABLE'
           ).length,
 
         busy:
           trucks.filter(
-            (t) =>
+            t =>
               t.availability ===
               'BUSY'
           ).length,
 
         offline:
           trucks.filter(
-            (t) =>
+            t =>
               t.availability ===
               'OFFLINE'
           ).length,
@@ -2528,6 +2958,33 @@ router.patch(
         return res.status(400).json({
           error:
             'A busy truck cannot be deactivated until its active transport job is completed',
+        });
+      }
+
+
+      const activeJob =
+        await prisma.transportJob.findFirst({
+          where: {
+            truckId:
+              truck.id,
+
+            status: {
+              in: [
+                'REQUESTED',
+                'QUOTED',
+                'ACCEPTED',
+                'PICKUP',
+                'IN_TRANSIT',
+              ],
+            },
+          },
+        });
+
+
+      if (activeJob) {
+        return res.status(400).json({
+          error:
+            'This truck has an active transport job and cannot be deactivated',
         });
       }
 
@@ -2634,8 +3091,6 @@ router.get(
 
             status: {
               in: [
-                'REQUESTED',
-                'QUOTED',
                 'ACCEPTED',
                 'PICKUP',
                 'IN_TRANSIT',
