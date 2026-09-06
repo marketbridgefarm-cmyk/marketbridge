@@ -44,7 +44,6 @@ export default function Register() {
             <li><b>🔍</b> Add inspector, transport, or advertiser roles anytime</li>
           </ul>
         </aside>
-
         <div className="auth-card">
           <span className="eyebrow">JOIN THE NETWORK</span>
           <h1>Create your account</h1>
@@ -60,21 +59,14 @@ export default function Register() {
             <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
             <label>Password (min. 8 characters)</label>
             <input required minLength={8} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-
             <label>Optional capabilities</label>
             <div className="role-select">
               {optional.map(([r, l]) => (
-                <button
-                  type="button"
-                  key={r}
-                  className={`role-option ${selected.includes(r) ? 'selected' : ''}`}
-                  onClick={() => toggle(r)}
-                >
+                <button type="button" key={r} className={`role-option ${selected.includes(r) ? 'selected' : ''}`} onClick={() => toggle(r)}>
                   {selected.includes(r) ? '✓ ' : ''}{l}
                 </button>
               ))}
             </div>
-
             <button className="btn btn-primary btn-lg full mt" type="submit">Create account</button>
           </form>
           <p className="muted mt">Already registered? <Link to="/login">Log in</Link></p>
