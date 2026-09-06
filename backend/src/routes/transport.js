@@ -1,921 +1,590 @@
 const express = require('express');
-const crypto = require('crypto');
 const {
   body,
-  param,
   validationResult,
 } = require('express-validator');
 
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
-const {
-  isAdmin,
-  isOrderParticipant,
-} = require('../utils/authorization');
-const { commissionFor } = require('../config/commissions');
-const chapa = require('../config/chapa');
+const { requireRole } = require('../middleware/roleCheck');
 
 const router = express.Router();
-
-
-// ============================================================================
-// VALIDATION
-// ============================================================================
-
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      error: 'Validation failed',
-      errors: errors.array(),
-    });
-  }
-
-  next();
-};
 
 
 // ============================================================================
 // HELPERS
 // ============================================================================
 
-function timingSafeEqual(a, b) {
-  const x = Buffer.from(a || '', 'utf8');
-  const y = Buffer.from(b || '', 'utf8');
+function isBuyer(order, userId) {
+  return order.buyerId === userId;
+}
 
+
+function isSeller(order, userId) {
+  return order.sellerId === userId;
+}
+
+
+function hasRole(user, role) {
   return (
-    x.length === y.length &&
-    crypto.timingSafeEqual(x, y)
+    Array.isArray(user.roles) &&
+    user.roles.includes(role)
   );
 }
 
 
-function verifySignature(req) {
-  const secret = process.env.PAYMENT_WEBHOOK_SECRET;
+function normalizeRegistration(value) {
+  return String(
+    value || ''
+  )
+    .trim()
+    .toUpperCase();
+}
 
-  if (!secret) {
-    return false;
+
+function normalizeString(value) {
+  if (
+    value === undefined ||
+    value === null
+  ) {
+    return '';
   }
 
-  const raw =
-    req.rawBody ||
-    Buffer.from(JSON.stringify(req.body));
+  return String(value).trim();
+}
 
-  const expected = crypto
-    .createHmac('sha256', secret)
-    .update(raw)
-    .digest('hex');
 
-  const supplied =
-    req.headers['x-marketbridge-signature'];
+function positiveNumber(value) {
+  const number =
+    Number(value);
 
-  return (
-    typeof supplied === 'string' &&
-    timingSafeEqual(supplied, expected)
-  );
+  return Number.isFinite(number) &&
+    number > 0
+    ? number
+    : null;
 }
 
 
 function moneyEqual(a, b) {
-  return Math.abs(Number(a) - Number(b)) < 0.01;
+  return (
+    Math.abs(
+      Number(a) -
+        Number(b)
+    ) < 0.01
+  );
 }
 
 
 // ============================================================================
-// PAYMENT PAID — SINGLE SOURCE OF TRUTH
-// ============================================================================
-//
-// Every confirmation path eventually uses this function.
-//
-// It handles:
-//
-// MARKETPLACE
-// TRANSPORT
-// DIGITAL
-// ADVERTISING
-// INSPECTOR
-//
+// PAYMENT HELPERS
 // ============================================================================
 
-async function markPaymentPaid(
-  tx,
-  paymentId,
-  {
-    reference,
-    provider,
-    providerTransactionId,
-  } = {}
+async function getPaidMarketplacePayment(
+  orderId,
+  client = prisma
 ) {
-  const payment =
-    await tx.payment.findUnique({
-      where: {
-        id: paymentId,
-      },
-      include: {
-        order: true,
-        digitalPurchase: true,
-        advertisement: true,
-      },
-    });
+  return client.payment.findFirst({
+    where: {
+      orderId,
 
-  if (!payment) {
-    throw Object.assign(
-      new Error('Payment not found'),
-      { status: 404 }
-    );
-  }
+      type:
+        'MARKETPLACE',
 
-  if (payment.status === 'PAID') {
-    return payment;
-  }
+      status:
+        'PAID',
+    },
 
-  if (payment.status === 'REFUNDED') {
-    throw Object.assign(
-      new Error(
-        'Refunded payment cannot be reopened'
-      ),
-      { status: 409 }
-    );
-  }
-
-  // --------------------------------------------------------------------------
-  // SECURITY CHECKS BEFORE MARKING PAYMENT PAID
-  // --------------------------------------------------------------------------
-
-  if (
-    payment.type === 'TRANSPORT' &&
-    payment.orderId
-  ) {
-    const order =
-      await tx.order.findUnique({
-        where: {
-          id: payment.orderId,
-        },
-        include: {
-          transportJob: true,
-          payments: true,
-        },
-      });
-
-    if (!order) {
-      throw Object.assign(
-        new Error('Order not found'),
-        { status: 404 }
-      );
-    }
-
-    if (!order.transportJob) {
-      throw Object.assign(
-        new Error(
-          'Transport job required before transport payment can be confirmed'
-        ),
-        { status: 400 }
-      );
-    }
-
-    if (
-      order.transportJob.method !==
-      'HIRE_TRANSPORTER'
-    ) {
-      throw Object.assign(
-        new Error(
-          'No separate transport payment is required for OWN_TRUCK transport'
-        ),
-        { status: 400 }
-      );
-    }
-
-    if (
-      order.transportJob.status !==
-      'ACCEPTED'
-    ) {
-      throw Object.assign(
-        new Error(
-          'A transport quote must be accepted before transport payment can be confirmed'
-        ),
-        { status: 400 }
-      );
-    }
-
-    if (
-      order.transportJob.agreedAmount == null
-    ) {
-      throw Object.assign(
-        new Error(
-          'Accepted transport amount is missing'
-        ),
-        { status: 400 }
-      );
-    }
-
-    if (
-      !moneyEqual(
-        payment.amount,
-        order.transportJob.agreedAmount
-      )
-    ) {
-      throw Object.assign(
-        new Error(
-          'Transport payment amount does not match the accepted transport fee'
-        ),
-        { status: 409 }
-      );
-    }
-
-    const marketplacePaid =
-      order.payments.some(
-        (p) =>
-          p.type === 'MARKETPLACE' &&
-          p.status === 'PAID'
-      );
-
-    if (!marketplacePaid) {
-      throw Object.assign(
-        new Error(
-          'Marketplace payment must be PAID before transport payment can be confirmed'
-        ),
-        { status: 402 }
-      );
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // COMMISSION
-  // --------------------------------------------------------------------------
-
-  const commission =
-    commissionFor(
-      payment.type,
-      payment.amount
-    );
-
-  const updated =
-    await tx.payment.update({
-      where: {
-        id: payment.id,
-      },
-
-      data: {
-        status: 'PAID',
-
-        commissionRate:
-          commission.rate,
-
-        commissionAmount:
-          commission.commissionAmount,
-
-        reference:
-          reference ||
-          payment.reference,
-
-        provider:
-          provider ||
-          payment.provider,
-
-        providerTransactionId:
-          providerTransactionId ||
-          payment.providerTransactionId,
-      },
-    });
+    orderBy: {
+      updatedAt:
+        'desc',
+    },
+  });
+}
 
 
-  // --------------------------------------------------------------------------
-  // MARKETPLACE
-  // --------------------------------------------------------------------------
+async function getPaidTransportPayment(
+  orderId,
+  client = prisma
+) {
+  return client.payment.findFirst({
+    where: {
+      orderId,
 
-  if (
-    payment.type === 'MARKETPLACE' &&
-    payment.orderId
-  ) {
-    await tx.order.updateMany({
-      where: {
-        id: payment.orderId,
-        status: 'PENDING_PAYMENT',
-      },
+      type:
+        'TRANSPORT',
 
-      data: {
-        status: 'CONFIRMED',
-      },
-    });
-  }
+      status:
+        'PAID',
+    },
 
-
-  // --------------------------------------------------------------------------
-  // DIGITAL
-  // --------------------------------------------------------------------------
-
-  if (
-    payment.type === 'DIGITAL' &&
-    payment.digitalPurchase
-  ) {
-    await tx.digitalPurchase.update({
-      where: {
-        id: payment.digitalPurchase.id,
-      },
-
-      data: {
-        status: 'COMPLETED',
-      },
-    });
-  }
-
-
-  // --------------------------------------------------------------------------
-  // ADVERTISING
-  // --------------------------------------------------------------------------
-
-  if (
-    payment.type === 'ADVERTISING' &&
-    payment.advertisement
-  ) {
-    await tx.advertisement.update({
-      where: {
-        id: payment.advertisement.id,
-      },
-
-      data: {
-        amountPaid:
-          payment.amount,
-      },
-    });
-  }
-
-
-  return updated;
+    orderBy: {
+      updatedAt:
+        'desc',
+    },
+  });
 }
 
 
 // ============================================================================
-// CREATE PAYMENT
+// CREATE TRANSPORT JOB
 // ============================================================================
 
 router.post(
   '/',
   authenticate,
+  requireRole(
+    'SELLER',
+    'BUYER'
+  ),
 
   [
-    body('type')
-      .isIn([
-        'MARKETPLACE',
-        'TRANSPORT',
-        'INSPECTOR',
-        'ADVERTISING',
-        'DIGITAL',
-      ]),
+    body('orderId')
+      .trim()
+      .notEmpty()
+      .withMessage(
+        'Order ID is required'
+      ),
 
-    body('amount')
-      .isFloat({ gt: 0 }),
+    body('arrangingParty')
+      .isIn([
+        'SELLER',
+        'BUYER',
+        'JOINT',
+      ])
+      .withMessage(
+        'Invalid arranging party'
+      ),
 
     body('method')
       .isIn([
-        'TELEBIRR',
-        'CBE',
-        'QR',
-        'OTHER',
-      ]),
+        'OWN_TRUCK',
+        'HIRE_TRANSPORTER',
+      ])
+      .withMessage(
+        'Invalid transport method'
+      ),
 
-    body('orderId')
-      .optional()
-      .isUUID(),
-
-    body('digitalProductId')
-      .optional()
-      .isUUID(),
-
-    body('advertisementId')
-      .optional()
-      .isUUID(),
-
-    body('inspectionRequestId')
-      .optional()
-      .isUUID(),
-
-    body('reference')
-      .optional()
-      .isString()
+    body('pickupLocation')
       .trim()
-      .isLength({ max: 200 }),
-  ],
+      .notEmpty()
+      .withMessage(
+        'Pickup location is required'
+      ),
 
-  validate,
+    body('destination')
+      .trim()
+      .notEmpty()
+      .withMessage(
+        'Destination is required'
+      ),
+
+    body('load')
+      .trim()
+      .notEmpty()
+      .withMessage(
+        'Load is required'
+      ),
+
+    body('requiredCapacity')
+      .optional({
+        values: 'falsy',
+      })
+      .isFloat({
+        gt: 0,
+      })
+      .withMessage(
+        'Required capacity must be greater than zero'
+      ),
+  ],
 
   async (req, res) => {
     try {
+      const errors =
+        validationResult(req);
+
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          error:
+            'Validation failed',
+
+          errors:
+            errors.array(),
+        });
+      }
+
+
       const {
-        type,
         orderId,
-        digitalProductId,
-        advertisementId,
-        inspectionRequestId,
-        reference,
+        arrangingParty,
+        method,
+        truckOwnerId,
+        truckId,
+        pickupLocation,
+        destination,
+        load,
+        requiredCapacity,
+        specialRequirements,
       } = req.body;
 
-      const amount =
-        Number(req.body.amount);
+
+      const order =
+        await prisma.order.findUnique({
+          where: {
+            id:
+              orderId,
+          },
+
+          include: {
+            transportJob:
+              true,
+          },
+        });
+
+
+      if (!order) {
+        return res.status(404).json({
+          error:
+            'Order not found',
+        });
+      }
+
+
+      if (
+        !isBuyer(
+          order,
+          req.user.id
+        ) &&
+        !isSeller(
+          order,
+          req.user.id
+        )
+      ) {
+        return res.status(403).json({
+          error:
+            'Only the buyer or seller on this order may arrange transport',
+        });
+      }
+
+
+      if (order.transportJob) {
+        return res.status(409).json({
+          error:
+            'Transport has already been arranged for this order',
+
+          transportJob:
+            order.transportJob,
+        });
+      }
 
 
       // ======================================================================
-      // ORDER PAYMENTS
+      // PAYMENT GATE
+      // ======================================================================
+      //
+      // Transport cannot even be arranged until the marketplace transaction
+      // has actually been confirmed PAID.
+      //
+      // This prevents:
+      //
+      // PENDING_PAYMENT
+      //      ↓
+      // TRANSPORT
+      //
       // ======================================================================
 
       if (
-        type === 'MARKETPLACE' ||
-        type === 'TRANSPORT'
+        order.status !==
+        'CONFIRMED'
       ) {
-        if (!orderId) {
+        return res.status(400).json({
+          error:
+            'Marketplace payment must be confirmed before transport can be arranged',
+        });
+      }
+
+
+      const marketplacePaid =
+        await getPaidMarketplacePayment(
+          order.id
+        );
+
+
+      if (!marketplacePaid) {
+        return res.status(402).json({
+          error:
+            'Marketplace payment must be PAID before transport can be arranged',
+        });
+      }
+
+
+      // ======================================================================
+      // ARRANGING PARTY
+      // ======================================================================
+
+      if (
+        arrangingParty ===
+          'BUYER' &&
+        !isBuyer(
+          order,
+          req.user.id
+        )
+      ) {
+        return res.status(403).json({
+          error:
+            'Only the buyer can arrange transport as BUYER',
+        });
+      }
+
+
+      if (
+        arrangingParty ===
+          'SELLER' &&
+        !isSeller(
+          order,
+          req.user.id
+        )
+      ) {
+        return res.status(403).json({
+          error:
+            'Only the seller can arrange transport as SELLER',
+        });
+      }
+
+
+      if (
+        arrangingParty ===
+        'JOINT'
+      ) {
+        if (
+          !isBuyer(
+            order,
+            req.user.id
+          ) &&
+          !isSeller(
+            order,
+            req.user.id
+          )
+        ) {
+          return res.status(403).json({
+            error:
+              'Only the buyer or seller may create a joint transport arrangement',
+          });
+        }
+      }
+
+
+      // ======================================================================
+      // OWN TRUCK
+      // ======================================================================
+
+      if (
+        method ===
+        'OWN_TRUCK'
+      ) {
+        if (!truckId) {
           return res.status(400).json({
             error:
-              `${type} payment requires orderId`,
+              'truckId is required when using your own truck',
           });
         }
 
-        const order =
-          await prisma.order.findUnique({
-            where: {
-              id: orderId,
-            },
 
-            include: {
-              transportJob: true,
+        const truck =
+          await prisma.truck.findUnique({
+            where: {
+              id:
+                truckId,
             },
           });
 
-        if (!order) {
+
+        if (!truck) {
           return res.status(404).json({
-            error: 'Order not found',
+            error:
+              'Selected truck was not found',
           });
         }
 
 
         if (
-          !isOrderParticipant(
-            req.user.id,
-            order
-          ) &&
-          !isAdmin(req.user)
+          truck.ownerId !==
+          req.user.id
         ) {
           return res.status(403).json({
-            error: 'Not authorized',
+            error:
+              'You can only use a truck registered under your own account',
           });
         }
 
 
-        // ====================================================================
-        // MARKETPLACE PAYMENT
-        // ====================================================================
-
-        if (type === 'MARKETPLACE') {
-          if (
-            order.buyerId !==
-              req.user.id &&
-            !isAdmin(req.user)
-          ) {
-            return res.status(403).json({
-              error:
-                'Only the buyer may create the marketplace payment',
-            });
-          }
-
-          if (
-            !moneyEqual(
-              amount,
-              order.finalPrice
-            )
-          ) {
-            return res.status(400).json({
-              error:
-                'Amount must match order final price',
-
-              expectedAmount:
-                Number(order.finalPrice),
-            });
-          }
-
-          if (
-            order.status ===
-            'COMPLETED'
-          ) {
-            return res.status(400).json({
-              error:
-                'This order has already been completed',
-            });
-          }
+        if (
+          truck.availability !==
+          'AVAILABLE'
+        ) {
+          return res.status(400).json({
+            error:
+              `Selected truck is currently ${truck.availability}`,
+          });
         }
+      }
 
 
-        // ====================================================================
-        // TRANSPORT PAYMENT
-        // ====================================================================
+      // ======================================================================
+      // HIRE TRANSPORTER
+      // ======================================================================
 
-        if (type === 'TRANSPORT') {
-          if (!order.transportJob) {
-            return res.status(400).json({
-              error:
-                'Transport job required',
-            });
-          }
-
-
-          if (
-            order.transportJob.method ===
-            'OWN_TRUCK'
-          ) {
-            return res.status(400).json({
-              error:
-                'No separate transport payment is required for OWN_TRUCK transport',
-            });
-          }
+      if (
+        method ===
+          'HIRE_TRANSPORTER' &&
+        (truckOwnerId ||
+          truckId)
+      ) {
+        return res.status(400).json({
+          error:
+            'HIRE_TRANSPORTER uses the TransportQuote workflow; do not select a transporter or truck when creating the request',
+        });
+      }
 
 
-          if (
-            order.transportJob.status !==
-            'ACCEPTED'
-          ) {
-            return res.status(400).json({
-              error:
-                'A transport quote must be accepted before transport payment can be created',
-            });
-          }
+      const capacity =
+        positiveNumber(
+          requiredCapacity
+        );
 
 
-          if (
-            order.transportJob.agreedAmount ==
-            null
-          ) {
-            return res.status(400).json({
-              error:
-                'Accepted transport amount is missing',
-            });
-          }
+      const job =
+        await prisma.$transaction(
+          async (tx) => {
+            // Recheck payment inside transaction.
+            const paid =
+              await getPaidMarketplacePayment(
+                order.id,
+                tx
+              );
 
 
-          if (
-            !moneyEqual(
-              amount,
-              order.transportJob
-                .agreedAmount
-            )
-          ) {
-            return res.status(400).json({
-              error:
-                'Amount must match the accepted transport quote',
-
-              expectedAmount:
-                Number(
-                  order.transportJob
-                    .agreedAmount
+            if (!paid) {
+              throw Object.assign(
+                new Error(
+                  'Marketplace payment must be PAID before transport can be arranged'
                 ),
-            });
-          }
+                {
+                  status: 402,
+                }
+              );
+            }
 
 
-          const allowed =
-            order.arrangingParty ===
-              'BUYER'
-              ? order.buyerId ===
-                req.user.id
-              : order.arrangingParty ===
-                  'SELLER'
-                ? order.sellerId ===
-                  req.user.id
-                : (
-                    order.buyerId ===
-                      req.user.id ||
-                    order.sellerId ===
-                      req.user.id
-                  );
+            const createdJob =
+              await tx.transportJob.create({
+                data: {
+                  orderId:
+                    order.id,
+
+                  arrangingParty,
+
+                  method,
+
+                  truckOwnerId:
+                    method ===
+                    'OWN_TRUCK'
+                      ? req.user.id
+                      : null,
+
+                  truckId:
+                    method ===
+                    'OWN_TRUCK'
+                      ? truckId
+                      : null,
+
+                  pickupLocation:
+                    normalizeString(
+                      pickupLocation
+                    ),
+
+                  destination:
+                    normalizeString(
+                      destination
+                    ),
+
+                  load:
+                    normalizeString(
+                      load
+                    ),
+
+                  requiredCapacity:
+                    capacity,
+
+                  specialRequirements:
+                    normalizeString(
+                      specialRequirements
+                    ) || null,
+
+                  status:
+                    method ===
+                    'OWN_TRUCK'
+                      ? 'PICKUP'
+                      : 'REQUESTED',
+                },
+              });
 
 
-          if (
-            !allowed &&
-            !isAdmin(req.user)
-          ) {
-            return res.status(403).json({
-              error:
-                'Only the party who arranged transport may pay for this transport',
-            });
-          }
-
-
-          // IMPORTANT:
-          // Marketplace payment must already be PAID.
-          const marketplacePaid =
-            await prisma.payment.findFirst({
+            await tx.order.update({
               where: {
-                orderId:
+                id:
                   order.id,
+              },
 
-                type:
-                  'MARKETPLACE',
+              data: {
+                arrangingParty,
 
                 status:
-                  'PAID',
+                  'TRANSPORT_ARRANGED',
               },
             });
 
 
-          if (!marketplacePaid) {
-            return res.status(402).json({
-              error:
-                'Marketplace payment must be PAID before transport payment can be created',
-            });
+            if (
+              method ===
+                'OWN_TRUCK' &&
+              truckId
+            ) {
+              await tx.truck.update({
+                where: {
+                  id:
+                    truckId,
+                },
+
+                data: {
+                  availability:
+                    'BUSY',
+                },
+              });
+            }
+
+
+            return createdJob;
           }
-        }
-      }
-
-
-      // ======================================================================
-      // DIGITAL
-      // ======================================================================
-
-      else if (type === 'DIGITAL') {
-        if (!digitalProductId) {
-          return res.status(400).json({
-            error:
-              'digitalProductId is required',
-          });
-        }
-
-        const product =
-          await prisma.digitalProduct.findUnique({
-            where: {
-              id: digitalProductId,
-            },
-          });
-
-        if (
-          !product ||
-          product.status !== 'ACTIVE'
-        ) {
-          return res.status(404).json({
-            error:
-              'Digital product not found',
-          });
-        }
-
-        if (
-          product.sellerId ===
-          req.user.id
-        ) {
-          return res.status(400).json({
-            error:
-              'You cannot purchase your own product',
-          });
-        }
-
-        if (
-          !moneyEqual(
-            amount,
-            product.price
-          )
-        ) {
-          return res.status(400).json({
-            error:
-              'Amount must match product price',
-
-            expectedAmount:
-              Number(product.price),
-          });
-        }
-      }
-
-
-      // ======================================================================
-      // ADVERTISING
-      // ======================================================================
-
-      else if (type === 'ADVERTISING') {
-        if (!advertisementId) {
-          return res.status(400).json({
-            error:
-              'advertisementId is required',
-          });
-        }
-
-        const ad =
-          await prisma.advertisement.findUnique({
-            where: {
-              id: advertisementId,
-            },
-          });
-
-        if (!ad) {
-          return res.status(404).json({
-            error:
-              'Advertisement not found',
-          });
-        }
-
-        if (
-          ad.advertiserId !==
-            req.user.id &&
-          !isAdmin(req.user)
-        ) {
-          return res.status(403).json({
-            error:
-              'Not authorized',
-          });
-        }
-
-        if (
-          ad.amountPaid != null &&
-          !moneyEqual(
-            amount,
-            ad.amountPaid
-          )
-        ) {
-          return res.status(400).json({
-            error:
-              'Amount must match advertisement amount',
-
-            expectedAmount:
-              Number(ad.amountPaid),
-          });
-        }
-      }
-
-
-      // ======================================================================
-      // INSPECTOR
-      // ======================================================================
-
-      else if (type === 'INSPECTOR') {
-        if (!inspectionRequestId) {
-          return res.status(400).json({
-            error:
-              'inspectionRequestId is required',
-          });
-        }
-
-        const request =
-          await prisma.inspectionRequest.findUnique({
-            where: {
-              id: inspectionRequestId,
-            },
-          });
-
-        if (!request) {
-          return res.status(404).json({
-            error:
-              'Inspection request not found',
-          });
-        }
-
-        if (
-          request.requestedById !==
-            req.user.id &&
-          !isAdmin(req.user)
-        ) {
-          return res.status(403).json({
-            error:
-              'Only the person who requested the inspection may pay for it',
-          });
-        }
-
-        if (request.fee == null) {
-          return res.status(400).json({
-            error:
-              'This inspection has no agreed fee yet',
-          });
-        }
-
-        if (
-          !moneyEqual(
-            amount,
-            request.fee
-          )
-        ) {
-          return res.status(400).json({
-            error:
-              'Amount must match the agreed inspection fee',
-
-            expectedAmount:
-              Number(request.fee),
-          });
-        }
-      }
-
-
-      // ======================================================================
-      // RESOURCE ID VALIDATION
-      // ======================================================================
-
-      else if (
-        orderId ||
-        digitalProductId ||
-        advertisementId ||
-        inspectionRequestId
-      ) {
-        return res.status(400).json({
-          error:
-            'This payment type cannot use the supplied resource id',
-        });
-      }
-
-
-      // ======================================================================
-      // DUPLICATE ACTIVE PAYMENT
-      // ======================================================================
-
-      const duplicate =
-        await prisma.payment.findFirst({
-          where: {
-            createdById:
-              req.user.id,
-
-            type,
-
-            status: {
-              in: [
-                'PENDING',
-                'PAID',
-              ],
-            },
-
-            ...(orderId && {
-              orderId,
-            }),
-
-            ...(digitalProductId && {
-              digitalProductId,
-            }),
-
-            ...(advertisementId && {
-              advertisementId,
-            }),
-
-            ...(inspectionRequestId && {
-              inspectionRequestId,
-            }),
-          },
-        });
-
-
-      if (duplicate) {
-        return res.status(409).json({
-          error:
-            'An active payment already exists',
-
-          payment:
-            duplicate,
-        });
-      }
-
-
-      // ======================================================================
-      // CREATE PAYMENT
-      // ======================================================================
-
-      const payment =
-        await prisma.payment.create({
-          data: {
-            createdById:
-              req.user.id,
-
-            type,
-
-            amount,
-
-            method,
-
-            reference:
-              reference || null,
-
-            orderId:
-              orderId || null,
-
-            digitalProductId:
-              digitalProductId ||
-              null,
-
-            advertisementId:
-              advertisementId ||
-              null,
-
-            inspectionRequestId:
-              inspectionRequestId ||
-              null,
-
-            status:
-              'PENDING',
-          },
-        });
+        );
 
 
       return res.status(201).json({
         message:
-          'Payment intent created. Call /payments/:id/chapa/initialize to get a checkout link, or wait for admin reconciliation.',
+          method ===
+          'OWN_TRUCK'
+            ? 'Own-truck transport arrangement created successfully'
+            : 'Transport request created successfully',
 
-        payment,
+        transportJob:
+          job,
 
-        paymentConfirmed:
+        commissionGenerated:
           false,
       });
 
     } catch (error) {
       console.error(
-        'CREATE PAYMENT ERROR:',
+        'CREATE TRANSPORT JOB ERROR:',
         error
       );
 
@@ -925,7 +594,7 @@ router.post(
         error:
           error.status
             ? error.message
-            : 'Could not create payment',
+            : 'Could not create transport job',
 
         details:
           process.env.NODE_ENV ===
@@ -939,401 +608,131 @@ router.post(
 
 
 // ============================================================================
-// CHAPA INITIALIZE
-// ============================================================================
-
-router.post(
-  '/:id/chapa/initialize',
-  authenticate,
-
-  [
-    param('id').isUUID(),
-  ],
-
-  validate,
-
-  async (req, res) => {
-    const payment =
-      await prisma.payment.findUnique({
-        where: {
-          id: req.params.id,
-        },
-      });
-
-    if (!payment) {
-      return res.status(404).json({
-        error:
-          'Payment not found',
-      });
-    }
-
-    if (
-      payment.createdById !==
-        req.user.id &&
-      !isAdmin(req.user)
-    ) {
-      return res.status(403).json({
-        error:
-          'Not authorized',
-      });
-    }
-
-    if (
-      payment.status !==
-      'PENDING'
-    ) {
-      return res.status(409).json({
-        error:
-          `Payment is already ${payment.status}`,
-      });
-    }
-
-
-    const appUrl =
-      (
-        process.env.APP_BASE_URL ||
-        ''
-      ).replace(/\/$/, '');
-
-    const apiUrl =
-      (
-        process.env.API_BASE_URL ||
-        ''
-      ).replace(/\/$/, '');
-
-
-    if (!appUrl || !apiUrl) {
-      return res.status(500).json({
-        error:
-          'APP_BASE_URL and API_BASE_URL must be configured to use Chapa checkout',
-      });
-    }
-
-
-    try {
-      const {
-        checkoutUrl,
-      } =
-        await chapa.initializeTransaction({
-          txRef:
-            payment.id,
-
-          amount:
-            payment.amount,
-
-          email:
-            req.user.email,
-
-          firstName:
-            (
-              req.user.name ||
-              'MarketBridge'
-            ).split(' ')[0],
-
-          lastName:
-            (
-              req.user.name ||
-              ''
-            )
-              .split(' ')
-              .slice(1)
-              .join(' ') ||
-            'User',
-
-          phoneNumber:
-            req.user.phone ||
-            undefined,
-
-          callbackUrl:
-            `${apiUrl}/api/payments/webhooks/chapa`,
-
-          returnUrl:
-            `${appUrl}/payments/${payment.id}/return`,
-
-          title:
-            payment.type,
-
-          description:
-            `MarketBridge ${payment.type} payment`,
-        });
-
-
-      await prisma.payment.update({
-        where: {
-          id: payment.id,
-        },
-
-        data: {
-          provider:
-            'chapa',
-        },
-      });
-
-
-      return res.json({
-        checkoutUrl,
-      });
-
-    } catch (error) {
-      console.error(
-        'CHAPA INITIALIZE ERROR:',
-        error.chapaResponse ||
-          error.message
-      );
-
-      return res.status(
-        error.status || 500
-      ).json({
-        error:
-          'Could not start Chapa checkout',
-
-        details:
-          error.message,
-      });
-    }
-  }
-);
-
-
-// ============================================================================
-// CHAPA VERIFY
+// FIND AVAILABLE TRUCKS
 // ============================================================================
 
 router.get(
-  '/:id/chapa/verify',
+  '/match',
   authenticate,
-
-  [
-    param('id').isUUID(),
-  ],
-
-  validate,
-
   async (req, res) => {
-    const payment =
-      await prisma.payment.findUnique({
-        where: {
-          id: req.params.id,
-        },
-      });
-
-    if (!payment) {
-      return res.status(404).json({
-        error:
-          'Payment not found',
-      });
-    }
-
-    if (
-      payment.createdById !==
-        req.user.id &&
-      !isAdmin(req.user)
-    ) {
-      return res.status(403).json({
-        error:
-          'Not authorized',
-      });
-    }
-
-
-    if (
-      payment.status ===
-      'PAID'
-    ) {
-      return res.json({
-        status:
-          'PAID',
-
-        payment,
-      });
-    }
-
-
     try {
-      const {
-        status,
-        raw,
-      } =
-        await chapa.verifyTransaction(
-          payment.id
+      const area =
+        normalizeString(
+          req.query.area
+        );
+
+      const truckType =
+        normalizeString(
+          req.query.truckType
         );
 
 
-      if (
-        status ===
-        'success'
-      ) {
-        const updated =
-          await prisma.$transaction(
-            (tx) =>
-              markPaymentPaid(
-                tx,
-                payment.id,
-                {
-                  provider:
-                    'chapa',
+      let capacity;
 
-                  providerTransactionId:
-                    raw?.data
-                      ?.reference ||
-                    raw?.data
-                      ?.tx_ref,
-                }
-              )
+
+      if (
+        req.query.minCapacity !==
+          undefined &&
+        req.query.minCapacity !==
+          ''
+      ) {
+        capacity =
+          positiveNumber(
+            req.query.minCapacity
           );
 
-
-        return res.json({
-          status:
-            'PAID',
-
-          payment:
-            updated,
-        });
+        if (!capacity) {
+          return res.status(400).json({
+            error:
+              'minCapacity must be a positive number',
+          });
+        }
       }
 
 
+      const trucks =
+        await prisma.truck.findMany({
+          where: {
+            availability:
+              'AVAILABLE',
+
+            ...(area
+              ? {
+                  operatingArea: {
+                    contains:
+                      area,
+
+                    mode:
+                      'insensitive',
+                  },
+                }
+              : {}),
+
+            ...(truckType
+              ? {
+                  truckType: {
+                    contains:
+                      truckType,
+
+                    mode:
+                      'insensitive',
+                  },
+                }
+              : {}),
+
+            ...(capacity
+              ? {
+                  capacity: {
+                    gte:
+                      capacity,
+                  },
+                }
+              : {}),
+          },
+
+          include: {
+            owner: {
+              select: {
+                id: true,
+                name: true,
+                phone: true,
+                rating: true,
+                verificationStatus:
+                  true,
+              },
+            },
+          },
+
+          orderBy: [
+            {
+              rating:
+                'desc',
+            },
+
+            {
+              createdAt:
+                'desc',
+            },
+          ],
+        });
+
+
       return res.json({
-        status:
-          status === 'failed'
-            ? 'FAILED'
-            : 'PENDING',
+        trucks,
 
-        payment,
-
-        chapaStatus:
-          status,
+        count:
+          trucks.length,
       });
 
     } catch (error) {
       console.error(
-        'CHAPA VERIFY ERROR:',
-        error.chapaResponse ||
-          error.message
-      );
-
-      return res.status(
-        error.status || 500
-      ).json({
-        error:
-          'Could not verify Chapa transaction',
-
-        details:
-          error.message,
-      });
-    }
-  }
-);
-
-
-// ============================================================================
-// CHAPA WEBHOOK
-// ============================================================================
-
-router.post(
-  '/webhooks/chapa',
-  async (req, res) => {
-    const signature =
-      req.headers[
-        'chapa-signature'
-      ] ||
-      req.headers[
-        'x-chapa-signature'
-      ];
-
-    const rawBody =
-      req.rawBody;
-
-
-    if (
-      !rawBody ||
-      !chapa.verifyWebhookSignature(
-        rawBody,
-        signature
-      )
-    ) {
-      console.error(
-        'CHAPA WEBHOOK: invalid signature'
-      );
-
-      return res.status(401).json({
-        error:
-          'Invalid webhook signature',
-      });
-    }
-
-
-    const txRef =
-      req.body?.tx_ref ||
-      req.body?.reference;
-
-    const eventStatus =
-      req.body?.status;
-
-
-    if (!txRef) {
-      return res.status(400).json({
-        error:
-          'Invalid webhook payload — no tx_ref',
-      });
-    }
-
-
-    try {
-      if (
-        eventStatus ===
-          'success' ||
-        eventStatus ===
-          'successful'
-      ) {
-        const updated =
-          await prisma.$transaction(
-            (tx) =>
-              markPaymentPaid(
-                tx,
-                txRef,
-                {
-                  provider:
-                    'chapa',
-
-                  providerTransactionId:
-                    req.body
-                      ?.reference,
-                }
-              )
-          );
-
-
-        return res.json({
-          ok: true,
-
-          payment:
-            updated,
-        });
-      }
-
-
-      return res.json({
-        ok: true,
-
-        ignored: true,
-
-        eventStatus,
-      });
-
-    } catch (error) {
-      console.error(
-        'CHAPA WEBHOOK PROCESSING ERROR:',
+        'TRUCK MATCH ERROR:',
         error
       );
 
-      return res.status(
-        error.status || 500
-      ).json({
+      return res.status(500).json({
         error:
-          error.status
-            ? error.message
-            : 'Chapa webhook processing failed',
+          'Could not find available trucks',
       });
     }
   }
@@ -1341,73 +740,661 @@ router.post(
 
 
 // ============================================================================
-// GENERIC WEBHOOK
+// MY TRUCKS
+// ============================================================================
+
+router.get(
+  '/trucks/mine',
+  authenticate,
+  requireRole('TRUCK_OWNER'),
+
+  async (req, res) => {
+    try {
+      const trucks =
+        await prisma.truck.findMany({
+          where: {
+            ownerId:
+              req.user.id,
+          },
+
+          orderBy: {
+            createdAt:
+              'desc',
+          },
+        });
+
+
+      const stats = {
+        total:
+          trucks.length,
+
+        available:
+          trucks.filter(
+            (truck) =>
+              truck.availability ===
+              'AVAILABLE'
+          ).length,
+
+        busy:
+          trucks.filter(
+            (truck) =>
+              truck.availability ===
+              'BUSY'
+          ).length,
+
+        offline:
+          trucks.filter(
+            (truck) =>
+              truck.availability ===
+              'OFFLINE'
+          ).length,
+      };
+
+
+      return res.json({
+        trucks,
+
+        count:
+          trucks.length,
+
+        stats,
+      });
+
+    } catch (error) {
+      console.error(
+        'MY TRUCKS ERROR:',
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          'Could not load your trucks',
+      });
+    }
+  }
+);
+
+
+// ============================================================================
+// MY TRANSPORT JOBS
+// ============================================================================
+
+router.get(
+  '/mine',
+  authenticate,
+  requireRole('TRUCK_OWNER'),
+
+  async (req, res) => {
+    try {
+      const jobs =
+        await prisma.transportJob.findMany({
+          where: {
+            truckOwnerId:
+              req.user.id,
+          },
+
+          include: {
+            truck:
+              true,
+
+            order: {
+              include: {
+                listing:
+                  true,
+
+                buyer: {
+                  select: {
+                    id: true,
+                    name: true,
+                    phone: true,
+                  },
+                },
+
+                seller: {
+                  select: {
+                    id: true,
+                    name: true,
+                    phone: true,
+                  },
+                },
+              },
+            },
+          },
+
+          orderBy: {
+            createdAt:
+              'desc',
+          },
+        });
+
+
+      return res.json({
+        jobs,
+
+        count:
+          jobs.length,
+      });
+
+    } catch (error) {
+      console.error(
+        'MY TRANSPORT JOBS ERROR:',
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          'Could not load your transport jobs',
+      });
+    }
+  }
+);
+
+
+// ============================================================================
+// OPEN TRANSPORT REQUESTS
+// ============================================================================
+
+router.get(
+  '/open',
+  authenticate,
+  requireRole('TRUCK_OWNER'),
+
+  async (req, res) => {
+    try {
+      const jobs =
+        await prisma.transportJob.findMany({
+          where: {
+            method:
+              'HIRE_TRANSPORTER',
+
+            truckOwnerId:
+              null,
+
+            status: {
+              in: [
+                'REQUESTED',
+                'QUOTED',
+              ],
+            },
+          },
+
+          include: {
+            order: {
+              include: {
+                listing:
+                  true,
+
+                buyer: {
+                  select: {
+                    id: true,
+                    name: true,
+                    phone: true,
+                  },
+                },
+
+                seller: {
+                  select: {
+                    id: true,
+                    name: true,
+                    phone: true,
+                  },
+                },
+              },
+            },
+          },
+
+          orderBy: {
+            createdAt:
+              'desc',
+          },
+        });
+
+
+      return res.json({
+        jobs,
+
+        count:
+          jobs.length,
+      });
+
+    } catch (error) {
+      console.error(
+        'OPEN TRANSPORT JOBS ERROR:',
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          'Could not load open transport jobs',
+      });
+    }
+  }
+);
+
+
+// ============================================================================
+// CREATE TRANSPORT QUOTE
 // ============================================================================
 
 router.post(
-  '/webhooks/generic',
-  express.json({
-    limit: '100kb',
-  }),
+  '/:id/quotes',
+  authenticate,
+  requireRole('TRUCK_OWNER'),
+
+  [
+    body('truckId')
+      .trim()
+      .notEmpty()
+      .withMessage(
+        'truckId is required'
+      ),
+
+    body('amount')
+      .isFloat({
+        gt: 0,
+      })
+      .withMessage(
+        'amount must be greater than zero'
+      ),
+
+    body('message')
+      .optional()
+      .isString()
+      .trim(),
+  ],
 
   async (req, res) => {
-    if (!verifySignature(req)) {
-      return res.status(401).json({
-        error:
-          'Invalid webhook signature',
-      });
-    }
-
-
-    const {
-      paymentId,
-      status,
-      reference,
-      provider,
-      providerTransactionId,
-    } = req.body;
-
-
-    if (
-      !paymentId ||
-      ![
-        'PAID',
-        'FAILED',
-        'REFUNDED',
-      ].includes(status)
-    ) {
-      return res.status(400).json({
-        error:
-          'Invalid webhook payload',
-      });
-    }
-
-
     try {
+      const errors =
+        validationResult(req);
+
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          error:
+            'Validation failed',
+
+          errors:
+            errors.array(),
+        });
+      }
+
+
+      const job =
+        await prisma.transportJob.findUnique({
+          where: {
+            id:
+              req.params.id,
+          },
+        });
+
+
+      if (!job) {
+        return res.status(404).json({
+          error:
+            'Transport job not found',
+        });
+      }
+
+
       if (
-        status ===
-        'PAID'
+        job.method !==
+          'HIRE_TRANSPORTER' ||
+        ![
+          'REQUESTED',
+          'QUOTED',
+        ].includes(job.status) ||
+        job.truckOwnerId
       ) {
-        const updated =
-          await prisma.$transaction(
-            (tx) =>
-              markPaymentPaid(
-                tx,
-                paymentId,
-                {
-                  reference,
-                  provider,
-                  providerTransactionId,
-                }
-              )
-          );
+        return res.status(400).json({
+          error:
+            'This transport job is not open for quotes',
+        });
+      }
 
 
-        return res.json({
-          ok: true,
+      const truck =
+        await prisma.truck.findUnique({
+          where: {
+            id:
+              req.body.truckId,
+          },
+        });
 
-          payment:
-            updated,
+
+      if (!truck) {
+        return res.status(404).json({
+          error:
+            'Truck not found',
+        });
+      }
+
+
+      if (
+        truck.ownerId !==
+        req.user.id
+      ) {
+        return res.status(403).json({
+          error:
+            'You can only quote with your own truck',
+        });
+      }
+
+
+      if (
+        truck.availability !==
+        'AVAILABLE'
+      ) {
+        return res.status(400).json({
+          error:
+            `Selected truck is currently ${truck.availability}`,
+        });
+      }
+
+
+      if (
+        job.requiredCapacity &&
+        truck.capacity <
+          job.requiredCapacity
+      ) {
+        return res.status(400).json({
+          error:
+            'Selected truck does not meet required capacity',
+        });
+      }
+
+
+      const quote =
+        await prisma.transportQuote.create({
+          data: {
+            transportJobId:
+              job.id,
+
+            truckOwnerId:
+              req.user.id,
+
+            truckId:
+              truck.id,
+
+            amount:
+              Number(
+                req.body.amount
+              ),
+
+            message:
+              req.body.message
+                ?.trim() ||
+              null,
+          },
+        });
+
+
+      await prisma.transportJob.update({
+        where: {
+          id:
+            job.id,
+        },
+
+        data: {
+          status:
+            'QUOTED',
+        },
+      });
+
+
+      return res.status(201).json({
+        message:
+          'Transport quote submitted',
+
+        quote,
+      });
+
+    } catch (error) {
+      console.error(
+        'CREATE TRANSPORT QUOTE ERROR:',
+        error
+      );
+
+      if (
+        error.code ===
+        'P2002'
+      ) {
+        return res.status(409).json({
+          error:
+            'You already submitted this truck quote for this request',
+        });
+      }
+
+      return res.status(500).json({
+        error:
+          'Could not submit transport quote',
+      });
+    }
+  }
+);
+
+
+// ============================================================================
+// GET TRANSPORT QUOTES
+// ============================================================================
+
+router.get(
+  '/:id/quotes',
+  authenticate,
+
+  async (req, res) => {
+    try {
+      const job =
+        await prisma.transportJob.findUnique({
+          where: {
+            id:
+              req.params.id,
+          },
+
+          include: {
+            order:
+              true,
+          },
+        });
+
+
+      if (!job) {
+        return res.status(404).json({
+          error:
+            'Transport job not found',
+        });
+      }
+
+
+      const allowed =
+        req.user.roles?.includes(
+          'ADMIN'
+        ) ||
+        job.order.buyerId ===
+          req.user.id ||
+        job.order.sellerId ===
+          req.user.id ||
+        job.truckOwnerId ===
+          req.user.id;
+
+
+      if (!allowed) {
+        return res.status(403).json({
+          error:
+            'Not authorized to view transport quotes',
+        });
+      }
+
+
+      const quotes =
+        await prisma.transportQuote.findMany({
+          where: {
+            transportJobId:
+              job.id,
+          },
+
+          include: {
+            truckOwner: {
+              select: {
+                id: true,
+                name: true,
+                phone: true,
+                rating: true,
+                verificationStatus:
+                  true,
+              },
+            },
+
+            truck:
+              true,
+          },
+
+          orderBy: {
+            amount:
+              'asc',
+          },
+        });
+
+
+      return res.json({
+        quotes,
+
+        count:
+          quotes.length,
+      });
+
+    } catch (error) {
+      console.error(
+        'GET TRANSPORT QUOTES ERROR:',
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          'Could not load transport quotes',
+      });
+    }
+  }
+);
+
+
+// ============================================================================
+// ACCEPT TRANSPORT QUOTE
+// ============================================================================
+
+router.patch(
+  '/quotes/:quoteId/accept',
+  authenticate,
+
+  async (req, res) => {
+    try {
+      const quote =
+        await prisma.transportQuote.findUnique({
+          where: {
+            id:
+              req.params.quoteId,
+          },
+
+          include: {
+            transportJob: {
+              include: {
+                order:
+                  true,
+              },
+            },
+          },
+        });
+
+
+      if (!quote) {
+        return res.status(404).json({
+          error:
+            'Transport quote not found',
+        });
+      }
+
+
+      const job =
+        quote.transportJob;
+
+      const order =
+        job.order;
+
+
+      if (
+        order.buyerId !==
+          req.user.id &&
+        order.sellerId !==
+          req.user.id
+      ) {
+        return res.status(403).json({
+          error:
+            'Only the buyer or seller on the order can accept a transport quote',
+        });
+      }
+
+
+      if (
+        order.arrangingParty &&
+        (
+          (
+            order.arrangingParty ===
+              'BUYER' &&
+            order.buyerId !==
+              req.user.id
+          ) ||
+          (
+            order.arrangingParty ===
+              'SELLER' &&
+            order.sellerId !==
+              req.user.id
+          )
+        )
+      ) {
+        return res.status(403).json({
+          error:
+            'Only the party who arranged transport can accept the quote',
+        });
+      }
+
+
+      if (
+        quote.status !==
+        'PENDING'
+      ) {
+        return res.status(400).json({
+          error:
+            `Quote is already ${quote.status}`,
+        });
+      }
+
+
+      if (
+        job.status !==
+          'REQUESTED' &&
+        job.status !==
+          'QUOTED'
+      ) {
+        return res.status(400).json({
+          error:
+            `Transport job is ${job.status} and cannot accept quotes`,
+        });
+      }
+
+
+      // ======================================================================
+      // PAYMENT GATE
+      // ======================================================================
+
+      const marketplacePaid =
+        await getPaidMarketplacePayment(
+          order.id
+        );
+
+
+      if (!marketplacePaid) {
+        return res.status(402).json({
+          error:
+            'Marketplace payment must be PAID before accepting a transport quote',
         });
       }
 
@@ -1415,105 +1402,688 @@ router.post(
       const result =
         await prisma.$transaction(
           async (tx) => {
-            const payment =
-              await tx.payment.findUnique({
-                where: {
-                  id: paymentId,
-                },
-
-                include: {
-                  digitalPurchase:
-                    true,
-                },
-              });
+            // Recheck marketplace payment in transaction.
+            const paid =
+              await getPaidMarketplacePayment(
+                order.id,
+                tx
+              );
 
 
-            if (!payment) {
+            if (!paid) {
               throw Object.assign(
                 new Error(
-                  'Payment not found'
+                  'Marketplace payment must be PAID before accepting a transport quote'
                 ),
-                { status: 404 }
+                {
+                  status:
+                    402,
+                }
               );
             }
 
 
-            if (
-              payment.status ===
-                'REFUNDED' &&
-              status !==
-                'REFUNDED'
-            ) {
-              throw Object.assign(
-                new Error(
-                  'Refunded payment cannot be reopened'
-                ),
-                { status: 409 }
-              );
-            }
-
-
-            const updated =
-              await tx.payment.update({
+            const currentTruck =
+              await tx.truck.findUnique({
                 where: {
                   id:
-                    payment.id,
-                },
-
-                data: {
-                  status,
-
-                  reference:
-                    reference ||
-                    payment.reference,
-
-                  provider:
-                    provider ||
-                    payment.provider,
-
-                  providerTransactionId:
-                    providerTransactionId ||
-                    payment.providerTransactionId,
+                    quote.truckId,
                 },
               });
 
 
             if (
-              status ===
-                'REFUNDED' &&
-              payment.digitalPurchase
+              !currentTruck ||
+              currentTruck.availability !==
+                'AVAILABLE'
             ) {
-              await tx.digitalPurchase.update({
+              throw new Error(
+                'Selected truck is no longer available'
+              );
+            }
+
+
+            const accepted =
+              await tx.transportQuote.update({
                 where: {
                   id:
-                    payment
-                      .digitalPurchase
-                      .id,
+                    quote.id,
                 },
 
                 data: {
                   status:
-                    'REFUNDED',
+                    'ACCEPTED',
                 },
               });
-            }
 
 
-            return updated;
+            await tx.transportQuote.updateMany({
+              where: {
+                transportJobId:
+                  quote.transportJobId,
+
+                id: {
+                  not:
+                    quote.id,
+                },
+
+                status:
+                  'PENDING',
+              },
+
+              data: {
+                status:
+                  'REJECTED',
+              },
+            });
+
+
+            const updatedJob =
+              await tx.transportJob.update({
+                where: {
+                  id:
+                    quote.transportJobId,
+                },
+
+                data: {
+                  truckOwnerId:
+                    quote.truckOwnerId,
+
+                  truckId:
+                    quote.truckId,
+
+                  status:
+                    'ACCEPTED',
+
+                  agreedAmount:
+                    quote.amount,
+                },
+              });
+
+
+            await tx.truck.update({
+              where: {
+                id:
+                  quote.truckId,
+              },
+
+              data: {
+                availability:
+                  'BUSY',
+              },
+            });
+
+
+            await tx.order.update({
+              where: {
+                id:
+                  order.id,
+              },
+
+              data: {
+                status:
+                  'TRANSPORT_ARRANGED',
+              },
+            });
+
+
+            return {
+              accepted,
+
+              job:
+                updatedJob,
+            };
           }
         );
 
 
       return res.json({
-        ok: true,
+        message:
+          'Transport quote accepted',
 
-        payment:
-          result,
+        quote:
+          result.accepted,
+
+        transportJob:
+          result.job,
+
+        commissionGenerated:
+          true,
       });
 
     } catch (error) {
       console.error(
-        'GENERIC WEBHOOK ERROR:',
+        'ACCEPT TRANSPORT QUOTE ERROR:',
+        error
+      );
+
+      return res.status(
+        error.status || 400
+      ).json({
+        error:
+          error.status
+            ? error.message
+            : (
+                error.message ===
+                'Selected truck is no longer available'
+                  ? error.message
+                  : 'Could not accept transport quote'
+              ),
+      });
+    }
+  }
+);
+
+
+// ============================================================================
+// UPDATE TRANSPORT STATUS
+// ============================================================================
+//
+// REQUESTED
+//    ↓
+// ACCEPTED
+//    ↓
+// PICKUP
+//    ↓
+// IN_TRANSIT
+//    ↓
+// DELIVERED
+//    ↓
+// BUYER CONFIRMS RECEIPT
+//    ↓
+// COMPLETED
+//
+// PAYMENT REQUIREMENTS:
+//
+// MARKETPLACE:
+//   Must be PAID before physical transport begins.
+//
+// HIRE_TRANSPORTER:
+//   TRANSPORT payment must also be PAID and match agreedAmount.
+//
+// OWN_TRUCK:
+//   No separate transport payment.
+//
+// ============================================================================
+
+router.patch(
+  '/:id/status',
+  authenticate,
+
+  [
+    body('status')
+      .isIn([
+        'PICKUP',
+        'IN_TRANSIT',
+        'DELIVERED',
+        'CANCELLED',
+      ])
+      .withMessage(
+        'Invalid transport status'
+      ),
+  ],
+
+  async (req, res) => {
+    try {
+      const errors =
+        validationResult(req);
+
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          error:
+            'Validation failed',
+
+          errors:
+            errors.array(),
+        });
+      }
+
+
+      const {
+        status,
+        incidentNotes,
+      } = req.body;
+
+
+      const job =
+        await prisma.transportJob.findUnique({
+          where: {
+            id:
+              req.params.id,
+          },
+
+          include: {
+            order:
+              true,
+
+            truck:
+              true,
+          },
+        });
+
+
+      if (!job) {
+        return res.status(404).json({
+          error:
+            'Transport job not found',
+        });
+      }
+
+
+      const buyer =
+        job.order.buyerId ===
+        req.user.id;
+
+      const seller =
+        job.order.sellerId ===
+        req.user.id;
+
+      const truckOwner =
+        job.truckOwnerId ===
+        req.user.id;
+
+
+      if (
+        !buyer &&
+        !seller &&
+        !truckOwner
+      ) {
+        return res.status(403).json({
+          error:
+            'You are not authorized to update this transport job',
+        });
+      }
+
+
+      // ======================================================================
+      // STATUS TRANSITIONS
+      // ======================================================================
+
+      const allowedTransitions = {
+        REQUESTED: [
+          'CANCELLED',
+        ],
+
+        QUOTED: [
+          'CANCELLED',
+        ],
+
+        ACCEPTED: [
+          'PICKUP',
+          'CANCELLED',
+        ],
+
+        PICKUP: [
+          'IN_TRANSIT',
+          'CANCELLED',
+        ],
+
+        IN_TRANSIT: [
+          'DELIVERED',
+          'CANCELLED',
+        ],
+
+        DELIVERED: [],
+
+        CANCELLED: [],
+      };
+
+
+      if (
+        !allowedTransitions[
+          job.status
+        ] ||
+        !allowedTransitions[
+          job.status
+        ].includes(status)
+      ) {
+        return res.status(400).json({
+          error:
+            `Cannot change transport status from ${job.status} to ${status}`,
+        });
+      }
+
+
+      // ======================================================================
+      // PHYSICAL STATUS AUTHORIZATION
+      // ======================================================================
+
+      if (
+        [
+          'PICKUP',
+          'IN_TRANSIT',
+          'DELIVERED',
+        ].includes(status) &&
+        !truckOwner
+      ) {
+        return res.status(403).json({
+          error:
+            `Only the truck owner can mark a transport job as ${status}`,
+        });
+      }
+
+
+      // ======================================================================
+      // PAYMENT GATES
+      // ======================================================================
+      //
+      // CANCELLED does not require payment.
+      //
+      // PICKUP / IN_TRANSIT / DELIVERED do.
+      //
+      // ======================================================================
+
+      if (
+        [
+          'PICKUP',
+          'IN_TRANSIT',
+          'DELIVERED',
+        ].includes(status)
+      ) {
+        const marketplacePaid =
+          await getPaidMarketplacePayment(
+            job.orderId
+          );
+
+
+        if (!marketplacePaid) {
+          return res.status(402).json({
+            error:
+              'Marketplace payment must be PAID before transport can proceed',
+          });
+        }
+
+
+        if (
+          job.method ===
+          'HIRE_TRANSPORTER'
+        ) {
+          if (
+            !job.truckOwnerId ||
+            !job.truckId ||
+            job.agreedAmount ==
+              null
+          ) {
+            return res.status(400).json({
+              error:
+                'Transport quote must be accepted before transport can proceed',
+            });
+          }
+
+
+          const transportPayment =
+            await getPaidTransportPayment(
+              job.orderId
+            );
+
+
+          if (!transportPayment) {
+            return res.status(402).json({
+              error:
+                'Transport payment must be PAID before the transporter can proceed',
+            });
+          }
+
+
+          if (
+            !moneyEqual(
+              transportPayment.amount,
+              job.agreedAmount
+            )
+          ) {
+            return res.status(409).json({
+              error:
+                'Transport payment amount does not match the accepted transport fee',
+            });
+          }
+        }
+      }
+
+
+      // ======================================================================
+      // TRANSACTION
+      // ======================================================================
+
+      const updated =
+        await prisma.$transaction(
+          async (tx) => {
+            // Recheck payment immediately before physical state transition.
+            if (
+              [
+                'PICKUP',
+                'IN_TRANSIT',
+                'DELIVERED',
+              ].includes(status)
+            ) {
+              const marketplacePaidTx =
+                await getPaidMarketplacePayment(
+                  job.orderId,
+                  tx
+                );
+
+
+              if (!marketplacePaidTx) {
+                throw Object.assign(
+                  new Error(
+                    'Marketplace payment must be PAID before transport can proceed'
+                  ),
+                  {
+                    status:
+                      402,
+                  }
+                );
+              }
+
+
+              if (
+                job.method ===
+                'HIRE_TRANSPORTER'
+              ) {
+                if (
+                  !job.truckOwnerId ||
+                  !job.truckId ||
+                  job.agreedAmount ==
+                    null
+                ) {
+                  throw Object.assign(
+                    new Error(
+                      'Transport quote must be accepted before transport can proceed'
+                    ),
+                    {
+                      status:
+                        400,
+                    }
+                  );
+                }
+
+
+                const transportPaymentTx =
+                  await getPaidTransportPayment(
+                    job.orderId,
+                    tx
+                  );
+
+
+                if (
+                  !transportPaymentTx
+                ) {
+                  throw Object.assign(
+                    new Error(
+                      'Transport payment must be PAID before the transporter can proceed'
+                    ),
+                    {
+                      status:
+                        402,
+                    }
+                  );
+                }
+
+
+                if (
+                  !moneyEqual(
+                    transportPaymentTx.amount,
+                    job.agreedAmount
+                  )
+                ) {
+                  throw Object.assign(
+                    new Error(
+                      'Transport payment amount does not match the accepted transport fee'
+                    ),
+                    {
+                      status:
+                        409,
+                    }
+                  );
+                }
+              }
+            }
+
+
+            const data = {
+              status,
+            };
+
+
+            const notes =
+              normalizeString(
+                incidentNotes
+              );
+
+
+            if (notes) {
+              data.incidentNotes =
+                notes;
+            }
+
+
+            if (
+              status ===
+              'PICKUP'
+            ) {
+              data.pickupConfirmedAt =
+                new Date();
+            }
+
+
+            if (
+              status ===
+              'DELIVERED'
+            ) {
+              data.deliveredConfirmedAt =
+                new Date();
+            }
+
+
+            const updatedJob =
+              await tx.transportJob.update({
+                where: {
+                  id:
+                    job.id,
+                },
+
+                data,
+              });
+
+
+            // ================================================================
+            // ORDER STATUS
+            // ================================================================
+
+            if (
+              status ===
+              'IN_TRANSIT'
+            ) {
+              await tx.order.update({
+                where: {
+                  id:
+                    job.orderId,
+                },
+
+                data: {
+                  status:
+                    'IN_TRANSIT',
+                },
+              });
+            }
+
+
+            if (
+              status ===
+              'DELIVERED'
+            ) {
+              await tx.order.update({
+                where: {
+                  id:
+                    job.orderId,
+                },
+
+                data: {
+                  status:
+                    'DELIVERED',
+                },
+              });
+            }
+
+
+            if (
+              status ===
+              'CANCELLED'
+            ) {
+              await tx.order.update({
+                where: {
+                  id:
+                    job.orderId,
+                },
+
+                data: {
+                  status:
+                    'CONFIRMED',
+                },
+              });
+            }
+
+
+            // ================================================================
+            // RELEASE TRUCK
+            // ================================================================
+
+            if (
+              job.truckId &&
+              [
+                'DELIVERED',
+                'CANCELLED',
+              ].includes(status)
+            ) {
+              await tx.truck.update({
+                where: {
+                  id:
+                    job.truckId,
+                },
+
+                data: {
+                  availability:
+                    'AVAILABLE',
+                },
+              });
+            }
+
+
+            return updatedJob;
+          }
+        );
+
+
+      return res.json({
+        message:
+          'Transport status updated successfully',
+
+        transportJob:
+          updated,
+      });
+
+    } catch (error) {
+      console.error(
+        'TRANSPORT STATUS ERROR:',
         error
       );
 
@@ -1523,7 +2093,13 @@ router.post(
         error:
           error.status
             ? error.message
-            : 'Webhook processing failed',
+            : 'Could not update transport status',
+
+        details:
+          process.env.NODE_ENV ===
+          'development'
+            ? error.message
+            : undefined,
       });
     }
   }
@@ -1531,404 +2107,583 @@ router.post(
 
 
 // ============================================================================
-// ADMIN — PAYMENT QUEUE
+// REGISTER TRUCK
 // ============================================================================
 
-router.get(
-  '/',
+router.post(
+  '/trucks',
   authenticate,
+  requireRole('TRUCK_OWNER'),
+
+  [
+    body('registration')
+      .trim()
+      .notEmpty()
+      .withMessage(
+        'Registration is required'
+      ),
+
+    body('truckType')
+      .trim()
+      .notEmpty()
+      .withMessage(
+        'Truck type is required'
+      ),
+
+    body('capacity')
+      .isFloat({
+        gt: 0,
+      })
+      .withMessage(
+        'Capacity must be greater than zero'
+      ),
+
+    body('operatingArea')
+      .optional({
+        values: 'falsy',
+      })
+      .trim(),
+  ],
+
   async (req, res) => {
-    if (!isAdmin(req.user)) {
-      return res.status(403).json({
+    try {
+      const errors =
+        validationResult(req);
+
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          error:
+            'Validation failed',
+
+          errors:
+            errors.array(),
+        });
+      }
+
+
+      const registration =
+        normalizeRegistration(
+          req.body.registration
+        );
+
+      const truckType =
+        normalizeString(
+          req.body.truckType
+        );
+
+      const operatingArea =
+        normalizeString(
+          req.body.operatingArea
+        );
+
+      const capacity =
+        Number(
+          req.body.capacity
+        );
+
+
+      if (
+        !Number.isFinite(
+          capacity
+        ) ||
+        capacity <= 0
+      ) {
+        return res.status(400).json({
+          error:
+            'Capacity must be greater than zero',
+        });
+      }
+
+
+      const existing =
+        await prisma.truck.findFirst({
+          where: {
+            registration: {
+              equals:
+                registration,
+
+              mode:
+                'insensitive',
+            },
+          },
+        });
+
+
+      if (existing) {
+        return res.status(409).json({
+          error:
+            'A truck with this registration is already registered',
+        });
+      }
+
+
+      const truck =
+        await prisma.truck.create({
+          data: {
+            ownerId:
+              req.user.id,
+
+            registration,
+
+            truckType,
+
+            capacity,
+
+            operatingArea,
+
+            availability:
+              'AVAILABLE',
+          },
+        });
+
+
+      const trucks =
+        await prisma.truck.findMany({
+          where: {
+            ownerId:
+              req.user.id,
+          },
+        });
+
+
+      const stats = {
+        total:
+          trucks.length,
+
+        available:
+          trucks.filter(
+            (t) =>
+              t.availability ===
+              'AVAILABLE'
+          ).length,
+
+        busy:
+          trucks.filter(
+            (t) =>
+              t.availability ===
+              'BUSY'
+          ).length,
+
+        offline:
+          trucks.filter(
+            (t) =>
+              t.availability ===
+              'OFFLINE'
+          ).length,
+      };
+
+
+      return res.status(201).json({
+        message:
+          'Truck registered successfully',
+
+        truck,
+
+        count:
+          trucks.length,
+
+        stats,
+      });
+
+    } catch (error) {
+      console.error(
+        'REGISTER TRUCK ERROR:',
+        error
+      );
+
+      return res.status(500).json({
         error:
-          'Only an administrator can view all payments',
+          'Could not register truck',
+
+        details:
+          process.env.NODE_ENV ===
+          'development'
+            ? error.message
+            : undefined,
       });
     }
-
-
-    const { status } =
-      req.query;
-
-
-    const payments =
-      await prisma.payment.findMany({
-        where: {
-          ...(status && {
-            status,
-          }),
-        },
-
-        include: {
-          createdBy: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-
-          order: {
-            select: {
-              id: true,
-              finalPrice: true,
-            },
-          },
-
-          digitalProduct: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
-
-          advertisement: {
-            select: {
-              id: true,
-              type: true,
-            },
-          },
-
-          inspectionRequest: {
-            select: {
-              id: true,
-              fee: true,
-            },
-          },
-        },
-
-        orderBy: {
-          createdAt:
-            'desc',
-        },
-      });
-
-
-    return res.json({
-      payments,
-
-      count:
-        payments.length,
-    });
   }
 );
 
 
 // ============================================================================
-// COMMISSION SUMMARY
-// ============================================================================
-
-router.get(
-  '/commissions/summary',
-  authenticate,
-  async (req, res) => {
-    if (!isAdmin(req.user)) {
-      return res.status(403).json({
-        error:
-          'Only an administrator can view commission records',
-      });
-    }
-
-
-    const paid =
-      await prisma.payment.findMany({
-        where: {
-          status:
-            'PAID',
-        },
-
-        select: {
-          type: true,
-          amount: true,
-          commissionAmount:
-            true,
-        },
-      });
-
-
-    const byType = {};
-
-    let totalCommission =
-      0;
-
-    let totalVolume =
-      0;
-
-
-    for (const payment of paid) {
-      const type =
-        byType[payment.type] ||
-        {
-          volume: 0,
-          commission: 0,
-          count: 0,
-        };
-
-
-      type.volume +=
-        Number(
-          payment.amount
-        );
-
-      type.commission +=
-        Number(
-          payment.commissionAmount ||
-            0
-        );
-
-      type.count +=
-        1;
-
-
-      byType[payment.type] =
-        type;
-
-
-      totalVolume +=
-        Number(
-          payment.amount
-        );
-
-      totalCommission +=
-        Number(
-          payment.commissionAmount ||
-            0
-        );
-    }
-
-
-    return res.json({
-      totalVolume,
-
-      totalCommission,
-
-      byType,
-    });
-  }
-);
-
-
-// ============================================================================
-// ADMIN MANUAL CONFIRMATION
+// UPDATE TRUCK AVAILABILITY
 // ============================================================================
 
 router.patch(
-  '/:id/confirm',
+  '/trucks/:id/availability',
   authenticate,
+  requireRole('TRUCK_OWNER'),
+
+  [
+    body('availability')
+      .isIn([
+        'AVAILABLE',
+        'BUSY',
+        'OFFLINE',
+      ])
+      .withMessage(
+        'Invalid truck availability'
+      ),
+  ],
+
   async (req, res) => {
-    if (!isAdmin(req.user)) {
-      return res.status(403).json({
-        error:
-          'Only an administrator can perform manual payment reconciliation',
-      });
-    }
-
-
-    const existing =
-      await prisma.payment.findUnique({
-        where: {
-          id:
-            req.params.id,
-        },
-      });
-
-
-    if (!existing) {
-      return res.status(404).json({
-        error:
-          'Payment not found',
-      });
-    }
-
-
-    if (
-      existing.status !==
-      'PENDING'
-    ) {
-      return res.status(409).json({
-        error:
-          `Payment is already ${existing.status}`,
-      });
-    }
-
-
-    if (existing.provider) {
-      return res.status(409).json({
-        error:
-          `This payment is linked to ${existing.provider} — confirm it through that gateway's verification, not manually`,
-      });
-    }
-
-
     try {
+      const errors =
+        validationResult(req);
+
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          error:
+            'Validation failed',
+
+          errors:
+            errors.array(),
+        });
+      }
+
+
+      const {
+        availability,
+      } = req.body;
+
+
+      const truck =
+        await prisma.truck.findUnique({
+          where: {
+            id:
+              req.params.id,
+          },
+        });
+
+
+      if (!truck) {
+        return res.status(404).json({
+          error:
+            'Truck not found',
+        });
+      }
+
+
+      if (
+        truck.ownerId !==
+        req.user.id
+      ) {
+        return res.status(403).json({
+          error:
+            'You do not own this truck',
+        });
+      }
+
+
+      if (
+        availability ===
+        'AVAILABLE'
+      ) {
+        const activeJob =
+          await prisma.transportJob.findFirst({
+            where: {
+              truckId:
+                truck.id,
+
+              status: {
+                in: [
+                  'REQUESTED',
+                  'QUOTED',
+                  'ACCEPTED',
+                  'PICKUP',
+                  'IN_TRANSIT',
+                ],
+              },
+            },
+          });
+
+
+        if (activeJob) {
+          return res.status(400).json({
+            error:
+              'This truck is assigned to an active transport job and cannot be marked AVAILABLE yet',
+          });
+        }
+      }
+
+
       const updated =
-        await prisma.$transaction(
-          (tx) =>
-            markPaymentPaid(
-              tx,
-              req.params.id
-            )
-        );
+        await prisma.truck.update({
+          where: {
+            id:
+              truck.id,
+          },
+
+          data: {
+            availability,
+          },
+        });
+
+
+      const trucks =
+        await prisma.truck.findMany({
+          where: {
+            ownerId:
+              req.user.id,
+          },
+        });
+
+
+      const stats = {
+        total:
+          trucks.length,
+
+        available:
+          trucks.filter(
+            (t) =>
+              t.availability ===
+              'AVAILABLE'
+          ).length,
+
+        busy:
+          trucks.filter(
+            (t) =>
+              t.availability ===
+              'BUSY'
+          ).length,
+
+        offline:
+          trucks.filter(
+            (t) =>
+              t.availability ===
+              'OFFLINE'
+          ).length,
+      };
 
 
       return res.json({
         message:
-          'Payment manually reconciled.',
+          'Truck availability updated',
 
-        payment:
+        truck:
+          updated,
+
+        stats,
+      });
+
+    } catch (error) {
+      console.error(
+        'TRUCK AVAILABILITY ERROR:',
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          'Could not update truck availability',
+      });
+    }
+  }
+);
+
+
+// ============================================================================
+// DEACTIVATE TRUCK
+// ============================================================================
+
+router.patch(
+  '/trucks/:id/deactivate',
+  authenticate,
+  requireRole('TRUCK_OWNER'),
+
+  async (req, res) => {
+    try {
+      const truck =
+        await prisma.truck.findUnique({
+          where: {
+            id:
+              req.params.id,
+          },
+        });
+
+
+      if (!truck) {
+        return res.status(404).json({
+          error:
+            'Truck not found',
+        });
+      }
+
+
+      if (
+        truck.ownerId !==
+        req.user.id
+      ) {
+        return res.status(403).json({
+          error:
+            'You do not own this truck',
+        });
+      }
+
+
+      if (
+        truck.availability ===
+        'BUSY'
+      ) {
+        return res.status(400).json({
+          error:
+            'A busy truck cannot be deactivated until its active transport job is completed',
+        });
+      }
+
+
+      const updated =
+        await prisma.truck.update({
+          where: {
+            id:
+              truck.id,
+          },
+
+          data: {
+            availability:
+              'OFFLINE',
+          },
+        });
+
+
+      return res.json({
+        message:
+          'Truck deactivated',
+
+        truck:
           updated,
       });
 
     } catch (error) {
-      return res.status(
-        error.status || 500
-      ).json({
-        error:
-          error.status
-            ? error.message
-            : 'Could not reconcile payment',
-      });
-    }
-  }
-);
-
-
-// ============================================================================
-// PAYMENTS FOR ORDER
-// ============================================================================
-
-router.get(
-  '/order/:orderId',
-  authenticate,
-
-  [
-    param('orderId')
-      .isUUID(),
-  ],
-
-  validate,
-
-  async (req, res) => {
-    const order =
-      await prisma.order.findUnique({
-        where: {
-          id:
-            req.params.orderId,
-        },
-      });
-
-
-    if (!order) {
-      return res.status(404).json({
-        error:
-          'Order not found',
-      });
-    }
-
-
-    if (
-      !isOrderParticipant(
-        req.user.id,
-        order
-      ) &&
-      !isAdmin(req.user)
-    ) {
-      return res.status(403).json({
-        error:
-          'Not authorized',
-      });
-    }
-
-
-    const payments =
-      await prisma.payment.findMany({
-        where: {
-          orderId:
-            order.id,
-        },
-
-        orderBy: {
-          createdAt:
-            'desc',
-        },
-      });
-
-
-    return res.json({
-      payments,
-
-      count:
-        payments.length,
-    });
-  }
-);
-
-
-// ============================================================================
-// PAYMENT BY ID
-// ============================================================================
-
-router.get(
-  '/:id',
-  authenticate,
-
-  [
-    param('id').isUUID(),
-  ],
-
-  validate,
-
-  async (req, res) => {
-    const payment =
-      await prisma.payment.findUnique({
-        where: {
-          id:
-            req.params.id,
-        },
-
-        include: {
-          order: true,
-
-          digitalPurchase:
-            true,
-        },
-      });
-
-
-    if (!payment) {
-      return res.status(404).json({
-        error:
-          'Payment not found',
-      });
-    }
-
-
-    const owner =
-      payment.createdById ===
-      req.user.id;
-
-    const orderParticipant =
-      payment.order &&
-      isOrderParticipant(
-        req.user.id,
-        payment.order
+      console.error(
+        'DEACTIVATE TRUCK ERROR:',
+        error
       );
 
-
-    if (
-      !owner &&
-      !orderParticipant &&
-      !isAdmin(req.user)
-    ) {
-      return res.status(403).json({
+      return res.status(500).json({
         error:
-          'Not authorized',
+          'Could not deactivate truck',
       });
     }
+  }
+);
 
 
-    return res.json({
-      payment,
-    });
+// ============================================================================
+// TRUCK STATISTICS
+// ============================================================================
+
+router.get(
+  '/trucks/stats',
+  authenticate,
+  requireRole('TRUCK_OWNER'),
+
+  async (req, res) => {
+    try {
+      const [
+        total,
+        available,
+        busy,
+        offline,
+      ] =
+        await Promise.all([
+          prisma.truck.count({
+            where: {
+              ownerId:
+                req.user.id,
+            },
+          }),
+
+          prisma.truck.count({
+            where: {
+              ownerId:
+                req.user.id,
+
+              availability:
+                'AVAILABLE',
+            },
+          }),
+
+          prisma.truck.count({
+            where: {
+              ownerId:
+                req.user.id,
+
+              availability:
+                'BUSY',
+            },
+          }),
+
+          prisma.truck.count({
+            where: {
+              ownerId:
+                req.user.id,
+
+              availability:
+                'OFFLINE',
+            },
+          }),
+        ]);
+
+
+      const activeJobs =
+        await prisma.transportJob.count({
+          where: {
+            truckOwnerId:
+              req.user.id,
+
+            status: {
+              in: [
+                'REQUESTED',
+                'QUOTED',
+                'ACCEPTED',
+                'PICKUP',
+                'IN_TRANSIT',
+              ],
+            },
+          },
+        });
+
+
+      const completedJobs =
+        await prisma.transportJob.count({
+          where: {
+            truckOwnerId:
+              req.user.id,
+
+            status:
+              'DELIVERED',
+          },
+        });
+
+
+      return res.json({
+        stats: {
+          total,
+
+          available,
+
+          busy,
+
+          offline,
+
+          activeJobs,
+
+          completedJobs,
+        },
+      });
+
+    } catch (error) {
+      console.error(
+        'TRUCK STATS ERROR:',
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          'Could not load truck statistics',
+      });
+    }
   }
 );
 
