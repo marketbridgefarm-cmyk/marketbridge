@@ -1,37 +1,64 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
+import {
+  Link,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
+
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
+import PaymentPanel from '../components/PaymentPanel.jsx';
 
-const money = (value) =>
-  Number(value || 0).toLocaleString(undefined, {
+function money(value) {
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) {
+    return '0.00';
+  }
+
+  return n.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
 
-const shortId = (value) =>
-  value ? value.slice(0, 8).toUpperCase() : '—';
+function shortId(value) {
+  return String(value || '').slice(0, 8);
+}
 
-const isPaid = (payment) =>
-  payment?.status === 'PAID';
+function isPaid(payment) {
+  return String(payment?.status || '').toUpperCase() === 'PAID';
+}
 
-const getPayment = (payments, type) =>
-  payments?.find(
+function getLatestPayment(payments, type) {
+  const matching = (payments || []).filter(
     (payment) =>
-      payment.type === type &&
-      payment.status === 'PAID'
+      String(payment.type || '').toUpperCase() ===
+      String(type || '').toUpperCase()
   );
 
-const statusLabel = (status) =>
-  String(status || '')
-    .replaceAll('_', ' ')
-    .toLowerCase()
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  if (!matching.length) {
+    return null;
+  }
 
-function StatusBadge({ status }) {
+  /*
+   * Prefer PAID because payment arrays may contain old PENDING,
+   * FAILED or replaced attempts.
+   */
+  const paid = matching.find(isPaid);
+
+  return paid || matching[0];
+}
+
+function StatusBadge({ children }) {
   return (
-    <span className={`badge status-${String(status || '').toLowerCase()}`}>
-      {statusLabel(status)}
+    <span className="badge">
+      {children}
     </span>
   );
 }
@@ -39,17 +66,19 @@ function StatusBadge({ status }) {
 function PaymentState({ payment, label }) {
   if (!payment) {
     return (
-      <div className="payment-state">
+      <div>
         <span>{label}</span>
-        <StatusBadge status="PENDING" />
+        <strong>Not started</strong>
       </div>
     );
   }
 
   return (
-    <div className="payment-state">
+    <div>
       <span>{label}</span>
-      <StatusBadge status={payment.status} />
+      <strong>
+        {money(payment.amount)} ETB · {payment.status}
+      </strong>
     </div>
   );
 }
@@ -62,22 +91,21 @@ export default function OrderDetail() {
   const [order, setOrder] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
-  const [loading, setLoading] = useState(true);
 
   async function load() {
-    setLoading(true);
-    setError('');
-
     try {
-      const response = await api.get(`/orders/${orderId}`);
+      setError('');
+
+      const response = await api.get(
+        `/orders/${orderId}`
+      );
+
       setOrder(response.data.order);
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Could not load this order.'
+          'Order not found.'
       );
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -90,12 +118,15 @@ export default function OrderDetail() {
     setError('');
 
     try {
-      await api.patch(`/transport/quotes/${quoteId}/accept`);
+      await api.patch(
+        `/transport/quotes/${quoteId}/accept`
+      );
+
       await load();
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Could not accept the transport quote.'
+          'Could not accept transport quote.'
       );
     } finally {
       setBusy('');
@@ -107,7 +138,10 @@ export default function OrderDetail() {
     setError('');
 
     try {
-      await api.patch(`/orders/${orderId}/confirm-receipt`);
+      await api.patch(
+        `/orders/${orderId}/confirm-receipt`
+      );
+
       await load();
     } catch (err) {
       setError(
@@ -119,33 +153,11 @@ export default function OrderDetail() {
     }
   }
 
-  if (loading) {
-    return (
-      <main className="section">
-        <div className="container-narrow loading">
-          Loading order…
-        </div>
-      </main>
-    );
-  }
-
   if (!order) {
     return (
       <main className="section">
-        <div className="container-narrow">
-          {error && (
-            <div className="alert error">
-              {error}
-            </div>
-          )}
-
-          <button
-            className="back-link"
-            type="button"
-            onClick={() => navigate(-1)}
-          >
-            ← Back
-          </button>
+        <div className="container-narrow loading">
+          {error || 'Loading order…'}
         </div>
       </main>
     );
@@ -154,26 +166,25 @@ export default function OrderDetail() {
   const transport = order.transportJob;
   const payments = order.payments || [];
 
-  const marketplacePayment = getPayment(
-    payments,
-    'MARKETPLACE'
+  const marketplacePayment = useMemo(
+    () => getLatestPayment(payments, 'MARKETPLACE'),
+    [payments]
   );
 
-  const transportPayment = getPayment(
-    payments,
-    'TRANSPORT'
+  const transportPayment = useMemo(
+    () => getLatestPayment(payments, 'TRANSPORT'),
+    [payments]
   );
 
-  const isMarketplacePaid = isPaid(
+  const marketplacePaid = isPaid(
     marketplacePayment
   );
 
-  const isTransportPaid =
-    transport?.method === 'HIRE_TRANSPORTER' &&
-    isPaid(transportPayment);
-
-  const requiresTransportPayment =
+  const transportRequired =
     transport?.method === 'HIRE_TRANSPORTER';
+
+  const transportPaid =
+    isPaid(transportPayment);
 
   const acceptedTransportAmount =
     transport?.agreedAmount != null
@@ -186,106 +197,148 @@ export default function OrderDetail() {
       : null;
 
   const transportAmountMatches =
-    !requiresTransportPayment ||
-    (acceptedTransportAmount != null &&
-      transportPaymentAmount != null &&
-      Math.abs(
-        acceptedTransportAmount -
-          transportPaymentAmount
-      ) < 0.01);
+    acceptedTransportAmount != null &&
+    transportPaymentAmount != null &&
+    Math.abs(
+      acceptedTransportAmount -
+        transportPaymentAmount
+    ) < 0.01;
 
-  const canChooseQuote =
-    transport &&
-    ['BUYER', 'SELLER'].some((role) =>
-      user?.roles?.includes(role)
-    ) &&
-    (order.buyerId === user?.id ||
-      order.sellerId === user?.id) &&
-    ['REQUESTED', 'QUOTED'].includes(
-      transport.status
-    ) &&
-    !transport.truckOwnerId;
-
-  const canArrangeTransport =
-    !transport &&
-    order.status !== 'CANCELLED' &&
-    order.status !== 'COMPLETED';
-
-  const canConfirmReceipt =
-    order.status === 'DELIVERED' &&
-    order.buyerId === user?.id &&
-    isMarketplacePaid &&
-    (!requiresTransportPayment ||
-      (isTransportPaid &&
-        transportAmountMatches));
-
-  const receiptBlockedReason =
-    order.status !== 'DELIVERED'
-      ? `Receipt can be confirmed after delivery. Current order status: ${statusLabel(
-          order.status
-        )}.`
-      : !isMarketplacePaid
-      ? 'Marketplace payment must be confirmed before receipt can be completed.'
-      : requiresTransportPayment &&
-        !isTransportPaid
-      ? 'Transport payment must be confirmed before receipt can be completed.'
-      : requiresTransportPayment &&
-        !transportAmountMatches
-      ? 'The transport payment amount does not match the accepted transport fee.'
-      : '';
+  const transportPaymentReady =
+    !transportRequired ||
+    (transportPaid &&
+      transportAmountMatches);
 
   const title =
     order.listing?.title ||
     order.listing?.cropType ||
     'Order';
 
-  const quoteList = transport?.quotes || [];
+  const isBuyer =
+    order.buyerId === user?.id;
 
-  const orderProgress = useMemo(() => {
-    const statuses = [
-      'PENDING_PAYMENT',
-      'CONFIRMED',
-      'TRANSPORT_ARRANGED',
-      'IN_TRANSIT',
-      'DELIVERED',
-      'COMPLETED',
-    ];
+  const isParticipant =
+    order.buyerId === user?.id ||
+    order.sellerId === user?.id;
 
-    const currentIndex =
-      statuses.indexOf(order.status);
+  const canChooseQuote =
+    Boolean(
+      transport &&
+        ['BUYER', 'SELLER'].some((role) =>
+          user?.roles?.includes(role)
+        ) &&
+        isParticipant &&
+        ['REQUESTED', 'QUOTED'].includes(
+          transport.status
+        ) &&
+        !transport.truckOwnerId
+    );
 
-    return statuses.map((status, index) => ({
-      status,
-      completed:
-        currentIndex >= 0 &&
-        index <= currentIndex,
-      current:
-        currentIndex >= 0 &&
-        index === currentIndex,
-    }));
-  }, [order.status]);
+  const canArrangeTransport =
+    isParticipant &&
+    !transport &&
+    !['CANCELLED', 'COMPLETED'].includes(
+      order.status
+    );
+
+  /*
+   * Marketplace payment is required for every buyer who has
+   * an unpaid active order.
+   */
+  const showMarketplacePayment =
+    isBuyer &&
+    !marketplacePaid &&
+    !['CANCELLED', 'COMPLETED'].includes(
+      order.status
+    );
+
+  /*
+   * Transport payment becomes available only after a transporter
+   * has been selected and the accepted amount exists.
+   */
+  const showTransportPayment =
+    isBuyer &&
+    transportRequired &&
+    Boolean(transport?.truckOwnerId) &&
+    transport?.status === 'ACCEPTED' &&
+    acceptedTransportAmount != null &&
+    marketplacePaid &&
+    !transportPaid;
+
+  const canConfirmReceipt =
+    isBuyer &&
+    order.status === 'DELIVERED' &&
+    marketplacePaid &&
+    transportPaymentReady;
+
+  const lifecycle = [
+    {
+      key: 'PENDING_PAYMENT',
+      label: 'Payment',
+      active: order.status === 'PENDING_PAYMENT',
+    },
+    {
+      key: 'CONFIRMED',
+      label: 'Confirmed',
+      active: [
+        'CONFIRMED',
+        'TRANSPORT_ARRANGED',
+        'IN_TRANSIT',
+        'DELIVERED',
+        'COMPLETED',
+      ].includes(order.status),
+    },
+    {
+      key: 'TRANSPORT_ARRANGED',
+      label: 'Transport',
+      active: [
+        'TRANSPORT_ARRANGED',
+        'IN_TRANSIT',
+        'DELIVERED',
+        'COMPLETED',
+      ].includes(order.status),
+    },
+    {
+      key: 'IN_TRANSIT',
+      label: 'In transit',
+      active: [
+        'IN_TRANSIT',
+        'DELIVERED',
+        'COMPLETED',
+      ].includes(order.status),
+    },
+    {
+      key: 'DELIVERED',
+      label: 'Delivered',
+      active: [
+        'DELIVERED',
+        'COMPLETED',
+      ].includes(order.status),
+    },
+    {
+      key: 'COMPLETED',
+      label: 'Completed',
+      active: order.status === 'COMPLETED',
+    },
+  ];
 
   return (
     <main className="section">
       <div className="container-narrow">
         <button
-          className="back-link"
           type="button"
+          className="back-link"
           onClick={() => navigate(-1)}
         >
           ← Back
         </button>
 
         {error && (
-          <div
-            className="alert error"
-            role="alert"
-          >
+          <div className="alert error">
             {error}
           </div>
         )}
 
-        {/* Header */}
         <div className="page-header compact-header">
           <div>
             <span className="eyebrow">
@@ -295,39 +348,131 @@ export default function OrderDetail() {
             <h1>{title}</h1>
 
             <p>
-              <StatusBadge status={order.status} />{' '}
-              · {money(order.finalPrice)} ETB
+              <StatusBadge>
+                {order.status}
+              </StatusBadge>
+
+              {' · '}
+
+              <strong>
+                {money(order.finalPrice)} ETB
+              </strong>
             </p>
           </div>
         </div>
 
-        {/* Order lifecycle */}
+        {/* ORDER LIFECYCLE */}
         <div className="card">
           <h2>Order progress</h2>
 
-          <div className="order-progress">
-            {orderProgress.map((step) => (
+          <div className="timeline">
+            {lifecycle.map((step) => (
               <div
-                key={step.status}
-                className={`progress-step ${
-                  step.completed ? 'completed' : ''
-                } ${
-                  step.current ? 'current' : ''
-                }`}
+                className={
+                  step.active
+                    ? 'timeline-step done'
+                    : 'timeline-step'
+                }
+                key={step.key}
               >
-                <div className="progress-dot">
-                  {step.completed ? '✓' : ''}
-                </div>
-
                 <span>
-                  {statusLabel(step.status)}
+                  {step.active ? '✓' : '•'}
                 </span>
+
+                {step.label}
               </div>
             ))}
           </div>
         </div>
 
-        {/* Parties */}
+        {/* PAYMENT REQUIRED */}
+        {showMarketplacePayment && (
+          <div className="card">
+            <span className="eyebrow">
+              BUYER ACTION REQUIRED
+            </span>
+
+            <h2>Pay your order</h2>
+
+            <p className="muted">
+              Your order has been created, but the
+              marketplace payment has not yet been
+              verified.
+            </p>
+
+            <div className="detail-facts">
+              <div>
+                <span>Order amount</span>
+                <strong>
+                  {money(order.finalPrice)} ETB
+                </strong>
+              </div>
+
+              <div>
+                <span>Payment status</span>
+                <strong>
+                  {marketplacePayment?.status ||
+                    'NOT PAID'}
+                </strong>
+              </div>
+
+              <div>
+                <span>Next step</span>
+                <strong>
+                  Pay through Chapa
+                </strong>
+              </div>
+            </div>
+
+            <PaymentPanel
+              type="MARKETPLACE"
+              orderId={order.id}
+              amount={order.finalPrice}
+              onPaid={async () => {
+                await load();
+              }}
+            />
+          </div>
+        )}
+
+        {/* PAYMENT SUCCESS / STATE */}
+        <div className="card">
+          <h2>Payment status</h2>
+
+          <div className="detail-facts">
+            <PaymentState
+              label="Marketplace"
+              payment={marketplacePayment}
+            />
+
+            {transportRequired && (
+              <PaymentState
+                label="Transport"
+                payment={transportPayment}
+              />
+            )}
+
+            <div>
+              <span>Order status</span>
+              <strong>
+                {order.status}
+              </strong>
+            </div>
+          </div>
+
+          {!marketplacePaid &&
+            isBuyer &&
+            !showMarketplacePayment &&
+            order.status !== 'CANCELLED' && (
+              <div className="notice">
+                Marketplace payment is not yet
+                verified. Transport and delivery
+                actions remain restricted.
+              </div>
+            )}
+        </div>
+
+        {/* PARTIES */}
         <div className="card">
           <h2>Parties</h2>
 
@@ -347,126 +492,24 @@ export default function OrderDetail() {
             </div>
 
             <div>
-              <span>Order amount</span>
+              <span>Amount</span>
               <strong>
                 {money(order.finalPrice)} ETB
               </strong>
             </div>
-
-            {order.quantity != null && (
-              <div>
-                <span>Quantity</span>
-                <strong>
-                  {order.quantity}
-                  {order.unit
-                    ? ` ${order.unit}`
-                    : ''}
-                </strong>
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Payment requirements */}
-        <div className="card">
-          <div className="row-between">
-            <div>
-              <h2>Payment status</h2>
-              <p className="muted">
-                Transport cannot progress until
-                the required payment has been
-                verified by the backend.
-              </p>
-            </div>
-
-            {order.status ===
-              'PENDING_PAYMENT' && (
-              <span className="badge">
-                Payment required
-              </span>
-            )}
-          </div>
-
-          <div className="payment-summary">
-            <PaymentState
-              label="Marketplace payment"
-              payment={marketplacePayment}
-            />
-
-            {requiresTransportPayment && (
-              <PaymentState
-                label="Transport payment"
-                payment={transportPayment}
-              />
-            )}
-          </div>
-
-          {!isMarketplacePaid && (
-            <div className="notice">
-              <strong>
-                Marketplace payment pending.
-              </strong>
-              <p className="muted">
-                The order must have a verified
-                MARKETPLACE payment before
-                transport can proceed.
-              </p>
-            </div>
-          )}
-
-          {requiresTransportPayment &&
-            isMarketplacePaid &&
-            !isTransportPaid && (
-              <div className="notice">
-                <strong>
-                  Transport payment pending.
-                </strong>
-
-                {acceptedTransportAmount !=
-                  null && (
-                  <p className="muted">
-                    Accepted transport fee:{' '}
-                    <strong>
-                      {money(
-                        acceptedTransportAmount
-                      )}{' '}
-                      ETB
-                    </strong>
-                  </p>
-                )}
-              </div>
-            )}
-
-          {requiresTransportPayment &&
-            isTransportPaid &&
-            !transportAmountMatches && (
-              <div className="alert error">
-                The recorded transport payment
-                amount does not match the accepted
-                transport quote.
-              </div>
-            )}
-
-          {isMarketplacePaid &&
-            (!requiresTransportPayment ||
-              isTransportPaid) && (
-              <div className="notice success">
-                Required payment conditions are
-                satisfied for the current stage.
-              </div>
-            )}
-        </div>
-
-        {/* Transport */}
+        {/* TRANSPORT */}
         <div className="card">
           <div className="row-between">
             <div>
               <h2>Transport</h2>
 
               <p className="muted">
-                The buyer or seller arranges
-                transport. MarketBridge does not
-                automatically assign a transporter.
+                The buyer or seller arranges transport.
+                MarketBridge does not automatically
+                assign a transporter.
               </p>
             </div>
 
@@ -480,435 +523,352 @@ export default function OrderDetail() {
             )}
           </div>
 
-          {!transport && (
+          {!marketplacePaid && isBuyer && (
             <div className="notice">
-              No transport arrangement has been
-              recorded for this order yet.
+              <strong>Payment required first.</strong>{' '}
+              Complete the marketplace payment before
+              arranging or proceeding with transport.
             </div>
           )}
 
-          {transport && (
+          {transport ? (
             <>
-              <div className="transport-overview">
-                <div>
-                  <span>Arranging party</span>
-                  <strong>
-                    {statusLabel(
-                      transport.arrangingParty
-                    )}
-                  </strong>
-                </div>
+              <p>
+                <strong>
+                  {transport.arrangingParty}
+                </strong>
 
-                <div>
-                  <span>Method</span>
-                  <strong>
-                    {statusLabel(
-                      transport.method
-                    )}
-                  </strong>
-                </div>
+                {' · '}
 
-                <div>
-                  <span>Status</span>
-                  <strong>
-                    <StatusBadge
-                      status={transport.status}
-                    />
-                  </strong>
-                </div>
-              </div>
+                {transport.method}
 
-              <div className="route-box">
-                <div>
-                  <span>Pickup</span>
-                  <strong>
-                    {transport.pickupLocation ||
-                      '—'}
-                  </strong>
-                </div>
+                {' · '}
 
-                <div className="route-arrow">
-                  →
-                </div>
+                <StatusBadge>
+                  {transport.status}
+                </StatusBadge>
+              </p>
 
-                <div>
-                  <span>Destination</span>
-                  <strong>
-                    {transport.destination ||
-                      '—'}
-                  </strong>
-                </div>
-              </div>
+              <p>
+                {transport.pickupLocation}
+                {' → '}
+                {transport.destination}
+              </p>
 
-              {/* Assigned transporter */}
               {transport.truckOwner && (
-                <div className="match-box">
-                  <h3>
-                    Assigned transporter
-                  </h3>
+                <div className="notice">
+                  Transporter:{' '}
+                  <strong>
+                    {transport.truckOwner.name}
+                  </strong>
 
-                  <div className="transporter">
-                    <div>
-                      <strong>
-                        {transport.truckOwner
-                          .name || '—'}
-                      </strong>
-
-                      <p>
-                        Rating:{' '}
-                        {transport.truckOwner
-                          .rating != null
-                          ? Number(
-                              transport.truckOwner
-                                .rating
-                            ).toFixed(1)
-                          : '—'}
-                      </p>
-
-                      <p className="muted">
-                        {transport.truckOwner
-                          .phone || ''}
-                      </p>
-                    </div>
-
-                    {transport.truck && (
-                      <div>
-                        <strong>
-                          {transport.truck
-                            .registration ||
-                            'Truck'}
-                        </strong>
-
-                        <p className="muted">
-                          {transport.truck
-                            .truckType || '—'}{' '}
-                          ·{' '}
-                          {transport.truck
-                            .capacity != null
-                            ? `${transport.truck.capacity}t`
-                            : 'Capacity —'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {transport.method ===
-                    'HIRE_TRANSPORTER' &&
-                    acceptedTransportAmount !=
-                      null && (
-                      <div className="notice">
-                        <strong>
-                          Accepted transport fee:{' '}
-                          {money(
-                            acceptedTransportAmount
-                          )}{' '}
-                          ETB
-                        </strong>
-
-                        <p className="muted">
-                          Transport payment must
-                          match this amount exactly
-                          within the system's
-                          currency precision.
-                        </p>
-                      </div>
-                    )}
+                  {transport.truck?.registration && (
+                    <>
+                      {' · Truck '}
+                      {transport.truck.registration}
+                    </>
+                  )}
                 </div>
               )}
 
-              {/* Quotes */}
               {transport.method ===
-                'HIRE_TRANSPORTER' &&
-                !transport.truckOwnerId && (
-                  <div className="match-box">
-                    <div className="row-between">
-                      <div>
+                'HIRE_TRANSPORTER' && (
+                <>
+                  {/* ACCEPTED TRANSPORT PAYMENT */}
+                  {transport.truckOwnerId &&
+                    transport.status === 'ACCEPTED' && (
+                      <div className="card">
                         <h3>
-                          Transport quotes
+                          Transport payment
                         </h3>
 
-                        <p className="muted">
-                          Select the transporter
-                          only after reviewing the
-                          available quotes.
-                        </p>
-                      </div>
-
-                      {!isMarketplacePaid && (
-                        <span className="badge">
-                          Payment pending
-                        </span>
-                      )}
-                    </div>
-
-                    {quoteList.length > 0 ? (
-                      quoteList.map((quote) => (
-                        <div
-                          className="transporter"
-                          key={quote.id}
-                        >
+                        <div className="detail-facts">
                           <div>
+                            <span>
+                              Accepted fee
+                            </span>
+
                             <strong>
-                              {quote.truckOwner
-                                ?.name ||
-                                'Truck owner'}
+                              {acceptedTransportAmount != null
+                                ? `${money(
+                                    acceptedTransportAmount
+                                  )} ETB`
+                                : 'Not available'}
                             </strong>
-
-                            <p>
-                              {quote.truck
-                                ?.truckType ||
-                                'Truck'}{' '}
-                              ·{' '}
-                              {quote.truck
-                                ?.capacity !=
-                              null
-                                ? `${quote.truck.capacity}t`
-                                : 'Capacity —'}{' '}
-                              ·{' '}
-                              {quote.truck
-                                ?.registration ||
-                                '—'}
-                            </p>
-
-                            <p>
-                              ★{' '}
-                              {quote.truckOwner
-                                ?.rating != null
-                                ? Number(
-                                    quote.truckOwner
-                                      .rating
-                                  ).toFixed(1)
-                                : '—'}
-                            </p>
-
-                            {quote.message && (
-                              <p className="muted">
-                                {quote.message}
-                              </p>
-                            )}
                           </div>
 
                           <div>
-                            <strong>
-                              {money(
-                                quote.amount
-                              )}{' '}
-                              ETB
-                            </strong>
+                            <span>
+                              Payment status
+                            </span>
 
-                            {canChooseQuote && (
-                              <button
-                                className="btn btn-sm"
-                                type="button"
-                                disabled={
-                                  busy === quote.id
-                                }
-                                onClick={() =>
-                                  acceptQuote(
-                                    quote.id
-                                  )
-                                }
-                              >
-                                {busy === quote.id
-                                  ? 'Accepting…'
-                                  : 'Accept quote'}
-                              </button>
-                            )}
+                            <strong>
+                              {transportPayment?.status ||
+                                'NOT PAID'}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span>
+                              Marketplace payment
+                            </span>
+
+                            <strong>
+                              {marketplacePaid
+                                ? 'PAID'
+                                : 'NOT PAID'}
+                            </strong>
                           </div>
                         </div>
-                      ))
-                    ) : (
-                      <p className="muted">
-                        Waiting for registered truck
-                        owners to submit quotes.
-                      </p>
-                    )}
 
-                    {!isMarketplacePaid && (
-                      <div className="notice">
-                        Marketplace payment must be
-                        verified before transport
-                        operations can proceed.
-                      </div>
-                    )}
-                  </div>
-                )}
+                        {transportPayment &&
+                          !transportAmountMatches && (
+                            <div className="alert error">
+                              The transport payment amount
+                              does not match the accepted
+                              transport quote. A matching
+                              payment is required before
+                              transport can proceed.
+                            </div>
+                          )}
 
-              {/* Transport payment information */}
-              {transport.method ===
-                'HIRE_TRANSPORTER' &&
-                transport.truckOwnerId && (
-                  <div className="match-box">
-                    <h3>
-                      Transport payment
-                    </h3>
-
-                    <div className="detail-facts">
-                      <div>
-                        <span>
-                          Accepted fee
-                        </span>
-                        <strong>
-                          {acceptedTransportAmount !=
-                          null
-                            ? `${money(
-                                acceptedTransportAmount
-                              )} ETB`
-                            : 'Not recorded'}
-                        </strong>
-                      </div>
-
-                      <div>
-                        <span>
-                          Payment status
-                        </span>
-                        <strong>
-                          <StatusBadge
-                            status={
-                              transportPayment
-                                ?.status ||
-                              'PENDING'
+                        {showTransportPayment && (
+                          <PaymentPanel
+                            type="TRANSPORT"
+                            orderId={order.id}
+                            transportJobId={transport.id}
+                            amount={
+                              acceptedTransportAmount
                             }
+                            onPaid={async () => {
+                              await load();
+                            }}
                           />
-                        </strong>
-                      </div>
+                        )}
 
-                      <div>
-                        <span>
-                          Paid amount
-                        </span>
-                        <strong>
-                          {transportPayment
-                            ? `${money(
-                                transportPayment.amount
-                              )} ETB`
-                            : '—'}
-                        </strong>
-                      </div>
-                    </div>
-
-                    {!isTransportPaid && (
-                      <div className="notice">
-                        The accepted transporter
-                        must be paid before this
-                        transport can move to its
-                        physical delivery stages.
+                        {transportPaid &&
+                          transportAmountMatches && (
+                            <div className="alert success">
+                              Transport payment verified.
+                              The accepted transport fee has
+                              been paid.
+                            </div>
+                          )}
                       </div>
                     )}
-                  </div>
-                )}
-            </>
-          )}
-        </div>
 
-        {/* Receipt */}
-        {order.status === 'DELIVERED' &&
-          order.buyerId === user?.id && (
-            <div className="card">
-              <h2>Confirm receipt</h2>
+                  {/* QUOTES */}
+                  {!transport.truckOwnerId && (
+                    <div className="match-box">
+                      <h3>
+                        Transport quotes
+                      </h3>
 
-              <p className="muted">
-                Confirm only after you have
-                physically received the
-                produce/product.
-              </p>
+                      {transport.quotes?.length ? (
+                        transport.quotes.map(
+                          (quote) => (
+                            <div
+                              className="transporter"
+                              key={quote.id}
+                            >
+                              <div>
+                                <strong>
+                                  {quote.truckOwner
+                                    ?.name ||
+                                    'Truck owner'}
+                                </strong>
 
-              {!canConfirmReceipt &&
-                receiptBlockedReason && (
-                  <div className="notice">
-                    {receiptBlockedReason}
-                  </div>
-                )}
+                                <p>
+                                  {quote.truck
+                                    ?.truckType ||
+                                    'Truck'}{' '}
+                                  ·{' '}
+                                  {quote.truck
+                                    ?.capacity ??
+                                    '—'}
+                                  t
 
-              <button
-                className="btn btn-primary"
-                type="button"
-                disabled={
-                  busy === 'receipt' ||
-                  !canConfirmReceipt
-                }
-                onClick={confirmReceipt}
-              >
-                {busy === 'receipt'
-                  ? 'Confirming…'
-                  : 'Confirm receipt & complete order'}
-              </button>
-            </div>
-          )}
+                                  {quote.truck
+                                    ?.registration && (
+                                    <>
+                                      {' · '}
+                                      {
+                                        quote.truck
+                                          .registration
+                                      }
+                                    </>
+                                  )}
 
-        {/* Payment records */}
-        <div className="card">
-          <h2>Payment records</h2>
+                                  {' · ★ '}
 
-          {payments.length > 0 ? (
-            <div className="payment-list">
-              {payments.map((payment) => (
-                <div
-                  className="payment-row"
-                  key={payment.id}
-                >
-                  <div>
-                    <strong>
-                      {statusLabel(
-                        payment.type
+                                  {quote.truckOwner
+                                    ?.rating != null
+                                    ? Number(
+                                        quote.truckOwner
+                                          .rating
+                                      ).toFixed(1)
+                                    : '—'}
+                                </p>
+
+                                {quote.message && (
+                                  <p className="muted">
+                                    {quote.message}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div>
+                                <strong>
+                                  {money(
+                                    quote.amount
+                                  )}{' '}
+                                  ETB
+                                </strong>
+
+                                {canChooseQuote && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm"
+                                    disabled={
+                                      busy ===
+                                      quote.id
+                                    }
+                                    onClick={() =>
+                                      acceptQuote(
+                                        quote.id
+                                      )
+                                    }
+                                  >
+                                    {busy ===
+                                    quote.id
+                                      ? 'Accepting…'
+                                      : 'Accept quote'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        )
+                      ) : (
+                        <p className="muted">
+                          Waiting for registered truck
+                          owners to submit quotes.
+                        </p>
                       )}
-                    </strong>
-
-                    {payment.reference && (
-                      <p className="muted">
-                        Reference:{' '}
-                        {payment.reference}
-                      </p>
-                    )}
-
-                    {payment.provider && (
-                      <p className="muted">
-                        Provider:{' '}
-                        {payment.provider}
-                      </p>
-                    )}
-                  </div>
-
-                  <strong>
-                    {money(payment.amount)}{' '}
-                    {payment.currency || 'ETB'}
-                  </strong>
-
-                  <span>
-                    {statusLabel(
-                      payment.method
-                    )}
-                  </span>
-
-                  <StatusBadge
-                    status={payment.status}
-                  />
-                </div>
-              ))}
-            </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
           ) : (
-            <p className="muted">
-              No payment records are attached to
-              this order yet.
-            </p>
+            <div className="notice">
+              No transport arrangement recorded yet.
+            </div>
           )}
         </div>
 
-        {/* Final state */}
+        {/* DELIVERY / RECEIPT */}
+        {order.status === 'DELIVERED' &&
+          isBuyer && (
+            <div className="card">
+              <span className="eyebrow">
+                DELIVERY
+              </span>
+
+              <h2>
+                Confirm receipt
+              </h2>
+
+              {!marketplacePaid ? (
+                <div className="alert error">
+                  Marketplace payment has not been
+                  verified, so receipt confirmation is
+                  unavailable.
+                </div>
+              ) : transportRequired &&
+                !transportPaid ? (
+                <div className="alert error">
+                  Transport payment must be verified
+                  before you can confirm receipt.
+                </div>
+              ) : transportRequired &&
+                !transportAmountMatches ? (
+                <div className="alert error">
+                  The transport payment does not match
+                  the accepted transport fee.
+                </div>
+              ) : (
+                <>
+                  <p className="muted">
+                    Confirm only after you have
+                    physically received the
+                    produce/product.
+                  </p>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={
+                      busy === 'receipt'
+                    }
+                    onClick={confirmReceipt}
+                  >
+                    {busy === 'receipt'
+                      ? 'Confirming…'
+                      : 'Confirm receipt & complete order'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+        {/* COMPLETED */}
         {order.status === 'COMPLETED' && (
           <div className="card">
-            <div className="notice success">
+            <div className="alert success">
               <strong>
-                Order completed successfully.
-              </strong>
-
-              <p className="muted">
-                The buyer has confirmed receipt and
-                the order is now complete.
-              </p>
+                Order completed.
+              </strong>{' '}
+              The buyer has confirmed receipt and the
+              transaction is complete.
             </div>
           </div>
         )}
+
+        {/* PAYMENT RECORDS */}
+        <div className="card">
+          <h2>Payment records</h2>
+
+          {payments.length ? (
+            payments.map((payment) => (
+              <div
+                className="payment-row"
+                key={payment.id}
+              >
+                <span>
+                  {payment.type}
+                </span>
+
+                <strong>
+                  {money(payment.amount)} ETB
+                </strong>
+
+                <span>
+                  {payment.method}
+                </span>
+
+                <span className="badge">
+                  {payment.status}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="muted">
+              No payment records attached to this
+              order yet.
+            </p>
+          )}
+        </div>
       </div>
     </main>
   );
