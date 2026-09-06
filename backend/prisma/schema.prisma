@@ -529,3 +529,46 @@ model Message {
   @@index([senderId])
   @@index([receiverId])
 }
+
+enum CommissionType {
+  MARKETPLACE
+  TRANSPORT
+  INSPECTOR
+  DIGITAL
+}
+
+enum CommissionStatus {
+  RECORDED
+  VOIDED
+}
+
+model Commission {
+  id String @id @default(uuid())
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+  paymentId String @unique
+
+  order Order? @relation(fields: [orderId], references: [id])
+  orderId String?
+
+  transportJob TransportJob? @relation(fields: [transportJobId], references: [id])
+  transportJobId String?
+
+  type CommissionType
+
+  rate Float
+  amount Float
+  currency String @default("ETB")
+
+  status CommissionStatus @default(RECORDED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([transportJobId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+}
+
