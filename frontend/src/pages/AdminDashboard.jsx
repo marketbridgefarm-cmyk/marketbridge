@@ -275,6 +275,28 @@ export default function AdminDashboard() {
     }
   }
 
+  async function checkGatewayPayment(paymentId, provider) {
+    clearMessages();
+    setActionLoading(`payment-${paymentId}`);
+
+    try {
+      const r = await api.get(`/payments/${paymentId}/${provider}/verify`);
+      setSuccess(
+        r.data?.status === 'PAID'
+          ? 'Payment confirmed by the gateway and reconciled.'
+          : `Gateway reports this payment as ${r.data?.status || 'not yet completed'} — nothing to reconcile yet.`
+      );
+      await loadAll();
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+        'Could not check payment with the gateway'
+      );
+    } finally {
+      setActionLoading('');
+    }
+  }
+
   const filteredUsers = useMemo(() => {
     const search = userSearch.trim().toLowerCase();
 
@@ -1187,13 +1209,23 @@ export default function AdminDashboard() {
                   {new Date(p.createdAt).toLocaleString()}
                 </p>
 
-                <button
-                  className="btn btn-primary"
-                  disabled={actionLoading === `payment-${p.id}`}
-                  onClick={() => confirmPayment(p.id)}
-                >
-                  {actionLoading === `payment-${p.id}` ? 'Working…' : 'Confirm payment received'}
-                </button>
+                {p.provider ? (
+                  <button
+                    className="btn btn-primary"
+                    disabled={actionLoading === `payment-${p.id}`}
+                    onClick={() => checkGatewayPayment(p.id, p.provider)}
+                  >
+                    {actionLoading === `payment-${p.id}` ? 'Checking…' : `Check with ${p.provider}`}
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-primary"
+                    disabled={actionLoading === `payment-${p.id}`}
+                    onClick={() => confirmPayment(p.id)}
+                  >
+                    {actionLoading === `payment-${p.id}` ? 'Working…' : 'Confirm payment received'}
+                  </button>
+                )}
               </div>
             ))}
 
