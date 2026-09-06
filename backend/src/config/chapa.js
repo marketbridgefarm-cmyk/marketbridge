@@ -2,24 +2,18 @@
 //
 // Ethiopia-licensed payment gateway operator. Supports card, Telebirr, and
 // bank-transfer checkout without requiring the merchant to be in a
-// Stripe-eligible country. Works identically in test mode (no KYC needed,
-// uses Chapa's own test cards, no real money moves) and live mode
-// (requires Chapa's compliance/KYC approval) — same endpoints, same
-// payload shapes, just different keys. Switch CHAPA_SECRET_KEY from a
-// CHASECK_TEST-... key to a live CHASECK-... key when ready; no code
-// changes needed.
+// Stripe-eligible country.
 //
-// CAVEAT: the initialize/verify request-response shapes below are
-// well-documented and stable. The webhook payload shape has drifted across
-// Chapa's own docs and community integrations historically — treat the
-// webhook handler as best-effort and lean on the verify-on-return flow
-// (which calls Chapa directly and is authoritative) as the primary
-// confirmation path until you've confirmed the exact webhook fields by
-// inspecting a real test event in your Chapa dashboard or server logs.
+// Enhanced with:
+// - Request retry logic
+// - Better error handling
+// - Timeout support
+// - Logging
 
 const crypto = require('crypto');
 
 const CHAPA_BASE_URL = 'https://api.chapa.co/v1';
+const TIMEOUT_MS = 30000; // 30 second timeout
 
 function getSecretKey() {
   const key = process.env.CHAPA_SECRET_KEY;
@@ -27,47 +21,81 @@ function getSecretKey() {
   return key;
 }
 
-// The webhook secret is a SEPARATE value from CHAPA_SECRET_KEY. Per
-// Chapa's own docs, when you enable a webhook in the dashboard you set an
-// arbitrary "secret hash" of your choosing (store it here as
-// CHAPA_WEBHOOK_SECRET) — Chapa signs the webhook payload with that value,
-// not with your API secret key. Reusing CHAPA_SECRET_KEY for this check
-// would silently fail verification against every real webhook.
 function getWebhookSecret() {
   const key = process.env.CHAPA_WEBHOOK_SECRET;
   if (!key) throw new Error('CHAPA_WEBHOOK_SECRET is not configured');
   return key;
 }
 
-// Lets the app report which mode it's running in (e.g. for an admin
-// screen or a startup log) without parsing the key itself elsewhere.
-// Chapa's test keys are always prefixed CHASECK_TEST-; live keys are not.
 function getChapaMode() {
   const key = process.env.CHAPA_SECRET_KEY || '';
   return key.startsWith('CHASECK_TEST-') ? 'test' : key ? 'live' : 'unconfigured';
 }
 
-async function chapaFetch(path, options = {}) {
-  const res = await fetch(`${CHAPA_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${getSecretKey()}`,
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) {
-    const message = data?.message || `Chapa request failed (${res.status})`;
-    throw Object.assign(new Error(message), { status: 502, chapaResponse: data });
+// Enhanced fetch with timeout and retry
+async function chapaFetch(path, options = {}, retries = 2) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${CHAPA_BASE_URL}${path}`, {
+        ...options,
+        headers: {
+          Authorization: `Bearer ${getSecretKey()}`,
+          'Content-Type': 'application/json',
+          ...(options.headers || {}),
+        },
+        signal: controller.signal,
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const message = data?.message || `Chapa request failed (${res.status})`;
+        const error = Object.assign(new Error(message), {
+          status: res.status,
+          chapaResponse: data,
+          retryable: res.status >= 500 || res.status === 429,
+        });
+
+        // Retry on 5xx or rate limit
+        if (error.retryable && attempt < retries) {
+          lastError = error;
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+          continue;
+        }
+
+        throw error;
+      }
+
+      clearTimeout(timeoutId);
+      return data;
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        clearTimeout(timeoutId);
+        throw Object.assign(new Error('Chapa request timed out'), { status: 504 });
+      }
+
+      lastError = error;
+
+      // Retry network errors
+      if (attempt < retries && !error.status) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        continue;
+      }
+
+      clearTimeout(timeoutId);
+      throw error;
+    }
   }
-  return data;
+
+  clearTimeout(timeoutId);
+  throw lastError || new Error('Chapa request failed');
 }
 
-// Initializes a transaction and returns a hosted checkout URL to redirect
-// the browser to. txRef must be unique per attempt — we use the Payment's
-// own id, which is safe to reuse across retries of the same still-PENDING
-// payment.
 async function initializeTransaction({
   txRef, amount, currency = 'ETB', email, firstName, lastName, phoneNumber,
   callbackUrl, returnUrl, title, description,
@@ -85,7 +113,7 @@ async function initializeTransaction({
       callback_url: callbackUrl,
       return_url: returnUrl,
       customization: {
-        title: (title || 'MarketBridge payment').slice(0, 16), // Chapa limits this field's length
+        title: (title || 'MarketBridge payment').slice(0, 16),
         description: description || undefined,
       },
     }),
@@ -96,22 +124,26 @@ async function initializeTransaction({
   return { checkoutUrl, raw: data };
 }
 
-// Authoritative status check — call this on the return_url page rather
-// than trusting only the webhook, since webhook delivery/format can lag
-// or vary.
 async function verifyTransaction(txRef) {
   const data = await chapaFetch(`/transaction/verify/${encodeURIComponent(txRef)}`, { method: 'GET' });
   const status = data?.data?.status; // expected: 'success' | 'failed' | 'pending'
   return { status, raw: data };
 }
 
-// Chapa signs webhook bodies with the webhook secret hash you configured
-// in the dashboard (Settings > Webhooks) — over the raw JSON body.
-// Confirm the exact header name and algorithm against your dashboard's
-// webhook settings / a real test event before relying on this in
-// production — see the caveat above.
 function verifyWebhookSignature(rawBody, signatureHeader) {
   if (!signatureHeader) return false;
+  try {
+    const expected = crypto.createHmac('sha256', getWebhookSecret()).update(rawBody).digest('hex');
+    const a = Buffer.from(expected, 'utf8');
+    const b = Buffer.from(signatureHeader, 'utf8');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  } catch (error) {
+    console.error('Webhook signature verification error:', error.message);
+    return false;
+  }
+}
+
+module.exports = { initializeTransaction, verifyTransaction, verifyWebhookSignature, getChapaMode };  if (!signatureHeader) return false;
   const expected = crypto.createHmac('sha256', getWebhookSecret()).update(rawBody).digest('hex');
   const a = Buffer.from(expected, 'utf8');
   const b = Buffer.from(signatureHeader, 'utf8');
