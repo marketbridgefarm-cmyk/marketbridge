@@ -32,7 +32,7 @@ router.get('/active', async (req,res)=>{
 
 // Advertiser's own campaigns, any status.
 router.get('/mine', authenticate, requireRole('ADVERTISER'), async (req,res)=>{
-  const ads=await prisma.advertisement.findMany({where:{advertiserId:req.user.id},include:{listing:{select:{id:true,title:true,cropType:true}}},orderBy:{createdAt:'desc'}});
+  const ads=await prisma.advertisement.findMany({where:{advertiserId:req.user.id},include:{listing:{select:{id:true,title:true,cropType:true}},payments:{select:{id:true,status:true}}},orderBy:{createdAt:'desc'}});
   res.json({ads});
 });
 
