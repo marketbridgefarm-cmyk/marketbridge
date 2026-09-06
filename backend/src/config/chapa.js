@@ -27,6 +27,26 @@ function getSecretKey() {
   return key;
 }
 
+// The webhook secret is a SEPARATE value from CHAPA_SECRET_KEY. Per
+// Chapa's own docs, when you enable a webhook in the dashboard you set an
+// arbitrary "secret hash" of your choosing (store it here as
+// CHAPA_WEBHOOK_SECRET) — Chapa signs the webhook payload with that value,
+// not with your API secret key. Reusing CHAPA_SECRET_KEY for this check
+// would silently fail verification against every real webhook.
+function getWebhookSecret() {
+  const key = process.env.CHAPA_WEBHOOK_SECRET;
+  if (!key) throw new Error('CHAPA_WEBHOOK_SECRET is not configured');
+  return key;
+}
+
+// Lets the app report which mode it's running in (e.g. for an admin
+// screen or a startup log) without parsing the key itself elsewhere.
+// Chapa's test keys are always prefixed CHASECK_TEST-; live keys are not.
+function getChapaMode() {
+  const key = process.env.CHAPA_SECRET_KEY || '';
+  return key.startsWith('CHASECK_TEST-') ? 'test' : key ? 'live' : 'unconfigured';
+}
+
 async function chapaFetch(path, options = {}) {
   const res = await fetch(`${CHAPA_BASE_URL}${path}`, {
     ...options,
@@ -85,16 +105,17 @@ async function verifyTransaction(txRef) {
   return { status, raw: data };
 }
 
-// Chapa signs webhook bodies with the secret key over the raw JSON body.
+// Chapa signs webhook bodies with the webhook secret hash you configured
+// in the dashboard (Settings > Webhooks) — over the raw JSON body.
 // Confirm the exact header name and algorithm against your dashboard's
 // webhook settings / a real test event before relying on this in
 // production — see the caveat above.
 function verifyWebhookSignature(rawBody, signatureHeader) {
   if (!signatureHeader) return false;
-  const expected = crypto.createHmac('sha256', getSecretKey()).update(rawBody).digest('hex');
+  const expected = crypto.createHmac('sha256', getWebhookSecret()).update(rawBody).digest('hex');
   const a = Buffer.from(expected, 'utf8');
   const b = Buffer.from(signatureHeader, 'utf8');
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-module.exports = { initializeTransaction, verifyTransaction, verifyWebhookSignature };
+module.exports = { initializeTransaction, verifyTransaction, verifyWebhookSignature, getChapaMode };
