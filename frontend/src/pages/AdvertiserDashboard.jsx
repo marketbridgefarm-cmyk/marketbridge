@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../api/client';
+import { startChapaPayment, chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 import { useAuth } from '../context/AuthContext.jsx';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 
@@ -113,17 +114,25 @@ export default function AdvertiserDashboard() {
 
     setPayingId(ad.id);
     try {
-      await api.post('/payments', {
+      await startChapaPayment({
         type: 'ADVERTISING',
         advertisementId: ad.id,
         amount,
         method,
       });
-      setSuccess('Payment recorded. An admin will confirm it and review your campaign.');
-      await loadAll();
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not submit payment');
-    } finally {
+      setError(err.response?.data?.error || err.message || 'Could not start payment');
+      setPayingId(null);
+    }
+  }
+
+  async function resumeAdPayment(paymentId, adId) {
+    clearMessages();
+    setPayingId(adId);
+    try {
+      await chapaInitializeAndRedirect(paymentId);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Could not resume payment');
       setPayingId(null);
     }
   }
@@ -252,22 +261,47 @@ export default function AdvertiserDashboard() {
                   {ad.amountPaid != null ? `Paid: ${Number(ad.amountPaid).toLocaleString()} ETB` : 'No payment recorded yet'}
                 </p>
 
-                {ad.status === 'PENDING' && ad.amountPaid == null && (
-                  <form onSubmit={(e) => payForAd(ad, e)} style={{ marginTop: 12 }}>
-                    <label>Amount (ETB)</label>
-                    <input name="amount" type="number" min="1" step="0.01" required />
-                    <label>Payment method</label>
-                    <select name="method" defaultValue="TELEBIRR">
-                      <option value="TELEBIRR">Telebirr</option>
-                      <option value="CBE">CBE</option>
-                      <option value="QR">QR</option>
-                      <option value="OTHER">Other</option>
-                    </select>
-                    <button className="sd-btn sd-btn-primary" style={{ marginTop: 8 }} disabled={payingId === ad.id}>
-                      {payingId === ad.id ? 'Submitting…' : 'Record payment'}
-                    </button>
-                  </form>
-                )}
+                {(() => {
+                  const pending = (ad.payments || []).find((p) => p.status === 'PENDING');
+                  const paid = (ad.payments || []).find((p) => p.status === 'PAID');
+
+                  if (paid || ad.amountPaid != null) return null;
+
+                  if (pending) {
+                    return (
+                      <div style={{ marginTop: 12 }}>
+                        <p className="muted">Your payment hasn't completed yet.</p>
+                        <button
+                          type="button"
+                          className="sd-btn sd-btn-primary"
+                          disabled={payingId === ad.id}
+                          onClick={() => resumeAdPayment(pending.id, ad.id)}
+                        >
+                          {payingId === ad.id ? 'Redirecting…' : 'Resume payment'}
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  if (ad.status !== 'PENDING') return null;
+
+                  return (
+                    <form onSubmit={(e) => payForAd(ad, e)} style={{ marginTop: 12 }}>
+                      <label>Amount (ETB)</label>
+                      <input name="amount" type="number" min="1" step="0.01" required />
+                      <label>Payment method</label>
+                      <select name="method" defaultValue="TELEBIRR">
+                        <option value="TELEBIRR">Telebirr</option>
+                        <option value="CBE">CBE</option>
+                        <option value="QR">QR</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                      <button className="sd-btn sd-btn-primary" style={{ marginTop: 8 }} disabled={payingId === ad.id}>
+                        {payingId === ad.id ? 'Submitting…' : 'Record payment'}
+                      </button>
+                    </form>
+                  );
+                })()}
               </div>
             ))}
           </div>
