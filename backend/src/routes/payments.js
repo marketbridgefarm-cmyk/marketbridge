@@ -8,6 +8,8 @@ const { isAdmin, isOrderParticipant } = require('../utils/authorization');
 const { commissionFor, netFor } = require('../config/commissions');
 const chapa = require('../config/chapa');
 const { paymentLimiter } = require('../middleware/rateLimit');
+const paymentService = require('../services/paymentService');
+const commissionService = require('../services/commissionService');
 
 const router = express.Router();
 
@@ -38,122 +40,6 @@ function moneyEqual(a, b) {
   return Math.abs(Number(a) - Number(b)) < 0.01;
 }
 
-// ============ PAYMENT PAID — SINGLE SOURCE OF TRUTH ============
-async function markPaymentPaid(tx, paymentId, { reference, provider, providerTransactionId } = {}) {
-  const payment = await tx.payment.findUnique({
-    where: { id: paymentId },
-    include: {
-      order: { include: { transportJob: true, payments: true } },
-      digitalPurchase: true,
-      advertisement: true,
-      inspectionRequest: true,
-      digitalProduct: true,
-    },
-  });
-
-  if (!payment) throw Object.assign(new Error('Payment not found'), { status: 404 });
-  if (payment.status === 'PAID') return payment;
-  if (payment.status === 'REFUNDED') throw Object.assign(new Error('Refunded payment cannot be reopened'), { status: 409 });
-
-  // Transport payment validation
-  if (payment.type === 'TRANSPORT' && payment.orderId) {
-    const order = payment.order;
-    if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
-    if (!order.transportJob) throw Object.assign(new Error('Transport job required before transport payment can be confirmed'), { status: 400 });
-    if (order.transportJob.method !== 'HIRE_TRANSPORTER') throw Object.assign(new Error('No separate transport payment is required for OWN_TRUCK transport'), { status: 400 });
-    if (order.transportJob.status !== 'ACCEPTED') throw Object.assign(new Error('A transport quote must be accepted before transport payment can be confirmed'), { status: 400 });
-    if (order.transportJob.agreedAmount == null) throw Object.assign(new Error('Accepted transport amount is missing'), { status: 400 });
-    if (!moneyEqual(payment.amount, order.transportJob.agreedAmount)) throw Object.assign(new Error('Transport payment amount does not match the accepted transport fee'), { status: 409 });
-    const marketplacePaid = order.payments.some(p => p.type === 'MARKETPLACE' && p.status === 'PAID');
-    if (!marketplacePaid) throw Object.assign(new Error('Marketplace payment must be PAID before transport payment can be confirmed'), { status: 402 });
-  }
-
-  const { rate, commissionAmount } = commissionFor(payment.type, payment.amount);
-  const { netAmount } = netFor(payment.type, payment.amount);
-
-  const updated = await tx.payment.update({
-    where: { id: payment.id },
-    data: {
-      status: 'PAID',
-      commissionRate: rate,
-      commissionAmount,
-      netAmount,
-      reference: reference || payment.reference,
-      provider: provider || payment.provider,
-      providerTransactionId: providerTransactionId || payment.providerTransactionId,
-    },
-  });
-
-  // Create commission record
-  if (commissionAmount > 0 && ['MARKETPLACE', 'TRANSPORT', 'INSPECTOR', 'DIGITAL'].includes(payment.type)) {
-    try {
-      await tx.commission.create({
-        data: {
-          paymentId: payment.id,
-          orderId: payment.orderId,
-          transportJobId: payment.transportJobId,
-          type: payment.type,
-          rate,
-          amount: commissionAmount,
-          currency: payment.currency || 'ETB',
-          status: 'RECORDED',
-        },
-      });
-    } catch (e) {
-      if (e.code !== 'P2002') console.error('Commission creation error:', e);
-    }
-  }
-
-  // Create ledger entries
-  try {
-    if (commissionAmount > 0) {
-      await tx.paymentLedgerEntry.create({
-        data: { paymentId: payment.id, type: 'PLATFORM_COMMISSION', amount: commissionAmount, currency: payment.currency || 'ETB', description: `${payment.type} commission` },
-      });
-    }
-    if (payment.type === 'MARKETPLACE' && payment.order?.sellerId && netAmount > 0) {
-      await tx.paymentLedgerEntry.create({
-        data: { paymentId: payment.id, userId: payment.order.sellerId, type: 'SELLER_EARNING', amount: netAmount, currency: payment.currency || 'ETB', description: 'Seller earning from marketplace payment' },
-      });
-    }
-    if (payment.type === 'TRANSPORT' && payment.transportJob?.truckOwnerId && netAmount > 0) {
-      await tx.paymentLedgerEntry.create({
-        data: { paymentId: payment.id, userId: payment.transportJob.truckOwnerId, type: 'TRANSPORTER_EARNING', amount: netAmount, currency: payment.currency || 'ETB', description: 'Transporter earning from hired transport payment' },
-      });
-    }
-    if (payment.type === 'INSPECTOR' && payment.inspectionRequest?.inspectorId && netAmount > 0) {
-      await tx.paymentLedgerEntry.create({
-        data: { paymentId: payment.id, userId: payment.inspectionRequest.inspectorId, type: 'INSPECTOR_EARNING', amount: netAmount, currency: payment.currency || 'ETB', description: 'Inspector earning from inspection payment' },
-      });
-    }
-    if (payment.type === 'DIGITAL' && payment.digitalProduct?.sellerId && netAmount > 0) {
-      await tx.paymentLedgerEntry.create({
-        data: { paymentId: payment.id, userId: payment.digitalProduct.sellerId, type: 'SELLER_EARNING', amount: netAmount, currency: payment.currency || 'ETB', description: 'Digital seller earning from digital product sale' },
-      });
-    }
-    if (payment.type === 'ADVERTISING' && payment.amount > 0) {
-      await tx.paymentLedgerEntry.create({
-        data: { paymentId: payment.id, type: 'PLATFORM_REVENUE', amount: payment.amount, currency: payment.currency || 'ETB', description: 'Advertising revenue' },
-      });
-    }
-  } catch (ledgerError) {
-    console.error('Ledger entry creation error:', ledgerError);
-  }
-
-  // Business effects
-  if (payment.type === 'MARKETPLACE' && payment.orderId) {
-    await tx.order.updateMany({ where: { id: payment.orderId, status: 'PENDING_PAYMENT' }, data: { status: 'CONFIRMED' } });
-  }
-  if (payment.type === 'DIGITAL' && payment.digitalPurchase) {
-    await tx.digitalPurchase.update({ where: { id: payment.digitalPurchase.id }, data: { status: 'COMPLETED' } });
-  }
-  if (payment.type === 'ADVERTISING' && payment.advertisement) {
-    await tx.advertisement.update({ where: { id: payment.advertisement.id }, data: { amountPaid: payment.amount, status: 'ACTIVE' } });
-  }
-
-  return updated;
-}
-
 // ============ CREATE PAYMENT ============
 router.post('/', authenticate, paymentLimiter, [
   body('type').isIn(['MARKETPLACE', 'TRANSPORT', 'INSPECTOR', 'ADVERTISING', 'DIGITAL']),
@@ -163,14 +49,15 @@ router.post('/', authenticate, paymentLimiter, [
   body('digitalProductId').optional().isUUID(),
   body('advertisementId').optional().isUUID(),
   body('inspectionRequestId').optional().isUUID(),
+  body('transportJobId').optional().isUUID(),
   body('reference').optional().isString().trim().isLength({ max: 200 }),
 ], validate, async (req, res) => {
   try {
-    const { type, orderId, digitalProductId, advertisementId, inspectionRequestId, reference } = req.body;
-    const { method } = req.body; // ⚠️ FIX: method must be destructured
+    const { type, orderId, digitalProductId, advertisementId, inspectionRequestId, transportJobId, reference } = req.body;
+    const { method } = req.body;
     const amount = Number(req.body.amount);
 
-    // ORDER PAYMENTS
+    // ---------- AUTHORIZATION & VALIDATION ----------
     if (type === 'MARKETPLACE' || type === 'TRANSPORT') {
       if (!orderId) return res.status(400).json({ error: `${type} payment requires orderId` });
       const order = await prisma.order.findUnique({ where: { id: orderId }, include: { transportJob: true } });
@@ -180,39 +67,39 @@ router.post('/', authenticate, paymentLimiter, [
       if (type === 'MARKETPLACE') {
         if (order.buyerId !== req.user.id && !isAdmin(req.user)) return res.status(403).json({ error: 'Only the buyer may create the marketplace payment' });
         if (!moneyEqual(amount, order.finalPrice)) return res.status(400).json({ error: 'Amount must match order final price', expectedAmount: Number(order.finalPrice) });
-        if (order.status === 'COMPLETED') return res.status(400).json({ error: 'This order has already been completed' });
+        if (order.status === 'COMPLETED') return res.status(400).json({ error: 'Order already completed' });
       }
 
       if (type === 'TRANSPORT') {
         if (!order.transportJob) return res.status(400).json({ error: 'Transport job required' });
-        if (order.transportJob.method === 'OWN_TRUCK') return res.status(400).json({ error: 'No separate transport payment is required for OWN_TRUCK transport' });
-        if (order.transportJob.status !== 'ACCEPTED') return res.status(400).json({ error: 'A transport quote must be accepted before transport payment can be created' });
-        if (order.transportJob.agreedAmount == null) return res.status(400).json({ error: 'Accepted transport amount is missing' });
-        if (!moneyEqual(amount, order.transportJob.agreedAmount)) return res.status(400).json({ error: 'Amount must match the accepted transport quote', expectedAmount: Number(order.transportJob.agreedAmount) });
+        if (order.transportJob.method === 'OWN_TRUCK') return res.status(400).json({ error: 'No separate transport payment for OWN_TRUCK' });
+        if (order.transportJob.status !== 'ACCEPTED') return res.status(400).json({ error: 'Transport must be accepted before payment' });
+        if (order.transportJob.agreedAmount == null) return res.status(400).json({ error: 'Agreed amount missing' });
+        if (!moneyEqual(amount, order.transportJob.agreedAmount)) return res.status(400).json({ error: 'Amount mismatch', expectedAmount: Number(order.transportJob.agreedAmount) });
         const allowed = order.arrangingParty === 'BUYER' ? order.buyerId === req.user.id : order.arrangingParty === 'SELLER' ? order.sellerId === req.user.id : (order.buyerId === req.user.id || order.sellerId === req.user.id);
-        if (!allowed && !isAdmin(req.user)) return res.status(403).json({ error: 'Only the party who arranged transport may pay for this transport' });
+        if (!allowed && !isAdmin(req.user)) return res.status(403).json({ error: 'Only arranging party may pay transport' });
         const marketplacePaid = await prisma.payment.findFirst({ where: { orderId: order.id, type: 'MARKETPLACE', status: 'PAID' } });
-        if (!marketplacePaid) return res.status(402).json({ error: 'Marketplace payment must be PAID before transport payment can be created' });
+        if (!marketplacePaid) return res.status(402).json({ error: 'Marketplace payment must be PAID first' });
       }
     } else if (type === 'DIGITAL') {
-      if (!digitalProductId) return res.status(400).json({ error: 'digitalProductId is required' });
+      if (!digitalProductId) return res.status(400).json({ error: 'digitalProductId required' });
       const product = await prisma.digitalProduct.findUnique({ where: { id: digitalProductId } });
       if (!product || product.status !== 'ACTIVE') return res.status(404).json({ error: 'Digital product not found' });
-      if (product.sellerId === req.user.id) return res.status(400).json({ error: 'You cannot purchase your own product' });
-      if (!moneyEqual(amount, product.price)) return res.status(400).json({ error: 'Amount must match product price', expectedAmount: Number(product.price) });
+      if (product.sellerId === req.user.id) return res.status(400).json({ error: 'Cannot purchase own product' });
+      if (!moneyEqual(amount, product.price)) return res.status(400).json({ error: 'Amount mismatch', expectedAmount: Number(product.price) });
     } else if (type === 'ADVERTISING') {
-      if (!advertisementId) return res.status(400).json({ error: 'advertisementId is required' });
+      if (!advertisementId) return res.status(400).json({ error: 'advertisementId required' });
       const ad = await prisma.advertisement.findUnique({ where: { id: advertisementId } });
-      if (!ad) return res.status(404).json({ error: 'Advertisement not found' });
+      if (!ad) return res.status(404).json({ error: 'Ad not found' });
       if (ad.advertiserId !== req.user.id && !isAdmin(req.user)) return res.status(403).json({ error: 'Not authorized' });
-      if (ad.amountPaid != null && !moneyEqual(amount, ad.amountPaid)) return res.status(400).json({ error: 'Amount must match advertisement amount', expectedAmount: Number(ad.amountPaid) });
+      if (ad.amountPaid != null && !moneyEqual(amount, ad.amountPaid)) return res.status(400).json({ error: 'Amount mismatch', expectedAmount: Number(ad.amountPaid) });
     } else if (type === 'INSPECTOR') {
-      if (!inspectionRequestId) return res.status(400).json({ error: 'inspectionRequestId is required' });
+      if (!inspectionRequestId) return res.status(400).json({ error: 'inspectionRequestId required' });
       const request = await prisma.inspectionRequest.findUnique({ where: { id: inspectionRequestId } });
       if (!request) return res.status(404).json({ error: 'Inspection request not found' });
-      if (request.requestedById !== req.user.id && !isAdmin(req.user)) return res.status(403).json({ error: 'Only the person who requested the inspection may pay for it' });
-      if (request.fee == null) return res.status(400).json({ error: 'This inspection has no agreed fee yet' });
-      if (!moneyEqual(amount, request.fee)) return res.status(400).json({ error: 'Amount must match the agreed inspection fee', expectedAmount: Number(request.fee) });
+      if (request.requestedById !== req.user.id && !isAdmin(req.user)) return res.status(403).json({ error: 'Only requester may pay' });
+      if (request.fee == null) return res.status(400).json({ error: 'No agreed fee' });
+      if (!moneyEqual(amount, request.fee)) return res.status(400).json({ error: 'Amount mismatch', expectedAmount: Number(request.fee) });
     }
 
     // Duplicate check
@@ -221,32 +108,33 @@ router.post('/', authenticate, paymentLimiter, [
         createdById: req.user.id, type, status: { in: ['PENDING', 'PAID'] },
         ...(orderId && { orderId }), ...(digitalProductId && { digitalProductId }),
         ...(advertisementId && { advertisementId }), ...(inspectionRequestId && { inspectionRequestId }),
+        ...(transportJobId && { transportJobId }),
       },
     });
-    if (duplicate) return res.status(409).json({ error: 'An active payment already exists', payment: duplicate });
+    if (duplicate) return res.status(409).json({ error: 'Active payment already exists', payment: duplicate });
 
-    // Create payment
-    const commission = commissionFor(type, amount);
-    const net = netFor(type, amount);
-    const payment = await prisma.payment.create({
-      data: {
-        createdById: req.user.id, type, amount, method,
-        reference: reference || null,
-        orderId: orderId || null,
-        digitalProductId: digitalProductId || null,
-        advertisementId: advertisementId || null,
-        inspectionRequestId: inspectionRequestId || null,
-        commissionRate: commission.rate,
-        commissionAmount: commission.commissionAmount,
-        netAmount: net.netAmount,
-        status: 'PENDING',
-      },
+    // Create payment using paymentService
+    const payment = await paymentService.createPayment({
+      createdById: req.user.id,
+      type,
+      amount,
+      method,
+      reference: reference || null,
+      orderId: orderId || null,
+      digitalProductId: digitalProductId || null,
+      advertisementId: advertisementId || null,
+      inspectionRequestId: inspectionRequestId || null,
+      transportJobId: transportJobId || null,
     });
 
-    return res.status(201).json({ message: 'Payment intent created. Call /payments/:id/chapa/initialize to get a checkout link, or wait for admin reconciliation.', payment, paymentConfirmed: false });
+    return res.status(201).json({
+      message: 'Payment intent created. Use /payments/:id/chapa/initialize for checkout.',
+      payment,
+      paymentConfirmed: false,
+    });
   } catch (error) {
     console.error('CREATE PAYMENT ERROR:', error);
-    return res.status(error.status || 500).json({ error: error.status ? error.message : 'Could not create payment', details: process.env.NODE_ENV === 'development' ? error.message : undefined });
+    return res.status(error.status || 500).json({ error: error.message || 'Could not create payment' });
   }
 });
 
@@ -255,10 +143,10 @@ router.post('/:id/chapa/initialize', authenticate, [param('id').isUUID()], valid
   const payment = await prisma.payment.findUnique({ where: { id: req.params.id } });
   if (!payment) return res.status(404).json({ error: 'Payment not found' });
   if (payment.createdById !== req.user.id && !isAdmin(req.user)) return res.status(403).json({ error: 'Not authorized' });
-  if (payment.status !== 'PENDING') return res.status(409).json({ error: `Payment is already ${payment.status}` });
+  if (payment.status !== 'PENDING') return res.status(409).json({ error: `Payment is ${payment.status}` });
   const appUrl = (process.env.APP_BASE_URL || '').replace(/\/$/, '');
   const apiUrl = (process.env.API_BASE_URL || '').replace(/\/$/, '');
-  if (!appUrl || !apiUrl) return res.status(500).json({ error: 'APP_BASE_URL and API_BASE_URL must be configured to use Chapa checkout' });
+  if (!appUrl || !apiUrl) return res.status(500).json({ error: 'APP_BASE_URL and API_BASE_URL required' });
   try {
     const { checkoutUrl } = await chapa.initializeTransaction({
       txRef: payment.id, amount: payment.amount, email: req.user.email,
@@ -272,8 +160,8 @@ router.post('/:id/chapa/initialize', authenticate, [param('id').isUUID()], valid
     await prisma.payment.update({ where: { id: payment.id }, data: { provider: 'chapa' } });
     return res.json({ checkoutUrl });
   } catch (error) {
-    console.error('CHAPA INITIALIZE ERROR:', error.chapaResponse || error.message);
-    return res.status(error.status || 500).json({ error: 'Could not start Chapa checkout', details: error.message });
+    console.error('CHAPA INIT ERROR:', error);
+    return res.status(error.status || 500).json({ error: 'Could not start Chapa checkout' });
   }
 });
 
@@ -286,13 +174,22 @@ router.get('/:id/chapa/verify', authenticate, [param('id').isUUID()], validate, 
   try {
     const { status, raw } = await chapa.verifyTransaction(payment.id);
     if (status === 'success') {
-      const updated = await prisma.$transaction(tx => markPaymentPaid(tx, payment.id, { provider: 'chapa', providerTransactionId: raw?.data?.reference || raw?.data?.tx_ref }));
-      return res.json({ status: 'PAID', payment: updated });
+      // Use paymentService to settle
+      const settled = await paymentService.settlePayment({
+        paymentId: payment.id,
+        status: 'PAID',
+        provider: 'chapa',
+        providerTransactionId: raw?.data?.reference || raw?.data?.tx_ref,
+        reference: payment.reference,
+        eventId: `chapa-verify-${payment.id}`,
+        payload: { amount: payment.amount, currency: payment.currency || 'ETB' },
+      });
+      return res.json({ status: 'PAID', payment: settled });
     }
     return res.json({ status: status === 'failed' ? 'FAILED' : 'PENDING', payment, chapaStatus: status });
   } catch (error) {
-    console.error('CHAPA VERIFY ERROR:', error.chapaResponse || error.message);
-    return res.status(error.status || 500).json({ error: 'Could not verify Chapa transaction', details: error.message });
+    console.error('CHAPA VERIFY ERROR:', error);
+    return res.status(error.status || 500).json({ error: 'Could not verify Chapa transaction' });
   }
 });
 
@@ -306,54 +203,64 @@ router.post('/webhooks/chapa', async (req, res) => {
   }
   const txRef = req.body?.tx_ref || req.body?.reference;
   const eventStatus = req.body?.status;
-  if (!txRef) return res.status(400).json({ error: 'Invalid webhook payload — no tx_ref' });
+  if (!txRef) return res.status(400).json({ error: 'Invalid payload' });
   try {
     if (eventStatus === 'success' || eventStatus === 'successful') {
-      const updated = await prisma.$transaction(tx => markPaymentPaid(tx, txRef, { provider: 'chapa', providerTransactionId: req.body?.reference }));
-      return res.json({ ok: true, payment: updated });
+      const settled = await paymentService.settlePayment({
+        paymentId: txRef,
+        status: 'PAID',
+        provider: 'chapa',
+        providerTransactionId: req.body?.reference || txRef,
+        eventId: req.body?.event_id || `chapa-webhook-${txRef}`,
+        payload: req.body,
+      });
+      return res.json({ ok: true, payment: settled });
     }
     return res.json({ ok: true, ignored: true, eventStatus });
   } catch (error) {
-    console.error('CHAPA WEBHOOK PROCESSING ERROR:', error);
-    return res.status(error.status || 500).json({ error: error.status ? error.message : 'Chapa webhook processing failed' });
+    console.error('CHAPA WEBHOOK ERROR:', error);
+    return res.status(error.status || 500).json({ error: 'Webhook processing failed' });
   }
 });
 
 // ============ GENERIC WEBHOOK ============
 router.post('/webhooks/generic', express.json({ limit: '100kb' }), async (req, res) => {
-  if (!verifySignature(req)) return res.status(401).json({ error: 'Invalid webhook signature' });
+  if (!verifySignature(req)) return res.status(401).json({ error: 'Invalid signature' });
   const { paymentId, status, reference, provider, providerTransactionId } = req.body;
-  if (!paymentId || !['PAID', 'FAILED', 'REFUNDED'].includes(status)) return res.status(400).json({ error: 'Invalid webhook payload' });
+  if (!paymentId || !['PAID', 'FAILED', 'REFUNDED'].includes(status)) return res.status(400).json({ error: 'Invalid payload' });
   try {
-    if (status === 'PAID') {
-      const updated = await prisma.$transaction(tx => markPaymentPaid(tx, paymentId, { reference, provider, providerTransactionId }));
-      return res.json({ ok: true, payment: updated });
-    }
-    const result = await prisma.$transaction(async tx => {
-      const payment = await tx.payment.findUnique({ where: { id: paymentId }, include: { digitalPurchase: true } });
-      if (!payment) throw Object.assign(new Error('Payment not found'), { status: 404 });
-      if (payment.status === 'REFUNDED' && status !== 'REFUNDED') throw Object.assign(new Error('Refunded payment cannot be reopened'), { status: 409 });
-      const updated = await tx.payment.update({ where: { id: payment.id }, data: { status, reference: reference || payment.reference, provider: provider || payment.provider, providerTransactionId: providerTransactionId || payment.providerTransactionId } });
-      if (status === 'REFUNDED') {
-        if (payment.digitalPurchase) await tx.digitalPurchase.update({ where: { id: payment.digitalPurchase.id }, data: { status: 'REFUNDED' } });
-        await tx.paymentLedgerEntry.create({ data: { paymentId: payment.id, type: 'REFUND', amount: -Number(payment.amount), currency: payment.currency || 'ETB', description: 'Payment refund' } });
-      }
-      return updated;
+    const settled = await paymentService.settlePayment({
+      paymentId,
+      status,
+      provider: provider || 'generic',
+      providerTransactionId,
+      reference: reference || null,
+      eventId: `generic-${paymentId}-${Date.now()}`,
+      payload: req.body,
     });
-    return res.json({ ok: true, payment: result });
+    return res.json({ ok: true, payment: settled });
   } catch (error) {
     console.error('GENERIC WEBHOOK ERROR:', error);
-    return res.status(error.status || 500).json({ error: error.status ? error.message : 'Webhook processing failed' });
+    return res.status(error.status || 500).json({ error: 'Webhook processing failed' });
   }
 });
 
 // ============ ADMIN PAYMENT QUEUE ============
 router.get('/', authenticate, async (req, res) => {
-  if (!isAdmin(req.user)) return res.status(403).json({ error: 'Only an administrator can view all payments' });
+  if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admin only' });
   const { status } = req.query;
   const payments = await prisma.payment.findMany({
     where: { ...(status && { status }) },
-    include: { createdBy: { select: { id: true, name: true, email: true } }, order: { select: { id: true, finalPrice: true } }, digitalProduct: { select: { id: true, title: true } }, advertisement: { select: { id: true, type: true } }, inspectionRequest: { select: { id: true, fee: true } }, commission: true, ledgerEntries: true },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      order: { select: { id: true, finalPrice: true } },
+      digitalProduct: { select: { id: true, title: true } },
+      advertisement: { select: { id: true, type: true } },
+      inspectionRequest: { select: { id: true, fee: true } },
+      transportJob: { select: { id: true, method: true, agreedAmount: true } },
+      commission: true,
+      ledgerEntries: true,
+    },
     orderBy: { createdAt: 'desc' },
   });
   return res.json({ payments, count: payments.length });
@@ -361,9 +268,9 @@ router.get('/', authenticate, async (req, res) => {
 
 // ============ COMMISSION SUMMARY ============
 router.get('/commissions/summary', authenticate, async (req, res) => {
-  if (!isAdmin(req.user)) return res.status(403).json({ error: 'Only an administrator can view commission records' });
+  if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admin only' });
   const paid = await prisma.payment.findMany({ where: { status: 'PAID' }, select: { type: true, amount: true, commissionAmount: true } });
-  const byType = {}; let totalCommission = 0; let totalVolume = 0;
+  const byType = {}; let totalCommission = 0, totalVolume = 0;
   for (const payment of paid) {
     const type = byType[payment.type] || { volume: 0, commission: 0, count: 0 };
     type.volume += Number(payment.amount);
@@ -378,16 +285,22 @@ router.get('/commissions/summary', authenticate, async (req, res) => {
 
 // ============ ADMIN MANUAL CONFIRMATION ============
 router.patch('/:id/confirm', authenticate, async (req, res) => {
-  if (!isAdmin(req.user)) return res.status(403).json({ error: 'Only an administrator can perform manual payment reconciliation' });
+  if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admin only' });
   const existing = await prisma.payment.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: 'Payment not found' });
-  if (existing.status !== 'PENDING') return res.status(409).json({ error: `Payment is already ${existing.status}` });
-  if (existing.provider) return res.status(409).json({ error: `This payment is linked to ${existing.provider} — confirm it through that gateway's verification, not manually` });
+  if (existing.status !== 'PENDING') return res.status(409).json({ error: `Payment is ${existing.status}` });
+  if (existing.provider) return res.status(409).json({ error: `Payment linked to ${existing.provider} — verify via gateway` });
   try {
-    const updated = await prisma.$transaction(tx => markPaymentPaid(tx, req.params.id));
-    return res.json({ message: 'Payment manually reconciled.', payment: updated });
+    const settled = await paymentService.settlePayment({
+      paymentId: existing.id,
+      status: 'PAID',
+      provider: 'admin',
+      eventId: `admin-${existing.id}`,
+      payload: { amount: existing.amount, currency: existing.currency || 'ETB' },
+    });
+    return res.json({ message: 'Payment manually reconciled.', payment: settled });
   } catch (error) {
-    return res.status(error.status || 500).json({ error: error.status ? error.message : 'Could not reconcile payment' });
+    return res.status(error.status || 500).json({ error: error.message || 'Could not reconcile' });
   }
 });
 
@@ -396,13 +309,20 @@ router.get('/order/:orderId', authenticate, [param('orderId').isUUID()], validat
   const order = await prisma.order.findUnique({ where: { id: req.params.orderId } });
   if (!order) return res.status(404).json({ error: 'Order not found' });
   if (!isOrderParticipant(req.user.id, order) && !isAdmin(req.user)) return res.status(403).json({ error: 'Not authorized' });
-  const payments = await prisma.payment.findMany({ where: { orderId: order.id }, include: { commission: true, ledgerEntries: true }, orderBy: { createdAt: 'desc' } });
+  const payments = await prisma.payment.findMany({
+    where: { orderId: order.id },
+    include: { commission: true, ledgerEntries: true },
+    orderBy: { createdAt: 'desc' },
+  });
   return res.json({ payments, count: payments.length });
 });
 
 // ============ PAYMENT BY ID ============
 router.get('/:id', authenticate, [param('id').isUUID()], validate, async (req, res) => {
-  const payment = await prisma.payment.findUnique({ where: { id: req.params.id }, include: { order: true, digitalPurchase: true, commission: true, ledgerEntries: true } });
+  const payment = await prisma.payment.findUnique({
+    where: { id: req.params.id },
+    include: { order: true, digitalPurchase: true, commission: true, ledgerEntries: true, transportJob: true },
+  });
   if (!payment) return res.status(404).json({ error: 'Payment not found' });
   const owner = payment.createdById === req.user.id;
   const orderParticipant = payment.order && isOrderParticipant(req.user.id, payment.order);
