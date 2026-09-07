@@ -1,19 +1,14 @@
 // Chapa (chapa.co) payment gateway client.
 //
-// Ethiopia-licensed payment gateway operator. Supports card, Telebirr, and
-// bank-transfer checkout without requiring the merchant to be in a
-// Stripe-eligible country.
-//
-// Enhanced with:
-// - Request retry logic
-// - Better error handling
-// - Timeout support
-// - Logging
+// MarketBridge uses Chapa for payment checkout and verification.
+// Keep this module small and provider-focused; business/payment settlement
+// belongs in backend/src/routes/payments.js / payment service.
 
 const crypto = require('crypto');
 
 const CHAPA_BASE_URL = 'https://api.chapa.co/v1';
-const TIMEOUT_MS = 30000; // 30 second timeout
+const TIMEOUT_MS = 30000;
+const DEFAULT_RETRIES = 2;
 
 function getSecretKey() {
   const key = process.env.CHAPA_SECRET_KEY;
@@ -29,19 +24,23 @@ function getWebhookSecret() {
 
 function getChapaMode() {
   const key = process.env.CHAPA_SECRET_KEY || '';
-  return key.startsWith('CHASECK_TEST-') ? 'test' : key ? 'live' : 'unconfigured';
+  if (!key) return 'unconfigured';
+  return key.startsWith('CHASECK_TEST-') ? 'test' : 'live';
 }
 
-// Enhanced fetch with timeout and retry
-async function chapaFetch(path, options = {}, retries = 2) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
+async function chapaFetch(path, options = {}, retries = DEFAULT_RETRIES) {
   let lastError = null;
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
     try {
-      const res = await fetch(`${CHAPA_BASE_URL}${path}`, {
+      const response = await fetch(`${CHAPA_BASE_URL}${path}`, {
         ...options,
         headers: {
           Authorization: `Bearer ${getSecretKey()}`,
@@ -51,55 +50,75 @@ async function chapaFetch(path, options = {}, retries = 2) {
         signal: controller.signal,
       });
 
-      const data = await res.json().catch(() => null);
+      const data = await response.json().catch(() => null);
 
-      if (!res.ok) {
-        const message = data?.message || `Chapa request failed (${res.status})`;
-        const error = Object.assign(new Error(message), {
-          status: res.status,
-          chapaResponse: data,
-          retryable: res.status >= 500 || res.status === 429,
-        });
+      if (!response.ok) {
+        const error = Object.assign(
+          new Error(data?.message || `Chapa request failed (${response.status})`),
+          {
+            status: response.status,
+            chapaResponse: data,
+            retryable: response.status >= 500 || response.status === 429,
+          },
+        );
 
-        // Retry on 5xx or rate limit
         if (error.retryable && attempt < retries) {
           lastError = error;
-          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+          await sleep(1000 * (attempt + 1));
           continue;
         }
 
         throw error;
       }
 
-      clearTimeout(timeoutId);
       return data;
     } catch (error) {
       if (error.name === 'AbortError') {
-        clearTimeout(timeoutId);
-        throw Object.assign(new Error('Chapa request timed out'), { status: 504 });
+        lastError = Object.assign(new Error('Chapa request timed out'), {
+          status: 504,
+          retryable: true,
+        });
+      } else {
+        lastError = error;
       }
 
-      lastError = error;
+      const retryableNetworkError = !error.status;
+      const retryable = error.retryable || retryableNetworkError;
 
-      // Retry network errors
-      if (attempt < retries && !error.status) {
-        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      if (retryable && attempt < retries) {
+        await sleep(1000 * (attempt + 1));
         continue;
       }
 
+      throw lastError;
+    } finally {
       clearTimeout(timeoutId);
-      throw error;
     }
   }
 
-  clearTimeout(timeoutId);
   throw lastError || new Error('Chapa request failed');
 }
 
 async function initializeTransaction({
-  txRef, amount, currency = 'ETB', email, firstName, lastName, phoneNumber,
-  callbackUrl, returnUrl, title, description,
+  txRef,
+  amount,
+  currency = 'ETB',
+  email,
+  firstName,
+  lastName,
+  phoneNumber,
+  callbackUrl,
+  returnUrl,
+  title,
+  description,
 }) {
+  if (!txRef) throw Object.assign(new Error('txRef is required'), { status: 400 });
+  if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+    throw Object.assign(new Error('amount must be greater than zero'), { status: 400 });
+  }
+  if (!callbackUrl) throw Object.assign(new Error('callbackUrl is required'), { status: 400 });
+  if (!returnUrl) throw Object.assign(new Error('returnUrl is required'), { status: 400 });
+
   const data = await chapaFetch('/transaction/initialize', {
     method: 'POST',
     body: JSON.stringify({
@@ -120,22 +139,47 @@ async function initializeTransaction({
   });
 
   const checkoutUrl = data?.data?.checkout_url;
-  if (!checkoutUrl) throw Object.assign(new Error('Chapa did not return a checkout URL'), { status: 502, chapaResponse: data });
+  if (!checkoutUrl) {
+    throw Object.assign(new Error('Chapa did not return a checkout URL'), {
+      status: 502,
+      chapaResponse: data,
+    });
+  }
+
   return { checkoutUrl, raw: data };
 }
 
 async function verifyTransaction(txRef) {
-  const data = await chapaFetch(`/transaction/verify/${encodeURIComponent(txRef)}`, { method: 'GET' });
-  const status = data?.data?.status; // expected: 'success' | 'failed' | 'pending'
-  return { status, raw: data };
+  if (!txRef) throw Object.assign(new Error('txRef is required'), { status: 400 });
+
+  const data = await chapaFetch(
+    `/transaction/verify/${encodeURIComponent(txRef)}`,
+    { method: 'GET' },
+  );
+
+  return {
+    status: data?.data?.status,
+    raw: data,
+  };
 }
 
 function verifyWebhookSignature(rawBody, signatureHeader) {
   if (!signatureHeader) return false;
+
   try {
-    const expected = crypto.createHmac('sha256', getWebhookSecret()).update(rawBody).digest('hex');
+    const raw = Buffer.isBuffer(rawBody)
+      ? rawBody
+      : Buffer.from(String(rawBody ?? ''), 'utf8');
+
+    const expected = crypto
+      .createHmac('sha256', getWebhookSecret())
+      .update(raw)
+      .digest('hex');
+
+    const supplied = String(signatureHeader).trim();
     const a = Buffer.from(expected, 'utf8');
-    const b = Buffer.from(signatureHeader, 'utf8');
+    const b = Buffer.from(supplied, 'utf8');
+
     return a.length === b.length && crypto.timingSafeEqual(a, b);
   } catch (error) {
     console.error('Webhook signature verification error:', error.message);
@@ -143,11 +187,9 @@ function verifyWebhookSignature(rawBody, signatureHeader) {
   }
 }
 
-module.exports = { initializeTransaction, verifyTransaction, verifyWebhookSignature, getChapaMode };  if (!signatureHeader) return false;
-  const expected = crypto.createHmac('sha256', getWebhookSecret()).update(rawBody).digest('hex');
-  const a = Buffer.from(expected, 'utf8');
-  const b = Buffer.from(signatureHeader, 'utf8');
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
-
-module.exports = { initializeTransaction, verifyTransaction, verifyWebhookSignature, getChapaMode };
+module.exports = {
+  initializeTransaction,
+  verifyTransaction,
+  verifyWebhookSignature,
+  getChapaMode,
+};
