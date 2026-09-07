@@ -17,8 +17,6 @@ const validate = (req, res, next) => {
 };
 
 // ============ CREATE TRANSPORT JOB ============
-// POST /api/transport
-// Only seller or buyer (or admin) can create a transport job for an order.
 router.post(
   '/',
   authenticate,
@@ -53,31 +51,16 @@ router.post(
 
       if (!order) return res.status(404).json({ error: 'Order not found' });
 
-      // Only participants (buyer/seller) or admin can create transport
       if (!isOrderParticipant(req.user.id, order) && !isAdmin(req.user)) {
         return res.status(403).json({ error: 'Not authorized to arrange transport for this order' });
       }
 
-      // Ensure the order is confirmed (marketplace payment done)
       if (order.status !== 'CONFIRMED' && order.status !== 'PENDING_PAYMENT') {
         return res.status(400).json({ error: `Transport can only be arranged for orders in CONFIRMED or PENDING_PAYMENT state (current: ${order.status})` });
       }
 
-      // Prevent duplicate transport job
       if (order.transportJob) {
         return res.status(409).json({ error: 'A transport job already exists for this order' });
-      }
-
-      // If method is OWN_TRUCK, the user must have a truck (or we allow any? we'll check)
-      if (method === 'OWN_TRUCK') {
-        // Ensure the current user is the seller or buyer (whoever is arranging) and they have a truck?
-        // The spec says OWN_TRUCK means the arranging party uses their own truck.
-        // We'll just allow it, but we don't enforce having a truck in the system.
-        // However, we need to set truckOwnerId = current user if they are arranging.
-        // But we could also allow the seller to use the buyer's truck? No.
-        // We'll set truckOwnerId to the current user.
-        // We'll not require a truck record, as they might not have registered it.
-        // We'll set truckOwnerId = req.user.id.
       }
 
       const transportJob = await prisma.transportJob.create({
@@ -90,25 +73,17 @@ router.post(
           load,
           requiredCapacity: requiredCapacity || null,
           specialRequirements: specialRequirements || null,
-          // For OWN_TRUCK, we set the truckOwnerId to the current user (they are using their own truck)
           truckOwnerId: method === 'OWN_TRUCK' ? req.user.id : null,
-          // truckId is optional, can be filled later if they register a truck
-          status: method === 'OWN_TRUCK' ? 'ACCEPTED' : 'REQUESTED', // OWN_TRUCK is immediately accepted
+          status: method === 'OWN_TRUCK' ? 'ACCEPTED' : 'REQUESTED',
         },
       });
 
-      // Update order status to TRANSPORT_ARRANGED if not already
-      if (order.status === 'PENDING_PAYMENT') {
-        // Do not change status yet; payment must be confirmed first.
-        // Actually, transport arrangement can happen before payment? The spec says transport is post-purchase.
-        // We'll leave order status as is; the frontend will handle.
-        // We'll update to TRANSPORT_ARRANGED only if order is CONFIRMED.
-        if (order.status === 'CONFIRMED') {
-          await prisma.order.update({
-            where: { id: order.id },
-            data: { status: 'TRANSPORT_ARRANGED' },
-          });
-        }
+      // Update order status if it's CONFIRMED
+      if (order.status === 'CONFIRMED') {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { status: 'TRANSPORT_ARRANGED' },
+        });
       }
 
       return res.status(201).json({ transportJob });
@@ -185,8 +160,6 @@ router.get('/mine', authenticate, requireRole('TRUCK_OWNER'), async (req, res) =
 });
 
 // ============ UPDATE TRANSPORT JOB STATUS ============
-// Only the arranging party (or admin) can update status, except for DELIVERED which buyer confirms.
-// For OWN_TRUCK, status updates are done by the truck owner (which is the arranging party).
 router.patch(
   '/:id/status',
   authenticate,
@@ -205,7 +178,6 @@ router.patch(
 
       if (!job) return res.status(404).json({ error: 'Transport job not found' });
 
-      // Check authorization
       const isArranging = job.arrangingParty === 'SELLER' && job.order.sellerId === req.user.id ||
                           job.arrangingParty === 'BUYER' && job.order.buyerId === req.user.id ||
                           job.arrangingParty === 'JOINT' && (job.order.buyerId === req.user.id || job.order.sellerId === req.user.id);
@@ -215,28 +187,22 @@ router.patch(
         return res.status(403).json({ error: 'Not authorized to update this transport job' });
       }
 
-      // Validate transition
       const current = job.status;
       const next = req.body.status;
 
-      // Define allowed transitions (simplified)
       const validTransitions = {
         REQUESTED: ['ACCEPTED', 'QUOTED', 'CANCELLED'],
         QUOTED: ['ACCEPTED', 'REJECTED', 'CANCELLED'],
         ACCEPTED: ['PICKUP', 'CANCELLED'],
         PICKUP: ['IN_TRANSIT', 'CANCELLED'],
         IN_TRANSIT: ['DELIVERED', 'CANCELLED'],
-        DELIVERED: ['DELIVERED'], // can stay
+        DELIVERED: ['DELIVERED'],
         CANCELLED: [],
       };
 
       if (!validTransitions[current]?.includes(next)) {
         return res.status(400).json({ error: `Invalid status transition from ${current} to ${next}` });
       }
-
-      // Only the arranging party can cancel, or truck owner if it's OWN_TRUCK? but we'll allow both.
-      // For DELIVERED, only buyer can confirm? Actually receipt confirmation is separate.
-      // We'll allow any authorized party to set DELIVERED, but the order receipt confirmation is separate.
 
       const updated = await prisma.transportJob.update({
         where: { id: job.id },
@@ -248,7 +214,6 @@ router.patch(
         },
       });
 
-      // If status becomes DELIVERED, we could auto-update order to DELIVERED if not already.
       if (next === 'DELIVERED') {
         await prisma.order.update({
           where: { id: job.orderId },
@@ -264,7 +229,7 @@ router.patch(
   }
 );
 
-// ============ SUBMIT A QUOTE (for HIRE_TRANSPORTER) ============
+// ============ SUBMIT A QUOTE ============
 router.post(
   '/:id/quotes',
   authenticate,
@@ -290,7 +255,6 @@ router.post(
         return res.status(400).json({ error: 'This job is not open for quotes' });
       }
 
-      // Check if the truck owner already has a pending quote
       const existing = await prisma.transportQuote.findFirst({
         where: {
           transportJobId: job.id,
@@ -300,7 +264,6 @@ router.post(
       });
       if (existing) return res.status(409).json({ error: 'You already have a pending or accepted quote for this job' });
 
-      // Optionally, the truck owner must have a truck
       const truck = await prisma.truck.findFirst({
         where: { ownerId: req.user.id, availability: 'AVAILABLE' },
       });
@@ -319,7 +282,6 @@ router.post(
         },
       });
 
-      // Update job status to QUOTED if not already
       if (job.status === 'REQUESTED') {
         await prisma.transportJob.update({
           where: { id: job.id },
@@ -350,7 +312,6 @@ router.get(
 
       if (!job) return res.status(404).json({ error: 'Transport job not found' });
 
-      // Only arranging party or admin can view all quotes; truck owners can see their own
       const isArranging = job.arrangingParty === 'SELLER' && job.order.sellerId === req.user.id ||
                           job.arrangingParty === 'BUYER' && job.order.buyerId === req.user.id ||
                           job.arrangingParty === 'JOINT' && (job.order.buyerId === req.user.id || job.order.sellerId === req.user.id);
@@ -378,8 +339,6 @@ router.get(
 );
 
 // ============ ACCEPT/REJECT A QUOTE ============
-// Only the arranging party can accept/reject a quote.
-// Upon acceptance, the transport job is updated with the chosen truck owner and amount.
 router.patch(
   '/quotes/:quoteId',
   authenticate,
@@ -403,7 +362,6 @@ router.patch(
       const job = quote.transportJob;
       const order = job.order;
 
-      // Check authorization: only arranging party can accept/reject
       const isArranging = job.arrangingParty === 'SELLER' && order.sellerId === req.user.id ||
                           job.arrangingParty === 'BUYER' && order.buyerId === req.user.id ||
                           job.arrangingParty === 'JOINT' && (order.buyerId === req.user.id || order.sellerId === req.user.id);
@@ -413,15 +371,12 @@ router.patch(
       }
 
       if (req.body.action === 'ACCEPT') {
-        // Accept the quote
         const updatedQuote = await prisma.$transaction(async (tx) => {
-          // Update quote status
           const q = await tx.transportQuote.update({
             where: { id: quote.id },
             data: { status: 'ACCEPTED' },
           });
 
-          // Reject all other pending quotes for this job
           await tx.transportQuote.updateMany({
             where: {
               transportJobId: job.id,
@@ -431,7 +386,6 @@ router.patch(
             data: { status: 'REJECTED' },
           });
 
-          // Update transport job with selected truck owner and agreed amount
           await tx.transportJob.update({
             where: { id: job.id },
             data: {
@@ -442,7 +396,6 @@ router.patch(
             },
           });
 
-          // Update order status to TRANSPORT_ARRANGED if not already
           if (order.status === 'CONFIRMED') {
             await tx.order.update({
               where: { id: order.id },
@@ -455,7 +408,6 @@ router.patch(
 
         return res.json({ message: 'Quote accepted', quote: updatedQuote });
       } else {
-        // REJECT
         const updatedQuote = await prisma.transportQuote.update({
           where: { id: quote.id },
           data: { status: 'REJECTED' },
