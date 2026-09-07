@@ -1,3 +1,5 @@
+'use strict';
+
 require('dotenv').config();
 require('express-async-errors');
 
@@ -5,7 +7,13 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const { apiLimiter, authLimiter, paymentLimiter, webhookLimiter } = require('./middleware/rateLimit');
+
+const {
+  apiLimiter,
+  authLimiter,
+  paymentLimiter,
+  webhookLimiter,
+} = require('./middleware/rateLimit');
 
 const authRoutes = require('./routes/auth');
 const listingRoutes = require('./routes/listings');
@@ -26,52 +34,69 @@ const prisma = require('./config/db');
 
 const app = express();
 
-// Trust the first proxy so Express can correctly read X-Forwarded-For
+// ============================================================================
+// BASIC APP CONFIGURATION
+// ============================================================================
+
 app.set('trust proxy', 1);
 
 // ============================================================================
-// ENVIRONMENT VALIDATION
+// ENVIRONMENT
 // ============================================================================
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 function validateEnv() {
-  const isProduction = process.env.NODE_ENV === 'production';
+  if (!isProduction) {
+    return;
+  }
 
-  if (isProduction) {
-    const required = [
-      'DATABASE_URL',
-      'JWT_SECRET',
-      'PAYMENT_WEBHOOK_SECRET',
-      'CHAPA_SECRET_KEY',
-      'CHAPA_WEBHOOK_SECRET',
-      'CLIENT_URL',
-      'APP_BASE_URL',
-      'API_BASE_URL',
-    ];
+  const required = [
+    'DATABASE_URL',
+    'JWT_SECRET',
+    'PAYMENT_WEBHOOK_SECRET',
+    'CHAPA_SECRET_KEY',
+    'CHAPA_WEBHOOK_SECRET',
+    'CLIENT_URL',
+    'APP_BASE_URL',
+    'API_BASE_URL',
+  ];
 
-    const missing = required.filter((key) => !process.env[key]);
+  const missing = required.filter(
+    (key) => !process.env[key] || !String(process.env[key]).trim()
+  );
 
-    if (missing.length > 0) {
-      console.error(`FATAL: Missing required environment variables in production: ${missing.join(', ')}`);
-      process.exit(1);
-    }
+  if (missing.length > 0) {
+    console.error(
+      `FATAL: Missing required environment variables in production: ${missing.join(', ')}`
+    );
+    process.exit(1);
+  }
 
-    // Validate minimum lengths
-    if (process.env.JWT_SECRET.length < 32) {
-      console.error('FATAL: JWT_SECRET must be at least 32 characters');
-      process.exit(1);
-    }
+  if (process.env.JWT_SECRET.length < 32) {
+    console.error('FATAL: JWT_SECRET must be at least 32 characters');
+    process.exit(1);
+  }
 
-    if (process.env.PAYMENT_WEBHOOK_SECRET.length < 32) {
-      console.error('FATAL: PAYMENT_WEBHOOK_SECRET must be at least 32 characters');
-      process.exit(1);
-    }
+  if (process.env.PAYMENT_WEBHOOK_SECRET.length < 32) {
+    console.error(
+      'FATAL: PAYMENT_WEBHOOK_SECRET must be at least 32 characters'
+    );
+    process.exit(1);
+  }
+
+  if (process.env.CHAPA_WEBHOOK_SECRET.length < 32) {
+    console.error(
+      'FATAL: CHAPA_WEBHOOK_SECRET must be at least 32 characters'
+    );
+    process.exit(1);
   }
 }
 
 validateEnv();
 
 // ============================================================================
-// DATABASE CONNECTION TEST
+// DATABASE CONNECTION
 // ============================================================================
 
 async function testDatabase() {
@@ -87,59 +112,88 @@ async function testDatabase() {
 testDatabase();
 
 // ============================================================================
-// SECURITY MIDDLEWARE
+// SECURITY
 // ============================================================================
 
-app.use(helmet({
-  contentSecurityPolicy: false, // API doesn't serve HTML
-  crossOriginEmbedderPolicy: false,
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
+// ============================================================================
+// CORS
+// ============================================================================
 
 const allowedOrigins = process.env.CLIENT_URL
-  ? process.env.CLIENT_URL.split(',').map((origin) => origin.trim()).filter(Boolean)
+  ? process.env.CLIENT_URL
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean)
   : [];
 
-const isProduction = process.env.NODE_ENV === 'production';
-
 if (isProduction && allowedOrigins.length === 0) {
-  console.error('FATAL: CLIENT_URL is not set. Refusing to start in production with an open CORS policy.');
+  console.error(
+    'FATAL: CLIENT_URL is not set. Refusing to start in production with an open CORS policy.'
+  );
   process.exit(1);
 }
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests without Origin header (health checks, server-to-server)
+      // Health checks and server-to-server requests may not have Origin.
       if (!origin) {
         return callback(null, true);
       }
 
+      // Configured production origins.
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
-      // Outside production, allow any origin for dev
+      // Development mode.
       if (!isProduction) {
         return callback(null, true);
       }
 
-      return callback(new Error(`CORS blocked request from origin: ${origin}`));
+      return callback(
+        new Error(`CORS blocked request from origin: ${origin}`)
+      );
     },
     credentials: true,
   })
 );
 
+// ============================================================================
+// LOGGING
+// ============================================================================
+
 app.use(morgan(isProduction ? 'combined' : 'dev'));
+
+// ============================================================================
+// RAW BODY + JSON PARSING
+// ============================================================================
+//
+// IMPORTANT:
+// Chapa webhook signature verification needs the ORIGINAL request body.
+//
+// express.json() below stores the original bytes in req.rawBody before
+// parsing JSON. This allows payments.js to verify Chapa's webhook signature.
+//
 
 app.use(
   express.json({
     limit: '5mb',
+
     verify: (req, res, buf) => {
       req.rawBody = Buffer.from(buf);
     },
   })
 );
 
+// URL-encoded requests.
 app.use(
   express.urlencoded({
     extended: true,
@@ -161,10 +215,14 @@ app.get('/health', (req, res) => {
 });
 
 // ============================================================================
-// API ROUTES
+// API RATE LIMITER
 // ============================================================================
 
 app.use('/api', apiLimiter);
+
+// ============================================================================
+// API ROUTES
+// ============================================================================
 
 app.use('/api/auth', authRoutes);
 
@@ -178,9 +236,11 @@ app.use('/api/transport', transportRoutes);
 
 app.use('/api/orders', orderRoutes);
 
+// Payment routes.
+//
+// Do NOT add another global paymentLimiter here because individual
+// sensitive payment endpoints can apply the limiter where appropriate.
 app.use('/api/payments', paymentRoutes);
-
-app.use('/api/payments', paymentLimiter); // Additional limiter for payment routes
 
 app.use('/api/ads', adRoutes);
 
@@ -214,19 +274,31 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   console.error('MarketBridge API error:', err);
 
-  // CORS errors
-  if (err.message && err.message.startsWith('CORS blocked')) {
+  // --------------------------------------------------------------------------
+  // CORS
+  // --------------------------------------------------------------------------
+
+  if (
+    err.message &&
+    err.message.startsWith('CORS blocked')
+  ) {
     return res.status(403).json({
       error: 'CORS policy blocked this request',
     });
   }
 
-  // Multer errors
+  // --------------------------------------------------------------------------
+  // MULTER
+  // --------------------------------------------------------------------------
+
   if (err.name === 'MulterError') {
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
         error: 'File too large',
-        maxSizeBytes: Number(process.env.DIGITAL_MAX_FILE_BYTES || 25 * 1024 * 1024),
+        maxSizeBytes: Number(
+          process.env.DIGITAL_MAX_FILE_BYTES ||
+            25 * 1024 * 1024
+        ),
       });
     }
 
@@ -235,14 +307,20 @@ app.use((err, req, res, next) => {
     });
   }
 
-  // Rate limit errors
+  // --------------------------------------------------------------------------
+  // RATE LIMIT
+  // --------------------------------------------------------------------------
+
   if (err.name === 'RateLimitError') {
     return res.status(429).json({
       error: 'Too many requests. Please try again later.',
     });
   }
 
-  // Validation errors
+  // --------------------------------------------------------------------------
+  // VALIDATION
+  // --------------------------------------------------------------------------
+
   if (err.name === 'ValidationError') {
     return res.status(400).json({
       error: 'Validation failed',
@@ -250,7 +328,10 @@ app.use((err, req, res, next) => {
     });
   }
 
-  // Prisma errors
+  // --------------------------------------------------------------------------
+  // PRISMA
+  // --------------------------------------------------------------------------
+
   if (err.code === 'P2002') {
     return res.status(409).json({
       error: 'A record with this value already exists',
@@ -263,15 +344,22 @@ app.use((err, req, res, next) => {
     });
   }
 
-  // Express/route-provided status
-  const status = Number(err.status || err.statusCode) || 500;
+  // --------------------------------------------------------------------------
+  // HTTP STATUS
+  // --------------------------------------------------------------------------
 
-  res.status(status).json({
+  const status =
+    Number(err.status || err.statusCode) || 500;
+
+  return res.status(status).json({
     error:
       isProduction && status === 500
         ? 'Internal server error'
         : err.message || 'Internal server error',
-    ...(isProduction && status === 500 ? {} : { stack: err.stack }),
+
+    ...(isProduction && status === 500
+      ? {}
+      : { stack: err.stack }),
   });
 });
 
@@ -282,7 +370,17 @@ app.use((err, req, res, next) => {
 const PORT = Number(process.env.PORT) || 4000;
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 MarketBridge API listening on port ${PORT}`);
-  console.log(`   Environment: ${isProduction ? 'production' : 'development'}`);
-  console.log(`   Health: http://localhost:${PORT}/health`);
+  console.log(
+    `🚀 MarketBridge API listening on port ${PORT}`
+  );
+
+  console.log(
+    `   Environment: ${
+      isProduction ? 'production' : 'development'
+    }`
+  );
+
+  console.log(
+    `   Health: http://localhost:${PORT}/health`
+  );
 });
