@@ -21,14 +21,29 @@ const money = (value) =>
 
 const getError = (error, fallback) =>
   error?.response?.data?.error ||
+  error?.response?.data?.message ||
   error?.message ||
   fallback;
 
+/*
+ * These are frontend payment-method labels only.
+ *
+ * Chapa credentials/secrets MUST remain on the backend.
+ * The frontend only sends the selected method to POST /payments.
+ */
 const PAYMENT_METHODS = [
-  { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
-  { value: 'CBE', label: 'CBE' },
-  { value: 'QR', label: 'QR Code' },
-  { value: 'OTHER', label: 'Other' },
+  {
+    value: 'TELEBIRR',
+    label: 'Telebirr via Chapa',
+  },
+  {
+    value: 'CBE',
+    label: 'CBE via Chapa',
+  },
+  {
+    value: 'QR',
+    label: 'QR Code',
+  },
 ];
 
 export default function OrderDetail() {
@@ -44,9 +59,9 @@ export default function OrderDetail() {
 
   const [payMethod, setPayMethod] = useState('TELEBIRR');
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // LOAD ORDER
-  // --------------------------------------------------------------------------
+  // ==========================================================================
 
   const load = useCallback(
     async ({ silent = false } = {}) => {
@@ -65,7 +80,9 @@ export default function OrderDetail() {
 
         setOrder(response.data?.order || null);
       } catch (err) {
-        setError(getError(err, 'Could not load order'));
+        setError(
+          getError(err, 'Could not load order')
+        );
       } finally {
         if (silent) {
           setRefreshing(false);
@@ -81,16 +98,29 @@ export default function OrderDetail() {
     load();
   }, [load]);
 
-  // --------------------------------------------------------------------------
-  // DERIVED STATE
-  // --------------------------------------------------------------------------
+  // ==========================================================================
+  // DERIVED DATA
+  // ==========================================================================
 
   const transportJob = order?.transportJob || null;
-  const payments = order?.payments || [];
+  const payments = Array.isArray(order?.payments)
+    ? order.payments
+    : [];
 
-  const isAdmin = Boolean(user?.roles?.includes('ADMIN'));
-  const isBuyer = Boolean(order && user?.id === order.buyerId);
-  const isSeller = Boolean(order && user?.id === order.sellerId);
+  const isAdmin = Boolean(
+    user?.roles?.includes('ADMIN')
+  );
+
+  const isBuyer = Boolean(
+    order &&
+    user?.id === order.buyerId
+  );
+
+  const isSeller = Boolean(
+    order &&
+    user?.id === order.sellerId
+  );
+
   const isParticipant = isBuyer || isSeller;
 
   const title =
@@ -98,10 +128,15 @@ export default function OrderDetail() {
     order?.listing?.cropType ||
     'Order';
 
+  // ==========================================================================
+  // PAYMENT GROUPS
+  // ==========================================================================
+
   const marketplacePayments = useMemo(
     () =>
       payments.filter(
-        (payment) => payment.type === 'MARKETPLACE'
+        (payment) =>
+          payment.type === 'MARKETPLACE'
       ),
     [payments]
   );
@@ -109,88 +144,154 @@ export default function OrderDetail() {
   const transportPayments = useMemo(
     () =>
       payments.filter(
-        (payment) => payment.type === 'TRANSPORT'
+        (payment) =>
+          payment.type === 'TRANSPORT'
       ),
     [payments]
   );
 
-  const marketplacePayment =
-    marketplacePayments.find(
+  /*
+   * Prefer the most recent active payment.
+   */
+  const marketplacePayment = useMemo(() => {
+    return (
+      marketplacePayments.find(
+        (payment) =>
+          payment.status === 'PENDING'
+      ) ||
+      marketplacePayments.find(
+        (payment) =>
+          payment.status === 'PAID'
+      ) ||
+      null
+    );
+  }, [marketplacePayments]);
+
+  const transportPayment = useMemo(() => {
+    return (
+      transportPayments.find(
+        (payment) =>
+          payment.status === 'PENDING'
+      ) ||
+      transportPayments.find(
+        (payment) =>
+          payment.status === 'PAID'
+      ) ||
+      null
+    );
+  }, [transportPayments]);
+
+  const marketplacePaid =
+    marketplacePayments.some(
       (payment) =>
-        payment.status === 'PENDING' ||
         payment.status === 'PAID'
-    ) || null;
+    );
 
-  const transportPayment =
-    transportPayments.find(
+  const marketplacePending =
+    marketplacePayments.some(
       (payment) =>
-        payment.status === 'PENDING' ||
+        payment.status === 'PENDING'
+    );
+
+  const transportPaid =
+    transportPayments.some(
+      (payment) =>
         payment.status === 'PAID'
-    ) || null;
+    );
 
-  const marketplacePaid = marketplacePayments.some(
-    (payment) => payment.status === 'PAID'
-  );
+  const transportPending =
+    transportPayments.some(
+      (payment) =>
+        payment.status === 'PENDING'
+    );
 
-  const transportPaid = transportPayments.some(
-    (payment) => payment.status === 'PAID'
-  );
-
-  const marketplacePending = marketplacePayments.some(
-    (payment) => payment.status === 'PENDING'
-  );
-
-  const transportPending = transportPayments.some(
-    (payment) => payment.status === 'PENDING'
-  );
-
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // TRANSPORT PERMISSIONS
-  // --------------------------------------------------------------------------
+  // ==========================================================================
 
+  /*
+   * Buyer or seller can create a transport job.
+   */
   const canArrangeTransport =
     Boolean(order) &&
     !transportJob &&
     order.status !== 'CANCELLED' &&
     isParticipant;
 
+  /*
+   * Only the arranging buyer/seller can select a quote.
+   *
+   * The backend accepts:
+   * PATCH /transport/quotes/:quoteId
+   * { action: 'ACCEPT' }
+   */
   const canChooseQuote =
     Boolean(transportJob) &&
     isParticipant &&
-    ['REQUESTED', 'QUOTED'].includes(transportJob.status) &&
+    ['REQUESTED', 'QUOTED'].includes(
+      transportJob.status
+    ) &&
     !transportJob.truckOwnerId;
 
+  /*
+   * Transport payment is ONLY for hired transport.
+   *
+   * OWN_TRUCK does not create a separate transport payment.
+   *
+   * Marketplace payment must already be PAID before the
+   * transport payment can be started.
+   */
   const canPayTransport =
     Boolean(transportJob) &&
-    transportJob.method === 'HIRE_TRANSPORTER' &&
+    transportJob.method ===
+      'HIRE_TRANSPORTER' &&
     Boolean(transportJob.truckOwnerId) &&
     transportJob.agreedAmount != null &&
-    !transportPayment &&
+    Number(transportJob.agreedAmount) > 0 &&
+    marketplacePaid &&
+    !transportPayments.some(
+      (payment) =>
+        payment.status === 'PENDING' ||
+        payment.status === 'PAID'
+    ) &&
     isParticipant;
 
+  /*
+   * Resume an existing pending transport payment.
+   */
   const canResumeTransportPayment =
     Boolean(transportPayment) &&
     transportPayment.status === 'PENDING' &&
     isParticipant;
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // MARKETPLACE PAYMENT PERMISSIONS
-  // --------------------------------------------------------------------------
+  // ==========================================================================
 
+  /*
+   * Marketplace payment can only be initiated by the buyer.
+   */
   const canPayMarketplace =
     Boolean(order) &&
     order.status === 'PENDING_PAYMENT' &&
     isBuyer &&
-    !marketplacePayment;
+    !marketplacePayments.some(
+      (payment) =>
+        payment.status === 'PENDING' ||
+        payment.status === 'PAID'
+    );
 
+  /*
+   * Resume an already-created pending marketplace payment.
+   */
   const canResumeMarketplacePayment =
     Boolean(marketplacePayment) &&
     marketplacePayment.status === 'PENDING' &&
     isBuyer;
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // COUNTERPARTY
-  // --------------------------------------------------------------------------
+  // ==========================================================================
 
   const counterpartId = isBuyer
     ? order?.sellerId
@@ -204,9 +305,9 @@ export default function OrderDetail() {
       ? order?.buyer?.name
       : null;
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // ACCEPT TRANSPORT QUOTE
-  // --------------------------------------------------------------------------
+  // ==========================================================================
 
   const acceptQuote = async (quoteId) => {
     if (!quoteId) return;
@@ -216,82 +317,142 @@ export default function OrderDetail() {
 
     try {
       /*
-       * Your current frontend uses:
-       *
-       * PATCH /transport/quotes/:quoteId/accept
-       *
-       * The backend you supplied also exposes:
+       * Correct backend contract:
        *
        * PATCH /transport/quotes/:quoteId
-       * { action: 'ACCEPT' }
-       *
-       * Try the existing endpoint first so this remains compatible with
-       * your current deployed frontend/backend setup.
+       * {
+       *   action: 'ACCEPT'
+       * }
        */
-      try {
-        await api.patch(`/transport/quotes/${quoteId}/accept`);
-      } catch (firstError) {
-        const status = firstError?.response?.status;
-
-        /*
-         * Only fall back when the endpoint itself is unavailable.
-         * Do not hide normal authorization/validation errors.
-         */
-        if (status !== 404 && status !== 405) {
-          throw firstError;
-        }
-
-        await api.patch(`/transport/quotes/${quoteId}`, {
+      await api.patch(
+        `/transport/quotes/${quoteId}`,
+        {
           action: 'ACCEPT',
-        });
-      }
+        }
+      );
 
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not accept transport quote'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  // --------------------------------------------------------------------------
-  // START MARKETPLACE PAYMENT
-  // --------------------------------------------------------------------------
-
-  const payMarketplace = async () => {
-    if (!order) return;
-
-    setBusy('pay-marketplace');
-    setError('');
-
-    try {
-      await startChapaPayment({
-        type: 'MARKETPLACE',
-        orderId: order.id,
-        amount: Number(order.finalPrice),
-        method: payMethod,
-      });
-
-      /*
-       * Chapa normally redirects the user. If it does not, refresh the
-       * order so any newly-created payment appears immediately.
-       */
       await load({ silent: true });
     } catch (err) {
       setError(
-        getError(err, 'Could not start marketplace payment')
+        getError(
+          err,
+          'Could not accept transport quote'
+        )
       );
     } finally {
       setBusy('');
     }
   };
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
+  // START MARKETPLACE PAYMENT
+  // ==========================================================================
+
+  const payMarketplace = async () => {
+    if (!order) return;
+
+    if (!isBuyer) {
+      setError(
+        'Only the buyer can make the marketplace payment'
+      );
+      return;
+    }
+
+    const amount = Number(order.finalPrice);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError(
+        'Invalid marketplace payment amount'
+      );
+      return;
+    }
+
+    setBusy('pay-marketplace');
+    setError('');
+
+    try {
+      /*
+       * startChapaPayment:
+       *
+       * POST /payments
+       * then
+       * POST /payments/:paymentId/chapa/initialize
+       *
+       * Chapa secrets remain on the backend.
+       */
+      await startChapaPayment({
+        type: 'MARKETPLACE',
+        orderId: order.id,
+        amount,
+        method: payMethod,
+      });
+
+      /*
+       * Normally the browser is redirected to Chapa.
+       * This refresh is useful if the backend returns without
+       * navigating, or for future payment providers.
+       */
+      await load({ silent: true });
+    } catch (err) {
+      setError(
+        getError(
+          err,
+          'Could not start marketplace payment'
+        )
+      );
+    } finally {
+      setBusy('');
+    }
+  };
+
+  // ==========================================================================
   // START TRANSPORT PAYMENT
-  // --------------------------------------------------------------------------
+  // ==========================================================================
 
   const payTransport = async () => {
     if (!order || !transportJob) return;
+
+    if (!isParticipant) {
+      setError(
+        'You are not authorized to pay for this transport'
+      );
+      return;
+    }
+
+    if (
+      transportJob.method !==
+      'HIRE_TRANSPORTER'
+    ) {
+      setError(
+        'Transport payment is only required for hired transport'
+      );
+      return;
+    }
+
+    if (!marketplacePaid) {
+      setError(
+        'Marketplace payment must be completed before transport payment'
+      );
+      return;
+    }
+
+    if (!transportJob.truckOwnerId) {
+      setError(
+        'A transporter must be selected before transport payment'
+      );
+      return;
+    }
+
+    const amount = Number(
+      transportJob.agreedAmount
+    );
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError(
+        'Invalid transport payment amount'
+      );
+      return;
+    }
 
     setBusy('pay-transport');
     setError('');
@@ -300,47 +461,85 @@ export default function OrderDetail() {
       await startChapaPayment({
         type: 'TRANSPORT',
         orderId: order.id,
-        amount: Number(transportJob.agreedAmount),
+        amount,
         method: payMethod,
       });
 
       await load({ silent: true });
     } catch (err) {
       setError(
-        getError(err, 'Could not start transport payment')
+        getError(
+          err,
+          'Could not start transport payment'
+        )
       );
     } finally {
       setBusy('');
     }
   };
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // RESUME PAYMENT
-  // --------------------------------------------------------------------------
+  // ==========================================================================
 
-  const resumePayment = async (paymentId, busyKey) => {
+  const resumePayment = async (
+    paymentId,
+    busyKey
+  ) => {
     if (!paymentId) return;
 
     setBusy(busyKey);
     setError('');
 
     try {
-      await chapaInitializeAndRedirect(paymentId);
+      await chapaInitializeAndRedirect(
+        paymentId
+      );
 
       await load({ silent: true });
     } catch (err) {
-      setError(getError(err, 'Could not resume payment'));
+      setError(
+        getError(
+          err,
+          'Could not resume payment'
+        )
+      );
     } finally {
       setBusy('');
     }
   };
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // CONFIRM RECEIPT
-  // --------------------------------------------------------------------------
+  // ==========================================================================
 
   const confirmReceipt = async () => {
     if (!order) return;
+
+    if (!isBuyer) {
+      setError(
+        'Only the buyer can confirm receipt'
+      );
+      return;
+    }
+
+    if (!marketplacePaid) {
+      setError(
+        'Marketplace payment must be confirmed before receipt'
+      );
+      return;
+    }
+
+    if (
+      transportJob?.method ===
+        'HIRE_TRANSPORTER' &&
+      !transportPaid
+    ) {
+      setError(
+        'Transport payment must be confirmed before receipt'
+      );
+      return;
+    }
 
     setBusy('receipt');
     setError('');
@@ -353,16 +552,19 @@ export default function OrderDetail() {
       await load({ silent: true });
     } catch (err) {
       setError(
-        getError(err, 'Could not confirm receipt')
+        getError(
+          err,
+          'Could not confirm receipt'
+        )
       );
     } finally {
       setBusy('');
     }
   };
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // LOADING
-  // --------------------------------------------------------------------------
+  // ==========================================================================
 
   if (loading) {
     return (
@@ -376,9 +578,9 @@ export default function OrderDetail() {
     );
   }
 
-  // --------------------------------------------------------------------------
-  // NOT FOUND / ERROR
-  // --------------------------------------------------------------------------
+  // ==========================================================================
+  // NOT FOUND
+  // ==========================================================================
 
   if (!order) {
     return (
@@ -400,19 +602,22 @@ export default function OrderDetail() {
     );
   }
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // RENDER
-  // --------------------------------------------------------------------------
+  // ==========================================================================
 
   return (
     <main className="section">
       <div className="container-narrow">
 
-        {/* ================================================================ */}
+        {/* ================================================================== */}
         {/* HEADER */}
-        {/* ================================================================ */}
+        {/* ================================================================== */}
 
-        <div className="row-between" style={{ marginBottom: 16 }}>
+        <div
+          className="row-between"
+          style={{ marginBottom: 16 }}
+        >
           <button
             type="button"
             className="back-link"
@@ -425,9 +630,13 @@ export default function OrderDetail() {
             type="button"
             className="btn btn-sm"
             disabled={refreshing}
-            onClick={() => load({ silent: true })}
+            onClick={() =>
+              load({ silent: true })
+            }
           >
-            {refreshing ? 'Refreshing…' : 'Refresh'}
+            {refreshing
+              ? 'Refreshing…'
+              : 'Refresh'}
           </button>
         </div>
 
@@ -455,9 +664,9 @@ export default function OrderDetail() {
           </div>
         </div>
 
-        {/* ================================================================ */}
+        {/* ================================================================== */}
         {/* ORDER DETAILS */}
-        {/* ================================================================ */}
+        {/* ================================================================== */}
 
         <div className="card">
           <h2>Order details</h2>
@@ -465,12 +674,16 @@ export default function OrderDetail() {
           <div className="detail-facts">
             <div>
               <span>Order</span>
-              <strong>{shortId(order.id)}</strong>
+              <strong>
+                {shortId(order.id)}
+              </strong>
             </div>
 
             <div>
               <span>Status</span>
-              <strong>{order.status}</strong>
+              <strong>
+                {order.status}
+              </strong>
             </div>
 
             <div>
@@ -483,7 +696,9 @@ export default function OrderDetail() {
             {order.listing?.cropType && (
               <div>
                 <span>Product</span>
-                <strong>{order.listing.cropType}</strong>
+                <strong>
+                  {order.listing.cropType}
+                </strong>
               </div>
             )}
 
@@ -498,9 +713,9 @@ export default function OrderDetail() {
           </div>
         </div>
 
-        {/* ================================================================ */}
+        {/* ================================================================== */}
         {/* PARTIES */}
-        {/* ================================================================ */}
+        {/* ================================================================== */}
 
         <div className="card">
           <h2>Parties</h2>
@@ -522,9 +737,9 @@ export default function OrderDetail() {
           </div>
         </div>
 
-        {/* ================================================================ */}
+        {/* ================================================================== */}
         {/* MARKETPLACE PAYMENT */}
-        {/* ================================================================ */}
+        {/* ================================================================== */}
 
         {canPayMarketplace && (
           <div className="card">
@@ -553,27 +768,38 @@ export default function OrderDetail() {
               <select
                 value={payMethod}
                 onChange={(event) =>
-                  setPayMethod(event.target.value)
+                  setPayMethod(
+                    event.target.value
+                  )
                 }
-                disabled={busy === 'pay-marketplace'}
+                disabled={
+                  busy ===
+                  'pay-marketplace'
+                }
               >
-                {PAYMENT_METHODS.map((method) => (
-                  <option
-                    key={method.value}
-                    value={method.value}
-                  >
-                    {method.label}
-                  </option>
-                ))}
+                {PAYMENT_METHODS.map(
+                  (method) => (
+                    <option
+                      key={method.value}
+                      value={method.value}
+                    >
+                      {method.label}
+                    </option>
+                  )
+                )}
               </select>
 
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={busy === 'pay-marketplace'}
+                disabled={
+                  busy ===
+                  'pay-marketplace'
+                }
                 onClick={payMarketplace}
               >
-                {busy === 'pay-marketplace'
+                {busy ===
+                'pay-marketplace'
                   ? 'Submitting…'
                   : 'Pay for this order'}
               </button>
@@ -581,46 +807,62 @@ export default function OrderDetail() {
           </div>
         )}
 
-        {/* ================================================================ */}
+        {/* ================================================================== */}
         {/* MARKETPLACE PAYMENT PENDING */}
-        {/* ================================================================ */}
+        {/* ================================================================== */}
 
         {canResumeMarketplacePayment && (
           <div className="card">
             <h2>Payment</h2>
 
             <p className="muted">
-              You started a payment for this order,
-              but it has not completed yet.
+              You started a payment for this
+              order, but it has not completed yet.
             </p>
 
             <div className="notice">
               <p>
                 Payment reference:{' '}
                 <strong>
-                  {shortId(marketplacePayment.id)}
+                  {shortId(
+                    marketplacePayment.id
+                  )}
                 </strong>
               </p>
 
               <p>
                 Amount:{' '}
                 <strong>
-                  {money(marketplacePayment.amount)} ETB
+                  {money(
+                    marketplacePayment.amount
+                  )}{' '}
+                  ETB
                 </strong>
               </p>
 
               <p>
                 Method:{' '}
                 <strong>
-                  {marketplacePayment.method || '—'}
+                  {marketplacePayment.method ||
+                    '—'}
                 </strong>
+              </p>
+
+              <p>
+                Status:{' '}
+                <span className="badge">
+                  {marketplacePayment.status}
+                </span>
               </p>
             </div>
 
             <button
               type="button"
               className="btn btn-primary"
-              disabled={busy === 'resume-marketplace'}
+              disabled={
+                busy ===
+                'resume-marketplace'
+              }
               onClick={() =>
                 resumePayment(
                   marketplacePayment.id,
@@ -628,16 +870,17 @@ export default function OrderDetail() {
                 )
               }
             >
-              {busy === 'resume-marketplace'
+              {busy ===
+              'resume-marketplace'
                 ? 'Redirecting…'
                 : 'Resume payment'}
             </button>
           </div>
         )}
 
-        {/* ================================================================ */}
-        {/* MARKETPLACE PAYMENT STATUS */}
-        {/* ================================================================ */}
+        {/* ================================================================== */}
+        {/* MARKETPLACE PAYMENT PAID */}
+        {/* ================================================================== */}
 
         {marketplacePaid && (
           <div className="card">
@@ -645,7 +888,9 @@ export default function OrderDetail() {
 
             <div className="notice">
               <p>
-                <strong>✓ Marketplace payment confirmed.</strong>
+                <strong>
+                  ✓ Marketplace payment confirmed.
+                </strong>
               </p>
 
               <p className="muted">
@@ -653,7 +898,8 @@ export default function OrderDetail() {
                 {money(
                   marketplacePayments.find(
                     (payment) =>
-                      payment.status === 'PAID'
+                      payment.status ===
+                      'PAID'
                   )?.amount
                 )}{' '}
                 ETB
@@ -666,18 +912,20 @@ export default function OrderDetail() {
           !canResumeMarketplacePayment &&
           !marketplacePaid && (
             <div className="card">
-              <h2>Marketplace payment</h2>
+              <h2>
+                Marketplace payment
+              </h2>
 
               <p className="muted">
-                A marketplace payment is currently
-                pending.
+                A marketplace payment is
+                currently pending.
               </p>
             </div>
           )}
 
-        {/* ================================================================ */}
+        {/* ================================================================== */}
         {/* TRANSPORT */}
-        {/* ================================================================ */}
+        {/* ================================================================== */}
 
         <div className="card">
           <div className="row-between">
@@ -685,9 +933,9 @@ export default function OrderDetail() {
               <h2>Transport</h2>
 
               <p className="muted">
-                The buyer or seller arranges transport.
-                MarketBridge does not automatically assign
-                a transporter.
+                The buyer or seller arranges
+                transport. MarketBridge does not
+                automatically assign a transporter.
               </p>
             </div>
 
@@ -704,28 +952,31 @@ export default function OrderDetail() {
           {!transportJob ? (
             <div className="notice">
               <p>
-                No transport arrangement recorded yet.
+                No transport arrangement recorded
+                yet.
               </p>
 
               {isParticipant &&
-                order.status === 'PENDING_PAYMENT' && (
+                order.status ===
+                  'PENDING_PAYMENT' && (
                   <p className="muted">
-                    You may arrange transport while the
-                    order is awaiting payment.
+                    You may arrange transport while
+                    the order is awaiting payment.
                   </p>
                 )}
             </div>
           ) : (
             <>
-              {/* ---------------------------------------------------------- */}
+              {/* ------------------------------------------------------------ */}
               {/* TRANSPORT SUMMARY */}
-              {/* ---------------------------------------------------------- */}
+              {/* ------------------------------------------------------------ */}
 
               <div className="detail-facts">
                 <div>
                   <span>Arranged by</span>
                   <strong>
-                    {transportJob.arrangingParty || '—'}
+                    {transportJob.arrangingParty ||
+                      '—'}
                   </strong>
                 </div>
 
@@ -748,14 +999,16 @@ export default function OrderDetail() {
                 <div>
                   <span>Pickup</span>
                   <strong>
-                    {transportJob.pickupLocation || '—'}
+                    {transportJob.pickupLocation ||
+                      '—'}
                   </strong>
                 </div>
 
                 <div>
                   <span>Destination</span>
                   <strong>
-                    {transportJob.destination || '—'}
+                    {transportJob.destination ||
+                      '—'}
                   </strong>
                 </div>
 
@@ -767,11 +1020,21 @@ export default function OrderDetail() {
                     </strong>
                   </div>
                 )}
+
+                {transportJob.requiredCapacity !=
+                  null && (
+                  <div>
+                    <span>Required capacity</span>
+                    <strong>
+                      {transportJob.requiredCapacity}
+                    </strong>
+                  </div>
+                )}
               </div>
 
-              {/* ---------------------------------------------------------- */}
+              {/* ------------------------------------------------------------ */}
               {/* ASSIGNED TRANSPORTER */}
-              {/* ---------------------------------------------------------- */}
+              {/* ------------------------------------------------------------ */}
 
               {transportJob.truckOwner && (
                 <div className="notice">
@@ -779,15 +1042,19 @@ export default function OrderDetail() {
 
                   <p>
                     <strong>
-                      {transportJob.truckOwner.name ||
-                        '—'}
+                      {transportJob.truckOwner
+                        .name || '—'}
                     </strong>
                   </p>
 
-                  {transportJob.truckOwner.phone && (
+                  {transportJob.truckOwner
+                    .phone && (
                     <p className="muted">
                       Phone:{' '}
-                      {transportJob.truckOwner.phone}
+                      {
+                        transportJob
+                          .truckOwner.phone
+                      }
                     </p>
                   )}
 
@@ -795,18 +1062,22 @@ export default function OrderDetail() {
                     <p>
                       Truck:{' '}
                       <strong>
-                        {transportJob.truck.registration ||
+                        {transportJob.truck
+                          .registration ||
                           '—'}
                       </strong>
                       {' · '}
-                      {transportJob.truck.truckType ||
+                      {transportJob.truck
+                        .truckType ||
                         'Truck'}
-                      {transportJob.truck.capacity != null &&
+                      {transportJob.truck
+                        .capacity != null &&
                         ` · ${transportJob.truck.capacity}t`}
                     </p>
                   )}
 
-                  {transportJob.agreedAmount != null && (
+                  {transportJob.agreedAmount !=
+                    null && (
                     <p>
                       Agreed transport fee:{' '}
                       <strong>
@@ -820,13 +1091,63 @@ export default function OrderDetail() {
                 </div>
               )}
 
-              {/* ---------------------------------------------------------- */}
+              {/* ------------------------------------------------------------ */}
               {/* TRANSPORT PAYMENT */}
-              {/* ---------------------------------------------------------- */}
+              {/* ------------------------------------------------------------ */}
+
+              {transportJob.method ===
+                'OWN_TRUCK' && (
+                <div className="notice">
+                  <h3>Transport payment</h3>
+
+                  <p>
+                    <strong>
+                      No separate transporter payment
+                      is required.
+                    </strong>
+                  </p>
+
+                  <p className="muted">
+                    This order is using the owner's
+                    own truck. OWN_TRUCK transport does
+                    not create a separate transport
+                    payment.
+                  </p>
+                </div>
+              )}
+
+              {transportJob.method ===
+                'HIRE_TRANSPORTER' &&
+                !marketplacePaid &&
+                !transportPaid && (
+                  <div className="notice">
+                    <h3>Transport payment</h3>
+
+                    <p className="muted">
+                      Complete the marketplace payment
+                      before paying the transporter.
+                    </p>
+
+                    {transportJob.agreedAmount !=
+                      null && (
+                      <p>
+                        Transport fee:{' '}
+                        <strong>
+                          {money(
+                            transportJob.agreedAmount
+                          )}{' '}
+                          ETB
+                        </strong>
+                      </p>
+                    )}
+                  </div>
+                )}
 
               {canPayTransport && (
                 <div className="notice">
-                  <h3>Transport payment</h3>
+                  <h3>
+                    Transport payment
+                  </h3>
 
                   <p>
                     Transport fee due:{' '}
@@ -839,9 +1160,9 @@ export default function OrderDetail() {
                   </p>
 
                   <p className="muted">
-                    Marketplace payment must be
-                    completed before transport payment
-                    can be made.
+                    Marketplace payment has been
+                    confirmed. You can now pay the
+                    agreed transporter fee.
                   </p>
 
                   <div
@@ -855,29 +1176,38 @@ export default function OrderDetail() {
                     <select
                       value={payMethod}
                       onChange={(event) =>
-                        setPayMethod(event.target.value)
+                        setPayMethod(
+                          event.target.value
+                        )
                       }
-                      disabled={busy === 'pay-transport'}
+                      disabled={
+                        busy ===
+                        'pay-transport'
+                      }
                     >
-                      {PAYMENT_METHODS.map((method) => (
-                        <option
-                          key={method.value}
-                          value={method.value}
-                        >
-                          {method.label}
-                        </option>
-                      ))}
+                      {PAYMENT_METHODS.map(
+                        (method) => (
+                          <option
+                            key={method.value}
+                            value={method.value}
+                          >
+                            {method.label}
+                          </option>
+                        )
+                      )}
                     </select>
 
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"
                       disabled={
-                        busy === 'pay-transport'
+                        busy ===
+                        'pay-transport'
                       }
                       onClick={payTransport}
                     >
-                      {busy === 'pay-transport'
+                      {busy ===
+                      'pay-transport'
                         ? 'Submitting…'
                         : 'Pay for transport'}
                     </button>
@@ -885,13 +1215,15 @@ export default function OrderDetail() {
                 </div>
               )}
 
-              {/* ---------------------------------------------------------- */}
+              {/* ------------------------------------------------------------ */}
               {/* RESUME TRANSPORT PAYMENT */}
-              {/* ---------------------------------------------------------- */}
+              {/* ------------------------------------------------------------ */}
 
               {canResumeTransportPayment && (
                 <div className="notice">
-                  <h3>Transport payment pending</h3>
+                  <h3>
+                    Transport payment pending
+                  </h3>
 
                   <p>
                     Amount:{' '}
@@ -903,16 +1235,25 @@ export default function OrderDetail() {
                     </strong>
                   </p>
 
+                  <p>
+                    Method:{' '}
+                    <strong>
+                      {transportPayment.method ||
+                        '—'}
+                    </strong>
+                  </p>
+
                   <p className="muted">
-                    The payment was started but has
-                    not completed yet.
+                    The payment was started but
+                    has not completed yet.
                   </p>
 
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
                     disabled={
-                      busy === 'resume-transport'
+                      busy ===
+                      'resume-transport'
                     }
                     onClick={() =>
                       resumePayment(
@@ -921,16 +1262,17 @@ export default function OrderDetail() {
                       )
                     }
                   >
-                    {busy === 'resume-transport'
+                    {busy ===
+                    'resume-transport'
                       ? 'Redirecting…'
                       : 'Resume payment'}
                   </button>
                 </div>
               )}
 
-              {/* ---------------------------------------------------------- */}
+              {/* ------------------------------------------------------------ */}
               {/* TRANSPORT PAID */}
-              {/* ---------------------------------------------------------- */}
+              {/* ------------------------------------------------------------ */}
 
               {transportPaid && (
                 <div className="notice">
@@ -939,93 +1281,130 @@ export default function OrderDetail() {
                       ✓ Transport payment confirmed.
                     </strong>
                   </p>
+
+                  <p className="muted">
+                    Paid amount:{' '}
+                    {money(
+                      transportPayments.find(
+                        (payment) =>
+                          payment.status ===
+                          'PAID'
+                      )?.amount
+                    )}{' '}
+                    ETB
+                  </p>
                 </div>
               )}
 
-              {/* ---------------------------------------------------------- */}
+              {/* ------------------------------------------------------------ */}
               {/* TRANSPORT QUOTES */}
-              {/* ---------------------------------------------------------- */}
+              {/* ------------------------------------------------------------ */}
 
               {transportJob.method ===
                 'HIRE_TRANSPORTER' &&
                 !transportJob.truckOwnerId && (
                   <div className="match-box">
-                    <h3>Transport quotes</h3>
+                    <h3>
+                      Transport quotes
+                    </h3>
 
-                    {transportJob.quotes?.length ? (
-                      transportJob.quotes.map((quote) => (
-                        <div
-                          className="transporter"
-                          key={quote.id}
-                        >
-                          <div>
-                            <strong>
-                              {quote.truckOwner?.name ||
-                                'Truck owner'}
-                            </strong>
+                    {transportJob.quotes
+                      ?.length ? (
+                      transportJob.quotes.map(
+                        (quote) => (
+                          <div
+                            className="transporter"
+                            key={quote.id}
+                          >
+                            <div>
+                              <strong>
+                                {quote
+                                  .truckOwner
+                                  ?.name ||
+                                  'Truck owner'}
+                              </strong>
 
-                            <p>
-                              {quote.truck?.truckType ||
-                                'Truck'}
-                              {' · '}
-                              {quote.truck?.capacity != null
-                                ? `${quote.truck.capacity}t`
-                                : 'Capacity —'}
-                              {' · '}
-                              {quote.truck
-                                ?.registration ||
-                                'Registration —'}
-                              {' · '}
-                              ★{' '}
-                              {typeof quote.truckOwner
-                                ?.rating === 'number'
-                                ? quote.truckOwner.rating.toFixed(
-                                    1
-                                  )
-                                : '—'}
-                            </p>
-
-                            {quote.message && (
-                              <p className="muted">
-                                {quote.message}
-                              </p>
-                            )}
-                          </div>
-
-                          <div>
-                            <strong>
-                              {money(quote.amount)} ETB
-                            </strong>
-
-                            {canChooseQuote && (
-                              <div
-                                style={{
-                                  marginTop: 8,
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  className="btn btn-sm"
-                                  disabled={
-                                    busy ===
-                                    `quote-${quote.id}`
-                                  }
-                                  onClick={() =>
-                                    acceptQuote(
-                                      quote.id
+                              <p>
+                                {quote.truck
+                                  ?.truckType ||
+                                  'Truck'}
+                                {' · '}
+                                {quote.truck
+                                  ?.capacity !=
+                                null
+                                  ? `${quote.truck.capacity}t`
+                                  : 'Capacity —'}
+                                {' · '}
+                                {quote.truck
+                                  ?.registration ||
+                                  'Registration —'}
+                                {' · '}
+                                ★{' '}
+                                {typeof quote
+                                  .truckOwner
+                                  ?.rating ===
+                                'number'
+                                  ? quote.truckOwner.rating.toFixed(
+                                      1
                                     )
-                                  }
-                                >
-                                  {busy ===
-                                  `quote-${quote.id}`
-                                    ? 'Accepting…'
-                                    : 'Accept quote'}
-                                </button>
-                              </div>
-                            )}
+                                  : '—'}
+                              </p>
+
+                              {quote.message && (
+                                <p className="muted">
+                                  {quote.message}
+                                </p>
+                              )}
+
+                              <p>
+                                Status:{' '}
+                                <span className="badge">
+                                  {quote.status ||
+                                    'PENDING'}
+                                </span>
+                              </p>
+                            </div>
+
+                            <div>
+                              <strong>
+                                {money(
+                                  quote.amount
+                                )}{' '}
+                                ETB
+                              </strong>
+
+                              {canChooseQuote &&
+                                quote.status ===
+                                  'PENDING' && (
+                                  <div
+                                    style={{
+                                      marginTop: 8,
+                                    }}
+                                  >
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm"
+                                      disabled={
+                                        busy ===
+                                        `quote-${quote.id}`
+                                      }
+                                      onClick={() =>
+                                        acceptQuote(
+                                          quote.id
+                                        )
+                                      }
+                                    >
+                                      {busy ===
+                                      `quote-${quote.id}`
+                                        ? 'Accepting…'
+                                        : 'Accept quote'}
+                                    </button>
+                                  </div>
+                                )}
+                            </div>
                           </div>
-                        </div>
-                      ))
+                        )
+                      )
                     ) : (
                       <p className="muted">
                         Waiting for registered truck
@@ -1035,19 +1414,22 @@ export default function OrderDetail() {
                   </div>
                 )}
 
-              {/* ---------------------------------------------------------- */}
-              {/* TRANSPORT STATUS INFORMATION */}
-              {/* ---------------------------------------------------------- */}
+              {/* ------------------------------------------------------------ */}
+              {/* TRANSPORT STATUS */}
+              {/* ------------------------------------------------------------ */}
 
-              {transportJob.status === 'DELIVERED' && (
+              {transportJob.status ===
+                'DELIVERED' && (
                 <div className="notice">
                   <p>
                     <strong>
-                      ✓ Transport marked as delivered.
+                      ✓ Transport marked as
+                      delivered.
                     </strong>
                   </p>
 
-                  {transportJob.deliveredConfirmedAt && (
+                  {transportJob
+                    .deliveredConfirmedAt && (
                     <p className="muted">
                       Delivery confirmed.
                     </p>
@@ -1057,7 +1439,9 @@ export default function OrderDetail() {
 
               {transportJob.incidentNotes && (
                 <div className="alert">
-                  <strong>Transport notes:</strong>{' '}
+                  <strong>
+                    Transport notes:
+                  </strong>{' '}
                   {transportJob.incidentNotes}
                 </div>
               )}
@@ -1065,14 +1449,16 @@ export default function OrderDetail() {
           )}
         </div>
 
-        {/* ================================================================ */}
+        {/* ================================================================== */}
         {/* CONFIRM RECEIPT */}
-        {/* ================================================================ */}
+        {/* ================================================================== */}
 
         {order.status === 'DELIVERED' &&
           isBuyer && (
             <div className="card">
-              <h2>Confirm receipt</h2>
+              <h2>
+                Confirm receipt
+              </h2>
 
               <p className="muted">
                 Confirm only after you have physically
@@ -1081,8 +1467,9 @@ export default function OrderDetail() {
 
               {!marketplacePaid && (
                 <div className="alert error">
-                  Marketplace payment must be confirmed
-                  before receipt can be completed.
+                  Marketplace payment must be
+                  confirmed before receipt can be
+                  completed.
                 </div>
               )}
 
@@ -1090,8 +1477,9 @@ export default function OrderDetail() {
                 'HIRE_TRANSPORTER' &&
                 !transportPaid && (
                   <div className="alert error">
-                    Transport payment must be confirmed
-                    before receipt can be completed.
+                    Transport payment must be
+                    confirmed before receipt can be
+                    completed.
                   </div>
                 )}
 
@@ -1116,13 +1504,15 @@ export default function OrderDetail() {
             </div>
           )}
 
-        {/* ================================================================ */}
+        {/* ================================================================== */}
         {/* COMPLETED */}
-        {/* ================================================================ */}
+        {/* ================================================================== */}
 
         {order.status === 'COMPLETED' && (
           <div className="card">
-            <h2>Order completed</h2>
+            <h2>
+              Order completed
+            </h2>
 
             <div className="notice">
               <p>
@@ -1132,18 +1522,21 @@ export default function OrderDetail() {
               </p>
 
               <p className="muted">
-                Receipt was confirmed by the buyer.
+                Receipt was confirmed by the
+                buyer.
               </p>
             </div>
           </div>
         )}
 
-        {/* ================================================================ */}
+        {/* ================================================================== */}
         {/* PAYMENT RECORDS */}
-        {/* ================================================================ */}
+        {/* ================================================================== */}
 
         <div className="card">
-          <h2>Payment records</h2>
+          <h2>
+            Payment records
+          </h2>
 
           {payments.length ? (
             <div>
@@ -1169,6 +1562,15 @@ export default function OrderDetail() {
                   <span className="badge">
                     {payment.status}
                   </span>
+
+                  {payment.reference && (
+                    <span className="muted">
+                      Ref:{' '}
+                      {shortId(
+                        payment.reference
+                      )}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
@@ -1180,19 +1582,21 @@ export default function OrderDetail() {
           )}
         </div>
 
-        {/* ================================================================ */}
+        {/* ================================================================== */}
         {/* RATING */}
-        {/* ================================================================ */}
+        {/* ================================================================== */}
 
         <RatingBox
           order={order}
           userId={user?.id}
-          onRated={() => load({ silent: true })}
+          onRated={() =>
+            load({ silent: true })
+          }
         />
 
-        {/* ================================================================ */}
+        {/* ================================================================== */}
         {/* MESSAGES */}
-        {/* ================================================================ */}
+        {/* ================================================================== */}
 
         {counterpartId && (
           <MessageThread
@@ -1201,19 +1605,21 @@ export default function OrderDetail() {
             counterpartId={counterpartId}
             counterpartName={counterpartName}
             currentUserId={user?.id}
-            onSent={() => load({ silent: true })}
+            onSent={() =>
+              load({ silent: true })
+            }
           />
         )}
 
-        {/* ================================================================ */}
+        {/* ================================================================== */}
         {/* ADMIN INDICATOR */}
-        {/* ================================================================ */}
+        {/* ================================================================== */}
 
         {isAdmin && (
           <div className="card">
             <p className="muted">
-              You are viewing this order with administrator
-              access.
+              You are viewing this order with
+              administrator access.
             </p>
           </div>
         )}
