@@ -2,18 +2,18 @@
 
 const crypto = require('crypto');
 
-const CHAPA_BASE_URL =
-  'https://api.chapa.co/v1';
+const CHAPA_BASE_URL = 'https://api.chapa.co/v1';
+
+// ============================================================================
+// SECRET KEY
+// ============================================================================
 
 function getSecretKey() {
-  const key =
-    process.env.CHAPA_SECRET_KEY;
+  const key = process.env.CHAPA_SECRET_KEY;
 
   if (!key) {
     throw Object.assign(
-      new Error(
-        'CHAPA_SECRET_KEY is not configured'
-      ),
+      new Error('CHAPA_SECRET_KEY is not configured'),
       { status: 500 }
     );
   }
@@ -25,53 +25,40 @@ function getSecretKey() {
 // API REQUEST
 // ============================================================================
 
-async function chapaRequest(
-  endpoint,
-  options = {}
-) {
-  const secretKey =
-    getSecretKey();
+async function chapaRequest(endpoint, options = {}) {
+  const secretKey = getSecretKey();
 
-  const response =
-    await fetch(
-      `${CHAPA_BASE_URL}${endpoint}`,
-      {
-        ...options,
+  const response = await fetch(
+    `${CHAPA_BASE_URL}${endpoint}`,
+    {
+      ...options,
 
-        headers: {
-          Authorization:
-            `Bearer ${secretKey}`,
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(options.headers || {}),
+      },
+    }
+  );
 
-          'Content-Type':
-            'application/json',
-
-          ...(options.headers || {}),
-        },
-      }
-    );
-
-  let data;
+  let data = {};
 
   try {
-    data =
-      await response.json();
+    data = await response.json();
   } catch {
     data = {};
   }
 
   if (!response.ok) {
-    const error =
-      new Error(
-        data?.message ||
-        data?.error ||
-        `Chapa request failed with HTTP ${response.status}`
-      );
+    const error = new Error(
+      data?.message ||
+      data?.error ||
+      `Chapa request failed with HTTP ${response.status}`
+    );
 
-    error.status =
-      response.status;
-
-    error.chapa =
-      data;
+    error.status = response.status;
+    error.chapa = data;
 
     throw error;
   }
@@ -120,62 +107,65 @@ async function initializeTransaction({
     );
   }
 
+  if (!callbackUrl) {
+    throw Object.assign(
+      new Error('Chapa callback URL is required'),
+      { status: 400 }
+    );
+  }
+
+  if (!returnUrl) {
+    throw Object.assign(
+      new Error('Chapa return URL is required'),
+      { status: 400 }
+    );
+  }
+
   const payload = {
-    amount:
-      Number(amount).toFixed(2),
+    amount: Number(amount).toFixed(2),
 
     currency,
 
     email,
 
-    first_name:
-      firstName || 'MarketBridge',
+    first_name: firstName || 'MarketBridge',
 
-    last_name:
-      lastName || 'User',
+    last_name: lastName || 'User',
 
-    tx_ref:
-      String(txRef),
+    tx_ref: String(txRef),
 
-    callback_url:
-      callbackUrl,
+    callback_url: callbackUrl,
 
-    return_url:
-      returnUrl,
+    return_url: returnUrl,
 
     customization: {
-      title:
-        title || 'MarketBridge',
+      title: title || 'MarketBridge',
 
       description:
-        description ||
-        'MarketBridge payment',
+        description || 'MarketBridge payment',
     },
   };
 
   if (phoneNumber) {
-    payload.phone_number =
-      phoneNumber;
+    payload.phone_number = phoneNumber;
   }
 
-  const result =
-    await chapaRequest(
-      '/transaction/initialize',
-      {
-        method: 'POST',
-        body:
-          JSON.stringify(payload),
-      }
-    );
+  const result = await chapaRequest(
+    '/transaction/initialize',
+    {
+      method: 'POST',
+
+      body: JSON.stringify(payload),
+    }
+  );
 
   const checkoutUrl =
     result?.data?.checkout_url;
 
   if (!checkoutUrl) {
-    const error =
-      new Error(
-        'Chapa did not return a checkout URL'
-      );
+    const error = new Error(
+      'Chapa did not return a checkout URL'
+    );
 
     error.status = 502;
     error.chapa = result;
@@ -193,9 +183,7 @@ async function initializeTransaction({
 // VERIFY TRANSACTION
 // ============================================================================
 
-async function verifyTransaction(
-  txRef
-) {
+async function verifyTransaction(txRef) {
   if (!txRef) {
     throw Object.assign(
       new Error('Transaction reference is required'),
@@ -203,46 +191,38 @@ async function verifyTransaction(
     );
   }
 
-  const result =
-    await chapaRequest(
-      `/transaction/verify/${encodeURIComponent(
-        String(txRef)
-      )}`,
-      {
-        method: 'GET',
-      }
-    );
+  const result = await chapaRequest(
+    `/transaction/verify/${encodeURIComponent(String(txRef))}`,
+    {
+      method: 'GET',
+    }
+  );
 
-  const status =
-    String(
-      result?.data?.status ||
-      result?.status ||
-      ''
-    ).toLowerCase();
+  const status = String(
+    result?.data?.status ||
+    result?.status ||
+    ''
+  ).toLowerCase();
 
-  let normalizedStatus =
-    'pending';
+  let normalizedStatus = 'pending';
 
   if (
     status === 'success' ||
     status === 'successful'
   ) {
-    normalizedStatus =
-      'success';
+    normalizedStatus = 'success';
   } else if (
     status === 'failed' ||
-    status === 'failure'
+    status === 'failure' ||
+    status === 'cancelled' ||
+    status === 'canceled'
   ) {
-    normalizedStatus =
-      'failed';
+    normalizedStatus = 'failed';
   }
 
   return {
-    status:
-      normalizedStatus,
-
-    raw:
-      result,
+    status: normalizedStatus,
+    raw: result,
   };
 }
 
@@ -267,28 +247,18 @@ function verifyWebhookSignature(
 
   const expected =
     crypto
-      .createHmac(
-        'sha256',
-        secret
-      )
+      .createHmac('sha256', secret)
       .update(rawBody)
       .digest('hex');
 
   const supplied =
-    String(signature)
-      .trim();
+    String(signature).trim();
 
   const expectedBuffer =
-    Buffer.from(
-      expected,
-      'utf8'
-    );
+    Buffer.from(expected, 'utf8');
 
   const suppliedBuffer =
-    Buffer.from(
-      supplied,
-      'utf8'
-    );
+    Buffer.from(supplied, 'utf8');
 
   if (
     expectedBuffer.length !==
