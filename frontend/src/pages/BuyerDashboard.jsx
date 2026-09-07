@@ -448,6 +448,14 @@ export default function BuyerDashboard() {
             Browse listings
           </Link>
 
+          <button
+            type="button"
+            className="sd-btn sd-btn-outline"
+            onClick={() => setActiveTab('orders')}
+          >
+            My orders
+          </button>
+
           <Link
             to="/digital"
             className="sd-btn sd-btn-outline"
