@@ -22,7 +22,9 @@ export default function Login() {
     e.preventDefault();
     try {
       const u = await login(email, password);
-      const path = u.roles?.includes('SELLER')
+      const path = u.roles?.includes('ADMIN')
+        ? '/dashboard/admin'
+        : u.roles?.includes('SELLER')
         ? '/dashboard/seller'
         : u.roles?.includes('BUYER')
         ? '/dashboard/buyer'
@@ -30,6 +32,8 @@ export default function Login() {
         ? '/dashboard/inspector'
         : u.roles?.includes('TRUCK_OWNER')
         ? '/dashboard/truck-owner'
+        : u.roles?.includes('ADVERTISER')
+        ? '/dashboard/advertiser'
         : '/';
       nav(path);
     } catch (e) {
