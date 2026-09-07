@@ -5,11 +5,9 @@ const { body, param, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { isAdmin, isOrderParticipant } = require('../utils/authorization');
-const { commissionFor, netFor } = require('../config/commissions');
 const chapa = require('../config/chapa');
 const { paymentLimiter } = require('../middleware/rateLimit');
 const paymentService = require('../services/paymentService');
-const commissionService = require('../services/commissionService');
 
 const router = express.Router();
 
@@ -49,11 +47,10 @@ router.post('/', authenticate, paymentLimiter, [
   body('digitalProductId').optional().isUUID(),
   body('advertisementId').optional().isUUID(),
   body('inspectionRequestId').optional().isUUID(),
-  body('transportJobId').optional().isUUID(),
   body('reference').optional().isString().trim().isLength({ max: 200 }),
 ], validate, async (req, res) => {
   try {
-    const { type, orderId, digitalProductId, advertisementId, inspectionRequestId, transportJobId, reference } = req.body;
+    const { type, orderId, digitalProductId, advertisementId, inspectionRequestId, reference } = req.body;
     const { method } = req.body;
     const amount = Number(req.body.amount);
 
@@ -105,10 +102,13 @@ router.post('/', authenticate, paymentLimiter, [
     // Duplicate check
     const duplicate = await prisma.payment.findFirst({
       where: {
-        createdById: req.user.id, type, status: { in: ['PENDING', 'PAID'] },
-        ...(orderId && { orderId }), ...(digitalProductId && { digitalProductId }),
-        ...(advertisementId && { advertisementId }), ...(inspectionRequestId && { inspectionRequestId }),
-        ...(transportJobId && { transportJobId }),
+        createdById: req.user.id,
+        type,
+        status: { in: ['PENDING', 'PAID'] },
+        ...(orderId && { orderId }),
+        ...(digitalProductId && { digitalProductId }),
+        ...(advertisementId && { advertisementId }),
+        ...(inspectionRequestId && { inspectionRequestId }),
       },
     });
     if (duplicate) return res.status(409).json({ error: 'Active payment already exists', payment: duplicate });
@@ -124,7 +124,6 @@ router.post('/', authenticate, paymentLimiter, [
       digitalProductId: digitalProductId || null,
       advertisementId: advertisementId || null,
       inspectionRequestId: inspectionRequestId || null,
-      transportJobId: transportJobId || null,
     });
 
     return res.status(201).json({
@@ -174,7 +173,6 @@ router.get('/:id/chapa/verify', authenticate, [param('id').isUUID()], validate, 
   try {
     const { status, raw } = await chapa.verifyTransaction(payment.id);
     if (status === 'success') {
-      // Use paymentService to settle
       const settled = await paymentService.settlePayment({
         paymentId: payment.id,
         status: 'PAID',
@@ -257,7 +255,6 @@ router.get('/', authenticate, async (req, res) => {
       digitalProduct: { select: { id: true, title: true } },
       advertisement: { select: { id: true, type: true } },
       inspectionRequest: { select: { id: true, fee: true } },
-      transportJob: { select: { id: true, method: true, agreedAmount: true } },
       commission: true,
       ledgerEntries: true,
     },
