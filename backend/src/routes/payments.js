@@ -38,6 +38,18 @@ function moneyEqual(a, b) {
   return Math.abs(Number(a) - Number(b)) < 0.01;
 }
 
+// ============ PAYMENT METHODS (for frontend) ============
+router.get('/methods', authenticate, (req, res) => {
+  res.json({
+    methods: [
+      { code: 'TELEBIRR', label: 'Telebirr via Chapa' },
+      { code: 'CBE', label: 'CBE' },
+      { code: 'QR', label: 'QR Code' },
+      { code: 'OTHER', label: 'Other' },
+    ],
+  });
+});
+
 // ============ CREATE PAYMENT ============
 router.post('/', authenticate, paymentLimiter, [
   body('type').isIn(['MARKETPLACE', 'TRANSPORT', 'INSPECTOR', 'ADVERTISING', 'DIGITAL']),
@@ -98,19 +110,7 @@ router.post('/', authenticate, paymentLimiter, [
       if (request.fee == null) return res.status(400).json({ error: 'No agreed fee' });
       if (!moneyEqual(amount, request.fee)) return res.status(400).json({ error: 'Amount mismatch', expectedAmount: Number(request.fee) });
     }
-// ============ PAYMENT METHODS ============
-router.get('/methods', authenticate, (req, res) => {
-  // Return a simple list of supported payment methods.
-  // In production, you might want to make this configurable via env.
-  res.json({
-    methods: [
-      { code: 'TELEBIRR', label: 'Telebirr via Chapa' },
-      { code: 'CBE', label: 'CBE' },
-      { code: 'QR', label: 'QR Code' },
-      { code: 'OTHER', label: 'Other' },
-    ],
-  });
-});
+
     // Duplicate check
     const duplicate = await prisma.payment.findFirst({
       where: {
@@ -267,6 +267,7 @@ router.get('/', authenticate, async (req, res) => {
       digitalProduct: { select: { id: true, title: true } },
       advertisement: { select: { id: true, type: true } },
       inspectionRequest: { select: { id: true, fee: true } },
+      transportJob: { select: { id: true, method: true, agreedAmount: true } },
       commission: true,
       ledgerEntries: true,
     },
