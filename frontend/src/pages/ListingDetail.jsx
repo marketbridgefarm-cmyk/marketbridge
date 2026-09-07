@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api from '../api/client';
+import { startChapaPayment } from '../utils/chapaCheckout';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const money = (n) => Number(n || 0).toLocaleString();
@@ -17,6 +18,8 @@ export default function ListingDetail() {
   const [feeForInspector, setFeeForInspector] = useState('');
   const [inspectionPayMethod, setInspectionPayMethod] = useState('TELEBIRR');
   const [payingInspectionId, setPayingInspectionId] = useState('');
+  const [buying, setBuying] = useState(false);
+  const [buyMethod, setBuyMethod] = useState('TELEBIRR');
 
   async function load() {
     try {
@@ -40,6 +43,25 @@ export default function ListingDetail() {
       load();
     } catch (e) {
       setError(e.response?.data?.error || 'Could not submit offer');
+    }
+  }
+
+  async function buyProduct() {
+    setError('');
+    setMsg('');
+    setBuying(true);
+    try {
+      const response = await api.post('/orders/buy-now', { listingId: id });
+      const order = response.data.order;
+      await startChapaPayment({
+        type: 'MARKETPLACE',
+        orderId: order.id,
+        amount: order.finalPrice,
+        method: buyMethod,
+      });
+    } catch (e) {
+      setError(e.response?.data?.error || e.message || 'Could not start purchase');
+      setBuying(false);
     }
   }
 
@@ -168,13 +190,13 @@ export default function ListingDetail() {
 
             {isBuyer && (
               <div className="card sticky-card">
-                <h2>{isAvailable ? 'Make an offer' : 'Listing unavailable'}</h2>
+                <h2>{isAvailable ? (isAgricultural ? 'Make an offer' : 'Buy this product') : 'Listing unavailable'}</h2>
                 {!isAvailable ? (
                   <>
                     <p className="muted">This listing has an accepted offer and is temporarily unavailable to new buyers.</p>
                     <Link className="btn btn-light full" to={isAgricultural ? '/agricultural' : '/products'}>Browse available listings</Link>
                   </>
-                ) : (
+                ) : isAgricultural ? (
                   <>
                     <p className="muted">Your offer does not reserve the listing. The seller decides whether to accept, reject or counter.</p>
                     <form onSubmit={submitOffer}>
@@ -194,6 +216,20 @@ export default function ListingDetail() {
                         <button className="btn btn-light full" style={{ marginTop: 8 }} onClick={chooseInspector}>Find an inspector</button>
                       </>
                     )}
+                  </>
+                ) : (
+                  <>
+                    <p className="muted">This product uses Buy Now. Your order is reserved while payment is completed.</p>
+                    <label>Payment method</label>
+                    <select value={buyMethod} onChange={(e) => setBuyMethod(e.target.value)} style={{ width: '100%', marginBottom: 10 }}>
+                      <option value="TELEBIRR">Telebirr</option>
+                      <option value="CBE">CBE</option>
+                      <option value="QR">QR</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                    <button type="button" className="btn btn-primary full" disabled={buying} onClick={buyProduct}>
+                      {buying ? 'Starting payment…' : `Buy for ${money(listing.askingPrice)} ETB`}
+                    </button>
                   </>
                 )}
               </div>
