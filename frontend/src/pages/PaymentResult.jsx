@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
 
 export default function PaymentResult() {
+  const { paymentId } = useParams();
   const [params] = useSearchParams();
-  const reference = params.get('payment') || params.get('tx_ref') || params.get('trx_ref') || params.get('reference');
+  const reference = params.get('payment') || paymentId || params.get('tx_ref') || params.get('trx_ref') || params.get('reference');
   const [state, setState] = useState({ loading: true, status: '', message: 'Checking payment status…' });
 
   useEffect(() => {
@@ -12,10 +13,10 @@ export default function PaymentResult() {
     async function checkPayment() {
       if (!reference) { setState({ loading: false, status: 'UNKNOWN', message: 'No payment reference was supplied.' }); return; }
       try {
-        const response = await api.get('/payments/lookup-by-reference', { params: { reference } });
+        const response = await api.get(`/payments/${reference}/chapa/verify`);
         if (cancelled) return;
         const payment = response.data?.payment;
-        const status = String(payment?.status || 'PENDING').toUpperCase();
+        const status = String(response.data?.status || payment?.status || 'PENDING').toUpperCase();
         if (status === 'PAID') setState({ loading: false, status: 'PAID', message: 'Payment confirmed successfully.' });
         else if (status === 'FAILED') setState({ loading: false, status: 'FAILED', message: 'The payment was not successful.' });
         else if (status === 'REFUNDED') setState({ loading: false, status: 'REFUNDED', message: 'This payment has been refunded.' });
