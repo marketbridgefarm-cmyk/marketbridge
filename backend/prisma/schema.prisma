@@ -7,9 +7,7 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
-// ============ ENUMS ============
-
+ 
 enum Role {
   SELLER
   BUYER
@@ -18,7 +16,6 @@ enum Role {
   ADVERTISER
   ADMIN
 }
-
 enum AccountStatus {
   ACTIVE
   SUSPENDED
@@ -163,83 +160,65 @@ enum VerificationStatus {
   REJECTED
 }
 
-enum CommissionType {
-  MARKETPLACE
-  TRANSPORT
-  INSPECTOR
-  DIGITAL
-}
-
-enum CommissionStatus {
-  RECORDED
-  VOIDED
-}
-
-// ============ MODELS ============
-
 model User {
-  id                 String    @id @default(uuid())
-  name               String
-  email              String    @unique
-  phone              String?
-  passwordHash       String
-  roles              Role[]    @default([BUYER, SELLER])
-  location           String?
+  id String @id @default(uuid())
+  name String
+  email String @unique
+  phone String?
+  passwordHash String
+  roles Role[] @default([BUYER, SELLER])
+  location String?
   verificationStatus VerificationStatus @default(UNVERIFIED)
-  accountStatus      AccountStatus @default(ACTIVE)
-  rating             Float     @default(0)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-
-  listings             Listing[]
-  offersMade           Offer[]
+accountStatus AccountStatus @default(ACTIVE)
+  rating Float @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  listings Listing[] @relation("SellerListings")
+  offersMade Offer[] @relation("BuyerOffers")
   inspectionsRequested InspectionRequest[] @relation("Requester")
   inspectionsPerformed InspectionRequest[] @relation("Inspector")
-  trucks               Truck[]
-  ordersAsBuyer        Order[]    @relation("BuyerOrders")
-  ordersAsSeller       Order[]    @relation("SellerOrders")
-  transportJobsHauled  TransportJob[] @relation("TruckOwnerJobs")
-  transportQuotes      TransportQuote[] @relation("TruckOwnerQuotes")
-  digitalProducts      DigitalProduct[]
-  ads                  Advertisement[]
-  ratingsGiven         Rating[]   @relation("RatingsGiven")
-  ratingsReceived      Rating[]   @relation("RatingsReceived")
-  messagesSent         Message[]  @relation("MessagesSent")
-  messagesReceived     Message[]  @relation("MessagesReceived")
-  disputesRaised       Dispute[]  @relation("DisputeRaisedBy")
-  disputesAgainst      Dispute[]  @relation("DisputeAgainst")
-  paymentsCreated      Payment[]  @relation("PaymentCreatedBy")
-  digitalPurchases     DigitalPurchase[] @relation("DigitalPurchases")
-  ledgerEntries        PaymentLedgerEntry[]
+  trucks Truck[]
+  ordersAsBuyer Order[] @relation("BuyerOrders")
+  ordersAsSeller Order[] @relation("SellerOrders")
+  transportJobsHauled TransportJob[] @relation("TruckOwnerJobs")
+  transportQuotes TransportQuote[] @relation("TruckOwnerQuotes")
+  digitalProducts DigitalProduct[]
+  ads Advertisement[]
+  ratingsGiven Rating[] @relation("RatingsGiven")
+  ratingsReceived Rating[] @relation("RatingsReceived")
+  messagesSent Message[] @relation("MessagesSent")
+  messagesReceived Message[] @relation("MessagesReceived")
+  disputesRaised Dispute[] @relation("DisputeRaisedBy")
+  disputesAgainst Dispute[] @relation("DisputeAgainst")
+  paymentsCreated Payment[] @relation("PaymentCreatedBy")
+  digitalPurchases DigitalPurchase[] @relation("DigitalPurchases")
 }
 
 model Listing {
-  id                  String   @id @default(uuid())
-  seller              User     @relation("SellerListings", fields: [sellerId], references: [id])
-  sellerId            String
-  category            ListingCategory @default(AGRICULTURAL)
-  title               String?
-  cropType            String?
-  quantity            Float
-  unit                String
-  askingPrice         Float
-  minAcceptablePrice  Float?
-  location            String
-  harvestedDate       DateTime?
-  readinessDate       DateTime?
-  photos              String[]
-  videos              String[]
-  description         String?
-  status              ListingStatus @default(DRAFT)
+  id String @id @default(uuid())
+  seller User @relation("SellerListings", fields: [sellerId], references: [id])
+  sellerId String
+  category ListingCategory @default(AGRICULTURAL)
+  title String?
+  cropType String?
+  quantity Float
+  unit String
+  askingPrice Float
+  minAcceptablePrice Float?
+  location String
+  harvestedDate DateTime?
+  readinessDate DateTime?
+  photos String[]
+  videos String[]
+  description String?
+  status ListingStatus @default(DRAFT)
   createdByInspectorId String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  offers             Offer[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  offers Offer[]
   inspectionRequests InspectionRequest[]
-  orders             Order[]
-  ads                Advertisement[]
-
+  orders Order[]
+  ads Advertisement[]
   @@index([sellerId])
   @@index([category])
   @@index([status])
@@ -247,40 +226,37 @@ model Listing {
 }
 
 model Offer {
-  id            String   @id @default(uuid())
-  listing       Listing  @relation(fields: [listingId], references: [id])
-  listingId     String
-  buyer         User     @relation("BuyerOffers", fields: [buyerId], references: [id])
-  buyerId       String
-  amount        Float
-  status        OfferStatus @default(PENDING)
+  id String @id @default(uuid())
+  listing Listing @relation(fields: [listingId], references: [id])
+  listingId String
+  buyer User @relation("BuyerOffers", fields: [buyerId], references: [id])
+  buyerId String
+  amount Float
+  status OfferStatus @default(PENDING)
   counterAmount Float?
-  message       String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
+  message String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   @@index([listingId])
   @@index([buyerId])
   @@index([status])
 }
 
 model InspectionRequest {
-  id            String   @id @default(uuid())
-  listing       Listing  @relation(fields: [listingId], references: [id])
-  listingId     String
-  requestedBy   User     @relation("Requester", fields: [requestedById], references: [id])
+  id String @id @default(uuid())
+  listing Listing @relation(fields: [listingId], references: [id])
+  listingId String
+  requestedBy User @relation("Requester", fields: [requestedById], references: [id])
   requestedById String
-  mode          InspectionMode
-  inspector     User?    @relation("Inspector", fields: [inspectorId], references: [id])
-  inspectorId   String?
-  status        InspectionStatus @default(REQUESTED)
-  fee           Float?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  report   InspectionReport?
+  mode InspectionMode
+  inspector User? @relation("Inspector", fields: [inspectorId], references: [id])
+  inspectorId String?
+  status InspectionStatus @default(REQUESTED)
+  fee Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  report InspectionReport?
   payments Payment[]
-
   @@index([listingId])
   @@index([requestedById])
   @@index([inspectorId])
@@ -288,42 +264,39 @@ model InspectionRequest {
 }
 
 model InspectionReport {
-  id             String   @id @default(uuid())
-  request        InspectionRequest @relation(fields: [requestId], references: [id])
-  requestId      String   @unique
-  quantity       Float
-  grade          String?
-  moisture       Float?
+  id String @id @default(uuid())
+  request InspectionRequest @relation(fields: [requestId], references: [id])
+  requestId String @unique
+  quantity Float
+  grade String?
+  moisture Float?
   visibleDefects String?
-  damageNotes    String?
+  damageNotes String?
   packagingNotes String?
-  photos         String[]
-  videos         String[]
-  gpsLocation    String?
-  inspectedAt    DateTime @default(now())
+  photos String[]
+  videos String[]
+  gpsLocation String?
+  inspectedAt DateTime @default(now())
 }
 
 model Order {
-  id             String   @id @default(uuid())
-  listing        Listing  @relation(fields: [listingId], references: [id])
-  listingId      String
-  buyer          User     @relation("BuyerOrders", fields: [buyerId], references: [id])
-  buyerId        String
-  seller         User     @relation("SellerOrders", fields: [sellerId], references: [id])
-  sellerId       String
-  finalPrice     Float
-  status         OrderStatus @default(PENDING_PAYMENT)
+  id String @id @default(uuid())
+  listing Listing @relation(fields: [listingId], references: [id])
+  listingId String
+  buyer User @relation("BuyerOrders", fields: [buyerId], references: [id])
+  buyerId String
+  seller User @relation("SellerOrders", fields: [sellerId], references: [id])
+  sellerId String
+  finalPrice Float
+  status OrderStatus @default(PENDING_PAYMENT)
   arrangingParty ArrangingParty?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   transportJob TransportJob?
-  payments     Payment[]
-  disputes     Dispute[]
-  ratings      Rating[]
-  messages     Message[]
-  commissions  Commission[]
-
+  payments Payment[]
+  disputes Dispute[]
+  ratings Rating[]
+  messages Message[]
   @@index([buyerId])
   @@index([sellerId])
   @@index([listingId])
@@ -331,22 +304,20 @@ model Order {
 }
 
 model Truck {
-  id                 String   @id @default(uuid())
-  owner              User     @relation(fields: [ownerId], references: [id])
-  ownerId            String
-  registration       String
-  truckType          String
-  capacity           Float
-  operatingArea      String
-  availability       TruckAvailability @default(AVAILABLE)
+  id String @id @default(uuid())
+  owner User @relation(fields: [ownerId], references: [id])
+  ownerId String
+  registration String
+  truckType String
+  capacity Float
+  operatingArea String
+  availability TruckAvailability @default(AVAILABLE)
   verificationStatus VerificationStatus @default(UNVERIFIED)
-  rating             Float    @default(0)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
+  rating Float @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   transportJobs TransportJob[]
   transportQuotes TransportQuote[]
-
   @@index([ownerId])
   @@index([availability])
   @@index([operatingArea])
@@ -354,32 +325,28 @@ model Truck {
 }
 
 model TransportJob {
-  id                  String    @id @default(uuid())
-  order               Order     @relation(fields: [orderId], references: [id])
-  orderId             String    @unique
-  arrangingParty      ArrangingParty
-  method              TransportMethod
-  truckOwner          User?     @relation("TruckOwnerJobs", fields: [truckOwnerId], references: [id])
-  truckOwnerId        String?
-  truck               Truck?    @relation(fields: [truckId], references: [id])
-  truckId             String?
-  pickupLocation      String
-  destination         String
-  load                String
-  requiredCapacity    Float?
+  id String @id @default(uuid())
+  order Order @relation(fields: [orderId], references: [id])
+  orderId String @unique
+  arrangingParty ArrangingParty
+  method TransportMethod
+  truckOwner User? @relation("TruckOwnerJobs", fields: [truckOwnerId], references: [id])
+  truckOwnerId String?
+  truck Truck? @relation(fields: [truckId], references: [id])
+  truckId String?
+  pickupLocation String
+  destination String
+  load String
+  requiredCapacity Float?
   specialRequirements String?
-  agreedAmount        Float?
-  status              TransportStatus @default(REQUESTED)
-  pickupConfirmedAt   DateTime?
+  agreedAmount Float?
+  status TransportStatus @default(REQUESTED)
+  pickupConfirmedAt DateTime?
   deliveredConfirmedAt DateTime?
-  incidentNotes       String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-
-  quotes      TransportQuote[]
-  payments    Payment[]
-  commissions Commission[]
-
+  incidentNotes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  quotes TransportQuote[]
   @@index([truckOwnerId])
   @@index([truckId])
   @@index([status])
@@ -387,19 +354,18 @@ model TransportJob {
 }
 
 model TransportQuote {
-  id             String   @id @default(uuid())
-  transportJob   TransportJob @relation(fields: [transportJobId], references: [id])
+  id String @id @default(uuid())
+  transportJob TransportJob @relation(fields: [transportJobId], references: [id])
   transportJobId String
-  truckOwner     User     @relation("TruckOwnerQuotes", fields: [truckOwnerId], references: [id])
-  truckOwnerId   String
-  truck          Truck    @relation(fields: [truckId], references: [id])
-  truckId        String
-  amount         Float
-  status         TransportQuoteStatus @default(PENDING)
-  message        String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
+  truckOwner User @relation("TruckOwnerQuotes", fields: [truckOwnerId], references: [id])
+  truckOwnerId String
+  truck Truck @relation(fields: [truckId], references: [id])
+  truckId String
+  amount Float
+  status TransportQuoteStatus @default(PENDING)
+  message String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   @@index([transportJobId])
   @@index([truckOwnerId])
   @@index([truckId])
@@ -408,120 +374,76 @@ model TransportQuote {
 }
 
 model DigitalProduct {
-  id            String   @id @default(uuid())
-  seller        User     @relation(fields: [sellerId], references: [id])
-  sellerId      String
-  title         String
-  productType   String
-  price         Float
+  id String @id @default(uuid())
+  seller User @relation(fields: [sellerId], references: [id])
+  sellerId String
+  title String
+  productType String
+  price Float
   // Private object-storage key. New products must have this set.
-  fileKey       String?
-  fileName      String?
-  mimeType      String?
+  fileKey String?
+  fileName String?
+  mimeType String?
   fileSizeBytes Int?
   // Legacy field retained only for migration/reference; never exposed or redirected.
-  fileUrl       String?
-  description   String?
-  status        ListingStatus @default(ACTIVE)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  payments         Payment[]
+  fileUrl String?
+  description String?
+  status ListingStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  payments Payment[]
   digitalPurchases DigitalPurchase[]
-
   @@index([sellerId])
   @@index([status])
 }
 
 model Payment {
-  id                    String   @id @default(uuid())
-  order                 Order?   @relation(fields: [orderId], references: [id])
-  orderId               String?
-  createdBy             User?    @relation("PaymentCreatedBy", fields: [createdById], references: [id])
-  createdById           String?
-  digitalProduct        DigitalProduct? @relation(fields: [digitalProductId], references: [id])
-  digitalProductId      String?
-  advertisement         Advertisement? @relation(fields: [advertisementId], references: [id])
-  advertisementId       String?
-  inspectionRequest     InspectionRequest? @relation(fields: [inspectionRequestId], references: [id])
-  inspectionRequestId   String?
-  transportJob          TransportJob? @relation(fields: [transportJobId], references: [id])
-  transportJobId        String?
-  digitalPurchase       DigitalPurchase?
-  type                  PaymentType
-  amount                Float
-  method                PaymentMethod
-  status                PaymentStatus @default(PENDING)
-  reference             String?
-  provider              String?
+  id String @id @default(uuid())
+  order Order? @relation(fields: [orderId], references: [id])
+  orderId String?
+  createdBy User? @relation("PaymentCreatedBy", fields: [createdById], references: [id])
+  createdById String?
+  digitalProduct DigitalProduct? @relation(fields: [digitalProductId], references: [id])
+  digitalProductId String?
+  advertisement Advertisement? @relation(fields: [advertisementId], references: [id])
+  advertisementId String?
+  inspectionRequest InspectionRequest? @relation(fields: [inspectionRequestId], references: [id])
+  inspectionRequestId String?
+  digitalPurchase DigitalPurchase?
+  type PaymentType
+  amount Float
+  method PaymentMethod
+  status PaymentStatus @default(PENDING)
+  reference String?
+  provider String?
   providerTransactionId String?
-  commissionRate        Float?
-  commissionAmount      Float?
-  netAmount             Float?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  commission    Commission?
-  ledgerEntries PaymentLedgerEntry[]
-  events        PaymentEvent[]
-
+  commissionRate Float?
+  commissionAmount Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   @@index([orderId])
   @@index([createdById])
   @@index([digitalProductId])
   @@index([inspectionRequestId])
   @@index([advertisementId])
-  @@index([transportJobId])
   @@index([type])
   @@index([status])
   @@index([reference])
   @@unique([provider, providerTransactionId])
 }
 
-model PaymentLedgerEntry {
-  id          String   @id @default(uuid())
-  paymentId   String
-  payment     Payment  @relation(fields: [paymentId], references: [id])
-  userId      String?
-  user        User?    @relation(fields: [userId], references: [id])
-  type        String
-  amount      Float
-  currency    String   @default("ETB")
-  description String?
-  createdAt   DateTime @default(now())
-
-  @@index([paymentId])
-  @@index([userId])
-  @@index([type])
-}
-
-model PaymentEvent {
-  id        String   @id @default(uuid())
-  paymentId String
-  payment   Payment  @relation(fields: [paymentId], references: [id])
-  provider  String
-  eventId   String
-  status    String
-  payload   Json?
-  createdAt DateTime @default(now())
-
-  @@unique([paymentId, eventId])
-  @@index([paymentId])
-  @@index([eventId])
-}
-
 model DigitalPurchase {
-  id            String   @id @default(uuid())
-  product       DigitalProduct @relation(fields: [productId], references: [id])
-  productId     String
-  buyer         User     @relation("DigitalPurchases", fields: [buyerId], references: [id])
-  buyerId       String
-  payment       Payment  @relation(fields: [paymentId], references: [id])
-  paymentId     String   @unique
-  status        DigitalPurchaseStatus @default(PENDING)
-  downloadCount Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
+  id String @id @default(uuid())
+  product DigitalProduct @relation(fields: [productId], references: [id])
+  productId String
+  buyer User @relation("DigitalPurchases", fields: [buyerId], references: [id])
+  buyerId String
+  payment Payment @relation(fields: [paymentId], references: [id])
+  paymentId String @unique
+  status DigitalPurchaseStatus @default(PENDING)
+  downloadCount Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   @@unique([productId, buyerId])
   @@index([buyerId])
   @@index([productId])
@@ -529,43 +451,39 @@ model DigitalPurchase {
 }
 
 model Advertisement {
-  id           String    @id @default(uuid())
-  advertiser   User      @relation(fields: [advertiserId], references: [id])
+  id String @id @default(uuid())
+  advertiser User @relation(fields: [advertiserId], references: [id])
   advertiserId String
-  listing      Listing?  @relation(fields: [listingId], references: [id])
-  listingId    String?
-  type         AdType
-  status       AdStatus  @default(PENDING)
-  startDate    DateTime
-  endDate      DateTime
-  amountPaid   Float?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
+  listing Listing? @relation(fields: [listingId], references: [id])
+  listingId String?
+  type AdType
+  status AdStatus @default(PENDING)
+  startDate DateTime
+  endDate DateTime
+  amountPaid Float?
   payments Payment[]
-
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   @@index([advertiserId])
   @@index([listingId])
   @@index([status])
 }
 
 model Dispute {
-  id                  String   @id @default(uuid())
-  order               Order    @relation(fields: [orderId], references: [id])
-  orderId             String
-  raisedBy            User     @relation("DisputeRaisedBy", fields: [raisedById], references: [id])
-  raisedById          String
-  against             User     @relation("DisputeAgainst", fields: [againstId], references: [id])
-  againstId           String
-  disputeType         String
-  description         String
-  evidence            String[]
-  status              DisputeStatus @default(OPEN)
-  resolution          String?
-  previousOrderStatus OrderStatus?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
+  id String @id @default(uuid())
+  order Order @relation(fields: [orderId], references: [id])
+  orderId String
+  raisedBy User @relation("DisputeRaisedBy", fields: [raisedById], references: [id])
+  raisedById String
+  against User @relation("DisputeAgainst", fields: [againstId], references: [id])
+  againstId String
+  disputeType String
+  description String
+  evidence String[]
+  status DisputeStatus @default(OPEN)
+  resolution String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   @@index([orderId])
   @@index([raisedById])
   @@index([againstId])
@@ -573,18 +491,17 @@ model Dispute {
 }
 
 model Rating {
-  id         String   @id @default(uuid())
-  order      Order    @relation(fields: [orderId], references: [id])
-  orderId    String
-  fromUser   User     @relation("RatingsGiven", fields: [fromUserId], references: [id])
+  id String @id @default(uuid())
+  order Order @relation(fields: [orderId], references: [id])
+  orderId String
+  fromUser User @relation("RatingsGiven", fields: [fromUserId], references: [id])
   fromUserId String
-  toUser     User     @relation("RatingsReceived", fields: [toUserId], references: [id])
-  toUserId   String
-  role       Role
-  score      Int
-  comment    String?
-  createdAt  DateTime @default(now())
-
+  toUser User @relation("RatingsReceived", fields: [toUserId], references: [id])
+  toUserId String
+  role Role
+  score Int
+  comment String?
+  createdAt DateTime @default(now())
   @@index([orderId])
   @@index([fromUserId])
   @@index([toUserId])
@@ -592,40 +509,16 @@ model Rating {
 }
 
 model Message {
-  id         String   @id @default(uuid())
-  order      Order?   @relation(fields: [orderId], references: [id])
-  orderId    String?
-  sender     User     @relation("MessagesSent", fields: [senderId], references: [id])
-  senderId   String
-  receiver   User     @relation("MessagesReceived", fields: [receiverId], references: [id])
+  id String @id @default(uuid())
+  order Order? @relation(fields: [orderId], references: [id])
+  orderId String?
+  sender User @relation("MessagesSent", fields: [senderId], references: [id])
+  senderId String
+  receiver User @relation("MessagesReceived", fields: [receiverId], references: [id])
   receiverId String
-  content    String
-  createdAt  DateTime @default(now())
-
+  content String
+  createdAt DateTime @default(now())
   @@index([orderId])
   @@index([senderId])
   @@index([receiverId])
-}
-
-model Commission {
-  id            String   @id @default(uuid())
-  payment       Payment  @relation(fields: [paymentId], references: [id])
-  paymentId     String   @unique
-  order         Order?   @relation(fields: [orderId], references: [id])
-  orderId       String?
-  transportJob  TransportJob? @relation(fields: [transportJobId], references: [id])
-  transportJobId String?
-  type          CommissionType
-  rate          Float
-  amount        Float
-  currency      String   @default("ETB")
-  status        CommissionStatus @default(RECORDED)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([orderId])
-  @@index([transportJobId])
-  @@index([type])
-  @@index([status])
-  @@index([createdAt])
 }
