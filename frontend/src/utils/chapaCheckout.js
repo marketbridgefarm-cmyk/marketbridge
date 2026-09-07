@@ -1,24 +1,96 @@
 import api from '../api/client';
 
-// Starts Chapa's hosted checkout for an existing payment id and redirects
-// the browser there. Throws on failure so callers can show their own
-// error message.
+/**
+ * Initialize an existing MarketBridge payment with Chapa
+ * and redirect the browser to Chapa's hosted checkout page.
+ */
 export async function chapaInitializeAndRedirect(paymentId) {
-  if (!paymentId) throw new Error('Payment was not created');
+  if (!paymentId) {
+    throw new Error('Payment was not created');
+  }
 
-  const { data: initData } = await api.post(`/payments/${paymentId}/chapa/initialize`);
-  if (!initData?.checkoutUrl) throw new Error('Could not start Chapa checkout');
+  try {
+    const { data } = await api.post(
+      `/payments/${paymentId}/chapa/initialize`
+    );
 
-  window.location.href = initData.checkoutUrl;
+    const checkoutUrl = data?.checkoutUrl;
+
+    if (!checkoutUrl) {
+      throw new Error('Could not start Chapa checkout');
+    }
+
+    // Redirect to Chapa's hosted payment page.
+    window.location.assign(checkoutUrl);
+  } catch (error) {
+    const message =
+      error?.response?.data?.error ||
+      error?.message ||
+      'Could not start Chapa checkout';
+
+    const enhancedError = new Error(message);
+
+    // Preserve useful Axios information for callers/logging.
+    enhancedError.response = error?.response;
+    enhancedError.status = error?.response?.status;
+
+    throw enhancedError;
+  }
 }
 
-// Creates a payment intent, then starts Chapa's hosted checkout and
-// redirects the browser there. Use this when there's no dedicated
-// creation endpoint (marketplace, transport, inspection, advertising
-// payments all go through the generic POST /payments route). For digital
-// purchases, the payment is created as part of the purchase endpoint
-// instead — use chapaInitializeAndRedirect directly with that payment's id.
+/**
+ * Create a MarketBridge payment intent and then
+ * initialize Chapa hosted checkout.
+ *
+ * Supported payment types include:
+ * - MARKETPLACE
+ * - TRANSPORT
+ * - INSPECTOR
+ * - ADVERTISING
+ * - DIGITAL
+ *
+ * The caller is responsible for supplying the appropriate
+ * payment payload and authorization context.
+ */
 export async function startChapaPayment(paymentPayload) {
-  const { data } = await api.post('/payments', paymentPayload);
-  await chapaInitializeAndRedirect(data?.payment?.id);
+  if (!paymentPayload || typeof paymentPayload !== 'object') {
+    throw new Error('Payment information is required');
+  }
+
+  try {
+    const { data } = await api.post(
+      '/payments',
+      paymentPayload
+    );
+
+    const paymentId = data?.payment?.id;
+
+    if (!paymentId) {
+      throw new Error(
+        data?.error ||
+        'Payment intent was not created'
+      );
+    }
+
+    await chapaInitializeAndRedirect(paymentId);
+
+    // Normally this function never reaches here because
+    // the browser is redirected to Chapa.
+    return {
+      payment: data.payment,
+      checkoutUrl: data.checkoutUrl || null,
+    };
+  } catch (error) {
+    const message =
+      error?.response?.data?.error ||
+      error?.message ||
+      'Could not create payment';
+
+    const enhancedError = new Error(message);
+
+    enhancedError.response = error?.response;
+    enhancedError.status = error?.response?.status;
+
+    throw enhancedError;
+  }
 }
