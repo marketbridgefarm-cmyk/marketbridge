@@ -9,17 +9,23 @@ const {
 } = require('express-validator');
 
 const prisma = require('../config/db');
+
 const {
   authenticate,
 } = require('../middleware/auth');
+
 const {
   isAdmin,
   isOrderParticipant,
 } = require('../utils/authorization');
-const chapa = require('../config/chapa');
+
+const chapa =
+  require('../config/chapa');
+
 const {
   paymentLimiter,
 } = require('../middleware/rateLimit');
+
 const paymentService =
   require('../services/paymentService');
 
@@ -29,11 +35,7 @@ const router = express.Router();
 // VALIDATION
 // ============================================================================
 
-const validate = (
-  req,
-  res,
-  next
-) => {
+const validate = (req, res, next) => {
   const errors =
     validationResult(req);
 
@@ -51,21 +53,12 @@ const validate = (
 // HELPERS
 // ============================================================================
 
-function timingSafeEqual(
-  a,
-  b
-) {
+function timingSafeEqual(a, b) {
   const x =
-    Buffer.from(
-      a || '',
-      'utf8'
-    );
+    Buffer.from(a || '', 'utf8');
 
   const y =
-    Buffer.from(
-      b || '',
-      'utf8'
-    );
+    Buffer.from(b || '', 'utf8');
 
   return (
     x.length === y.length &&
@@ -110,16 +103,27 @@ function verifySignature(req) {
   );
 }
 
-function moneyEqual(
-  a,
-  b
-) {
+function moneyEqual(a, b) {
   return (
     Math.abs(
       Number(a) -
       Number(b)
     ) < 0.01
   );
+}
+
+function appBaseUrl() {
+  return (
+    process.env.APP_BASE_URL ||
+    ''
+  ).replace(/\/$/, '');
+}
+
+function apiBaseUrl() {
+  return (
+    process.env.API_BASE_URL ||
+    ''
+  ).replace(/\/$/, '');
 }
 
 // ============================================================================
@@ -217,9 +221,6 @@ router.post(
         advertisementId,
         inspectionRequestId,
         reference,
-      } = req.body;
-
-      const {
         method,
       } = req.body;
 
@@ -301,7 +302,9 @@ router.post(
                 'Amount must match order final price',
 
               expectedAmount:
-                Number(order.finalPrice),
+                Number(
+                  order.finalPrice
+                ),
             });
           }
 
@@ -609,7 +612,7 @@ router.post(
       }
 
       // ======================================================================
-      // DUPLICATE PAYMENT
+      // DUPLICATE PAYMENT PROTECTION
       // ======================================================================
 
       const duplicate =
@@ -722,6 +725,13 @@ router.post(
 // ============================================================================
 // CHAPA INITIALIZE
 // ============================================================================
+//
+// Creates a hosted Chapa checkout session.
+//
+// The browser is redirected to the checkoutUrl returned by Chapa.
+// The callback URL is a GET endpoint.
+// The webhook URL is a separate POST endpoint.
+// ============================================================================
 
 router.post(
   '/:id/chapa/initialize',
@@ -738,7 +748,8 @@ router.post(
       const payment =
         await prisma.payment.findUnique({
           where: {
-            id: req.params.id,
+            id:
+              req.params.id,
           },
         });
 
@@ -771,16 +782,10 @@ router.post(
       }
 
       const appUrl =
-        (
-          process.env.APP_BASE_URL ||
-          ''
-        ).replace(/\/$/, '');
+        appBaseUrl();
 
       const apiUrl =
-        (
-          process.env.API_BASE_URL ||
-          ''
-        ).replace(/\/$/, '');
+        apiBaseUrl();
 
       if (
         !appUrl ||
@@ -801,6 +806,10 @@ router.post(
 
           amount:
             payment.amount,
+
+          currency:
+            payment.currency ||
+            'ETB',
 
           email:
             req.user.email,
@@ -825,9 +834,12 @@ router.post(
             req.user.phone ||
             undefined,
 
+          // IMPORTANT:
+          // Chapa callback is GET.
           callbackUrl:
-            `${apiUrl}/api/payments/webhooks/chapa`,
+            `${apiUrl}/api/payments/chapa/callback`,
 
+          // User-facing frontend return page.
           returnUrl:
             `${appUrl}/payments/${payment.id}/return`,
 
@@ -872,7 +884,184 @@ router.post(
 );
 
 // ============================================================================
+// CHAPA CALLBACK
+// ============================================================================
+//
+// Chapa redirects/calls this endpoint after checkout.
+//
+// IMPORTANT:
+// The callback itself is NOT trusted as final payment confirmation.
+// We use tx_ref to query Chapa's verification API and only settle the
+// MarketBridge payment after Chapa confirms the transaction.
+//
+// ============================================================================
+
+router.get(
+  '/chapa/callback',
+  async (req, res) => {
+    const appUrl =
+      appBaseUrl();
+
+    const txRef =
+      req.query?.tx_ref ||
+      req.query?.trx_ref ||
+      req.query?.reference;
+
+    try {
+      if (!txRef) {
+        console.error(
+          'CHAPA CALLBACK: missing tx_ref'
+        );
+
+        if (appUrl) {
+          return res.redirect(
+            `${appUrl}/payments/return?status=ERROR`
+          );
+        }
+
+        return res.status(400).json({
+          error:
+            'Missing Chapa transaction reference',
+        });
+      }
+
+      const payment =
+        await prisma.payment.findUnique({
+          where: {
+            id:
+              String(txRef),
+          },
+        });
+
+      if (!payment) {
+        console.error(
+          'CHAPA CALLBACK: payment not found:',
+          txRef
+        );
+
+        if (appUrl) {
+          return res.redirect(
+            `${appUrl}/payments/${encodeURIComponent(
+              String(txRef)
+            )}/return`
+          );
+        }
+
+        return res.status(404).json({
+          error:
+            'Payment not found',
+        });
+      }
+
+      // Already settled.
+      if (
+        payment.status ===
+        'PAID'
+      ) {
+        return res.redirect(
+          `${appUrl}/payments/${payment.id}/return`
+        );
+      }
+
+      // ----------------------------------------------------------------------
+      // SERVER-SIDE VERIFICATION
+      // ----------------------------------------------------------------------
+
+      const {
+        status,
+        raw,
+      } =
+        await chapa.verifyTransaction(
+          payment.id
+        );
+
+      if (
+        status ===
+        'success'
+      ) {
+        const verifiedAmount =
+          raw?.data?.amount;
+
+        const verifiedCurrency =
+          raw?.data?.currency;
+
+        // paymentService performs final amount/currency validation.
+        await paymentService.settlePayment({
+          paymentId:
+            payment.id,
+
+          status:
+            'PAID',
+
+          provider:
+            'chapa',
+
+          providerTransactionId:
+            raw?.data?.reference ||
+            raw?.data?.ref_id ||
+            raw?.data?.tx_ref ||
+            payment.id,
+
+          eventId:
+            `chapa-callback-${payment.id}-${Date.now()}`,
+
+          payload: {
+            amount:
+              verifiedAmount ??
+              payment.amount,
+
+            currency:
+              verifiedCurrency ??
+              payment.currency ??
+              'ETB',
+
+            chapa:
+              raw?.data || raw,
+          },
+        });
+      }
+
+      // Always return the customer to MarketBridge.
+      return res.redirect(
+        `${appUrl}/payments/${payment.id}/return`
+      );
+
+    } catch (error) {
+      console.error(
+        'CHAPA CALLBACK ERROR:',
+        error
+      );
+
+      // The frontend PaymentReturn page will perform its own verification.
+      if (
+        appUrl &&
+        txRef
+      ) {
+        return res.redirect(
+          `${appUrl}/payments/${encodeURIComponent(
+            String(txRef)
+          )}/return`
+        );
+      }
+
+      return res.status(
+        error.status || 500
+      ).json({
+        error:
+          error.message ||
+          'Could not process Chapa callback',
+      });
+    }
+  }
+);
+
+// ============================================================================
 // CHAPA VERIFY
+// ============================================================================
+//
+// Used by the frontend PaymentReturn page.
+//
+// This endpoint independently asks Chapa for the transaction status.
 // ============================================================================
 
 router.get(
@@ -933,10 +1122,20 @@ router.get(
           payment.id
         );
 
+      // ----------------------------------------------------------------------
+      // SUCCESS
+      // ----------------------------------------------------------------------
+
       if (
         status ===
         'success'
       ) {
+        const verifiedAmount =
+          raw?.data?.amount;
+
+        const verifiedCurrency =
+          raw?.data?.currency;
+
         const settled =
           await paymentService.settlePayment({
             paymentId:
@@ -950,23 +1149,28 @@ router.get(
 
             providerTransactionId:
               raw?.data?.reference ||
-              raw?.data?.tx_ref,
+              raw?.data?.ref_id ||
+              raw?.data?.tx_ref ||
+              payment.id,
 
             reference:
               payment.reference,
 
             eventId:
-              `chapa-verify-${payment.id}`,
+              `chapa-verify-${payment.id}-${Date.now()}`,
 
             payload: {
               amount:
-                raw?.data?.amount ??
+                verifiedAmount ??
                 payment.amount,
 
               currency:
-                raw?.data?.currency ??
+                verifiedCurrency ??
                 payment.currency ??
                 'ETB',
+
+              chapa:
+                raw?.data || raw,
             },
           });
 
@@ -979,11 +1183,32 @@ router.get(
         });
       }
 
+      // ----------------------------------------------------------------------
+      // FAILED
+      // ----------------------------------------------------------------------
+
+      if (
+        status ===
+        'failed'
+      ) {
+        return res.json({
+          status:
+            'FAILED',
+
+          payment,
+
+          chapaStatus:
+            status,
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // PENDING
+      // ----------------------------------------------------------------------
+
       return res.json({
         status:
-          status === 'failed'
-            ? 'FAILED'
-            : 'PENDING',
+          'PENDING',
 
         payment,
 
@@ -1011,6 +1236,17 @@ router.get(
 // ============================================================================
 // CHAPA WEBHOOK
 // ============================================================================
+//
+// Chapa sends POST notifications here.
+//
+// Security:
+// 1. Validate raw-body signature.
+// 2. Extract tx_ref.
+// 3. Ask Chapa's API to verify the transaction.
+// 4. Validate amount/currency through paymentService.
+// 5. Settle payment idempotently.
+//
+// ============================================================================
 
 router.post(
   '/webhooks/chapa',
@@ -1025,6 +1261,10 @@ router.post(
 
     const rawBody =
       req.rawBody;
+
+    // ------------------------------------------------------------------------
+    // SIGNATURE VERIFICATION
+    // ------------------------------------------------------------------------
 
     if (
       !rawBody ||
@@ -1043,14 +1283,20 @@ router.post(
       });
     }
 
+    // ------------------------------------------------------------------------
+    // TRANSACTION REFERENCE
+    // ------------------------------------------------------------------------
+
     const txRef =
       req.body?.tx_ref ||
+      req.body?.trx_ref ||
       req.body?.reference;
 
-    const eventStatus =
-      req.body?.status;
-
     if (!txRef) {
+      console.error(
+        'CHAPA WEBHOOK: missing tx_ref'
+      );
+
       return res.status(400).json({
         error:
           'Invalid payload',
@@ -1058,52 +1304,145 @@ router.post(
     }
 
     try {
-      if (
-        eventStatus ===
-          'success' ||
-        eventStatus ===
-          'successful'
-      ) {
-        const settled =
-          await paymentService.settlePayment({
-            paymentId:
-              txRef,
+      // ----------------------------------------------------------------------
+      // LOOK UP LOCAL PAYMENT
+      // ----------------------------------------------------------------------
 
-            status:
-              'PAID',
+      const payment =
+        await prisma.payment.findUnique({
+          where: {
+            id:
+              String(txRef),
+          },
+        });
 
-            provider:
-              'chapa',
+      if (!payment) {
+        console.error(
+          'CHAPA WEBHOOK: payment not found:',
+          txRef
+        );
 
-            providerTransactionId:
-              req.body?.reference ||
-              txRef,
-
-            eventId:
-              req.body?.event_id ||
-              `chapa-webhook-${txRef}`,
-
-            payload:
-              req.body,
-          });
-
+        // Acknowledge the webhook without trying to create a payment.
         return res.json({
           ok:
             true,
 
-          payment:
-            settled,
+          ignored:
+            true,
+
+          reason:
+            'Payment not found',
         });
       }
+
+      // ----------------------------------------------------------------------
+      // ALREADY PAID
+      // ----------------------------------------------------------------------
+
+      if (
+        payment.status ===
+        'PAID'
+      ) {
+        return res.json({
+          ok:
+            true,
+
+          alreadyPaid:
+            true,
+
+          paymentId:
+            payment.id,
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // NEVER TRUST WEBHOOK STATUS ALONE
+      // ----------------------------------------------------------------------
+
+      const {
+        status,
+        raw,
+      } =
+        await chapa.verifyTransaction(
+          payment.id
+        );
+
+      if (
+        status !==
+        'success'
+      ) {
+        return res.json({
+          ok:
+            true,
+
+          ignored:
+            true,
+
+          verificationStatus:
+            status,
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // VERIFIED PAYMENT DATA
+      // ----------------------------------------------------------------------
+
+      const verifiedAmount =
+        raw?.data?.amount;
+
+      const verifiedCurrency =
+        raw?.data?.currency;
+
+      // paymentService validates amount and currency.
+      const settled =
+        await paymentService.settlePayment({
+          paymentId:
+            payment.id,
+
+          status:
+            'PAID',
+
+          provider:
+            'chapa',
+
+          providerTransactionId:
+            raw?.data?.reference ||
+            raw?.data?.ref_id ||
+            raw?.data?.tx_ref ||
+            payment.id,
+
+          reference:
+            raw?.data?.reference ||
+            req.body?.reference ||
+            payment.reference,
+
+          eventId:
+            req.body?.event_id ||
+            `chapa-webhook-${payment.id}-${Date.now()}`,
+
+          payload: {
+            ...req.body,
+
+            amount:
+              verifiedAmount ??
+              payment.amount,
+
+            currency:
+              verifiedCurrency ??
+              payment.currency ??
+              'ETB',
+
+            chapaVerification:
+              raw?.data || raw,
+          },
+        });
 
       return res.json({
         ok:
           true,
 
-        ignored:
-          true,
-
-        eventStatus,
+        payment:
+          settled,
       });
 
     } catch (error) {
@@ -1125,6 +1464,12 @@ router.post(
 
 // ============================================================================
 // GENERIC WEBHOOK
+// ============================================================================
+//
+// Used for internal/provider integrations that use the MarketBridge webhook
+// signature.
+//
+// Chapa does NOT use this endpoint.
 // ============================================================================
 
 router.post(
@@ -1301,8 +1646,11 @@ router.get(
               },
             },
 
-            commission: true,
-            ledgerEntries: true,
+            commission:
+              true,
+
+            ledgerEntries:
+              true,
           },
 
           orderBy: {
@@ -1313,6 +1661,7 @@ router.get(
 
       return res.json({
         payments,
+
         count:
           payments.length,
       });
@@ -1358,16 +1707,24 @@ router.get(
           },
 
           select: {
-            type: true,
-            amount: true,
-            commissionAmount: true,
+            type:
+              true,
+
+            amount:
+              true,
+
+            commissionAmount:
+              true,
           },
         });
 
       const byType = {};
 
-      let totalCommission = 0;
-      let totalVolume = 0;
+      let totalCommission =
+        0;
+
+      let totalVolume =
+        0;
 
       for (
         const payment
@@ -1418,7 +1775,9 @@ router.get(
 
       return res.json({
         totalVolume,
+
         totalCommission,
+
         byType,
       });
 
@@ -1559,63 +1918,77 @@ router.get(
   validate,
 
   async (req, res) => {
-    const order =
-      await prisma.order.findUnique({
-        where: {
-          id:
-            req.params.orderId,
-        },
+    try {
+      const order =
+        await prisma.order.findUnique({
+          where: {
+            id:
+              req.params.orderId,
+          },
+        });
+
+      if (!order) {
+        return res.status(404).json({
+          error:
+            'Order not found',
+        });
+      }
+
+      if (
+        !isOrderParticipant(
+          req.user.id,
+          order
+        ) &&
+        !isAdmin(req.user)
+      ) {
+        return res.status(403).json({
+          error:
+            'Not authorized',
+        });
+      }
+
+      const payments =
+        await prisma.payment.findMany({
+          where: {
+            orderId:
+              order.id,
+          },
+
+          include: {
+            commission:
+              true,
+
+            ledgerEntries:
+              true,
+
+            transportJob:
+              true,
+          },
+
+          orderBy: {
+            createdAt:
+              'desc',
+          },
+        });
+
+      return res.json({
+        payments,
+
+        count:
+          payments.length,
       });
 
-    if (!order) {
-      return res.status(404).json({
+    } catch (error) {
+      console.error(
+        'GET ORDER PAYMENTS ERROR:',
+        error
+      );
+
+      return res.status(500).json({
         error:
-          'Order not found',
+          'Could not load order payments',
       });
     }
-
-    if (
-      !isOrderParticipant(
-        req.user.id,
-        order
-      ) &&
-      !isAdmin(req.user)
-    ) {
-      return res.status(403).json({
-        error:
-          'Not authorized',
-      });
-    }
-
-    const payments =
-      await prisma.payment.findMany({
-        where: {
-          orderId:
-            order.id,
-        },
-
-        include: {
-          commission:
-            true,
-
-          ledgerEntries:
-            true,
-
-          transportJob:
-            true,
-        },
-
-        orderBy: {
-          createdAt:
-            'desc',
-        },
-      });
-
-    return res.json({
-      payments,
-      count:
-        payments.length,
-    });
   }
 );
 
@@ -1634,64 +2007,81 @@ router.get(
   validate,
 
   async (req, res) => {
-    const payment =
-      await prisma.payment.findUnique({
-        where: {
-          id:
-            req.params.id,
-        },
+    try {
+      const payment =
+        await prisma.payment.findUnique({
+          where: {
+            id:
+              req.params.id,
+          },
 
-        include: {
-          order:
-            true,
+          include: {
+            order:
+              true,
 
-          digitalPurchase:
-            true,
+            digitalPurchase:
+              true,
 
-          commission:
-            true,
+            commission:
+              true,
 
-          ledgerEntries:
-            true,
+            ledgerEntries:
+              true,
 
-          transportJob:
-            true,
-        },
+            transportJob:
+              true,
+          },
+        });
+
+      if (!payment) {
+        return res.status(404).json({
+          error:
+            'Payment not found',
+        });
+      }
+
+      const owner =
+        payment.createdById ===
+        req.user.id;
+
+      const orderParticipant =
+        payment.order &&
+        isOrderParticipant(
+          req.user.id,
+          payment.order
+        );
+
+      if (
+        !owner &&
+        !orderParticipant &&
+        !isAdmin(req.user)
+      ) {
+        return res.status(403).json({
+          error:
+            'Not authorized',
+        });
+      }
+
+      return res.json({
+        payment,
       });
 
-    if (!payment) {
-      return res.status(404).json({
-        error:
-          'Payment not found',
-      });
-    }
-
-    const owner =
-      payment.createdById ===
-      req.user.id;
-
-    const orderParticipant =
-      payment.order &&
-      isOrderParticipant(
-        req.user.id,
-        payment.order
+    } catch (error) {
+      console.error(
+        'GET PAYMENT ERROR:',
+        error
       );
 
-    if (
-      !owner &&
-      !orderParticipant &&
-      !isAdmin(req.user)
-    ) {
-      return res.status(403).json({
+      return res.status(500).json({
         error:
-          'Not authorized',
+          'Could not load payment',
       });
     }
-
-    return res.json({
-      payment,
-    });
   }
 );
+
+// ============================================================================
+// EXPORT
+// ============================================================================
 
 module.exports = router;
