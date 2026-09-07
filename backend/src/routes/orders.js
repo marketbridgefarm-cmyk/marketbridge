@@ -34,6 +34,73 @@ const orderInclude = {
   messages: { orderBy: { createdAt: 'asc' } },
 };
 
+// BUY NOW for normal physical products.
+// Agricultural listings continue to use the offer/negotiation workflow.
+router.post('/buy-now', authenticate, async (req, res) => {
+  try {
+    if (!req.user.roles?.includes('BUYER')) {
+      return res.status(403).json({ error: 'Only buyers can purchase listings' });
+    }
+
+    const listingId = String(req.body?.listingId || '').trim();
+    if (!listingId) return res.status(400).json({ error: 'listingId is required' });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const listing = await tx.listing.findUnique({ where: { id: listingId } });
+      if (!listing) throw Object.assign(new Error('Listing not found'), { status: 404 });
+      if (listing.category !== 'PRODUCT') {
+        throw Object.assign(new Error('Buy Now is available for physical product listings. Agricultural listings use offers.'), { status: 400 });
+      }
+      if (listing.status !== 'ACTIVE') {
+        throw Object.assign(new Error('This product is currently unavailable'), { status: 409 });
+      }
+      if (listing.sellerId === req.user.id) {
+        throw Object.assign(new Error('You cannot purchase your own listing'), { status: 400 });
+      }
+
+      const existing = await tx.order.findFirst({
+        where: {
+          listingId,
+          status: { notIn: ['CANCELLED'] },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (existing) {
+        if (existing.buyerId === req.user.id) return existing;
+        throw Object.assign(new Error('This product is currently reserved or sold'), { status: 409 });
+      }
+
+      const order = await tx.order.create({
+        data: {
+          listingId: listing.id,
+          buyerId: req.user.id,
+          sellerId: listing.sellerId,
+          finalPrice: Number(listing.askingPrice),
+          status: 'PENDING_PAYMENT',
+        },
+      });
+
+      await tx.listing.update({
+        where: { id: listing.id },
+        data: { status: 'SOLD' },
+      });
+
+      return order;
+    });
+
+    return res.status(201).json({
+      message: 'Order created. Complete payment to confirm the purchase.',
+      order: result,
+      paymentConfirmed: false,
+    });
+  } catch (error) {
+    console.error('BUY NOW ERROR:', error);
+    return res.status(error.status || 500).json({
+      error: error.status ? error.message : 'Could not create order',
+    });
+  }
+});
+
 router.get('/', authenticate, async (req, res) => {
   try {
     const isAdmin = req.user.roles?.includes('ADMIN');
