@@ -224,7 +224,7 @@ router.post(
 
         await tx.order.update({
           where: { id: currentOrder.id },
-          data: { arrangingParty, status: 'TRANSPORT_ARRANGED' },
+          data: { arrangingParty, status: method === 'OWN_TRUCK' ? 'TRANSPORT_ARRANGED' : 'CONFIRMED' },
         });
 
         if (method === 'OWN_TRUCK' && truckId) {
@@ -571,31 +571,6 @@ router.patch('/quotes/:quoteId/accept', authenticate, async (req, res) => {
         data: { status: 'TRANSPORT_ARRANGED' },
       });
 
-      // Create commission record if applicable
-      if (transportCommissionApplicable(updatedJob) && updatedJob.agreedAmount != null) {
-        const commission = commissionFor('TRANSPORT', updatedJob.agreedAmount);
-        if (commission.commissionAmount > 0) {
-          try {
-            await tx.commission.create({
-              data: {
-                paymentId: null, // Will be linked when transport payment is made
-                orderId: updatedJob.orderId,
-                transportJobId: updatedJob.id,
-                type: 'TRANSPORT',
-                rate: commission.rate,
-                amount: commission.commissionAmount,
-                currency: 'ETB',
-                status: 'RECORDED',
-              },
-            });
-          } catch (commissionError) {
-            if (commissionError.code !== 'P2002') {
-              console.error('Commission creation error:', commissionError);
-            }
-          }
-        }
-      }
-
       const accepted = await tx.transportQuote.findUnique({ where: { id: quote.id } });
       return { accepted, job: updatedJob };
     });
@@ -607,7 +582,7 @@ router.patch('/quotes/:quoteId/accept', authenticate, async (req, res) => {
       quote: result.accepted,
       transportJob: result.job,
       commissionApplicable,
-      commissionGenerated: commissionApplicable && result.job.agreedAmount != null,
+      commissionGenerated: false,
     });
   } catch (error) {
     console.error('ACCEPT TRANSPORT QUOTE ERROR:', error);
