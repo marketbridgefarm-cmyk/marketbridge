@@ -1,106 +1,87 @@
-// MarketBridge Chapa integration.
-// Uses Chapa's hosted checkout API for test/live payments.
+'use strict';
 
 const crypto = require('crypto');
 
-const CHAPA_BASE_URL = 'https://api.chapa.co/v1';
-const TIMEOUT_MS = Number(process.env.CHAPA_TIMEOUT_MS || 30000);
+const CHAPA_BASE_URL =
+  'https://api.chapa.co/v1';
 
 function getSecretKey() {
-  const key = process.env.CHAPA_SECRET_KEY;
-  if (!key) throw new Error('CHAPA_SECRET_KEY is not configured');
-  return key.trim();
-}
+  const key =
+    process.env.CHAPA_SECRET_KEY;
 
-function getWebhookSecret() {
-  const key = process.env.CHAPA_WEBHOOK_SECRET;
-  if (!key) throw new Error('CHAPA_WEBHOOK_SECRET is not configured');
-  return key.trim();
-}
-
-function getChapaMode() {
-  const key = process.env.CHAPA_SECRET_KEY || '';
-  return key.startsWith('CHASECK_TEST-') ? 'test' : key ? 'live' : 'unconfigured';
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function chapaFetch(path, options = {}, retries = 2) {
-  let lastError = null;
-
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-    try {
-      const response = await fetch(`${CHAPA_BASE_URL}${path}`, {
-        ...options,
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${getSecretKey()}`,
-          'Content-Type': 'application/json',
-          ...(options.headers || {}),
-        },
-        signal: controller.signal,
-      });
-
-      const text = await response.text();
-      let data = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        data = { raw: text };
-      }
-
-      if (!response.ok) {
-        const message = data?.message || data?.error || data?.data?.message || `Chapa request failed (${response.status})`;
-        const error = Object.assign(new Error(message), {
-          status: response.status,
-          chapaResponse: data,
-          retryable: response.status >= 500 || response.status === 429,
-        });
-
-        if (error.retryable && attempt < retries) {
-          lastError = error;
-          await sleep(1000 * (attempt + 1));
-          continue;
-        }
-
-        throw error;
-      }
-
-      return data;
-    } catch (error) {
-      lastError = error;
-
-      if (error.name === 'AbortError') {
-        if (attempt < retries) {
-          await sleep(1000 * (attempt + 1));
-          continue;
-        }
-        throw Object.assign(new Error('Chapa request timed out'), { status: 504 });
-      }
-
-      if (attempt < retries && !error.status) {
-        await sleep(1000 * (attempt + 1));
-        continue;
-      }
-
-      throw error;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+  if (!key) {
+    throw Object.assign(
+      new Error(
+        'CHAPA_SECRET_KEY is not configured'
+      ),
+      { status: 500 }
+    );
   }
 
-  throw lastError || new Error('Chapa request failed');
+  return key;
 }
 
-function validEthiopianPhone(value) {
-  const phone = String(value || '').replace(/[\s-]/g, '');
-  return /^0[79]\d{8}$/.test(phone) ? phone : undefined;
+// ============================================================================
+// API REQUEST
+// ============================================================================
+
+async function chapaRequest(
+  endpoint,
+  options = {}
+) {
+  const secretKey =
+    getSecretKey();
+
+  const response =
+    await fetch(
+      `${CHAPA_BASE_URL}${endpoint}`,
+      {
+        ...options,
+
+        headers: {
+          Authorization:
+            `Bearer ${secretKey}`,
+
+          'Content-Type':
+            'application/json',
+
+          ...(options.headers || {}),
+        },
+      }
+    );
+
+  let data;
+
+  try {
+    data =
+      await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    const error =
+      new Error(
+        data?.message ||
+        data?.error ||
+        `Chapa request failed with HTTP ${response.status}`
+      );
+
+    error.status =
+      response.status;
+
+    error.chapa =
+      data;
+
+    throw error;
+  }
+
+  return data;
 }
+
+// ============================================================================
+// INITIALIZE TRANSACTION
+// ============================================================================
 
 async function initializeTransaction({
   txRef,
@@ -115,72 +96,219 @@ async function initializeTransaction({
   title,
   description,
 }) {
-  if (!txRef) throw Object.assign(new Error('Chapa transaction reference is required'), { status: 400 });
-  if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
-    throw Object.assign(new Error('Chapa payment amount must be greater than zero'), { status: 400 });
+  if (!txRef) {
+    throw Object.assign(
+      new Error('Chapa txRef is required'),
+      { status: 400 }
+    );
   }
-  if (currency !== 'ETB' && currency !== 'USD') {
-    throw Object.assign(new Error('Chapa currency must be ETB or USD'), { status: 400 });
+
+  if (
+    !Number.isFinite(Number(amount)) ||
+    Number(amount) <= 0
+  ) {
+    throw Object.assign(
+      new Error('Invalid Chapa amount'),
+      { status: 400 }
+    );
   }
-  if (!callbackUrl || !returnUrl) {
-    throw Object.assign(new Error('Chapa callback and return URLs are required'), { status: 400 });
+
+  if (!email) {
+    throw Object.assign(
+      new Error('Customer email is required for Chapa checkout'),
+      { status: 400 }
+    );
   }
 
   const payload = {
-    tx_ref: String(txRef),
-    amount: String(amount),
+    amount:
+      Number(amount).toFixed(2),
+
     currency,
-    email: email || undefined,
-    first_name: firstName || undefined,
-    last_name: lastName || undefined,
-    phone_number: validEthiopianPhone(phoneNumber),
-    callback_url: callbackUrl,
-    return_url: returnUrl,
+
+    email,
+
+    first_name:
+      firstName || 'MarketBridge',
+
+    last_name:
+      lastName || 'User',
+
+    tx_ref:
+      String(txRef),
+
+    callback_url:
+      callbackUrl,
+
+    return_url:
+      returnUrl,
+
     customization: {
-      title: String(title || 'MarketBridge').slice(0, 16),
-      description: String(description || 'MarketBridge payment').slice(0, 200),
+      title:
+        title || 'MarketBridge',
+
+      description:
+        description ||
+        'MarketBridge payment',
     },
   };
 
-  const data = await chapaFetch('/transaction/initialize', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-
-  const checkoutUrl = data?.data?.checkout_url;
-  if (!checkoutUrl) {
-    throw Object.assign(new Error(data?.message || 'Chapa did not return a checkout URL'), {
-      status: 502,
-      chapaResponse: data,
-    });
+  if (phoneNumber) {
+    payload.phone_number =
+      phoneNumber;
   }
 
-  return { checkoutUrl, raw: data };
+  const result =
+    await chapaRequest(
+      '/transaction/initialize',
+      {
+        method: 'POST',
+        body:
+          JSON.stringify(payload),
+      }
+    );
+
+  const checkoutUrl =
+    result?.data?.checkout_url;
+
+  if (!checkoutUrl) {
+    const error =
+      new Error(
+        'Chapa did not return a checkout URL'
+      );
+
+    error.status = 502;
+    error.chapa = result;
+
+    throw error;
+  }
+
+  return {
+    checkoutUrl,
+    raw: result,
+  };
 }
 
-async function verifyTransaction(txRef) {
-  const data = await chapaFetch(`/transaction/verify/${encodeURIComponent(txRef)}`, { method: 'GET' });
-  return { status: data?.data?.status, raw: data };
+// ============================================================================
+// VERIFY TRANSACTION
+// ============================================================================
+
+async function verifyTransaction(
+  txRef
+) {
+  if (!txRef) {
+    throw Object.assign(
+      new Error('Transaction reference is required'),
+      { status: 400 }
+    );
+  }
+
+  const result =
+    await chapaRequest(
+      `/transaction/verify/${encodeURIComponent(
+        String(txRef)
+      )}`,
+      {
+        method: 'GET',
+      }
+    );
+
+  const status =
+    String(
+      result?.data?.status ||
+      result?.status ||
+      ''
+    ).toLowerCase();
+
+  let normalizedStatus =
+    'pending';
+
+  if (
+    status === 'success' ||
+    status === 'successful'
+  ) {
+    normalizedStatus =
+      'success';
+  } else if (
+    status === 'failed' ||
+    status === 'failure'
+  ) {
+    normalizedStatus =
+      'failed';
+  }
+
+  return {
+    status:
+      normalizedStatus,
+
+    raw:
+      result,
+  };
 }
 
-function verifyWebhookSignature(rawBody, signatureHeader) {
-  if (!signatureHeader || !rawBody) return false;
+// ============================================================================
+// WEBHOOK SIGNATURE
+// ============================================================================
 
-  try {
-    const expected = crypto.createHmac('sha256', getWebhookSecret()).update(rawBody).digest('hex');
-    const provided = String(signatureHeader).trim();
-    const a = Buffer.from(expected, 'utf8');
-    const b = Buffer.from(provided, 'utf8');
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
-  } catch (error) {
-    console.error('Webhook signature verification error:', error.message);
+function verifyWebhookSignature(
+  rawBody,
+  signature
+) {
+  const secret =
+    process.env.CHAPA_WEBHOOK_SECRET;
+
+  if (
+    !secret ||
+    !rawBody ||
+    !signature
+  ) {
     return false;
   }
+
+  const expected =
+    crypto
+      .createHmac(
+        'sha256',
+        secret
+      )
+      .update(rawBody)
+      .digest('hex');
+
+  const supplied =
+    String(signature)
+      .trim();
+
+  const expectedBuffer =
+    Buffer.from(
+      expected,
+      'utf8'
+    );
+
+  const suppliedBuffer =
+    Buffer.from(
+      supplied,
+      'utf8'
+    );
+
+  if (
+    expectedBuffer.length !==
+    suppliedBuffer.length
+  ) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(
+    expectedBuffer,
+    suppliedBuffer
+  );
 }
+
+// ============================================================================
+// EXPORTS
+// ============================================================================
 
 module.exports = {
   initializeTransaction,
   verifyTransaction,
   verifyWebhookSignature,
-  getChapaMode,
 };
