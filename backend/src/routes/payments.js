@@ -98,7 +98,19 @@ router.post('/', authenticate, paymentLimiter, [
       if (request.fee == null) return res.status(400).json({ error: 'No agreed fee' });
       if (!moneyEqual(amount, request.fee)) return res.status(400).json({ error: 'Amount mismatch', expectedAmount: Number(request.fee) });
     }
-
+// ============ PAYMENT METHODS ============
+router.get('/methods', authenticate, (req, res) => {
+  // Return a simple list of supported payment methods.
+  // In production, you might want to make this configurable via env.
+  res.json({
+    methods: [
+      { code: 'TELEBIRR', label: 'Telebirr via Chapa' },
+      { code: 'CBE', label: 'CBE' },
+      { code: 'QR', label: 'QR Code' },
+      { code: 'OTHER', label: 'Other' },
+    ],
+  });
+});
     // Duplicate check
     const duplicate = await prisma.payment.findFirst({
       where: {
