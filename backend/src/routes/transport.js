@@ -16,7 +16,176 @@ const validate = (req, res, next) => {
   next();
 };
 
-// ============ CREATE TRANSPORT JOB ============
+// ============================================================
+// TRUCK MANAGEMENT
+// ============================================================
+
+// Register a truck (TRUCK_OWNER only)
+router.post(
+  '/trucks',
+  authenticate,
+  requireRole('TRUCK_OWNER'),
+  [
+    body('registration').isString().trim().notEmpty(),
+    body('truckType').isString().trim().notEmpty(),
+    body('capacity').isFloat({ gt: 0 }),
+    body('operatingArea').optional().isString().trim(),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { registration, truckType, capacity, operatingArea } = req.body;
+      const truck = await prisma.truck.create({
+        data: {
+          ownerId: req.user.id,
+          registration: registration.trim(),
+          truckType: truckType.trim(),
+          capacity: Number(capacity),
+          operatingArea: operatingArea?.trim() || '',
+        },
+      });
+      return res.status(201).json({ truck });
+    } catch (error) {
+      console.error('REGISTER TRUCK ERROR:', error);
+      if (error.code === 'P2002') {
+        return res.status(409).json({ error: 'A truck with this registration already exists' });
+      }
+      return res.status(500).json({ error: 'Could not register truck' });
+    }
+  }
+);
+
+// List my trucks
+router.get('/trucks/mine', authenticate, requireRole('TRUCK_OWNER'), async (req, res) => {
+  try {
+    const trucks = await prisma.truck.findMany({
+      where: { ownerId: req.user.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json({ trucks });
+  } catch (error) {
+    console.error('MY TRUCKS ERROR:', error);
+    return res.status(500).json({ error: 'Could not load your trucks' });
+  }
+});
+
+// Update truck availability
+router.patch(
+  '/trucks/:id/availability',
+  authenticate,
+  requireRole('TRUCK_OWNER'),
+  [
+    param('id').isUUID(),
+    body('availability').isIn(['AVAILABLE', 'BUSY', 'OFFLINE']),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const truck = await prisma.truck.findUnique({ where: { id: req.params.id } });
+      if (!truck) return res.status(404).json({ error: 'Truck not found' });
+      if (truck.ownerId !== req.user.id && !isAdmin(req.user)) {
+        return res.status(403).json({ error: 'Not your truck' });
+      }
+      const updated = await prisma.truck.update({
+        where: { id: req.params.id },
+        data: { availability: req.body.availability },
+      });
+      return res.json({ truck: updated });
+    } catch (error) {
+      console.error('UPDATE TRUCK AVAILABILITY ERROR:', error);
+      return res.status(500).json({ error: 'Could not update truck availability' });
+    }
+  }
+);
+
+// ============================================================
+// TRANSPORT JOBS – OPEN FOR TRUCK OWNERS
+// ============================================================
+
+// Open transport jobs (HIRE_TRANSPORTER, status REQUESTED or QUOTED, no truckOwnerId yet)
+router.get('/open', authenticate, requireRole('TRUCK_OWNER'), async (req, res) => {
+  try {
+    const jobs = await prisma.transportJob.findMany({
+      where: {
+        method: 'HIRE_TRANSPORTER',
+        truckOwnerId: null,
+        status: { in: ['REQUESTED', 'QUOTED'] },
+      },
+      include: {
+        order: {
+          include: {
+            buyer: { select: { id: true, name: true } },
+            seller: { select: { id: true, name: true } },
+          },
+        },
+        quotes: {
+          where: { truckOwnerId: req.user.id },
+          take: 1,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json({ jobs });
+  } catch (error) {
+    console.error('OPEN TRANSPORT JOBS ERROR:', error);
+    return res.status(500).json({ error: 'Could not load open transport jobs' });
+  }
+});
+
+// My transport jobs (assigned to me, i.e., truckOwnerId = me)
+router.get('/mine', authenticate, requireRole('TRUCK_OWNER'), async (req, res) => {
+  try {
+    const jobs = await prisma.transportJob.findMany({
+      where: { truckOwnerId: req.user.id },
+      include: {
+        order: {
+          include: {
+            buyer: { select: { id: true, name: true } },
+            seller: { select: { id: true, name: true } },
+          },
+        },
+        truck: true,
+        quotes: { where: { truckOwnerId: req.user.id } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json({ jobs });
+  } catch (error) {
+    console.error('MY TRANSPORT JOBS ERROR:', error);
+    return res.status(500).json({ error: 'Could not load your transport jobs' });
+  }
+});
+
+// ============================================================
+// MATCHING (simple search for trucks) – used by ArrangeTransport
+// ============================================================
+
+router.get('/match', authenticate, async (req, res) => {
+  try {
+    const { minCapacity, area } = req.query;
+    const where = { availability: 'AVAILABLE' };
+    if (minCapacity) where.capacity = { gte: Number(minCapacity) };
+    if (area) where.operatingArea = { contains: area, mode: 'insensitive' };
+
+    const trucks = await prisma.truck.findMany({
+      where,
+      include: {
+        owner: { select: { id: true, name: true, rating: true } },
+      },
+      orderBy: { rating: 'desc' },
+      take: 50,
+    });
+    return res.json({ trucks });
+  } catch (error) {
+    console.error('MATCH TRUCKS ERROR:', error);
+    return res.status(500).json({ error: 'Could not find matching trucks' });
+  }
+});
+
+// ============================================================
+// CREATE TRANSPORT JOB (existing)
+// ============================================================
+
 router.post(
   '/',
   authenticate,
@@ -29,6 +198,7 @@ router.post(
     body('load').isString().trim().notEmpty(),
     body('requiredCapacity').optional().isFloat({ min: 0 }),
     body('specialRequirements').optional().isString().trim(),
+    body('truckId').optional().isUUID(), // for OWN_TRUCK
   ],
   validate,
   async (req, res) => {
@@ -42,6 +212,7 @@ router.post(
         load,
         requiredCapacity,
         specialRequirements,
+        truckId,
       } = req.body;
 
       const order = await prisma.order.findUnique({
@@ -63,6 +234,21 @@ router.post(
         return res.status(409).json({ error: 'A transport job already exists for this order' });
       }
 
+      // If OWN_TRUCK, truckId must be provided and belong to user
+      if (method === 'OWN_TRUCK') {
+        if (!truckId) {
+          return res.status(400).json({ error: 'truckId is required for OWN_TRUCK' });
+        }
+        const truck = await prisma.truck.findUnique({ where: { id: truckId } });
+        if (!truck) return res.status(404).json({ error: 'Truck not found' });
+        if (truck.ownerId !== req.user.id && !isAdmin(req.user)) {
+          return res.status(403).json({ error: 'You do not own this truck' });
+        }
+        if (truck.availability !== 'AVAILABLE') {
+          return res.status(400).json({ error: 'Selected truck is not available' });
+        }
+      }
+
       const transportJob = await prisma.transportJob.create({
         data: {
           orderId: order.id,
@@ -74,11 +260,11 @@ router.post(
           requiredCapacity: requiredCapacity || null,
           specialRequirements: specialRequirements || null,
           truckOwnerId: method === 'OWN_TRUCK' ? req.user.id : null,
+          truckId: method === 'OWN_TRUCK' ? truckId : null,
           status: method === 'OWN_TRUCK' ? 'ACCEPTED' : 'REQUESTED',
         },
       });
 
-      // Update order status if it's CONFIRMED
       if (order.status === 'CONFIRMED') {
         await prisma.order.update({
           where: { id: order.id },
@@ -94,7 +280,10 @@ router.post(
   }
 );
 
-// ============ GET TRANSPORT JOB FOR ORDER ============
+// ============================================================
+// GET TRANSPORT JOB FOR ORDER (existing)
+// ============================================================
+
 router.get(
   '/order/:orderId',
   authenticate,
@@ -135,31 +324,10 @@ router.get(
   }
 );
 
-// ============ LIST MY TRANSPORT JOBS (for truck owner) ============
-router.get('/mine', authenticate, requireRole('TRUCK_OWNER'), async (req, res) => {
-  try {
-    const jobs = await prisma.transportJob.findMany({
-      where: { truckOwnerId: req.user.id },
-      include: {
-        order: {
-          include: {
-            buyer: { select: { id: true, name: true } },
-            seller: { select: { id: true, name: true } },
-          },
-        },
-        truck: true,
-        quotes: { where: { truckOwnerId: req.user.id } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    return res.json({ transportJobs: jobs });
-  } catch (error) {
-    console.error('MY TRANSPORT JOBS ERROR:', error);
-    return res.status(500).json({ error: 'Could not load your transport jobs' });
-  }
-});
+// ============================================================
+// UPDATE TRANSPORT JOB STATUS (existing)
+// ============================================================
 
-// ============ UPDATE TRANSPORT JOB STATUS ============
 router.patch(
   '/:id/status',
   authenticate,
@@ -229,7 +397,10 @@ router.patch(
   }
 );
 
-// ============ SUBMIT A QUOTE ============
+// ============================================================
+// SUBMIT A QUOTE (existing)
+// ============================================================
+
 router.post(
   '/:id/quotes',
   authenticate,
@@ -238,6 +409,7 @@ router.post(
     param('id').isUUID(),
     body('amount').isFloat({ gt: 0 }).withMessage('Amount must be greater than zero'),
     body('message').optional().isString().trim(),
+    body('truckId').optional().isUUID(),
   ],
   validate,
   async (req, res) => {
@@ -255,6 +427,25 @@ router.post(
         return res.status(400).json({ error: 'This job is not open for quotes' });
       }
 
+      // If truckId not provided, pick any available truck of the user
+      let truckId = req.body.truckId;
+      if (!truckId) {
+        const truck = await prisma.truck.findFirst({
+          where: { ownerId: req.user.id, availability: 'AVAILABLE' },
+        });
+        if (!truck) {
+          return res.status(400).json({ error: 'You must have an available truck to quote' });
+        }
+        truckId = truck.id;
+      } else {
+        const truck = await prisma.truck.findUnique({ where: { id: truckId } });
+        if (!truck) return res.status(404).json({ error: 'Truck not found' });
+        if (truck.ownerId !== req.user.id) return res.status(403).json({ error: 'Not your truck' });
+        if (truck.availability !== 'AVAILABLE') {
+          return res.status(400).json({ error: 'Selected truck is not available' });
+        }
+      }
+
       const existing = await prisma.transportQuote.findFirst({
         where: {
           transportJobId: job.id,
@@ -264,18 +455,11 @@ router.post(
       });
       if (existing) return res.status(409).json({ error: 'You already have a pending or accepted quote for this job' });
 
-      const truck = await prisma.truck.findFirst({
-        where: { ownerId: req.user.id, availability: 'AVAILABLE' },
-      });
-      if (!truck) {
-        return res.status(400).json({ error: 'You must have an available truck to quote' });
-      }
-
       const quote = await prisma.transportQuote.create({
         data: {
           transportJobId: job.id,
           truckOwnerId: req.user.id,
-          truckId: truck.id,
+          truckId,
           amount: Number(req.body.amount),
           message: req.body.message || null,
           status: 'PENDING',
@@ -297,7 +481,10 @@ router.post(
   }
 );
 
-// ============ LIST QUOTES FOR A JOB ============
+// ============================================================
+// LIST QUOTES FOR A JOB (existing)
+// ============================================================
+
 router.get(
   '/:id/quotes',
   authenticate,
@@ -338,7 +525,10 @@ router.get(
   }
 );
 
-// ============ ACCEPT/REJECT A QUOTE ============
+// ============================================================
+// ACCEPT/REJECT A QUOTE (existing)
+// ============================================================
+
 router.patch(
   '/quotes/:quoteId',
   authenticate,
