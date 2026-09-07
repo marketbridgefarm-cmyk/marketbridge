@@ -135,6 +135,7 @@ export default function SellerDashboard() {
         <RoleSwitchCTA current="SELLER" />
         <div className="sd-actions">
           <button className="sd-btn sd-btn-primary" onClick={() => listingModalRef.current.showModal()}>+ Create Listing</button>
+          <button className="sd-btn sd-btn-outline" onClick={() => setActiveTab('orders')}>Orders</button>
           <button className="sd-btn sd-btn-outline" onClick={() => setActiveTab('transport')}>Transport</button>
           <button className="sd-btn sd-btn-outline" onClick={() => setActiveTab('offers')}>Offers</button>
           <button className="sd-btn sd-btn-outline" onClick={() => setActiveTab('inspections')}>Inspections</button>
