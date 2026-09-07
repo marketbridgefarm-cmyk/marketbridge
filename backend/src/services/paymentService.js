@@ -27,7 +27,15 @@ function roundMoney(value) {
 
 function envRate(name) {
   const number = Number(process.env[name] ?? 0);
-  if (!Number.isFinite(number) || number < 0 || number > 100) return 0;
+
+  if (
+    !Number.isFinite(number) ||
+    number < 0 ||
+    number > 100
+  ) {
+    return 0;
+  }
+
   return number;
 }
 
@@ -39,11 +47,14 @@ function commissionRateFor(type) {
     ADVERTISING: envRate('ADVERTISING_COMMISSION_RATE'),
     DIGITAL: envRate('DIGITAL_COMMISSION_RATE'),
   };
+
   return rates[type] ?? 0;
 }
 
 function commissionAmount(amount, rate) {
-  return roundMoney(Number(amount) * Number(rate) / 100);
+  return roundMoney(
+    Number(amount) * Number(rate) / 100
+  );
 }
 
 // ============================================================================
@@ -52,23 +63,47 @@ function commissionAmount(amount, rate) {
 
 async function createPayment(data) {
   const amount = Number(data.amount);
+
   if (!Number.isFinite(amount) || amount <= 0) {
-    throw Object.assign(new Error('Payment amount must be greater than zero'), { status: 400 });
+    throw Object.assign(
+      new Error('Payment amount must be greater than zero'),
+      { status: 400 }
+    );
   }
 
-  const rate = data.commissionRate ?? commissionRateFor(data.type);
-  const commission = commissionAmount(amount, rate);
-  const netAmount = roundMoney(Math.max(0, amount - commission));
+  const rate =
+    data.commissionRate ??
+    commissionRateFor(data.type);
+
+  const commission = commissionAmount(
+    amount,
+    rate
+  );
+
+  const netAmount = roundMoney(
+    Math.max(0, amount - commission)
+  );
 
   return prisma.payment.create({
     data: {
       ...data,
+
       amount,
-      currency: data.currency || 'ETB',
-      commissionRate: rate,
-      commissionAmount: commission,
+
+      currency:
+        data.currency ||
+        'ETB',
+
+      commissionRate:
+        rate,
+
+      commissionAmount:
+        commission,
+
       netAmount,
-      status: 'PENDING',
+
+      status:
+        'PENDING',
     },
   });
 }
@@ -77,32 +112,83 @@ async function createPayment(data) {
 // LEDGER HELPERS
 // ============================================================================
 
-async function ledgerEntryExists(tx, paymentId, type) {
-  const existing = await tx.paymentLedgerEntry.findFirst({
-    where: { paymentId, type },
-    select: { id: true },
-  });
+async function ledgerEntryExists(
+  tx,
+  paymentId,
+  type
+) {
+  const existing =
+    await tx.paymentLedgerEntry.findFirst({
+      where: {
+        paymentId,
+        type,
+      },
+      select: {
+        id: true,
+      },
+    });
+
   return !!existing;
 }
 
-async function createLedgerEntryOnce(tx, data) {
-  const exists = await ledgerEntryExists(tx, data.paymentId, data.type);
-  if (exists) return null;
-  return tx.paymentLedgerEntry.create({ data });
+async function createLedgerEntryOnce(
+  tx,
+  data
+) {
+  const exists =
+    await ledgerEntryExists(
+      tx,
+      data.paymentId,
+      data.type
+    );
+
+  if (exists) {
+    return null;
+  }
+
+  return tx.paymentLedgerEntry.create({
+    data,
+  });
 }
 
 // ============================================================================
 // WRITE FINANCIAL LEDGER
 // ============================================================================
 
-async function writeLedger(tx, payment, status) {
-  if (status === 'PAID') {
-    const amount = Number(payment.amount);
-    const commission = roundMoney(Number(payment.commissionAmount || 0));
-    const net = roundMoney(Math.max(0, amount - commission));
+async function writeLedger(
+  tx,
+  payment,
+  status
+) {
+  // --------------------------------------------------------------------------
+  // PAID
+  // --------------------------------------------------------------------------
 
-    // ----- MARKETPLACE -----
-    if (payment.type === 'MARKETPLACE' && payment.order) {
+  if (status === 'PAID') {
+    const amount =
+      Number(payment.amount);
+
+    const commission =
+      roundMoney(
+        Number(payment.commissionAmount || 0)
+      );
+
+    const net =
+      roundMoney(
+        Math.max(
+          0,
+          amount - commission
+        )
+      );
+
+    // ------------------------------------------------------------------------
+    // MARKETPLACE
+    // ------------------------------------------------------------------------
+
+    if (
+      payment.type === 'MARKETPLACE' &&
+      payment.order
+    ) {
       if (net > 0) {
         await createLedgerEntryOnce(tx, {
           paymentId: payment.id,
@@ -110,27 +196,46 @@ async function writeLedger(tx, payment, status) {
           type: 'SELLER_EARNING',
           amount: net,
           currency: payment.currency,
-          description: 'Seller earning from buyer marketplace payment',
+          description:
+            'Seller earning from buyer marketplace payment',
         });
       }
+
       if (commission > 0) {
         await createLedgerEntryOnce(tx, {
           paymentId: payment.id,
           type: 'PLATFORM_COMMISSION',
           amount: commission,
           currency: payment.currency,
-          description: 'Marketplace seller transaction commission',
+          description:
+            'Marketplace seller transaction commission',
         });
       }
+
       return;
     }
 
-    // ----- TRANSPORT -----
-    if (payment.type === 'TRANSPORT') {
-      const job = payment.transportJob;
-      if (job && job.method === 'OWN_TRUCK') return; // no commission
+    // ------------------------------------------------------------------------
+    // TRANSPORT
+    // ------------------------------------------------------------------------
 
-      if (job && job.method === 'HIRE_TRANSPORTER' && job.truckOwnerId) {
+    if (payment.type === 'TRANSPORT') {
+      const job =
+        payment.transportJob;
+
+      // OWN_TRUCK has no transporter-hiring commission.
+      if (
+        job &&
+        job.method === 'OWN_TRUCK'
+      ) {
+        return;
+      }
+
+      if (
+        job &&
+        job.method === 'HIRE_TRANSPORTER' &&
+        job.truckOwnerId
+      ) {
         if (net > 0) {
           await createLedgerEntryOnce(tx, {
             paymentId: payment.id,
@@ -138,90 +243,130 @@ async function writeLedger(tx, payment, status) {
             type: 'TRANSPORTER_EARNING',
             amount: net,
             currency: payment.currency,
-            description: 'Transporter earning from hired transport payment',
+            description:
+              'Transporter earning from hired transport payment',
           });
         }
+
         if (commission > 0) {
           await createLedgerEntryOnce(tx, {
             paymentId: payment.id,
             type: 'PLATFORM_COMMISSION',
             amount: commission,
             currency: payment.currency,
-            description: 'Hired transporter marketplace commission',
+            description:
+              'Hired transporter marketplace commission',
           });
         }
       }
+
       return;
     }
 
-    // ----- INSPECTOR -----
-    if (payment.type === 'INSPECTOR' && payment.inspectionRequest && payment.inspectionRequest.inspectorId) {
+    // ------------------------------------------------------------------------
+    // INSPECTOR
+    // ------------------------------------------------------------------------
+
+    if (
+      payment.type === 'INSPECTOR' &&
+      payment.inspectionRequest &&
+      payment.inspectionRequest.inspectorId
+    ) {
       if (net > 0) {
         await createLedgerEntryOnce(tx, {
           paymentId: payment.id,
-          userId: payment.inspectionRequest.inspectorId,
+          userId:
+            payment.inspectionRequest.inspectorId,
           type: 'INSPECTOR_EARNING',
           amount: net,
           currency: payment.currency,
-          description: 'Inspector service earning',
+          description:
+            'Inspector service earning',
         });
       }
+
       if (commission > 0) {
         await createLedgerEntryOnce(tx, {
           paymentId: payment.id,
           type: 'PLATFORM_COMMISSION',
           amount: commission,
           currency: payment.currency,
-          description: 'Inspection marketplace commission',
+          description:
+            'Inspection marketplace commission',
         });
       }
+
       return;
     }
 
-    // ----- ADVERTISING -----
-    if (payment.type === 'ADVERTISING') {
+    // ------------------------------------------------------------------------
+    // ADVERTISING
+    // ------------------------------------------------------------------------
+
+    if (
+      payment.type === 'ADVERTISING'
+    ) {
       await createLedgerEntryOnce(tx, {
         paymentId: payment.id,
         type: 'PLATFORM_REVENUE',
-        amount: amount,
+        amount,
         currency: payment.currency,
-        description: 'Advertising revenue',
+        description:
+          'Advertising revenue',
       });
+
       return;
     }
 
-    // ----- DIGITAL -----
-    if (payment.type === 'DIGITAL') {
-      if (payment.digitalProduct && payment.digitalProduct.sellerId && net > 0) {
+    // ------------------------------------------------------------------------
+    // DIGITAL
+    // ------------------------------------------------------------------------
+
+    if (
+      payment.type === 'DIGITAL'
+    ) {
+      if (
+        payment.digitalProduct &&
+        payment.digitalProduct.sellerId &&
+        net > 0
+      ) {
         await createLedgerEntryOnce(tx, {
           paymentId: payment.id,
-          userId: payment.digitalProduct.sellerId,
+          userId:
+            payment.digitalProduct.sellerId,
           type: 'SELLER_EARNING',
           amount: net,
           currency: payment.currency,
-          description: 'Digital seller earning',
+          description:
+            'Digital seller earning',
         });
       }
+
       if (commission > 0) {
         await createLedgerEntryOnce(tx, {
           paymentId: payment.id,
           type: 'PLATFORM_COMMISSION',
           amount: commission,
           currency: payment.currency,
-          description: 'Digital marketplace commission',
+          description:
+            'Digital marketplace commission',
         });
       }
     }
   }
 
-  // ----- REFUND -----
+  // --------------------------------------------------------------------------
+  // REFUND
+  // --------------------------------------------------------------------------
+
   if (status === 'REFUNDED') {
     await createLedgerEntryOnce(tx, {
       paymentId: payment.id,
       type: 'REFUND',
       amount: -Number(payment.amount),
       currency: payment.currency,
-      description: 'Payment refund record',
+      description:
+        'Payment refund record',
     });
   }
 }
@@ -240,113 +385,231 @@ async function settlePayment({
   payload = {},
 }) {
   return prisma.$transaction(async (tx) => {
-    const payment = await tx.payment.findUnique({
-      where: { id: paymentId },
-      include: {
-        order: true,
-        transportJob: true,
-        inspectionRequest: true,
-        advertisement: true,
-        digitalPurchase: true,
-        digitalProduct: true,
-      },
-    });
+    const payment =
+      await tx.payment.findUnique({
+        where: {
+          id: paymentId,
+        },
+
+        include: {
+          order: true,
+          transportJob: true,
+          inspectionRequest: true,
+          advertisement: true,
+          digitalPurchase: true,
+          digitalProduct: true,
+        },
+      });
 
     if (!payment) {
-      throw Object.assign(new Error('Payment not found'), { status: 404 });
+      throw Object.assign(
+        new Error('Payment not found'),
+        { status: 404 }
+      );
     }
 
-    // Amount validation (only if payload provides amount)
-    if (payload.amount != null && !moneyEqual(payment.amount, payload.amount)) {
-      throw Object.assign(new Error('Payment amount mismatch'), { status: 409 });
+    // ------------------------------------------------------------------------
+    // AMOUNT VALIDATION
+    // ------------------------------------------------------------------------
+
+    if (
+      payload.amount != null &&
+      !moneyEqual(
+        payment.amount,
+        payload.amount
+      )
+    ) {
+      throw Object.assign(
+        new Error('Payment amount mismatch'),
+        { status: 409 }
+      );
     }
 
-    // Currency validation
-    if (payload.currency && String(payload.currency).toUpperCase() !== String(payment.currency).toUpperCase()) {
-      throw Object.assign(new Error('Payment currency mismatch'), { status: 409 });
+    // ------------------------------------------------------------------------
+    // CURRENCY VALIDATION
+    // ------------------------------------------------------------------------
+
+    if (
+      payload.currency &&
+      String(payload.currency).toUpperCase() !==
+        String(payment.currency).toUpperCase()
+    ) {
+      throw Object.assign(
+        new Error('Payment currency mismatch'),
+        { status: 409 }
+      );
     }
 
-    // Idempotent event logging
+    // ------------------------------------------------------------------------
+    // IDEMPOTENT EVENT LOGGING
+    // ------------------------------------------------------------------------
+
     if (eventId) {
       try {
         await tx.paymentEvent.create({
           data: {
             paymentId: payment.id,
-            provider: provider || payment.provider || 'UNKNOWN',
+            provider:
+              provider ||
+              payment.provider ||
+              'UNKNOWN',
             eventId,
             status,
             payload,
           },
         });
       } catch (error) {
-        if (error.code === 'P2002') return payment; // already processed
+        if (error.code === 'P2002') {
+          return payment;
+        }
+
         throw error;
       }
     }
 
-    // Prevent reopening a refunded payment
-    if (payment.status === 'REFUNDED' && status !== 'REFUNDED') {
-      return payment;
-    }
-    if (payment.status === 'PAID' && status === 'FAILED') {
+    // Never reopen a refunded payment.
+    if (
+      payment.status === 'REFUNDED' &&
+      status !== 'REFUNDED'
+    ) {
       return payment;
     }
 
-    // Update payment
-    const updated = await tx.payment.update({
-      where: { id: payment.id },
-      data: {
-        status,
-        provider: provider || payment.provider,
-        providerTransactionId: providerTransactionId || payment.providerTransactionId,
-        reference: reference || payment.reference,
-      },
-    });
+    // Never move PAID backwards to FAILED.
+    if (
+      payment.status === 'PAID' &&
+      status === 'FAILED'
+    ) {
+      return payment;
+    }
 
-    // ----- PAID business effects -----
+    // ------------------------------------------------------------------------
+    // UPDATE PAYMENT
+    // ------------------------------------------------------------------------
+
+    const updated =
+      await tx.payment.update({
+        where: {
+          id: payment.id,
+        },
+
+        data: {
+          status,
+
+          provider:
+            provider ||
+            payment.provider,
+
+          providerTransactionId:
+            providerTransactionId ||
+            payment.providerTransactionId,
+
+          reference:
+            reference ||
+            payment.reference,
+        },
+      });
+
+    // ------------------------------------------------------------------------
+    // PAID BUSINESS EFFECTS
+    // ------------------------------------------------------------------------
+
     if (status === 'PAID') {
+
       // Marketplace order
-      if (payment.type === 'MARKETPLACE' && payment.orderId) {
+      if (
+        payment.type === 'MARKETPLACE' &&
+        payment.orderId
+      ) {
         await tx.order.updateMany({
-          where: { id: payment.orderId, status: 'PENDING_PAYMENT' },
-          data: { status: 'CONFIRMED' },
+          where: {
+            id: payment.orderId,
+            status: 'PENDING_PAYMENT',
+          },
+
+          data: {
+            status: 'CONFIRMED',
+          },
         });
       }
 
       // Digital purchase
-      if (payment.type === 'DIGITAL' && payment.digitalPurchase) {
+      if (
+        payment.type === 'DIGITAL' &&
+        payment.digitalPurchase
+      ) {
         await tx.digitalPurchase.update({
-          where: { id: payment.digitalPurchase.id },
-          data: { status: 'COMPLETED' },
+          where: {
+            id:
+              payment.digitalPurchase.id,
+          },
+
+          data: {
+            status: 'COMPLETED',
+          },
         });
       }
 
       // Advertising
-      if (payment.type === 'ADVERTISING' && payment.advertisement) {
+      if (
+        payment.type === 'ADVERTISING' &&
+        payment.advertisement
+      ) {
         await tx.advertisement.update({
-          where: { id: payment.advertisement.id },
-          data: { amountPaid: payment.amount, status: 'ACTIVE' },
+          where: {
+            id:
+              payment.advertisement.id,
+          },
+
+          data: {
+            amountPaid:
+              payment.amount,
+
+            status: 'ACTIVE',
+          },
         });
       }
 
       // Financial allocation
-      await writeLedger(tx, payment, 'PAID');
+      await writeLedger(
+        tx,
+        payment,
+        'PAID'
+      );
     }
 
-    // ----- REFUND business effects -----
+    // ------------------------------------------------------------------------
+    // REFUND BUSINESS EFFECTS
+    // ------------------------------------------------------------------------
+
     if (status === 'REFUNDED') {
       if (payment.digitalPurchase) {
         await tx.digitalPurchase.update({
-          where: { id: payment.digitalPurchase.id },
-          data: { status: 'REFUNDED' },
+          where: {
+            id:
+              payment.digitalPurchase.id,
+          },
+
+          data: {
+            status: 'REFUNDED',
+          },
         });
       }
-      await writeLedger(tx, payment, 'REFUNDED');
+
+      await writeLedger(
+        tx,
+        payment,
+        'REFUNDED'
+      );
     }
 
     return updated;
   });
 }
+
+// ============================================================================
+// EXPORTS
+// ============================================================================
 
 module.exports = {
   ACTIVE_STATUSES,
