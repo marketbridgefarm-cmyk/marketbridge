@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 // Order of preference when resolving a single "Dashboard" destination for a
 // user with multiple roles. Per-role prompts to switch between capabilities
-// now live on the dashboards themselves (see RoleSwitchCTA), not here.
+// live on the dashboards themselves (see RoleSwitchCTA), not here.
 const DASHBOARD_BY_ROLE = [
   ['ADMIN', '/dashboard/admin'],
   ['SELLER', '/dashboard/seller'],
@@ -18,11 +18,49 @@ function resolveDashboard(user) {
   return DASHBOARD_BY_ROLE.find(([r]) => user?.roles?.includes(r))?.[1] || '/';
 }
 
+const MARKET_LINKS = [
+  { to: '/agricultural', label: 'Agricultural', match: (p) => p === '/agricultural' || p === '/listings' },
+  { to: '/products', label: 'Product', match: (p) => p.startsWith('/products') },
+  { to: '/digital', label: 'Digital', match: (p) => p.startsWith('/digital') },
+];
+
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const dashboardHref = resolveDashboard(user);
+
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef(null);
+
+  // Close both menus whenever the route changes.
+  useEffect(() => {
+    setMobileOpen(false);
+    setAccountOpen(false);
+  }, [location.pathname]);
+
+  // Close the account dropdown on outside click or Escape.
+  useEffect(() => {
+    if (!accountOpen) return;
+    function onDocClick(e) {
+      if (accountRef.current && !accountRef.current.contains(e.target)) setAccountOpen(false);
+    }
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setAccountOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [accountOpen]);
+
+  function handleLogout() {
+    logout();
+    navigate('/');
+  }
 
   return (
     <header className="site-header">
@@ -31,26 +69,68 @@ export default function Navbar() {
           <span className="brand-mark">MB</span>
           <span>Market<span>Bridge</span></span>
         </Link>
+
+        {/* Desktop links */}
         <div className="nav-links">
-          <Link className={location.pathname === '/agricultural' || location.pathname === '/listings' ? 'active' : ''} to="/agricultural">Agricultural</Link>
-          <Link className={location.pathname.startsWith('/products') ? 'active' : ''} to="/products">Product</Link>
-          <Link className={location.pathname.startsWith('/digital') ? 'active' : ''} to="/digital">Digital</Link>
-          {user && <Link className={location.pathname.startsWith('/dashboard') ? 'active' : ''} to={dashboardHref}>Dashboard</Link>}
-          {user && <Link className={location.pathname.startsWith('/orders') ? 'active' : ''} to="/orders">Orders</Link>}
+          {MARKET_LINKS.map((l) => (
+            <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{l.label}</Link>
+          ))}
+
           {user ? (
-            <button className="nav-user" onClick={() => navigate(dashboardHref)}>
-              <span className="avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
-              {user.name}
-            </button>
+            <div className="nav-account" ref={accountRef}>
+              <button className="nav-user" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((v) => !v)}>
+                <span className="avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
+                {user.name}
+                <span className="nav-caret">▾</span>
+              </button>
+              {accountOpen && (
+                <div className="nav-dropdown" role="menu">
+                  <Link role="menuitem" to={dashboardHref}>Dashboard</Link>
+                  <button role="menuitem" onClick={handleLogout}>Log out</button>
+                </div>
+              )}
+            </div>
           ) : (
             <>
               <Link to="/login">Log in</Link>
               <Link className="nav-cta" to="/register">Join MarketBridge</Link>
             </>
           )}
-          {user && <button className="nav-logout" onClick={() => { logout(); navigate('/'); }}>Log out</button>}
         </div>
+
+        {/* Mobile hamburger */}
+        <button
+          className={`nav-burger${mobileOpen ? ' nav-burger-open' : ''}`}
+          aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={mobileOpen}
+          onClick={() => setMobileOpen((v) => !v)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
       </nav>
+
+      {/* Mobile menu panel */}
+      {mobileOpen && (
+        <div className="mobile-menu">
+          {MARKET_LINKS.map((l) => (
+            <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{l.label}</Link>
+          ))}
+          <div className="mobile-menu-divider" />
+          {user ? (
+            <>
+              <Link to={dashboardHref}>Dashboard</Link>
+              <button className="mobile-logout" onClick={handleLogout}>Log out</button>
+            </>
+          ) : (
+            <>
+              <Link to="/login">Log in</Link>
+              <Link className="nav-cta" to="/register">Join MarketBridge</Link>
+            </>
+          )}
+        </div>
+      )}
     </header>
   );
 }
