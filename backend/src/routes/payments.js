@@ -1646,9 +1646,6 @@ router.get(
               },
             },
 
-            commission:
-              true,
-
             ledgerEntries:
               true,
           },
@@ -1955,9 +1952,6 @@ router.get(
           },
 
           include: {
-            commission:
-              true,
-
             ledgerEntries:
               true,
 
@@ -2020,9 +2014,6 @@ router.get(
               true,
 
             digitalPurchase:
-              true,
-
-            commission:
               true,
 
             ledgerEntries:
