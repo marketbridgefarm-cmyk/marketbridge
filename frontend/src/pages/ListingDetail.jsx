@@ -160,6 +160,17 @@ export default function ListingDetail() {
                 <div><span>Seller</span><strong>{listing.seller?.name}</strong></div>
               </div>
               <p className="muted">A pending, rejected or countered offer does not remove a listing from buyer availability. Acceptance creates a temporary reservation.</p>
+              {(() => {
+                const myOrder = (listing.orders || []).find((o) => o.buyerId === user?.id);
+                if (!myOrder) return null;
+                return (
+                  <p style={{ marginTop: 8 }}>
+                    <Link className="btn btn-primary btn-sm" to={`/orders/${myOrder.id}`}>
+                      View your order ({myOrder.status.replaceAll('_', ' ')}) →
+                    </Link>
+                  </p>
+                );
+              })()}
             </div>
             {isAgricultural && (
               <div className="card">
