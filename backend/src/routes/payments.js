@@ -723,53 +723,25 @@ router.post(
 );
 
 // ============================================================================
-// CHAPA TRANSACTION REFERENCE
-// ============================================================================
-// Each checkout attempt gets its own Chapa tx_ref. The MarketBridge payment
-// id remains the stable internal payment identifier. The latest Chapa ref is
-// stored in providerTransactionId so callbacks/webhooks can resolve it.
-
-function createChapaTxRef() {
-  return `MB-${crypto.randomUUID()}`;
-}
-
-async function findPaymentByChapaTxRef(txRef) {
-  const ref = String(txRef || '').trim();
-
-  if (!ref) {
-    return null;
-  }
-
-  // New payments: Chapa tx_ref is stored here.
-  const byProviderRef =
-    await prisma.payment.findFirst({
-      where: {
-        provider: 'chapa',
-        providerTransactionId: ref,
-      },
-    });
-
-  if (byProviderRef) {
-    return byProviderRef;
-  }
-
-  // Backward compatibility for payments created before unique Chapa refs.
-  return prisma.payment.findUnique({
-    where: {
-      id: ref,
-    },
-  });
-}
-
-// ============================================================================
 // CHAPA INITIALIZE
 // ============================================================================
 //
 // Creates a hosted Chapa checkout session.
 //
 // The browser is redirected to the checkoutUrl returned by Chapa.
-// The callback URL is a GET endpoint.
-// The webhook URL is a separate POST endpoint.
+//
+// Chapa notifies MarketBridge in two separate ways after payment:
+//   1. callback_url (set below) - Chapa makes a GET request here with
+//      status/tx_ref. Handled by GET /chapa/callback below, which
+//      independently re-verifies with Chapa before settling.
+//   2. Webhook - a URL configured separately in the Chapa merchant
+//      dashboard (a POST notification). Must point at
+//      POST {API_BASE_URL}/api/payments/webhooks/chapa. This is a
+//      dashboard setting, not something this code controls.
+//
+// Either notification is a backup for the other; the return_url flow
+// (PaymentReturn.jsx calling GET /:id/chapa/verify) is the primary path
+// and does not depend on either of these reaching us.
 // ============================================================================
 
 router.post(
@@ -836,28 +808,11 @@ router.post(
         });
       }
 
-      // Chapa rejects a tx_ref that has ever been used before. Generate a
-      // fresh provider reference for every checkout attempt instead of
-      // reusing payment.id when the user resumes/retries payment.
+      // A fresh, globally-unique tx_ref per initialize attempt.
+      // Chapa permanently rejects a reused tx_ref, so retrying or
+      // resuming a still-PENDING payment must never reuse the same one.
       const chapaTxRef =
-        createChapaTxRef();
-
-      // Persist the reference before contacting Chapa so callback/webhook
-      // processing can resolve the payment as soon as Chapa sends an event.
-      await prisma.payment.update({
-        where: {
-          id:
-            payment.id,
-        },
-
-        data: {
-          provider:
-            'chapa',
-
-          providerTransactionId:
-            chapaTxRef,
-        },
-      });
+        `${payment.id}_${Date.now()}`;
 
       const {
         checkoutUrl,
@@ -896,8 +851,8 @@ router.post(
             req.user.phone ||
             undefined,
 
-          // IMPORTANT:
-          // Chapa callback is GET.
+          // Chapa calls this via GET after payment completes;
+          // handled by GET /chapa/callback below.
           callbackUrl:
             `${apiUrl}/api/payments/chapa/callback`,
 
@@ -911,6 +866,24 @@ router.post(
           description:
             `MarketBridge ${payment.type} payment`,
         });
+
+      await prisma.payment.update({
+        where: {
+          id:
+            payment.id,
+        },
+
+        data: {
+          provider:
+            'chapa',
+
+          // Tracks the tx_ref actually on file with Chapa for this
+          // attempt, so verify/callback/webhook can look it up correctly.
+          // Overwritten with Chapa's own confirmed reference at settlement.
+          providerTransactionId:
+            chapaTxRef,
+        },
+      });
 
       return res.json({
         checkoutUrl,
@@ -975,10 +948,19 @@ router.get(
         });
       }
 
+      // tx_ref is `${payment.id}_${timestamp}` (see /chapa/initialize) -
+      // extract the payment id to look it up, but verify against Chapa
+      // using the exact raw tx_ref, since that's what Chapa has on file.
+      const paymentId =
+        String(txRef).split('_')[0];
+
       const payment =
-        await findPaymentByChapaTxRef(
-          txRef
-        );
+        await prisma.payment.findUnique({
+          where: {
+            id:
+              paymentId,
+          },
+        });
 
       if (!payment) {
         console.error(
@@ -989,7 +971,7 @@ router.get(
         if (appUrl) {
           return res.redirect(
             `${appUrl}/payments/${encodeURIComponent(
-              String(txRef)
+              paymentId
             )}/return`
           );
         }
@@ -1019,8 +1001,7 @@ router.get(
         raw,
       } =
         await chapa.verifyTransaction(
-          payment.providerTransactionId ||
-          payment.id
+          String(txRef)
         );
 
       if (
@@ -1064,8 +1045,7 @@ router.get(
               'ETB',
 
             chapa:
-              raw?.data ||
-              raw,
+              raw?.data || raw,
           },
         });
       }
@@ -1088,7 +1068,7 @@ router.get(
       ) {
         return res.redirect(
           `${appUrl}/payments/${encodeURIComponent(
-            String(txRef)
+            String(txRef).split('_')[0]
           )}/return`
         );
       }
@@ -1169,7 +1149,7 @@ router.get(
       } =
         await chapa.verifyTransaction(
           payment.providerTransactionId ||
-          payment.id
+            payment.id
         );
 
       // ----------------------------------------------------------------------
@@ -1220,8 +1200,7 @@ router.get(
                 'ETB',
 
               chapa:
-                raw?.data ||
-                raw,
+                raw?.data || raw,
             },
           });
 
@@ -1359,10 +1338,19 @@ router.post(
       // LOOK UP LOCAL PAYMENT
       // ----------------------------------------------------------------------
 
+      // tx_ref is `${payment.id}_${timestamp}` (see /chapa/initialize) -
+      // extract the payment id to look it up, but verify against Chapa
+      // using the exact raw tx_ref, since that's what Chapa has on file.
+      const paymentId =
+        String(txRef).split('_')[0];
+
       const payment =
-        await findPaymentByChapaTxRef(
-          txRef
-        );
+        await prisma.payment.findUnique({
+          where: {
+            id:
+              paymentId,
+          },
+        });
 
       if (!payment) {
         console.error(
@@ -1412,8 +1400,7 @@ router.post(
         raw,
       } =
         await chapa.verifyTransaction(
-          payment.providerTransactionId ||
-          payment.id
+          String(txRef)
         );
 
       if (
@@ -1482,8 +1469,7 @@ router.post(
               'ETB',
 
             chapaVerification:
-              raw?.data ||
-              raw,
+              raw?.data || raw,
           },
         });
 
