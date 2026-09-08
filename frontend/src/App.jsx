@@ -26,7 +26,6 @@ import OrderDetail from './pages/OrderDetail.jsx';
 import Orders from './pages/Orders.jsx';
 
 import PaymentReturn from './pages/PaymentReturn.jsx';
-import PaymentResult from './pages/PaymentResult.jsx';
 
 export default function App() {
   return (
@@ -144,16 +143,6 @@ export default function App() {
           element={
             <ProtectedRoute>
               <PaymentReturn />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Chapa / Telebirr payment result */}
-        <Route
-          path="/payment-result"
-          element={
-            <ProtectedRoute>
-              <PaymentResult />
             </ProtectedRoute>
           }
         />
