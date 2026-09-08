@@ -2064,6 +2064,21 @@ form > label:first-of-type,
   font-size: 13px;
 }
 
+/* Additions for AdminDashboard / InspectorDashboard restyle.
+   Append to the end of the existing shared stylesheet.
+   Adds color variants for .sd-badge so status pills (verification,
+   account status, dispute/ad status) read at a glance. */
+
+.sd-badge.sd-good {
+  background: #e6f6ea;
+  color: var(--green);
+}
+
+.sd-badge.sd-red {
+  background: #fdecea;
+  color: var(--danger);
+}
+
 /* Messaging UI */
 
 .message-thread {
@@ -2127,6 +2142,7 @@ form > label:first-of-type,
 .message-composer button {
   flex: 0 0 auto;
 }
+
 
 @media (prefers-reduced-motion: reduce) {
   .nav-burger span {
