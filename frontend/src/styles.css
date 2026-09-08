@@ -1820,7 +1820,7 @@ form > label:first-of-type,
   position: fixed;
   top: 0;
   right: 0;
-  bottom: 0;
+  bottom: 18px;
   width: min(320px, 78vw);
   max-width: 82vw;
   display: flex;
@@ -1828,11 +1828,15 @@ form > label:first-of-type,
   gap: 2px;
   padding: 84px 18px 24px;
   overflow-y: auto;
-  background: rgba(255, 255, 255, .72);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
-  border-left: 1px solid rgba(255, 255, 255, .5);
-  box-shadow: -18px 0 50px rgba(20, 45, 28, .18);
+  border-radius: 0 0 22px 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(200deg, rgba(70, 168, 197, .4) 0%, rgba(23, 107, 58, .38) 55%, rgba(14, 75, 41, .4) 100%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, .35);
+  border-top: none;
+  box-shadow: -14px 18px 50px rgba(10, 40, 45, .22), 0 2px 0 rgba(255, 255, 255, .3) inset;
   z-index: 46;
   animation: mobileMenuIn .28s var(--ease);
 }
@@ -1866,7 +1870,8 @@ form > label:first-of-type,
   text-align: left;
   padding: 13px 12px;
   border-radius: 10px;
-  color: #334038;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(10, 35, 20, .18);
   text-decoration: none;
   font: inherit;
   font-size: 15px;
@@ -1878,43 +1883,47 @@ form > label:first-of-type,
 
 .mobile-menu a:hover,
 .mobile-menu button:hover {
-  background: rgba(23, 107, 58, .1);
-  color: var(--green);
+  background: rgba(255, 255, 255, .22);
+  color: #fff;
   padding-left: 18px;
 }
 
 .mobile-menu a.active {
-  background: rgba(23, 107, 58, .1);
-  color: var(--green);
+  background: rgba(255, 255, 255, .26);
+  color: #fff;
   font-weight: 700;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .3) inset;
 }
 
 .mobile-menu a.nav-cta {
-  background: var(--green);
-  color: #fff !important;
+  background: #fff;
+  color: var(--green) !important;
+  text-shadow: none;
   font-weight: 700;
   text-align: center;
   margin-top: 6px;
+  box-shadow: 0 6px 18px rgba(10, 40, 25, .2);
 }
 
 .mobile-menu a.nav-cta:hover {
-  background: var(--green-dark);
-  color: #fff;
+  background: #f0faf3;
+  color: var(--green-dark) !important;
   padding-left: 12px;
 }
 
 .mobile-menu-divider {
   height: 1px;
   margin: 8px 4px;
-  background: rgba(23, 107, 58, .14);
+  background: rgba(255, 255, 255, .28);
 }
 
 .mobile-logout {
-  color: var(--danger) !important;
+  color: #ffd9d4 !important;
 }
 
 .mobile-logout:hover {
-  background: rgba(180, 35, 24, .1) !important;
+  background: rgba(255, 255, 255, .18) !important;
+  color: #fff !important;
 }
 
 .nav-account {
