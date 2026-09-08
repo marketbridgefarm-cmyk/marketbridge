@@ -28,7 +28,6 @@ const ratingRoutes = require('./routes/ratings');
 const digitalRoutes = require('./routes/digital');
 const messageRoutes = require('./routes/messages');
 const adminRoutes = require('./routes/admin');
-const chapaRoutes = require('./routes/chapa');
 
 const prisma = require('./config/db');
 
@@ -253,8 +252,6 @@ app.use('/api/digital-products', digitalRoutes);
 app.use('/api/messages', messageRoutes);
 
 app.use('/api/admin', adminRoutes);
-
-app.use('/api/chapa', chapaRoutes);
 
 // ============================================================================
 // API 404
