@@ -1351,6 +1351,22 @@ form > label:first-of-type,
   flex-wrap: wrap;
 }
 
+/* Base (desktop) state for the mobile hamburger button — must come
+   before the max-width media queries below so their `display: flex`
+   override actually wins on small screens. */
+.nav-burger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+
 @media (max-width: 900px) {
   .hero-grid,
   .split,
@@ -1769,19 +1785,6 @@ form > label:first-of-type,
 }
 
 /* Responsive nav: hamburger + mobile menu panel, desktop account dropdown */
-
-.nav-burger {
-  display: none;
-  flex-direction: column;
-  justify-content: center;
-  gap: 5px;
-  width: 38px;
-  height: 38px;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  padding: 0;
-}
 
 .nav-burger span {
   display: block;
