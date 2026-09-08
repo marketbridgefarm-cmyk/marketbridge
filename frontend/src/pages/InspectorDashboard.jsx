@@ -109,22 +109,75 @@ export default function InspectorDashboard() {
   const pendingMine = mine.filter((r) => r.status === 'ACCEPTED' || r.status === 'IN_PROGRESS');
   const completedMine = mine.filter((r) => r.status === 'COMPLETED');
 
+  if (loading) {
+    return (
+      <div className="sd-dashboard">
+        <section>
+          <span className="sd-eyebrow">INSPECTOR DASHBOARD</span>
+          <h1>Loading your inspection workspace...</h1>
+          <p className="sd-muted">Loading available jobs and your accepted inspections.</p>
+        </section>
+      </div>
+    );
+  }
+
   return (
-    <main className="section">
-      <div className="container-wide">
-        <div className="page-header">
+    <div className="sd-dashboard">
+
+      {/* =========================================================
+          HEADER / SUMMARY
+      ========================================================= */}
+
+      <section>
+        <div className="sd-toolbar">
           <div>
-            <span className="eyebrow">INSPECTOR DASHBOARD</span>
+            <span className="sd-eyebrow">INSPECTOR DASHBOARD</span>
             <h1>Verify. Document. Report.</h1>
-            <p>Inspectors are independent verifiers. They do not own produce, set farmer prices or arrange transport.</p>
+            <p className="sd-muted" style={{ maxWidth: 780 }}>
+              Inspectors are independent verifiers. They do not own produce,
+              set farmer prices or arrange transport.
+            </p>
           </div>
-          <span className="role-chip">VERIFICATION ROLE</span>
+
+          <span className="sd-badge sd-blue">VERIFICATION ROLE</span>
         </div>
 
-        {msg && <div className="alert success">{msg}</div>}
-        {error && <div className="alert error">{error}</div>}
+        <div className="sd-stat-grid">
+          <div className="sd-stat">
+            <span>AVAILABLE JOBS</span>
+            <b>{available.length}</b>
+          </div>
 
-        <div className="sd-tabs" style={{ marginBottom: 16 }}>
+          <div className="sd-stat">
+            <span>IN PROGRESS</span>
+            <b>{pendingMine.length}</b>
+          </div>
+
+          <div className="sd-stat">
+            <span>COMPLETED</span>
+            <b>{completedMine.length}</b>
+          </div>
+        </div>
+      </section>
+
+      {msg && (
+        <section>
+          <div className="alert success">{msg}</div>
+        </section>
+      )}
+
+      {error && (
+        <section>
+          <div className="alert error">{error}</div>
+        </section>
+      )}
+
+      {/* =========================================================
+          TABS
+      ========================================================= */}
+
+      <section>
+        <div className="sd-tabs">
           <button
             type="button"
             className={`sd-tab ${tab === 'available' ? 'sd-active' : ''}`}
@@ -141,89 +194,129 @@ export default function InspectorDashboard() {
           </button>
         </div>
 
-        <div className="dashboard-layout">
-          <section>
+        <div className="sd-workspace">
+          <div>
             {tab === 'available' && (
-              <div className="card">
-                <h2>Open inspection requests</h2>
-                <p className="muted">Requests from sellers or buyers that no inspector has accepted yet.</p>
+              <div>
+                <div className="sd-toolbar">
+                  <div>
+                    <span className="sd-eyebrow">MARKETPLACE</span>
+                    <h2>Open inspection requests</h2>
+                    <p className="sd-muted">
+                      Requests from sellers or buyers that no inspector has
+                      accepted yet.
+                    </p>
+                  </div>
+                </div>
 
-                {loading ? (
-                  <p className="muted">Loading…</p>
-                ) : (
-                  <div className="request-list">
-                    {available.map((r) => (
-                      <div className="request-row" key={r.id}>
+                <div className="sd-cards">
+                  {available.map((r) => (
+                    <div className="sd-card" key={r.id}>
+                      <h3>
+                        {r.listing?.cropType || 'Listing'} · {r.listing?.quantity} {r.listing?.unit}
+                      </h3>
+
+                      <p className="sd-muted">
+                        {modeLabel(r.mode)} — requested for {r.listing?.location || 'location not set'}
+                      </p>
+
+                      <p className="sd-muted">Requested by {r.requestedBy?.name || 'user'}</p>
+
+                      <div className="sd-form-grid" style={{ marginTop: 12 }}>
                         <div>
-                          <strong>{r.listing?.cropType || 'Listing'} · {r.listing?.quantity} {r.listing?.unit}</strong>
-                          <p>{modeLabel(r.mode)} — requested for {r.listing?.location || 'location not set'}</p>
-                          <p className="muted">Requested by {r.requestedBy?.name || 'user'}</p>
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <label>Your fee (ETB)</label>
                           <input
                             type="number"
                             min="1"
                             step="0.01"
-                            placeholder="Your fee (ETB)"
-                            style={{ width: 130 }}
+                            placeholder="e.g. 500"
                             value={feeInputs[r.id] || ''}
                             onChange={(e) => setFeeInputs((f) => ({ ...f, [r.id]: e.target.value }))}
                           />
-                          <button type="button" className="btn btn-primary" onClick={() => accept(r.id)}>
-                            Accept job
-                          </button>
                         </div>
                       </div>
-                    ))}
 
-                    {available.length === 0 && <p className="muted">No open requests right now.</p>}
-                  </div>
-                )}
+                      <button type="button" className="sd-btn sd-btn-primary" style={{ marginTop: 6 }} onClick={() => accept(r.id)}>
+                        Accept job
+                      </button>
+                    </div>
+                  ))}
+
+                  {available.length === 0 && (
+                    <div className="sd-panel">
+                      <h3>No open requests</h3>
+                      <p className="sd-muted">New inspection requests will appear here.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
             {tab === 'mine' && (
-              <div className="card">
-                <h2>My accepted jobs</h2>
-                <p className="muted">Jobs you've accepted. Submit a report once the inspection is complete.</p>
-
-                {loading ? (
-                  <p className="muted">Loading…</p>
-                ) : (
-                  <div className="request-list">
-                    {pendingMine.map((r) => (
-                      <div className="request-row" key={r.id}>
-                        <div>
-                          <strong>{r.listing?.cropType || 'Listing'} · {r.listing?.quantity} {r.listing?.unit}</strong>
-                          <p>{modeLabel(r.mode)} — {r.listing?.location || 'location not set'}</p>
-                        </div>
-                        <button type="button" className="btn btn-primary" onClick={() => openReportForm(r.id)}>
-                          Submit report
-                        </button>
-                      </div>
-                    ))}
-
-                    {pendingMine.length === 0 && <p className="muted">No jobs in progress.</p>}
+              <div>
+                <div className="sd-toolbar">
+                  <div>
+                    <span className="sd-eyebrow">MY JOBS</span>
+                    <h2>My accepted jobs</h2>
+                    <p className="sd-muted">
+                      Jobs you've accepted. Submit a report once the
+                      inspection is complete.
+                    </p>
                   </div>
-                )}
+                </div>
+
+                <div className="sd-cards">
+                  {pendingMine.map((r) => (
+                    <div className="sd-card" key={r.id}>
+                      <h3>{r.listing?.cropType || 'Listing'} · {r.listing?.quantity} {r.listing?.unit}</h3>
+                      <p className="sd-muted">{modeLabel(r.mode)} — {r.listing?.location || 'location not set'}</p>
+                      <button type="button" className="sd-btn sd-btn-primary" onClick={() => openReportForm(r.id)}>
+                        Submit report
+                      </button>
+                    </div>
+                  ))}
+
+                  {pendingMine.length === 0 && (
+                    <div className="sd-panel">
+                      <p className="sd-muted">No jobs in progress.</p>
+                    </div>
+                  )}
+                </div>
 
                 {completedMine.length > 0 && (
                   <>
-                    <h3 style={{ marginTop: 24 }}>Completed</h3>
-                    <div className="request-list">
-                      {completedMine.map((r) => (
-                        <div className="request-row" key={r.id}>
-                          <div>
-                            <strong>{r.listing?.cropType || 'Listing'}</strong>
-                            <p className="muted">
-                              {r.report ? `Grade: ${r.report.grade || '—'} · Quantity verified: ${r.report.quantity}` : 'Report on file'}
-                            </p>
-                          </div>
-                          <Link to={`/listings/${r.listing?.id}`}>
-                            <button type="button" className="btn btn-light">View listing</button>
-                          </Link>
-                        </div>
-                      ))}
+                    <div className="sd-toolbar" style={{ marginTop: 28 }}>
+                      <div>
+                        <span className="sd-eyebrow">HISTORY</span>
+                        <h2>Completed</h2>
+                      </div>
+                    </div>
+
+                    <div className="sd-panel sd-table-wrap">
+                      <table className="sd-table">
+                        <thead>
+                          <tr>
+                            <th>Listing</th>
+                            <th>Report</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {completedMine.map((r) => (
+                            <tr key={r.id}>
+                              <td><strong>{r.listing?.cropType || 'Listing'}</strong></td>
+                              <td className="sd-muted">
+                                {r.report ? `Grade: ${r.report.grade || '—'} · Quantity verified: ${r.report.quantity}` : 'Report on file'}
+                              </td>
+                              <td>
+                                <Link to={`/listings/${r.listing?.id}`}>
+                                  <button type="button" className="sd-btn sd-btn-outline">View listing</button>
+                                </Link>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </>
                 )}
@@ -231,10 +324,10 @@ export default function InspectorDashboard() {
             )}
 
             {activeRequestId && (
-              <div className="card" style={{ marginTop: 20 }}>
+              <div className="sd-panel" style={{ marginTop: 20 }}>
                 <h2>Inspection report</h2>
                 <form onSubmit={submitReport}>
-                  <div className="form-grid">
+                  <div className="sd-form-grid">
                     <div>
                       <label>Verified quantity</label>
                       <input
@@ -263,37 +356,40 @@ export default function InspectorDashboard() {
                         onChange={(e) => setReport({ ...report, gpsLocation: e.target.value })}
                       />
                     </div>
+                    <div className="sd-full">
+                      <label>Visible defects</label>
+                      <textarea
+                        value={report.visibleDefects}
+                        onChange={(e) => setReport({ ...report, visibleDefects: e.target.value })}
+                      />
+                    </div>
+                    <div className="sd-full">
+                      <label>Damage notes</label>
+                      <textarea
+                        value={report.damageNotes}
+                        onChange={(e) => setReport({ ...report, damageNotes: e.target.value })}
+                      />
+                    </div>
+                    <div className="sd-full">
+                      <label>Packaging notes</label>
+                      <textarea
+                        value={report.packagingNotes}
+                        onChange={(e) => setReport({ ...report, packagingNotes: e.target.value })}
+                      />
+                    </div>
                   </div>
 
-                  <label>Visible defects</label>
-                  <textarea
-                    value={report.visibleDefects}
-                    onChange={(e) => setReport({ ...report, visibleDefects: e.target.value })}
-                  />
-
-                  <label>Damage notes</label>
-                  <textarea
-                    value={report.damageNotes}
-                    onChange={(e) => setReport({ ...report, damageNotes: e.target.value })}
-                  />
-
-                  <label>Packaging notes</label>
-                  <textarea
-                    value={report.packagingNotes}
-                    onChange={(e) => setReport({ ...report, packagingNotes: e.target.value })}
-                  />
-
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                    <button className="btn btn-primary" type="submit">Publish evidence report</button>
-                    <button type="button" className="btn btn-light" onClick={closeReportForm}>Cancel</button>
+                  <div className="sd-modal-actions" style={{ marginTop: 16 }}>
+                    <button className="sd-btn sd-btn-primary" type="submit">Publish evidence report</button>
+                    <button type="button" className="sd-btn sd-btn-outline" onClick={closeReportForm}>Cancel</button>
                   </div>
                 </form>
               </div>
             )}
-          </section>
+          </div>
 
           <aside>
-            <div className="card">
+            <div className="sd-panel">
               <h3>Evidence checklist</h3>
               {[
                 'Quantity', 'Grade / quality', 'Size where applicable', 'Moisture where applicable',
@@ -305,7 +401,7 @@ export default function InspectorDashboard() {
             </div>
           </aside>
         </div>
-      </div>
-    </main>
+      </section>
+    </div>
   );
 }
