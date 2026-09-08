@@ -723,6 +723,45 @@ router.post(
 );
 
 // ============================================================================
+// CHAPA TRANSACTION REFERENCE
+// ============================================================================
+// Each checkout attempt gets its own Chapa tx_ref. The MarketBridge payment
+// id remains the stable internal payment identifier. The latest Chapa ref is
+// stored in providerTransactionId so callbacks/webhooks can resolve it.
+
+function createChapaTxRef() {
+  return `MB-${crypto.randomUUID()}`;
+}
+
+async function findPaymentByChapaTxRef(txRef) {
+  const ref = String(txRef || '').trim();
+
+  if (!ref) {
+    return null;
+  }
+
+  // New payments: Chapa tx_ref is stored here.
+  const byProviderRef =
+    await prisma.payment.findFirst({
+      where: {
+        provider: 'chapa',
+        providerTransactionId: ref,
+      },
+    });
+
+  if (byProviderRef) {
+    return byProviderRef;
+  }
+
+  // Backward compatibility for payments created before unique Chapa refs.
+  return prisma.payment.findUnique({
+    where: {
+      id: ref,
+    },
+  });
+}
+
+// ============================================================================
 // CHAPA INITIALIZE
 // ============================================================================
 //
@@ -797,12 +836,35 @@ router.post(
         });
       }
 
+      // Chapa rejects a tx_ref that has ever been used before. Generate a
+      // fresh provider reference for every checkout attempt instead of
+      // reusing payment.id when the user resumes/retries payment.
+      const chapaTxRef =
+        createChapaTxRef();
+
+      // Persist the reference before contacting Chapa so callback/webhook
+      // processing can resolve the payment as soon as Chapa sends an event.
+      await prisma.payment.update({
+        where: {
+          id:
+            payment.id,
+        },
+
+        data: {
+          provider:
+            'chapa',
+
+          providerTransactionId:
+            chapaTxRef,
+        },
+      });
+
       const {
         checkoutUrl,
       } =
         await chapa.initializeTransaction({
           txRef:
-            payment.id,
+            chapaTxRef,
 
           amount:
             payment.amount,
@@ -849,18 +911,6 @@ router.post(
           description:
             `MarketBridge ${payment.type} payment`,
         });
-
-      await prisma.payment.update({
-        where: {
-          id:
-            payment.id,
-        },
-
-        data: {
-          provider:
-            'chapa',
-        },
-      });
 
       return res.json({
         checkoutUrl,
@@ -926,12 +976,9 @@ router.get(
       }
 
       const payment =
-        await prisma.payment.findUnique({
-          where: {
-            id:
-              String(txRef),
-          },
-        });
+        await findPaymentByChapaTxRef(
+          txRef
+        );
 
       if (!payment) {
         console.error(
@@ -972,6 +1019,7 @@ router.get(
         raw,
       } =
         await chapa.verifyTransaction(
+          payment.providerTransactionId ||
           payment.id
         );
 
@@ -1016,7 +1064,8 @@ router.get(
               'ETB',
 
             chapa:
-              raw?.data || raw,
+              raw?.data ||
+              raw,
           },
         });
       }
@@ -1119,6 +1168,7 @@ router.get(
         raw,
       } =
         await chapa.verifyTransaction(
+          payment.providerTransactionId ||
           payment.id
         );
 
@@ -1170,7 +1220,8 @@ router.get(
                 'ETB',
 
               chapa:
-                raw?.data || raw,
+                raw?.data ||
+                raw,
             },
           });
 
@@ -1309,12 +1360,9 @@ router.post(
       // ----------------------------------------------------------------------
 
       const payment =
-        await prisma.payment.findUnique({
-          where: {
-            id:
-              String(txRef),
-          },
-        });
+        await findPaymentByChapaTxRef(
+          txRef
+        );
 
       if (!payment) {
         console.error(
@@ -1364,6 +1412,7 @@ router.post(
         raw,
       } =
         await chapa.verifyTransaction(
+          payment.providerTransactionId ||
           payment.id
         );
 
@@ -1433,7 +1482,8 @@ router.post(
               'ETB',
 
             chapaVerification:
-              raw?.data || raw,
+              raw?.data ||
+              raw,
           },
         });
 
