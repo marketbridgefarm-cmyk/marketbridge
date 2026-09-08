@@ -12,7 +12,7 @@ const ROLE_OPTIONS = [
   'ADVERTISER',
   'ADMIN',
 ];
-
+  
 const ACCOUNT_STATUS_OPTIONS = ['ACTIVE', 'SUSPENDED'];
 
 export default function AdminDashboard() {
@@ -77,6 +77,13 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  function statusBadgeClass(status) {
+    if (['VERIFIED', 'ACTIVE', 'RESOLVED'].includes(status)) return 'sd-badge sd-good';
+    if (['REJECTED', 'SUSPENDED'].includes(status)) return 'sd-badge sd-red';
+    if (['PENDING', 'EXPIRED'].includes(status)) return 'sd-badge sd-warn';
+    return 'sd-badge';
+  }
 
   function clearMessages() {
     setError('');
@@ -324,11 +331,13 @@ export default function AdminDashboard() {
 
   if (loading && !overview) {
     return (
-      <main className="section">
-        <div className="container-wide loading">
-          {error || 'Loading admin dashboard…'}
-        </div>
-      </main>
+      <div className="sd-dashboard">
+        <section>
+          <span className="sd-eyebrow">ADMINISTRATION</span>
+          <h1>Loading the control center...</h1>
+          <p className="sd-muted">{error || 'Loading admin dashboard…'}</p>
+        </section>
+      </div>
     );
   }
 
@@ -369,56 +378,42 @@ export default function AdminDashboard() {
   );
 
   return (
-    <main className="section">
-      <div className="container-wide">
+    <div className="sd-dashboard">
 
-        <div className="page-header">
-          <div>
-            <span className="eyebrow">
-              ADMINISTRATION
-            </span>
-
-            <h1>
-              Marketplace control center.
-            </h1>
-
-            <p>
-              Manage users, verification, account access,
-              roles, disputes, and fraud monitoring.
-            </p>
-          </div>
-        </div>
+      <section>
+        <span className="sd-eyebrow">ADMINISTRATION</span>
+        <h1>Marketplace control center.</h1>
+        <p className="sd-muted" style={{ maxWidth: 780 }}>
+          Manage users, verification, account access, roles,
+          disputes, and fraud monitoring.
+        </p>
 
         <RoleSwitchCTA current="ADMIN" />
 
-        {error && (
-          <div className="alert error">
-            {error}
-          </div>
-        )}
-
-        {success && (
-          <div className="alert">
-            {success}
-          </div>
-        )}
-
-        <div className="dashboard-grid">
+        <div className="sd-stat-grid">
           {cards.map(([label, value]) => (
-            <div
-              className="stat-card"
-              key={label}
-            >
-              <strong>{value}</strong>
-              <span>{label}</span>
+            <div className="sd-stat" key={label}>
+              <span>{label.toUpperCase()}</span>
+              <b>{value}</b>
             </div>
           ))}
         </div>
+      </section>
 
-        <div
-          className="sd-tabs"
-          style={{ margin: '20px 0' }}
-        >
+      {error && (
+        <section>
+          <div className="alert error">{error}</div>
+        </section>
+      )}
+
+      {success && (
+        <section>
+          <div className="alert success">{success}</div>
+        </section>
+      )}
+
+      <section>
+        <div className="sd-tabs">
           <button
             type="button"
             className={`sd-tab ${
@@ -519,8 +514,8 @@ export default function AdminDashboard() {
         </div>
 
         {tab === 'overview' && (
-          <div className="admin-grid">
-            <div className="card">
+          <div>
+            <div className="sd-panel">
               <h2>Modules status</h2>
 
               {[
@@ -575,7 +570,7 @@ export default function AdminDashboard() {
                 >
                   {built ? '✓' : '○'} {label}{' '}
                   {!built && (
-                    <span className="muted">
+                    <span className="sd-muted">
                       (backend not built yet)
                     </span>
                   )}
@@ -586,21 +581,13 @@ export default function AdminDashboard() {
         )}
 
         {tab === 'users' && (
-          <div className="card">
+          <div className="sd-panel">
 
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: '12px',
-                flexWrap: 'wrap',
-              }}
-            >
+            <div className="sd-toolbar">
               <div>
                 <h2>Users & account control</h2>
 
-                <p className="muted">
+                <p className="sd-muted">
                   Search users, manage verification,
                   activate or suspend accounts, and
                   manage marketplace roles.
@@ -609,7 +596,7 @@ export default function AdminDashboard() {
 
               <button
                 type="button"
-                className="btn btn-light"
+                className="sd-btn sd-btn-outline"
                 onClick={loadAll}
                 disabled={loading}
               >
@@ -619,11 +606,7 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            <div
-              style={{
-                margin: '18px 0',
-              }}
-            >
+            <div style={{ margin: '18px 0' }}>
               <input
                 type="search"
                 value={userSearch}
@@ -631,17 +614,10 @@ export default function AdminDashboard() {
                   setUserSearch(e.target.value)
                 }
                 placeholder="Search by name, email, phone, role, status..."
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: '1px solid #ccc',
-                  boxSizing: 'border-box',
-                }}
               />
             </div>
 
-            <p className="muted">
+            <p className="sd-muted">
               Showing {filteredUsers.length} of{' '}
               {users.length} users.
             </p>
@@ -676,13 +652,13 @@ export default function AdminDashboard() {
                           </strong>
 
                           {user.phone && (
-                            <div className="muted">
+                            <div className="sd-muted">
                               {user.phone}
                             </div>
                           )}
 
                           {user.location && (
-                            <div className="muted">
+                            <div className="sd-muted">
                               {user.location}
                             </div>
                           )}
@@ -760,7 +736,9 @@ export default function AdminDashboard() {
                             }}
                           >
                             <span
-                              className="sd-badge"
+                              className={statusBadgeClass(
+                                user.accountStatus || 'ACTIVE'
+                              )}
                             >
                               {user.accountStatus ||
                                 'ACTIVE'}
@@ -770,7 +748,7 @@ export default function AdminDashboard() {
                             'SUSPENDED' ? (
                               <button
                                 type="button"
-                                className="btn btn-primary"
+                                className="sd-btn sd-btn-primary"
                                 disabled={
                                   isActionLoading
                                 }
@@ -788,7 +766,7 @@ export default function AdminDashboard() {
                             ) : (
                               <button
                                 type="button"
-                                className="btn btn-light"
+                                className="sd-btn sd-btn-outline"
                                 disabled={
                                   isActionLoading
                                 }
@@ -853,7 +831,7 @@ export default function AdminDashboard() {
 
                             <button
                               type="button"
-                              className="btn btn-primary"
+                              className="sd-btn sd-btn-primary"
                               disabled={
                                 isActionLoading ||
                                 !roleSelections[
@@ -881,7 +859,7 @@ export default function AdminDashboard() {
                                     <button
                                       type="button"
                                       key={role}
-                                      className="btn btn-light"
+                                      className="sd-btn sd-btn-outline"
                                       disabled={
                                         isActionLoading
                                       }
@@ -921,33 +899,33 @@ export default function AdminDashboard() {
         )}
 
         {tab === 'disputes' && (
-          <div className="admin-grid">
+          <div>
 
-            <div className="card">
-              <h2>Open disputes</h2>
+            <div className="sd-toolbar">
+              <div>
+                <span className="sd-eyebrow">MODERATION</span>
+                <h2>Open disputes</h2>
+              </div>
+            </div>
 
+            <div className="sd-cards">
               {openDisputes.map((item) => (
-                <div
-                  className="dispute"
-                  key={item.id}
-                >
-                  <strong>
-                    {item.disputeType}
-                  </strong>
+                <div className="sd-card" key={item.id}>
+                  <h3>{item.disputeType}</h3>
 
-                  <p>
+                  <p className="sd-muted">
                     {item.raisedBy?.name} vs{' '}
                     {item.against?.name}
                   </p>
 
-                  <p>
+                  <p className="sd-muted">
                     {item.description}
                   </p>
 
-                  <div className="row-actions">
+                  <div className="sd-modal-actions" style={{ marginTop: 12 }}>
 
                     <button
-                      className="btn btn-primary"
+                      className="sd-btn sd-btn-primary"
                       disabled={
                         actionLoading ===
                         `dispute-${item.id}`
@@ -966,7 +944,7 @@ export default function AdminDashboard() {
                     </button>
 
                     <button
-                      className="btn btn-light"
+                      className="sd-btn sd-btn-outline"
                       disabled={
                         actionLoading ===
                         `dispute-${item.id}`
@@ -986,114 +964,113 @@ export default function AdminDashboard() {
               ))}
 
               {openDisputes.length === 0 && (
-                <p className="muted">
-                  No open disputes.
-                </p>
+                <div className="sd-panel">
+                  <p className="sd-muted">No open disputes.</p>
+                </div>
               )}
             </div>
 
-            <div className="card">
-              <h2>Recently resolved</h2>
+            <div className="sd-toolbar" style={{ marginTop: 28 }}>
+              <div>
+                <span className="sd-eyebrow">HISTORY</span>
+                <h2>Recently resolved</h2>
+              </div>
+            </div>
 
-              {resolvedDisputes
-                .slice(0, 10)
-                .map((item) => (
-                  <div
-                    className="dispute"
-                    key={item.id}
-                  >
-                    <strong>
-                      {item.disputeType}
-                    </strong>
+            <div className="sd-panel sd-table-wrap">
+              <table className="sd-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Parties</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resolvedDisputes.slice(0, 10).map((item) => (
+                    <tr key={item.id}>
+                      <td><strong>{item.disputeType}</strong></td>
+                      <td className="sd-muted">
+                        {item.raisedBy?.name} vs {item.against?.name}
+                      </td>
+                      <td>
+                        <span className={statusBadgeClass(item.status)}>{item.status}</span>
+                      </td>
+                    </tr>
+                  ))}
 
-                    <p className="muted">
-                      {item.raisedBy?.name} vs{' '}
-                      {item.against?.name} —{' '}
-                      <span className="sd-badge">
-                        {item.status}
-                      </span>
-                    </p>
-                  </div>
-                ))}
-
-              {resolvedDisputes.length === 0 && (
-                <p className="muted">
-                  Nothing resolved yet.
-                </p>
-              )}
+                  {resolvedDisputes.length === 0 && (
+                    <tr>
+                      <td colSpan="3" className="sd-muted">Nothing resolved yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
 
           </div>
         )}
 
         {tab === 'fraud' && (
-          <div className="card">
-
-            <h2>Flagged users</h2>
-
-            <p className="muted">
-              Users with multiple open disputes
-              filed against them. This is a
-              starting heuristic — not a conclusive
-              fraud finding.
-            </p>
-
-            {suspiciousUsers.map((user) => (
-              <div
-                className="dispute"
-                key={user.id}
-              >
-                <strong>
-                  {user.name}
-                </strong>
-
-                <p className="muted">
-                  {user.email} ·{' '}
-                  {(user.disputesAgainst || [])
-                    .length}{' '}
-                  open dispute(s) against this
-                  account
+          <div>
+            <div className="sd-toolbar">
+              <div>
+                <span className="sd-eyebrow">RISK</span>
+                <h2>Flagged users</h2>
+                <p className="sd-muted">
+                  Users with multiple open disputes filed against
+                  them. This is a starting heuristic — not a
+                  conclusive fraud finding.
                 </p>
-
-                {(user.disputesAgainst || []).map(
-                  (dispute) => (
-                    <p
-                      key={dispute.id}
-                      className="muted"
-                    >
-                      — {dispute.disputeType}:{' '}
-                      {dispute.description}
-                    </p>
-                  )
-                )}
               </div>
-            ))}
+            </div>
 
-            {suspiciousUsers.length === 0 && (
-              <p className="muted">
-                No flagged users right now.
-              </p>
-            )}
+            <div className="sd-cards">
+              {suspiciousUsers.map((user) => (
+                <div className="sd-card" key={user.id}>
+                  <h3>{user.name}</h3>
 
+                  <p className="sd-muted">
+                    {user.email} ·{' '}
+                    {(user.disputesAgainst || []).length}{' '}
+                    open dispute(s) against this account
+                  </p>
+
+                  {(user.disputesAgainst || []).map((dispute) => (
+                    <p key={dispute.id} className="sd-muted">
+                      — {dispute.disputeType}: {dispute.description}
+                    </p>
+                  ))}
+                </div>
+              ))}
+
+              {suspiciousUsers.length === 0 && (
+                <div className="sd-panel">
+                  <p className="sd-muted">No flagged users right now.</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {tab === 'advertising' && (
-          <div className="admin-grid">
+          <div className="sd-workspace">
 
-            <div className="card">
+            <div>
+              <span className="sd-eyebrow">PENDING</span>
               <h2>Pending review</h2>
 
+              <div className="sd-cards">
               {pendingAds.map((ad) => (
-                <div className="dispute" key={ad.id}>
-                  <strong>{ad.type.replace(/_/g, ' ')}</strong>
+                <div className="sd-card" key={ad.id}>
+                  <h3>{ad.type.replace(/_/g, ' ')}</h3>
 
-                  <p className="muted">
+                  <p className="sd-muted">
                     {ad.advertiser?.name} ({ad.advertiser?.email})
                     {ad.listing && <> — featuring "{ad.listing.title || ad.listing.cropType}"</>}
                   </p>
 
-                  <p className="muted">
+                  <p className="sd-muted">
                     {new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}
                     {' · '}
                     {ad.amountPaid != null
@@ -1101,9 +1078,9 @@ export default function AdminDashboard() {
                       : 'No payment recorded yet'}
                   </p>
 
-                  <div className="row-actions">
+                  <div className="sd-modal-actions">
                     <button
-                      className="btn btn-primary"
+                      className="sd-btn sd-btn-primary"
                       disabled={
                         actionLoading === `ad-${ad.id}` ||
                         ad.amountPaid == null
@@ -1115,7 +1092,7 @@ export default function AdminDashboard() {
                     </button>
 
                     <button
-                      className="btn btn-light"
+                      className="sd-btn sd-btn-outline"
                       disabled={actionLoading === `ad-${ad.id}`}
                       onClick={() => setAdStatus(ad.id, 'REJECTED')}
                     >
@@ -1126,37 +1103,52 @@ export default function AdminDashboard() {
               ))}
 
               {pendingAds.length === 0 && (
-                <p className="muted">No campaigns waiting on review.</p>
+                <div className="sd-panel">
+                  <p className="sd-muted">No campaigns waiting on review.</p>
+                </div>
               )}
+              </div>
             </div>
 
-            <div className="card">
+            <div className="sd-panel sd-table-wrap">
               <h2>Reviewed campaigns</h2>
 
-              {reviewedAds.slice(0, 15).map((ad) => (
-                <div className="dispute" key={ad.id}>
-                  <strong>{ad.type.replace(/_/g, ' ')}</strong>
+              <table className="sd-table">
+                <thead>
+                  <tr>
+                    <th>Campaign</th>
+                    <th>Advertiser</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reviewedAds.slice(0, 15).map((ad) => (
+                    <tr key={ad.id}>
+                      <td><strong>{ad.type.replace(/_/g, ' ')}</strong></td>
+                      <td className="sd-muted">{ad.advertiser?.name}</td>
+                      <td><span className={statusBadgeClass(ad.status)}>{ad.status}</span></td>
+                      <td>
+                        {ad.status === 'ACTIVE' && (
+                          <button
+                            className="sd-btn sd-btn-outline"
+                            disabled={actionLoading === `ad-${ad.id}`}
+                            onClick={() => setAdStatus(ad.id, 'EXPIRED')}
+                          >
+                            {actionLoading === `ad-${ad.id}` ? 'Working…' : 'End early'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
 
-                  <p className="muted">
-                    {ad.advertiser?.name} —{' '}
-                    <span className="sd-badge">{ad.status}</span>
-                  </p>
-
-                  {ad.status === 'ACTIVE' && (
-                    <button
-                      className="btn btn-light"
-                      disabled={actionLoading === `ad-${ad.id}`}
-                      onClick={() => setAdStatus(ad.id, 'EXPIRED')}
-                    >
-                      {actionLoading === `ad-${ad.id}` ? 'Working…' : 'End campaign early'}
-                    </button>
+                  {reviewedAds.length === 0 && (
+                    <tr>
+                      <td colSpan="4" className="sd-muted">Nothing reviewed yet.</td>
+                    </tr>
                   )}
-                </div>
-              ))}
-
-              {reviewedAds.length === 0 && (
-                <p className="muted">Nothing reviewed yet.</p>
-              )}
+                </tbody>
+              </table>
             </div>
 
           </div>
@@ -1164,79 +1156,86 @@ export default function AdminDashboard() {
 
         {tab === 'payments' && (
           <div>
-            <div className="dashboard-grid" style={{ marginBottom: 20 }}>
-              <div className="stat-card">
-                <strong>{Number(commissionSummary?.totalVolume || 0).toLocaleString()} ETB</strong>
-                <span>Total confirmed volume</span>
+            <div className="sd-stat-grid" style={{ marginBottom: 20 }}>
+              <div className="sd-stat">
+                <span>TOTAL CONFIRMED VOLUME</span>
+                <b>{Number(commissionSummary?.totalVolume || 0).toLocaleString()} ETB</b>
               </div>
-              <div className="stat-card">
-                <strong>{Number(commissionSummary?.totalCommission || 0).toLocaleString()} ETB</strong>
-                <span>Platform commission earned</span>
+              <div className="sd-stat">
+                <span>PLATFORM COMMISSION EARNED</span>
+                <b>{Number(commissionSummary?.totalCommission || 0).toLocaleString()} ETB</b>
               </div>
               {Object.entries(commissionSummary?.byType || {}).map(([type, t]) => (
-                <div className="stat-card" key={type}>
-                  <strong>{Number(t.commission).toLocaleString()} ETB</strong>
+                <div className="sd-stat" key={type}>
                   <span>{type} ({t.count} payment{t.count === 1 ? '' : 's'})</span>
+                  <b>{Number(t.commission).toLocaleString()} ETB</b>
                 </div>
               ))}
             </div>
 
-            <div className="card">
-            <h2>Pending payment reconciliation</h2>
-            <p className="muted">
-              These are payment records waiting to be confirmed. Prefer a
-              signed provider webhook where available — use manual confirm
-              only once you've verified the funds arrived (e.g. checking a
-              Telebirr/CBE reference).
-            </p>
-
-            {payments.map((p) => (
-              <div className="dispute" key={p.id}>
-                <strong>
-                  {Number(p.amount).toLocaleString()} ETB — {p.type} via {p.method}
-                </strong>
-
-                <p className="muted">
-                  {p.createdBy?.name} ({p.createdBy?.email})
-                  {p.reference && <> · Ref: {p.reference}</>}
+            <div className="sd-toolbar">
+              <div>
+                <span className="sd-eyebrow">RECONCILIATION</span>
+                <h2>Pending payment reconciliation</h2>
+                <p className="sd-muted">
+                  These are payment records waiting to be confirmed. Prefer a
+                  signed provider webhook where available — use manual confirm
+                  only once you've verified the funds arrived (e.g. checking a
+                  Telebirr/CBE reference).
                 </p>
-
-                <p className="muted">
-                  {p.order && `Order ${p.order.id.slice(0, 8)}`}
-                  {p.digitalProduct && `Digital product: ${p.digitalProduct.title}`}
-                  {p.advertisement && `Ad campaign: ${p.advertisement.type.replace(/_/g, ' ')}`}
-                  {' · '}
-                  {new Date(p.createdAt).toLocaleString()}
-                </p>
-
-                {p.provider ? (
-                  <button
-                    className="btn btn-primary"
-                    disabled={actionLoading === `payment-${p.id}`}
-                    onClick={() => checkGatewayPayment(p.id, p.provider)}
-                  >
-                    {actionLoading === `payment-${p.id}` ? 'Checking…' : `Check with ${p.provider}`}
-                  </button>
-                ) : (
-                  <button
-                    className="btn btn-primary"
-                    disabled={actionLoading === `payment-${p.id}`}
-                    onClick={() => confirmPayment(p.id)}
-                  >
-                    {actionLoading === `payment-${p.id}` ? 'Working…' : 'Confirm payment received'}
-                  </button>
-                )}
               </div>
-            ))}
+            </div>
 
-            {payments.length === 0 && (
-              <p className="muted">No pending payments right now.</p>
-            )}
+            <div className="sd-cards">
+              {payments.map((p) => (
+                <div className="sd-card" key={p.id}>
+                  <h3>
+                    {Number(p.amount).toLocaleString()} ETB — {p.type} via {p.method}
+                  </h3>
+
+                  <p className="sd-muted">
+                    {p.createdBy?.name} ({p.createdBy?.email})
+                    {p.reference && <> · Ref: {p.reference}</>}
+                  </p>
+
+                  <p className="sd-muted">
+                    {p.order && `Order ${p.order.id.slice(0, 8)}`}
+                    {p.digitalProduct && `Digital product: ${p.digitalProduct.title}`}
+                    {p.advertisement && `Ad campaign: ${p.advertisement.type.replace(/_/g, ' ')}`}
+                    {' · '}
+                    {new Date(p.createdAt).toLocaleString()}
+                  </p>
+
+                  {p.provider ? (
+                    <button
+                      className="sd-btn sd-btn-primary"
+                      disabled={actionLoading === `payment-${p.id}`}
+                      onClick={() => checkGatewayPayment(p.id, p.provider)}
+                    >
+                      {actionLoading === `payment-${p.id}` ? 'Checking…' : `Check with ${p.provider}`}
+                    </button>
+                  ) : (
+                    <button
+                      className="sd-btn sd-btn-primary"
+                      disabled={actionLoading === `payment-${p.id}`}
+                      onClick={() => confirmPayment(p.id)}
+                    >
+                      {actionLoading === `payment-${p.id}` ? 'Working…' : 'Confirm payment received'}
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              {payments.length === 0 && (
+                <div className="sd-panel">
+                  <p className="sd-muted">No pending payments right now.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-      </div>
-    </main>
+      </section>
+    </div>
   );
 }
