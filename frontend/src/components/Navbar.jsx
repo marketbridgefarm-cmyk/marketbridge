@@ -57,80 +57,101 @@ export default function Navbar() {
     };
   }, [accountOpen]);
 
+  // Close the mobile drawer on outside click (backdrop) or Escape.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setMobileOpen(false);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = '';
+    };
+  }, [mobileOpen]);
+
   function handleLogout() {
     logout();
     navigate('/');
   }
 
   return (
-    <header className="site-header">
-      <nav className="navbar container-wide">
-        <Link to="/" className="brand">
-          <span className="brand-mark">MB</span>
-          <span>Market<span>Bridge</span></span>
-        </Link>
+    <>
+      <header className="site-header">
+        <nav className="navbar container-wide">
+          <Link to="/" className="brand">
+            <span className="brand-mark">MB</span>
+            <span>Market<span>Bridge</span></span>
+          </Link>
 
-        {/* Desktop links */}
-        <div className="nav-links">
-          {MARKET_LINKS.map((l) => (
-            <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{l.label}</Link>
-          ))}
+          {/* Desktop links */}
+          <div className="nav-links">
+            {MARKET_LINKS.map((l) => (
+              <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{l.label}</Link>
+            ))}
 
-          {user ? (
-            <div className="nav-account" ref={accountRef}>
-              <button className="nav-user" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((v) => !v)}>
-                <span className="avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
-                {user.name}
-                <span className="nav-caret">▾</span>
-              </button>
-              {accountOpen && (
-                <div className="nav-dropdown" role="menu">
-                  <Link role="menuitem" to={dashboardHref}>Dashboard</Link>
-                  <button role="menuitem" onClick={handleLogout}>Log out</button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              <Link to="/login">Log in</Link>
-              <Link className="nav-cta" to="/register">Join MarketBridge</Link>
-            </>
-          )}
-        </div>
+            {user ? (
+              <div className="nav-account" ref={accountRef}>
+                <button className="nav-user" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((v) => !v)}>
+                  <span className="avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
+                  {user.name}
+                  <span className="nav-caret">▾</span>
+                </button>
+                {accountOpen && (
+                  <div className="nav-dropdown" role="menu">
+                    <Link role="menuitem" to={dashboardHref}>Dashboard</Link>
+                    <button role="menuitem" onClick={handleLogout}>Log out</button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <Link to="/login">Log in</Link>
+                <Link className="nav-cta" to="/register">Join MarketBridge</Link>
+              </>
+            )}
+          </div>
 
-        {/* Mobile hamburger */}
-        <button
-          className={`nav-burger${mobileOpen ? ' nav-burger-open' : ''}`}
-          aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
-          aria-expanded={mobileOpen}
-          onClick={() => setMobileOpen((v) => !v)}
-        >
-          <span />
-          <span />
-          <span />
-        </button>
-      </nav>
+          {/* Mobile hamburger */}
+          <button
+            className={`nav-burger${mobileOpen ? ' nav-burger-open' : ''}`}
+            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileOpen}
+            onClick={() => setMobileOpen((v) => !v)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+        </nav>
+      </header>
 
-      {/* Mobile menu panel */}
+      {/* Mobile menu: dimmed backdrop + slide-in panel anchored to the right,
+          rendered outside <header> so its fixed positioning is relative to
+          the viewport rather than the header's own (small) box. */}
       {mobileOpen && (
-        <div className="mobile-menu">
-          {MARKET_LINKS.map((l) => (
-            <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{l.label}</Link>
-          ))}
-          <div className="mobile-menu-divider" />
-          {user ? (
-            <>
-              <Link to={dashboardHref}>Dashboard</Link>
-              <button className="mobile-logout" onClick={handleLogout}>Log out</button>
-            </>
-          ) : (
-            <>
-              <Link to="/login">Log in</Link>
-              <Link className="nav-cta" to="/register">Join MarketBridge</Link>
-            </>
-          )}
-        </div>
+        <>
+          <div className="mobile-menu-backdrop" onClick={() => setMobileOpen(false)} aria-hidden="true" />
+          <div className="mobile-menu" role="dialog" aria-modal="true">
+            {MARKET_LINKS.map((l) => (
+              <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{l.label}</Link>
+            ))}
+            <div className="mobile-menu-divider" />
+            {user ? (
+              <>
+                <Link to={dashboardHref}>Dashboard</Link>
+                <button className="mobile-logout" onClick={handleLogout}>Log out</button>
+              </>
+            ) : (
+              <>
+                <Link to="/login">Log in</Link>
+                <Link className="nav-cta" to="/register">Join MarketBridge</Link>
+              </>
+            )}
+          </div>
+        </>
       )}
-    </header>
+    </>
   );
 }
