@@ -25,7 +25,6 @@ const orderInclude = {
   transportJob: { include: transportInclude },
   payments: {
     include: {
-      commission: true,
       ledgerEntries: true,
     },
   },
