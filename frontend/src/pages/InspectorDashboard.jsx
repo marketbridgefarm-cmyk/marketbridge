@@ -29,6 +29,7 @@ export default function InspectorDashboard() {
   const [feeInputs, setFeeInputs] = useState({});
   const [activeRequestId, setActiveRequestId] = useState('');
   const [report, setReport] = useState(EMPTY_REPORT);
+  const [photoEvidence, setPhotoEvidence] = useState([]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -76,6 +77,7 @@ export default function InspectorDashboard() {
   function openReportForm(requestId) {
     setActiveRequestId(requestId);
     setReport(EMPTY_REPORT);
+    setPhotoEvidence([]);
     setMsg('');
     setError('');
   }
@@ -83,6 +85,7 @@ export default function InspectorDashboard() {
   function closeReportForm() {
     setActiveRequestId('');
     setReport(EMPTY_REPORT);
+    setPhotoEvidence([]);
   }
 
   async function submitReport(e) {
@@ -94,7 +97,7 @@ export default function InspectorDashboard() {
         ...report,
         quantity: Number(report.quantity),
         moisture: report.moisture ? Number(report.moisture) : undefined,
-        photos: [],
+        photos: photoEvidence,
         videos: [],
       });
 
@@ -324,66 +327,76 @@ export default function InspectorDashboard() {
             )}
 
             {activeRequestId && (
-              <div className="sd-panel" style={{ marginTop: 20 }}>
-                <h2>Inspection report</h2>
-                <form onSubmit={submitReport}>
-                  <div className="sd-form-grid">
+              <div
+                className="sd-report-backdrop"
+                role="presentation"
+                onMouseDown={(e) => {
+                  if (e.target === e.currentTarget) closeReportForm();
+                }}
+              >
+                <div
+                  className="sd-report-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="inspection-report-title"
+                >
+                  <div className="sd-report-header">
                     <div>
-                      <label>Verified quantity</label>
-                      <input
-                        required
-                        type="number"
-                        value={report.quantity}
-                        onChange={(e) => setReport({ ...report, quantity: e.target.value })}
-                      />
+                      <span className="sd-eyebrow">INSPECTION EVIDENCE</span>
+                      <h2 id="inspection-report-title">Inspection report</h2>
+                      <p className="sd-muted">Record the verified condition of the produce and supporting evidence.</p>
                     </div>
-                    <div>
-                      <label>Grade</label>
-                      <input value={report.grade} onChange={(e) => setReport({ ...report, grade: e.target.value })} />
-                    </div>
-                    <div>
-                      <label>Moisture (%)</label>
-                      <input
-                        type="number"
-                        value={report.moisture}
-                        onChange={(e) => setReport({ ...report, moisture: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <label>GPS / location evidence</label>
-                      <input
-                        value={report.gpsLocation}
-                        onChange={(e) => setReport({ ...report, gpsLocation: e.target.value })}
-                      />
-                    </div>
-                    <div className="sd-full">
-                      <label>Visible defects</label>
-                      <textarea
-                        value={report.visibleDefects}
-                        onChange={(e) => setReport({ ...report, visibleDefects: e.target.value })}
-                      />
-                    </div>
-                    <div className="sd-full">
-                      <label>Damage notes</label>
-                      <textarea
-                        value={report.damageNotes}
-                        onChange={(e) => setReport({ ...report, damageNotes: e.target.value })}
-                      />
-                    </div>
-                    <div className="sd-full">
-                      <label>Packaging notes</label>
-                      <textarea
-                        value={report.packagingNotes}
-                        onChange={(e) => setReport({ ...report, packagingNotes: e.target.value })}
-                      />
-                    </div>
+                    <button type="button" className="sd-close" onClick={closeReportForm} aria-label="Close report form">×</button>
                   </div>
 
-                  <div className="sd-modal-actions" style={{ marginTop: 16 }}>
-                    <button className="sd-btn sd-btn-primary" type="submit">Publish evidence report</button>
-                    <button type="button" className="sd-btn sd-btn-outline" onClick={closeReportForm}>Cancel</button>
-                  </div>
-                </form>
+                  <form onSubmit={submitReport}>
+                    <div className="sd-form-grid">
+                      <div>
+                        <label>Verified quantity</label>
+                        <input required type="number" min="0.01" step="0.01" value={report.quantity} onChange={(e) => setReport({ ...report, quantity: e.target.value })} />
+                      </div>
+                      <div>
+                        <label>Grade</label>
+                        <input value={report.grade} onChange={(e) => setReport({ ...report, grade: e.target.value })} />
+                      </div>
+                      <div>
+                        <label>Moisture (%)</label>
+                        <input type="number" min="0" step="0.01" value={report.moisture} onChange={(e) => setReport({ ...report, moisture: e.target.value })} />
+                      </div>
+                      <div>
+                        <label>GPS / location evidence</label>
+                        <input value={report.gpsLocation} placeholder="e.g. 8.9806, 38.7578" onChange={(e) => setReport({ ...report, gpsLocation: e.target.value })} />
+                      </div>
+                      <div className="sd-full">
+                        <label>Visible defects</label>
+                        <textarea value={report.visibleDefects} placeholder="Describe visible defects, quality issues or contamination." onChange={(e) => setReport({ ...report, visibleDefects: e.target.value })} />
+                      </div>
+                      <div className="sd-full">
+                        <label>Damage notes</label>
+                        <textarea value={report.damageNotes} placeholder="Describe physical damage, bruising, broken packaging, etc." onChange={(e) => setReport({ ...report, damageNotes: e.target.value })} />
+                      </div>
+                      <div className="sd-full">
+                        <label>Packaging notes</label>
+                        <textarea value={report.packagingNotes} placeholder="Describe packaging condition and quantity of packages inspected." onChange={(e) => setReport({ ...report, packagingNotes: e.target.value })} />
+                      </div>
+                      <div className="sd-full sd-photo-evidence">
+                        <div className="sd-photo-placeholder" aria-label="Photo evidence placeholder">
+                          <div className="sd-photo-icon" aria-hidden="true">▧</div>
+                          <div>
+                            <strong>Photo evidence</strong>
+                            <p>Photo upload placeholder — capture or attach inspection photos here.</p>
+                            <span>Secure evidence-storage upload will be connected in the next evidence phase.</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="sd-modal-actions sd-report-actions">
+                      <button className="sd-btn sd-btn-primary" type="submit">Publish evidence report</button>
+                      <button type="button" className="sd-btn sd-btn-outline" onClick={closeReportForm}>Cancel</button>
+                    </div>
+                  </form>
+                </div>
               </div>
             )}
           </div>
