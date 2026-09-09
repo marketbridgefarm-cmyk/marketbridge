@@ -73,7 +73,10 @@ router.get('/:id', async (req, res) => {
       include: {
         seller: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
         offers: true,
-        orders: { select: { id: true, buyerId: true, sellerId: true, status: true } },
+        orders: {
+          where: { status: { not: 'CANCELLED' } },
+          select: { id: true, buyerId: true, sellerId: true, status: true },
+        },
         inspectionRequests: {
           include: {
             report: true,
