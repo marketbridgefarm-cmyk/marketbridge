@@ -6,7 +6,81 @@ const { requireRole } = require('../middleware/roleCheck');
 
 const router = express.Router();
 
-// Public browse/search with filtering and pagination
+/**
+ * Fields that are safe to expose on public listing endpoints.
+ *
+ * IMPORTANT:
+ * minAcceptablePrice is intentionally absent.
+ *
+ * Never return a raw Prisma Listing from a public endpoint because the
+ * database model contains seller-private fields.
+ */
+const PUBLIC_LISTING_FIELDS = {
+  id: true,
+  sellerId: true,
+  category: true,
+  title: true,
+  cropType: true,
+  quantity: true,
+  unit: true,
+  askingPrice: true,
+  location: true,
+  harvestedDate: true,
+  readinessDate: true,
+  photos: true,
+  videos: true,
+  description: true,
+  status: true,
+  createdByInspectorId: true,
+  createdAt: true,
+  updatedAt: true,
+};
+
+/**
+ * Explicitly serialize a listing for public API responses.
+ *
+ * This is deliberately defensive: even if a caller accidentally passes a
+ * complete Prisma object containing private fields, they will not cross the
+ * public API boundary.
+ */
+function toPublicListing(listing) {
+  if (!listing) return listing;
+
+  const publicListing = {};
+
+  for (const field of Object.keys(PUBLIC_LISTING_FIELDS)) {
+    if (Object.prototype.hasOwnProperty.call(listing, field)) {
+      publicListing[field] = listing[field];
+    }
+  }
+
+  if (listing.seller) {
+    publicListing.seller = listing.seller;
+  }
+
+  if (listing.sponsored !== undefined) {
+    publicListing.sponsored = listing.sponsored;
+  }
+
+  if (listing.offers !== undefined) {
+    publicListing.offers = listing.offers;
+  }
+
+  if (listing.orders !== undefined) {
+    publicListing.orders = listing.orders;
+  }
+
+  if (listing.inspectionRequests !== undefined) {
+    publicListing.inspectionRequests = listing.inspectionRequests;
+  }
+
+  return publicListing;
+};
+
+// ============================================================================
+// PUBLIC LISTINGS — browse/search
+// ============================================================================
+
 router.get('/', async (req, res) => {
   try {
     const {
@@ -90,91 +164,155 @@ router.get('/', async (req, res) => {
       verificationStatus: true,
     };
 
-    // ------------------------------------------------------------------
-    // Sponsored placement: FEATURED_LISTING and SPONSORED_SEARCH ads are
-    // eligible to boost their listing in any search that already matches
-    // it; TOP_OF_CATEGORY ads only boost when the buyer is actually
-    // browsing that category (a "top of category" placement means nothing
-    // outside category view). Boosted listings are pinned to the top of
-    // page 1 only, then excluded from the normal chronological stream on
-    // every page so nothing is ever shown twice.
-    // ------------------------------------------------------------------
     const now = new Date();
+
     const activeAds = await prisma.advertisement.findMany({
       where: {
         status: 'ACTIVE',
         startDate: { lte: now },
         endDate: { gte: now },
-        type: { in: ['FEATURED_LISTING', 'SPONSORED_SEARCH', 'TOP_OF_CATEGORY'] },
+        type: {
+          in: [
+            'FEATURED_LISTING',
+            'SPONSORED_SEARCH',
+            'TOP_OF_CATEGORY',
+          ],
+        },
         listingId: { not: null },
         listing: where,
       },
-      select: { listingId: true, type: true },
+      select: {
+        listingId: true,
+        type: true,
+      },
     });
 
-    const BOOST_RANK = { FEATURED_LISTING: 0, SPONSORED_SEARCH: 0, TOP_OF_CATEGORY: 1 };
+    const BOOST_RANK = {
+      FEATURED_LISTING: 0,
+      SPONSORED_SEARCH: 0,
+      TOP_OF_CATEGORY: 1,
+    };
+
     const boostRank = new Map();
+
     for (const ad of activeAds) {
-      if (ad.type === 'TOP_OF_CATEGORY' && !category) continue;
+      if (ad.type === 'TOP_OF_CATEGORY' && !category) {
+        continue;
+      }
 
       const rank = BOOST_RANK[ad.type];
       const existing = boostRank.get(ad.listingId);
+
       if (existing === undefined || rank < existing) {
         boostRank.set(ad.listingId, rank);
       }
     }
+
     const boostedIds = [...boostRank.keys()];
+
     const normalWhere = boostedIds.length
-      ? { ...where, id: { notIn: boostedIds } }
+      ? {
+          ...where,
+          id: {
+            notIn: boostedIds,
+          },
+        }
       : where;
 
     let listings;
 
     if (pageNumber === 1 && boostedIds.length) {
       const boostedListings = await prisma.listing.findMany({
-        where: { ...where, id: { in: boostedIds } },
-        include: { seller: { select: sellerSelect } },
-        orderBy: { createdAt: 'desc' },
+        where: {
+          ...where,
+          id: {
+            in: boostedIds,
+          },
+        },
+        select: {
+          ...PUBLIC_LISTING_FIELDS,
+          seller: {
+            select: sellerSelect,
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
         take,
       });
+
       boostedListings.sort(
-        (a, b) => boostRank.get(a.id) - boostRank.get(b.id)
+        (a, b) =>
+          boostRank.get(a.id) - boostRank.get(b.id)
       );
 
-      const remainingSlots = Math.max(take - boostedListings.length, 0);
+      const remainingSlots = Math.max(
+        take - boostedListings.length,
+        0
+      );
+
       const normalListings = remainingSlots
         ? await prisma.listing.findMany({
             where: normalWhere,
-            include: { seller: { select: sellerSelect } },
-            orderBy: { createdAt: 'desc' },
+            select: {
+              ...PUBLIC_LISTING_FIELDS,
+              seller: {
+                select: sellerSelect,
+              },
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
             take: remainingSlots,
           })
         : [];
 
       listings = [
-        ...boostedListings.map((l) => ({ ...l, sponsored: true })),
-        ...normalListings.map((l) => ({ ...l, sponsored: false })),
+        ...boostedListings.map((listing) =>
+          toPublicListing({
+            ...listing,
+            sponsored: true,
+          })
+        ),
+        ...normalListings.map((listing) =>
+          toPublicListing({
+            ...listing,
+            sponsored: false,
+          })
+        ),
       ];
     } else {
-      // Pages after 1 skip into the normal (non-boosted) stream only; the
-      // boosted items already appeared once, pinned on page 1, so the
-      // offset is shifted back by however many were pinned there.
       const pageSkip = boostedIds.length
         ? Math.max(skip - boostedIds.length, 0)
         : skip;
 
-      listings = (
+      const normalListings =
         await prisma.listing.findMany({
           where: normalWhere,
-          include: { seller: { select: sellerSelect } },
-          orderBy: { createdAt: 'desc' },
+          select: {
+            ...PUBLIC_LISTING_FIELDS,
+            seller: {
+              select: sellerSelect,
+            },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
           skip: pageSkip,
           take,
+        });
+
+      listings = normalListings.map((listing) =>
+        toPublicListing({
+          ...listing,
+          sponsored: false,
         })
-      ).map((l) => ({ ...l, sponsored: false }));
+      );
     }
 
-    const total = await prisma.listing.count({ where });
+    const total = await prisma.listing.count({
+      where,
+    });
 
     return res.json({
       listings,
@@ -193,8 +331,7 @@ router.get('/', async (req, res) => {
 });
 
 // ============================================================================
-// GET SINGLE LISTING
-// Includes inspection requests, reports, payments and inspection quotes.
+// GET SINGLE PUBLIC LISTING
 // ============================================================================
 
 router.get('/:id', async (req, res) => {
@@ -204,7 +341,9 @@ router.get('/:id', async (req, res) => {
         id: req.params.id,
       },
 
-      include: {
+      select: {
+        ...PUBLIC_LISTING_FIELDS,
+
         seller: {
           select: {
             id: true,
@@ -292,7 +431,7 @@ router.get('/:id', async (req, res) => {
     }
 
     return res.json({
-      listing,
+      listing: toPublicListing(listing),
     });
   } catch (error) {
     console.error('GET LISTING ERROR:', error);
@@ -305,7 +444,6 @@ router.get('/:id', async (req, res) => {
 
 // ============================================================================
 // CREATE LISTING
-// Seller or inspector helping a farmer creates a listing.
 // ============================================================================
 
 router.post(
@@ -369,7 +507,6 @@ router.post(
         description,
       } = req.body;
 
-      // Inspector cannot list as themselves.
       if (
         req.user.roles.includes('INSPECTOR') &&
         !req.user.roles.includes('SELLER')
@@ -382,7 +519,6 @@ router.post(
         }
       }
 
-      // Non-inspectors can only list under their own account.
       if (
         !req.user.roles.includes('INSPECTOR') &&
         sellerId !== req.user.id
@@ -504,7 +640,6 @@ router.post(
 
 // ============================================================================
 // UPDATE LISTING
-// Only the farmer/seller who owns the listing may change price or status.
 // ============================================================================
 
 router.patch(
@@ -721,5 +856,8 @@ router.get(
     }
   }
 );
+
+// Export the serializer for regression testing.
+router.toPublicListing = toPublicListing;
 
 module.exports = router;
