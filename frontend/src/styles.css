@@ -1784,6 +1784,105 @@ form > label:first-of-type,
   }
 }
 
+
+/* Inspection report mobile-first modal */
+.sd-report-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, .58);
+  overscroll-behavior: contain;
+}
+
+.sd-report-modal {
+  width: min(760px, 100%);
+  max-height: calc(100dvh - 28px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  padding: clamp(18px, 4vw, 28px);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .28);
+}
+
+.sd-report-header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.sd-report-header h2 { margin: 5px 0 4px; }
+.sd-report-header p { margin: 0; }
+
+.sd-report-modal .sd-close {
+  float: none;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background: #f2f2f2;
+  line-height: 1;
+}
+
+.sd-photo-evidence { margin-top: 2px; }
+
+.sd-photo-placeholder {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-height: 100px;
+  padding: 16px;
+  box-sizing: border-box;
+  border: 1.5px dashed #bdbdbd;
+  border-radius: 12px;
+  background: #fafafa;
+}
+
+.sd-photo-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border-radius: 12px;
+  background: #eef5ee;
+  font-size: 24px;
+}
+
+.sd-photo-placeholder p { margin: 4px 0; color: #555; }
+.sd-photo-placeholder span { font-size: 12px; color: #777; }
+
+.sd-report-actions {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e5e5;
+}
+
+@media (max-width: 600px) {
+  .sd-report-backdrop { align-items: flex-start; padding: 8px; }
+  .sd-report-modal { width: 100%; max-height: calc(100dvh - 16px); border-radius: 14px; padding: 16px; }
+  .sd-report-header { margin-bottom: 14px; }
+  .sd-report-actions {
+    position: sticky;
+    bottom: -16px;
+    margin-left: -16px;
+    margin-right: -16px;
+    margin-bottom: -16px;
+    padding: 12px 16px 16px;
+    background: #fff;
+  }
+  .sd-report-actions .sd-btn { flex: 1 1 140px; }
+}
+
 /* Responsive nav: hamburger + mobile menu panel, desktop account dropdown */
 
 .nav-burger span {
