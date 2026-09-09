@@ -62,6 +62,13 @@ enum InspectionStatus {
   CANCELLED
 }
 
+enum InspectionQuoteStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
 enum OrderStatus {
   PENDING_PAYMENT
   CONFIRMED
@@ -210,6 +217,7 @@ model User {
   // Inspections
   inspectionsRequested InspectionRequest[] @relation("Requester")
   inspectionsPerformed InspectionRequest[] @relation("Inspector")
+  inspectionQuotes    InspectionQuote[]
 
   // Trucks
   trucks Truck[]
@@ -347,6 +355,8 @@ model InspectionRequest {
   inspector   User?  @relation("Inspector", fields: [inspectorId], references: [id])
   inspectorId String?
 
+  location String?
+
   status InspectionStatus @default(REQUESTED)
 
   fee Float?
@@ -357,9 +367,37 @@ model InspectionRequest {
   report InspectionReport?
 
   payments Payment[]
+  quotes   InspectionQuote[]
 
   @@index([listingId])
   @@index([requestedById])
+  @@index([inspectorId])
+  @@index([status])
+  @@index([location])
+}
+
+// ============================================================================
+// INSPECTION QUOTE
+// ============================================================================
+
+model InspectionQuote {
+  id String @id @default(uuid())
+
+  inspectionRequest   InspectionRequest @relation(fields: [inspectionRequestId], references: [id])
+  inspectionRequestId String
+
+  inspector   User @relation(fields: [inspectorId], references: [id])
+  inspectorId String
+
+  amount Float
+  status InspectionQuoteStatus @default(PENDING)
+  message String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([inspectionRequestId, inspectorId])
+  @@index([inspectionRequestId])
   @@index([inspectorId])
   @@index([status])
 }
