@@ -82,34 +82,99 @@ router.get('/', async (req, res) => {
       status: status || 'ACTIVE',
     };
 
-    const [listings, total] = await Promise.all([
-      prisma.listing.findMany({
-        where,
+    const sellerSelect = {
+      id: true,
+      name: true,
+      rating: true,
+      location: true,
+      verificationStatus: true,
+    };
 
-        include: {
-          seller: {
-            select: {
-              id: true,
-              name: true,
-              rating: true,
-              location: true,
-              verificationStatus: true,
-            },
-          },
-        },
+    // ------------------------------------------------------------------
+    // Sponsored placement: FEATURED_LISTING and SPONSORED_SEARCH ads are
+    // eligible to boost their listing in any search that already matches
+    // it; TOP_OF_CATEGORY ads only boost when the buyer is actually
+    // browsing that category (a "top of category" placement means nothing
+    // outside category view). Boosted listings are pinned to the top of
+    // page 1 only, then excluded from the normal chronological stream on
+    // every page so nothing is ever shown twice.
+    // ------------------------------------------------------------------
+    const now = new Date();
+    const activeAds = await prisma.advertisement.findMany({
+      where: {
+        status: 'ACTIVE',
+        startDate: { lte: now },
+        endDate: { gte: now },
+        type: { in: ['FEATURED_LISTING', 'SPONSORED_SEARCH', 'TOP_OF_CATEGORY'] },
+        listingId: { not: null },
+        listing: where,
+      },
+      select: { listingId: true, type: true },
+    });
 
-        orderBy: {
-          createdAt: 'desc',
-        },
+    const BOOST_RANK = { FEATURED_LISTING: 0, SPONSORED_SEARCH: 0, TOP_OF_CATEGORY: 1 };
+    const boostRank = new Map();
+    for (const ad of activeAds) {
+      if (ad.type === 'TOP_OF_CATEGORY' && !category) continue;
 
-        skip,
+      const rank = BOOST_RANK[ad.type];
+      const existing = boostRank.get(ad.listingId);
+      if (existing === undefined || rank < existing) {
+        boostRank.set(ad.listingId, rank);
+      }
+    }
+    const boostedIds = [...boostRank.keys()];
+    const normalWhere = boostedIds.length
+      ? { ...where, id: { notIn: boostedIds } }
+      : where;
+
+    let listings;
+
+    if (pageNumber === 1 && boostedIds.length) {
+      const boostedListings = await prisma.listing.findMany({
+        where: { ...where, id: { in: boostedIds } },
+        include: { seller: { select: sellerSelect } },
+        orderBy: { createdAt: 'desc' },
         take,
-      }),
+      });
+      boostedListings.sort(
+        (a, b) => boostRank.get(a.id) - boostRank.get(b.id)
+      );
 
-      prisma.listing.count({
-        where,
-      }),
-    ]);
+      const remainingSlots = Math.max(take - boostedListings.length, 0);
+      const normalListings = remainingSlots
+        ? await prisma.listing.findMany({
+            where: normalWhere,
+            include: { seller: { select: sellerSelect } },
+            orderBy: { createdAt: 'desc' },
+            take: remainingSlots,
+          })
+        : [];
+
+      listings = [
+        ...boostedListings.map((l) => ({ ...l, sponsored: true })),
+        ...normalListings.map((l) => ({ ...l, sponsored: false })),
+      ];
+    } else {
+      // Pages after 1 skip into the normal (non-boosted) stream only; the
+      // boosted items already appeared once, pinned on page 1, so the
+      // offset is shifted back by however many were pinned there.
+      const pageSkip = boostedIds.length
+        ? Math.max(skip - boostedIds.length, 0)
+        : skip;
+
+      listings = (
+        await prisma.listing.findMany({
+          where: normalWhere,
+          include: { seller: { select: sellerSelect } },
+          orderBy: { createdAt: 'desc' },
+          skip: pageSkip,
+          take,
+        })
+      ).map((l) => ({ ...l, sponsored: false }));
+    }
+
+    const total = await prisma.listing.count({ where });
 
     return res.json({
       listings,
