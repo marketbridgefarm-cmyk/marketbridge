@@ -1320,26 +1320,20 @@ router.get(
 router.post(
   '/webhooks/chapa',
   async (req, res) => {
-    const signature =
-      req.headers[
-        'chapa-signature'
-      ] ||
-      req.headers[
-        'x-chapa-signature'
-      ];
-
     const rawBody =
       req.rawBody;
 
     // ------------------------------------------------------------------------
     // SIGNATURE VERIFICATION
     // ------------------------------------------------------------------------
+    // Chapa sends two differently-computed headers (chapa-signature and
+    // x-chapa-signature); verifyWebhookSignature checks both correctly.
 
     if (
       !rawBody ||
       !chapa.verifyWebhookSignature(
         rawBody,
-        signature
+        req.headers
       )
     ) {
       console.error(
