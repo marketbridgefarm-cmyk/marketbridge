@@ -123,6 +123,20 @@ export default function OrderDetail() {
 
   const isParticipant = isBuyer || isSeller;
 
+  const isAgricultural =
+    order?.listing?.category === 'AGRICULTURAL';
+
+  const inspectionPaid = Boolean(
+    order?.listing?.inspectionRequests?.some(
+      (request) =>
+        request.payments?.some(
+          (payment) =>
+            payment.type === 'INSPECTOR' &&
+            payment.status === 'PAID'
+        )
+    )
+  );
+
   const title =
     order?.listing?.title ||
     order?.listing?.cropType ||
@@ -210,13 +224,14 @@ export default function OrderDetail() {
   // ==========================================================================
 
   /*
-   * Buyer or seller can create a transport job.
+   * Buyer or seller can create a transport job — except for
+   * agricultural orders, where only the buyer may arrange transport.
    */
   const canArrangeTransport =
     Boolean(order) &&
     !transportJob &&
     order.status !== 'CANCELLED' &&
-    isParticipant;
+    (isAgricultural ? isBuyer : isParticipant);
 
   /*
    * Only the arranging buyer/seller can select a quote.
@@ -270,16 +285,37 @@ export default function OrderDetail() {
 
   /*
    * Marketplace payment can only be initiated by the buyer.
+   *
+   * For agricultural orders, transport must already be arranged and
+   * an inspection must already be paid for before the buyer can pay
+   * for the produce itself.
    */
+  const agriculturalGateMet =
+    !isAgricultural ||
+    (Boolean(transportJob) && inspectionPaid);
+
   const canPayMarketplace =
     Boolean(order) &&
     order.status === 'PENDING_PAYMENT' &&
     isBuyer &&
+    agriculturalGateMet &&
     !marketplacePayments.some(
       (payment) =>
         payment.status === 'PENDING' ||
         payment.status === 'PAID'
     );
+
+  /*
+   * Explains why the marketplace payment button is hidden when the
+   * agricultural gate hasn't been met yet, so buyers aren't left
+   * looking for a button that doesn't exist.
+   */
+  const marketplaceBlockedReason =
+    isAgricultural && isBuyer && !agriculturalGateMet
+      ? !transportJob
+        ? 'Arrange transport before you can pay for this order.'
+        : 'The inspection must be paid for before you can pay for this order.'
+      : null;
 
   /*
    * Resume an already-created pending marketplace payment.
@@ -736,6 +772,19 @@ export default function OrderDetail() {
             </div>
           </div>
         </div>
+
+        {/* ================================================================== */}
+        {/* MARKETPLACE PAYMENT BLOCKED (agricultural gate) */}
+        {/* ================================================================== */}
+
+        {marketplaceBlockedReason && (
+          <div className="card">
+            <h2>Payment</h2>
+            <p className="muted">
+              {marketplaceBlockedReason}
+            </p>
+          </div>
+        )}
 
         {/* ================================================================== */}
         {/* MARKETPLACE PAYMENT */}
