@@ -38,10 +38,6 @@ const PUBLIC_LISTING_FIELDS = {
 
 /**
  * Explicitly serialize a listing for public API responses.
- *
- * This is deliberately defensive: even if a caller accidentally passes a
- * complete Prisma object containing private fields, they will not cross the
- * public API boundary.
  */
 function toPublicListing(listing) {
   if (!listing) return listing;
@@ -71,11 +67,126 @@ function toPublicListing(listing) {
   }
 
   if (listing.inspectionRequests !== undefined) {
-    publicListing.inspectionRequests = listing.inspectionRequests;
+    publicListing.inspectionRequests =
+      listing.inspectionRequests;
   }
 
   return publicListing;
-};
+}
+
+/**
+ * Convert an incoming date into a valid Date.
+ *
+ * Returns null for empty values.
+ * Returns null for invalid dates.
+ */
+function parseDate(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date;
+}
+
+/**
+ * Validate price relationships.
+ *
+ * The seller's private minimum acceptable price must never be negative,
+ * zero, or greater than the public asking price.
+ */
+function validatePrices(askingPrice, minAcceptablePrice) {
+  if (
+    askingPrice !== undefined &&
+    askingPrice !== null &&
+    (!Number.isFinite(Number(askingPrice)) ||
+      Number(askingPrice) <= 0)
+  ) {
+    return 'askingPrice must be greater than 0';
+  }
+
+  if (
+    minAcceptablePrice !== undefined &&
+    minAcceptablePrice !== null &&
+    minAcceptablePrice !== ''
+  ) {
+    const minimum = Number(minAcceptablePrice);
+
+    if (!Number.isFinite(minimum) || minimum <= 0) {
+      return 'minAcceptablePrice must be greater than 0';
+    }
+
+    if (
+      askingPrice !== undefined &&
+      askingPrice !== null &&
+      minimum > Number(askingPrice)
+    ) {
+      return 'minAcceptablePrice cannot be greater than askingPrice';
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Validate agricultural dates.
+ */
+function validateAgriculturalDates(
+  category,
+  harvestedDate,
+  readinessDate
+) {
+  if (category !== 'AGRICULTURAL') {
+    return null;
+  }
+
+  const harvested =
+    harvestedDate === undefined ||
+    harvestedDate === null ||
+    harvestedDate === ''
+      ? null
+      : parseDate(harvestedDate);
+
+  const readiness =
+    readinessDate === undefined ||
+    readinessDate === null ||
+    readinessDate === ''
+      ? null
+      : parseDate(readinessDate);
+
+  if (
+    harvestedDate !== undefined &&
+    harvestedDate !== null &&
+    harvestedDate !== '' &&
+    !harvested
+  ) {
+    return 'harvestedDate must be a valid date';
+  }
+
+  if (
+    readinessDate !== undefined &&
+    readinessDate !== null &&
+    readinessDate !== '' &&
+    !readiness
+  ) {
+    return 'readinessDate must be a valid date';
+  }
+
+  if (
+    harvested &&
+    readiness &&
+    harvested > readiness
+  ) {
+    return 'harvestedDate cannot be later than readinessDate';
+  }
+
+  return null;
+}
 
 // ============================================================================
 // PUBLIC LISTINGS — browse/search
@@ -166,26 +277,28 @@ router.get('/', async (req, res) => {
 
     const now = new Date();
 
-    const activeAds = await prisma.advertisement.findMany({
-      where: {
-        status: 'ACTIVE',
-        startDate: { lte: now },
-        endDate: { gte: now },
-        type: {
-          in: [
-            'FEATURED_LISTING',
-            'SPONSORED_SEARCH',
-            'TOP_OF_CATEGORY',
-          ],
+    const activeAds =
+      await prisma.advertisement.findMany({
+        where: {
+          status: 'ACTIVE',
+          startDate: { lte: now },
+          endDate: { gte: now },
+          type: {
+            in: [
+              'FEATURED_LISTING',
+              'SPONSORED_SEARCH',
+              'TOP_OF_CATEGORY',
+            ],
+          },
+          listingId: { not: null },
+          listing: where,
         },
-        listingId: { not: null },
-        listing: where,
-      },
-      select: {
-        listingId: true,
-        type: true,
-      },
-    });
+
+        select: {
+          listingId: true,
+          type: true,
+        },
+      });
 
     const BOOST_RANK = {
       FEATURED_LISTING: 0,
@@ -196,14 +309,20 @@ router.get('/', async (req, res) => {
     const boostRank = new Map();
 
     for (const ad of activeAds) {
-      if (ad.type === 'TOP_OF_CATEGORY' && !category) {
+      if (
+        ad.type === 'TOP_OF_CATEGORY' &&
+        !category
+      ) {
         continue;
       }
 
       const rank = BOOST_RANK[ad.type];
       const existing = boostRank.get(ad.listingId);
 
-      if (existing === undefined || rank < existing) {
+      if (
+        existing === undefined ||
+        rank < existing
+      ) {
         boostRank.set(ad.listingId, rank);
       }
     }
@@ -221,29 +340,38 @@ router.get('/', async (req, res) => {
 
     let listings;
 
-    if (pageNumber === 1 && boostedIds.length) {
-      const boostedListings = await prisma.listing.findMany({
-        where: {
-          ...where,
-          id: {
-            in: boostedIds,
+    if (
+      pageNumber === 1 &&
+      boostedIds.length
+    ) {
+      const boostedListings =
+        await prisma.listing.findMany({
+          where: {
+            ...where,
+            id: {
+              in: boostedIds,
+            },
           },
-        },
-        select: {
-          ...PUBLIC_LISTING_FIELDS,
-          seller: {
-            select: sellerSelect,
+
+          select: {
+            ...PUBLIC_LISTING_FIELDS,
+
+            seller: {
+              select: sellerSelect,
+            },
           },
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-        take,
-      });
+
+          orderBy: {
+            createdAt: 'desc',
+          },
+
+          take,
+        });
 
       boostedListings.sort(
         (a, b) =>
-          boostRank.get(a.id) - boostRank.get(b.id)
+          boostRank.get(a.id) -
+          boostRank.get(b.id)
       );
 
       const remainingSlots = Math.max(
@@ -251,21 +379,26 @@ router.get('/', async (req, res) => {
         0
       );
 
-      const normalListings = remainingSlots
-        ? await prisma.listing.findMany({
-            where: normalWhere,
-            select: {
-              ...PUBLIC_LISTING_FIELDS,
-              seller: {
-                select: sellerSelect,
+      const normalListings =
+        remainingSlots
+          ? await prisma.listing.findMany({
+              where: normalWhere,
+
+              select: {
+                ...PUBLIC_LISTING_FIELDS,
+
+                seller: {
+                  select: sellerSelect,
+                },
               },
-            },
-            orderBy: {
-              createdAt: 'desc',
-            },
-            take: remainingSlots,
-          })
-        : [];
+
+              orderBy: {
+                createdAt: 'desc',
+              },
+
+              take: remainingSlots,
+            })
+          : [];
 
       listings = [
         ...boostedListings.map((listing) =>
@@ -274,6 +407,7 @@ router.get('/', async (req, res) => {
             sponsored: true,
           })
         ),
+
         ...normalListings.map((listing) =>
           toPublicListing({
             ...listing,
@@ -283,46 +417,60 @@ router.get('/', async (req, res) => {
       ];
     } else {
       const pageSkip = boostedIds.length
-        ? Math.max(skip - boostedIds.length, 0)
+        ? Math.max(
+            skip - boostedIds.length,
+            0
+          )
         : skip;
 
       const normalListings =
         await prisma.listing.findMany({
           where: normalWhere,
+
           select: {
             ...PUBLIC_LISTING_FIELDS,
+
             seller: {
               select: sellerSelect,
             },
           },
+
           orderBy: {
             createdAt: 'desc',
           },
+
           skip: pageSkip,
           take,
         });
 
-      listings = normalListings.map((listing) =>
-        toPublicListing({
-          ...listing,
-          sponsored: false,
-        })
+      listings = normalListings.map(
+        (listing) =>
+          toPublicListing({
+            ...listing,
+            sponsored: false,
+          })
       );
     }
 
-    const total = await prisma.listing.count({
-      where,
-    });
+    const total =
+      await prisma.listing.count({
+        where,
+      });
 
     return res.json({
       listings,
       total,
       page: pageNumber,
       limit: take,
-      totalPages: Math.ceil(total / take),
+      totalPages: Math.ceil(
+        total / take
+      ),
     });
   } catch (error) {
-    console.error('LIST LISTINGS ERROR:', error);
+    console.error(
+      'LIST LISTINGS ERROR:',
+      error
+    );
 
     return res.status(500).json({
       error: 'Could not load listings',
@@ -336,93 +484,97 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const listing = await prisma.listing.findUnique({
-      where: {
-        id: req.params.id,
-      },
-
-      select: {
-        ...PUBLIC_LISTING_FIELDS,
-
-        seller: {
-          select: {
-            id: true,
-            name: true,
-            rating: true,
-            location: true,
-            verificationStatus: true,
-          },
+    const listing =
+      await prisma.listing.findUnique({
+        where: {
+          id: req.params.id,
         },
 
-        offers: true,
+        select: {
+          ...PUBLIC_LISTING_FIELDS,
 
-        orders: {
-          where: {
-            status: {
-              not: 'CANCELLED',
+          seller: {
+            select: {
+              id: true,
+              name: true,
+              rating: true,
+              location: true,
+              verificationStatus: true,
             },
           },
 
-          select: {
-            id: true,
-            buyerId: true,
-            sellerId: true,
-            status: true,
-          },
-        },
+          offers: true,
 
-        inspectionRequests: {
-          include: {
-            report: true,
-
-            inspector: {
-              select: {
-                id: true,
-                name: true,
-                rating: true,
-                location: true,
-                verificationStatus: true,
+          orders: {
+            where: {
+              status: {
+                not: 'CANCELLED',
               },
             },
 
-            payments: {
-              select: {
-                id: true,
-                status: true,
-              },
+            select: {
+              id: true,
+              buyerId: true,
+              sellerId: true,
+              status: true,
             },
+          },
 
-            quotes: {
-              where: {
-                status: {
-                  in: ['PENDING', 'ACCEPTED'],
+          inspectionRequests: {
+            include: {
+              report: true,
+
+              inspector: {
+                select: {
+                  id: true,
+                  name: true,
+                  rating: true,
+                  location: true,
+                  verificationStatus: true,
                 },
               },
 
-              include: {
-                inspector: {
-                  select: {
-                    id: true,
-                    name: true,
-                    rating: true,
-                    location: true,
-                    verificationStatus: true,
+              payments: {
+                select: {
+                  id: true,
+                  status: true,
+                },
+              },
+
+              quotes: {
+                where: {
+                  status: {
+                    in: [
+                      'PENDING',
+                      'ACCEPTED',
+                    ],
                   },
                 },
-              },
 
-              orderBy: {
-                amount: 'asc',
+                include: {
+                  inspector: {
+                    select: {
+                      id: true,
+                      name: true,
+                      rating: true,
+                      location: true,
+                      verificationStatus: true,
+                    },
+                  },
+                },
+
+                orderBy: {
+                  amount: 'asc',
+                },
               },
             },
-          },
 
-          orderBy: {
-            createdAt: 'desc',
+            orderBy: {
+              createdAt: 'desc',
+            },
           },
         },
-      },
-    });
+      });
 
     if (!listing) {
       return res.status(404).json({
@@ -434,7 +586,10 @@ router.get('/:id', async (req, res) => {
       listing: toPublicListing(listing),
     });
   } catch (error) {
-    console.error('GET LISTING ERROR:', error);
+    console.error(
+      'GET LISTING ERROR:',
+      error
+    );
 
     return res.status(500).json({
       error: 'Could not load listing',
@@ -451,11 +606,21 @@ router.post(
   authenticate,
   requireRole('SELLER', 'INSPECTOR'),
   [
-    body('sellerId').notEmpty(),
+    body('sellerId')
+      .notEmpty()
+      .isString(),
 
+    /**
+     * DIGITAL intentionally remains excluded here.
+     *
+     * MarketBridge already has a separate DigitalProduct flow.
+     */
     body('category')
       .optional()
-      .isIn(['AGRICULTURAL', 'PRODUCT']),
+      .isIn([
+        'AGRICULTURAL',
+        'PRODUCT',
+      ]),
 
     body('title')
       .optional()
@@ -471,13 +636,47 @@ router.post(
       .isFloat({ gt: 0 }),
 
     body('unit')
-      .notEmpty(),
+      .notEmpty()
+      .isString()
+      .trim(),
 
     body('askingPrice')
       .isFloat({ gt: 0 }),
 
     body('location')
-      .notEmpty(),
+      .notEmpty()
+      .isString()
+      .trim(),
+
+    body('minAcceptablePrice')
+      .optional({
+        nullable: true,
+      })
+      .isFloat({ gt: 0 }),
+
+    body('harvestedDate')
+      .optional({
+        nullable: true,
+      })
+      .isISO8601(),
+
+    body('readinessDate')
+      .optional({
+        nullable: true,
+      })
+      .isISO8601(),
+
+    body('photos')
+      .optional()
+      .isArray(),
+
+    body('videos')
+      .optional()
+      .isArray(),
+
+    body('description')
+      .optional()
+      .isString(),
   ],
 
   async (req, res) => {
@@ -507,6 +706,10 @@ router.post(
         description,
       } = req.body;
 
+      // ----------------------------------------------------------------------
+      // Permission checks
+      // ----------------------------------------------------------------------
+
       if (
         req.user.roles.includes('INSPECTOR') &&
         !req.user.roles.includes('SELLER')
@@ -529,6 +732,10 @@ router.post(
         });
       }
 
+      // ----------------------------------------------------------------------
+      // Category-specific validation
+      // ----------------------------------------------------------------------
+
       if (
         category === 'AGRICULTURAL' &&
         !cropType
@@ -541,8 +748,7 @@ router.post(
 
       if (
         category === 'PRODUCT' &&
-        !title &&
-        !cropType
+        !title
       ) {
         return res.status(400).json({
           error:
@@ -550,11 +756,77 @@ router.post(
         });
       }
 
-      const seller = await prisma.user.findUnique({
-        where: {
-          id: sellerId,
-        },
-      });
+      /**
+       * A generic PRODUCT listing should not carry an agricultural cropType
+       * merely because the title exists.
+       */
+      if (
+        category === 'PRODUCT' &&
+        cropType
+      ) {
+        return res.status(400).json({
+          error:
+            'cropType is only allowed for agricultural listings',
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // Price validation
+      // ----------------------------------------------------------------------
+
+      const priceError =
+        validatePrices(
+          Number(askingPrice),
+          minAcceptablePrice
+        );
+
+      if (priceError) {
+        return res.status(400).json({
+          error: priceError,
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // Date validation
+      // ----------------------------------------------------------------------
+
+      const dateError =
+        validateAgriculturalDates(
+          category,
+          harvestedDate,
+          readinessDate
+        );
+
+      if (dateError) {
+        return res.status(400).json({
+          error: dateError,
+        });
+      }
+
+      /**
+       * Agricultural dates do not make sense for a generic product.
+       */
+      if (
+        category === 'PRODUCT' &&
+        (harvestedDate ||
+          readinessDate)
+      ) {
+        return res.status(400).json({
+          error:
+            'harvestedDate and readinessDate are only allowed for agricultural listings',
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // Seller validation
+      // ----------------------------------------------------------------------
+
+      const seller =
+        await prisma.user.findUnique({
+          where: {
+            id: sellerId,
+          },
+        });
 
       if (!seller) {
         return res.status(404).json({
@@ -569,6 +841,10 @@ router.post(
         });
       }
 
+      // ----------------------------------------------------------------------
+      // Create listing
+      // ----------------------------------------------------------------------
+
       const listing =
         await prisma.listing.create({
           data: {
@@ -576,31 +852,52 @@ router.post(
             category,
 
             title:
-              title || cropType,
+              title || null,
 
+            /**
+             * IMPORTANT:
+             * Do not copy a generic product title into cropType.
+             */
             cropType:
-              cropType || title,
+              category === 'AGRICULTURAL'
+                ? cropType
+                : null,
 
             description,
 
-            quantity,
+            quantity: Number(quantity),
 
             unit,
 
-            askingPrice,
+            askingPrice:
+              Number(askingPrice),
 
-            minAcceptablePrice,
+            minAcceptablePrice:
+              minAcceptablePrice ===
+              undefined ||
+              minAcceptablePrice === null ||
+              minAcceptablePrice === ''
+                ? null
+                : Number(
+                    minAcceptablePrice
+                  ),
 
             location,
 
             harvestedDate:
+              category === 'AGRICULTURAL' &&
               harvestedDate
-                ? new Date(harvestedDate)
+                ? parseDate(
+                    harvestedDate
+                  )
                 : null,
 
             readinessDate:
+              category === 'AGRICULTURAL' &&
               readinessDate
-                ? new Date(readinessDate)
+                ? parseDate(
+                    readinessDate
+                  )
                 : null,
 
             photos:
@@ -616,7 +913,9 @@ router.post(
             status: 'ACTIVE',
 
             createdByInspectorId:
-              req.user.roles.includes('INSPECTOR')
+              req.user.roles.includes(
+                'INSPECTOR'
+              )
                 ? req.user.id
                 : null,
           },
@@ -679,6 +978,152 @@ router.patch(
         description,
       } = req.body;
 
+      // ----------------------------------------------------------------------
+      // Validate update values before touching the database
+      // ----------------------------------------------------------------------
+
+      if (
+        askingPrice !== undefined &&
+        (!Number.isFinite(
+          Number(askingPrice)
+        ) ||
+          Number(askingPrice) <= 0)
+      ) {
+        return res.status(400).json({
+          error:
+            'askingPrice must be greater than 0',
+        });
+      }
+
+      if (
+        quantity !== undefined &&
+        (!Number.isFinite(
+          Number(quantity)
+        ) ||
+          Number(quantity) <= 0)
+      ) {
+        return res.status(400).json({
+          error:
+            'quantity must be greater than 0',
+        });
+      }
+
+      if (
+        minAcceptablePrice !==
+          undefined &&
+        minAcceptablePrice !== null &&
+        minAcceptablePrice !== ''
+      ) {
+        if (
+          !Number.isFinite(
+            Number(minAcceptablePrice)
+          ) ||
+          Number(minAcceptablePrice) <= 0
+        ) {
+          return res.status(400).json({
+            error:
+              'minAcceptablePrice must be greater than 0',
+          });
+        }
+      }
+
+      const effectiveAskingPrice =
+        askingPrice !== undefined
+          ? Number(askingPrice)
+          : listing.askingPrice;
+
+      const effectiveMinimum =
+        minAcceptablePrice !==
+          undefined
+          ? minAcceptablePrice ===
+              null ||
+            minAcceptablePrice === ''
+            ? null
+            : Number(
+                minAcceptablePrice
+              )
+          : listing.minAcceptablePrice;
+
+      if (
+        effectiveMinimum !== null &&
+        effectiveMinimum !== undefined &&
+        effectiveMinimum >
+          effectiveAskingPrice
+      ) {
+        return res.status(400).json({
+          error:
+            'minAcceptablePrice cannot be greater than askingPrice',
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // Validate readinessDate
+      // ----------------------------------------------------------------------
+
+      let parsedReadinessDate;
+
+      if (
+        readinessDate !== undefined
+      ) {
+        if (
+          readinessDate === null ||
+          readinessDate === ''
+        ) {
+          parsedReadinessDate = null;
+        } else {
+          parsedReadinessDate =
+            parseDate(
+              readinessDate
+            );
+
+          if (!parsedReadinessDate) {
+            return res.status(400).json({
+              error:
+                'readinessDate must be a valid date',
+            });
+          }
+        }
+
+        if (
+          listing.harvestedDate &&
+          parsedReadinessDate &&
+          listing.harvestedDate >
+            parsedReadinessDate
+        ) {
+          return res.status(400).json({
+            error:
+              'readinessDate cannot be earlier than harvestedDate',
+          });
+        }
+      }
+
+      // ----------------------------------------------------------------------
+      // Validate status
+      // ----------------------------------------------------------------------
+
+      const allowedStatuses = [
+        'DRAFT',
+        'ACTIVE',
+        'UNDER_NEGOTIATION',
+        'SOLD',
+        'CANCELLED',
+      ];
+
+      if (
+        status !== undefined &&
+        !allowedStatuses.includes(
+          status
+        )
+      ) {
+        return res.status(400).json({
+          error: 'Invalid listing status',
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // Update listing
+      // ----------------------------------------------------------------------
+
       const updated =
         await prisma.listing.update({
           where: {
@@ -686,28 +1131,37 @@ router.patch(
           },
 
           data: {
-            ...(askingPrice !== undefined && {
-              askingPrice,
+            ...(askingPrice !==
+              undefined && {
+              askingPrice:
+                Number(askingPrice),
             }),
 
-            ...(minAcceptablePrice !== undefined && {
-              minAcceptablePrice,
+            ...(minAcceptablePrice !==
+              undefined && {
+              minAcceptablePrice:
+                effectiveMinimum,
             }),
 
-            ...(quantity !== undefined && {
-              quantity,
+            ...(quantity !==
+              undefined && {
+              quantity:
+                Number(quantity),
             }),
 
-            ...(status !== undefined && {
+            ...(status !==
+              undefined && {
               status,
             }),
 
-            ...(readinessDate !== undefined && {
+            ...(readinessDate !==
+              undefined && {
               readinessDate:
-                new Date(readinessDate),
+                parsedReadinessDate,
             }),
 
-            ...(description !== undefined && {
+            ...(description !==
+              undefined && {
               description,
             }),
           },
@@ -767,7 +1221,8 @@ router.get(
       const recentSimilar =
         await prisma.listing.findMany({
           where: {
-            cropType: listing.cropType,
+            cropType:
+              listing.cropType,
             status: 'SOLD',
           },
 
@@ -796,14 +1251,16 @@ router.get(
       const estimatedTransportCost =
         req.query.estTransportCost
           ? Number(
-              req.query.estTransportCost
+              req.query
+                .estTransportCost
             )
           : 0;
 
       const estimatedInspectionCost =
         req.query.estInspectionCost
           ? Number(
-              req.query.estInspectionCost
+              req.query
+                .estInspectionCost
             )
           : 0;
 
@@ -858,6 +1315,7 @@ router.get(
 );
 
 // Export the serializer for regression testing.
-router.toPublicListing = toPublicListing;
+router.toPublicListing =
+  toPublicListing;
 
 module.exports = router;
