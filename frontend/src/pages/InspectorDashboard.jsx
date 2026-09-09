@@ -29,7 +29,6 @@ export default function InspectorDashboard() {
   const [feeInputs, setFeeInputs] = useState({});
   const [activeRequestId, setActiveRequestId] = useState('');
   const [report, setReport] = useState(EMPTY_REPORT);
-  const [photoEvidence, setPhotoEvidence] = useState([]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -44,7 +43,10 @@ export default function InspectorDashboard() {
       setAvailable(availRes.data?.requests || []);
       setMine(mineRes.data?.requests || []);
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not load inspection jobs.');
+      setError(
+        err.response?.data?.error ||
+          'Could not load inspection jobs.'
+      );
     } finally {
       setLoading(false);
     }
@@ -59,25 +61,57 @@ export default function InspectorDashboard() {
     setMsg('');
 
     const fee = Number(feeInputs[id]);
+
     if (!fee || fee <= 0) {
-      setError('Enter your fee for this inspection before accepting.');
+      setError(
+        'Enter your fee for this inspection before accepting.'
+      );
       return;
     }
 
     try {
-      await api.patch(`/inspections/${id}/accept`, { fee });
-      setMsg('Job accepted. It is now in "My Jobs" — submit your report once the inspection is complete.');
+      await api.patch(`/inspections/${id}/accept`, {
+        fee,
+      });
+
+      setMsg(
+        'Job accepted. Start the inspection when you arrive at the inspection location.'
+      );
+
       setTab('mine');
+
       await loadAll();
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not accept this job — it may have just been claimed by another inspector.');
+      setError(
+        err.response?.data?.error ||
+          'Could not accept this job — it may have just been claimed by another inspector.'
+      );
+    }
+  }
+
+  async function startInspection(id) {
+    setError('');
+    setMsg('');
+
+    try {
+      await api.post(`/inspections/${id}/start`);
+
+      setMsg(
+        'Inspection started. You can now complete the evidence report.'
+      );
+
+      await loadAll();
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+          'Could not start the inspection.'
+      );
     }
   }
 
   function openReportForm(requestId) {
     setActiveRequestId(requestId);
     setReport(EMPTY_REPORT);
-    setPhotoEvidence([]);
     setMsg('');
     setError('');
   }
@@ -85,40 +119,86 @@ export default function InspectorDashboard() {
   function closeReportForm() {
     setActiveRequestId('');
     setReport(EMPTY_REPORT);
-    setPhotoEvidence([]);
   }
 
   async function submitReport(e) {
     e.preventDefault();
+
     if (!activeRequestId) return;
 
-    try {
-      await api.post(`/inspections/${activeRequestId}/report`, {
-        ...report,
-        quantity: Number(report.quantity),
-        moisture: report.moisture ? Number(report.moisture) : undefined,
-        photos: photoEvidence,
-        videos: [],
-      });
+    setError('');
+    setMsg('');
 
-      setMsg('Inspection report submitted and marked complete.');
+    try {
+      await api.post(
+        `/inspections/${activeRequestId}/report`,
+        {
+          ...report,
+
+          quantity: Number(report.quantity),
+
+          moisture:
+            report.moisture !== ''
+              ? Number(report.moisture)
+              : undefined,
+
+          // Photo upload will be connected to secure evidence
+          // storage in the evidence-storage phase.
+          photos: [],
+
+          videos: [],
+        }
+      );
+
+      setMsg(
+        'Inspection report submitted and inspection marked complete.'
+      );
+
       closeReportForm();
+
       await loadAll();
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not submit report.');
+      setError(
+        err.response?.data?.error ||
+          'Could not submit report.'
+      );
     }
   }
 
-  const pendingMine = mine.filter((r) => r.status === 'ACCEPTED' || r.status === 'IN_PROGRESS');
-  const completedMine = mine.filter((r) => r.status === 'COMPLETED');
+  const acceptedMine = mine.filter(
+    (r) => r.status === 'ACCEPTED'
+  );
+
+  const inProgressMine = mine.filter(
+    (r) => r.status === 'IN_PROGRESS'
+  );
+
+  const pendingMine = mine.filter(
+    (r) =>
+      r.status === 'ACCEPTED' ||
+      r.status === 'IN_PROGRESS'
+  );
+
+  const completedMine = mine.filter(
+    (r) => r.status === 'COMPLETED'
+  );
 
   if (loading) {
     return (
       <div className="sd-dashboard">
         <section>
-          <span className="sd-eyebrow">INSPECTOR DASHBOARD</span>
-          <h1>Loading your inspection workspace...</h1>
-          <p className="sd-muted">Loading available jobs and your accepted inspections.</p>
+          <span className="sd-eyebrow">
+            INSPECTOR DASHBOARD
+          </span>
+
+          <h1>
+            Loading your inspection workspace...
+          </h1>
+
+          <p className="sd-muted">
+            Loading available jobs and your accepted
+            inspections.
+          </p>
         </section>
       </div>
     );
@@ -126,23 +206,30 @@ export default function InspectorDashboard() {
 
   return (
     <div className="sd-dashboard">
-
-      {/* =========================================================
-          HEADER / SUMMARY
-      ========================================================= */}
-
       <section>
         <div className="sd-toolbar">
           <div>
-            <span className="sd-eyebrow">INSPECTOR DASHBOARD</span>
-            <h1>Verify. Document. Report.</h1>
-            <p className="sd-muted" style={{ maxWidth: 780 }}>
-              Inspectors are independent verifiers. They do not own produce,
-              set farmer prices or arrange transport.
+            <span className="sd-eyebrow">
+              INSPECTOR DASHBOARD
+            </span>
+
+            <h1>
+              Verify. Document. Report.
+            </h1>
+
+            <p
+              className="sd-muted"
+              style={{ maxWidth: 780 }}
+            >
+              Inspectors are independent verifiers. They do
+              not own produce, set farmer prices or arrange
+              transport.
             </p>
           </div>
 
-          <span className="sd-badge sd-blue">VERIFICATION ROLE</span>
+          <span className="sd-badge sd-blue">
+            VERIFICATION ROLE
+          </span>
         </div>
 
         <div className="sd-stat-grid">
@@ -152,8 +239,13 @@ export default function InspectorDashboard() {
           </div>
 
           <div className="sd-stat">
+            <span>ACCEPTED</span>
+            <b>{acceptedMine.length}</b>
+          </div>
+
+          <div className="sd-stat">
             <span>IN PROGRESS</span>
-            <b>{pendingMine.length}</b>
+            <b>{inProgressMine.length}</b>
           </div>
 
           <div className="sd-stat">
@@ -165,35 +257,52 @@ export default function InspectorDashboard() {
 
       {msg && (
         <section>
-          <div className="alert success">{msg}</div>
+          <div className="alert success">
+            {msg}
+          </div>
         </section>
       )}
 
       {error && (
         <section>
-          <div className="alert error">{error}</div>
+          <div className="alert error">
+            {error}
+          </div>
         </section>
       )}
-
-      {/* =========================================================
-          TABS
-      ========================================================= */}
 
       <section>
         <div className="sd-tabs">
           <button
             type="button"
-            className={`sd-tab ${tab === 'available' ? 'sd-active' : ''}`}
-            onClick={() => setTab('available')}
+            className={`sd-tab ${
+              tab === 'available'
+                ? 'sd-active'
+                : ''
+            }`}
+            onClick={() =>
+              setTab('available')
+            }
           >
-            Available Jobs {available.length > 0 && `(${available.length})`}
+            Available Jobs{' '}
+            {available.length > 0 &&
+              `(${available.length})`}
           </button>
+
           <button
             type="button"
-            className={`sd-tab ${tab === 'mine' ? 'sd-active' : ''}`}
-            onClick={() => setTab('mine')}
+            className={`sd-tab ${
+              tab === 'mine'
+                ? 'sd-active'
+                : ''
+            }`}
+            onClick={() =>
+              setTab('mine')
+            }
           >
-            My Jobs {pendingMine.length > 0 && `(${pendingMine.length})`}
+            My Jobs{' '}
+            {pendingMine.length > 0 &&
+              `(${pendingMine.length})`}
           </button>
         </div>
 
@@ -203,43 +312,94 @@ export default function InspectorDashboard() {
               <div>
                 <div className="sd-toolbar">
                   <div>
-                    <span className="sd-eyebrow">MARKETPLACE</span>
-                    <h2>Open inspection requests</h2>
+                    <span className="sd-eyebrow">
+                      MARKETPLACE
+                    </span>
+
+                    <h2>
+                      Open inspection requests
+                    </h2>
+
                     <p className="sd-muted">
-                      Requests from sellers or buyers that no inspector has
-                      accepted yet.
+                      Requests from sellers or buyers
+                      that no inspector has accepted
+                      yet.
                     </p>
                   </div>
                 </div>
 
                 <div className="sd-cards">
                   {available.map((r) => (
-                    <div className="sd-card" key={r.id}>
+                    <div
+                      className="sd-card"
+                      key={r.id}
+                    >
                       <h3>
-                        {r.listing?.cropType || 'Listing'} · {r.listing?.quantity} {r.listing?.unit}
+                        {r.listing?.cropType ||
+                          r.listing?.title ||
+                          'Listing'}{' '}
+                        · {r.listing?.quantity}{' '}
+                        {r.listing?.unit}
                       </h3>
 
                       <p className="sd-muted">
-                        {modeLabel(r.mode)} — requested for {r.listing?.location || 'location not set'}
+                        {modeLabel(r.mode)} —
+                        requested for{' '}
+                        {r.location ||
+                          r.listing?.location ||
+                          'location not set'}
                       </p>
 
-                      <p className="sd-muted">Requested by {r.requestedBy?.name || 'user'}</p>
+                      <p className="sd-muted">
+                        Requested by{' '}
+                        {r.requestedBy?.name ||
+                          'user'}
+                      </p>
 
-                      <div className="sd-form-grid" style={{ marginTop: 12 }}>
+                      <div
+                        className="sd-form-grid"
+                        style={{
+                          marginTop: 12,
+                        }}
+                      >
                         <div>
-                          <label>Your fee (ETB)</label>
+                          <label>
+                            Your fee (ETB)
+                          </label>
+
                           <input
                             type="number"
                             min="1"
                             step="0.01"
                             placeholder="e.g. 500"
-                            value={feeInputs[r.id] || ''}
-                            onChange={(e) => setFeeInputs((f) => ({ ...f, [r.id]: e.target.value }))}
+                            value={
+                              feeInputs[r.id] ||
+                              ''
+                            }
+                            onChange={(e) =>
+                              setFeeInputs(
+                                (f) => ({
+                                  ...f,
+                                  [r.id]:
+                                    e.target
+                                      .value,
+                                })
+                              )
+                            }
                           />
                         </div>
                       </div>
 
-                      <button type="button" className="sd-btn sd-btn-primary" style={{ marginTop: 6 }} onClick={() => accept(r.id)}>
+                      <button
+                        type="button"
+                        className="sd-btn sd-btn-primary"
+                        style={{
+                          marginTop: 6,
+                        }}
+                        onClick={() =>
+                          accept(r.id)
+                        }
+                      >
                         Accept job
                       </button>
                     </div>
@@ -247,8 +407,14 @@ export default function InspectorDashboard() {
 
                   {available.length === 0 && (
                     <div className="sd-panel">
-                      <h3>No open requests</h3>
-                      <p className="sd-muted">New inspection requests will appear here.</p>
+                      <h3>
+                        No open requests
+                      </h3>
+
+                      <p className="sd-muted">
+                        New inspection requests
+                        will appear here.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -259,39 +425,125 @@ export default function InspectorDashboard() {
               <div>
                 <div className="sd-toolbar">
                   <div>
-                    <span className="sd-eyebrow">MY JOBS</span>
-                    <h2>My accepted jobs</h2>
+                    <span className="sd-eyebrow">
+                      MY JOBS
+                    </span>
+
+                    <h2>
+                      My inspection jobs
+                    </h2>
+
                     <p className="sd-muted">
-                      Jobs you've accepted. Submit a report once the
-                      inspection is complete.
+                      Start an accepted inspection
+                      when you arrive at the inspection
+                      location. Submit the evidence
+                      report after completing the
+                      inspection.
                     </p>
                   </div>
                 </div>
 
                 <div className="sd-cards">
                   {pendingMine.map((r) => (
-                    <div className="sd-card" key={r.id}>
-                      <h3>{r.listing?.cropType || 'Listing'} · {r.listing?.quantity} {r.listing?.unit}</h3>
-                      <p className="sd-muted">{modeLabel(r.mode)} — {r.listing?.location || 'location not set'}</p>
-                      <button type="button" className="sd-btn sd-btn-primary" onClick={() => openReportForm(r.id)}>
-                        Submit report
-                      </button>
+                    <div
+                      className="sd-card"
+                      key={r.id}
+                    >
+                      <h3>
+                        {r.listing?.cropType ||
+                          r.listing?.title ||
+                          'Listing'}{' '}
+                        · {r.listing?.quantity}{' '}
+                        {r.listing?.unit}
+                      </h3>
+
+                      <p className="sd-muted">
+                        {modeLabel(r.mode)} —{' '}
+                        {r.location ||
+                          r.listing?.location ||
+                          'location not set'}
+                      </p>
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 8,
+                          flexWrap: 'wrap',
+                          marginTop: 12,
+                        }}
+                      >
+                        {r.status ===
+                          'ACCEPTED' && (
+                          <button
+                            type="button"
+                            className="sd-btn sd-btn-primary"
+                            onClick={() =>
+                              startInspection(
+                                r.id
+                              )
+                            }
+                          >
+                            Start inspection
+                          </button>
+                        )}
+
+                        {r.status ===
+                          'IN_PROGRESS' && (
+                          <button
+                            type="button"
+                            className="sd-btn sd-btn-primary"
+                            onClick={() =>
+                              openReportForm(
+                                r.id
+                              )
+                            }
+                          >
+                            Submit report
+                          </button>
+                        )}
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: 10,
+                        }}
+                      >
+                        <span className="sd-badge">
+                          {r.status.replaceAll(
+                            '_',
+                            ' '
+                          )}
+                        </span>
+                      </div>
                     </div>
                   ))}
 
                   {pendingMine.length === 0 && (
                     <div className="sd-panel">
-                      <p className="sd-muted">No jobs in progress.</p>
+                      <p className="sd-muted">
+                        No accepted or in-progress
+                        inspection jobs.
+                      </p>
                     </div>
                   )}
                 </div>
 
                 {completedMine.length > 0 && (
                   <>
-                    <div className="sd-toolbar" style={{ marginTop: 28 }}>
+                    <div
+                      className="sd-toolbar"
+                      style={{
+                        marginTop: 28,
+                      }}
+                    >
                       <div>
-                        <span className="sd-eyebrow">HISTORY</span>
-                        <h2>Completed</h2>
+                        <span className="sd-eyebrow">
+                          HISTORY
+                        </span>
+
+                        <h2>
+                          Completed
+                        </h2>
                       </div>
                     </div>
 
@@ -299,25 +551,62 @@ export default function InspectorDashboard() {
                       <table className="sd-table">
                         <thead>
                           <tr>
-                            <th>Listing</th>
-                            <th>Report</th>
-                            <th>Action</th>
+                            <th>
+                              Listing
+                            </th>
+
+                            <th>
+                              Report
+                            </th>
+
+                            <th>
+                              Action
+                            </th>
                           </tr>
                         </thead>
+
                         <tbody>
-                          {completedMine.map((r) => (
-                            <tr key={r.id}>
-                              <td><strong>{r.listing?.cropType || 'Listing'}</strong></td>
-                              <td className="sd-muted">
-                                {r.report ? `Grade: ${r.report.grade || '—'} · Quantity verified: ${r.report.quantity}` : 'Report on file'}
-                              </td>
-                              <td>
-                                <Link to={`/listings/${r.listing?.id}`}>
-                                  <button type="button" className="sd-btn sd-btn-outline">View listing</button>
-                                </Link>
-                              </td>
-                            </tr>
-                          ))}
+                          {completedMine.map(
+                            (r) => (
+                              <tr key={r.id}>
+                                <td>
+                                  <strong>
+                                    {r.listing
+                                      ?.cropType ||
+                                      r.listing
+                                        ?.title ||
+                                      'Listing'}
+                                  </strong>
+                                </td>
+
+                                <td className="sd-muted">
+                                  {r.report
+                                    ? `Grade: ${
+                                        r.report
+                                          .grade ||
+                                        '—'
+                                      } · Quantity verified: ${
+                                        r.report
+                                          .quantity
+                                      }`
+                                    : 'Report on file'}
+                                </td>
+
+                                <td>
+                                  <Link
+                                    to={`/listings/${r.listing?.id}`}
+                                  >
+                                    <button
+                                      type="button"
+                                      className="sd-btn sd-btn-outline"
+                                    >
+                                      View listing
+                                    </button>
+                                  </Link>
+                                </td>
+                              </tr>
+                            )
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -331,7 +620,12 @@ export default function InspectorDashboard() {
                 className="sd-report-backdrop"
                 role="presentation"
                 onMouseDown={(e) => {
-                  if (e.target === e.currentTarget) closeReportForm();
+                  if (
+                    e.target ===
+                    e.currentTarget
+                  ) {
+                    closeReportForm();
+                  }
                 }}
               >
                 <div
@@ -342,58 +636,240 @@ export default function InspectorDashboard() {
                 >
                   <div className="sd-report-header">
                     <div>
-                      <span className="sd-eyebrow">INSPECTION EVIDENCE</span>
-                      <h2 id="inspection-report-title">Inspection report</h2>
-                      <p className="sd-muted">Record the verified condition of the produce and supporting evidence.</p>
+                      <span className="sd-eyebrow">
+                        INSPECTION EVIDENCE
+                      </span>
+
+                      <h2 id="inspection-report-title">
+                        Inspection report
+                      </h2>
+
+                      <p className="sd-muted">
+                        Record the verified condition
+                        of the produce and supporting
+                        evidence.
+                      </p>
                     </div>
-                    <button type="button" className="sd-close" onClick={closeReportForm} aria-label="Close report form">×</button>
+
+                    <button
+                      type="button"
+                      className="sd-close"
+                      onClick={
+                        closeReportForm
+                      }
+                      aria-label="Close report form"
+                    >
+                      ×
+                    </button>
                   </div>
 
-                  <form onSubmit={submitReport}>
+                  <form
+                    onSubmit={submitReport}
+                  >
                     <div className="sd-form-grid">
                       <div>
-                        <label>Verified quantity</label>
-                        <input required type="number" min="0.01" step="0.01" value={report.quantity} onChange={(e) => setReport({ ...report, quantity: e.target.value })} />
+                        <label>
+                          Verified quantity
+                        </label>
+
+                        <input
+                          required
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={
+                            report.quantity
+                          }
+                          onChange={(e) =>
+                            setReport({
+                              ...report,
+                              quantity:
+                                e.target
+                                  .value,
+                            })
+                          }
+                        />
                       </div>
+
                       <div>
-                        <label>Grade</label>
-                        <input value={report.grade} onChange={(e) => setReport({ ...report, grade: e.target.value })} />
+                        <label>
+                          Grade
+                        </label>
+
+                        <input
+                          value={
+                            report.grade
+                          }
+                          onChange={(e) =>
+                            setReport({
+                              ...report,
+                              grade:
+                                e.target
+                                  .value,
+                            })
+                          }
+                        />
                       </div>
+
                       <div>
-                        <label>Moisture (%)</label>
-                        <input type="number" min="0" step="0.01" value={report.moisture} onChange={(e) => setReport({ ...report, moisture: e.target.value })} />
+                        <label>
+                          Moisture (%)
+                        </label>
+
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={
+                            report.moisture
+                          }
+                          onChange={(e) =>
+                            setReport({
+                              ...report,
+                              moisture:
+                                e.target
+                                  .value,
+                            })
+                          }
+                        />
                       </div>
+
                       <div>
-                        <label>GPS / location evidence</label>
-                        <input value={report.gpsLocation} placeholder="e.g. 8.9806, 38.7578" onChange={(e) => setReport({ ...report, gpsLocation: e.target.value })} />
+                        <label>
+                          GPS / location evidence
+                        </label>
+
+                        <input
+                          value={
+                            report.gpsLocation
+                          }
+                          placeholder="e.g. 8.9806, 38.7578"
+                          onChange={(e) =>
+                            setReport({
+                              ...report,
+                              gpsLocation:
+                                e.target
+                                  .value,
+                            })
+                          }
+                        />
                       </div>
+
                       <div className="sd-full">
-                        <label>Visible defects</label>
-                        <textarea value={report.visibleDefects} placeholder="Describe visible defects, quality issues or contamination." onChange={(e) => setReport({ ...report, visibleDefects: e.target.value })} />
+                        <label>
+                          Visible defects
+                        </label>
+
+                        <textarea
+                          value={
+                            report.visibleDefects
+                          }
+                          placeholder="Describe visible defects, quality issues or contamination."
+                          onChange={(e) =>
+                            setReport({
+                              ...report,
+                              visibleDefects:
+                                e.target
+                                  .value,
+                            })
+                          }
+                        />
                       </div>
+
                       <div className="sd-full">
-                        <label>Damage notes</label>
-                        <textarea value={report.damageNotes} placeholder="Describe physical damage, bruising, broken packaging, etc." onChange={(e) => setReport({ ...report, damageNotes: e.target.value })} />
+                        <label>
+                          Damage notes
+                        </label>
+
+                        <textarea
+                          value={
+                            report.damageNotes
+                          }
+                          placeholder="Describe physical damage, bruising, broken packaging, etc."
+                          onChange={(e) =>
+                            setReport({
+                              ...report,
+                              damageNotes:
+                                e.target
+                                  .value,
+                            })
+                          }
+                        />
                       </div>
+
                       <div className="sd-full">
-                        <label>Packaging notes</label>
-                        <textarea value={report.packagingNotes} placeholder="Describe packaging condition and quantity of packages inspected." onChange={(e) => setReport({ ...report, packagingNotes: e.target.value })} />
+                        <label>
+                          Packaging notes
+                        </label>
+
+                        <textarea
+                          value={
+                            report.packagingNotes
+                          }
+                          placeholder="Describe packaging condition and quantity of packages inspected."
+                          onChange={(e) =>
+                            setReport({
+                              ...report,
+                              packagingNotes:
+                                e.target
+                                  .value,
+                            })
+                          }
+                        />
                       </div>
+
                       <div className="sd-full sd-photo-evidence">
-                        <div className="sd-photo-placeholder" aria-label="Photo evidence placeholder">
-                          <div className="sd-photo-icon" aria-hidden="true">▧</div>
+                        <div
+                          className="sd-photo-placeholder"
+                          aria-label="Photo evidence placeholder"
+                        >
+                          <div
+                            className="sd-photo-icon"
+                            aria-hidden="true"
+                          >
+                            ▧
+                          </div>
+
                           <div>
-                            <strong>Photo evidence</strong>
-                            <p>Photo upload placeholder — capture or attach inspection photos here.</p>
-                            <span>Secure evidence-storage upload will be connected in the next evidence phase.</span>
+                            <strong>
+                              Photo evidence
+                            </strong>
+
+                            <p>
+                              Photo upload
+                              placeholder —
+                              capture or attach
+                              inspection photos
+                              here.
+                            </p>
+
+                            <span>
+                              Secure evidence-storage
+                              upload will be connected
+                              in the next evidence phase.
+                            </span>
                           </div>
                         </div>
                       </div>
                     </div>
 
                     <div className="sd-modal-actions sd-report-actions">
-                      <button className="sd-btn sd-btn-primary" type="submit">Publish evidence report</button>
-                      <button type="button" className="sd-btn sd-btn-outline" onClick={closeReportForm}>Cancel</button>
+                      <button
+                        className="sd-btn sd-btn-primary"
+                        type="submit"
+                      >
+                        Publish evidence report
+                      </button>
+
+                      <button
+                        type="button"
+                        className="sd-btn sd-btn-outline"
+                        onClick={
+                          closeReportForm
+                        }
+                      >
+                        Cancel
+                      </button>
                     </div>
                   </form>
                 </div>
@@ -403,13 +879,27 @@ export default function InspectorDashboard() {
 
           <aside>
             <div className="sd-panel">
-              <h3>Evidence checklist</h3>
+              <h3>
+                Evidence checklist
+              </h3>
+
               {[
-                'Quantity', 'Grade / quality', 'Size where applicable', 'Moisture where applicable',
-                'Visible defects / damage', 'Packaging', 'Photos / videos', 'GPS / location',
+                'Quantity',
+                'Grade / quality',
+                'Size where applicable',
+                'Moisture where applicable',
+                'Visible defects / damage',
+                'Packaging',
+                'Photos / videos',
+                'GPS / location',
                 'Date, time & inspector identity',
               ].map((x) => (
-                <div className="tool-row" key={x}>✓ {x}</div>
+                <div
+                  className="tool-row"
+                  key={x}
+                >
+                  ✓ {x}
+                </div>
               ))}
             </div>
           </aside>
