@@ -564,12 +564,28 @@ p {
 }
 
 .listing-photo {
+  position: relative;
   aspect-ratio: 16 / 10;
   background: linear-gradient(135deg, #dfece0, #f5f7f1);
   display: grid;
   place-items: center;
   color: var(--green);
   font: 800 clamp(28px, 6vw, 40px) Manrope;
+}
+
+.listing-card--sponsored {
+  border-color: var(--gold);
+  box-shadow: 0 5px 18px rgba(183, 123, 27, .12);
+}
+
+.tag--sponsored {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+  color: #fff;
+  background: var(--gold);
+  box-shadow: var(--shadow-tight);
 }
 
 .listing-photo img,
