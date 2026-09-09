@@ -257,6 +257,9 @@ export default function BuyerDashboard() {
       'Joint-agreed': 'JOINT',
     };
 
+    const isAgricultural =
+      order.listing?.category === 'AGRICULTURAL';
+
     const isHire =
       transportTarget.method === 'hire';
 
@@ -267,8 +270,12 @@ export default function BuyerDashboard() {
     const payload = {
       orderId: order.id,
 
-      arrangingParty:
-        partyMap[transportForm.party] || 'BUYER',
+      // Agricultural orders are always buyer-arranged; the backend
+      // enforces this too, but we mirror it here so the request always
+      // matches what the UI shows the buyer.
+      arrangingParty: isAgricultural
+        ? 'BUYER'
+        : partyMap[transportForm.party] || 'BUYER',
 
       method,
 
@@ -1109,24 +1116,34 @@ export default function BuyerDashboard() {
                   Arranging party
                 </label>
 
-                <select
-                  id="transport-party"
-                  name="party"
-                  value={transportForm.party}
-                  onChange={handleTransportChange}
-                >
-                  <option value="Buyer">
-                    Buyer
-                  </option>
+                {transportTarget?.order?.listing
+                  ?.category === 'AGRICULTURAL' ? (
+                  <input
+                    id="transport-party"
+                    value="Buyer"
+                    disabled
+                    title="Agricultural orders are always arranged by the buyer"
+                  />
+                ) : (
+                  <select
+                    id="transport-party"
+                    name="party"
+                    value={transportForm.party}
+                    onChange={handleTransportChange}
+                  >
+                    <option value="Buyer">
+                      Buyer
+                    </option>
 
-                  <option value="Joint-agreed">
-                    Joint-agreed
-                  </option>
+                    <option value="Joint-agreed">
+                      Joint-agreed
+                    </option>
 
-                  <option value="Seller">
-                    Seller
-                  </option>
-                </select>
+                    <option value="Seller">
+                      Seller
+                    </option>
+                  </select>
+                )}
               </div>
 
               {/* Destination */}
