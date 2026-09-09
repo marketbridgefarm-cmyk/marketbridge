@@ -230,47 +230,57 @@ async function verifyTransaction(txRef) {
 // WEBHOOK SIGNATURE
 // ============================================================================
 
+function hmacHex(secret, data) {
+  return crypto
+    .createHmac('sha256', secret)
+    .update(data)
+    .digest('hex');
+}
+
+function safeCompare(a, b) {
+  const aBuf = Buffer.from(String(a || '').trim(), 'utf8');
+  const bBuf = Buffer.from(String(b || '').trim(), 'utf8');
+
+  if (aBuf.length !== bBuf.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
+
+// Chapa sends two different headers, computed two different ways:
+// - "chapa-signature":   HMAC-SHA256(secret, secret)   -- signs the secret itself
+// - "x-chapa-signature": HMAC-SHA256(secret, payload)  -- signs the raw request body
+// Either header matching is sufficient (per Chapa's docs).
 function verifyWebhookSignature(
   rawBody,
-  signature
+  headers
 ) {
   const secret =
     process.env.CHAPA_WEBHOOK_SECRET;
 
-  if (
-    !secret ||
-    !rawBody ||
-    !signature
-  ) {
+  if (!secret || !rawBody || !headers) {
     return false;
   }
 
-  const expected =
-    crypto
-      .createHmac('sha256', secret)
-      .update(rawBody)
-      .digest('hex');
+  const payloadSig = headers['x-chapa-signature'];
+  const secretSig = headers['chapa-signature'];
 
-  const supplied =
-    String(signature).trim();
-
-  const expectedBuffer =
-    Buffer.from(expected, 'utf8');
-
-  const suppliedBuffer =
-    Buffer.from(supplied, 'utf8');
-
-  if (
-    expectedBuffer.length !==
-    suppliedBuffer.length
-  ) {
-    return false;
+  if (payloadSig) {
+    const expected = hmacHex(secret, rawBody);
+    if (safeCompare(expected, payloadSig)) {
+      return true;
+    }
   }
 
-  return crypto.timingSafeEqual(
-    expectedBuffer,
-    suppliedBuffer
-  );
+  if (secretSig) {
+    const expected = hmacHex(secret, secret);
+    if (safeCompare(expected, secretSig)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // ============================================================================
