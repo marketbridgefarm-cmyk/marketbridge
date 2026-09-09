@@ -252,6 +252,13 @@ router.post(
 
             include: {
               transportJob: true,
+              listing: {
+                include: {
+                  inspectionRequests: {
+                    include: { payments: true },
+                  },
+                },
+              },
             },
           });
 
@@ -316,6 +323,38 @@ router.post(
               error:
                 'Order already completed',
             });
+          }
+
+          // Agricultural orders: buyers must have transport arranged and
+          // an inspection paid for before they can pay for the produce
+          // itself. Physical PRODUCT (buy-now) orders are unaffected.
+          if (
+            order.listing?.category ===
+            'AGRICULTURAL'
+          ) {
+            if (!order.transportJob) {
+              return res.status(400).json({
+                error:
+                  'Transport must be arranged before the marketplace payment can be made for agricultural orders',
+              });
+            }
+
+            const inspectionPaid =
+              (order.listing.inspectionRequests || []).some(
+                (request) =>
+                  (request.payments || []).some(
+                    (payment) =>
+                      payment.type === 'INSPECTOR' &&
+                      payment.status === 'PAID'
+                  )
+              );
+
+            if (!inspectionPaid) {
+              return res.status(402).json({
+                error:
+                  'An inspection must be paid for before the marketplace payment can be made for agricultural orders',
+              });
+            }
           }
         }
 
