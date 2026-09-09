@@ -38,6 +38,7 @@ router.post(
           requestedById: req.user.id,
           mode,
           inspectorId: inspectorId || null,
+          location: listing.location,
           status: inspectorId ? 'ACCEPTED' : 'REQUESTED',
           fee: inspectorId ? Number(fee) : null,
         },
@@ -78,7 +79,7 @@ router.get('/available', authenticate, requireRole('INSPECTOR'), async (req, res
       where: {
         status: 'REQUESTED',
         inspectorId: null,
-        ...(location && { listing: { location: { contains: location, mode: 'insensitive' } } }),
+        ...(location && { location: { contains: location, mode: 'insensitive' } }),
       },
       include: {
         listing: { select: { id: true, cropType: true, quantity: true, unit: true, location: true, category: true } },
@@ -150,6 +151,85 @@ router.patch(
   }
 );
 
+// Inspector starts an accepted inspection
+router.post(
+  '/:id/start',
+  authenticate,
+  requireRole('INSPECTOR'),
+  async (req, res) => {
+    try {
+      const request = await prisma.inspectionRequest.findUnique({
+        where: { id: req.params.id },
+        select: {
+          id: true,
+          inspectorId: true,
+          status: true,
+        },
+      });
+
+      if (!request) {
+        return res.status(404).json({ error: 'Request not found' });
+      }
+
+      if (request.inspectorId !== req.user.id) {
+        return res.status(403).json({
+          error: 'Only the assigned inspector can start this inspection',
+        });
+      }
+
+      if (request.status !== 'ACCEPTED') {
+        return res.status(400).json({
+          error: `Only an accepted inspection can be started. Current status: ${request.status}`,
+        });
+      }
+
+      const started = await prisma.inspectionRequest.updateMany({
+        where: {
+          id: request.id,
+          inspectorId: req.user.id,
+          status: 'ACCEPTED',
+        },
+        data: { status: 'IN_PROGRESS' },
+      });
+
+      if (started.count === 0) {
+        return res.status(409).json({
+          error: 'This inspection was already started or its status changed',
+        });
+      }
+
+      const updated = await prisma.inspectionRequest.findUnique({
+        where: { id: request.id },
+        include: {
+          listing: {
+            select: {
+              id: true,
+              cropType: true,
+              quantity: true,
+              unit: true,
+              location: true,
+              category: true,
+            },
+          },
+          requestedBy: { select: { id: true, name: true } },
+          inspector: {
+            select: { id: true, name: true, location: true },
+          },
+          report: true,
+        },
+      });
+
+      return res.json({
+        message: 'Inspection started',
+        request: updated,
+      });
+    } catch (error) {
+      console.error('START INSPECTION ERROR:', error);
+      return res.status(500).json({ error: 'Could not start inspection' });
+    }
+  }
+);
+
 // Inspector submits report
 router.post(
   '/:id/report',
@@ -166,6 +246,12 @@ router.post(
 
       if (request.inspectorId !== req.user.id) {
         return res.status(403).json({ error: 'Only the assigned inspector can submit this report' });
+      }
+
+      if (request.status !== 'IN_PROGRESS') {
+        return res.status(400).json({
+          error: `Inspection must be IN_PROGRESS before submitting a report. Current status: ${request.status}`,
+        });
       }
 
       const {
