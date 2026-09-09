@@ -217,7 +217,7 @@ router.post(
 
       const order = await prisma.order.findUnique({
         where: { id: orderId },
-        include: { transportJob: true },
+        include: { transportJob: true, listing: true },
       });
 
       if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -232,6 +232,19 @@ router.post(
 
       if (order.transportJob) {
         return res.status(409).json({ error: 'A transport job already exists for this order' });
+      }
+
+      // Agricultural orders: transport is always arranged by the buyer.
+      // The buyer bears the delivery/inspection risk on these deals, so
+      // sellers (and joint arrangements) cannot initiate transport here.
+      const isAgricultural = order.listing?.category === 'AGRICULTURAL';
+      let resolvedArrangingParty = arrangingParty;
+
+      if (isAgricultural) {
+        if (order.buyerId !== req.user.id && !isAdmin(req.user)) {
+          return res.status(403).json({ error: 'For agricultural orders, only the buyer can arrange transport' });
+        }
+        resolvedArrangingParty = 'BUYER';
       }
 
       // If OWN_TRUCK, truckId must be provided and belong to user
@@ -252,7 +265,7 @@ router.post(
       const transportJob = await prisma.transportJob.create({
         data: {
           orderId: order.id,
-          arrangingParty,
+          arrangingParty: resolvedArrangingParty,
           method,
           pickupLocation,
           destination,
@@ -265,12 +278,16 @@ router.post(
         },
       });
 
-      if (order.status === 'CONFIRMED') {
-        await prisma.order.update({
-          where: { id: order.id },
-          data: { status: 'TRANSPORT_ARRANGED' },
-        });
-      }
+      // Bug fix: order.arrangingParty was never being set, only
+      // transportJob.arrangingParty. Payment authorization for TRANSPORT
+      // payments reads order.arrangingParty, so it must be kept in sync.
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          arrangingParty: resolvedArrangingParty,
+          ...(order.status === 'CONFIRMED' ? { status: 'TRANSPORT_ARRANGED' } : {}),
+        },
+      });
 
       return res.status(201).json({ transportJob });
     } catch (error) {
