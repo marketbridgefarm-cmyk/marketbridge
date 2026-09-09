@@ -48,6 +48,11 @@ enum OfferStatus {
   WITHDRAWN
 }
 
+enum OfferCounterParty {
+  BUYER
+  SELLER
+}
+
 enum InspectionMode {
   SELLER_REQUESTED
   BUYER_REQUESTED
@@ -326,8 +331,19 @@ model Offer {
 
   status OfferStatus @default(PENDING)
 
+  // The latest negotiated price.
   counterAmount Float?
-  message       String?
+
+  // Identifies whose turn it is after a counter-offer.
+  //
+  // SELLER means the seller most recently countered,
+  // so the buyer must respond.
+  //
+  // BUYER means the buyer most recently countered,
+  // so the seller must respond.
+  counteredBy OfferCounterParty?
+
+  message String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -335,8 +351,8 @@ model Offer {
   @@index([listingId])
   @@index([buyerId])
   @@index([status])
+  @@index([counteredBy])
 }
-
 // ============================================================================
 // INSPECTION REQUEST
 // ============================================================================
