@@ -269,33 +269,6 @@ export default function TruckOwnerDashboard() {
     }
   }
 
-  function paymentsReadyForTransit(job) {
-    const order = job?.order;
-    if (!order) return false;
-
-    const marketplacePaid = (order.payments || []).some(
-      (p) => p.type === 'MARKETPLACE' && p.status === 'PAID'
-    );
-
-    const inspectionRequests = order.listing?.inspectionRequests || [];
-    const inspectionRequired = inspectionRequests.length > 0;
-    const inspectionPaid = !inspectionRequired || inspectionRequests.some(
-      (request) => (request.payments || []).some(
-        (p) => p.type === 'INSPECTOR' && p.status === 'PAID'
-      )
-    );
-
-    const transportRequired = job.method === 'HIRE_TRANSPORTER';
-    const transportPaid = !transportRequired || (order.payments || []).some(
-      (p) =>
-        p.type === 'TRANSPORT' &&
-        p.status === 'PAID' &&
-        p.transportJobId === job.id
-    );
-
-    return marketplacePaid && inspectionPaid && transportPaid;
-  }
-
   function getStatusClass(status) {
     if (status === 'DELIVERED') return 'sd-badge';
     if (status === 'CANCELLED') return 'sd-badge sd-warn';
@@ -320,31 +293,23 @@ export default function TruckOwnerDashboard() {
     }
 
     if (job.status === 'PICKUP') {
-      if (!paymentsReadyForTransit(job)) {
-        return (
-          <div>
-            <button
-              className="sd-btn sd-btn-outline"
-              disabled
-              title="All required buyer payments must be confirmed before IN_TRANSIT"
-            >
-              Awaiting buyer payments
-            </button>
-            <div className="sd-muted" style={{ marginTop: 6, fontSize: 12 }}>
-              IN_TRANSIT is locked until seller/produce, required inspection, and transport payments are confirmed.
-            </div>
-          </div>
-        );
-      }
-
+      const orderPayments = job.order?.payments || [];
+      const marketplacePaid = orderPayments.some((p) => p.type === 'MARKETPLACE' && p.status === 'PAID');
+      const transportPaid = job.method !== 'HIRE_TRANSPORTER' || (orderPayments.some((p) => p.type === 'TRANSPORT' && p.status === 'PAID') || (job.payments || []).some((p) => p.type === 'TRANSPORT' && p.status === 'PAID'));
+      const inspectionRequests = job.order?.listing?.inspectionRequests || [];
+      const inspectionPaid = inspectionRequests.filter((r) => r.status !== 'CANCELLED' && r.fee != null && Number(r.fee) > 0).every((r) => (r.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID'));
+      const paymentsReady = marketplacePaid && transportPaid && inspectionPaid;
       return (
-        <button
-          className="sd-btn sd-btn-outline"
-          disabled={busy}
-          onClick={() => openEvidenceModal(job.id, 'PICKUP', 'IN_TRANSIT')}
-        >
-          {busy ? 'Updating...' : 'Add pickup evidence & mark in transit'}
-        </button>
+        <div>
+          <button
+            className="sd-btn sd-btn-outline"
+            disabled={busy || !paymentsReady}
+            onClick={() => openEvidenceModal(job.id, 'PICKUP', 'IN_TRANSIT')}
+          >
+            {busy ? 'Updating...' : paymentsReady ? 'Add pickup evidence & mark in transit' : 'Waiting for all payments'}
+          </button>
+          {!paymentsReady && <p className="sd-muted" style={{ marginTop: 6 }}>Buyer payments are not complete. The server will also block IN_TRANSIT until all required payments are PAID.</p>}
+        </div>
       );
     }
 

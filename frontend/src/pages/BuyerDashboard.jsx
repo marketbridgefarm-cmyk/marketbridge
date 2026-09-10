@@ -51,6 +51,8 @@ function statusClass(status) {
   return 'sd-blue';
 }
 
+function isAgriculturalOrder(order) { return order?.listing?.category === 'AGRICULTURAL'; }
+
 export default function BuyerDashboard() {
   const { user } = useAuth();
 
@@ -63,6 +65,8 @@ export default function BuyerDashboard() {
   const [toastMsg, setToastMsg] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [offerBusy, setOfferBusy] = useState('');
+  const [counterDrafts, setCounterDrafts] = useState({});
 
   const [transportTarget, setTransportTarget] = useState(null);
   const [transportForm, setTransportForm] = useState(EMPTY_TRANSPORT_FORM);
@@ -139,13 +143,41 @@ export default function BuyerDashboard() {
     loadAll();
   }, [loadAll]);
 
-  const pendingOffers = offers.filter(
+
+  const respondToOffer = useCallback(async (offer, action) => {
+    if (!offer?.id) return;
+    const counterAmount = Number(counterDrafts[offer.id]);
+    if (action === 'RE_COUNTER' && (!Number.isFinite(counterAmount) || counterAmount <= 0)) {
+      toast('Enter a valid counter-offer amount.');
+      return;
+    }
+    setOfferBusy(`${offer.id}:${action}`);
+    try {
+      const payload = { action };
+      if (action === 'RE_COUNTER') payload.counterAmount = counterAmount;
+      const response = await api.patch(`/offers/${offer.id}`, payload);
+      toast(response.data?.message || 'Negotiation updated.');
+      setCounterDrafts((previous) => ({ ...previous, [offer.id]: '' }));
+      await loadAll();
+    } catch (err) {
+      toast(err.response?.data?.error || 'Could not update the offer.');
+    } finally {
+      setOfferBusy('');
+    }
+  }, [counterDrafts, loadAll, toast]);
+
+  const leafOffers = useMemo(() => {
+    const parentIds = new Set(offers.map((offer) => offer.parentOfferId).filter(Boolean));
+    return offers.filter((offer) => !parentIds.has(offer.id));
+  }, [offers]);
+
+  const pendingOffers = leafOffers.filter(
     (offer) =>
       offer.status === 'PENDING' ||
       offer.status === 'COUNTERED'
   );
 
-  const acceptedOffers = offers.filter(
+  const acceptedOffers = leafOffers.filter(
     (offer) => offer.status === 'ACCEPTED'
   );
 
@@ -270,12 +302,9 @@ export default function BuyerDashboard() {
     const payload = {
       orderId: order.id,
 
-      // Agricultural orders are always buyer-arranged; the backend
-      // enforces this too, but we mirror it here so the request always
-      // matches what the UI shows the buyer.
       arrangingParty: isAgricultural
-        ? 'BUYER'
-        : partyMap[transportForm.party] || 'BUYER',
+        ? (partyMap[transportForm.party] || 'BUYER')
+        : (partyMap[transportForm.party] || 'BUYER'),
 
       method,
 
@@ -538,81 +567,93 @@ export default function BuyerDashboard() {
               </div>
             </div>
 
-            <div className="sd-panel sd-table-wrap">
+            <div className="sd-panel">
               {loading ? (
                 <p>Loading offers...</p>
+              ) : leafOffers.length === 0 ? (
+                <p>No offers yet. <Link to="/listings">Browse listings</Link> to make one.</p>
               ) : (
-                <table className="sd-table">
-                  <thead>
-                    <tr>
-                      <th>Produce</th>
-                      <th>My Offer</th>
-                      <th>Status</th>
-                      <th></th>
-                    </tr>
-                  </thead>
+                <div className="sd-offer-list">
+                  {leafOffers.map((offer) => {
+                    const sellerCounter = offer.status === 'COUNTERED' && offer.counteredBy === 'SELLER';
+                    const myCounter = offer.status === 'COUNTERED' && offer.counteredBy === 'BUYER';
+                    const rejected = offer.status === 'REJECTED';
+                    const accepted = offer.status === 'ACCEPTED';
+                    const busyAccept = offerBusy === `${offer.id}:ACCEPT_COUNTER`;
+                    const busyCounter = offerBusy === `${offer.id}:RE_COUNTER`;
+                    return (
+                      <article className="sd-offer-card" key={offer.id}>
+                        <div className="row-between" style={{ gap: 12, alignItems: 'flex-start' }}>
+                          <div>
+                            <strong>{offer.listing?.title || offer.listing?.cropType || 'Agricultural produce'}</strong>
+                            <p className="sd-muted" style={{ margin: '6px 0 0' }}>Your offer: {formatETB(offer.amount)}</p>
+                          </div>
+                          <span className="sd-badge">{offer.status}</span>
+                        </div>
 
-                  <tbody>
-                    {offers.map((offer) => (
-                      <tr key={offer.id}>
-                        <td>
-                          {offer.listing?.cropType ||
-                            'Produce'}
-                        </td>
+                        {offer.counterAmount != null && (
+                          <p style={{ margin: '10px 0' }}>
+                            Seller counter: <strong>{formatETB(offer.counterAmount)}</strong>
+                          </p>
+                        )}
 
-                        <td>
-                          {formatETB(offer.amount)}
+                        {sellerCounter && (
+                          <div className="sd-offer-response">
+                            <strong>Seller responded — your turn</strong>
+                            <p className="sd-muted">Accept the seller's price or make another counter-offer.</p>
+                            <div className="sd-actions" style={{ marginTop: 8 }}>
+                              <button className="sd-btn sd-btn-primary" disabled={busyAccept} onClick={() => respondToOffer(offer, 'ACCEPT_COUNTER')}>
+                                {busyAccept ? 'Accepting…' : 'Accept seller counter'}
+                              </button>
+                              <input
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                placeholder="New counter ETB"
+                                value={counterDrafts[offer.id] || ''}
+                                onChange={(e) => setCounterDrafts((p) => ({ ...p, [offer.id]: e.target.value }))}
+                                style={{ maxWidth: 180 }}
+                              />
+                              <button className="sd-btn sd-btn-outline" disabled={busyCounter || !counterDrafts[offer.id]} onClick={() => respondToOffer(offer, 'RE_COUNTER')}>
+                                {busyCounter ? 'Sending…' : 'Counter seller'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
 
-                          {offer.counterAmount != null && (
-                            <>
-                              {' '}
-                              <span className="sd-muted">
-                                (countered:{' '}
-                                {formatETB(
-                                  offer.counterAmount
-                                )}
-                                )
-                              </span>
-                            </>
-                          )}
-                        </td>
+                        {myCounter && (
+                          <div className="sd-notice" style={{ marginTop: 10 }}>
+                            <strong>You made the latest counter.</strong>
+                            <p className="sd-muted" style={{ margin: '4px 0 0' }}>Waiting for the seller to accept, reject or counter.</p>
+                          </div>
+                        )}
 
-                        <td>
-                          <span
-                            className={`sd-badge ${
-                              statusClass(
-                                offer.status
-                              )
-                            }`}
-                          >
-                            {offer.status}
-                          </span>
-                        </td>
+                        {offer.status === 'PENDING' && (
+                          <p className="sd-muted" style={{ marginTop: 10 }}>Waiting for the seller to respond to your offer.</p>
+                        )}
 
-                        <td>
-                          <Link
-                            to={`/listings/${offer.listingId}`}
-                            className="sd-btn sd-btn-outline"
-                          >
-                            View listing
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
+                        {accepted && (
+                          <div className="sd-notice" style={{ marginTop: 10 }}>
+                            <strong>Agreement reached.</strong>
+                            <p className="sd-muted" style={{ margin: '4px 0 0' }}>Open your order to continue with payment and transport.</p>
+                          </div>
+                        )}
 
-                    {offers.length === 0 && (
-                      <tr>
-                        <td colSpan="4">
-                          No offers yet.{' '}
-                          <Link to="/listings">
-                            Browse listings
-                          </Link>{' '}
-                          to make one.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                        {rejected && (
+                          <div className="sd-notice" style={{ marginTop: 10 }}>
+                            <strong>Seller rejected this offer.</strong>
+                            <p className="sd-muted" style={{ margin: '4px 0 0' }}>You may return to the listing and make a new offer if it is still available.</p>
+                          </div>
+                        )}
+
+                        <div className="sd-actions" style={{ marginTop: 12 }}>
+                          <Link to={`/listings/${offer.listingId}`} className="sd-btn sd-btn-outline">View listing</Link>
+                          {rejected && <Link to={`/listings/${offer.listingId}`} className="sd-btn sd-btn-primary">Make new offer</Link>}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -753,7 +794,7 @@ export default function BuyerDashboard() {
                 </span>
 
                 <h2>
-                  Party-controlled transport
+                  Buyer-controlled transport
                 </h2>
               </div>
             </div>
@@ -801,7 +842,7 @@ export default function BuyerDashboard() {
               </ul>
             </div>
 
-            {/* Transport actions */}
+            {/* Buyer transport actions */}
 
             <div className="sd-flow">
               <div className="sd-panel">
@@ -1116,33 +1157,22 @@ export default function BuyerDashboard() {
                   Arranging party
                 </label>
 
-                {transportTarget?.order?.listing
-                  ?.category === 'AGRICULTURAL' ? (
-                  <input
-                    id="transport-party"
-                    value="Buyer"
-                    disabled
-                    title="Agricultural orders are always arranged by the buyer"
-                  />
-                ) : (
-                  <select
-                    id="transport-party"
-                    name="party"
-                    value={transportForm.party}
-                    onChange={handleTransportChange}
-                  >
-                    <option value="Buyer">
-                      Buyer
-                    </option>
-
-                    <option value="Joint-agreed">
-                      Joint-agreed
-                    </option>
-
-                    <option value="Seller">
-                      Seller
-                    </option>
-                  </select>
+                <select
+                  id="transport-party"
+                  name="party"
+                  value={transportForm.party}
+                  onChange={handleTransportChange}
+                >
+                  <option value="Buyer">Buyer arranges</option>
+                  <option value="Joint-agreed">Buyer + Seller (joint)</option>
+                  {!isAgriculturalOrder(transportTarget?.order) && (
+                    <option value="Seller">Seller arranges</option>
+                  )}
+                </select>
+                {transportTarget?.order?.listing?.category === 'AGRICULTURAL' && (
+                  <p className="sd-muted" style={{ marginTop: 6 }}>
+                    From the buyer dashboard you may arrange as Buyer or Joint. If the seller alone will arrange transport, the seller creates that arrangement from the Seller Dashboard.
+                  </p>
                 )}
               </div>
 

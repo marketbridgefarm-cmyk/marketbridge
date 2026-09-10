@@ -21,6 +21,7 @@ export default function ListingDetail() {
   const [payingInspectionId, setPayingInspectionId] = useState('');
   const [buying, setBuying] = useState(false);
   const [buyMethod, setBuyMethod] = useState('TELEBIRR');
+  const [buyerCounter, setBuyerCounter] = useState('');
 
   async function load() {
     try {
@@ -91,11 +92,11 @@ export default function ListingDetail() {
   async function respondToOffer(offerId, action, counterAmount) {
     setError('');
     try {
-      await api.patch(`/offers/${offerId}`, {
-        action,
-        ...(counterAmount ? { counterAmount: Number(counterAmount) } : {}),
-      });
-      setMsg(action === 'ACCEPT_COUNTER' ? 'Counter-offer accepted. Order created.' : action === 'RE_COUNTER' || action === 'COUNTER' ? 'Counter-offer submitted.' : `Offer ${action.toLowerCase()}.`);
+      const payload = { action };
+      if (counterAmount != null) payload.counterAmount = Number(counterAmount);
+      const response = await api.patch(`/offers/${offerId}`, payload);
+      setMsg(response.data?.message || 'Negotiation updated.');
+      setBuyerCounter('');
       await load();
     } catch (e) {
       setError(e.response?.data?.error || 'Action failed');
@@ -142,6 +143,12 @@ export default function ListingDetail() {
   const isBuyer = user?.roles?.includes('BUYER') && !isOwner;
   const isAgricultural = listing.category === 'AGRICULTURAL';
   const isAvailable = listing.status === 'ACTIVE';
+  const listingParentIds = new Set((listing.offers || []).map((offer) => offer.parentOfferId).filter(Boolean));
+  const myLatestOffer = (listing.offers || [])
+    .filter((offer) => offer.buyerId === user?.id && !listingParentIds.has(offer.id))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0] || null;
+  const sellerCounterWaitingForBuyer = myLatestOffer?.status === 'COUNTERED' && myLatestOffer.counteredBy === 'SELLER';
+  const buyerCounterWaitingForSeller = myLatestOffer?.status === 'COUNTERED' && myLatestOffer.counteredBy === 'BUYER';
 
   return (
     <main className="section">
@@ -210,6 +217,28 @@ export default function ListingDetail() {
             {msg && <div className="alert success">{msg}</div>}
             {error && <div className="alert error">{error}</div>}
 
+            {isBuyer && myLatestOffer && isAgricultural && (
+              <div className="card" id="negotiation">
+                <h2>Your negotiation</h2>
+                <p>Current amount: <strong>{money(myLatestOffer.counterAmount ?? myLatestOffer.amount)} ETB</strong></p>
+                <span className="badge">{myLatestOffer.status}</span>
+                {sellerCounterWaitingForBuyer && (
+                  <>
+                    <p className="muted" style={{ marginTop: 10 }}>The seller has countered. <strong>Your turn.</strong></p>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button className="btn btn-primary" onClick={() => respondToOffer(myLatestOffer.id, 'ACCEPT_COUNTER')}>Accept seller counter</button>
+                      <input type="number" min="0.01" step="0.01" placeholder="Counter ETB" value={buyerCounter} onChange={(e) => setBuyerCounter(e.target.value)} style={{ minWidth: 140 }} />
+                      <button className="btn btn-light" disabled={!buyerCounter} onClick={() => respondToOffer(myLatestOffer.id, 'RE_COUNTER', buyerCounter)}>Counter seller</button>
+                    </div>
+                  </>
+                )}
+                {buyerCounterWaitingForSeller && <p className="muted" style={{ marginTop: 10 }}>You made the latest counter. Waiting for the seller.</p>}
+                {myLatestOffer.status === 'PENDING' && <p className="muted" style={{ marginTop: 10 }}>Waiting for the seller to respond.</p>}
+                {myLatestOffer.status === 'REJECTED' && <p className="muted" style={{ marginTop: 10 }}>The seller rejected this offer. If the listing is available, you can make a new offer.</p>}
+                {myLatestOffer.status === 'ACCEPTED' && <Link className="btn btn-primary full" style={{ marginTop: 10 }} to={(listing.orders || []).find((o) => o.buyerId === user?.id)?.id ? `/orders/${(listing.orders || []).find((o) => o.buyerId === user?.id).id}` : '#'}>Continue to order →</Link>}
+              </div>
+            )}
+
             {isBuyer && (
               <div className="card sticky-card">
                 <h2>{isAvailable ? (isAgricultural ? 'Make an offer' : 'Buy this product') : 'Listing unavailable'}</h2>
@@ -228,31 +257,6 @@ export default function ListingDetail() {
                       <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Optional message to the farmer" />
                       <button className="btn btn-primary full">Submit offer</button>
                     </form>
-                    {(() => {
-                      const myOffers = (listing.offers || []).filter((o) => o.buyerId === user?.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-                      const current = myOffers[0];
-                      if (!current) return null;
-                      const waitingForBuyer = current.status === 'COUNTERED' && current.counteredBy === 'SELLER';
-                      const waitingForSeller = current.status === 'COUNTERED' && current.counteredBy === 'BUYER';
-                      return (
-                        <div className="card" style={{ marginTop: 16 }}>
-                          <h3>Negotiation status</h3>
-                          <p>Latest amount: <strong>{money(current.counterAmount ?? current.amount)} ETB</strong></p>
-                          {waitingForBuyer && (
-                            <div>
-                              <p className="muted">The seller made the latest counter-offer. It is your turn.</p>
-                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                <button type="button" className="btn btn-primary btn-sm" onClick={() => respondToOffer(current.id, 'ACCEPT_COUNTER')}>Accept counter</button>
-                                <button type="button" className="btn btn-light btn-sm" onClick={() => { const v = prompt('Enter your counteroffer amount (ETB):'); if (v) respondToOffer(current.id, 'RE_COUNTER', v); }}>Counter</button>
-                              </div>
-                            </div>
-                          )}
-                          {waitingForSeller && <p className="muted">Your counter-offer was sent. Waiting for the seller.</p>}
-                          {current.status === 'ACCEPTED' && <p className="success-text">Agreement reached. Your order has been created.</p>}
-                          {['REJECTED', 'EXPIRED'].includes(current.status) && <p className="muted">This negotiation is closed.</p>}
-                        </div>
-                      );
-                    })()}
                     {isAgricultural && (
                       <>
                         <hr />
@@ -294,7 +298,11 @@ export default function ListingDetail() {
                   </>
                 )}
                 <h3 className="mt">Offers received</h3>
-                {listing.offers?.length ? listing.offers.map((offer) => <OfferRow key={offer.id} offer={offer} onAction={respondToOffer} />) : <p className="muted">No offers yet.</p>}
+                {(() => {
+                  const parentIds = new Set((listing.offers || []).map((offer) => offer.parentOfferId).filter(Boolean));
+                  const latestOffers = (listing.offers || []).filter((offer) => !parentIds.has(offer.id));
+                  return latestOffers.length ? latestOffers.map((offer) => <OfferRow key={offer.id} offer={offer} onAction={respondToOffer} />) : <p className="muted">No offers yet.</p>;
+                })()}
               </div>
             )}
 
@@ -314,30 +322,27 @@ export default function ListingDetail() {
 
 function OfferRow({ offer, onAction }) {
   const [counter, setCounter] = useState('');
+  const sellerCanAct =
+    offer.status === 'PENDING' ||
+    (offer.status === 'COUNTERED' && offer.counteredBy === 'BUYER');
+
   return (
     <div className="offer-row">
-      <strong>{Number(offer.amount).toLocaleString()} ETB</strong>
-      <span className="badge">{offer.status}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <strong>{Number(offer.counterAmount ?? offer.amount).toLocaleString()} ETB</strong>
+        <span className="badge">{offer.status}</span>
+      </div>
       <small>{offer.buyer?.name || 'Buyer'}</small>
-      {offer.status === 'PENDING' && (
-        <div className="row-actions">
-          <button className="btn btn-sm" onClick={() => onAction(offer.id, 'ACCEPT')}>Accept</button>
-          <button className="btn btn-sm btn-light" onClick={() => onAction(offer.id, 'REJECT')}>Reject</button>
-          <input placeholder="Counter ETB" value={counter} onChange={(e) => setCounter(e.target.value)} />
-          <button className="btn btn-sm btn-light" disabled={!counter} onClick={() => onAction(offer.id, 'COUNTER', counter)}>Counter</button>
-        </div>
-      )}
-      {offer.status === 'COUNTERED' && offer.counteredBy === 'BUYER' && (
-        <div className="row-actions">
-          <span className="muted">Buyer countered: {Number(offer.counterAmount ?? offer.amount).toLocaleString()} ETB</span>
-          <button className="btn btn-sm" onClick={() => onAction(offer.id, 'ACCEPT')}>Accept</button>
-          <button className="btn btn-sm btn-light" onClick={() => onAction(offer.id, 'REJECT')}>Reject</button>
-          <input placeholder="Counter ETB" value={counter} onChange={(e) => setCounter(e.target.value)} />
-          <button className="btn btn-sm btn-light" disabled={!counter} onClick={() => onAction(offer.id, 'COUNTER', counter)}>Counter</button>
-        </div>
-      )}
       {offer.status === 'COUNTERED' && offer.counteredBy === 'SELLER' && (
-        <small className="muted">You made the latest counter. Waiting for the buyer.</small>
+        <p className="muted" style={{ marginTop: 8 }}>You made the latest counter. Waiting for the buyer.</p>
+      )}
+      {sellerCanAct && (
+        <div className="row-actions">
+          <button className="btn btn-sm" onClick={() => onAction(offer.id, 'ACCEPT')}>Accept</button>
+          <button className="btn btn-sm btn-light" onClick={() => onAction(offer.id, 'REJECT')}>Reject</button>
+          <input type="number" min="0.01" step="0.01" placeholder="Counter ETB" value={counter} onChange={(e) => setCounter(e.target.value)} />
+          <button className="btn btn-sm btn-light" disabled={!counter} onClick={() => onAction(offer.id, 'COUNTER', counter)}>Counter</button>
+        </div>
       )}
     </div>
   );
