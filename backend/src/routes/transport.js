@@ -1363,13 +1363,15 @@ router.get(
 );
 
 // ============================================================================
-// PAYMENT GATE FOR STARTING TRANSPORT
+// PAYMENT GATE FOR TRUCK PICKUP
 // ============================================================================
-// IN_TRANSIT is the contractual start of the trip. It is server-side locked
-// until every payment required by this order is settled.
+// PICKUP is the point at which the truck takes physical possession of the
+// produce/goods. It is server-side locked until every payment required by
+// this order is settled — the buyer must have paid the seller, transport,
+// and inspections before the truck is allowed to collect the goods.
 //
 // Required payments:
-//   1. MARKETPLACE payment for the agricultural/physical order.
+//   1. MARKETPLACE payment for the agricultural/physical order (to the seller).
 //   2. INSPECTOR payment for every non-cancelled inspection request with a fee.
 //   3. TRANSPORT payment when HIRE_TRANSPORTER is used.
 //
@@ -1605,14 +1607,16 @@ router.patch(
         });
       }
 
-      // HARD PAYMENT GATE: no transporter may start the trip until all
-      // required buyer payments are PAID.
-      if (next === 'IN_TRANSIT') {
+      // HARD PAYMENT GATE: no transporter may pick up the goods until all
+      // required buyer payments (seller/marketplace, inspection, and
+      // transport) are PAID. This runs before PICKUP, not before
+      // IN_TRANSIT, so the truck cannot collect the produce unpaid-for.
+      if (next === 'PICKUP') {
         const gate = await getTransportPaymentGate(prisma, job.id);
         if (!gate.ready) {
           return res.status(409).json({
-            code: 'PAYMENTS_REQUIRED_BEFORE_IN_TRANSIT',
-            error: 'All required payments must be completed before transport can enter IN_TRANSIT.',
+            code: 'PAYMENTS_REQUIRED_BEFORE_PICKUP',
+            error: 'All required payments must be completed before the truck can pick up the goods.',
             missingPayments: gate.missing,
           });
         }

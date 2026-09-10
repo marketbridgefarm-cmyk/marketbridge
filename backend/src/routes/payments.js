@@ -327,8 +327,10 @@ router.post(
 
           // Agricultural purchase payment is independent from transport.
           // The buyer may pay for the produce before or after arranging
-          // transport. IN_TRANSIT is separately gated on the backend until
-          // all required payments are PAID.
+          // transport. PICKUP is separately gated on the backend until
+          // all required payments are PAID, so the truck cannot collect
+          // the goods before the seller, transport, and inspection
+          // payments are settled.
         }
 
         // --------------------------------------------------------------------
@@ -402,8 +404,9 @@ router.post(
           }
 
           // Transport payment is independent from marketplace payment.
-          // Both must be PAID before IN_TRANSIT, but neither payment has to
-          // be completed before creating the other payment intent.
+          // Both must be PAID before PICKUP (before the truck collects the
+          // goods), but neither payment has to be completed before
+          // creating the other payment intent.
 
           transportJobId =
             order.transportJob.id;
