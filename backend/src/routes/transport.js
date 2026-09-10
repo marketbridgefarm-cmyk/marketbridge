@@ -2255,3 +2255,6 @@ router.claimAvailableTruck =
   claimAvailableTruck;
 
 module.exports = router;
+
+
+
