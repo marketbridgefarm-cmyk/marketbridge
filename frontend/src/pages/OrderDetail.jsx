@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../context/AuthContext.jsx';
 import RatingBox from '../components/RatingBox.jsx';
 import MessageThread from '../components/MessageThread.jsx';
+import EvidenceGallery from '../components/EvidenceGallery.jsx';
 
 const shortId = (id) => id?.slice(0, 8) || '—';
 
@@ -1139,6 +1140,18 @@ export default function OrderDetail() {
                   )}
                 </div>
               )}
+
+              {/* ------------------------------------------------------------ */}
+              {/* TRANSPORT EVIDENCE */}
+              {/* ------------------------------------------------------------ */}
+
+              <div className="notice">
+                <h3>Pickup / delivery evidence</h3>
+                <EvidenceGallery
+                  listUrl={`/transport/${transportJob.id}/evidence`}
+                  mediaUrl={(evidenceId) => `/transport/${transportJob.id}/evidence/${evidenceId}/media`}
+                />
+              </div>
 
               {/* ------------------------------------------------------------ */}
               {/* TRANSPORT PAYMENT */}

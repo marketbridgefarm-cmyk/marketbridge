@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
+import EvidenceUploader from '../components/EvidenceUploader.jsx';
 
 const EMPTY_REPORT = {
   quantity: '',
@@ -29,6 +30,7 @@ export default function InspectorDashboard() {
   const [feeInputs, setFeeInputs] = useState({});
   const [activeRequestId, setActiveRequestId] = useState('');
   const [report, setReport] = useState(EMPTY_REPORT);
+  const [reportEvidence, setReportEvidence] = useState({ photoKeys: [], videoKeys: [] });
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -112,6 +114,7 @@ export default function InspectorDashboard() {
   function openReportForm(requestId) {
     setActiveRequestId(requestId);
     setReport(EMPTY_REPORT);
+    setReportEvidence({ photoKeys: [], videoKeys: [] });
     setMsg('');
     setError('');
   }
@@ -119,6 +122,7 @@ export default function InspectorDashboard() {
   function closeReportForm() {
     setActiveRequestId('');
     setReport(EMPTY_REPORT);
+    setReportEvidence({ photoKeys: [], videoKeys: [] });
   }
 
   async function submitReport(e) {
@@ -142,11 +146,9 @@ export default function InspectorDashboard() {
               ? Number(report.moisture)
               : undefined,
 
-          // Photo upload will be connected to secure evidence
-          // storage in the evidence-storage phase.
-          photos: [],
+          photos: reportEvidence.photoKeys,
 
-          videos: [],
+          videos: reportEvidence.videoKeys,
         }
       );
 
@@ -819,37 +821,21 @@ export default function InspectorDashboard() {
                       </div>
 
                       <div className="sd-full sd-photo-evidence">
-                        <div
-                          className="sd-photo-placeholder"
-                          aria-label="Photo evidence placeholder"
-                        >
-                          <div
-                            className="sd-photo-icon"
-                            aria-hidden="true"
-                          >
-                            ▧
-                          </div>
-
-                          <div>
-                            <strong>
-                              Photo evidence
-                            </strong>
-
-                            <p>
-                              Photo upload
-                              placeholder —
-                              capture or attach
-                              inspection photos
-                              here.
-                            </p>
-
-                            <span>
-                              Secure evidence-storage
-                              upload will be connected
-                              in the next evidence phase.
-                            </span>
-                          </div>
-                        </div>
+                        <strong>Photo / video evidence</strong>
+                        <EvidenceUploader
+                          uploadUrl={`/inspections/${activeRequestId}/evidence/media`}
+                          onUploaded={({ photoKeys, videoKeys }) =>
+                            setReportEvidence((prev) => ({
+                              photoKeys: [...prev.photoKeys, ...photoKeys],
+                              videoKeys: [...prev.videoKeys, ...videoKeys],
+                            }))
+                          }
+                        />
+                        {(reportEvidence.photoKeys.length > 0 || reportEvidence.videoKeys.length > 0) && (
+                          <p className="muted small">
+                            {reportEvidence.photoKeys.length} photo(s), {reportEvidence.videoKeys.length} video(s) attached
+                          </p>
+                        )}
                       </div>
                     </div>
 

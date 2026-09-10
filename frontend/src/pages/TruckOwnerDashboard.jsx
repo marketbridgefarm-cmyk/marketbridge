@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
+import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import api from '../api/client';
 
 const TABS = [
@@ -30,6 +31,15 @@ export default function TruckOwnerDashboard() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const [truckForm, setTruckForm] = useState(EMPTY_TRUCK_FORM);
+
+  // Evidence capture, required by the backend before PICKUP -> IN_TRANSIT
+  // (needs PICKUP evidence) and IN_TRANSIT -> DELIVERED (needs DELIVERY evidence).
+  const [evidenceModal, setEvidenceModal] = useState(null); // { jobId, type, nextStatus }
+  const [evidenceKeys, setEvidenceKeys] = useState({ photoKeys: [], videoKeys: [] });
+  const [evidenceNotes, setEvidenceNotes] = useState('');
+  const [evidenceGps, setEvidenceGps] = useState('');
+  const [evidenceError, setEvidenceError] = useState('');
+  const [submittingEvidence, setSubmittingEvidence] = useState(false);
 
   function toast(message) {
     setToastMsg(message);
@@ -204,6 +214,48 @@ export default function TruckOwnerDashboard() {
     }
   }
 
+  function openEvidenceModal(jobId, type, nextStatus) {
+    setEvidenceModal({ jobId, type, nextStatus });
+    setEvidenceKeys({ photoKeys: [], videoKeys: [] });
+    setEvidenceNotes('');
+    setEvidenceGps('');
+    setEvidenceError('');
+  }
+
+  function closeEvidenceModal() {
+    setEvidenceModal(null);
+  }
+
+  async function submitEvidenceAndAdvance() {
+    if (!evidenceModal) return;
+    const { jobId, type, nextStatus } = evidenceModal;
+
+    if (!evidenceKeys.photoKeys.length && !evidenceKeys.videoKeys.length && !evidenceNotes && !evidenceGps) {
+      setEvidenceError('Upload a photo/video or add notes/GPS before continuing.');
+      return;
+    }
+
+    setSubmittingEvidence(true);
+    setEvidenceError('');
+
+    try {
+      await api.post(`/transport/${jobId}/evidence`, {
+        type,
+        photos: evidenceKeys.photoKeys,
+        videos: evidenceKeys.videoKeys,
+        notes: evidenceNotes || undefined,
+        gpsLocation: evidenceGps || undefined,
+      });
+
+      closeEvidenceModal();
+      await updateStatus(jobId, nextStatus);
+    } catch (err) {
+      setEvidenceError(getErrorMessage(err, `Could not record ${type.toLowerCase()} evidence.`));
+    } finally {
+      setSubmittingEvidence(false);
+    }
+  }
+
   function getArrangingPartyLabel(arrangingParty) {
     switch (arrangingParty) {
       case 'SELLER':
@@ -245,9 +297,9 @@ export default function TruckOwnerDashboard() {
         <button
           className="sd-btn sd-btn-outline"
           disabled={busy}
-          onClick={() => updateStatus(job.id, 'IN_TRANSIT')}
+          onClick={() => openEvidenceModal(job.id, 'PICKUP', 'IN_TRANSIT')}
         >
-          {busy ? 'Updating...' : 'Mark in transit'}
+          {busy ? 'Updating...' : 'Add pickup evidence & mark in transit'}
         </button>
       );
     }
@@ -257,9 +309,9 @@ export default function TruckOwnerDashboard() {
         <button
           className="sd-btn sd-btn-primary"
           disabled={busy}
-          onClick={() => updateStatus(job.id, 'DELIVERED')}
+          onClick={() => openEvidenceModal(job.id, 'DELIVERY', 'DELIVERED')}
         >
-          {busy ? 'Updating...' : 'Mark delivered'}
+          {busy ? 'Updating...' : 'Add delivery evidence & mark delivered'}
         </button>
       );
     }
@@ -895,6 +947,76 @@ export default function TruckOwnerDashboard() {
           aria-live="polite"
         >
           {toastMsg}
+        </div>
+      )}
+
+      {/* =========================================================
+          EVIDENCE CAPTURE MODAL
+      ========================================================= */}
+
+      {evidenceModal && (
+        <div className="sd-report-backdrop" role="presentation" onClick={closeEvidenceModal}>
+          <div
+            className="sd-report-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="evidence-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sd-report-header">
+              <h2 id="evidence-modal-title">
+                {evidenceModal.type === 'PICKUP' ? 'Pickup evidence' : 'Delivery evidence'}
+              </h2>
+              <button type="button" className="btn btn-light btn-sm" aria-label="Close evidence form" onClick={closeEvidenceModal}>
+                Close
+              </button>
+            </div>
+
+            <p className="muted small">
+              A photo, video, GPS location or note is required before this trip can be marked {evidenceModal.nextStatus === 'IN_TRANSIT' ? 'in transit' : 'delivered'}.
+            </p>
+
+            {evidenceError && <div className="alert error">{evidenceError}</div>}
+
+            <EvidenceUploader
+              uploadUrl={`/transport/${evidenceModal.jobId}/evidence/media`}
+              disabled={submittingEvidence}
+              onUploaded={({ photoKeys, videoKeys }) =>
+                setEvidenceKeys((prev) => ({
+                  photoKeys: [...prev.photoKeys, ...photoKeys],
+                  videoKeys: [...prev.videoKeys, ...videoKeys],
+                }))
+              }
+            />
+
+            {(evidenceKeys.photoKeys.length > 0 || evidenceKeys.videoKeys.length > 0) && (
+              <p className="muted small">
+                {evidenceKeys.photoKeys.length} photo(s), {evidenceKeys.videoKeys.length} video(s) ready to submit
+              </p>
+            )}
+
+            <div className="form-grid">
+              <div>
+                <label>GPS location (optional)</label>
+                <input value={evidenceGps} onChange={(e) => setEvidenceGps(e.target.value)} placeholder="lat,lng" />
+              </div>
+              <div>
+                <label>Notes (optional)</label>
+                <input value={evidenceNotes} onChange={(e) => setEvidenceNotes(e.target.value)} placeholder="Condition on pickup/delivery..." />
+              </div>
+            </div>
+
+            <div className="sd-modal-actions sd-report-actions">
+              <button
+                type="button"
+                className="sd-btn sd-btn-primary"
+                disabled={submittingEvidence}
+                onClick={submitEvidenceAndAdvance}
+              >
+                {submittingEvidence ? 'Submitting…' : `Submit & mark ${evidenceModal.nextStatus === 'IN_TRANSIT' ? 'in transit' : 'delivered'}`}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

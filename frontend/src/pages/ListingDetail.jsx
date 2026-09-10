@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import api from '../api/client';
 import { startChapaPayment } from '../utils/chapaCheckout';
 import { useAuth } from '../context/AuthContext.jsx';
+import EvidenceGallery from '../components/EvidenceGallery.jsx';
 
 const money = (n) => Number(n || 0).toLocaleString();
 
@@ -189,6 +190,12 @@ export default function ListingDetail() {
                       return <div style={{ marginTop: 8 }}><p>Fee due: <strong>{Number(request.fee).toLocaleString()} ETB</strong></p><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><select value={inspectionPayMethod} onChange={(e) => setInspectionPayMethod(e.target.value)}><option value="TELEBIRR">Telebirr</option><option value="CBE">CBE</option><option value="QR">QR</option><option value="OTHER">Other</option></select><button type="button" className="btn btn-primary btn-sm" disabled={payingInspectionId === request.id} onClick={() => payInspection(request)}>{payingInspectionId === request.id ? 'Submitting…' : 'Pay inspection fee'}</button></div></div>;
                     })()}
                     {request.report ? <p>✓ {request.report.quantity} verified · {request.report.grade || 'Grade not stated'}{request.report.moisture != null ? ` · ${request.report.moisture}% moisture` : ''}</p> : <p className="muted">Report pending.</p>}
+                    {request.report && (
+                      <EvidenceGallery
+                        listUrl={`/inspections/${request.id}/evidence`}
+                        mediaUrl={(evidenceId) => `/inspections/${request.id}/evidence/${evidenceId}/media`}
+                      />
+                    )}
                   </div>
                 )) : <p className="muted">No inspection yet.</p>}
               </div>
