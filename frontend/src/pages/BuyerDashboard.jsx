@@ -741,7 +741,13 @@ export default function BuyerDashboard() {
                               to={`/orders/${order.id}`}
                               className="sd-btn sd-btn-primary"
                             >
-                              {order.status === 'PENDING_PAYMENT' ? 'Pay / continue' : 'Open order'}
+                              {order.status === 'PENDING_PAYMENT' && !order.transportJob
+                                ? 'Pay / continue'
+                                : order.transportJob?.status === 'ACCEPTED'
+                                  ? 'Open payment & transport'
+                                  : order.transportJob?.status === 'DELIVERED'
+                                    ? 'Confirm receipt'
+                                    : 'Open order / continue'}
                             </Link>
                             {renderTransportButtons(order)}
                           </div>

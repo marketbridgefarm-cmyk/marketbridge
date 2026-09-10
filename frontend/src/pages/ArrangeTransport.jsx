@@ -14,6 +14,7 @@ export default function ArrangeTransport() {
   const [truck, setTruck] = useState('');
   const [ownTrucks, setOwnTrucks] = useState([]);
   const [error, setError] = useState('');
+  const [arrangingParty, setArrangingParty] = useState('');
 
   useEffect(() => {
     api.get('/transport/trucks/mine').then(r => setOwnTrucks(r.data.trucks || [])).catch(() => {});
@@ -23,7 +24,9 @@ export default function ArrangeTransport() {
     });
   }, [orderId]);
 
-  const party = order && (user.id === order.sellerId ? 'SELLER' : 'BUYER');
+  const canSeller = Boolean(order && user?.id === order.sellerId);
+  const canBuyer = Boolean(order && user?.id === order.buyerId);
+  const party = arrangingParty || (canSeller ? 'SELLER' : canBuyer ? 'BUYER' : '');
 
   async function find() {
     try { const r = await api.get('/transport/match', { params: { minCapacity: form.requiredCapacity, area: form.pickupLocation } }); setMatches(r.data.trucks || []); }
@@ -33,6 +36,8 @@ export default function ArrangeTransport() {
   async function submit(e) {
     e.preventDefault();
     setError('');
+    if (!party) return setError('Select who will arrange transport.');
+    if (method === 'OWN_TRUCK' && party === 'JOINT') return setError('Joint arrangements must use a hired transporter.');
     if (method === 'OWN_TRUCK' && !truck) return setError('Select one of your available trucks.');
     try {
       await api.post('/transport', {
@@ -53,10 +58,15 @@ export default function ArrangeTransport() {
       <div className="container-narrow">
         <span className="eyebrow">TRANSPORT</span>
         <h1>Choose how transport is handled.</h1>
-        <p className="lead">Arranging party: <strong>{party}</strong>. Transport is not automatically assigned.</p>
+        <p className="lead">Choose who controls the transport arrangement. The buyer remains responsible for paying a hired transporter.</p>
+        <div className="choice-grid" style={{ marginBottom: 16 }}>
+          {canBuyer && <button type="button" className={`choice ${party === 'BUYER' ? 'selected' : ''}`} onClick={() => setArrangingParty('BUYER')}><b>Buyer arranges</b><span>Buyer controls the transport request and quote selection.</span></button>}
+          {canSeller && <button type="button" className={`choice ${party === 'SELLER' ? 'selected' : ''}`} onClick={() => setArrangingParty('SELLER')}><b>Seller arranges</b><span>Seller controls the transport request and quote selection.</span></button>}
+          {canBuyer && canSeller && <button type="button" className={`choice ${party === 'JOINT' ? 'selected' : ''}`} onClick={() => { setArrangingParty('JOINT'); if (method === 'OWN_TRUCK') setMethod('HIRE_TRANSPORTER'); }}><b>Joint arrangement</b><span>Buyer and seller jointly agree; hired transporter only.</span></button>}
+        </div>
         {error && <div className="alert error">{error}</div>}
         <div className="choice-grid">
-          <button className={`choice ${method === 'OWN_TRUCK' ? 'selected' : ''}`} onClick={() => setMethod('OWN_TRUCK')}><b>🚚 Use my own truck</b><span>Record your own legally permitted vehicle and pickup details. No transport-hiring commission.</span></button>
+          <button disabled={party === 'JOINT'} className={`choice ${method === 'OWN_TRUCK' ? 'selected' : ''}`} onClick={() => setMethod('OWN_TRUCK')}><b>🚚 Use my own truck</b><span>Record your own legally permitted vehicle and pickup details. No transport-hiring commission.</span></button>
           <button className={`choice ${method === 'HIRE_TRANSPORTER' ? 'selected' : ''}`} onClick={() => setMethod('HIRE_TRANSPORTER')}><b>Hire a registered transporter</b><span>MarketBridge matches by capacity, area, route, availability, rating and verification.</span></button>
         </div>
         <form className="card form-card" onSubmit={submit}>

@@ -340,24 +340,22 @@ export default function OrderDetail() {
    * Required payments are separately tracked and the transport state machine
    * prevents IN_TRANSIT until all required payments are PAID.
    */
+  // Agricultural purchase payment is intentionally independent from transport
+  // and inspection payment. The hard sequencing rule is enforced when the
+  // transporter attempts IN_TRANSIT, not by hiding the buyer's payment button.
   const agriculturalGateMet = true;
 
   const canPayMarketplace =
     Boolean(order) &&
-    order.status === 'PENDING_PAYMENT' &&
+    order.status !== 'COMPLETED' &&
+    order.status !== 'CANCELLED' &&
     isBuyer &&
-    agriculturalGateMet &&
     !marketplacePayments.some(
       (payment) =>
         payment.status === 'PENDING' ||
         payment.status === 'PAID'
     );
 
-  /*
-   * Explains why the marketplace payment button is hidden when the
-   * agricultural gate hasn't been met yet, so buyers aren't left
-   * looking for a button that doesn't exist.
-   */
   const marketplaceBlockedReason = null;
 
   /*
@@ -387,6 +385,13 @@ export default function OrderDetail() {
   // ==========================================================================
   // ACCEPT TRANSPORT QUOTE
   // ==========================================================================
+
+  const scrollToSection = (id) => {
+    document.getElementById(id)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  };
 
   const acceptQuote = async (quoteId) => {
     if (!quoteId) return;
@@ -768,20 +773,27 @@ export default function OrderDetail() {
               )}
 
               <div className="next-action-buttons">
-                {order.status === 'PENDING_PAYMENT' && !marketplacePaid && (
-                  <button type="button" className="btn btn-primary" onClick={() => document.getElementById('payment-center')?.scrollIntoView({ behavior: 'smooth' })}>Pay seller / order now</button>
+                {isBuyer && !marketplacePaid && (
+                  canResumeMarketplacePayment ? (
+                    <button type="button" className="btn btn-primary" onClick={() => scrollToSection('payment-center')}>Resume seller/order payment</button>
+                  ) : canPayMarketplace ? (
+                    <button type="button" className="btn btn-primary" onClick={() => scrollToSection('payment-center')}>Pay seller / order now</button>
+                  ) : null
                 )}
-                {transportJob?.status === 'ACCEPTED' && (!marketplacePaid || !transportPaid || !inspectionPaymentsComplete) && (
-                  <button type="button" className="btn btn-primary" onClick={() => document.getElementById('payment-center')?.scrollIntoView({ behavior: 'smooth' })}>Continue to payments</button>
+                {isBuyer && transportJob?.status === 'ACCEPTED' && transportJob.method === 'HIRE_TRANSPORTER' && !transportPaid && (
+                  <button type="button" className="btn btn-primary" onClick={() => scrollToSection('payment-center')}>Pay transporter now</button>
+                )}
+                {isBuyer && transportJob?.status === 'ACCEPTED' && (!marketplacePaid || !transportPaid || !inspectionPaymentsComplete) && (
+                  <button type="button" className="btn btn-outline" onClick={() => scrollToSection('payment-center')}>Open payment center</button>
                 )}
                 {!transportJob && isParticipant && (
                   <Link className="btn btn-primary" to={`/orders/${order.id}/transport`}>Arrange transport</Link>
                 )}
                 {transportJob && (
-                  <button type="button" className="btn btn-outline" onClick={() => document.getElementById('transport-section')?.scrollIntoView({ behavior: 'smooth' })}>Open transport steps</button>
+                  <button type="button" className="btn btn-outline" onClick={() => scrollToSection('transport-section')}>Open transport steps</button>
                 )}
                 {transportJob?.status === 'DELIVERED' && (
-                  <button type="button" className="btn btn-primary" onClick={() => document.getElementById('confirm-receipt')?.scrollIntoView({ behavior: 'smooth' })}>Confirm receipt</button>
+                  <button type="button" className="btn btn-primary" onClick={() => scrollToSection('confirm-receipt')}>Confirm receipt</button>
                 )}
               </div>
             </div>
@@ -807,7 +819,8 @@ export default function OrderDetail() {
               )}
               <div className="next-action-buttons">
                 {!transportJob && <Link className="btn btn-primary" to={`/orders/${order.id}/transport`}>Arrange transport</Link>}
-                {transportJob && <button type="button" className="btn btn-outline" onClick={() => document.getElementById('transport-section')?.scrollIntoView({ behavior: 'smooth' })}>Open transport steps</button>}
+                {transportJob && isTransportArranger && !transportJob.truckOwnerId && ['REQUESTED', 'QUOTED'].includes(transportJob.status) && <button type="button" className="btn btn-primary" onClick={() => scrollToSection('transport-section')}>Review transport quotes</button>}
+                {transportJob && <button type="button" className="btn btn-outline" onClick={() => scrollToSection('transport-section')}>Open transport steps</button>}
               </div>
             </div>
           )}

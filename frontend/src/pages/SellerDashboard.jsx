@@ -223,7 +223,7 @@ export default function SellerDashboard() {
                       <td>{o.finalPrice.toLocaleString()} ETB</td>
                       <td>{o.transportJob ? `${o.transportJob.arrangingParty} — ${o.transportJob.method === 'OWN_TRUCK' ? 'Own Truck' : 'Hire Transport'}` : '—'}</td>
                       <td><span className="sd-badge sd-blue">{o.status}</span></td>
-                      <td><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Link to={`/orders/${o.id}`} className="sd-btn sd-btn-primary">View Order</Link>{!o.transportJob && <Link to={`/orders/${o.id}/transport`} className="sd-btn sd-btn-outline">Arrange</Link>}</div></td>
+                      <td><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Link to={`/orders/${o.id}`} className="sd-btn sd-btn-primary">{!o.transportJob ? 'Open order / arrange' : o.transportJob.status === 'REQUESTED' || o.transportJob.status === 'QUOTED' ? 'Review transport' : 'Open order / continue'}</Link>{!o.transportJob && <Link to={`/orders/${o.id}/transport`} className="sd-btn sd-btn-outline">Arrange transport</Link>}</div></td>
                     </tr>
                   ))}
                   {orders.length === 0 && <tr><td colSpan="7">No orders yet.</td></tr>}
