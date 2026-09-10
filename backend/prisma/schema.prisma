@@ -46,6 +46,7 @@ enum OfferStatus {
   ACCEPTED
   REJECTED
   WITHDRAWN
+  EXPIRED
 }
 
 enum OfferCounterParty {
@@ -106,6 +107,12 @@ enum TransportStatus {
   CANCELLED
 }
 
+enum TransportEvidenceType {
+  PICKUP
+  DELIVERY
+  INCIDENT
+}
+
 enum TransportQuoteStatus {
   PENDING
   ACCEPTED
@@ -146,6 +153,7 @@ enum PaymentStatus {
   PAID
   FAILED
   REFUNDED
+  RECONCILIATION_REQUIRED
 }
 
 enum AdType {
@@ -218,11 +226,13 @@ model User {
 
   // Offers
   offersMade Offer[] @relation("BuyerOffers")
+  offersReceived Offer[] @relation("SellerOffers")
 
   // Inspections
   inspectionsRequested InspectionRequest[] @relation("Requester")
   inspectionsPerformed InspectionRequest[] @relation("Inspector")
   inspectionQuotes    InspectionQuote[]
+  inspectionEvidenceCreated InspectionEvidence[] @relation("InspectionEvidenceCreator")
 
   // Trucks
   trucks Truck[]
@@ -256,6 +266,9 @@ model User {
   // Payments
   paymentsCreated Payment[] @relation("PaymentCreatedBy")
 
+  auditEvents AuditEvent[] @relation("AuditActor")
+  transportEvidenceCreated TransportEvidence[] @relation("TransportEvidenceCreator")
+
   // Digital purchases
   digitalPurchases DigitalPurchase[] @relation("DigitalPurchases")
 
@@ -265,6 +278,37 @@ model User {
   @@index([email])
   @@index([accountStatus])
   @@index([verificationStatus])
+}
+
+// ============================================================================
+// AUDIT EVENT
+// ============================================================================
+//
+// Append-only application audit record. Critical domain mutations write an
+// event inside the same transaction as the state change whenever possible.
+// ============================================================================
+
+model AuditEvent {
+  id String @id @default(uuid())
+
+  actor   User?  @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorId String?
+
+  action       String
+  resourceType String
+  resourceId   String?
+
+  // Structured context. Never use this field for secrets, passwords or tokens.
+  metadata Json?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([resourceType, resourceId, createdAt])
+  @@index([action, createdAt])
 }
 
 // ============================================================================
@@ -290,6 +334,8 @@ model Listing {
 
   harvestedDate DateTime?
   readinessDate DateTime?
+  pickupWindowStart DateTime?
+  pickupWindowEnd DateTime?
 
   photos  String[]
   videos  String[]
@@ -312,6 +358,7 @@ model Listing {
   @@index([category])
   @@index([status])
   @@index([location])
+  @@index([pickupWindowStart, pickupWindowEnd])
 }
 
 // ============================================================================
@@ -327,7 +374,20 @@ model Offer {
   buyer   User   @relation("BuyerOffers", fields: [buyerId], references: [id])
   buyerId String
 
+  seller   User   @relation("SellerOffers", fields: [sellerId], references: [id])
+  sellerId String
+
   amount Float
+  quantity Float?
+
+  // Immutable negotiation chain. A counter-offer is a new child offer.
+  parentOfferId String?
+  parentOffer Offer? @relation("OfferChain", fields: [parentOfferId], references: [id])
+  childOffers Offer[] @relation("OfferChain")
+
+  // Optional deadline. New agricultural offers/counters receive a server-side
+  // expiry; existing rows remain nullable for backwards compatibility.
+  expiresAt DateTime?
 
   status OfferStatus @default(PENDING)
 
@@ -352,6 +412,9 @@ model Offer {
   @@index([buyerId])
   @@index([status])
   @@index([counteredBy])
+  @@index([sellerId])
+  @@index([parentOfferId])
+  @@index([expiresAt])
 }
 // ============================================================================
 // INSPECTION REQUEST
@@ -442,6 +505,33 @@ model InspectionReport {
   gpsLocation String?
 
   inspectedAt DateTime @default(now())
+
+  evidence InspectionEvidence[]
+}
+
+// ============================================================================
+// INSPECTION EVIDENCE
+// ============================================================================
+
+model InspectionEvidence {
+  id String @id @default(uuid())
+
+  report   InspectionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  reportId String
+
+  type String @default("REPORT")
+
+  photos String[]
+  videos String[]
+  gpsLocation String?
+  notes String?
+
+  capturedAt DateTime @default(now())
+  createdById String
+  createdBy User @relation("InspectionEvidenceCreator", fields: [createdById], references: [id])
+
+  @@index([reportId, type])
+  @@index([createdById, capturedAt])
 }
 
 // ============================================================================
@@ -559,6 +649,7 @@ model TransportJob {
   updatedAt DateTime @updatedAt
 
   quotes TransportQuote[]
+  evidence TransportEvidence[]
 
   // Transport payments
   payments Payment[]
@@ -567,6 +658,31 @@ model TransportJob {
   @@index([truckId])
   @@index([status])
   @@index([method])
+}
+
+// ============================================================================
+// TRANSPORT EVIDENCE
+// ============================================================================
+
+model TransportEvidence {
+  id String @id @default(uuid())
+
+  transportJob   TransportJob @relation(fields: [transportJobId], references: [id], onDelete: Cascade)
+  transportJobId String
+
+  type TransportEvidenceType
+
+  photos String[]
+  videos String[]
+  gpsLocation String?
+  notes String?
+
+  capturedAt DateTime @default(now())
+  createdById String
+  createdBy User @relation("TransportEvidenceCreator", fields: [createdById], references: [id])
+
+  @@index([transportJobId, type])
+  @@index([createdById, capturedAt])
 }
 
 // ============================================================================
