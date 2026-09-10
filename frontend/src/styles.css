@@ -2358,3 +2358,43 @@ form > label:first-of-type,
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* ========================================================================== */
+/* ORDER NEXT-ACTION CENTER                                                   */
+/* ========================================================================== */
+.next-action-card {
+  border: 2px solid rgba(25, 116, 68, 0.18);
+  background: linear-gradient(180deg, rgba(245, 250, 246, 0.95), #fff);
+}
+
+.next-action-panel {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid #dbe5de;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.next-action-panel strong {
+  font-size: 1.05rem;
+}
+
+.next-action-panel p {
+  margin: 7px 0 12px;
+}
+
+.next-action-buttons,
+.sd-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .next-action-buttons .btn,
+  .next-action-buttons a,
+  .next-action-buttons button {
+    width: 100%;
+  }
+}
