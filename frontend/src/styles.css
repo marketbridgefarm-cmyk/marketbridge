@@ -2264,3 +2264,40 @@ form > label:first-of-type,
     transition: none;
   }
 }
+
+/* ============================================================
+   EVIDENCE CAPTURE / GALLERY
+   ============================================================ */
+
+.evidence-uploader {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.evidence-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.evidence-item {
+  padding: 10px 12px;
+}
+
+.evidence-media-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.evidence-thumb {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e2e2e2);
+}
