@@ -150,10 +150,17 @@ router.get('/:id', authenticate, async (req, res) => {
 
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
+    const assignedInspector = Boolean(
+      order.listing?.inspectionRequests?.some(
+        (request) => request.inspectorId === req.user.id
+      )
+    );
+
     const allowed = req.user.roles?.includes('ADMIN') ||
       order.buyerId === req.user.id ||
       order.sellerId === req.user.id ||
-      order.transportJob?.truckOwnerId === req.user.id;
+      order.transportJob?.truckOwnerId === req.user.id ||
+      assignedInspector;
 
     if (!allowed) return res.status(403).json({ error: 'Not authorized to view this order' });
 

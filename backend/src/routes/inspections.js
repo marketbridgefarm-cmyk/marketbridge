@@ -866,6 +866,11 @@ router.get(
               unit: true,
               location: true,
               category: true,
+              orders: {
+                select: { id: true, status: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
             },
           },
 

@@ -1522,6 +1522,18 @@ router.patch(
       const current = job.status;
       const next = req.body.status;
 
+      // Transport movement is controlled by the assigned transporter.
+      // Buyer/seller controls the commercial arrangement and payments, but
+      // must not be able to falsely mark a truck as picked up, in transit,
+      // or delivered. Admin remains available for controlled intervention.
+      const movementStatus = ['PICKUP', 'IN_TRANSIT', 'DELIVERED'];
+      if (movementStatus.includes(next) && !isTruckOwner && !isAdmin(req.user)) {
+        return res.status(403).json({
+          code: 'TRANSPORTER_ACTION_REQUIRED',
+          error: `Only the assigned transporter can mark transport as ${next.replace('_', ' ').toLowerCase()}.`,
+        });
+      }
+
       const validTransitions = {
         REQUESTED: [
           'ACCEPTED',
