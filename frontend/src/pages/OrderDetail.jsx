@@ -60,6 +60,11 @@ export default function OrderDetail() {
 
   const [payMethod, setPayMethod] = useState('TELEBIRR');
 
+  const [inspectorId, setInspectorId] = useState('');
+  const [inspectionFee, setInspectionFee] = useState('');
+  const [findingInspector, setFindingInspector] = useState(false);
+  const [requestingInspection, setRequestingInspection] = useState(false);
+
   // ==========================================================================
   // LOAD ORDER
   // ==========================================================================
@@ -482,6 +487,70 @@ export default function OrderDetail() {
       );
     } finally {
       setBusy('');
+    }
+  };
+
+  // ==========================================================================
+  // REQUEST INSPECTION (from the order, once the listing is no longer
+  // reachable from the marketplace because it is reserved/sold)
+  // ==========================================================================
+
+  const findInspector = async () => {
+    if (!order?.listing) return;
+
+    setFindingInspector(true);
+    setError('');
+
+    try {
+      const response = await api.get('/inspections/inspectors', {
+        params: { location: order.listing.location },
+      });
+
+      const options = response.data?.inspectors || [];
+
+      if (!options.length) {
+        setError('No inspectors were found in this area.');
+        return;
+      }
+
+      setInspectorId(options[0].id);
+    } catch (err) {
+      setError(getError(err, 'Could not load inspectors'));
+    } finally {
+      setFindingInspector(false);
+    }
+  };
+
+  const requestInspection = async (mode) => {
+    if (!order?.listing) return;
+
+    setError('');
+
+    if (inspectorId && (!inspectionFee || Number(inspectionFee) <= 0)) {
+      setError('Enter the agreed inspection fee before requesting this inspector.');
+      return;
+    }
+
+    setRequestingInspection(true);
+
+    try {
+      const body = { listingId: order.listing.id, mode };
+
+      if (inspectorId) {
+        body.inspectorId = inspectorId;
+        body.fee = Number(inspectionFee);
+      }
+
+      await api.post('/inspections', body);
+
+      setInspectorId('');
+      setInspectionFee('');
+
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not request inspection'));
+    } finally {
+      setRequestingInspection(false);
     }
   };
 
@@ -945,6 +1014,50 @@ export default function OrderDetail() {
             <p className="muted">
               {marketplaceBlockedReason}
             </p>
+          </div>
+        )}
+
+        {/* ================================================================== */}
+        {/* REQUEST INSPECTION */}
+        {/* ================================================================== */}
+        {/* Once an offer is accepted the listing becomes unavailable to new */}
+        {/* buyers, which also hides the "Request inspection" controls on the */}
+        {/* listing page. Buyer and seller can still request an inspection */}
+        {/* from here for as long as the order isn't finished. */}
+
+        {isAgricultural && isParticipant && order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
+          <div className="card">
+            <h2>Request inspection</h2>
+            <p className="muted">Request an independent quality check for this order.</p>
+            {inspectorId && (
+              <input
+                type="number"
+                min="1"
+                step="0.01"
+                placeholder="Agreed fee (ETB)"
+                value={inspectionFee}
+                onChange={(event) => setInspectionFee(event.target.value)}
+                style={{ marginBottom: 8, width: '100%' }}
+              />
+            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-light"
+                disabled={requestingInspection}
+                onClick={() => requestInspection(isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}
+              >
+                {requestingInspection ? 'Requesting…' : 'Request inspection'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-light"
+                disabled={findingInspector}
+                onClick={findInspector}
+              >
+                {findingInspector ? 'Searching…' : 'Find an inspector'}
+              </button>
+            </div>
           </div>
         )}
 
