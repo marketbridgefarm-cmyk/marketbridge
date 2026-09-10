@@ -1695,6 +1695,13 @@ router.patch(
         error
       );
 
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({
+          code: error.code,
+          error: error.message,
+        });
+      }
+
       return res.status(500).json({
         error:
           'Could not update transport status',
