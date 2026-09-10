@@ -66,7 +66,7 @@ export default function SellerDashboard() {
 
   const allOffers = listings.flatMap((l) => (offersByListing[l.id] || []).map((o) => ({ ...o, listing: l })));
   const allInspections = listings.flatMap((l) => (inspectionsByListing[l.id] || []).map((r) => ({ ...r, listing: l })));
-  const openOffers = allOffers.filter((o) => o.status === 'PENDING' || o.status === 'COUNTERED');
+  const openOffers = allOffers.filter((o) => o.status === 'PENDING' || (o.status === 'COUNTERED' && o.counteredBy === 'BUYER'));
   const confirmedSales = orders.filter((o) => ['CONFIRMED', 'TRANSPORT_ARRANGED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'].includes(o.status));
   const grossSales = confirmedSales.reduce((sum, o) => sum + o.finalPrice, 0);
 
@@ -130,7 +130,7 @@ export default function SellerDashboard() {
         <span className="sd-eyebrow">SELLER / FARMER DASHBOARD</span>
         <h1>Your produce. Your price authority. Your transport choice.</h1>
         <p className="sd-muted" style={{ maxWidth: 780 }}>
-          Manage listings, compare buyer offers, authorize inspectors and decide whether you or the buyer will arrange transport.
+          Manage listings, compare buyer offers, authorize inspectors and decide whether you, the buyer, or both parties will arrange transport.
         </p>
         <RoleSwitchCTA current="SELLER" />
         <div className="sd-actions">

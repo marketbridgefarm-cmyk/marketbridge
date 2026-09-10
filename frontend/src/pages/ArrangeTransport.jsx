@@ -23,7 +23,12 @@ export default function ArrangeTransport() {
     });
   }, [orderId]);
 
-  const party = order && (user.id === order.sellerId ? 'SELLER' : 'BUYER');
+  const [party, setParty] = useState('BUYER');
+
+  useEffect(() => {
+    if (order && user?.id === order.sellerId) setParty('SELLER');
+    else if (order && user?.id === order.buyerId) setParty('BUYER');
+  }, [order, user]);
 
   async function find() {
     try { const r = await api.get('/transport/match', { params: { minCapacity: form.requiredCapacity, area: form.pickupLocation } }); setMatches(r.data.trucks || []); }
@@ -33,6 +38,7 @@ export default function ArrangeTransport() {
   async function submit(e) {
     e.preventDefault();
     setError('');
+    if (method === 'OWN_TRUCK' && party === 'JOINT') return setError('Joint arrangements must use a hired transporter.');
     if (method === 'OWN_TRUCK' && !truck) return setError('Select one of your available trucks.');
     try {
       await api.post('/transport', {
@@ -53,11 +59,19 @@ export default function ArrangeTransport() {
       <div className="container-narrow">
         <span className="eyebrow">TRANSPORT</span>
         <h1>Choose how transport is handled.</h1>
-        <p className="lead">Arranging party: <strong>{party}</strong>. Transport is not automatically assigned.</p>
+        <p className="lead">Choose who will take responsibility for transport. Transport is not automatically assigned.</p>
+        <div className="choice-grid" style={{ marginBottom: 16 }}>
+          {['BUYER', 'SELLER', 'JOINT'].filter(p => p !== 'SELLER' || user?.id === order.sellerId).filter(p => p !== 'BUYER' || user?.id === order.buyerId).map(p => (
+            <button key={p} type="button" className={`choice ${party === p ? 'selected' : ''}`} onClick={() => { setParty(p); if (p === 'JOINT') setMethod('HIRE_TRANSPORTER'); }}>
+              <b>{p === 'BUYER' ? 'Buyer arranges' : p === 'SELLER' ? 'Seller arranges' : 'Joint arrangement'}</b>
+              <span>{p === 'JOINT' ? 'Buyer and seller agree together; use a hired transporter.' : `The ${p.toLowerCase()} controls the transport arrangement.`}</span>
+            </button>
+          ))}
+        </div>
         {error && <div className="alert error">{error}</div>}
         <div className="choice-grid">
-          <button className={`choice ${method === 'OWN_TRUCK' ? 'selected' : ''}`} onClick={() => setMethod('OWN_TRUCK')}><b>🚚 Use my own truck</b><span>Record your own legally permitted vehicle and pickup details. No transport-hiring commission.</span></button>
-          <button className={`choice ${method === 'HIRE_TRANSPORTER' ? 'selected' : ''}`} onClick={() => setMethod('HIRE_TRANSPORTER')}><b>Hire a registered transporter</b><span>MarketBridge matches by capacity, area, route, availability, rating and verification.</span></button>
+          <button type="button" disabled={party === 'JOINT'} className={`choice ${method === 'OWN_TRUCK' ? 'selected' : ''}`} onClick={() => setMethod('OWN_TRUCK')}><b>🚚 Use my own truck</b><span>Record your own legally permitted vehicle and pickup details. No transport-hiring commission.</span></button>
+          <button type="button" className={`choice ${method === 'HIRE_TRANSPORTER' ? 'selected' : ''}`} onClick={() => setMethod('HIRE_TRANSPORTER')}><b>Hire a registered transporter</b><span>MarketBridge matches by capacity, area, route, availability, rating and verification.</span></button>
         </div>
         <form className="card form-card" onSubmit={submit}>
           <div className="notice"><strong>Role separation:</strong> Inspectors verify produce and evidence; they do not arrange trucks.</div>

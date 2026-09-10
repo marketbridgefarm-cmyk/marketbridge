@@ -225,14 +225,14 @@ export default function OrderDetail() {
   // ==========================================================================
 
   /*
-   * Buyer or seller can create a transport job — except for
-   * agricultural orders, where only the buyer may arrange transport.
+   * The buyer or seller may create a transport job. JOINT is also supported
+   * when both parties agree; the server validates the selected party.
    */
   const canArrangeTransport =
     Boolean(order) &&
     !transportJob &&
     order.status !== 'CANCELLED' &&
-    (isAgricultural ? isBuyer : isParticipant);
+    isParticipant;
 
   /*
    * Only the arranging buyer/seller can select a quote.
@@ -285,15 +285,19 @@ export default function OrderDetail() {
   // ==========================================================================
 
   /*
-   * Marketplace payment can only be initiated by the buyer.
-   *
-   * For agricultural orders, transport must already be arranged and
-   * an inspection must already be paid for before the buyer can pay
-   * for the produce itself.
+   * Marketplace payment is initiated only by the buyer. Transport is a
+   * separate logistics decision and must not block produce payment. If an
+   * agricultural inspection has been requested, the buyer must have a
+   * completed inspection report before payment.
    */
+  const inspectionRequests = order?.listing?.inspectionRequests || [];
+  const inspectionCompleted = inspectionRequests.some(
+    (request) => request.status === 'COMPLETED' && request.report
+  );
   const agriculturalGateMet =
     !isAgricultural ||
-    (Boolean(transportJob) && inspectionPaid);
+    inspectionRequests.length === 0 ||
+    inspectionCompleted;
 
   const canPayMarketplace =
     Boolean(order) &&
@@ -314,8 +318,8 @@ export default function OrderDetail() {
   const marketplaceBlockedReason =
     isAgricultural && isBuyer && !agriculturalGateMet
       ? !transportJob
-        ? 'Arrange transport before you can pay for this order.'
-        : 'The inspection must be paid for before you can pay for this order.'
+        ? 'Complete the requested agricultural inspection before you can pay for this order.'
+        : 'The agricultural inspection report is not complete yet.'
       : null;
 
   /*
