@@ -2301,3 +2301,60 @@ form > label:first-of-type,
   border-radius: 8px;
   border: 1px solid var(--border, #e2e2e2);
 }
+
+
+/* Buyer negotiation cards: mobile-first so counters/actions never overflow
+   the narrow phone viewport. */
+.sd-offer-list {
+  display: grid;
+  gap: 14px;
+}
+
+.sd-offer-card {
+  border: 1px solid #ddd;
+  border-radius: 14px;
+  padding: 16px;
+  background: #fff;
+}
+
+.sd-offer-response {
+  margin-top: 12px;
+  padding: 13px;
+  border-radius: 12px;
+  background: #f5f5ef;
+}
+
+.sd-offer-response input,
+.sd-offer-card input {
+  box-sizing: border-box;
+  min-height: 42px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+
+@media (max-width: 600px) {
+  .sd-offer-card .sd-actions,
+  .sd-offer-response .sd-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sd-offer-card .sd-btn,
+  .sd-offer-response .sd-btn,
+  .sd-offer-response input {
+    width: 100%;
+    max-width: none !important;
+    box-sizing: border-box;
+  }
+
+  .sd-table-wrap {
+    overflow-x: auto;
+  }
+
+  .sd-tabs {
+    overflow-x: auto;
+    justify-content: flex-start;
+    -webkit-overflow-scrolling: touch;
+  }
+}
