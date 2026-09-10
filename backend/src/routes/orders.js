@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
+const { recordAuditEvent } = require('../utils/audit');
 
 const router = express.Router();
 
@@ -82,6 +83,19 @@ router.post('/buy-now', authenticate, async (req, res) => {
       await tx.listing.update({
         where: { id: listing.id },
         data: { status: 'SOLD' },
+      });
+
+      await recordAuditEvent(tx, {
+        actorId: req.user.id,
+        action: 'ORDER_CREATED',
+        resourceType: 'Order',
+        resourceId: order.id,
+        metadata: {
+          listingId: listing.id,
+          sellerId: listing.sellerId,
+          finalPrice: order.finalPrice,
+          via: 'buy-now',
+        },
       });
 
       return order;
@@ -185,11 +199,24 @@ router.patch('/:id/confirm-receipt', authenticate, async (req, res) => {
         throw new Error(`Receipt cannot be confirmed while transport status is ${current.transportJob?.status || 'UNKNOWN'}`);
       }
 
-      return tx.order.update({
+      const updatedOrder = await tx.order.update({
         where: { id: current.id },
         data: { status: 'COMPLETED' },
         include: orderInclude,
       });
+
+      await recordAuditEvent(tx, {
+        actorId: req.user.id,
+        action: 'ORDER_RECEIPT_CONFIRMED',
+        resourceType: 'Order',
+        resourceId: current.id,
+        metadata: {
+          fromStatus: current.status,
+          toStatus: 'COMPLETED',
+        },
+      });
+
+      return updatedOrder;
     });
 
     return res.json({ message: 'Receipt confirmed. Order completed.', order: updated });

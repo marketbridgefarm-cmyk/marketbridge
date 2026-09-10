@@ -8,6 +8,9 @@ const {
 const {
   requireRole,
 } = require('../middleware/roleCheck');
+const {
+  recordAuditEvent,
+} = require('../utils/audit');
 
 const router = express.Router();
 
@@ -1896,8 +1899,13 @@ router.patch(
       }
 
 
-      const user =
-        await prisma.user.update({
+      const user = await prisma.$transaction(async (tx) => {
+        const before = await tx.user.findUnique({
+          where: { id: req.params.id },
+          select: { verificationStatus: true },
+        });
+
+        const updated = await tx.user.update({
           where: {
             id:
               req.params.id,
@@ -1927,6 +1935,20 @@ router.patch(
               true,
           },
         });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'ADMIN_USER_VERIFICATION_CHANGED',
+          resourceType: 'User',
+          resourceId: updated.id,
+          metadata: {
+            fromStatus: before?.verificationStatus || null,
+            toStatus: verificationStatus,
+          },
+        });
+
+        return updated;
+      });
 
 
       return res.json({
@@ -2046,8 +2068,13 @@ router.patch(
       }
 
 
-      const user =
-        await prisma.user.update({
+      const user = await prisma.$transaction(async (tx) => {
+        const before = await tx.user.findUnique({
+          where: { id: targetId },
+          select: { accountStatus: true },
+        });
+
+        const updated = await tx.user.update({
           where: {
             id:
               targetId,
@@ -2077,6 +2104,20 @@ router.patch(
               true,
           },
         });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'ADMIN_USER_ACCOUNT_STATUS_CHANGED',
+          resourceType: 'User',
+          resourceId: updated.id,
+          metadata: {
+            fromStatus: before?.accountStatus || null,
+            toStatus: accountStatus,
+          },
+        });
+
+        return updated;
+      });
 
 
       return res.json({
@@ -2165,8 +2206,8 @@ router.patch(
       }
 
 
-      const updatedUser =
-        await prisma.user.update({
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const updated = await tx.user.update({
           where: {
             id:
               user.id,
@@ -2199,6 +2240,21 @@ router.patch(
               true,
           },
         });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'ADMIN_USER_ROLE_ADDED',
+          resourceType: 'User',
+          resourceId: updated.id,
+          metadata: {
+            role,
+            rolesBefore: user.roles,
+            rolesAfter: updated.roles,
+          },
+        });
+
+        return updated;
+      });
 
 
       return res.json({
@@ -2345,8 +2401,8 @@ router.patch(
         );
 
 
-      const updatedUser =
-        await prisma.user.update({
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const updated = await tx.user.update({
           where: {
             id:
               targetId,
@@ -2377,6 +2433,21 @@ router.patch(
               true,
           },
         });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'ADMIN_USER_ROLE_REMOVED',
+          resourceType: 'User',
+          resourceId: updated.id,
+          metadata: {
+            role,
+            rolesBefore: user.roles,
+            rolesAfter: updated.roles,
+          },
+        });
+
+        return updated;
+      });
 
 
       return res.json({

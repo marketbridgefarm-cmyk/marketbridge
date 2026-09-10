@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
+const { recordAuditEvent } = require('../utils/audit');
 
 const router = express.Router();
 
@@ -61,6 +62,19 @@ router.post(
           data: { status: 'DISPUTED' },
         });
 
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'DISPUTE_RAISED',
+          resourceType: 'Dispute',
+          resourceId: dispute.id,
+          metadata: {
+            orderId,
+            againstId,
+            disputeType,
+            previousOrderStatus: order.status,
+          },
+        });
+
         return dispute;
       });
 
@@ -112,6 +126,18 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), async (req, res
       await tx.order.update({
         where: { id: updated.orderId },
         data: { status: updated.previousOrderStatus || 'CONFIRMED' },
+      });
+
+      await recordAuditEvent(tx, {
+        actorId: req.user.id,
+        action: 'DISPUTE_RESOLVED',
+        resourceType: 'Dispute',
+        resourceId: updated.id,
+        metadata: {
+          orderId: updated.orderId,
+          finalStatus,
+          restoredOrderStatus: updated.previousOrderStatus || 'CONFIRMED',
+        },
       });
 
       return updated;
