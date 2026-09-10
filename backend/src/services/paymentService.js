@@ -1,12 +1,13 @@
 'use strict';
 
 const prisma = require('../config/db');
+const { recordAuditEvent } = require('../utils/audit');
 
 // ============================================================================
 // CONSTANTS
 // ============================================================================
 
-const ACTIVE_STATUSES = ['PENDING', 'PAID'];
+const ACTIVE_STATUSES = ['PENDING', 'PAID', 'RECONCILIATION_REQUIRED'];
 const TERMINAL_STATUSES = ['PAID', 'REFUNDED'];
 
 // ============================================================================
@@ -84,27 +85,49 @@ async function createPayment(data) {
     Math.max(0, amount - commission)
   );
 
-  return prisma.payment.create({
-    data: {
-      ...data,
+  return prisma.$transaction(async (tx) => {
+    const payment = await tx.payment.create({
+      data: {
+        ...data,
 
-      amount,
+        amount,
 
-      currency:
-        data.currency ||
-        'ETB',
+        currency:
+          data.currency ||
+          'ETB',
 
-      commissionRate:
-        rate,
+        commissionRate:
+          rate,
 
-      commissionAmount:
-        commission,
+        commissionAmount:
+          commission,
 
-      netAmount,
+        netAmount,
 
-      status:
-        'PENDING',
-    },
+        status:
+          'PENDING',
+      },
+    });
+
+    await recordAuditEvent(tx, {
+      actorId: data.createdById || null,
+      action: 'PAYMENT_CREATED',
+      resourceType: 'Payment',
+      resourceId: payment.id,
+      metadata: {
+        type: payment.type,
+        amount: payment.amount,
+        currency: payment.currency,
+        method: payment.method,
+        orderId: payment.orderId,
+        transportJobId: payment.transportJobId,
+        digitalProductId: payment.digitalProductId,
+        advertisementId: payment.advertisementId,
+        inspectionRequestId: payment.inspectionRequestId,
+      },
+    });
+
+    return payment;
   });
 }
 
@@ -475,10 +498,19 @@ async function settlePayment({
       return payment;
     }
 
-    // Never move PAID backwards to FAILED.
+    // Never move PAID backwards to FAILED or reconciliation-required.
     if (
       payment.status === 'PAID' &&
-      status === 'FAILED'
+      ['FAILED', 'RECONCILIATION_REQUIRED'].includes(status)
+    ) {
+      return payment;
+    }
+
+    // A reconciliation-required payment may only be resolved by an
+    // authoritative settlement result, never by a client-created payment.
+    if (
+      payment.status === 'RECONCILIATION_REQUIRED' &&
+      !['PAID', 'FAILED', 'REFUNDED', 'RECONCILIATION_REQUIRED'].includes(status)
     ) {
       return payment;
     }
@@ -509,6 +541,21 @@ async function settlePayment({
             payment.reference,
         },
       });
+
+    await recordAuditEvent(tx, {
+      actorId: null,
+      action: 'PAYMENT_STATUS_CHANGED',
+      resourceType: 'Payment',
+      resourceId: payment.id,
+      metadata: {
+        fromStatus: payment.status,
+        toStatus: status,
+        provider: provider || payment.provider || null,
+        providerTransactionId: providerTransactionId || payment.providerTransactionId || null,
+        reference: reference || payment.reference || null,
+        eventId: eventId || null,
+      },
+    });
 
     // ------------------------------------------------------------------------
     // PAID BUSINESS EFFECTS
