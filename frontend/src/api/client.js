@@ -119,21 +119,4 @@ api.interceptors.response.use(
   }
 );
 
-export default api;      const serverMessage = error.response?.data?.error;
-      const isSuspended = status === 403 && serverMessage === SUSPENDED_MESSAGE;
-      const isSessionInvalid = status === 401;
-
-      if ((isSuspended || isSessionInvalid) && localStorage.getItem('mb_token')) {
-        localStorage.removeItem('mb_token');
-
-        if (!window.location.pathname.startsWith('/login')) {
-          window.location.href = `/login?session=${isSuspended ? 'suspended' : 'expired'}`;
-        }
-      }
-    }
-
-    return Promise.reject(error);
-  }
-);
-
 export default api;
