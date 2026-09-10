@@ -5,6 +5,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
+const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 
 const router = express.Router();
 
@@ -982,6 +983,28 @@ router.get('/:id/evidence/:evidenceId/media', authenticate, [
   } catch (error) {
     console.error('SIGN INSPECTION EVIDENCE MEDIA ERROR:', error);
     return res.status(503).json({ error: 'Protected media is temporarily unavailable' });
+  }
+});
+
+// ============================================================================
+// UPLOAD INSPECTION EVIDENCE MEDIA
+// Returns private object-storage keys for use in POST /:id/report or
+// POST /:id/evidence. Only the assigned inspector may upload.
+// ============================================================================
+
+router.post('/:id/evidence/media', authenticate, requireRole('INSPECTOR'), evidenceUpload.array('files', 5), async (req, res) => {
+  try {
+    const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id } });
+    if (!request) return res.status(404).json({ error: 'Inspection request not found' });
+    if (request.inspectorId !== req.user.id) return res.status(403).json({ error: 'Only the assigned inspector can add inspection evidence' });
+    if (!req.files?.length) return res.status(400).json({ error: 'At least one file is required' });
+
+    const { photoKeys, videoKeys } = await uploadEvidenceFiles('inspection', request.id, req.files);
+
+    return res.status(201).json({ photoKeys, videoKeys });
+  } catch (error) {
+    console.error('UPLOAD INSPECTION EVIDENCE MEDIA ERROR:', error);
+    return res.status(500).json({ error: error.message || 'Could not upload evidence media' });
   }
 });
 

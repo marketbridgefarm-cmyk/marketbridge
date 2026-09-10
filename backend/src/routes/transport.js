@@ -7,6 +7,7 @@ const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { isOrderParticipant, isAdmin } = require('../utils/authorization');
+const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 
 const router = express.Router();
 
@@ -1084,6 +1085,57 @@ router.get(
         error:
           'Could not load transport job',
       });
+    }
+  }
+);
+
+// ============================================================================
+// UPLOAD PICKUP / DELIVERY / INCIDENT EVIDENCE MEDIA
+// Returns private object-storage keys for use in POST /:id/evidence.
+// ============================================================================
+
+router.post(
+  '/:id/evidence/media',
+  authenticate,
+  [param('id').isUUID()],
+  validate,
+  evidenceUpload.array('files', 5),
+  async (req, res) => {
+    try {
+      const job = await prisma.transportJob.findUnique({
+        where: { id: req.params.id },
+        include: { order: true },
+      });
+
+      if (!job) {
+        return res.status(404).json({ error: 'Transport job not found' });
+      }
+
+      const isArranging =
+        (job.arrangingParty === 'SELLER' && job.order.sellerId === req.user.id) ||
+        (job.arrangingParty === 'BUYER' && job.order.buyerId === req.user.id) ||
+        (job.arrangingParty === 'JOINT' &&
+          (job.order.buyerId === req.user.id || job.order.sellerId === req.user.id));
+      const isTruckOwner = job.truckOwnerId === req.user.id;
+
+      if (!isArranging && !isTruckOwner && !isAdmin(req)) {
+        return res.status(403).json({ error: 'Not authorized to add transport evidence' });
+      }
+
+      if (job.status === 'CANCELLED') {
+        return res.status(400).json({ error: 'Cannot add evidence to a cancelled transport job' });
+      }
+
+      if (!req.files?.length) {
+        return res.status(400).json({ error: 'At least one file is required' });
+      }
+
+      const { photoKeys, videoKeys } = await uploadEvidenceFiles('transport', job.id, req.files);
+
+      return res.status(201).json({ photoKeys, videoKeys });
+    } catch (error) {
+      console.error('UPLOAD TRANSPORT EVIDENCE MEDIA ERROR:', error);
+      return res.status(500).json({ error: error.message || 'Could not upload evidence media' });
     }
   }
 );
