@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import api from '../api/client';
@@ -908,6 +909,13 @@ export default function TruckOwnerDashboard() {
                             flexWrap: 'wrap',
                           }}
                         >
+                          <Link
+                            to={`/orders/${job.orderId}`}
+                            className="sd-btn sd-btn-outline"
+                          >
+                            Open order
+                          </Link>
+
                           {renderJobActionButtons(job)}
 
                           {job.status === 'DELIVERED' && (

@@ -127,6 +127,56 @@ export default function OrderDetail() {
   const isAgricultural =
     order?.listing?.category === 'AGRICULTURAL';
 
+  const inspectionRequests = useMemo(
+    () =>
+      (order?.listing?.inspectionRequests || []).filter(
+        (request) => request.status !== 'CANCELLED'
+      ),
+    [order?.listing?.inspectionRequests]
+  );
+
+  const assignedInspection = useMemo(
+    () =>
+      inspectionRequests.find(
+        (request) => request.inspectorId === user?.id
+      ) || null,
+    [inspectionRequests, user?.id]
+  );
+
+  const isInspector = Boolean(assignedInspection);
+  const isTransporter = Boolean(
+    transportJob?.truckOwnerId &&
+    transportJob.truckOwnerId === user?.id
+  );
+
+  const inspectionPaymentRows = useMemo(
+    () =>
+      inspectionRequests.filter(
+        (request) =>
+          request.fee != null &&
+          Number(request.fee) > 0
+      ),
+    [inspectionRequests]
+  );
+
+  const inspectionPaymentsComplete = inspectionPaymentRows.every(
+    (request) =>
+      (request.payments || []).some(
+        (payment) =>
+          payment.type === 'INSPECTOR' &&
+          payment.status === 'PAID'
+      )
+  );
+
+  const isTransportArranger = Boolean(
+    transportJob &&
+    (
+      (transportJob.arrangingParty === 'BUYER' && isBuyer) ||
+      (transportJob.arrangingParty === 'SELLER' && isSeller) ||
+      (transportJob.arrangingParty === 'JOINT' && isParticipant)
+    )
+  );
+
   const inspectionPaid = Boolean(
     order?.listing?.inspectionRequests?.some(
       (request) =>
@@ -243,7 +293,7 @@ export default function OrderDetail() {
    */
   const canChooseQuote =
     Boolean(transportJob) &&
-    isParticipant &&
+    isTransportArranger &&
     ['REQUESTED', 'QUOTED'].includes(
       transportJob.status
     ) &&
@@ -682,6 +732,121 @@ export default function OrderDetail() {
         </div>
 
         {/* ================================================================== */}
+        {/* NEXT ACTION CENTER */}
+        {/* ================================================================== */}
+
+        <div className="card next-action-card" id="next-action">
+          <div className="row-between">
+            <div>
+              <span className="eyebrow">NEXT STEP</span>
+              <h2 style={{ marginBottom: 6 }}>What happens next?</h2>
+              <p className="muted">The next action is assigned to the party responsible for it. Payment, inspection, transport movement and receipt are separate steps.</p>
+            </div>
+          </div>
+
+          {isBuyer && (
+            <div className="next-action-panel">
+              <strong>Buyer action</strong>
+              {order.status === 'PENDING_PAYMENT' && !marketplacePaid ? (
+                <p>Pay the seller for the agreed order amount.</p>
+              ) : transportJob?.status === 'ACCEPTED' && (
+                !marketplacePaid || !transportPaid || !inspectionPaymentsComplete
+              ) ? (
+                <p>Complete the remaining required payments before the transporter can start.</p>
+              ) : transportJob?.status === 'DELIVERED' ? (
+                <p>The produce has been delivered. Confirm physical receipt to complete the order.</p>
+              ) : transportJob?.status === 'IN_TRANSIT' ? (
+                <p>Transport is in progress. Wait for delivery confirmation.</p>
+              ) : transportJob?.status === 'PICKUP' ? (
+                <p>Pickup is confirmed. The transporter will start the trip after all required payments are complete.</p>
+              ) : transportJob?.status === 'ACCEPTED' ? (
+                <p>Transporter selected. Continue with the payment center below.</p>
+              ) : !transportJob ? (
+                <p>Choose who will arrange transport.</p>
+              ) : (
+                <p>Monitor the order and continue from the payment or transport section below.</p>
+              )}
+
+              <div className="next-action-buttons">
+                {order.status === 'PENDING_PAYMENT' && !marketplacePaid && (
+                  <button type="button" className="btn btn-primary" onClick={() => document.getElementById('payment-center')?.scrollIntoView({ behavior: 'smooth' })}>Pay seller / order now</button>
+                )}
+                {transportJob?.status === 'ACCEPTED' && (!marketplacePaid || !transportPaid || !inspectionPaymentsComplete) && (
+                  <button type="button" className="btn btn-primary" onClick={() => document.getElementById('payment-center')?.scrollIntoView({ behavior: 'smooth' })}>Continue to payments</button>
+                )}
+                {!transportJob && isParticipant && (
+                  <Link className="btn btn-primary" to={`/orders/${order.id}/transport`}>Arrange transport</Link>
+                )}
+                {transportJob && (
+                  <button type="button" className="btn btn-outline" onClick={() => document.getElementById('transport-section')?.scrollIntoView({ behavior: 'smooth' })}>Open transport steps</button>
+                )}
+                {transportJob?.status === 'DELIVERED' && (
+                  <button type="button" className="btn btn-primary" onClick={() => document.getElementById('confirm-receipt')?.scrollIntoView({ behavior: 'smooth' })}>Confirm receipt</button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {isSeller && (
+            <div className="next-action-panel">
+              <strong>Seller action</strong>
+              {isTransportArranger && transportJob && !transportJob.truckOwnerId && ['REQUESTED', 'QUOTED'].includes(transportJob.status) ? (
+                <p>Choose one of the transporter's quotes to assign the transport job.</p>
+              ) : !transportJob ? (
+                <p>Arrange transport yourself or leave the transport arrangement to the buyer.</p>
+              ) : transportJob.status === 'ACCEPTED' ? (
+                <p>Transporter has been assigned. The buyer completes the required payments; the transporter then starts the trip.</p>
+              ) : transportJob.status === 'PICKUP' ? (
+                <p>Pickup is confirmed. Waiting for all required payments and transporter start.</p>
+              ) : transportJob.status === 'IN_TRANSIT' ? (
+                <p>Produce is in transit. Wait for delivery confirmation.</p>
+              ) : transportJob.status === 'DELIVERED' ? (
+                <p>Delivery is complete. The buyer must confirm receipt.</p>
+              ) : (
+                <p>Continue monitoring the order from the transport and payment sections.</p>
+              )}
+              <div className="next-action-buttons">
+                {!transportJob && <Link className="btn btn-primary" to={`/orders/${order.id}/transport`}>Arrange transport</Link>}
+                {transportJob && <button type="button" className="btn btn-outline" onClick={() => document.getElementById('transport-section')?.scrollIntoView({ behavior: 'smooth' })}>Open transport steps</button>}
+              </div>
+            </div>
+          )}
+
+          {isTransporter && (
+            <div className="next-action-panel">
+              <strong>Transporter action</strong>
+              {transportJob.status === 'ACCEPTED' && <p>Confirm pickup with evidence when the load is physically collected.</p>}
+              {transportJob.status === 'PICKUP' && <p>All required payments must be PAID. Then add pickup evidence and mark the trip IN_TRANSIT.</p>}
+              {transportJob.status === 'IN_TRANSIT' && <p>Complete delivery and submit delivery evidence.</p>}
+              {transportJob.status === 'DELIVERED' && <p>Trip complete. The buyer is now responsible for confirming receipt.</p>}
+              <div className="next-action-buttons">
+                <Link className="btn btn-primary" to="/dashboard/truck-owner">Open transport job dashboard</Link>
+              </div>
+            </div>
+          )}
+
+          {isInspector && (
+            <div className="next-action-panel">
+              <strong>Inspector action</strong>
+              {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
+              {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
+              {assignedInspection.status === 'COMPLETED' && <p>Inspection report is published. The buyer can now complete any required inspection payment and continue the order.</p>}
+              <div className="next-action-buttons">
+                <Link className="btn btn-primary" to="/dashboard/inspector">Open inspection dashboard</Link>
+              </div>
+            </div>
+          )}
+
+          {isAdmin && (
+            <div className="next-action-panel">
+              <strong>Administrator</strong>
+              <p>Review the order, payment ledger and transport state from the relevant operational dashboard.</p>
+              <div className="next-action-buttons"><Link className="btn btn-outline" to="/dashboard/admin">Open admin dashboard</Link></div>
+            </div>
+          )}
+        </div>
+
+        {/* ================================================================== */}
         {/* ORDER DETAILS */}
         {/* ================================================================== */}
 
@@ -999,7 +1164,7 @@ export default function OrderDetail() {
         {/* TRANSPORT */}
         {/* ================================================================== */}
 
-        <div className="card">
+        <div className="card" id="transport-section">
           <div className="row-between">
             <div>
               <h2>Transport</h2>
@@ -1202,13 +1367,12 @@ export default function OrderDetail() {
 
               {transportJob.method ===
                 'HIRE_TRANSPORTER' &&
-                !marketplacePaid &&
                 !transportPaid && (
                   <div className="notice">
                     <h3>Transport payment</h3>
 
                     <p className="muted">
-                      Transport payment is separate from the seller payment. Complete it before the transporter starts the trip.
+                      Transport payment is separate from the seller payment. You may pay it as soon as the transport quote is accepted. The transporter cannot start the trip until every required payment is confirmed.
                     </p>
 
                     {transportJob.agreedAmount !=
@@ -1243,9 +1407,7 @@ export default function OrderDetail() {
                   </p>
 
                   <p className="muted">
-                    Marketplace payment has been
-                    confirmed. You can now pay the
-                    agreed transporter fee.
+                    Pay the agreed transporter fee. This payment is independent from the seller and inspection payments. All required payments must be PAID before IN_TRANSIT.
                   </p>
 
                   <div
@@ -1538,7 +1700,7 @@ export default function OrderDetail() {
 
         {order.status === 'DELIVERED' &&
           isBuyer && (
-            <div className="card">
+            <div className="card" id="confirm-receipt">
               <h2>
                 Confirm receipt
               </h2>

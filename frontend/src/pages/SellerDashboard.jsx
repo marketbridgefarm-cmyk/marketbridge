@@ -287,6 +287,10 @@ export default function SellerDashboard() {
               {orders.filter((o) => o.transportJob).map((o) => (
                 <div className="sd-notice" key={o.id} style={{ marginBottom: 10 }}>
                   <b>Order {o.id.slice(0, 8)}:</b> {o.transportJob.arrangingParty} arranging via {o.transportJob.method === 'OWN_TRUCK' ? 'own truck' : 'hired transporter'}. Status: {o.transportJob.status}.
+                  <div className="sd-actions" style={{ marginTop: 10 }}>
+                    <Link to={`/orders/${o.id}`} className="sd-btn sd-btn-primary">Open order / continue</Link>
+                    {o.transportJob.arrangingParty === 'SELLER' && ['REQUESTED','QUOTED'].includes(o.transportJob.status) && !o.transportJob.truckOwnerId && <Link to={`/orders/${o.id}`} className="sd-btn sd-btn-outline">Choose transporter</Link>}
+                  </div>
                 </div>
               ))}
               {orders.filter((o) => o.transportJob).length === 0 && <p>No transport records yet.</p>}

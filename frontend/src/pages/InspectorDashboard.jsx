@@ -508,8 +508,19 @@ export default function InspectorDashboard() {
                       <div
                         style={{
                           marginTop: 10,
+                          display: 'flex',
+                          gap: 8,
+                          flexWrap: 'wrap',
                         }}
                       >
+                        {r.listing?.orders?.[0]?.id && (
+                          <Link
+                            to={`/orders/${r.listing.orders[0].id}`}
+                            className="sd-btn sd-btn-outline"
+                          >
+                            Open related order
+                          </Link>
+                        )}
                         <span className="sd-badge">
                           {r.status.replaceAll(
                             '_',
