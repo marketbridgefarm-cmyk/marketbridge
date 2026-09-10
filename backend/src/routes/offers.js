@@ -1075,33 +1075,28 @@ router.patch(
                   },
                 });
 
-              const remainingOffers =
-                await tx.offer.count({
-                  where: {
-                    listingId:
-                      freshOffer.listingId,
+              // A negotiation is active only when its latest (leaf) offer
+              // is PENDING or COUNTERED. Older parent offers remain
+              // COUNTERED for the audit trail and must not keep the listing
+              // locked after the latest offer is rejected.
+              const activeOffers = await tx.offer.findMany({
+                where: {
+                  listingId: freshOffer.listingId,
+                  status: { in: ['PENDING', 'COUNTERED'] },
+                },
+                select: { id: true, parentOfferId: true },
+              });
+              const activeParentIds = new Set(
+                activeOffers.map((item) => item.parentOfferId).filter(Boolean)
+              );
+              const remainingActiveLeafOffers = activeOffers.filter(
+                (item) => !activeParentIds.has(item.id)
+              ).length;
 
-                    status: {
-                      in: [
-                        'PENDING',
-                        'COUNTERED',
-                      ],
-                    },
-                  },
-                });
-
-              if (
-                remainingOffers === 0
-              ) {
+              if (remainingActiveLeafOffers === 0) {
                 await tx.listing.update({
-                  where: {
-                    id:
-                      freshOffer.listingId,
-                  },
-
-                  data: {
-                    status: 'ACTIVE',
-                  },
+                  where: { id: freshOffer.listingId },
+                  data: { status: 'ACTIVE' },
                 });
               }
 
@@ -1113,7 +1108,7 @@ router.patch(
                 metadata: {
                   listingId: freshOffer.listingId,
                   buyerId: freshOffer.buyerId,
-                  remainingActiveOffers: remainingOffers,
+                  remainingActiveLeafOffers,
                 },
               });
 

@@ -399,21 +399,6 @@ router.get(
                     name: true,
                   },
                 },
-                payments: {
-                  select: {
-                    id: true,
-                    type: true,
-                    status: true,
-                    transportJobId: true,
-                  },
-                },
-                listing: {
-                  include: {
-                    inspectionRequests: {
-                      include: { payments: true },
-                    },
-                  },
-                },
               },
             },
             quotes: {
@@ -463,6 +448,21 @@ router.get(
           include: {
             order: {
               include: {
+                payments: { select: { type: true, status: true } },
+                listing: {
+                  select: {
+                    category: true,
+                    inspectionRequests: {
+                      where: { status: { not: 'CANCELLED' } },
+                      select: {
+                        id: true,
+                        status: true,
+                        fee: true,
+                        payments: { select: { type: true, status: true } },
+                      },
+                    },
+                  },
+                },
                 buyer: {
                   select: {
                     id: true,
@@ -473,21 +473,6 @@ router.get(
                   select: {
                     id: true,
                     name: true,
-                  },
-                },
-                payments: {
-                  select: {
-                    id: true,
-                    type: true,
-                    status: true,
-                    transportJobId: true,
-                  },
-                },
-                listing: {
-                  include: {
-                    inspectionRequests: {
-                      include: { payments: true },
-                    },
                   },
                 },
               },
@@ -713,32 +698,31 @@ router.post(
         }
       }
 
-      const resolvedArrangingParty = arrangingParty;
+      let resolvedArrangingParty =
+        arrangingParty;
 
-      // Agricultural transport is party-controlled: seller, buyer, or joint.
-      // The arranging party must match the authenticated order participant.
-      if (resolvedArrangingParty === 'SELLER' && order.sellerId !== req.user.id && !isAdmin(req.user)) {
-        return res.status(403).json({
-          error: 'Only the seller can create a SELLER-arranged transport job',
+      if (!['SELLER', 'BUYER', 'JOINT'].includes(resolvedArrangingParty)) {
+        return res.status(400).json({
+          error: 'arrangingParty must be SELLER, BUYER, or JOINT',
         });
       }
 
-      if (resolvedArrangingParty === 'BUYER' && order.buyerId !== req.user.id && !isAdmin(req.user)) {
-        return res.status(403).json({
-          error: 'Only the buyer can create a BUYER-arranged transport job',
-        });
-      }
-
-      if (resolvedArrangingParty === 'JOINT' && !isOrderParticipant(req.user.id, order) && !isAdmin(req.user)) {
-        return res.status(403).json({
-          error: 'Only the buyer or seller can create a JOINT transport arrangement',
-        });
-      }
-
-      if (resolvedArrangingParty === 'JOINT' && method === 'OWN_TRUCK') {
+      if (method === 'OWN_TRUCK' && resolvedArrangingParty === 'JOINT') {
         return res.status(400).json({
           error: 'JOINT arrangements must use HIRE_TRANSPORTER. Select SELLER or BUYER when using an own truck.',
         });
+      }
+
+      if (resolvedArrangingParty === 'SELLER' && order.sellerId !== req.user.id && !isAdmin(req.user)) {
+        return res.status(403).json({ error: 'Only the seller can create a SELLER-arranged transport job' });
+      }
+
+      if (resolvedArrangingParty === 'BUYER' && order.buyerId !== req.user.id && !isAdmin(req.user)) {
+        return res.status(403).json({ error: 'Only the buyer can create a BUYER-arranged transport job' });
+      }
+
+      if (resolvedArrangingParty === 'JOINT' && !isOrderParticipant(req.user.id, order) && !isAdmin(req.user)) {
+        return res.status(403).json({ error: 'Only the buyer or seller can create a JOINT transport arrangement' });
       }
 
       // ----------------------------------------------------------------------
@@ -1379,6 +1363,76 @@ router.get(
 );
 
 // ============================================================================
+// PAYMENT GATE FOR STARTING TRANSPORT
+// ============================================================================
+// IN_TRANSIT is the contractual start of the trip. It is server-side locked
+// until every payment required by this order is settled.
+//
+// Required payments:
+//   1. MARKETPLACE payment for the agricultural/physical order.
+//   2. INSPECTOR payment for every non-cancelled inspection request with a fee.
+//   3. TRANSPORT payment when HIRE_TRANSPORTER is used.
+//
+// MarketBridge commission is already calculated inside each payment and
+// recorded in the financial ledger; it is not a second buyer checkout.
+// ============================================================================
+async function getTransportPaymentGate(client, jobId) {
+  const job = await client.transportJob.findUnique({
+    where: { id: jobId },
+    include: {
+      order: {
+        include: {
+          payments: { select: { id: true, type: true, status: true, amount: true } },
+          listing: {
+            include: {
+              inspectionRequests: {
+                where: { status: { not: 'CANCELLED' } },
+                include: {
+                  payments: { select: { id: true, type: true, status: true, amount: true } },
+                },
+              },
+            },
+          },
+        },
+      },
+      payments: { select: { id: true, type: true, status: true, amount: true } },
+    },
+  });
+
+  if (!job) return { ready: false, missing: ['TRANSPORT_JOB'] };
+
+  const marketplacePaid = job.order.payments.some(
+    (p) => p.type === 'MARKETPLACE' && p.status === 'PAID'
+  );
+
+  const inspectionRequests = job.order.listing?.inspectionRequests || [];
+  const inspectionMissing = inspectionRequests
+    .filter((r) => r.fee != null && Number(r.fee) > 0)
+    .filter((r) => !r.payments.some((p) => p.type === 'INSPECTOR' && p.status === 'PAID'))
+    .map((r) => r.id);
+
+  const transportRequired = job.method === 'HIRE_TRANSPORTER';
+  const transportPaid = !transportRequired || job.payments.some(
+    (p) => p.type === 'TRANSPORT' && p.status === 'PAID'
+  );
+
+  const missing = [];
+  if (!marketplacePaid) missing.push('MARKETPLACE');
+  if (inspectionMissing.length) missing.push('INSPECTOR');
+  if (!transportPaid) missing.push('TRANSPORT');
+
+  return {
+    ready: missing.length === 0,
+    missing,
+    marketplacePaid,
+    inspectionPaid: inspectionMissing.length === 0,
+    transportRequired,
+    transportPaid,
+    inspectionRequestIds: inspectionRequests.map((r) => r.id),
+  };
+}
+
+// ============================================================================
 // UPDATE TRANSPORT JOB STATUS
 // ============================================================================
 
@@ -1412,20 +1466,7 @@ router.patch(
             id: req.params.id,
           },
           include: {
-            order: {
-              include: {
-                listing: {
-                  include: {
-                    inspectionRequests: {
-                      include: { payments: true },
-                    },
-                  },
-                },
-                payments: {
-                  include: { ledgerEntries: true },
-                },
-              },
-            },
+            order: { include: { listing: true } },
             evidence: {
               select: { id: true, type: true },
             },
@@ -1538,56 +1579,8 @@ router.patch(
         }
       }
 
-      // Payment gate: IN_TRANSIT is the point at which the buyer/transporter
-      // deal is allowed to begin physically moving the load. Every required
-      // financial obligation must therefore be independently confirmed PAID.
-      //
-      // Required payments for an agricultural order are:
-      //   1) MARKETPLACE = seller/procurement payment + platform commission
-      //   2) INSPECTOR   = only when an inspection was requested
-      //   3) TRANSPORT  = only for HIRE_TRANSPORTER
-      // OWN_TRUCK has no transporter-hiring payment. Platform commission is
-      // accounted for in the payment ledger rather than as a second buyer
-      // checkout.
-      if (next === 'IN_TRANSIT') {
-        const marketplacePaid = (job.order.payments || []).some(
-          (payment) => payment.type === 'MARKETPLACE' && payment.status === 'PAID'
-        );
-
-        const inspectionRequests = (job.order.listing?.inspectionRequests || [])
-          .filter((request) => request.status !== 'CANCELLED');
-        const inspectionRequired = inspectionRequests.length > 0;
-        const inspectionPaid = !inspectionRequired || inspectionRequests.some(
-          (request) => (request.payments || []).some(
-            (payment) => payment.type === 'INSPECTOR' && payment.status === 'PAID'
-          )
-        );
-
-        const transportRequired = job.method === 'HIRE_TRANSPORTER';
-        const transportPaid = !transportRequired || (job.order.payments || []).some(
-          (payment) =>
-            payment.type === 'TRANSPORT' &&
-            payment.status === 'PAID' &&
-            payment.transportJobId === job.id
-        );
-
-        if (!marketplacePaid || !inspectionPaid || !transportPaid) {
-          const missing = [];
-          if (!marketplacePaid) missing.push('marketplace/seller payment');
-          if (inspectionRequired && !inspectionPaid) missing.push('inspection payment');
-          if (transportRequired && !transportPaid) missing.push('transport payment');
-
-          return res.status(409).json({
-            error: 'All required payments must be confirmed before transport can enter IN_TRANSIT',
-            code: 'PAYMENTS_REQUIRED_BEFORE_IN_TRANSIT',
-            missingPayments: missing,
-          });
-        }
-      }
-
-      // Evidence is part of the transport state machine: pickup evidence is
-      // required before the load can move into IN_TRANSIT, and delivery
-      // evidence is required before the order can be marked DELIVERED.
+      // Pickup evidence is required before IN_TRANSIT and delivery evidence
+      // is required before DELIVERED.
       if (next === 'IN_TRANSIT' && !job.evidence.some((item) => item.type === 'PICKUP')) {
         return res.status(409).json({
           error: 'Pickup evidence is required before transport can enter IN_TRANSIT',
@@ -1598,6 +1591,19 @@ router.patch(
         return res.status(409).json({
           error: 'Delivery evidence is required before transport can be marked DELIVERED',
         });
+      }
+
+      // HARD PAYMENT GATE: no transporter may start the trip until all
+      // required buyer payments are PAID.
+      if (next === 'IN_TRANSIT') {
+        const gate = await getTransportPaymentGate(prisma, job.id);
+        if (!gate.ready) {
+          return res.status(409).json({
+            code: 'PAYMENTS_REQUIRED_BEFORE_IN_TRANSIT',
+            error: 'All required payments must be completed before transport can enter IN_TRANSIT.',
+            missingPayments: gate.missing,
+          });
+        }
       }
 
       const result =

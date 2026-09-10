@@ -325,29 +325,10 @@ router.post(
             });
           }
 
-          // Agricultural orders may use an inspection before the produce
-          // payment. Transport is a separate financial obligation and is not
-          // a prerequisite for creating the marketplace payment.
-          if (
-            order.listing?.category ===
-            'AGRICULTURAL'
-          ) {
-            const inspectionRequests = order.listing.inspectionRequests || [];
-            const inspectionRequired = inspectionRequests.length > 0;
-            const inspectionPaid = !inspectionRequired || inspectionRequests.some(
-              (request) => (request.payments || []).some(
-                (payment) =>
-                  payment.type === 'INSPECTOR' &&
-                  payment.status === 'PAID'
-              )
-            );
-
-            if (!inspectionPaid) {
-              return res.status(402).json({
-                error: 'Pay the required inspection fee before paying for the agricultural produce',
-              });
-            }
-          }
+          // Agricultural purchase payment is independent from transport.
+          // The buyer may pay for the produce before or after arranging
+          // transport. IN_TRANSIT is separately gated on the backend until
+          // all required payments are PAID.
         }
 
         // --------------------------------------------------------------------
@@ -411,20 +392,21 @@ router.post(
             });
           }
 
-          // The buyer is the payer for the hired transport service, even
-          // when the seller arranged the transport job. The arranging party
-          // controls selection; the buyer/transporter deal is settled by the
-          // buyer before the trip can enter IN_TRANSIT.
-          if (
-            order.buyerId !== req.user.id &&
-            !isAdmin(req.user)
-          ) {
+          // Transport is a buyer-to-transporter transaction on MarketBridge.
+          // The party who arranged the transport (BUYER, SELLER or JOINT)
+          // does not change who pays the hired transporter: the buyer does.
+          if (order.buyerId !== req.user.id && !isAdmin(req.user)) {
             return res.status(403).json({
-              error: 'Only the buyer may pay the hired transport fee',
+              error: 'Only the buyer may pay the hired transporter',
             });
           }
 
-          transportJobId = order.transportJob.id;
+          // Transport payment is independent from marketplace payment.
+          // Both must be PAID before IN_TRANSIT, but neither payment has to
+          // be completed before creating the other payment intent.
+
+          transportJobId =
+            order.transportJob.id;
         }
       }
 
@@ -571,14 +553,25 @@ router.post(
           });
         }
 
-        if (
-          request.requestedById !==
-            req.user.id &&
-          !isAdmin(req.user)
-        ) {
+        // Once an agricultural order exists, the buyer is responsible for
+        // the inspection service payment even when the seller originally
+        // requested the inspection. Keep the original requester authorized
+        // as well for pre-order inspection payments.
+        let inspectionPaymentAllowed = request.requestedById === req.user.id || isAdmin(req.user);
+        if (!inspectionPaymentAllowed && req.body.orderId) {
+          const inspectionOrder = await prisma.order.findUnique({
+            where: { id: req.body.orderId },
+            select: { id: true, buyerId: true, listingId: true },
+          });
+          inspectionPaymentAllowed = Boolean(
+            inspectionOrder &&
+            inspectionOrder.buyerId === req.user.id &&
+            inspectionOrder.listingId === request.listingId
+          );
+        }
+        if (!inspectionPaymentAllowed) {
           return res.status(403).json({
-            error:
-              'Only requester may pay',
+            error: 'Only the buyer of the related order or the inspection requester may pay',
           });
         }
 

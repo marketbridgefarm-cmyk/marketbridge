@@ -23,20 +23,12 @@ const orderInclude = {
   listing: {
     include: {
       inspectionRequests: {
+        where: { status: { not: 'CANCELLED' } },
         include: {
-          inspector: {
-            select: {
-              id: true,
-              name: true,
-              phone: true,
-              rating: true,
-              verificationStatus: true,
-            },
-          },
           report: true,
-          payments: true,
+          inspector: { select: { id: true, name: true, phone: true } },
+          payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
         },
-        orderBy: { createdAt: 'desc' },
       },
     },
   },
