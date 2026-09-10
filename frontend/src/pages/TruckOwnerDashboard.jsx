@@ -35,6 +35,8 @@ export default function TruckOwnerDashboard() {
 
   // Evidence capture, required by the backend before PICKUP -> IN_TRANSIT
   // (needs PICKUP evidence) and IN_TRANSIT -> DELIVERED (needs DELIVERY evidence).
+  // Payment completeness (seller, transport, inspection) is enforced by the
+  // backend before ACCEPTED -> PICKUP, i.e. before the truck collects the goods.
   const [evidenceModal, setEvidenceModal] = useState(null); // { jobId, type, nextStatus }
   const [evidenceKeys, setEvidenceKeys] = useState({ photoKeys: [], videoKeys: [] });
   const [evidenceNotes, setEvidenceNotes] = useState('');
@@ -282,18 +284,6 @@ export default function TruckOwnerDashboard() {
     const busy = actionLoading?.startsWith(`status-${job.id}`);
 
     if (job.status === 'ACCEPTED') {
-      return (
-        <button
-          className="sd-btn sd-btn-outline"
-          disabled={busy}
-          onClick={() => updateStatus(job.id, 'PICKUP')}
-        >
-          {busy ? 'Updating...' : 'Mark picked up'}
-        </button>
-      );
-    }
-
-    if (job.status === 'PICKUP') {
       const orderPayments = job.order?.payments || [];
       const marketplacePaid = orderPayments.some((p) => p.type === 'MARKETPLACE' && p.status === 'PAID');
       const transportPaid = job.method !== 'HIRE_TRANSPORTER' || (orderPayments.some((p) => p.type === 'TRANSPORT' && p.status === 'PAID') || (job.payments || []).some((p) => p.type === 'TRANSPORT' && p.status === 'PAID'));
@@ -305,12 +295,24 @@ export default function TruckOwnerDashboard() {
           <button
             className="sd-btn sd-btn-outline"
             disabled={busy || !paymentsReady}
-            onClick={() => openEvidenceModal(job.id, 'PICKUP', 'IN_TRANSIT')}
+            onClick={() => updateStatus(job.id, 'PICKUP')}
           >
-            {busy ? 'Updating...' : paymentsReady ? 'Add pickup evidence & mark in transit' : 'Waiting for all payments'}
+            {busy ? 'Updating...' : paymentsReady ? 'Mark picked up' : 'Waiting for all payments'}
           </button>
-          {!paymentsReady && <p className="sd-muted" style={{ marginTop: 6 }}>Buyer payments are not complete. The server will also block IN_TRANSIT until all required payments are PAID.</p>}
+          {!paymentsReady && <p className="sd-muted" style={{ marginTop: 6 }}>Buyer payments (seller, transport and inspection) are not complete. The server will also block PICKUP until all required payments are PAID.</p>}
         </div>
+      );
+    }
+
+    if (job.status === 'PICKUP') {
+      return (
+        <button
+          className="sd-btn sd-btn-outline"
+          disabled={busy}
+          onClick={() => openEvidenceModal(job.id, 'PICKUP', 'IN_TRANSIT')}
+        >
+          {busy ? 'Updating...' : 'Add pickup evidence & mark in transit'}
+        </button>
       );
     }
 

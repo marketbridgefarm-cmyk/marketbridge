@@ -305,7 +305,8 @@ export default function OrderDetail() {
    * OWN_TRUCK does not create a separate transport payment.
    *
    * Marketplace and transport payments are independent. Both must be
-   * PAID before the transporter can enter IN_TRANSIT.
+   * PAID before the transporter can mark the load PICKUP (i.e. before the
+   * truck is allowed to collect the goods).
    */
   const canPayTransport =
     Boolean(transportJob) &&
@@ -338,11 +339,11 @@ export default function OrderDetail() {
    *
    * Agricultural marketplace payment is independent from transport.
    * Required payments are separately tracked and the transport state machine
-   * prevents IN_TRANSIT until all required payments are PAID.
+   * prevents PICKUP until all required payments are PAID.
    */
   // Agricultural purchase payment is intentionally independent from transport
   // and inspection payment. The hard sequencing rule is enforced when the
-  // transporter attempts IN_TRANSIT, not by hiding the buyer's payment button.
+  // transporter attempts PICKUP, not by hiding the buyer's payment button.
   const agriculturalGateMet = true;
 
   const canPayMarketplace =
@@ -763,7 +764,7 @@ export default function OrderDetail() {
               ) : transportJob?.status === 'IN_TRANSIT' ? (
                 <p>Transport is in progress. Wait for delivery confirmation.</p>
               ) : transportJob?.status === 'PICKUP' ? (
-                <p>Pickup is confirmed. The transporter will start the trip after all required payments are complete.</p>
+                <p>Pickup is confirmed. The transporter will start the trip shortly.</p>
               ) : transportJob?.status === 'ACCEPTED' ? (
                 <p>Transporter selected. Continue with the payment center below.</p>
               ) : !transportJob ? (
@@ -807,9 +808,9 @@ export default function OrderDetail() {
               ) : !transportJob ? (
                 <p>Arrange transport yourself or leave the transport arrangement to the buyer.</p>
               ) : transportJob.status === 'ACCEPTED' ? (
-                <p>Transporter has been assigned. The buyer completes the required payments; the transporter then starts the trip.</p>
+                <p>Transporter has been assigned. The buyer must complete all required payments before the transporter can pick up the goods.</p>
               ) : transportJob.status === 'PICKUP' ? (
-                <p>Pickup is confirmed. Waiting for all required payments and transporter start.</p>
+                <p>Payments are complete and pickup is confirmed. Waiting for the transporter to start the trip.</p>
               ) : transportJob.status === 'IN_TRANSIT' ? (
                 <p>Produce is in transit. Wait for delivery confirmation.</p>
               ) : transportJob.status === 'DELIVERED' ? (
@@ -828,8 +829,8 @@ export default function OrderDetail() {
           {isTransporter && (
             <div className="next-action-panel">
               <strong>Transporter action</strong>
-              {transportJob.status === 'ACCEPTED' && <p>Confirm pickup with evidence when the load is physically collected.</p>}
-              {transportJob.status === 'PICKUP' && <p>All required payments must be PAID. Then add pickup evidence and mark the trip IN_TRANSIT.</p>}
+              {transportJob.status === 'ACCEPTED' && <p>All required payments must be PAID before you can mark the load picked up.</p>}
+              {transportJob.status === 'PICKUP' && <p>Pickup confirmed. Add pickup evidence and mark the trip IN_TRANSIT.</p>}
               {transportJob.status === 'IN_TRANSIT' && <p>Complete delivery and submit delivery evidence.</p>}
               {transportJob.status === 'DELIVERED' && <p>Trip complete. The buyer is now responsible for confirming receipt.</p>}
               <div className="next-action-buttons">
@@ -1157,7 +1158,7 @@ export default function OrderDetail() {
         {transportJob && (
           <div className="card">
             <h2>Payment center</h2>
-            <p className="muted">Seller, inspector (if required), and hired transporter payments are tracked separately. All required payments must show PAID before the transporter can start the trip.</p>
+            <p className="muted">Seller, inspector (if required), and hired transporter payments are tracked separately. All required payments must show PAID before the transporter can pick up the goods.</p>
             <div className="notice">
               <p>{marketplacePaid ? '✓' : '○'} Seller / marketplace payment — <strong>{marketplacePaid ? 'PAID' : 'NOT PAID'}</strong></p>
               {isAgricultural && (order.listing?.inspectionRequests || []).filter((r) => r.status !== 'CANCELLED' && r.fee != null && Number(r.fee) > 0).map((r) => {
@@ -1167,8 +1168,8 @@ export default function OrderDetail() {
               {transportJob.method === 'HIRE_TRANSPORTER' && <p>{transportPaid ? '✓' : '○'} Transporter — <strong>{transportPaid ? 'PAID' : 'NOT PAID'}</strong></p>}
               {transportJob.method === 'OWN_TRUCK' && <p>✓ Own truck — <strong>NO TRANSPORTER PAYMENT REQUIRED</strong></p>}
             </div>
-            {transportJob.status === 'PICKUP' && (!marketplacePaid || !transportPaid || (isAgricultural && (order.listing?.inspectionRequests || []).some((r) => r.status !== 'CANCELLED' && r.fee != null && Number(r.fee) > 0 && !(r.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID')))) && (
-              <div className="alert error" style={{ marginTop: 10 }}>Transport is waiting for payment. IN_TRANSIT is locked until every required payment is PAID.</div>
+            {transportJob.status === 'ACCEPTED' && (!marketplacePaid || !transportPaid || (isAgricultural && (order.listing?.inspectionRequests || []).some((r) => r.status !== 'CANCELLED' && r.fee != null && Number(r.fee) > 0 && !(r.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID')))) && (
+              <div className="alert error" style={{ marginTop: 10 }}>Transport is waiting for payment. PICKUP is locked until every required payment is PAID.</div>
             )}
           </div>
         )}
@@ -1420,7 +1421,7 @@ export default function OrderDetail() {
                   </p>
 
                   <p className="muted">
-                    Pay the agreed transporter fee. This payment is independent from the seller and inspection payments. All required payments must be PAID before IN_TRANSIT.
+                    Pay the agreed transporter fee. This payment is independent from the seller and inspection payments. All required payments must be PAID before the truck can pick up the goods.
                   </p>
 
                   <div
