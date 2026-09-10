@@ -270,9 +270,12 @@ export default function BuyerDashboard() {
     const payload = {
       orderId: order.id,
 
-      // Buyer may arrange their own transport or a joint arrangement.
-      // A buyer cannot submit SELLER-arranged transport on behalf of the seller.
-      arrangingParty: partyMap[transportForm.party] || 'BUYER',
+      // Agricultural orders are always buyer-arranged; the backend
+      // enforces this too, but we mirror it here so the request always
+      // matches what the UI shows the buyer.
+      arrangingParty: isAgricultural
+        ? 'BUYER'
+        : partyMap[transportForm.party] || 'BUYER',
 
       method,
 
@@ -750,7 +753,7 @@ export default function BuyerDashboard() {
                 </span>
 
                 <h2>
-                  Buyer, seller, or joint transport
+                  Party-controlled transport
                 </h2>
               </div>
             </div>
@@ -792,13 +795,13 @@ export default function BuyerDashboard() {
 
                 <li>
                   <strong>Seller Arranges:</strong>{' '}
-                  The seller may arrange transport from the order page, or both parties may agree on a joint hired-transporter request
+                  The seller may arrange transport separately
                   when agreed with you.
                 </li>
               </ul>
             </div>
 
-            {/* Buyer transport actions */}
+            {/* Transport actions */}
 
             <div className="sd-flow">
               <div className="sd-panel">
@@ -1113,15 +1116,34 @@ export default function BuyerDashboard() {
                   Arranging party
                 </label>
 
-                <select
+                {transportTarget?.order?.listing
+                  ?.category === 'AGRICULTURAL' ? (
+                  <input
+                    id="transport-party"
+                    value="Buyer"
+                    disabled
+                    title="Agricultural orders are always arranged by the buyer"
+                  />
+                ) : (
+                  <select
                     id="transport-party"
                     name="party"
                     value={transportForm.party}
                     onChange={handleTransportChange}
                   >
-                    <option value="Buyer">Buyer</option>
-                    <option value="Joint-agreed">Joint-agreed</option>
-                </select>
+                    <option value="Buyer">
+                      Buyer
+                    </option>
+
+                    <option value="Joint-agreed">
+                      Joint-agreed
+                    </option>
+
+                    <option value="Seller">
+                      Seller
+                    </option>
+                  </select>
+                )}
               </div>
 
               {/* Destination */}
