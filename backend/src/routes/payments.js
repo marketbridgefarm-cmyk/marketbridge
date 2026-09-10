@@ -255,7 +255,7 @@ router.post(
               listing: {
                 include: {
                   inspectionRequests: {
-                    include: { payments: true, report: true },
+                    include: { payments: true },
                   },
                 },
               },
@@ -325,23 +325,27 @@ router.post(
             });
           }
 
-          // Agricultural orders: transport is a separate operational
-          // decision and must NOT block payment. If an inspection request
-          // exists, the buyer should complete that quality-verification step
-          // before paying for the produce. If no inspection was requested,
-          // payment may proceed.
-          if (order.listing?.category === 'AGRICULTURAL') {
+          // Agricultural orders may use an inspection before the produce
+          // payment. Transport is a separate financial obligation and is not
+          // a prerequisite for creating the marketplace payment.
+          if (
+            order.listing?.category ===
+            'AGRICULTURAL'
+          ) {
             const inspectionRequests = order.listing.inspectionRequests || [];
-            if (inspectionRequests.length > 0) {
-              const inspectionCompleted = inspectionRequests.some(
-                (request) => request.status === 'COMPLETED' && request.report
-              );
+            const inspectionRequired = inspectionRequests.length > 0;
+            const inspectionPaid = !inspectionRequired || inspectionRequests.some(
+              (request) => (request.payments || []).some(
+                (payment) =>
+                  payment.type === 'INSPECTOR' &&
+                  payment.status === 'PAID'
+              )
+            );
 
-              if (!inspectionCompleted) {
-                return res.status(409).json({
-                  error: 'Complete the requested agricultural inspection and report before paying for the produce',
-                });
-              }
+            if (!inspectionPaid) {
+              return res.status(402).json({
+                error: 'Pay the required inspection fee before paying for the agricultural produce',
+              });
             }
           }
         }
@@ -407,55 +411,20 @@ router.post(
             });
           }
 
-          const allowed =
-            order.arrangingParty ===
-              'BUYER'
-              ? order.buyerId ===
-                req.user.id
-              : order.arrangingParty ===
-                'SELLER'
-                ? order.sellerId ===
-                  req.user.id
-                : (
-                    order.buyerId ===
-                      req.user.id ||
-                    order.sellerId ===
-                      req.user.id
-                  );
-
+          // The buyer is the payer for the hired transport service, even
+          // when the seller arranged the transport job. The arranging party
+          // controls selection; the buyer/transporter deal is settled by the
+          // buyer before the trip can enter IN_TRANSIT.
           if (
-            !allowed &&
+            order.buyerId !== req.user.id &&
             !isAdmin(req.user)
           ) {
             return res.status(403).json({
-              error:
-                'Only arranging party may pay transport',
+              error: 'Only the buyer may pay the hired transport fee',
             });
           }
 
-          const marketplacePaid =
-            await prisma.payment.findFirst({
-              where: {
-                orderId:
-                  order.id,
-
-                type:
-                  'MARKETPLACE',
-
-                status:
-                  'PAID',
-              },
-            });
-
-          if (!marketplacePaid) {
-            return res.status(402).json({
-              error:
-                'Marketplace payment must be PAID first',
-            });
-          }
-
-          transportJobId =
-            order.transportJob.id;
+          transportJobId = order.transportJob.id;
         }
       }
 

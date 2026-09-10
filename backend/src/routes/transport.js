@@ -399,6 +399,21 @@ router.get(
                     name: true,
                   },
                 },
+                payments: {
+                  select: {
+                    id: true,
+                    type: true,
+                    status: true,
+                    transportJobId: true,
+                  },
+                },
+                listing: {
+                  include: {
+                    inspectionRequests: {
+                      include: { payments: true },
+                    },
+                  },
+                },
               },
             },
             quotes: {
@@ -458,6 +473,21 @@ router.get(
                   select: {
                     id: true,
                     name: true,
+                  },
+                },
+                payments: {
+                  select: {
+                    id: true,
+                    type: true,
+                    status: true,
+                    transportJobId: true,
+                  },
+                },
+                listing: {
+                  include: {
+                    inspectionRequests: {
+                      include: { payments: true },
+                    },
                   },
                 },
               },
@@ -683,38 +713,32 @@ router.post(
         }
       }
 
-      // Seller, buyer, or both parties may arrange transport. The
-      // arrangingParty describes who has taken responsibility for the
-      // transport decision; it is deliberately not inferred from the
-      // marketplace role because normal users may both buy and sell.
-      let resolvedArrangingParty = arrangingParty;
+      const resolvedArrangingParty = arrangingParty;
 
-      if (!['SELLER', 'BUYER', 'JOINT'].includes(resolvedArrangingParty)) {
-        return res.status(400).json({
-          error: 'arrangingParty must be SELLER, BUYER, or JOINT',
-        });
-      }
-
-      // A party can only declare OWN_TRUCK when the acting user actually
-      // owns the selected truck. JOINT + OWN_TRUCK is intentionally rejected
-      // because the API has no separate field identifying which joint party
-      // supplied the truck; use JOINT + HIRE_TRANSPORTER instead.
-      if (method === 'OWN_TRUCK' && resolvedArrangingParty === 'JOINT') {
-        return res.status(400).json({
-          error: 'JOINT arrangements must use HIRE_TRANSPORTER. For an own truck, select SELLER or BUYER as the arranging party.',
-        });
-      }
-
+      // Agricultural transport is party-controlled: seller, buyer, or joint.
+      // The arranging party must match the authenticated order participant.
       if (resolvedArrangingParty === 'SELLER' && order.sellerId !== req.user.id && !isAdmin(req.user)) {
-        return res.status(403).json({ error: 'Only the seller can create a SELLER-arranged transport job' });
+        return res.status(403).json({
+          error: 'Only the seller can create a SELLER-arranged transport job',
+        });
       }
 
       if (resolvedArrangingParty === 'BUYER' && order.buyerId !== req.user.id && !isAdmin(req.user)) {
-        return res.status(403).json({ error: 'Only the buyer can create a BUYER-arranged transport job' });
+        return res.status(403).json({
+          error: 'Only the buyer can create a BUYER-arranged transport job',
+        });
       }
 
       if (resolvedArrangingParty === 'JOINT' && !isOrderParticipant(req.user.id, order) && !isAdmin(req.user)) {
-        return res.status(403).json({ error: 'Only the buyer or seller can create a JOINT transport arrangement' });
+        return res.status(403).json({
+          error: 'Only the buyer or seller can create a JOINT transport arrangement',
+        });
+      }
+
+      if (resolvedArrangingParty === 'JOINT' && method === 'OWN_TRUCK') {
+        return res.status(400).json({
+          error: 'JOINT arrangements must use HIRE_TRANSPORTER. Select SELLER or BUYER when using an own truck.',
+        });
       }
 
       // ----------------------------------------------------------------------
@@ -1388,7 +1412,20 @@ router.patch(
             id: req.params.id,
           },
           include: {
-            order: { include: { listing: true } },
+            order: {
+              include: {
+                listing: {
+                  include: {
+                    inspectionRequests: {
+                      include: { payments: true },
+                    },
+                  },
+                },
+                payments: {
+                  include: { ledgerEntries: true },
+                },
+              },
+            },
             evidence: {
               select: { id: true, type: true },
             },
@@ -1497,6 +1534,53 @@ router.patch(
         if (Number.isFinite(pickupDeadline) && pickupDeadline <= Date.now()) {
           return res.status(409).json({
             error: 'The agricultural pickup window has expired. Pickup cannot be confirmed until the listing window is updated.',
+          });
+        }
+      }
+
+      // Payment gate: IN_TRANSIT is the point at which the buyer/transporter
+      // deal is allowed to begin physically moving the load. Every required
+      // financial obligation must therefore be independently confirmed PAID.
+      //
+      // Required payments for an agricultural order are:
+      //   1) MARKETPLACE = seller/procurement payment + platform commission
+      //   2) INSPECTOR   = only when an inspection was requested
+      //   3) TRANSPORT  = only for HIRE_TRANSPORTER
+      // OWN_TRUCK has no transporter-hiring payment. Platform commission is
+      // accounted for in the payment ledger rather than as a second buyer
+      // checkout.
+      if (next === 'IN_TRANSIT') {
+        const marketplacePaid = (job.order.payments || []).some(
+          (payment) => payment.type === 'MARKETPLACE' && payment.status === 'PAID'
+        );
+
+        const inspectionRequests = (job.order.listing?.inspectionRequests || [])
+          .filter((request) => request.status !== 'CANCELLED');
+        const inspectionRequired = inspectionRequests.length > 0;
+        const inspectionPaid = !inspectionRequired || inspectionRequests.some(
+          (request) => (request.payments || []).some(
+            (payment) => payment.type === 'INSPECTOR' && payment.status === 'PAID'
+          )
+        );
+
+        const transportRequired = job.method === 'HIRE_TRANSPORTER';
+        const transportPaid = !transportRequired || (job.order.payments || []).some(
+          (payment) =>
+            payment.type === 'TRANSPORT' &&
+            payment.status === 'PAID' &&
+            payment.transportJobId === job.id
+        );
+
+        if (!marketplacePaid || !inspectionPaid || !transportPaid) {
+          const missing = [];
+          if (!marketplacePaid) missing.push('marketplace/seller payment');
+          if (inspectionRequired && !inspectionPaid) missing.push('inspection payment');
+          if (transportRequired && !transportPaid) missing.push('transport payment');
+
+          return res.status(409).json({
+            error: 'All required payments must be confirmed before transport can enter IN_TRANSIT',
+            code: 'PAYMENTS_REQUIRED_BEFORE_IN_TRANSIT',
+            missingPayments: missing,
           });
         }
       }

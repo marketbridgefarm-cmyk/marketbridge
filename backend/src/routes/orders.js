@@ -24,7 +24,15 @@ const orderInclude = {
     include: {
       inspectionRequests: {
         include: {
-          inspector: { select: { id: true, name: true, phone: true, rating: true, verificationStatus: true } },
+          inspector: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              rating: true,
+              verificationStatus: true,
+            },
+          },
           report: true,
           payments: true,
         },
