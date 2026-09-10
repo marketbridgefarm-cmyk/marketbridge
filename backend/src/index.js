@@ -290,11 +290,13 @@ app.use((err, req, res, next) => {
 
   if (err.name === 'MulterError') {
     if (err.code === 'LIMIT_FILE_SIZE') {
+      const isEvidenceUpload = req.path.includes('/evidence/media');
       return res.status(400).json({
         error: 'File too large',
         maxSizeBytes: Number(
-          process.env.DIGITAL_MAX_FILE_BYTES ||
-            25 * 1024 * 1024
+          isEvidenceUpload
+            ? process.env.EVIDENCE_MAX_FILE_BYTES || 15 * 1024 * 1024
+            : process.env.DIGITAL_MAX_FILE_BYTES || 25 * 1024 * 1024
         ),
       });
     }
