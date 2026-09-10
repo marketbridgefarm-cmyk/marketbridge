@@ -218,6 +218,7 @@ router.get(
         pending,
         failed,
         refunded,
+        reconciliationRequired,
         marketplace,
         transport,
         inspector,
@@ -288,6 +289,23 @@ router.get(
           where: {
             status:
               'REFUNDED',
+          },
+        }),
+
+        prisma.payment.aggregate({
+          _sum: {
+            amount:
+              true,
+          },
+
+          _count: {
+            id:
+              true,
+          },
+
+          where: {
+            status:
+              'RECONCILIATION_REQUIRED',
           },
         }),
 
@@ -412,6 +430,16 @@ router.get(
             amount:
               money(
                 refunded._sum.amount
+              ),
+          },
+
+          reconciliationRequired: {
+            count:
+              reconciliationRequired._count.id,
+
+            amount:
+              money(
+                reconciliationRequired._sum.amount
               ),
           },
         },
@@ -2421,5 +2449,61 @@ router.get(
 // ============================================================================
 // EXPORT
 // ============================================================================
+
+// ============================================================================
+// AUDIT EVENTS
+// ============================================================================
+// Admin-only read access to the append-only audit trail.
+
+router.get(
+  '/audit-events',
+  async (req, res) => {
+    try {
+      const rawLimit = Number(req.query.limit || 50);
+      const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1), 100);
+
+      const where = {};
+
+      if (req.query.action) {
+        where.action = String(req.query.action);
+      }
+
+      if (req.query.resourceType) {
+        where.resourceType = String(req.query.resourceType);
+      }
+
+      if (req.query.resourceId) {
+        where.resourceId = String(req.query.resourceId);
+      }
+
+      const events = await prisma.auditEvent.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        include: {
+          actor: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      return res.json({
+        events,
+        count: events.length,
+      });
+    } catch (error) {
+      console.error('ADMIN AUDIT EVENTS ERROR:', error);
+
+      return res.status(500).json({
+        error: 'Could not load audit events',
+      });
+    }
+  }
+);
+
 
 module.exports = router;

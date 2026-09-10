@@ -1582,6 +1582,7 @@ router.post(
         'PAID',
         'FAILED',
         'REFUNDED',
+        'RECONCILIATION_REQUIRED',
       ].includes(status)
     ) {
       return res.status(400).json({

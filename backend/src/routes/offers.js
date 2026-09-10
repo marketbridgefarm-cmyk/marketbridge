@@ -7,6 +7,7 @@ const {
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
+const { recordAuditEvent } = require('../utils/audit');
 
 const router = express.Router();
 
@@ -36,6 +37,63 @@ function offerError(message, statusCode = 400) {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
+}
+
+function offerExpiry(hours = 24, listing = null) {
+  const standardExpiry = Date.now() + hours * 60 * 60 * 1000;
+
+  // Perishable agricultural listings should not keep a negotiation alive
+  // beyond the advertised pickup window.
+  if (listing?.category === 'AGRICULTURAL' && listing.pickupWindowEnd) {
+    const pickupDeadline = new Date(listing.pickupWindowEnd).getTime();
+    if (Number.isFinite(pickupDeadline)) {
+      return new Date(Math.min(standardExpiry, pickupDeadline));
+    }
+  }
+
+  return new Date(standardExpiry);
+}
+
+function validateNegotiationWindow(listing) {
+  if (listing?.category !== 'AGRICULTURAL' || !listing.pickupWindowEnd) return null;
+
+  const deadline = new Date(listing.pickupWindowEnd).getTime();
+  if (!Number.isFinite(deadline) || deadline <= Date.now()) {
+    return 'The agricultural pickup window has expired; negotiation cannot continue until the listing is updated.';
+  }
+
+  return null;
+}
+
+function isOfferExpired(offer) {
+  return Boolean(
+    offer.expiresAt &&
+    new Date(offer.expiresAt).getTime() <= Date.now()
+  );
+}
+
+async function expireOfferIfNeeded(tx, offer, actorId = null) {
+  if (!offer || !isOfferExpired(offer)) return false;
+  if (!['PENDING', 'COUNTERED'].includes(offer.status)) return false;
+
+  const updated = await tx.offer.update({
+    where: { id: offer.id },
+    data: { status: 'EXPIRED' },
+  });
+
+  await recordAuditEvent(tx, {
+    actorId,
+    action: 'OFFER_EXPIRED',
+    resourceType: 'Offer',
+    resourceId: updated.id,
+    metadata: {
+      listingId: updated.listingId,
+      previousStatus: offer.status,
+      expiresAt: offer.expiresAt,
+    },
+  });
+
+  return true;
 }
 
 // ============================================================================
@@ -74,7 +132,12 @@ router.post(
 
       const listingId = req.body.listingId;
       const amount = Number(req.body.amount);
+      const quantity = req.body.quantity === undefined ? null : Number(req.body.quantity);
       const message = req.body.message || null;
+
+      if (quantity !== null && (!Number.isFinite(quantity) || quantity <= 0)) {
+        return res.status(400).json({ error: 'quantity must be greater than zero' });
+      }
 
       const listing = await prisma.listing.findUnique({
         where: {
@@ -112,6 +175,16 @@ router.post(
         });
       }
 
+      const negotiationWindowError = validateNegotiationWindow(listing);
+      if (negotiationWindowError) {
+        return res.status(409).json({ error: negotiationWindowError });
+      }
+
+      const negotiationExpiresAt = offerExpiry(24, listing);
+      if (negotiationExpiresAt.getTime() <= Date.now()) {
+        return res.status(409).json({ error: 'The agricultural pickup window is too close or has expired.' });
+      }
+
       const existingOffer =
         await prisma.offer.findFirst({
           where: {
@@ -120,6 +193,7 @@ router.post(
             status: {
               in: ['PENDING', 'COUNTERED'],
             },
+            childOffers: { none: {} },
           },
         });
 
@@ -138,7 +212,10 @@ router.post(
               data: {
                 listingId,
                 buyerId: req.user.id,
+                sellerId: listing.sellerId,
                 amount,
+                quantity,
+                expiresAt: negotiationExpiresAt,
                 message,
                 status: 'PENDING',
                 counterAmount: null,
@@ -152,6 +229,18 @@ router.post(
             },
             data: {
               status: 'UNDER_NEGOTIATION',
+            },
+          });
+
+          await recordAuditEvent(tx, {
+            actorId: req.user.id,
+            action: 'OFFER_CREATED',
+            resourceType: 'Offer',
+            resourceId: createdOffer.id,
+            metadata: {
+              listingId,
+              amount,
+              status: createdOffer.status,
             },
           });
 
@@ -333,7 +422,8 @@ async function acceptOfferAndCreateOrder(
   tx,
   offer,
   finalPrice,
-  sellerId
+  sellerId,
+  actorId = sellerId
 ) {
   const existingOrder =
     await tx.order.findFirst({
@@ -398,6 +488,35 @@ async function acceptOfferAndCreateOrder(
         status: 'PENDING_PAYMENT',
       },
     });
+
+  await recordAuditEvent(tx, {
+    actorId,
+    action: 'OFFER_ACCEPTED',
+    resourceType: 'Offer',
+    resourceId: updatedOffer.id,
+    metadata: {
+      listingId: offer.listingId,
+      buyerId: offer.buyerId,
+      sellerId,
+      finalPrice,
+      orderId: order.id,
+    },
+  });
+
+  await recordAuditEvent(tx, {
+    actorId,
+    action: 'ORDER_CREATED_FROM_OFFER',
+    resourceType: 'Order',
+    resourceId: order.id,
+    metadata: {
+      listingId: offer.listingId,
+      offerId: updatedOffer.id,
+      buyerId: offer.buyerId,
+      sellerId,
+      finalPrice,
+      status: order.status,
+    },
+  });
 
   return {
     offer: updatedOffer,
@@ -498,6 +617,15 @@ router.patch(
         });
       }
 
+      if (isOfferExpired(offer)) {
+        await prisma.$transaction(async (tx) => {
+          await expireOfferIfNeeded(tx, offer, req.user.id);
+        });
+        return res.status(409).json({
+          error: 'Offer has expired and can no longer be acted on',
+        });
+      }
+
       // ======================================================================
       // BUYER ACCEPTS SELLER COUNTER
       // ======================================================================
@@ -559,6 +687,10 @@ router.patch(
                 );
               }
 
+              if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
+                throw offerError('Offer has expired and can no longer be acted on', 409);
+              }
+
               if (
                 freshOffer.status !==
                 'COUNTERED'
@@ -596,7 +728,8 @@ router.patch(
                 Number(
                   freshOffer.counterAmount
                 ),
-                freshOffer.listing.sellerId
+                freshOffer.listing.sellerId,
+                req.user.id
               );
             }
           );
@@ -665,6 +798,7 @@ router.patch(
                   where: {
                     id: offer.id,
                   },
+                  include: { listing: true },
                 });
 
               if (!freshOffer) {
@@ -672,6 +806,10 @@ router.patch(
                   'Offer not found',
                   404
                 );
+              }
+
+              if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
+                throw offerError('Offer has expired and can no longer be acted on', 409);
               }
 
               if (
@@ -694,18 +832,51 @@ router.patch(
                 );
               }
 
-              return tx.offer.update({
-                where: {
-                  id: freshOffer.id,
-                },
+              const negotiationWindowError = validateNegotiationWindow(freshOffer.listing);
+              if (negotiationWindowError) {
+                throw offerError(negotiationWindowError, 409);
+              }
 
+              const counterExpiresAt = offerExpiry(12, freshOffer.listing);
+              if (counterExpiresAt.getTime() <= Date.now()) {
+                throw offerError('The agricultural pickup window is too close or has expired.', 409);
+              }
+
+              await tx.offer.update({
+                where: { id: freshOffer.id },
+                data: { status: 'COUNTERED' },
+              });
+
+              const counterOffer = await tx.offer.create({
                 data: {
+                  listingId: freshOffer.listingId,
+                  buyerId: freshOffer.buyerId,
+                  sellerId: freshOffer.sellerId,
+                  amount: numericCounter,
+                  quantity: freshOffer.quantity,
                   status: 'COUNTERED',
-                  counterAmount:
-                    numericCounter,
+                  counterAmount: numericCounter,
                   counteredBy: 'BUYER',
+                  parentOfferId: freshOffer.id,
+                  expiresAt: counterExpiresAt,
+                  message: freshOffer.message,
                 },
               });
+
+              await recordAuditEvent(tx, {
+                actorId: req.user.id,
+                action: 'OFFER_COUNTERED',
+                resourceType: 'Offer',
+                resourceId: counterOffer.id,
+                metadata: {
+                  counteredBy: 'BUYER',
+                  parentOfferId: freshOffer.id,
+                  previousAmount: freshOffer.counterAmount ?? freshOffer.amount,
+                  counterAmount: numericCounter,
+                },
+              });
+
+              return counterOffer;
             }
           );
 
@@ -823,7 +994,8 @@ router.patch(
                 tx,
                 freshOffer,
                 finalPrice,
-                freshOffer.listing.sellerId
+                freshOffer.listing.sellerId,
+                req.user.id
               );
             }
           );
@@ -871,6 +1043,7 @@ router.patch(
                   where: {
                     id: offer.id,
                   },
+                  include: { listing: true },
                 });
 
               if (!freshOffer) {
@@ -931,6 +1104,18 @@ router.patch(
                   },
                 });
               }
+
+              await recordAuditEvent(tx, {
+                actorId: req.user.id,
+                action: 'OFFER_REJECTED',
+                resourceType: 'Offer',
+                resourceId: updatedOffer.id,
+                metadata: {
+                  listingId: freshOffer.listingId,
+                  buyerId: freshOffer.buyerId,
+                  remainingActiveOffers: remainingOffers,
+                },
+              });
 
               return updatedOffer;
             }
@@ -999,6 +1184,7 @@ router.patch(
                   where: {
                     id: offer.id,
                   },
+                  include: { listing: true },
                 });
 
               if (!freshOffer) {
@@ -1031,18 +1217,51 @@ router.patch(
                 );
               }
 
-              return tx.offer.update({
-                where: {
-                  id: freshOffer.id,
-                },
+              const negotiationWindowError = validateNegotiationWindow(freshOffer.listing);
+              if (negotiationWindowError) {
+                throw offerError(negotiationWindowError, 409);
+              }
 
+              const counterExpiresAt = offerExpiry(12, freshOffer.listing);
+              if (counterExpiresAt.getTime() <= Date.now()) {
+                throw offerError('The agricultural pickup window is too close or has expired.', 409);
+              }
+
+              await tx.offer.update({
+                where: { id: freshOffer.id },
+                data: { status: 'COUNTERED' },
+              });
+
+              const counterOffer = await tx.offer.create({
                 data: {
+                  listingId: freshOffer.listingId,
+                  buyerId: freshOffer.buyerId,
+                  sellerId: freshOffer.sellerId,
+                  amount: numericCounter,
+                  quantity: freshOffer.quantity,
                   status: 'COUNTERED',
-                  counterAmount:
-                    numericCounter,
+                  counterAmount: numericCounter,
                   counteredBy: 'SELLER',
+                  parentOfferId: freshOffer.id,
+                  expiresAt: counterExpiresAt,
+                  message: freshOffer.message,
                 },
               });
+
+              await recordAuditEvent(tx, {
+                actorId: req.user.id,
+                action: 'OFFER_COUNTERED',
+                resourceType: 'Offer',
+                resourceId: counterOffer.id,
+                metadata: {
+                  counteredBy: 'SELLER',
+                  parentOfferId: freshOffer.id,
+                  previousAmount: freshOffer.counterAmount ?? freshOffer.amount,
+                  counterAmount: numericCounter,
+                },
+              });
+
+              return counterOffer;
             }
           );
 

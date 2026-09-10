@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
+const { recordAuditEvent } = require('../utils/audit');
 
 const router = express.Router();
 
@@ -27,6 +28,8 @@ const PUBLIC_LISTING_FIELDS = {
   location: true,
   harvestedDate: true,
   readinessDate: true,
+  pickupWindowStart: true,
+  pickupWindowEnd: true,
   photos: true,
   videos: true,
   description: true,
@@ -183,6 +186,59 @@ function validateAgriculturalDates(
     harvested > readiness
   ) {
     return 'harvestedDate cannot be later than readinessDate';
+  }
+
+  return null;
+}
+
+/**
+ * Validate an agricultural pickup window. Both boundaries are optional, but
+ * if either is supplied the complete window must be supplied and end must be
+ * later than start. Active listings cannot advertise a window that has
+ * already completely expired.
+ */
+function validatePickupWindow(
+  category,
+  pickupWindowStart,
+  pickupWindowEnd,
+  existingStart = null,
+  existingEnd = null
+) {
+  if (category !== 'AGRICULTURAL') {
+    if (pickupWindowStart || pickupWindowEnd) {
+      return 'pickupWindowStart and pickupWindowEnd are only allowed for agricultural listings';
+    }
+    return null;
+  }
+
+  const startProvided = pickupWindowStart !== undefined;
+  const endProvided = pickupWindowEnd !== undefined;
+
+  const startValue = startProvided ? pickupWindowStart : existingStart;
+  const endValue = endProvided ? pickupWindowEnd : existingEnd;
+
+  const hasStart = startValue !== undefined && startValue !== null && startValue !== '';
+  const hasEnd = endValue !== undefined && endValue !== null && endValue !== '';
+
+  if (hasStart !== hasEnd) {
+    return 'pickupWindowStart and pickupWindowEnd must be provided together';
+  }
+
+  if (!hasStart && !hasEnd) return null;
+
+  const start = parseDate(startValue);
+  const end = parseDate(endValue);
+
+  if (!start || !end) {
+    return 'pickupWindowStart and pickupWindowEnd must be valid dates';
+  }
+
+  if (end <= start) {
+    return 'pickupWindowEnd must be later than pickupWindowStart';
+  }
+
+  if (end <= new Date()) {
+    return 'pickupWindowEnd must be in the future';
   }
 
   return null;
@@ -701,6 +757,8 @@ router.post(
         location,
         harvestedDate,
         readinessDate,
+        pickupWindowStart,
+        pickupWindowEnd,
         photos,
         videos,
         description,
@@ -803,6 +861,16 @@ router.post(
         });
       }
 
+      const pickupWindowError = validatePickupWindow(
+        category,
+        pickupWindowStart,
+        pickupWindowEnd
+      );
+
+      if (pickupWindowError) {
+        return res.status(400).json({ error: pickupWindowError });
+      }
+
       /**
        * Agricultural dates do not make sense for a generic product.
        */
@@ -900,6 +968,16 @@ router.post(
                   )
                 : null,
 
+            pickupWindowStart:
+              category === 'AGRICULTURAL' && pickupWindowStart
+                ? parseDate(pickupWindowStart)
+                : null,
+
+            pickupWindowEnd:
+              category === 'AGRICULTURAL' && pickupWindowEnd
+                ? parseDate(pickupWindowEnd)
+                : null,
+
             photos:
               Array.isArray(photos)
                 ? photos
@@ -920,6 +998,18 @@ router.post(
                 : null,
           },
         });
+
+      await recordAuditEvent(prisma, {
+        actorId: req.user.id,
+        action: 'LISTING_CREATED',
+        resourceType: 'Listing',
+        resourceId: listing.id,
+        metadata: {
+          category: listing.category,
+          pickupWindowStart: listing.pickupWindowStart,
+          pickupWindowEnd: listing.pickupWindowEnd,
+        },
+      });
 
       return res.status(201).json({
         listing,
@@ -975,6 +1065,8 @@ router.patch(
         quantity,
         status,
         readinessDate,
+        pickupWindowStart,
+        pickupWindowEnd,
         description,
       } = req.body;
 
@@ -1098,6 +1190,22 @@ router.patch(
       }
 
       // ----------------------------------------------------------------------
+      // Validate pickup window
+      // ----------------------------------------------------------------------
+
+      const pickupWindowError = validatePickupWindow(
+        listing.category,
+        pickupWindowStart,
+        pickupWindowEnd,
+        listing.pickupWindowStart,
+        listing.pickupWindowEnd
+      );
+
+      if (pickupWindowError) {
+        return res.status(400).json({ error: pickupWindowError });
+      }
+
+      // ----------------------------------------------------------------------
       // Validate status
       // ----------------------------------------------------------------------
 
@@ -1160,12 +1268,43 @@ router.patch(
                 parsedReadinessDate,
             }),
 
+            ...(pickupWindowStart !== undefined && {
+              pickupWindowStart: pickupWindowStart === null || pickupWindowStart === ''
+                ? null
+                : parseDate(pickupWindowStart),
+            }),
+
+            ...(pickupWindowEnd !== undefined && {
+              pickupWindowEnd: pickupWindowEnd === null || pickupWindowEnd === ''
+                ? null
+                : parseDate(pickupWindowEnd),
+            }),
+
             ...(description !==
               undefined && {
               description,
             }),
           },
         });
+
+      const pickupWindowChanged =
+        pickupWindowStart !== undefined ||
+        pickupWindowEnd !== undefined;
+
+      if (pickupWindowChanged) {
+        await recordAuditEvent(prisma, {
+          actorId: req.user.id,
+          action: 'LISTING_PICKUP_WINDOW_CHANGED',
+          resourceType: 'Listing',
+          resourceId: updated.id,
+          metadata: {
+            previousPickupWindowStart: listing.pickupWindowStart,
+            previousPickupWindowEnd: listing.pickupWindowEnd,
+            pickupWindowStart: updated.pickupWindowStart,
+            pickupWindowEnd: updated.pickupWindowEnd,
+          },
+        });
+      }
 
       return res.json({
         listing: updated,

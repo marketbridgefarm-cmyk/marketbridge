@@ -3,6 +3,8 @@ const { body, param, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
+const { recordAuditEvent } = require('../utils/audit');
+const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 
 const router = express.Router();
 
@@ -85,40 +87,40 @@ router.post(
         }
       }
 
-      const request = await prisma.inspectionRequest.create({
-        data: {
-          listingId,
-          requestedById: req.user.id,
-          mode,
-
-          // Preserve the location at the time the inspection was requested.
-          location: listing.location || null,
-
-          inspectorId: inspectorId || null,
-          status: inspectorId ? 'ACCEPTED' : 'REQUESTED',
-          fee: inspectorId ? Number(fee) : null,
-        },
-        include: {
-          listing: {
-            select: {
-              id: true,
-              cropType: true,
-              title: true,
-              quantity: true,
-              unit: true,
-              location: true,
-              category: true,
+      const request = await prisma.$transaction(async (tx) => {
+        const created = await tx.inspectionRequest.create({
+          data: {
+            listingId,
+            requestedById: req.user.id,
+            mode,
+            // Preserve the location at the time the inspection was requested.
+            location: listing.location || null,
+            inspectorId: inspectorId || null,
+            status: inspectorId ? 'ACCEPTED' : 'REQUESTED',
+            fee: inspectorId ? Number(fee) : null,
+          },
+          include: {
+            listing: {
+              select: {
+                id: true, cropType: true, title: true, quantity: true, unit: true,
+                location: true, category: true,
+              },
+            },
+            inspector: {
+              select: { id: true, name: true, rating: true, location: true },
             },
           },
-          inspector: {
-            select: {
-              id: true,
-              name: true,
-              rating: true,
-              location: true,
-            },
-          },
-        },
+        });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'INSPECTION_REQUEST_CREATED',
+          resourceType: 'InspectionRequest',
+          resourceId: created.id,
+          metadata: { listingId, mode, inspectorId: inspectorId || null },
+        });
+
+        return created;
       });
 
       return res.status(201).json({ request });
@@ -334,26 +336,37 @@ router.post(
         });
       }
 
-      const quote = await prisma.inspectionQuote.create({
-        data: {
-          inspectionRequestId: request.id,
-          inspectorId: req.user.id,
-          amount: Number(req.body.amount),
-          message: req.body.message || null,
-          status: 'PENDING',
-        },
-
-        include: {
-          inspector: {
-            select: {
-              id: true,
-              name: true,
-              rating: true,
-              location: true,
-              verificationStatus: true,
+      const quote = await prisma.$transaction(async (tx) => {
+        const created = await tx.inspectionQuote.create({
+          data: {
+            inspectionRequestId: request.id,
+            inspectorId: req.user.id,
+            amount: Number(req.body.amount),
+            message: req.body.message || null,
+            status: 'PENDING',
+          },
+          include: {
+            inspector: {
+              select: {
+                id: true,
+                name: true,
+                rating: true,
+                location: true,
+                verificationStatus: true,
+              },
             },
           },
-        },
+        });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'INSPECTION_QUOTE_SUBMITTED',
+          resourceType: 'InspectionQuote',
+          resourceId: created.id,
+          metadata: { inspectionRequestId: request.id, amount: created.amount },
+        });
+
+        return created;
       });
 
       return res.status(201).json({
@@ -534,7 +547,7 @@ router.patch(
           },
         });
 
-        return tx.inspectionQuote.update({
+        const acceptedQuote = await tx.inspectionQuote.update({
           where: {
             id: quote.id,
           },
@@ -554,6 +567,16 @@ router.patch(
             },
           },
         });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'INSPECTION_QUOTE_ACCEPTED',
+          resourceType: 'InspectionQuote',
+          resourceId: acceptedQuote.id,
+          metadata: { inspectionRequestId: request.id, inspectorId: acceptedQuote.inspectorId },
+        });
+
+        return acceptedQuote;
       });
 
       return res.json({
@@ -644,6 +667,14 @@ router.patch(
         });
       }
 
+      await recordAuditEvent(prisma, {
+        actorId: req.user.id,
+        action: 'INSPECTION_ASSIGNED',
+        resourceType: 'InspectionRequest',
+        resourceId: req.params.id,
+        metadata: { fee: Number(req.body.fee), inspectorId: req.user.id },
+      });
+
       const updated = await prisma.inspectionRequest.findUnique({
         where: {
           id: req.params.id,
@@ -727,19 +758,31 @@ router.post(
         });
       }
 
-      const result = await prisma.inspectionRequest.updateMany({
-        where: {
-          id: request.id,
-          inspectorId: req.user.id,
-          status: 'ACCEPTED',
-        },
+      const result = await prisma.$transaction(async (tx) => {
+        const updatedCount = await tx.inspectionRequest.updateMany({
+          where: {
+            id: request.id,
+            inspectorId: req.user.id,
+            status: 'ACCEPTED',
+          },
+          data: { status: 'IN_PROGRESS' },
+        });
 
-        data: {
-          status: 'IN_PROGRESS',
-        },
+        if (updatedCount.count !== 1) {
+          return false;
+        }
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'INSPECTION_STARTED',
+          resourceType: 'InspectionRequest',
+          resourceId: request.id,
+        });
+
+        return true;
       });
 
-      if (result.count !== 1) {
+      if (!result) {
         return res.status(409).json({
           error: 'This inspection was already started or its status changed',
         });
@@ -855,6 +898,128 @@ router.get(
 );
 
 // ============================================================================
+// INSPECTION EVIDENCE ACCESS
+// Evidence is private transaction data. Only the inspection requester,
+// listing seller, assigned inspector, or ADMIN may access it.
+// ============================================================================
+
+async function canAccessInspection(req, requestId) {
+  const request = await prisma.inspectionRequest.findUnique({
+    where: { id: requestId },
+    include: { listing: { select: { sellerId: true } }, report: true },
+  });
+  if (!request) return { request: null, allowed: false };
+  const allowed = req.user.roles.includes('ADMIN') ||
+    request.requestedById === req.user.id ||
+    request.inspectorId === req.user.id ||
+    request.listing.sellerId === req.user.id;
+  return { request, allowed };
+}
+
+router.get('/:id/evidence', authenticate, async (req, res) => {
+  try {
+    const access = await canAccessInspection(req, req.params.id);
+    if (!access.request) return res.status(404).json({ error: 'Inspection request not found' });
+    if (!access.allowed) return res.status(403).json({ error: 'You are not authorized to access this inspection evidence' });
+    if (!access.request.report) return res.json({ evidence: [] });
+    const evidence = await prisma.inspectionEvidence.findMany({
+      where: { reportId: access.request.report.id },
+      select: { id: true, reportId: true, type: true, photos: true, videos: true, gpsLocation: true, notes: true, capturedAt: true, createdById: true },
+      orderBy: { capturedAt: 'asc' },
+    });
+    return res.json({ evidence });
+  } catch (error) {
+    console.error('GET INSPECTION EVIDENCE ERROR:', error);
+    return res.status(500).json({ error: 'Could not load inspection evidence' });
+  }
+});
+
+router.get('/:id/evidence/:evidenceId/media', authenticate, [
+  param('id').notEmpty(),
+  param('evidenceId').notEmpty(),
+], async (req, res) => {
+  try {
+    const access = await canAccessInspection(req, req.params.id);
+    if (!access.request) return res.status(404).json({ error: 'Inspection request not found' });
+    if (!access.allowed) return res.status(403).json({ error: 'You are not authorized to access this inspection evidence' });
+
+    const evidence = await prisma.inspectionEvidence.findFirst({
+      where: { id: req.params.evidenceId, reportId: access.request.report?.id || '__none__' },
+    });
+    if (!evidence) return res.status(404).json({ error: 'Inspection evidence not found' });
+
+    const sign = async (ref, kind, index) => {
+      const metadata = await privateMediaMetadata(ref);
+      const url = await signedMediaUrl({
+        key: metadata.key,
+        fileName: `${kind.toLowerCase()}-${evidence.id}-${index + 1}`,
+        contentType: metadata.contentType || undefined,
+      });
+      return { index, url, key: metadata.key, contentType: metadata.contentType, size: metadata.contentLength, etag: metadata.etag, lastModified: metadata.lastModified };
+    };
+
+    const media = { photos: [], videos: [], unsupported: [] };
+    for (let i = 0; i < evidence.photos.length; i += 1) {
+      try { media.photos.push(await sign(evidence.photos[i], 'photo', i)); }
+      catch (error) { media.unsupported.push({ kind: 'photo', index: i, reason: error.message }); }
+    }
+    for (let i = 0; i < evidence.videos.length; i += 1) {
+      try { media.videos.push(await sign(evidence.videos[i], 'video', i)); }
+      catch (error) { media.unsupported.push({ kind: 'video', index: i, reason: error.message }); }
+    }
+
+    await prisma.auditEvent.create({
+      data: {
+        actorId: req.user.id,
+        action: 'INSPECTION_EVIDENCE_MEDIA_ACCESSED',
+        resourceType: 'InspectionEvidence',
+        resourceId: evidence.id,
+        metadata: { inspectionRequestId: access.request.id, photoCount: media.photos.length, videoCount: media.videos.length, unsupportedCount: media.unsupported.length },
+      },
+    });
+
+    return res.json({ evidenceId: evidence.id, expiresInSeconds: Math.min(Math.max(Number(process.env.MEDIA_SIGNED_URL_EXPIRES_SECONDS || 300), 60), 900), media });
+  } catch (error) {
+    console.error('SIGN INSPECTION EVIDENCE MEDIA ERROR:', error);
+    return res.status(503).json({ error: 'Protected media is temporarily unavailable' });
+  }
+});
+
+router.post('/:id/evidence', authenticate, requireRole('INSPECTOR'), [
+  param('id').notEmpty(),
+  body('photos').optional().isArray().withMessage('photos must be an array'),
+  body('videos').optional().isArray().withMessage('videos must be an array'),
+  body('gpsLocation').optional({ nullable: true }).isString(),
+  body('notes').optional({ nullable: true }).isString().trim().isLength({ max: 2000 }),
+  body('capturedAt').optional({ nullable: true }).isISO8601().withMessage('capturedAt must be a valid ISO date'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { report: true } });
+    if (!request) return res.status(404).json({ error: 'Inspection request not found' });
+    if (request.inspectorId !== req.user.id) return res.status(403).json({ error: 'Only the assigned inspector can add inspection evidence' });
+    if (!request.report) return res.status(400).json({ error: 'Submit the inspection report before adding supplemental evidence' });
+    const photos = Array.isArray(req.body.photos) ? req.body.photos : [];
+    const videos = Array.isArray(req.body.videos) ? req.body.videos : [];
+    const gpsLocation = req.body.gpsLocation || null;
+    const notes = req.body.notes || null;
+    if (!photos.length && !videos.length && !gpsLocation && !notes) return res.status(400).json({ error: 'Evidence must contain a photo, video, GPS location, or notes' });
+    const evidence = await prisma.$transaction(async (tx) => {
+      const created = await tx.inspectionEvidence.create({
+        data: { reportId: request.report.id, type: 'ADDITIONAL', photos, videos, gpsLocation, notes, capturedAt: req.body.capturedAt ? new Date(req.body.capturedAt) : new Date(), createdById: req.user.id },
+      });
+      await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_EVIDENCE_ADDED', resourceType: 'InspectionEvidence', resourceId: created.id, metadata: { inspectionRequestId: request.id, reportId: request.report.id, type: created.type } });
+      return created;
+    });
+    return res.status(201).json({ evidence });
+  } catch (error) {
+    console.error('ADD INSPECTION EVIDENCE ERROR:', error);
+    return res.status(500).json({ error: 'Could not add inspection evidence' });
+  }
+});
+
+// ============================================================================
 // SUBMIT INSPECTION REPORT
 // IN_PROGRESS -> COMPLETED
 // ============================================================================
@@ -871,6 +1036,11 @@ router.post(
     body('grade')
       .optional({ nullable: true })
       .isString(),
+
+    body('moisture')
+      .optional({ nullable: true })
+      .isFloat({ min: 0 })
+      .withMessage('moisture must be zero or greater'),
 
     body('visibleDefects')
       .optional({ nullable: true })
@@ -975,6 +1145,19 @@ router.post(
           },
         });
 
+        await tx.inspectionEvidence.create({
+          data: {
+            reportId: createdReport.id,
+            type: 'REPORT',
+            photos: Array.isArray(photos) ? photos : [],
+            videos: Array.isArray(videos) ? videos : [],
+            gpsLocation: gpsLocation || null,
+            notes: [visibleDefects, damageNotes, packagingNotes].filter(Boolean).join('\n') || null,
+            capturedAt: createdReport.inspectedAt,
+            createdById: req.user.id,
+          },
+        });
+
         const completed = await tx.inspectionRequest.updateMany({
           where: {
             id: request.id,
@@ -990,6 +1173,14 @@ router.post(
         if (completed.count !== 1) {
           throw new Error('INSPECTION_STATUS_CHANGED');
         }
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'INSPECTION_REPORT_SUBMITTED',
+          resourceType: 'InspectionReport',
+          resourceId: createdReport.id,
+          metadata: { inspectionRequestId: request.id, quantity: createdReport.quantity },
+        });
 
         return createdReport;
       });
