@@ -113,21 +113,37 @@ export default function OrderDetail() {
     ? order.payments
     : [];
 
-  const isAdmin = Boolean(
-    user?.roles?.includes('ADMIN')
-  );
+  // AuthContext normally exposes user.id. Keep the fallbacks so payment
+  // controls do not disappear if an older session shape is still cached.
+  const currentUserId = user?.id || user?.userId || user?._id || null;
+  const userRoles = Array.isArray(user?.roles) ? user.roles : [];
+
+  const isAdmin = userRoles.includes('ADMIN');
 
   const isBuyer = Boolean(
     order &&
-    user?.id === order.buyerId
+    currentUserId &&
+    currentUserId === order.buyerId
   );
 
   const isSeller = Boolean(
     order &&
-    user?.id === order.sellerId
+    currentUserId &&
+    currentUserId === order.sellerId
   );
 
   const isParticipant = isBuyer || isSeller;
+
+  // A payment button must only be shown to the authenticated buyer.
+  // If the session is stale/mismatched, show a clear explanation instead of
+  // silently hiding every payment action.
+  const buyerIdentityMismatch = Boolean(
+    order &&
+    currentUserId &&
+    !isBuyer &&
+    !isSeller &&
+    !isAdmin
+  );
 
   const isAgricultural =
     order?.listing?.category === 'AGRICULTURAL';
@@ -143,15 +159,15 @@ export default function OrderDetail() {
   const assignedInspection = useMemo(
     () =>
       inspectionRequests.find(
-        (request) => request.inspectorId === user?.id
+        (request) => request.inspectorId === currentUserId
       ) || null,
-    [inspectionRequests, user?.id]
+    [inspectionRequests, currentUserId]
   );
 
   const isInspector = Boolean(assignedInspection);
   const isTransporter = Boolean(
     transportJob?.truckOwnerId &&
-    transportJob.truckOwnerId === user?.id
+    transportJob.truckOwnerId === currentUserId
   );
 
   const inspectionPaymentRows = useMemo(
@@ -313,13 +329,14 @@ export default function OrderDetail() {
    * PAID before the transporter can mark the load PICKUP (i.e. before the
    * truck is allowed to collect the goods).
    */
-  const canPayTransport =
+  const canStartTransportPayment =
     Boolean(transportJob) &&
     transportJob.method ===
       'HIRE_TRANSPORTER' &&
     Boolean(transportJob.truckOwnerId) &&
     transportJob.agreedAmount != null &&
     Number(transportJob.agreedAmount) > 0 &&
+    transportJob.status === 'ACCEPTED' &&
     !transportPayments.some(
       (payment) =>
         payment.status === 'PENDING' ||
@@ -1006,8 +1023,6 @@ export default function OrderDetail() {
         {/* MARKETPLACE PAYMENT BLOCKED (agricultural gate) */}
         {/* ================================================================== */}
 
-        <div id="payment-center" />
-
         {marketplaceBlockedReason && (
           <div className="card">
             <h2>Payment</h2>
@@ -1058,232 +1073,6 @@ export default function OrderDetail() {
                 {findingInspector ? 'Searching…' : 'Find an inspector'}
               </button>
             </div>
-          </div>
-        )}
-
-        {/* ================================================================== */}
-        {/* INSPECTION PAYMENTS */}
-        {/* ================================================================== */}
-
-        {isAgricultural && (order.listing?.inspectionRequests || []).filter((r) => r.status !== 'CANCELLED' && r.fee != null && Number(r.fee) > 0).map((request) => {
-          const requestPayment = (request.payments || []).find((p) => p.type === 'INSPECTOR' && p.status === 'PENDING') || (request.payments || []).find((p) => p.type === 'INSPECTOR' && p.status === 'PAID');
-          const paid = requestPayment?.status === 'PAID';
-          return (
-            <div className="card" key={request.id}>
-              <h2>Inspector payment</h2>
-              <p className="muted">{request.inspector?.name ? `Inspector: ${request.inspector.name}` : 'Inspection service'}</p>
-              <p>Amount: <strong>{money(request.fee)} ETB</strong></p>
-              {paid ? <div className="notice"><strong>✓ Inspector payment confirmed.</strong></div> : requestPayment ? <button type="button" className="btn btn-primary" disabled={busy === `resume-inspection-${request.id}`} onClick={() => resumePayment(requestPayment.id, `resume-inspection-${request.id}`)}>{busy === `resume-inspection-${request.id}` ? 'Redirecting…' : 'Resume inspector payment'}</button> : isBuyer ? <button type="button" className="btn btn-primary" disabled={busy === `pay-inspection-${request.id}`} onClick={async () => { setBusy(`pay-inspection-${request.id}`); setError(''); try { await startChapaPayment({ type: 'INSPECTOR', inspectionRequestId: request.id, orderId: order.id, amount: Number(request.fee), method: payMethod }); await load({ silent: true }); } catch (err) { setError(getError(err, 'Could not start inspector payment')); } finally { setBusy(''); } }}>{busy === `pay-inspection-${request.id}` ? 'Submitting…' : 'Pay inspector now'}</button> : <p className="muted">The buyer must complete this inspection payment.</p>}
-            </div>
-          );
-        })}
-
-        {/* ================================================================== */}
-        {/* MARKETPLACE PAYMENT */}
-        {/* ================================================================== */}
-
-        {canPayMarketplace && (
-          <div className="card">
-            <h2>Payment</h2>
-
-            <p className="muted">
-              This order is awaiting payment before
-              the seller can proceed.
-            </p>
-
-            <p>
-              Amount due:{' '}
-              <strong>
-                {money(order.finalPrice)} ETB
-              </strong>
-            </p>
-
-            <div
-              style={{
-                display: 'flex',
-                gap: 8,
-                flexWrap: 'wrap',
-                alignItems: 'center',
-              }}
-            >
-              <select
-                value={payMethod}
-                onChange={(event) =>
-                  setPayMethod(
-                    event.target.value
-                  )
-                }
-                disabled={
-                  busy ===
-                  'pay-marketplace'
-                }
-              >
-                {PAYMENT_METHODS.map(
-                  (method) => (
-                    <option
-                      key={method.value}
-                      value={method.value}
-                    >
-                      {method.label}
-                    </option>
-                  )
-                )}
-              </select>
-
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={
-                  busy ===
-                  'pay-marketplace'
-                }
-                onClick={payMarketplace}
-              >
-                {busy ===
-                'pay-marketplace'
-                  ? 'Submitting…'
-                  : 'Pay seller / order now'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ================================================================== */}
-        {/* MARKETPLACE PAYMENT PENDING */}
-        {/* ================================================================== */}
-
-        {canResumeMarketplacePayment && (
-          <div className="card">
-            <h2>Payment</h2>
-
-            <p className="muted">
-              You started a payment for this
-              order, but it has not completed yet.
-            </p>
-
-            <div className="notice">
-              <p>
-                Payment reference:{' '}
-                <strong>
-                  {shortId(
-                    marketplacePayment.id
-                  )}
-                </strong>
-              </p>
-
-              <p>
-                Amount:{' '}
-                <strong>
-                  {money(
-                    marketplacePayment.amount
-                  )}{' '}
-                  ETB
-                </strong>
-              </p>
-
-              <p>
-                Method:{' '}
-                <strong>
-                  {marketplacePayment.method ||
-                    '—'}
-                </strong>
-              </p>
-
-              <p>
-                Status:{' '}
-                <span className="badge">
-                  {marketplacePayment.status}
-                </span>
-              </p>
-            </div>
-
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={
-                busy ===
-                'resume-marketplace'
-              }
-              onClick={() =>
-                resumePayment(
-                  marketplacePayment.id,
-                  'resume-marketplace'
-                )
-              }
-            >
-              {busy ===
-              'resume-marketplace'
-                ? 'Redirecting…'
-                : 'Resume payment'}
-            </button>
-          </div>
-        )}
-
-        {/* ================================================================== */}
-        {/* MARKETPLACE PAYMENT PAID */}
-        {/* ================================================================== */}
-
-        {marketplacePaid && (
-          <div className="card">
-            <h2>Marketplace payment</h2>
-
-            <div className="notice">
-              <p>
-                <strong>
-                  ✓ Marketplace payment confirmed.
-                </strong>
-              </p>
-
-              <p className="muted">
-                Paid amount:{' '}
-                {money(
-                  marketplacePayments.find(
-                    (payment) =>
-                      payment.status ===
-                      'PAID'
-                  )?.amount
-                )}{' '}
-                ETB
-              </p>
-            </div>
-          </div>
-        )}
-
-        {marketplacePending &&
-          !canResumeMarketplacePayment &&
-          !marketplacePaid && (
-            <div className="card">
-              <h2>
-                Marketplace payment
-              </h2>
-
-              <p className="muted">
-                A marketplace payment is
-                currently pending.
-              </p>
-            </div>
-          )}
-
-        {/* ================================================================== */}
-        {/* PAYMENT CHECKLIST */}
-        {/* ================================================================== */}
-
-        {transportJob && (
-          <div className="card">
-            <h2>Payment center</h2>
-            <p className="muted">Seller, inspector (if required), and hired transporter payments are tracked separately. All required payments must show PAID before the transporter can pick up the goods.</p>
-            <div className="notice">
-              <p>{marketplacePaid ? '✓' : '○'} Seller / marketplace payment — <strong>{marketplacePaid ? 'PAID' : 'NOT PAID'}</strong></p>
-              {isAgricultural && (order.listing?.inspectionRequests || []).filter((r) => r.status !== 'CANCELLED' && r.fee != null && Number(r.fee) > 0).map((r) => {
-                const paid = (r.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID');
-                return <p key={r.id}>{paid ? '✓' : '○'} Inspector — <strong>{paid ? 'PAID' : 'NOT PAID'}</strong></p>;
-              })}
-              {transportJob.method === 'HIRE_TRANSPORTER' && <p>{transportPaid ? '✓' : '○'} Transporter — <strong>{transportPaid ? 'PAID' : 'NOT PAID'}</strong></p>}
-              {transportJob.method === 'OWN_TRUCK' && <p>✓ Own truck — <strong>NO TRANSPORTER PAYMENT REQUIRED</strong></p>}
-            </div>
-            {transportJob.status === 'ACCEPTED' && (!marketplacePaid || !transportPaid || (isAgricultural && (order.listing?.inspectionRequests || []).some((r) => r.status !== 'CANCELLED' && r.fee != null && Number(r.fee) > 0 && !(r.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID')))) && (
-              <div className="alert error" style={{ marginTop: 10 }}>Transport is waiting for payment. PICKUP is locked until every required payment is PAID.</div>
-            )}
           </div>
         )}
 
@@ -1517,7 +1306,7 @@ export default function OrderDetail() {
                   </div>
                 )}
 
-              {canPayTransport && (
+              {canStartTransportPayment && (
                 <div className="notice">
                   <h3>
                     Transport payment
@@ -1822,6 +1611,234 @@ export default function OrderDetail() {
         </div>
 
         {/* ================================================================== */}
+        {/* PAYMENT CENTER */}
+        {/* ================================================================== */}
+
+        <div className="card payment-action-center" id="payment-center">
+          <div className="row-between">
+            <div>
+              <span className="eyebrow">PAYMENT CENTER</span>
+              <h2>Complete required payments</h2>
+              <p className="muted">
+                Payments are separate. The buyer can pay the seller, any required
+                inspector, and a hired transporter from this order page.
+              </p>
+            </div>
+          </div>
+
+          {buyerIdentityMismatch && (
+            <div className="alert error">
+              This order belongs to a different buyer account. Sign in with the
+              buyer account to make payments.
+            </div>
+          )}
+
+          {isBuyer ? (
+            <div style={{ display: 'grid', gap: 12 }}>
+              {/* Seller / marketplace payment */}
+              <div className="notice">
+                <div className="row-between" style={{ gap: 12, flexWrap: 'wrap' }}>
+                  <div>
+                    <strong>Seller / order payment</strong>
+                    <p className="muted" style={{ marginBottom: 0 }}>
+                      {marketplacePaid
+                        ? 'Payment confirmed.'
+                        : `Amount due: ${money(order.finalPrice)} ETB`}
+                    </p>
+                  </div>
+                  <span className="badge">
+                    {marketplacePaid ? 'PAID' : marketplacePending ? 'PENDING' : 'NOT PAID'}
+                  </span>
+                </div>
+
+                {!marketplacePaid && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+                    <select
+                      value={payMethod}
+                      onChange={(event) => setPayMethod(event.target.value)}
+                      disabled={busy === 'pay-marketplace' || busy === 'resume-marketplace'}
+                    >
+                      {PAYMENT_METHODS.map((method) => (
+                        <option key={method.value} value={method.value}>
+                          {method.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    {canResumeMarketplacePayment ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={busy === 'resume-marketplace'}
+                        onClick={() => resumePayment(marketplacePayment.id, 'resume-marketplace')}
+                      >
+                        {busy === 'resume-marketplace' ? 'Redirecting…' : 'Resume seller payment'}
+                      </button>
+                    ) : canPayMarketplace ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={busy === 'pay-marketplace'}
+                        onClick={payMarketplace}
+                      >
+                        {busy === 'pay-marketplace' ? 'Submitting…' : 'Pay seller / order now'}
+                      </button>
+                    ) : marketplacePending ? (
+                      <span className="muted">A payment is pending. Refresh this page after checkout.</span>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
+              {/* Inspector payments */}
+              {isAgricultural && inspectionPaymentRows.length > 0 && (
+                <div className="notice">
+                  <strong>Inspection payment(s)</strong>
+                  {inspectionPaymentRows.map((request) => {
+                    const requestPayment =
+                      (request.payments || []).find((payment) =>
+                        payment.type === 'INSPECTOR' && payment.status === 'PENDING'
+                      ) || null;
+                    const paid = (request.payments || []).some((payment) =>
+                      payment.type === 'INSPECTOR' && payment.status === 'PAID'
+                    );
+
+                    return (
+                      <div key={request.id} style={{ marginTop: 10 }}>
+                        <div className="row-between" style={{ gap: 12, flexWrap: 'wrap' }}>
+                          <span>
+                            {request.inspector?.name || 'Inspector'} — {money(request.fee)} ETB
+                          </span>
+                          <span className="badge">{paid ? 'PAID' : requestPayment ? 'PENDING' : 'NOT PAID'}</span>
+                        </div>
+
+                        {!paid && (
+                          requestPayment ? (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              style={{ marginTop: 8 }}
+                              disabled={busy === `resume-inspection-${request.id}`}
+                              onClick={() => resumePayment(requestPayment.id, `resume-inspection-${request.id}`)}
+                            >
+                              {busy === `resume-inspection-${request.id}` ? 'Redirecting…' : 'Resume inspector payment'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              style={{ marginTop: 8 }}
+                              disabled={busy === `pay-inspection-${request.id}`}
+                              onClick={async () => {
+                                setBusy(`pay-inspection-${request.id}`);
+                                setError('');
+                                try {
+                                  await startChapaPayment({
+                                    type: 'INSPECTOR',
+                                    inspectionRequestId: request.id,
+                                    orderId: order.id,
+                                    amount: Number(request.fee),
+                                    method: payMethod,
+                                  });
+                                  await load({ silent: true });
+                                } catch (err) {
+                                  setError(getError(err, 'Could not start inspector payment'));
+                                } finally {
+                                  setBusy('');
+                                }
+                              }}
+                            >
+                              {busy === `pay-inspection-${request.id}` ? 'Submitting…' : 'Pay inspector now'}
+                            </button>
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Hired transporter payment */}
+              {transportJob?.method === 'HIRE_TRANSPORTER' && (
+                <div className="notice">
+                  <div className="row-between" style={{ gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <strong>Hired transporter payment</strong>
+                      <p className="muted" style={{ marginBottom: 0 }}>
+                        {transportJob.agreedAmount != null
+                          ? `Transport fee: ${money(transportJob.agreedAmount)} ETB`
+                          : 'Transport fee has not been agreed yet.'}
+                      </p>
+                    </div>
+                    <span className="badge">
+                      {transportPaid ? 'PAID' : transportPending ? 'PENDING' : 'NOT PAID'}
+                    </span>
+                  </div>
+
+                  {transportJob.status !== 'ACCEPTED' && !transportPaid && !transportPending && (
+                    <p className="muted" style={{ marginTop: 8 }}>
+                      Transporter payment becomes available after the transporter quote is accepted.
+                    </p>
+                  )}
+
+                  {transportJob.status === 'ACCEPTED' && !transportPaid && transportJob.agreedAmount != null && (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+                      {!transportPending && (
+                        <select
+                          value={payMethod}
+                          onChange={(event) => setPayMethod(event.target.value)}
+                          disabled={busy === 'pay-transport' || busy === 'resume-transport'}
+                        >
+                          {PAYMENT_METHODS.map((method) => (
+                            <option key={method.value} value={method.value}>
+                              {method.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      {canResumeTransportPayment ? (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={busy === 'resume-transport'}
+                          onClick={() => resumePayment(transportPayment.id, 'resume-transport')}
+                        >
+                          {busy === 'resume-transport' ? 'Redirecting…' : 'Resume transporter payment'}
+                        </button>
+                      ) : canStartTransportPayment ? (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={busy === 'pay-transport'}
+                          onClick={payTransport}
+                        >
+                          {busy === 'pay-transport' ? 'Submitting…' : 'Pay transporter now'}
+                        </button>
+                      ) : transportPending ? (
+                        <span className="muted">A transport payment is pending. Refresh this page after checkout.</span>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!marketplacePaid && !canPayMarketplace && !marketplacePending && !isAdmin && (
+                <div className="alert error">
+                  The buyer payment control is unavailable for this session. Refresh the page; if it remains unavailable, sign in again with the buyer account.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="notice">
+              <p className="muted" style={{ marginBottom: 0 }}>
+                Only the buyer can make seller, inspection, and hired-transporter payments. You can monitor payment status below.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* ================================================================== */}
         {/* CONFIRM RECEIPT */}
         {/* ================================================================== */}
 
@@ -1960,7 +1977,7 @@ export default function OrderDetail() {
 
         <RatingBox
           order={order}
-          userId={user?.id}
+          userId={currentUserId}
           onRated={() =>
             load({ silent: true })
           }
@@ -1976,7 +1993,7 @@ export default function OrderDetail() {
             messages={order.messages || []}
             counterpartId={counterpartId}
             counterpartName={counterpartName}
-            currentUserId={user?.id}
+            currentUserId={currentUserId}
             onSent={() =>
               load({ silent: true })
             }
