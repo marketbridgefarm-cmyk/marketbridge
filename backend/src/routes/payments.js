@@ -255,7 +255,7 @@ router.post(
               listing: {
                 include: {
                   inspectionRequests: {
-                    include: { payments: true },
+                    include: { payments: true, report: true },
                   },
                 },
               },
@@ -325,35 +325,23 @@ router.post(
             });
           }
 
-          // Agricultural orders: buyers must have transport arranged and
-          // an inspection paid for before they can pay for the produce
-          // itself. Physical PRODUCT (buy-now) orders are unaffected.
-          if (
-            order.listing?.category ===
-            'AGRICULTURAL'
-          ) {
-            if (!order.transportJob) {
-              return res.status(400).json({
-                error:
-                  'Transport must be arranged before the marketplace payment can be made for agricultural orders',
-              });
-            }
-
-            const inspectionPaid =
-              (order.listing.inspectionRequests || []).some(
-                (request) =>
-                  (request.payments || []).some(
-                    (payment) =>
-                      payment.type === 'INSPECTOR' &&
-                      payment.status === 'PAID'
-                  )
+          // Agricultural orders: transport is a separate operational
+          // decision and must NOT block payment. If an inspection request
+          // exists, the buyer should complete that quality-verification step
+          // before paying for the produce. If no inspection was requested,
+          // payment may proceed.
+          if (order.listing?.category === 'AGRICULTURAL') {
+            const inspectionRequests = order.listing.inspectionRequests || [];
+            if (inspectionRequests.length > 0) {
+              const inspectionCompleted = inspectionRequests.some(
+                (request) => request.status === 'COMPLETED' && request.report
               );
 
-            if (!inspectionPaid) {
-              return res.status(402).json({
-                error:
-                  'An inspection must be paid for before the marketplace payment can be made for agricultural orders',
-              });
+              if (!inspectionCompleted) {
+                return res.status(409).json({
+                  error: 'Complete the requested agricultural inspection and report before paying for the produce',
+                });
+              }
             }
           }
         }

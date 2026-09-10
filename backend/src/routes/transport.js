@@ -683,21 +683,38 @@ router.post(
         }
       }
 
-      let resolvedArrangingParty =
-        arrangingParty;
+      // Seller, buyer, or both parties may arrange transport. The
+      // arrangingParty describes who has taken responsibility for the
+      // transport decision; it is deliberately not inferred from the
+      // marketplace role because normal users may both buy and sell.
+      let resolvedArrangingParty = arrangingParty;
 
-      if (isAgricultural) {
-        if (
-          order.buyerId !== req.user.id &&
-          !isAdmin(req.user)
-        ) {
-          return res.status(403).json({
-            error:
-              'For agricultural orders, only the buyer can arrange transport',
-          });
-        }
+      if (!['SELLER', 'BUYER', 'JOINT'].includes(resolvedArrangingParty)) {
+        return res.status(400).json({
+          error: 'arrangingParty must be SELLER, BUYER, or JOINT',
+        });
+      }
 
-        resolvedArrangingParty = 'BUYER';
+      // A party can only declare OWN_TRUCK when the acting user actually
+      // owns the selected truck. JOINT + OWN_TRUCK is intentionally rejected
+      // because the API has no separate field identifying which joint party
+      // supplied the truck; use JOINT + HIRE_TRANSPORTER instead.
+      if (method === 'OWN_TRUCK' && resolvedArrangingParty === 'JOINT') {
+        return res.status(400).json({
+          error: 'JOINT arrangements must use HIRE_TRANSPORTER. For an own truck, select SELLER or BUYER as the arranging party.',
+        });
+      }
+
+      if (resolvedArrangingParty === 'SELLER' && order.sellerId !== req.user.id && !isAdmin(req.user)) {
+        return res.status(403).json({ error: 'Only the seller can create a SELLER-arranged transport job' });
+      }
+
+      if (resolvedArrangingParty === 'BUYER' && order.buyerId !== req.user.id && !isAdmin(req.user)) {
+        return res.status(403).json({ error: 'Only the buyer can create a BUYER-arranged transport job' });
+      }
+
+      if (resolvedArrangingParty === 'JOINT' && !isOrderParticipant(req.user.id, order) && !isAdmin(req.user)) {
+        return res.status(403).json({ error: 'Only the buyer or seller can create a JOINT transport arrangement' });
       }
 
       // ----------------------------------------------------------------------

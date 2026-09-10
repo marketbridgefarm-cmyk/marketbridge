@@ -20,7 +20,18 @@ const transportInclude = {
 };
 
 const orderInclude = {
-  listing: true,
+  listing: {
+    include: {
+      inspectionRequests: {
+        include: {
+          inspector: { select: { id: true, name: true, phone: true, rating: true, verificationStatus: true } },
+          report: true,
+          payments: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  },
   buyer: { select: userSelect },
   seller: { select: userSelect },
   transportJob: { include: transportInclude },
