@@ -235,9 +235,15 @@ router.get(
             },
           },
 
+          // Sealed-bid: an inspector browsing open requests only ever sees
+          // their OWN quote here, never anyone else's amount, message, or
+          // even the fact that other quotes exist. The requester is the
+          // only party who can see the full quote list, via the separate
+          // GET /:id/quotes route below.
           quotes: {
             where: {
               status: 'PENDING',
+              inspectorId: req.user.id,
             },
 
             select: {

@@ -597,32 +597,13 @@ router.get('/:id', async (req, res) => {
                 },
               },
 
-              quotes: {
-                where: {
-                  status: {
-                    in: [
-                      'PENDING',
-                      'ACCEPTED',
-                    ],
-                  },
-                },
-
-                include: {
-                  inspector: {
-                    select: {
-                      id: true,
-                      name: true,
-                      rating: true,
-                      location: true,
-                      verificationStatus: true,
-                    },
-                  },
-                },
-
-                orderBy: {
-                  amount: 'asc',
-                },
-              },
+              // Quote amounts/messages are NOT included here. This route has
+              // no `authenticate` middleware — it's public — so embedding
+              // quotes here would leak every inspector's bid to anyone,
+              // including competing inspectors who never called the
+              // requester-only GET /inspections/:id/quotes endpoint.
+              // The requester fetches quotes through that protected route
+              // instead.
             },
 
             orderBy: {

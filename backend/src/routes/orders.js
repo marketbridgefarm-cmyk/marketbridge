@@ -1,9 +1,29 @@
 const express = require('express');
+const { body, param, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { recordAuditEvent } = require('../utils/audit');
+const { isAdmin } = require('../utils/authorization');
 
 const router = express.Router();
+
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
+  }
+  next();
+};
+
+// Once an order is COMPLETED or already CANCELLED there is nothing left to
+// cancel.
+const NON_CANCELLABLE_STATUSES = ['COMPLETED', 'CANCELLED'];
+
+// Once the truck has actually picked up, is moving, or has delivered the
+// goods, a plain cancel is the wrong tool — that needs the dispute/refund
+// workflow so both sides have a record of why goods that physically moved
+// are being unwound.
+const TRANSPORT_IN_MOTION_STATUSES = ['PICKUP', 'IN_TRANSIT', 'DELIVERED'];
 
 const userSelect = { id: true, name: true, phone: true, location: true, rating: true, verificationStatus: true };
 
@@ -246,5 +266,141 @@ router.patch('/:id/confirm-receipt', authenticate, async (req, res) => {
     return res.status(500).json({ error: 'Failed to confirm receipt' });
   }
 });
+
+// CANCEL an order.
+//   - Buyer: only while PENDING_PAYMENT (backing out before paying).
+//   - Seller: while PENDING_PAYMENT or CONFIRMED (killing a stalled order
+//     before transport is really underway).
+//   - Admin: any order not already COMPLETED/CANCELLED, as an override —
+//     including DISPUTED orders, as part of dispute resolution.
+// In every case, goods already PICKUP/IN_TRANSIT/DELIVERED block a plain
+// cancel; use a dispute instead.
+router.patch(
+  '/:id/cancel',
+  authenticate,
+  [
+    param('id').isUUID(),
+    body('reason').optional().isString().trim().isLength({ max: 500 }),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const order = await prisma.order.findUnique({
+        where: { id: req.params.id },
+        include: { transportJob: true },
+      });
+
+      if (!order) return res.status(404).json({ error: 'Order not found' });
+
+      const userIsAdmin = isAdmin(req.user);
+      const userIsBuyer = order.buyerId === req.user.id;
+      const userIsSeller = order.sellerId === req.user.id;
+
+      if (!userIsAdmin && !userIsBuyer && !userIsSeller) {
+        return res.status(403).json({ error: 'Not authorized to cancel this order' });
+      }
+
+      if (NON_CANCELLABLE_STATUSES.includes(order.status)) {
+        return res.status(400).json({
+          error: `Order is already ${order.status.toLowerCase()} and cannot be cancelled`,
+        });
+      }
+
+      if (order.transportJob && TRANSPORT_IN_MOTION_STATUSES.includes(order.transportJob.status)) {
+        return res.status(400).json({
+          error: 'Goods are already in transit or delivered for this order. Raise a dispute instead of cancelling.',
+        });
+      }
+
+      if (userIsBuyer && !userIsAdmin && order.status !== 'PENDING_PAYMENT') {
+        return res.status(400).json({
+          error: 'You can only cancel an order before it has been paid for. Raise a dispute for orders already in progress.',
+        });
+      }
+
+      if (userIsSeller && !userIsAdmin && !['PENDING_PAYMENT', 'CONFIRMED'].includes(order.status)) {
+        return res.status(400).json({
+          error: 'This order has moved past the point a seller can cancel directly. An admin can cancel it, or raise a dispute.',
+        });
+      }
+
+      const reason = req.body?.reason || null;
+      const cancelledByRole = userIsAdmin ? 'ADMIN' : userIsBuyer ? 'BUYER' : 'SELLER';
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const current = await tx.order.findUnique({
+          where: { id: order.id },
+          include: { transportJob: true, payments: true },
+        });
+
+        if (!current || NON_CANCELLABLE_STATUSES.includes(current.status)) {
+          throw Object.assign(new Error('Order is no longer cancellable'), { status: 409 });
+        }
+
+        await tx.order.update({
+          where: { id: current.id },
+          data: { status: 'CANCELLED' },
+        });
+
+        // Free the listing back up so it can be sold again.
+        await tx.listing.update({
+          where: { id: current.listingId },
+          data: { status: 'ACTIVE' },
+        });
+
+        // Cascade-cancel a transport job that hasn't moved yet.
+        if (current.transportJob && !['DELIVERED', 'CANCELLED'].includes(current.transportJob.status)) {
+          await tx.transportJob.update({
+            where: { id: current.transportJob.id },
+            data: { status: 'CANCELLED' },
+          });
+        }
+
+        // Payment gateways are stubbed (see README) — there's no live
+        // provider to call for a refund here, so anything already PAID on
+        // this order gets flagged REFUNDED as a bookkeeping record rather
+        // than silently written off. A real gateway integration should
+        // trigger an actual refund call from this same branch.
+        const paidOrderPayments = current.payments.filter((p) => p.status === 'PAID');
+        const paidTransportPayments = current.transportJob
+          ? await tx.payment.findMany({
+              where: { transportJobId: current.transportJob.id, status: 'PAID' },
+            })
+          : [];
+
+        const toRefund = [...paidOrderPayments, ...paidTransportPayments];
+        for (const payment of toRefund) {
+          await tx.payment.update({
+            where: { id: payment.id },
+            data: { status: 'REFUNDED' },
+          });
+        }
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'ORDER_CANCELLED',
+          resourceType: 'Order',
+          resourceId: current.id,
+          metadata: {
+            fromStatus: current.status,
+            toStatus: 'CANCELLED',
+            cancelledByRole,
+            reason,
+            refundedPaymentIds: toRefund.map((p) => p.id),
+          },
+        });
+
+        return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
+      });
+
+      return res.json({ message: 'Order cancelled.', order: updated });
+    } catch (error) {
+      console.error('CANCEL ORDER ERROR:', error);
+      return res.status(error.status || 500).json({
+        error: error.status ? error.message : 'Failed to cancel order',
+      });
+    }
+  }
+);
 
 module.exports = router;
