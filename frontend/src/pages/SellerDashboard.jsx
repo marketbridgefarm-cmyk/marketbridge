@@ -23,9 +23,11 @@ export default function SellerDashboard() {
   const [activeTab, setActiveTab] = useState('listings');
   const [toastMsg, setToastMsg] = useState('');
   const [selectedOffer, setSelectedOffer] = useState(null);
+  const [editingListing, setEditingListing] = useState(null);
 
   const listingModalRef = useRef(null);
   const offerModalRef = useRef(null);
+  const editModalRef = useRef(null);
 
   function toast(msg) {
     setToastMsg(msg);
@@ -92,6 +94,42 @@ export default function SellerDashboard() {
       loadAll();
     } catch (err) {
       toast(err.response?.data?.error || 'Could not publish listing');
+    }
+  }
+
+  async function withdrawListing(listing) {
+    if (!window.confirm(`Withdraw "${listing.cropType}"? Buyers will no longer be able to see or offer on this listing.`)) return;
+    try {
+      await api.patch(`/listings/${listing.id}`, { status: 'CANCELLED' });
+      toast('Listing withdrawn.');
+      loadAll();
+    } catch (err) {
+      toast(err.response?.data?.error || 'Could not withdraw listing');
+    }
+  }
+
+  function openEditModal(listing) {
+    setEditingListing(listing);
+    editModalRef.current.showModal();
+  }
+
+  async function submitEditListing(e) {
+    e.preventDefault();
+    if (!editingListing) return;
+    const d = new FormData(e.target);
+    try {
+      await api.patch(`/listings/${editingListing.id}`, {
+        askingPrice: Number(d.get('price')),
+        minAcceptablePrice: d.get('minimum') ? Number(d.get('minimum')) : null,
+        quantity: Number(d.get('quantity')),
+        readinessDate: d.get('date') || undefined,
+      });
+      editModalRef.current.close();
+      setEditingListing(null);
+      toast('Listing updated.');
+      loadAll();
+    } catch (err) {
+      toast(err.response?.data?.error || 'Could not update listing');
     }
   }
 
@@ -180,7 +218,17 @@ export default function SellerDashboard() {
                         <td>{best ? best.amount.toLocaleString() + ' ETB' : '—'}</td>
                         <td>{latestInsp ? <span className={`sd-badge ${latestInsp.status === 'COMPLETED' ? '' : 'sd-warn'}`}>{latestInsp.status === 'COMPLETED' ? 'Verified' : latestInsp.status}</span> : <span className="sd-badge sd-warn">Not requested</span>}</td>
                         <td><span className="sd-badge">{l.status}</span></td>
-                        <td><Link to={`/listings/${l.id}`}><button className="sd-btn sd-btn-outline">View</button></Link></td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <Link to={`/listings/${l.id}`}><button className="sd-btn sd-btn-outline">View</button></Link>
+                            {l.status === 'ACTIVE' && (
+                              <>
+                                <button className="sd-btn sd-btn-outline" onClick={() => openEditModal(l)}>Edit</button>
+                                <button className="sd-btn sd-btn-outline" onClick={() => withdrawListing(l)}>Withdraw</button>
+                              </>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -334,6 +382,29 @@ export default function SellerDashboard() {
               <button type="button" className="sd-btn sd-btn-outline" onClick={() => listingModalRef.current.close()}>Cancel</button>
             </div>
           </form>
+        </div>
+      </dialog>
+
+      <dialog ref={editModalRef} className="sd-dialog">
+        <div className="sd-modal">
+          <button className="sd-close" onClick={() => { editModalRef.current.close(); setEditingListing(null); }}>×</button>
+          <span className="sd-eyebrow">EDIT LISTING</span>
+          <h2>Update {editingListing?.cropType || 'listing'}</h2>
+          {editingListing && (
+            <form onSubmit={submitEditListing}>
+              <div className="sd-form-grid">
+                <div><label>Quantity ({editingListing.unit})</label><input name="quantity" type="number" defaultValue={editingListing.quantity} required /></div>
+                <div><label>Asking price (ETB)</label><input name="price" type="number" defaultValue={editingListing.askingPrice} required /></div>
+                <div><label>Minimum acceptable price</label><input name="minimum" type="number" defaultValue={editingListing.minAcceptablePrice ?? ''} /></div>
+                <div><label>Readiness date</label><input name="date" type="date" defaultValue={editingListing.readinessDate ? editingListing.readinessDate.slice(0, 10) : ''} /></div>
+              </div>
+              <div className="sd-notice" style={{ marginTop: 12 }}>Buyers who already made an offer will still see their original offer amount — this only changes your public asking price going forward.</div>
+              <div className="sd-modal-actions" style={{ marginTop: 20 }}>
+                <button className="sd-btn sd-btn-primary">Save changes</button>
+                <button type="button" className="sd-btn sd-btn-outline" onClick={() => { editModalRef.current.close(); setEditingListing(null); }}>Cancel</button>
+              </div>
+            </form>
+          )}
         </div>
       </dialog>
 
