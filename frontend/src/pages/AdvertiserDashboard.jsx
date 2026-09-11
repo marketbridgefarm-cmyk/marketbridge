@@ -3,6 +3,8 @@ import api from '../api/client';
 import { startChapaPayment, chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 import { useAuth } from '../context/AuthContext.jsx';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
+import DashboardWelcome from '../components/DashboardWelcome.jsx';
+import RecentActivity from '../components/RecentActivity.jsx';
 
 const AD_TYPES = [
   { value: 'FEATURED_LISTING', label: 'Featured Listing' },
@@ -71,6 +73,19 @@ export default function AdvertiserDashboard() {
   }
 
   const needsListing = LISTING_LINKED_TYPES.includes(form.type);
+
+  const activityItems = ads.map((ad) => {
+    const typeLabel = AD_TYPES.find((t) => t.value === ad.type)?.label || 'Campaign';
+    const statusLabel = STATUS_LABELS[ad.status] || ad.status;
+    const listingSuffix = ad.listing?.cropType || ad.listing?.title ? ` for ${ad.listing.cropType || ad.listing.title}` : '';
+    return {
+      id: `ad-${ad.id}`,
+      icon: '📣',
+      text: `${typeLabel}${listingSuffix} is ${statusLabel.toLowerCase()}`,
+      time: ad.updatedAt || ad.createdAt,
+      href: ad.listing?.id ? `/listings/${ad.listing.id}` : undefined,
+    };
+  });
 
   async function submitAd(e) {
     e.preventDefault();
@@ -148,6 +163,7 @@ export default function AdvertiserDashboard() {
   return (
     <main className="section">
       <div className="container-wide">
+        <DashboardWelcome user={user} subtitle="Promote a listing, or run a platform-wide banner or Telegram placement." />
         <div className="page-header">
           <div>
             <span className="eyebrow">ADVERTISING</span>
@@ -157,6 +173,7 @@ export default function AdvertiserDashboard() {
         </div>
 
         <RoleSwitchCTA current="ADVERTISER" />
+        <RecentActivity items={activityItems} emptyText="No campaigns yet — create one below." />
 
         {error && <div className="alert error">{error}</div>}
         {success && <div className="alert">{success}</div>}
