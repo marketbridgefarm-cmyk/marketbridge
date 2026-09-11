@@ -70,9 +70,19 @@ enum InspectionStatus {
 
 enum InspectionQuoteStatus {
   PENDING
+  COUNTERED
   ACCEPTED
   REJECTED
   WITHDRAWN
+  EXPIRED
+}
+
+// Identifies whose turn it is in a quote negotiation (inspection or
+// transport). REQUESTER is the buyer/seller who requested the service;
+// PROVIDER is the inspector or truck owner who quoted on it.
+enum QuoteCounterParty {
+  REQUESTER
+  PROVIDER
 }
 
 enum OrderStatus {
@@ -115,9 +125,11 @@ enum TransportEvidenceType {
 
 enum TransportQuoteStatus {
   PENDING
+  COUNTERED
   ACCEPTED
   REJECTED
   WITHDRAWN
+  EXPIRED
 }
 
 enum TruckAvailability {
@@ -472,13 +484,31 @@ model InspectionQuote {
   status InspectionQuoteStatus @default(PENDING)
   message String?
 
+  // Immutable negotiation chain, mirroring Offer. A counter is a new child
+  // quote row rather than a mutation of the original.
+  parentQuoteId String?
+  parentQuote   InspectionQuote?  @relation("InspectionQuoteChain", fields: [parentQuoteId], references: [id])
+  childQuotes   InspectionQuote[] @relation("InspectionQuoteChain")
+
+  // The latest negotiated price once a counter has been made.
+  counterAmount Float?
+
+  // Whose turn it is to respond after a counter. REQUESTER means the
+  // requester (buyer/seller) most recently countered, so the inspector
+  // must respond next. PROVIDER means the inspector most recently
+  // countered, so the requester must respond next.
+  counteredBy QuoteCounterParty?
+
+  expiresAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([inspectionRequestId, inspectorId])
   @@index([inspectionRequestId])
   @@index([inspectorId])
   @@index([status])
+  @@index([parentQuoteId])
+  @@index([expiresAt])
 }
 
 // ============================================================================
@@ -707,6 +737,20 @@ model TransportQuote {
 
   message String?
 
+  // Immutable negotiation chain, mirroring Offer/InspectionQuote.
+  parentQuoteId String?
+  parentQuote   TransportQuote?  @relation("TransportQuoteChain", fields: [parentQuoteId], references: [id])
+  childQuotes   TransportQuote[] @relation("TransportQuoteChain")
+
+  counterAmount Float?
+
+  // REQUESTER = arranging party (buyer/seller) countered last, truck owner
+  // must respond. PROVIDER = truck owner countered last, arranging party
+  // must respond.
+  counteredBy QuoteCounterParty?
+
+  expiresAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -714,8 +758,8 @@ model TransportQuote {
   @@index([truckOwnerId])
   @@index([truckId])
   @@index([status])
-
-  @@unique([transportJobId, truckOwnerId, truckId])
+  @@index([parentQuoteId])
+  @@index([expiresAt])
 }
 
 // ============================================================================
