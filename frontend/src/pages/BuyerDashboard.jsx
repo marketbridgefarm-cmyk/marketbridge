@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
