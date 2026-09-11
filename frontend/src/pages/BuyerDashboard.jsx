@@ -398,6 +398,37 @@ export default function BuyerDashboard() {
     }
   }
 
+  async function cancelOrder(orderId) {
+    if (!orderId) return;
+
+    const confirmed = window.confirm(
+      'Cancel this order? This cannot be undone. It is only available before you have paid.'
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setSubmitting(true);
+
+      await api.patch(
+        `/orders/${orderId}/cancel`
+      );
+
+      toast('Order cancelled.');
+
+      await loadAll();
+    } catch (err) {
+      console.error('Order cancellation error:', err);
+
+      toast(
+        err.response?.data?.error ||
+          'Could not cancel order.'
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   /*
    * Only orders where transport has not yet been arranged can
    * receive a new transport record.
@@ -768,6 +799,25 @@ export default function BuyerDashboard() {
                               disabled={submitting}
                             >
                               Confirm Receipt
+                            </button>
+                          )}
+
+                          {order.status ===
+                            'PENDING_PAYMENT' && (
+                            <button
+                              type="button"
+                              className="sd-btn sd-btn-outline"
+                              style={{
+                                marginTop: 6,
+                              }}
+                              onClick={() =>
+                                cancelOrder(
+                                  order.id
+                                )
+                              }
+                              disabled={submitting}
+                            >
+                              Cancel Order
                             </button>
                           )}
                         </td>

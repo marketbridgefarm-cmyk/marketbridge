@@ -108,6 +108,17 @@ export default function SellerDashboard() {
     }
   }
 
+  async function cancelOrder(order) {
+    if (!window.confirm('Cancel this order? This cannot be undone. The listing will become available again and any completed payments will be flagged for refund.')) return;
+    try {
+      await api.patch(`/orders/${order.id}/cancel`);
+      toast('Order cancelled.');
+      loadAll();
+    } catch (err) {
+      toast(err.response?.data?.error || 'Could not cancel order');
+    }
+  }
+
   function openEditModal(listing) {
     setEditingListing(listing);
     editModalRef.current.showModal();
@@ -271,7 +282,7 @@ export default function SellerDashboard() {
                       <td>{o.finalPrice.toLocaleString()} ETB</td>
                       <td>{o.transportJob ? `${o.transportJob.arrangingParty} — ${o.transportJob.method === 'OWN_TRUCK' ? 'Own Truck' : 'Hire Transport'}` : '—'}</td>
                       <td><span className="sd-badge sd-blue">{o.status}</span></td>
-                      <td><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Link to={`/orders/${o.id}`} className="sd-btn sd-btn-primary">{!o.transportJob ? 'Open order / arrange' : o.transportJob.status === 'REQUESTED' || o.transportJob.status === 'QUOTED' ? 'Review transport' : 'Open order / continue'}</Link>{!o.transportJob && <Link to={`/orders/${o.id}/transport`} className="sd-btn sd-btn-outline">Arrange transport</Link>}</div></td>
+                      <td><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Link to={`/orders/${o.id}`} className="sd-btn sd-btn-primary">{!o.transportJob ? 'Open order / arrange' : o.transportJob.status === 'REQUESTED' || o.transportJob.status === 'QUOTED' ? 'Review transport' : 'Open order / continue'}</Link>{!o.transportJob && <Link to={`/orders/${o.id}/transport`} className="sd-btn sd-btn-outline">Arrange transport</Link>}{['PENDING_PAYMENT', 'CONFIRMED'].includes(o.status) && !(o.transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(o.transportJob.status)) && <button type="button" className="sd-btn sd-btn-outline" onClick={() => cancelOrder(o)}>Cancel order</button>}</div></td>
                     </tr>
                   ))}
                   {orders.length === 0 && <tr><td colSpan="7">No orders yet.</td></tr>}

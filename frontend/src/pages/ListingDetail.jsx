@@ -19,6 +19,9 @@ export default function ListingDetail() {
   const [feeForInspector, setFeeForInspector] = useState('');
   const [inspectionPayMethod, setInspectionPayMethod] = useState('TELEBIRR');
   const [payingInspectionId, setPayingInspectionId] = useState('');
+  const [quotesByRequest, setQuotesByRequest] = useState({});
+  const [loadingQuotesId, setLoadingQuotesId] = useState('');
+  const [acceptingQuoteId, setAcceptingQuoteId] = useState('');
   const [buying, setBuying] = useState(false);
   const [buyMethod, setBuyMethod] = useState('TELEBIRR');
   const [buyerCounter, setBuyerCounter] = useState('');
@@ -137,6 +140,38 @@ export default function ListingDetail() {
     }
   }
 
+  async function loadQuotes(requestId) {
+    setError('');
+    setLoadingQuotesId(requestId);
+    try {
+      const response = await api.get(`/inspections/${requestId}/quotes`);
+      setQuotesByRequest((q) => ({ ...q, [requestId]: response.data?.quotes || [] }));
+    } catch (e) {
+      setError(e.response?.data?.error || 'Could not load quotes');
+    } finally {
+      setLoadingQuotesId('');
+    }
+  }
+
+  async function acceptQuote(requestId, quoteId) {
+    setError('');
+    setAcceptingQuoteId(quoteId);
+    try {
+      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/accept`);
+      setMsg('Quote accepted. The inspector has been assigned.');
+      setQuotesByRequest((q) => {
+        const next = { ...q };
+        delete next[requestId];
+        return next;
+      });
+      await load();
+    } catch (e) {
+      setError(e.response?.data?.error || 'Could not accept this quote — it may no longer be available.');
+    } finally {
+      setAcceptingQuoteId('');
+    }
+  }
+
   if (!listing) return <main className="section"><div className="container-wide loading">Loading listing…</div></main>;
 
   const isOwner = user?.id === listing.sellerId;
@@ -191,6 +226,64 @@ export default function ListingDetail() {
                   <div className="evidence" key={request.id}>
                     <div><strong>{request.mode.replaceAll('_', ' ')}</strong><span className="badge" style={{ marginLeft: 8 }}>{request.status}</span></div>
                     {request.inspector && <p>Inspector: {request.inspector.name}</p>}
+                    {request.requestedById === user?.id && request.status === 'REQUESTED' && !request.inspectorId && (
+                      <div style={{ marginTop: 8 }}>
+                        {!quotesByRequest[request.id] ? (
+                          <button
+                            type="button"
+                            className="btn btn-light btn-sm"
+                            disabled={loadingQuotesId === request.id}
+                            onClick={() => loadQuotes(request.id)}
+                          >
+                            {loadingQuotesId === request.id ? 'Loading…' : 'View inspector quotes'}
+                          </button>
+                        ) : (
+                          <div>
+                            <p className="muted" style={{ marginBottom: 6 }}>
+                              {quotesByRequest[request.id].filter((q) => q.status === 'PENDING').length} open quote(s).
+                              {' '}This request has no pre-selected inspector — any inspector may also claim it outright at any time, which closes it to further quotes.
+                            </p>
+                            {quotesByRequest[request.id].length === 0 && (
+                              <p className="muted">No quotes submitted yet.</p>
+                            )}
+                            {quotesByRequest[request.id].map((quote) => (
+                              <div key={quote.id} className="evidence" style={{ marginBottom: 6 }}>
+                                <div>
+                                  <strong>{quote.inspector?.name || 'Inspector'}</strong>
+                                  {' — '}{Number(quote.amount).toLocaleString()} ETB
+                                  <span className="badge" style={{ marginLeft: 8 }}>{quote.status}</span>
+                                </div>
+                                <p className="muted">
+                                  {quote.inspector?.location || 'Location not set'}
+                                  {quote.inspector?.rating != null && ` · Rating ${Number(quote.inspector.rating).toFixed(1)}`}
+                                  {quote.inspector?.verificationStatus && ` · ${quote.inspector.verificationStatus}`}
+                                </p>
+                                {quote.message && <p className="muted">"{quote.message}"</p>}
+                                {quote.status === 'PENDING' && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary btn-sm"
+                                    disabled={acceptingQuoteId === quote.id}
+                                    onClick={() => acceptQuote(request.id, quote.id)}
+                                  >
+                                    {acceptingQuoteId === quote.id ? 'Accepting…' : 'Accept this quote'}
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              className="btn btn-light btn-sm"
+                              style={{ marginTop: 6 }}
+                              disabled={loadingQuotesId === request.id}
+                              onClick={() => loadQuotes(request.id)}
+                            >
+                              {loadingQuotesId === request.id ? 'Refreshing…' : 'Refresh quotes'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {(() => {
                       if (request.requestedById !== user?.id || request.fee == null) return null;
                       const existing = (request.payments || []).find((p) => ['PENDING', 'PAID'].includes(p.status));

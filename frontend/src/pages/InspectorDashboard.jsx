@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const EMPTY_REPORT = {
   quantity: '',
@@ -18,6 +19,9 @@ function modeLabel(mode) {
 }
 
 export default function InspectorDashboard() {
+  const { user } = useAuth();
+  const currentUserId = user?.id || user?.userId || user?._id || null;
+
   const [tab, setTab] = useState('available');
 
   const [available, setAvailable] = useState([]);
@@ -28,6 +32,10 @@ export default function InspectorDashboard() {
   const [error, setError] = useState('');
 
   const [feeInputs, setFeeInputs] = useState({});
+  const [quoteAmountInputs, setQuoteAmountInputs] = useState({});
+  const [quoteMessageInputs, setQuoteMessageInputs] = useState({});
+  const [submittingQuoteId, setSubmittingQuoteId] = useState('');
+  const [quotedRequestIds, setQuotedRequestIds] = useState(() => new Set());
   const [activeRequestId, setActiveRequestId] = useState('');
   const [report, setReport] = useState(EMPTY_REPORT);
   const [reportEvidence, setReportEvidence] = useState({ photoKeys: [], videoKeys: [] });
@@ -88,6 +96,44 @@ export default function InspectorDashboard() {
         err.response?.data?.error ||
           'Could not accept this job — it may have just been claimed by another inspector.'
       );
+    }
+  }
+
+  async function submitQuote(id) {
+    setError('');
+    setMsg('');
+
+    const amount = Number(quoteAmountInputs[id]);
+
+    if (!amount || amount <= 0) {
+      setError(
+        'Enter your quote amount before submitting.'
+      );
+      return;
+    }
+
+    setSubmittingQuoteId(id);
+
+    try {
+      await api.post(`/inspections/${id}/quote`, {
+        amount,
+        message: quoteMessageInputs[id] || undefined,
+      });
+
+      setMsg(
+        'Quote submitted. The requester will pick one inspector, or someone may claim the job outright before then.'
+      );
+
+      setQuotedRequestIds((s) => new Set(s).add(id));
+
+      await loadAll();
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+          'Could not submit quote — the job may have just been claimed or already has your quote.'
+      );
+    } finally {
+      setSubmittingQuoteId('');
     }
   }
 
@@ -358,6 +404,13 @@ export default function InspectorDashboard() {
                           'user'}
                       </p>
 
+                      {Array.isArray(r.quotes) && r.quotes.length > 0 && (
+                        <p className="sd-muted">
+                          You already quoted {Number(r.quotes[0].amount).toLocaleString()} ETB on this job.
+                          Quotes are sealed — you won't see what anyone else bids, and the requester decides.
+                        </p>
+                      )}
+
                       <div
                         className="sd-form-grid"
                         style={{
@@ -404,6 +457,62 @@ export default function InspectorDashboard() {
                       >
                         Accept job
                       </button>
+
+                      {!(quotedRequestIds.has(r.id) || (Array.isArray(r.quotes) && r.quotes.some((q) => q.inspectorId === currentUserId))) && (
+                        <p className="sd-muted" style={{ marginTop: 10, marginBottom: 4 }}>
+                          Or submit a sealed quote instead of claiming it outright — the requester compares every inspector's quote and picks one; nobody, including you, sees anyone else's amount.
+                        </p>
+                      )}
+
+                      {(quotedRequestIds.has(r.id) || (Array.isArray(r.quotes) && r.quotes.some((q) => q.inspectorId === currentUserId))) ? (
+                        <p className="sd-muted" style={{ marginTop: 10 }}>Waiting on the requester's decision.</p>
+                      ) : (
+                        <>
+                          <div
+                            className="sd-form-grid"
+                            style={{ marginTop: 6 }}
+                          >
+                            <div>
+                              <label>Your quote (ETB)</label>
+                              <input
+                                type="number"
+                                min="1"
+                                step="0.01"
+                                placeholder="e.g. 450"
+                                value={quoteAmountInputs[r.id] || ''}
+                                onChange={(e) =>
+                                  setQuoteAmountInputs((q) => ({
+                                    ...q,
+                                    [r.id]: e.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                          </div>
+
+                          <textarea
+                            placeholder="Optional message to the requester"
+                            value={quoteMessageInputs[r.id] || ''}
+                            onChange={(e) =>
+                              setQuoteMessageInputs((q) => ({
+                                ...q,
+                                [r.id]: e.target.value,
+                              }))
+                            }
+                            style={{ marginTop: 6, width: '100%' }}
+                          />
+
+                          <button
+                            type="button"
+                            className="sd-btn sd-btn-outline"
+                            style={{ marginTop: 6 }}
+                            disabled={submittingQuoteId === r.id}
+                            onClick={() => submitQuote(r.id)}
+                          >
+                            {submittingQuoteId === r.id ? 'Submitting…' : 'Submit quote'}
+                          </button>
+                        </>
+                      )}
                     </div>
                   ))}
 

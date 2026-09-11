@@ -24,6 +24,7 @@ export default function AdminDashboard() {
   const [suspiciousUsers, setSuspiciousUsers] = useState([]);
   const [ads, setAds] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [commissionSummary, setCommissionSummary] = useState(null);
 
   const [userSearch, setUserSearch] = useState('');
@@ -47,6 +48,7 @@ export default function AdminDashboard() {
         adsRes,
         paymentsRes,
         commissionRes,
+        ordersRes,
       ] = await Promise.all([
         api.get('/admin/overview'),
         api.get('/admin/users'),
@@ -55,6 +57,7 @@ export default function AdminDashboard() {
         api.get('/ads'),
         api.get('/payments', { params: { status: 'PENDING' } }),
         api.get('/payments/commissions/summary'),
+        api.get('/orders'),
       ]);
 
       setOverview(overviewRes.data);
@@ -64,6 +67,7 @@ export default function AdminDashboard() {
       setAds(adsRes.data?.ads || []);
       setPayments(paymentsRes.data?.payments || []);
       setCommissionSummary(commissionRes.data);
+      setOrders(ordersRes.data?.orders || []);
     } catch (err) {
       setError(
         err.response?.data?.error ||
@@ -106,6 +110,33 @@ export default function AdminDashboard() {
       setError(
         err.response?.data?.error ||
         'Could not resolve dispute'
+      );
+    } finally {
+      setActionLoading('');
+    }
+  }
+
+  async function cancelOrder(order) {
+    clearMessages();
+
+    const confirmed = window.confirm(
+      `Cancel order ${order.id.slice(0, 8)}? This cannot be undone. The listing becomes available again and any completed payments are flagged for refund.`
+    );
+    if (!confirmed) return;
+
+    setActionLoading(`order-${order.id}`);
+
+    try {
+      await api.patch(`/orders/${order.id}/cancel`, {
+        reason: 'Cancelled by admin',
+      });
+
+      setSuccess('Order cancelled.');
+      await loadAll();
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+        'Could not cancel order'
       );
     } finally {
       setActionLoading('');
@@ -493,6 +524,23 @@ export default function AdminDashboard() {
             Advertising{' '}
             {pendingAds.length > 0 &&
               `(${pendingAds.length})`}
+          </button>
+
+          <button
+            type="button"
+            className={`sd-tab ${
+              tab === 'orders'
+                ? 'sd-active'
+                : ''
+            }`}
+            onClick={() => {
+              clearMessages();
+              setTab('orders');
+            }}
+          >
+            Orders{' '}
+            {orders.length > 0 &&
+              `(${orders.length})`}
           </button>
 
           <button
@@ -1151,6 +1199,76 @@ export default function AdminDashboard() {
               </table>
             </div>
 
+          </div>
+        )}
+
+        {tab === 'orders' && (
+          <div>
+            <div className="sd-toolbar">
+              <div>
+                <span className="sd-eyebrow">ORDERS</span>
+                <h2>All orders</h2>
+                <p className="sd-muted">
+                  Cancelling here is an admin override for stalled orders —
+                  it's blocked once a transport job has started pickup,
+                  since goods already in motion need a dispute instead.
+                </p>
+              </div>
+            </div>
+
+            <div className="sd-panel sd-table-wrap">
+              <table className="sd-table">
+                <thead>
+                  <tr>
+                    <th>Order</th>
+                    <th>Listing</th>
+                    <th>Buyer</th>
+                    <th>Seller</th>
+                    <th>Value</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((o) => {
+                    const transportInMotion = Boolean(
+                      o.transportJob &&
+                      ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(o.transportJob.status)
+                    );
+                    const cancellable =
+                      !['COMPLETED', 'CANCELLED'].includes(o.status) &&
+                      !transportInMotion;
+
+                    return (
+                      <tr key={o.id}>
+                        <td>{o.id.slice(0, 8)}</td>
+                        <td>{o.listing?.title || o.listing?.cropType || '—'}</td>
+                        <td>{o.buyer?.name || '—'}</td>
+                        <td>{o.seller?.name || '—'}</td>
+                        <td>{Number(o.finalPrice).toLocaleString()} ETB</td>
+                        <td><span className={statusBadgeClass(o.status)}>{o.status}</span></td>
+                        <td>
+                          {cancellable && (
+                            <button
+                              type="button"
+                              className="sd-btn sd-btn-outline"
+                              disabled={actionLoading === `order-${o.id}`}
+                              onClick={() => cancelOrder(o)}
+                            >
+                              {actionLoading === `order-${o.id}` ? 'Cancelling…' : 'Cancel order'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {orders.length === 0 && (
+                    <tr><td colSpan="7">No orders yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

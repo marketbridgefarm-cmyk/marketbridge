@@ -722,6 +722,65 @@ export default function OrderDetail() {
   };
 
   // ==========================================================================
+  // CANCEL ORDER
+  // ==========================================================================
+
+  // Mirrors the backend's rules in routes/orders.js so the button only shows
+  // up when the call is actually going to succeed. The backend is still the
+  // source of truth / re-checks all of this itself.
+  const transportInMotion = Boolean(
+    transportJob &&
+    ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status)
+  );
+
+  const canCancelOrder = Boolean(
+    order &&
+    order.status !== 'COMPLETED' &&
+    order.status !== 'CANCELLED' &&
+    !transportInMotion &&
+    (
+      isAdmin ||
+      (isBuyer && order.status === 'PENDING_PAYMENT') ||
+      (isSeller && ['PENDING_PAYMENT', 'CONFIRMED'].includes(order.status))
+    )
+  );
+
+  const cancelOrder = async () => {
+    if (!order || !canCancelOrder) return;
+
+    const confirmed = window.confirm(
+      'Cancel this order? This cannot be undone. The listing will become available again and any completed payments will be flagged for refund.'
+    );
+
+    if (!confirmed) return;
+
+    const reason = window.prompt(
+      'Optional: add a reason for cancelling (shown in the order history).'
+    ) || undefined;
+
+    setBusy('cancel');
+    setError('');
+
+    try {
+      await api.patch(
+        `/orders/${order.id}/cancel`,
+        reason ? { reason } : {}
+      );
+
+      await load({ silent: true });
+    } catch (err) {
+      setError(
+        getError(
+          err,
+          'Could not cancel order'
+        )
+      );
+    } finally {
+      setBusy('');
+    }
+  };
+
+  // ==========================================================================
   // LOADING
   // ==========================================================================
 
@@ -821,6 +880,17 @@ export default function OrderDetail() {
               {money(order.finalPrice)} ETB
             </p>
           </div>
+
+          {canCancelOrder && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={busy === 'cancel'}
+              onClick={cancelOrder}
+            >
+              {busy === 'cancel' ? 'Cancelling…' : 'Cancel order'}
+            </button>
+          )}
         </div>
 
         {/* ================================================================== */}
