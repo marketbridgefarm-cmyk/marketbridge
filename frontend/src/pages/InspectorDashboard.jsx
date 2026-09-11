@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
+import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
+import DashboardWelcome from '../components/DashboardWelcome.jsx';
+import RecentActivity from '../components/RecentActivity.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const EMPTY_REPORT = {
@@ -293,6 +296,14 @@ export default function InspectorDashboard() {
     (r) => r.status === 'COMPLETED'
   );
 
+  const activityItems = mine.map((r) => ({
+    id: `insp-${r.id}`,
+    icon: '🔍',
+    text: `${r.listing?.cropType || r.listing?.title || 'Inspection'} is ${r.status === 'COMPLETED' ? 'complete' : r.status.toLowerCase().replaceAll('_', ' ')}`,
+    time: r.updatedAt || r.createdAt,
+    href: `/listings/${r.listing?.id}`,
+  }));
+
   if (loading) {
     return (
       <div className="sd-dashboard">
@@ -317,6 +328,9 @@ export default function InspectorDashboard() {
   return (
     <div className="sd-dashboard">
       <section>
+        <DashboardWelcome user={user} subtitle="Verify produce quality independently, document evidence, and get paid for completed inspections." />
+        <RoleSwitchCTA current="INSPECTOR" />
+        <RecentActivity items={activityItems} emptyText="No inspections accepted yet — check available jobs below." />
         <div className="sd-toolbar">
           <div>
             <span className="sd-eyebrow">
