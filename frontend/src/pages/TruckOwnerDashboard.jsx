@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
+import DashboardWelcome from '../components/DashboardWelcome.jsx';
+import RecentActivity from '../components/RecentActivity.jsx';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import api from '../api/client';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const TABS = [
   { id: 'trucks', label: 'My Trucks' },
@@ -20,6 +23,7 @@ const EMPTY_TRUCK_FORM = {
 const TERMINAL_STATUSES = ['DELIVERED', 'CANCELLED'];
 
 export default function TruckOwnerDashboard() {
+  const { user } = useAuth();
   const [trucks, setTrucks] = useState([]);
   const [openJobs, setOpenJobs] = useState([]);
   const [myJobs, setMyJobs] = useState([]);
@@ -103,6 +107,14 @@ export default function TruckOwnerDashboard() {
     () => myJobs.filter((job) => job.status === 'DELIVERED'),
     [myJobs]
   );
+
+  const activityItems = myJobs.map((job) => ({
+    id: `job-${job.id}`,
+    icon: '🚛',
+    text: `Job to ${job.destination || 'destination'} is ${job.status.toLowerCase().replaceAll('_', ' ')}`,
+    time: job.updatedAt || job.createdAt,
+    href: `/orders/${job.orderId}`,
+  }));
 
   const availableTrucks = useMemo(
     () =>
@@ -394,6 +406,7 @@ export default function TruckOwnerDashboard() {
       ========================================================= */}
 
       <section>
+        <DashboardWelcome user={user} subtitle="Register your trucks, pick up transport jobs, and manage trips through delivery." />
         <span className="sd-eyebrow">TRANSPORT DASHBOARD</span>
 
         <h1>Your trucks, your jobs, your routes.</h1>
@@ -408,6 +421,7 @@ export default function TruckOwnerDashboard() {
         </p>
 
         <RoleSwitchCTA current="TRUCK_OWNER" />
+        <RecentActivity items={activityItems} emptyText="No transport jobs yet — check available jobs below." />
 
         <div className="sd-stat-grid">
 
