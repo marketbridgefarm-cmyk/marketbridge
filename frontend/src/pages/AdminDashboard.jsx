@@ -520,7 +520,9 @@ export default function AdminDashboard() {
           >
             <span>
               {activeTabItem.label}
-              {activeTabItem.count > 0 && ` (${activeTabItem.count})`}
+              {activeTabItem.count > 0 && (
+                <span className="sd-tab-count">{activeTabItem.count}</span>
+              )}
             </span>
             <svg
               className="sd-tabs-chevron"
@@ -552,7 +554,9 @@ export default function AdminDashboard() {
                 }}
               >
                 {item.label}
-                {item.count > 0 && ` (${item.count})`}
+                {item.count > 0 && (
+                  <span className="sd-tab-count">{item.count}</span>
+                )}
               </button>
             ))}
           </div>
@@ -651,7 +655,7 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            <div style={{ margin: '18px 0' }}>
+            <div className="sd-search-wrap">
               <input
                 type="search"
                 value={userSearch}
@@ -668,7 +672,7 @@ export default function AdminDashboard() {
             </p>
 
             <div className="sd-table-wrap">
-              <table className="sd-table">
+              <table className="sd-table sd-table--stack">
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -691,7 +695,7 @@ export default function AdminDashboard() {
                     return (
                       <tr key={user.id}>
 
-                        <td>
+                        <td data-label="Name">
                           <strong>
                             {user.name}
                           </strong>
@@ -709,18 +713,12 @@ export default function AdminDashboard() {
                           )}
                         </td>
 
-                        <td>
+                        <td data-label="Email">
                           {user.email}
                         </td>
 
-                        <td>
-                          <div
-                            style={{
-                              display: 'flex',
-                              flexWrap: 'wrap',
-                              gap: '5px',
-                            }}
-                          >
+                        <td data-label="Roles">
+                          <div className="sd-chip-row">
                             {(user.roles || []).map(
                               (role) => (
                                 <span
@@ -734,13 +732,13 @@ export default function AdminDashboard() {
                           </div>
                         </td>
 
-                        <td>
+                        <td data-label="Rating">
                           {Number(
                             user.rating || 0
                           ).toFixed(1)}
                         </td>
 
-                        <td>
+                        <td data-label="Verification">
                           <select
                             value={
                               user.verificationStatus ||
@@ -771,15 +769,8 @@ export default function AdminDashboard() {
                           </select>
                         </td>
 
-                        <td>
-                          <div
-                            style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '8px',
-                              minWidth: '130px',
-                            }}
-                          >
+                        <td data-label="Account">
+                          <div className="sd-account-cell">
                             <span
                               className={statusBadgeClass(
                                 user.accountStatus || 'ACTIVE'
@@ -830,15 +821,8 @@ export default function AdminDashboard() {
                           </div>
                         </td>
 
-                        <td>
-                          <div
-                            style={{
-                              minWidth: '180px',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '8px',
-                            }}
-                          >
+                        <td data-label="Role control">
+                          <div className="sd-role-cell">
                             <select
                               value={
                                 roleSelections[
@@ -892,13 +876,7 @@ export default function AdminDashboard() {
 
                             {(user.roles || []).length >
                               0 && (
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  flexWrap: 'wrap',
-                                  gap: '5px',
-                                }}
-                              >
+                              <div className="sd-chip-row">
                                 {user.roles.map(
                                   (role) => (
                                     <button
@@ -1023,7 +1001,7 @@ export default function AdminDashboard() {
             </div>
 
             <div className="sd-panel sd-table-wrap">
-              <table className="sd-table">
+              <table className="sd-table sd-table--stack">
                 <thead>
                   <tr>
                     <th>Type</th>
@@ -1034,11 +1012,11 @@ export default function AdminDashboard() {
                 <tbody>
                   {resolvedDisputes.slice(0, 10).map((item) => (
                     <tr key={item.id}>
-                      <td><strong>{item.disputeType}</strong></td>
-                      <td className="sd-muted">
+                      <td data-label="Type"><strong>{item.disputeType}</strong></td>
+                      <td data-label="Parties" className="sd-muted">
                         {item.raisedBy?.name} vs {item.against?.name}
                       </td>
-                      <td>
+                      <td data-label="Status">
                         <span className={statusBadgeClass(item.status)}>{item.status}</span>
                       </td>
                     </tr>
@@ -1158,7 +1136,7 @@ export default function AdminDashboard() {
             <div className="sd-panel sd-table-wrap">
               <h2>Reviewed campaigns</h2>
 
-              <table className="sd-table">
+              <table className="sd-table sd-table--stack">
                 <thead>
                   <tr>
                     <th>Campaign</th>
@@ -1170,10 +1148,10 @@ export default function AdminDashboard() {
                 <tbody>
                   {reviewedAds.slice(0, 15).map((ad) => (
                     <tr key={ad.id}>
-                      <td><strong>{ad.type.replace(/_/g, ' ')}</strong></td>
-                      <td className="sd-muted">{ad.advertiser?.name}</td>
-                      <td><span className={statusBadgeClass(ad.status)}>{ad.status}</span></td>
-                      <td>
+                      <td data-label="Campaign"><strong>{ad.type.replace(/_/g, ' ')}</strong></td>
+                      <td data-label="Advertiser" className="sd-muted">{ad.advertiser?.name}</td>
+                      <td data-label="Status"><span className={statusBadgeClass(ad.status)}>{ad.status}</span></td>
+                      <td data-label="">
                         {ad.status === 'ACTIVE' && (
                           <button
                             className="sd-btn sd-btn-outline"
@@ -1214,7 +1192,7 @@ export default function AdminDashboard() {
             </div>
 
             <div className="sd-panel sd-table-wrap">
-              <table className="sd-table">
+              <table className="sd-table sd-table--stack">
                 <thead>
                   <tr>
                     <th>Order</th>
@@ -1238,13 +1216,13 @@ export default function AdminDashboard() {
 
                     return (
                       <tr key={o.id}>
-                        <td>{o.id.slice(0, 8)}</td>
-                        <td>{o.listing?.title || o.listing?.cropType || '—'}</td>
-                        <td>{o.buyer?.name || '—'}</td>
-                        <td>{o.seller?.name || '—'}</td>
-                        <td>{Number(o.finalPrice).toLocaleString()} ETB</td>
-                        <td><span className={statusBadgeClass(o.status)}>{o.status}</span></td>
-                        <td>
+                        <td data-label="Order">{o.id.slice(0, 8)}</td>
+                        <td data-label="Listing">{o.listing?.title || o.listing?.cropType || '—'}</td>
+                        <td data-label="Buyer">{o.buyer?.name || '—'}</td>
+                        <td data-label="Seller">{o.seller?.name || '—'}</td>
+                        <td data-label="Value">{Number(o.finalPrice).toLocaleString()} ETB</td>
+                        <td data-label="Status"><span className={statusBadgeClass(o.status)}>{o.status}</span></td>
+                        <td data-label="">
                           {cancellable && (
                             <button
                               type="button"
