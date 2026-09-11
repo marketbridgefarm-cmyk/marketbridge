@@ -18,6 +18,42 @@ function validationError(res) {
 }
 
 // ============================================================================
+// QUOTE NEGOTIATION HELPERS
+// Mirrors the buyer <-> seller Offer negotiation chain: a counter creates a
+// new child quote row rather than mutating the previous one.
+// ============================================================================
+
+function isPositiveNumber(value) {
+  const number = Number(value);
+  return value !== undefined && value !== null && Number.isFinite(number) && number > 0;
+}
+
+function quoteError(message, statusCode = 400) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+// Whose turn it is to respond to the current leaf quote.
+// PENDING (no counter yet) was created by the inspector, so the requester
+// must respond. COUNTERED flips based on who made the most recent counter.
+function quoteTurn(quote) {
+  if (quote.status === 'PENDING') return 'REQUESTER';
+  if (quote.status === 'COUNTERED') {
+    return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
+  }
+  return null;
+}
+
+function isQuoteExpired(quote) {
+  return Boolean(quote.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
+}
+
+function quoteExpiry(hours = 24) {
+  return new Date(Date.now() + hours * 60 * 60 * 1000);
+}
+
+// ============================================================================
 // CREATE INSPECTION REQUEST
 // Seller or buyer requests an inspection.
 // ============================================================================
@@ -242,7 +278,7 @@ router.get(
           // GET /:id/quotes route below.
           quotes: {
             where: {
-              status: 'PENDING',
+              status: { in: ['PENDING', 'COUNTERED', 'ACCEPTED', 'REJECTED'] },
               inspectorId: req.user.id,
             },
 
@@ -252,8 +288,14 @@ router.get(
               amount: true,
               status: true,
               message: true,
+              parentQuoteId: true,
+              counterAmount: true,
+              counteredBy: true,
+              expiresAt: true,
               createdAt: true,
             },
+
+            orderBy: { createdAt: 'asc' },
           },
         },
 
@@ -328,18 +370,18 @@ router.post(
         });
       }
 
-      const existing = await prisma.inspectionQuote.findUnique({
+      const existing = await prisma.inspectionQuote.findFirst({
         where: {
-          inspectionRequestId_inspectorId: {
-            inspectionRequestId: request.id,
-            inspectorId: req.user.id,
-          },
+          inspectionRequestId: request.id,
+          inspectorId: req.user.id,
+          status: { in: ['PENDING', 'COUNTERED'] },
+          childQuotes: { none: {} },
         },
       });
 
       if (existing) {
         return res.status(409).json({
-          error: 'You have already submitted a quote for this inspection',
+          error: 'You already have an active quote or negotiation for this inspection',
         });
       }
 
@@ -351,6 +393,7 @@ router.post(
             amount: Number(req.body.amount),
             message: req.body.message || null,
             status: 'PENDING',
+            expiresAt: quoteExpiry(),
           },
           include: {
             inspector: {
@@ -469,8 +512,45 @@ router.get(
 );
 
 // ============================================================================
+// SHARED LOOKUP: request + leaf quote, with the caller's role in the
+// negotiation (REQUESTER or PROVIDER/inspector). Returns null + a response
+// already sent if anything is invalid.
+// ============================================================================
+
+async function loadQuoteForNegotiation(req, res) {
+  const request = await prisma.inspectionRequest.findUnique({
+    where: { id: req.params.id },
+  });
+
+  if (!request) {
+    res.status(404).json({ error: 'Inspection request not found' });
+    return null;
+  }
+
+  const quote = await prisma.inspectionQuote.findUnique({
+    where: { id: req.params.quoteId },
+  });
+
+  if (!quote || quote.inspectionRequestId !== request.id) {
+    res.status(404).json({ error: 'Inspection quote not found' });
+    return null;
+  }
+
+  const isRequester = request.requestedById === req.user.id;
+  const isProvider = quote.inspectorId === req.user.id;
+
+  if (!isRequester && !isProvider) {
+    res.status(403).json({ error: 'Not authorized for this inspection quote negotiation' });
+    return null;
+  }
+
+  return { request, quote, actorRole: isRequester ? 'REQUESTER' : 'PROVIDER' };
+}
+
+// ============================================================================
 // ACCEPT INSPECTION QUOTE
-// Requester selects one inspector.
+// Either the requester accepts the inspector's (counter-)offer, or the
+// inspector accepts the requester's counter — whichever party's turn it is.
 // ============================================================================
 
 router.patch(
@@ -478,23 +558,9 @@ router.patch(
   authenticate,
   async (req, res) => {
     try {
-      const request = await prisma.inspectionRequest.findUnique({
-        where: {
-          id: req.params.id,
-        },
-      });
-
-      if (!request) {
-        return res.status(404).json({
-          error: 'Inspection request not found',
-        });
-      }
-
-      if (request.requestedById !== req.user.id) {
-        return res.status(403).json({
-          error: 'Only the inspection requester can accept a quote',
-        });
-      }
+      const loaded = await loadQuoteForNegotiation(req, res);
+      if (!loaded) return;
+      const { request, quote, actorRole } = loaded;
 
       if (request.status !== 'REQUESTED') {
         return res.status(400).json({
@@ -502,36 +568,35 @@ router.patch(
         });
       }
 
-      const quote = await prisma.inspectionQuote.findUnique({
-        where: {
-          id: req.params.quoteId,
-        },
-      });
-
-      if (!quote || quote.inspectionRequestId !== request.id) {
-        return res.status(404).json({
-          error: 'Inspection quote not found',
-        });
-      }
-
-      if (quote.status !== 'PENDING') {
+      if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
         return res.status(400).json({
           error: 'This quote is no longer available',
         });
       }
 
+      if (isQuoteExpired(quote)) {
+        return res.status(409).json({ error: 'This quote has expired' });
+      }
+
+      if (quoteTurn(quote) !== actorRole) {
+        return res.status(409).json({
+          error: 'It is the other party\u2019s turn to respond to this negotiation',
+        });
+      }
+
+      const finalAmount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
+
       const result = await prisma.$transaction(async (tx) => {
         const claim = await tx.inspectionRequest.updateMany({
           where: {
             id: request.id,
-            requestedById: req.user.id,
             status: 'REQUESTED',
             inspectorId: null,
           },
 
           data: {
             inspectorId: quote.inspectorId,
-            fee: quote.amount,
+            fee: finalAmount,
             status: 'ACCEPTED',
           },
         });
@@ -540,18 +605,14 @@ router.patch(
           throw new Error('INSPECTION_ALREADY_CLAIMED');
         }
 
+        // Close out every other negotiation thread on this request.
         await tx.inspectionQuote.updateMany({
           where: {
             inspectionRequestId: request.id,
-            status: 'PENDING',
-            id: {
-              not: quote.id,
-            },
+            status: { in: ['PENDING', 'COUNTERED'] },
+            id: { not: quote.id },
           },
-
-          data: {
-            status: 'REJECTED',
-          },
+          data: { status: 'REJECTED' },
         });
 
         const acceptedQuote = await tx.inspectionQuote.update({
@@ -561,6 +622,7 @@ router.patch(
 
           data: {
             status: 'ACCEPTED',
+            amount: finalAmount,
           },
 
           include: {
@@ -580,7 +642,7 @@ router.patch(
           action: 'INSPECTION_QUOTE_ACCEPTED',
           resourceType: 'InspectionQuote',
           resourceId: acceptedQuote.id,
-          metadata: { inspectionRequestId: request.id, inspectorId: acceptedQuote.inspectorId },
+          metadata: { inspectionRequestId: request.id, inspectorId: acceptedQuote.inspectorId, acceptedBy: actorRole, amount: finalAmount },
         });
 
         return acceptedQuote;
@@ -602,6 +664,167 @@ router.patch(
       return res.status(500).json({
         error: 'Could not accept inspection quote',
       });
+    }
+  }
+);
+
+// ============================================================================
+// COUNTER INSPECTION QUOTE
+// Requester and inspector can go back and forth on price, same pattern as
+// buyer <-> seller offer negotiation. Whoever it is NOT waiting on can
+// propose a new amount, which becomes a new child quote in the chain.
+// ============================================================================
+
+router.post(
+  '/:id/quotes/:quoteId/counter',
+  authenticate,
+  [
+    param('id').notEmpty(),
+    param('quoteId').notEmpty(),
+    body('counterAmount').isFloat({ gt: 0 }).withMessage('counterAmount must be greater than zero'),
+    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+      const loaded = await loadQuoteForNegotiation(req, res);
+      if (!loaded) return;
+      const { request, quote, actorRole } = loaded;
+
+      if (request.status !== 'REQUESTED') {
+        return res.status(400).json({ error: 'This inspection is no longer accepting quotes' });
+      }
+
+      if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
+        return res.status(400).json({ error: `Quote cannot be countered because it is ${quote.status}` });
+      }
+
+      if (isQuoteExpired(quote)) {
+        return res.status(409).json({ error: 'This quote has expired' });
+      }
+
+      if (quoteTurn(quote) !== actorRole) {
+        return res.status(409).json({
+          error: 'It is the other party\u2019s turn to respond to this negotiation',
+        });
+      }
+
+      const counterAmount = Number(req.body.counterAmount);
+
+      const counterQuote = await prisma.$transaction(async (tx) => {
+        const freshQuote = await tx.inspectionQuote.findUnique({ where: { id: quote.id } });
+        if (!freshQuote) throw quoteError('Inspection quote not found', 404);
+        if (!['PENDING', 'COUNTERED'].includes(freshQuote.status)) {
+          throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
+        }
+        if (quoteTurn(freshQuote) !== actorRole) {
+          throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
+        }
+
+        await tx.inspectionQuote.update({
+          where: { id: freshQuote.id },
+          data: { status: 'COUNTERED' },
+        });
+
+        const created = await tx.inspectionQuote.create({
+          data: {
+            inspectionRequestId: request.id,
+            inspectorId: freshQuote.inspectorId,
+            amount: counterAmount,
+            counterAmount,
+            counteredBy: actorRole,
+            status: 'COUNTERED',
+            parentQuoteId: freshQuote.id,
+            expiresAt: quoteExpiry(12),
+            message: req.body.message || freshQuote.message,
+          },
+          include: {
+            inspector: { select: { id: true, name: true, rating: true, location: true } },
+          },
+        });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'INSPECTION_QUOTE_COUNTERED',
+          resourceType: 'InspectionQuote',
+          resourceId: created.id,
+          metadata: {
+            inspectionRequestId: request.id,
+            parentQuoteId: freshQuote.id,
+            counteredBy: actorRole,
+            previousAmount: freshQuote.counterAmount ?? freshQuote.amount,
+            counterAmount,
+          },
+        });
+
+        return created;
+      });
+
+      return res.status(201).json({
+        message: actorRole === 'REQUESTER'
+          ? 'Counter-offer sent. The inspector must respond next.'
+          : 'Counter-offer sent. The requester must respond next.',
+        quote: counterQuote,
+      });
+    } catch (error) {
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+
+      console.error('COUNTER INSPECTION QUOTE ERROR:', error);
+
+      return res.status(500).json({ error: 'Could not counter inspection quote' });
+    }
+  }
+);
+
+// ============================================================================
+// REJECT INSPECTION QUOTE
+// Either party can end a negotiation thread when it's their turn to respond.
+// ============================================================================
+
+router.patch(
+  '/:id/quotes/:quoteId/reject',
+  authenticate,
+  async (req, res) => {
+    try {
+      const loaded = await loadQuoteForNegotiation(req, res);
+      if (!loaded) return;
+      const { quote, actorRole } = loaded;
+
+      if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
+        return res.status(400).json({ error: `Quote cannot be rejected because it is ${quote.status}` });
+      }
+
+      if (quoteTurn(quote) !== actorRole) {
+        return res.status(409).json({
+          error: 'It is the other party\u2019s turn to respond to this negotiation',
+        });
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const rejected = await tx.inspectionQuote.update({
+          where: { id: quote.id },
+          data: { status: 'REJECTED' },
+        });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'INSPECTION_QUOTE_REJECTED',
+          resourceType: 'InspectionQuote',
+          resourceId: rejected.id,
+          metadata: { inspectionRequestId: rejected.inspectionRequestId, rejectedBy: actorRole },
+        });
+
+        return rejected;
+      });
+
+      return res.json({ message: 'Quote rejected', quote: updated });
+    } catch (error) {
+      console.error('REJECT INSPECTION QUOTE ERROR:', error);
+      return res.status(500).json({ error: 'Could not reject inspection quote' });
     }
   }
 );

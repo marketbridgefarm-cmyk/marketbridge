@@ -52,6 +52,42 @@ class TruckConflictError extends Error {
   }
 }
 
+// ============================================================================
+// TRANSPORT QUOTE NEGOTIATION HELPERS
+// Mirrors the buyer <-> seller Offer negotiation chain and the inspection
+// quote negotiation: a counter creates a new child quote row.
+// ============================================================================
+
+function quoteError(message, statusCode = 400) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function quoteTurn(quote) {
+  if (quote.status === 'PENDING') return 'REQUESTER';
+  if (quote.status === 'COUNTERED') {
+    return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
+  }
+  return null;
+}
+
+function isQuoteExpired(quote) {
+  return Boolean(quote.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
+}
+
+function quoteExpiry(hours = 24) {
+  return new Date(Date.now() + hours * 60 * 60 * 1000);
+}
+
+function isArrangingParty(job, order, userId) {
+  return (
+    (job.arrangingParty === 'SELLER' && order.sellerId === userId) ||
+    (job.arrangingParty === 'BUYER' && order.buyerId === userId) ||
+    (job.arrangingParty === 'JOINT' && (order.buyerId === userId || order.sellerId === userId))
+  );
+}
+
 class ActiveTruckAssignmentError extends Error {
   constructor(
     message = 'Truck cannot be made available while it has an active transport job'
@@ -406,7 +442,7 @@ router.get(
               where: {
                 truckOwnerId: req.user.id,
               },
-              take: 1,
+              orderBy: { createdAt: 'asc' },
             },
           },
           orderBy: {
@@ -1847,16 +1883,18 @@ router.post(
             status: {
               in: [
                 'PENDING',
+                'COUNTERED',
                 'ACCEPTED',
               ],
             },
+            childQuotes: { none: {} },
           },
         });
 
       if (existing) {
         return res.status(409).json({
           error:
-            'You already have a pending or accepted quote for this job',
+            'You already have a pending, negotiating, or accepted quote for this job',
         });
       }
 
@@ -1921,6 +1959,7 @@ router.post(
                     null,
 
                   status: 'PENDING',
+                  expiresAt: quoteExpiry(),
                 },
               });
 
@@ -2092,8 +2131,51 @@ router.get(
   }
 );
 
+
 // ============================================================================
-// ACCEPT / REJECT QUOTE
+// SHARED LOOKUP: quote + job + order, with the caller's role in the
+// negotiation (REQUESTER = arranging party, PROVIDER = truck owner).
+// ============================================================================
+
+async function loadTransportQuoteForNegotiation(req, res) {
+  const quote = await prisma.transportQuote.findUnique({
+    where: { id: req.params.quoteId },
+    include: {
+      transportJob: {
+        include: { order: true },
+      },
+    },
+  });
+
+  if (!quote) {
+    res.status(404).json({ error: 'Quote not found' });
+    return null;
+  }
+
+  const job = quote.transportJob;
+  const order = job.order;
+
+  const isRequester = isArrangingParty(job, order, req.user.id);
+  const isProvider = quote.truckOwnerId === req.user.id;
+
+  if (!isRequester && !isProvider && !isAdmin(req.user)) {
+    res.status(403).json({ error: 'Not authorized for this transport quote negotiation' });
+    return null;
+  }
+
+  return {
+    quote,
+    job,
+    order,
+    actorRole: isRequester ? 'REQUESTER' : 'PROVIDER',
+  };
+}
+
+// ============================================================================
+// ACCEPT / REJECT / COUNTER QUOTE
+// Either the arranging party (buyer/seller) accepts or counters the truck
+// owner's (counter-)quote, or the truck owner accepts or counters the
+// arranging party's counter — whichever side's turn it is.
 // ============================================================================
 
 router.patch(
@@ -2105,222 +2187,110 @@ router.patch(
     body('action').isIn([
       'ACCEPT',
       'REJECT',
+      'COUNTER',
     ]),
+
+    body('counterAmount')
+      .if(body('action').equals('COUNTER'))
+      .isFloat({ gt: 0 })
+      .withMessage('counterAmount must be greater than zero'),
+
+    body('message')
+      .optional({ nullable: true })
+      .isString()
+      .trim()
+      .isLength({ max: 1000 }),
   ],
   validate,
   async (req, res) => {
     try {
-      const quote =
-        await prisma.transportQuote.findUnique({
-          where: {
-            id: req.params.quoteId,
-          },
-          include: {
-            transportJob: {
-              include: {
-                order: true,
-              },
+      const loaded = await loadTransportQuoteForNegotiation(req, res);
+      if (!loaded) return;
+      const { quote, job, actorRole } = loaded;
+
+      // Admins acting on behalf of a stuck negotiation are treated as the
+      // requester side for turn-taking purposes.
+      const effectiveRole = actorRole;
+
+      // ----------------------------------------------------------------------
+      // COUNTER
+      // ----------------------------------------------------------------------
+
+      if (req.body.action === 'COUNTER') {
+        if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
+          return res.status(400).json({
+            error: `Quote cannot be countered because it is ${quote.status}`,
+          });
+        }
+
+        if (isQuoteExpired(quote)) {
+          return res.status(409).json({ error: 'This quote has expired' });
+        }
+
+        if (quoteTurn(quote) !== effectiveRole) {
+          return res.status(409).json({
+            error: 'It is the other party\u2019s turn to respond to this negotiation',
+          });
+        }
+
+        const counterAmount = Number(req.body.counterAmount);
+
+        const counterQuote = await prisma.$transaction(async (tx) => {
+          const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
+          if (!freshQuote) throw quoteError('Quote not found', 404);
+          if (!['PENDING', 'COUNTERED'].includes(freshQuote.status)) {
+            throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
+          }
+          if (quoteTurn(freshQuote) !== effectiveRole) {
+            throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
+          }
+
+          await tx.transportQuote.update({
+            where: { id: freshQuote.id },
+            data: { status: 'COUNTERED' },
+          });
+
+          const created = await tx.transportQuote.create({
+            data: {
+              transportJobId: freshQuote.transportJobId,
+              truckOwnerId: freshQuote.truckOwnerId,
+              truckId: freshQuote.truckId,
+              amount: counterAmount,
+              counterAmount,
+              counteredBy: effectiveRole,
+              status: 'COUNTERED',
+              parentQuoteId: freshQuote.id,
+              expiresAt: quoteExpiry(12),
+              message: req.body.message || freshQuote.message,
             },
-          },
+            include: {
+              truckOwner: { select: { id: true, name: true, rating: true } },
+              truck: true,
+            },
+          });
+
+          await recordAuditEvent(tx, {
+            actorId: req.user.id,
+            action: 'TRANSPORT_QUOTE_COUNTERED',
+            resourceType: 'TransportQuote',
+            resourceId: created.id,
+            metadata: {
+              transportJobId: freshQuote.transportJobId,
+              parentQuoteId: freshQuote.id,
+              counteredBy: effectiveRole,
+              previousAmount: freshQuote.counterAmount ?? freshQuote.amount,
+              counterAmount,
+            },
+          });
+
+          return created;
         });
 
-      if (!quote) {
-        return res.status(404).json({
-          error: 'Quote not found',
-        });
-      }
-
-      if (quote.status !== 'PENDING') {
-        return res.status(400).json({
-          error:
-            `This quote is already ${quote.status.toLowerCase()}`,
-        });
-      }
-
-      const job =
-        quote.transportJob;
-
-      const order = job.order;
-
-      const isArranging =
-        (
-          job.arrangingParty ===
-            'SELLER' &&
-          order.sellerId ===
-            req.user.id
-        ) ||
-        (
-          job.arrangingParty ===
-            'BUYER' &&
-          order.buyerId ===
-            req.user.id
-        ) ||
-        (
-          job.arrangingParty ===
-            'JOINT' &&
-          (
-            order.buyerId ===
-              req.user.id ||
-            order.sellerId ===
-              req.user.id
-          )
-        );
-
-      if (
-        !isArranging &&
-        !isAdmin(req.user)
-      ) {
-        return res.status(403).json({
-          error:
-            'Only the arranging party can accept or reject a quote',
-        });
-      }
-
-      // ----------------------------------------------------------------------
-      // ACCEPT
-      // ----------------------------------------------------------------------
-
-      if (
-        req.body.action ===
-        'ACCEPT'
-      ) {
-        const result =
-          await prisma.$transaction(
-            async (tx) => {
-              // Re-read quote/job state inside the transaction.
-              const freshQuote =
-                await tx.transportQuote.findUnique({
-                  where: {
-                    id: quote.id,
-                  },
-                  include: {
-                    transportJob: {
-                      include: {
-                        order: true,
-                      },
-                    },
-                  },
-                });
-
-              if (!freshQuote) {
-                const error = new Error(
-                  'Quote not found'
-                );
-                error.statusCode = 404;
-                throw error;
-              }
-
-              if (
-                freshQuote.status !==
-                'PENDING'
-              ) {
-                const error = new Error(
-                  `This quote is already ${freshQuote.status.toLowerCase()}`
-                );
-                error.statusCode = 409;
-                throw error;
-              }
-
-              const freshJob =
-                freshQuote.transportJob;
-
-              if (
-                freshJob.status !==
-                  'REQUESTED' &&
-                freshJob.status !==
-                  'QUOTED'
-              ) {
-                const error = new Error(
-                  `This transport job cannot accept a quote while it is ${freshJob.status}`
-                );
-                error.statusCode = 409;
-                throw error;
-              }
-
-              // CRITICAL:
-              //
-              // Claim the selected truck before accepting the quote.
-              // If another active job has already claimed it, this transaction
-              // receives a 409 and nothing else is committed.
-              await claimAvailableTruck(
-                tx,
-                freshQuote.truckId
-              );
-
-              const updatedQuote =
-                await tx.transportQuote.update({
-                  where: {
-                    id: freshQuote.id,
-                  },
-                  data: {
-                    status:
-                      'ACCEPTED',
-                  },
-                });
-
-              await tx.transportQuote.updateMany({
-                where: {
-                  transportJobId:
-                    freshJob.id,
-
-                  id: {
-                    not: freshQuote.id,
-                  },
-
-                  status: 'PENDING',
-                },
-
-                data: {
-                  status:
-                    'REJECTED',
-                },
-              });
-
-              await tx.transportJob.update({
-                where: {
-                  id: freshJob.id,
-                },
-
-                data: {
-                  truckOwnerId:
-                    freshQuote.truckOwnerId,
-
-                  truckId:
-                    freshQuote.truckId,
-
-                  agreedAmount:
-                    freshQuote.amount,
-
-                  status:
-                    'ACCEPTED',
-                },
-              });
-
-              if (
-                freshJob.order.status ===
-                'CONFIRMED'
-              ) {
-                await tx.order.update({
-                  where: {
-                    id:
-                      freshJob.order.id,
-                  },
-
-                  data: {
-                    status:
-                      'TRANSPORT_ARRANGED',
-                  },
-                });
-              }
-
-              return updatedQuote;
-            }
-          );
-
-        return res.json({
-          message:
-            'Quote accepted',
-          quote: result,
+        return res.status(201).json({
+          message: effectiveRole === 'REQUESTER'
+            ? 'Counter-offer sent. The transporter must respond next.'
+            : 'Counter-offer sent. The requester must respond next.',
+          quote: counterQuote,
         });
       }
 
@@ -2328,25 +2298,138 @@ router.patch(
       // REJECT
       // ----------------------------------------------------------------------
 
-      const updatedQuote =
-        await prisma.transportQuote.update({
-          where: {
-            id: quote.id,
-          },
+      if (req.body.action === 'REJECT') {
+        if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
+          return res.status(400).json({
+            error: `This quote is already ${quote.status.toLowerCase()}`,
+          });
+        }
 
+        if (quoteTurn(quote) !== effectiveRole && !isAdmin(req.user)) {
+          return res.status(409).json({
+            error: 'It is the other party\u2019s turn to respond to this negotiation',
+          });
+        }
+
+        const updatedQuote = await prisma.transportQuote.update({
+          where: { id: quote.id },
+          data: { status: 'REJECTED' },
+        });
+
+        return res.json({
+          message: 'Quote rejected',
+          quote: updatedQuote,
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // ACCEPT
+      // ----------------------------------------------------------------------
+
+      if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
+        return res.status(400).json({
+          error: `This quote is already ${quote.status.toLowerCase()}`,
+        });
+      }
+
+      if (isQuoteExpired(quote)) {
+        return res.status(409).json({ error: 'This quote has expired' });
+      }
+
+      if (quoteTurn(quote) !== effectiveRole && !isAdmin(req.user)) {
+        return res.status(409).json({
+          error: 'It is the other party\u2019s turn to respond to this negotiation',
+        });
+      }
+
+      const finalAmount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
+
+      const result = await prisma.$transaction(async (tx) => {
+        const freshQuote = await tx.transportQuote.findUnique({
+          where: { id: quote.id },
+          include: { transportJob: { include: { order: true } } },
+        });
+
+        if (!freshQuote) {
+          const error = new Error('Quote not found');
+          error.statusCode = 404;
+          throw error;
+        }
+
+        if (!['PENDING', 'COUNTERED'].includes(freshQuote.status)) {
+          const error = new Error(`This quote is already ${freshQuote.status.toLowerCase()}`);
+          error.statusCode = 409;
+          throw error;
+        }
+
+        const freshJob = freshQuote.transportJob;
+
+        if (freshJob.status !== 'REQUESTED' && freshJob.status !== 'QUOTED') {
+          const error = new Error(`This transport job cannot accept a quote while it is ${freshJob.status}`);
+          error.statusCode = 409;
+          throw error;
+        }
+
+        // CRITICAL:
+        //
+        // Claim the selected truck before accepting the quote.
+        // If another active job has already claimed it, this transaction
+        // receives a 409 and nothing else is committed.
+        await claimAvailableTruck(tx, freshQuote.truckId);
+
+        const updatedQuote = await tx.transportQuote.update({
+          where: { id: freshQuote.id },
           data: {
-            status: 'REJECTED',
+            status: 'ACCEPTED',
+            amount: finalAmount,
           },
         });
 
+        // Close out every other negotiation thread on this job.
+        await tx.transportQuote.updateMany({
+          where: {
+            transportJobId: freshJob.id,
+            id: { not: freshQuote.id },
+            status: { in: ['PENDING', 'COUNTERED'] },
+          },
+          data: { status: 'REJECTED' },
+        });
+
+        await tx.transportJob.update({
+          where: { id: freshJob.id },
+          data: {
+            truckOwnerId: freshQuote.truckOwnerId,
+            truckId: freshQuote.truckId,
+            agreedAmount: finalAmount,
+            status: 'ACCEPTED',
+          },
+        });
+
+        if (freshJob.order.status === 'CONFIRMED') {
+          await tx.order.update({
+            where: { id: freshJob.order.id },
+            data: { status: 'TRANSPORT_ARRANGED' },
+          });
+        }
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'TRANSPORT_QUOTE_ACCEPTED',
+          resourceType: 'TransportQuote',
+          resourceId: updatedQuote.id,
+          metadata: { transportJobId: freshJob.id, truckOwnerId: updatedQuote.truckOwnerId, acceptedBy: effectiveRole, amount: finalAmount },
+        });
+
+        return updatedQuote;
+      });
+
       return res.json({
-        message:
-          'Quote rejected',
-        quote: updatedQuote,
+        message: 'Quote accepted',
+        quote: result,
       });
     } catch (error) {
       console.error(
-        'ACCEPT/REJECT QUOTE ERROR:',
+        'ACCEPT/REJECT/COUNTER QUOTE ERROR:',
         error
       );
 
@@ -2374,6 +2457,7 @@ router.patch(
     }
   }
 );
+
 
 // ============================================================================
 // TESTABLE INTERNAL CONSTANTS
