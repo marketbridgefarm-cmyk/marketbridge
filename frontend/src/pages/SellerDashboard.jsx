@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
+import DashboardWelcome from '../components/DashboardWelcome.jsx';
+import RecentActivity from '../components/RecentActivity.jsx';
 
 const TABS = [
   { id: 'listings', label: 'My Listings' },
@@ -73,6 +75,30 @@ export default function SellerDashboard() {
   const openOffers = latestOffers.filter((o) => o.status === 'PENDING' || (o.status === 'COUNTERED' && o.counteredBy === 'BUYER'));
   const confirmedSales = orders.filter((o) => ['CONFIRMED', 'TRANSPORT_ARRANGED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'].includes(o.status));
   const grossSales = confirmedSales.reduce((sum, o) => sum + o.finalPrice, 0);
+
+  const activityItems = [
+    ...latestOffers.map((o) => ({
+      id: `offer-${o.id}`,
+      icon: '💬',
+      text: `${o.amount.toLocaleString()} ETB offer on ${o.listing?.cropType || o.listing?.title || 'your listing'}`,
+      time: o.updatedAt || o.createdAt,
+      href: `/listings/${o.listing?.id}`,
+    })),
+    ...orders.map((o) => ({
+      id: `order-${o.id}`,
+      icon: '📦',
+      text: `Order for ${o.listing?.cropType || o.listing?.title || 'a listing'} is ${o.status.replaceAll('_', ' ').toLowerCase()}`,
+      time: o.updatedAt || o.createdAt,
+      href: `/orders/${o.id}`,
+    })),
+    ...allInspections.map((r) => ({
+      id: `insp-${r.id}`,
+      icon: '🔍',
+      text: `Inspection for ${r.listing?.cropType || 'your listing'} ${r.status === 'COMPLETED' ? 'report is ready' : `is ${r.status.toLowerCase()}`}`,
+      time: r.updatedAt || r.createdAt,
+      href: `/listings/${r.listing?.id}`,
+    })),
+  ];
 
   async function submitListing(e) {
     e.preventDefault();
@@ -178,12 +204,14 @@ export default function SellerDashboard() {
   return (
     <div className="sd-dashboard">
       <section id="overview">
+        <DashboardWelcome user={user} subtitle="Manage listings, compare buyer offers, and decide who arranges transport." />
         <span className="sd-eyebrow">SELLER / FARMER DASHBOARD</span>
         <h1>Your produce. Your price authority. Your transport choice.</h1>
         <p className="sd-muted" style={{ maxWidth: 780 }}>
           Manage listings, compare buyer offers, authorize inspectors and decide whether you or the buyer will arrange transport.
         </p>
         <RoleSwitchCTA current="SELLER" />
+        <RecentActivity items={activityItems} emptyText="No offers, orders, or inspection updates yet." />
         <div className="sd-actions">
           <button className="sd-btn sd-btn-primary" onClick={() => listingModalRef.current.showModal()}>+ Create Listing</button>
           <button className="sd-btn sd-btn-outline" onClick={() => setActiveTab('orders')}>Orders</button>
