@@ -20,7 +20,9 @@ const ACCOUNT_STATUS_OPTIONS = ['ACTIVE', 'SUSPENDED'];
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [tab, setTab] = useState('overview');
+  const [tabMenuOpen, setTabMenuOpen] = useState(false);
   const performanceModalRef = useRef(null);
+  const tabsNavRef = useRef(null);
 
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
@@ -85,6 +87,27 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    if (!tabMenuOpen) return undefined;
+
+    function handleOutsideClick(event) {
+      if (
+        tabsNavRef.current &&
+        !tabsNavRef.current.contains(event.target)
+      ) {
+        setTabMenuOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, [tabMenuOpen]);
 
   function statusBadgeClass(status) {
     if (['VERIFIED', 'ACTIVE', 'RESOLVED'].includes(status)) return 'sd-badge sd-good';
@@ -412,6 +435,19 @@ export default function AdminDashboard() {
     (a) => a.status !== 'PENDING'
   );
 
+  const tabItems = [
+    { key: 'overview', label: 'Overview', count: 0 },
+    { key: 'users', label: 'Users & Control', count: 0 },
+    { key: 'disputes', label: 'Disputes', count: openDisputes.length },
+    { key: 'fraud', label: 'Fraud Monitoring', count: suspiciousUsers.length },
+    { key: 'advertising', label: 'Advertising', count: pendingAds.length },
+    { key: 'orders', label: 'Orders', count: orders.length },
+    { key: 'payments', label: 'Payments', count: payments.length },
+  ];
+
+  const activeTabItem =
+    tabItems.find((item) => item.key === tab) || tabItems[0];
+
   return (
     <div className="sd-dashboard">
 
@@ -472,121 +508,54 @@ export default function AdminDashboard() {
       )}
 
       <section>
-        <div className="sd-tabs">
+        <div
+          className={`sd-tabs-nav ${tabMenuOpen ? 'sd-tabs-open' : ''}`}
+          ref={tabsNavRef}
+        >
           <button
             type="button"
-            className={`sd-tab ${
-              tab === 'overview'
-                ? 'sd-active'
-                : ''
-            }`}
-            onClick={() => {
-              clearMessages();
-              setTab('overview');
-            }}
+            className="sd-tabs-current"
+            aria-expanded={tabMenuOpen}
+            onClick={() => setTabMenuOpen((open) => !open)}
           >
-            Overview
+            <span>
+              {activeTabItem.label}
+              {activeTabItem.count > 0 && ` (${activeTabItem.count})`}
+            </span>
+            <svg
+              className="sd-tabs-chevron"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+            >
+              <path
+                d="M4 6l4 4 4-4"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
 
-          <button
-            type="button"
-            className={`sd-tab ${
-              tab === 'users'
-                ? 'sd-active'
-                : ''
-            }`}
-            onClick={() => {
-              clearMessages();
-              setTab('users');
-            }}
-          >
-            Users & Control
-          </button>
-
-          <button
-            type="button"
-            className={`sd-tab ${
-              tab === 'disputes'
-                ? 'sd-active'
-                : ''
-            }`}
-            onClick={() => {
-              clearMessages();
-              setTab('disputes');
-            }}
-          >
-            Disputes{' '}
-            {openDisputes.length > 0 &&
-              `(${openDisputes.length})`}
-          </button>
-
-          <button
-            type="button"
-            className={`sd-tab ${
-              tab === 'fraud'
-                ? 'sd-active'
-                : ''
-            }`}
-            onClick={() => {
-              clearMessages();
-              setTab('fraud');
-            }}
-          >
-            Fraud Monitoring{' '}
-            {suspiciousUsers.length > 0 &&
-              `(${suspiciousUsers.length})`}
-          </button>
-
-          <button
-            type="button"
-            className={`sd-tab ${
-              tab === 'advertising'
-                ? 'sd-active'
-                : ''
-            }`}
-            onClick={() => {
-              clearMessages();
-              setTab('advertising');
-            }}
-          >
-            Advertising{' '}
-            {pendingAds.length > 0 &&
-              `(${pendingAds.length})`}
-          </button>
-
-          <button
-            type="button"
-            className={`sd-tab ${
-              tab === 'orders'
-                ? 'sd-active'
-                : ''
-            }`}
-            onClick={() => {
-              clearMessages();
-              setTab('orders');
-            }}
-          >
-            Orders{' '}
-            {orders.length > 0 &&
-              `(${orders.length})`}
-          </button>
-
-          <button
-            type="button"
-            className={`sd-tab ${
-              tab === 'payments'
-                ? 'sd-active'
-                : ''
-            }`}
-            onClick={() => {
-              clearMessages();
-              setTab('payments');
-            }}
-          >
-            Payments{' '}
-            {payments.length > 0 &&
-              `(${payments.length})`}
-          </button>
+          <div className="sd-tabs-list">
+            {tabItems.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className={`sd-tab ${tab === item.key ? 'sd-active' : ''}`}
+                onClick={() => {
+                  clearMessages();
+                  setTab(item.key);
+                  setTabMenuOpen(false);
+                }}
+              >
+                {item.label}
+                {item.count > 0 && ` (${item.count})`}
+              </button>
+            ))}
+          </div>
         </div>
 
         {tab === 'overview' && (
