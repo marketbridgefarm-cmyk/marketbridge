@@ -25,6 +25,16 @@
   --space-md: clamp(16px, 3vw, 26px);
   --space-lg: clamp(24px, 5vw, 48px);
   --gutter: clamp(16px, 4vw, 22px);
+
+  /* Dashboard-specific variables */
+  --dash-panel-bg: #fff;
+  --dash-panel-border: #e5ebe6;
+  --dash-panel-shadow: 0 4px 12px rgba(20, 45, 28, .04);
+  --dash-panel-shadow-hover: 0 10px 25px rgba(20, 45, 28, .08);
+  --dash-tab-bg-active: var(--green);
+  --dash-tab-color-active: #fff;
+  --dash-tab-bg-inactive: var(--soft);
+  --dash-tab-color-inactive: var(--green);
 }
 
 * {
@@ -1743,7 +1753,9 @@ a.recent-activity-link:hover {
   }
 }
 
-/* Seller Dashboard */
+/* ========================================================================== */
+/* DASHBOARD STYLES (Enhanced)                                                */
+/* ========================================================================== */
 
 .sd-dashboard {
   max-width: 1280px;
@@ -1751,7 +1763,7 @@ a.recent-activity-link:hover {
   padding: clamp(20px, 4vw, 32px) clamp(12px, 4vw, 16px) 60px;
 }
 
-.sd-actions,
+/* --- Tabs --- */
 .sd-tabs,
 .sd-tabs-list,
 .sd-toolbar,
@@ -1762,57 +1774,11 @@ a.recent-activity-link:hover {
   align-items: center;
 }
 
-.sd-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
-  gap: 16px;
-  margin-top: 28px;
-}
-
-.sd-stat,
-.sd-panel,
-.sd-card {
-  padding: var(--space-md);
-  border: 1px solid #e2e2e2;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: var(--shadow-tight);
-  transition: transform .2s var(--ease), box-shadow .2s var(--ease);
-}
-
-.sd-stat:hover,
-.sd-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(20, 45, 28, .1);
-}
-
-.sd-stat {
-  border-left: 3px solid var(--green-light);
-}
-
-.sd-stat span,
-.sd-eyebrow {
-  font-size: 12px;
-  letter-spacing: .08em;
-  color: #666;
-}
-
-.sd-stat b {
-  display: block;
-  font-size: 30px;
-  margin-top: 8px;
-}
-
-.sd-workspace {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 20px;
-}
-
 .sd-tabs {
   margin: 30px 0 20px;
-  border-bottom: 1px solid #ddd;
-  padding-bottom: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--dash-panel-border);
+  position: relative;
 }
 
 .sd-tabs-nav {
@@ -1821,12 +1787,12 @@ a.recent-activity-link:hover {
 }
 
 .sd-tabs-list {
-  border-bottom: 1px solid #ddd;
-  padding-bottom: 8px;
+  border-bottom: none; /* Handled by .sd-tabs or .sd-tabs-nav */
+  padding-bottom: 0;
 }
 
 .sd-tabs-current {
-  display: none;
+  display: none; /* Hidden on desktop */
 }
 
 .sd-tabs-chevron {
@@ -1837,92 +1803,256 @@ a.recent-activity-link:hover {
 .sd-tab {
   border: 0;
   background: none;
-  padding: 10px 14px;
-  border-radius: 9px;
+  padding: 10px 18px;
+  border-radius: 99px; /* Pill shape */
   cursor: pointer;
   font-size: 14px;
-  transition: background .18s var(--ease), color .18s var(--ease);
+  font-weight: 600;
+  transition: background .18s var(--ease), color .18s var(--ease), transform .18s var(--ease);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .sd-tab:hover {
-  background: var(--soft);
+  background: var(--dash-tab-bg-inactive);
+  color: var(--green);
 }
 
 .sd-tab.sd-active {
-  background: var(--green);
-  color: #fff;
+  background: var(--dash-tab-bg-active);
+  color: var(--dash-tab-color-active);
 }
 
 .sd-tab.sd-active:hover {
-  background: var(--green);
+  background: var(--green-dark);
 }
 
-.sd-toolbar {
-  justify-content: space-between;
+.sd-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .3);
+  color: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
 }
 
+.sd-tab:not(.sd-active) .sd-tab-count {
+  background: var(--soft);
+  color: var(--green);
+}
+
+.sd-tabs-current .sd-tab-count {
+  background: var(--soft);
+  color: var(--green);
+}
+
+/* --- Panels and Cards --- */
+.sd-panel,
+.sd-card {
+  padding: var(--space-md);
+  border: 1px solid var(--dash-panel-border);
+  border-radius: var(--radius-md);
+  background: var(--dash-panel-bg);
+  box-shadow: var(--dash-panel-shadow);
+  transition: transform .2s var(--ease), box-shadow .2s var(--ease);
+}
+
+.sd-panel:hover,
+.sd-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--dash-panel-shadow-hover);
+}
+
+/* --- Stat Grid --- */
+.sd-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 16px;
+  margin-top: 28px;
+}
+
+.sd-stat {
+  padding: var(--space-md);
+  border: 1px solid var(--dash-panel-border);
+  border-radius: var(--radius-md);
+  background: var(--dash-panel-bg);
+  box-shadow: var(--dash-panel-shadow);
+  transition: transform .2s var(--ease), box-shadow .2s var(--ease);
+  position: relative;
+  overflow: hidden;
+  border-left: 4px solid var(--green-light); /* Accent border */
+}
+
+.sd-stat:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--dash-panel-shadow-hover);
+}
+
+.sd-stat span,
+.sd-eyebrow {
+  font-size: 12px;
+  letter-spacing: .08em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.sd-stat b {
+  display: block;
+  font-size: 30px;
+  font-family: Manrope, sans-serif;
+  font-weight: 800;
+  margin-top: 8px;
+  color: var(--ink);
+}
+
+/* --- Workspace Layout --- */
+.sd-workspace {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+}
+
+/* --- Tables --- */
 .sd-table-wrap {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--dash-panel-border);
 }
 
 .sd-table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 14px;
 }
 
 .sd-table th,
 .sd-table td {
   text-align: left;
-  padding: 13px;
-  border-bottom: 1px solid #ddd;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--dash-panel-border);
   white-space: nowrap;
 }
 
+.sd-table th {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  background: var(--soft);
+}
+
+.sd-table tbody tr:hover {
+  background: #f8faf8;
+}
+
+/* --- Badges --- */
 .sd-badge {
-  display: inline-block;
-  padding: 5px 9px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
   border-radius: 999px;
   background: #e8f4e8;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: var(--green-dark);
 }
 
 .sd-badge.sd-warn {
   background: #fff1cf;
+  color: #8a5b00;
 }
 
 .sd-badge.sd-blue {
   background: #e6efff;
+  color: #005cbf;
+}
+
+.sd-badge.sd-good {
+  background: #e6f6ea;
+  color: var(--green);
+}
+
+.sd-badge.sd-red {
+  background: #fdecea;
+  color: var(--danger);
 }
 
 .sd-muted {
-  color: #666;
+  color: var(--muted);
   line-height: 1.65;
 }
 
-.sd-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
-  gap: 16px;
+/* --- Buttons --- */
+.sd-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background .2s var(--ease), transform .2s var(--ease), box-shadow .2s var(--ease);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
-.sd-flow {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
-  gap: 14px;
+.sd-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
+.sd-btn-primary {
+  background: var(--green);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(23, 107, 58, .2);
+}
+
+.sd-btn-primary:hover:not(:disabled) {
+  background: var(--green-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(23, 107, 58, .25);
+}
+
+.sd-btn-outline {
+  background: #fff;
+  color: var(--green);
+  border: 1px solid var(--green);
+}
+
+.sd-btn-outline:hover:not(:disabled) {
+  background: var(--soft);
+  transform: translateY(-1px);
+}
+
+/* --- Notice / Alerts --- */
 .sd-notice {
-  padding: 17px;
-  border-radius: 13px;
-  background: #f5f5ef;
+  padding: 15px;
+  border-radius: var(--radius-md);
+  background: var(--soft);
+  border-left: 4px solid var(--green-light);
   line-height: 1.6;
+  font-size: 14px;
+  color: var(--ink);
 }
 
+/* --- Dialogs / Modals --- */
 .sd-dialog {
   border: 0;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   padding: 0;
   width: min(720px, calc(100% - 28px));
   max-height: calc(100dvh - 40px);
@@ -1932,6 +2062,7 @@ a.recent-activity-link:hover {
 
 .sd-dialog::backdrop {
   background: rgba(0, 0, 0, .5);
+  backdrop-filter: blur(4px);
 }
 
 .sd-modal {
@@ -1944,6 +2075,13 @@ a.recent-activity-link:hover {
   background: none;
   font-size: 24px;
   cursor: pointer;
+  color: var(--muted);
+  padding: 4px;
+  line-height: 1;
+}
+
+.sd-close:hover {
+  color: var(--ink);
 }
 
 .sd-form-grid {
@@ -1962,7 +2100,7 @@ a.recent-activity-link:hover {
   width: 100%;
   box-sizing: border-box;
   padding: 11px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
 }
@@ -1974,6 +2112,7 @@ a.recent-activity-link:hover {
   margin-bottom: 6px;
 }
 
+/* --- Toast --- */
 .sd-toast {
   position: fixed;
   right: 20px;
@@ -1988,35 +2127,25 @@ a.recent-activity-link:hover {
   box-shadow: var(--shadow-lift);
   z-index: 40;
   text-align: center;
+  font-weight: 500;
 }
 
-.sd-btn {
-  border: none;
-  border-radius: 6px;
-  padding: 9px 16px;
-  cursor: pointer;
-  font-size: 14px;
+/* --- Seller Dashboard Stats --- */
+.sd-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 16px;
+  margin-top: 28px;
 }
 
-.sd-btn-primary {
-  background: var(--green);
-  color: #fff;
+/* --- Transport Flow --- */
+.sd-flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 16px;
 }
 
-.sd-btn-outline {
-  background: #fff;
-  color: var(--green);
-  border: 1px solid var(--green);
-}
-
-.sd-btn-outline:hover {
-  background: var(--soft);
-}
-
-.sd-btn-primary:hover {
-  background: var(--green-dark);
-}
-
+/* --- Responsive Adjustments --- */
 @media (max-width: 900px) {
   .sd-stat-grid {
     grid-template-columns: 1fr 1fr;
@@ -2068,7 +2197,6 @@ a.recent-activity-link:hover {
     grid-template-columns: 1fr;
   }
 }
-
 
 /* Inspection report mobile-first modal */
 .sd-report-backdrop {
@@ -2527,7 +2655,6 @@ a.recent-activity-link:hover {
   flex: 0 0 auto;
 }
 
-
 @media (prefers-reduced-motion: reduce) {
   .nav-burger span {
     transition: none;
@@ -2722,9 +2849,6 @@ a.recent-activity-link:hover {
 
 /* ============================================================
    ADMIN DASHBOARD — RESPONSIVE POLISH
-   Card-style stacking for dense tables + tidy control clusters
-   so every admin action stays reachable and legible on phones,
-   tablets, and desktop alike.
    ============================================================ */
 
 .sd-btn {
@@ -2850,8 +2974,6 @@ a.recent-activity-link:hover {
 }
 
 @media (min-width: 761px) {
-  /* Above the stack breakpoint these tables behave like ordinary
-     scrollable tables, matching the rest of the dashboard. */
   .sd-table--stack {
     white-space: nowrap;
   }
