@@ -453,7 +453,7 @@ export default function AdminDashboard() {
 
       <section>
         <DashboardWelcome user={user} subtitle="Manage users, verification, account access, roles, disputes, and fraud monitoring." />
-        <div className="admin-cc-badge">Control Center (CC)</div>
+        <div className="admin-cc-badge">Control Center (C C)</div>
 
         <RoleSwitchCTA current="ADMIN" />
 
