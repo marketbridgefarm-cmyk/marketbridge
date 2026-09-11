@@ -2719,3 +2719,140 @@ a.recent-activity-link:hover {
     width: 100%;
   }
 }
+
+/* ============================================================
+   ADMIN DASHBOARD — RESPONSIVE POLISH
+   Card-style stacking for dense tables + tidy control clusters
+   so every admin action stays reachable and legible on phones,
+   tablets, and desktop alike.
+   ============================================================ */
+
+.sd-btn {
+  min-height: 40px;
+}
+
+.sd-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .28);
+  color: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.sd-tab:not(.sd-active) .sd-tab-count {
+  background: var(--soft);
+  color: var(--green);
+}
+
+.sd-tabs-current .sd-tab-count {
+  background: var(--soft);
+  color: var(--green);
+}
+
+/* Grouped cell controls (Users & account control table) */
+.sd-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sd-account-cell,
+.sd-role-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sd-account-cell {
+  min-width: 130px;
+}
+
+.sd-role-cell {
+  min-width: 180px;
+}
+
+.sd-search-wrap {
+  margin: 16px 0;
+}
+
+/* Card-style table stacking. Add "sd-table--stack" alongside
+   "sd-table" so a dense, many-column table (users, orders,
+   campaigns, disputes) reflows into readable cards below the
+   tablet breakpoint instead of forcing sideways scrolling. */
+@media (max-width: 760px) {
+  .sd-table--stack thead {
+    display: none;
+  }
+
+  .sd-table--stack,
+  .sd-table--stack tbody,
+  .sd-table--stack tr,
+  .sd-table--stack td {
+    display: block;
+    width: 100%;
+  }
+
+  .sd-table--stack tr {
+    margin-bottom: 14px;
+    padding: 6px 14px;
+    border: 1px solid #e2e2e2;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: var(--shadow-tight);
+  }
+
+  .sd-table--stack tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .sd-table--stack td {
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .sd-table--stack td:last-child {
+    border-bottom: 0;
+  }
+
+  .sd-table--stack td:not([data-label])::before {
+    content: none;
+  }
+
+  .sd-table--stack td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--muted, #666);
+  }
+
+  .sd-table--stack td[data-label=""] {
+    padding-top: 4px;
+  }
+
+  .sd-table--stack .sd-account-cell,
+  .sd-table--stack .sd-role-cell {
+    min-width: 0;
+  }
+}
+
+@media (min-width: 761px) {
+  /* Above the stack breakpoint these tables behave like ordinary
+     scrollable tables, matching the rest of the dashboard. */
+  .sd-table--stack {
+    white-space: nowrap;
+  }
+}
