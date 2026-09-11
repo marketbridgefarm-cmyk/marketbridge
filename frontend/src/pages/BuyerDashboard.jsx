@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
+import DashboardWelcome from '../components/DashboardWelcome.jsx';
+import RecentActivity from '../components/RecentActivity.jsx';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -198,6 +200,23 @@ export default function BuyerDashboard() {
   const ordersWithoutTransport = orders.filter(
     (order) => !order.transportJob
   );
+
+  const activityItems = [
+    ...leafOffers.map((offer) => ({
+      id: `offer-${offer.id}`,
+      icon: '💬',
+      text: `${(offer.counterAmount ?? offer.amount).toLocaleString()} ETB offer on ${offer.listing?.cropType || offer.listing?.title || 'a listing'} is ${offer.status.toLowerCase()}`,
+      time: offer.updatedAt || offer.createdAt,
+      href: `/listings/${offer.listing?.id}`,
+    })),
+    ...orders.map((order) => ({
+      id: `order-${order.id}`,
+      icon: '📦',
+      text: `Order for ${order.listing?.cropType || order.listing?.title || 'a listing'} is ${order.status.replaceAll('_', ' ').toLowerCase()}`,
+      time: order.updatedAt || order.createdAt,
+      href: `/orders/${order.id}`,
+    })),
+  ];
 
   /*
    * Open transport modal.
@@ -488,6 +507,7 @@ export default function BuyerDashboard() {
       ========================================================== */}
 
       <section>
+        <DashboardWelcome user={user} subtitle="Track negotiations, manage purchases, and arrange transport through MarketBridge." />
         <span className="sd-eyebrow">
           BUYER DASHBOARD
         </span>
@@ -506,6 +526,7 @@ export default function BuyerDashboard() {
         </p>
 
         <RoleSwitchCTA current="BUYER" />
+        <RecentActivity items={activityItems} emptyText="No offers or orders yet — browse listings to get started." />
 
         <div className="sd-actions">
           <Link
