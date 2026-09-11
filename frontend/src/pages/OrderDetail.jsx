@@ -57,6 +57,7 @@ export default function OrderDetail() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const [transportCounterInputs, setTransportCounterInputs] = useState({});
 
   const [payMethod, setPayMethod] = useState('TELEBIRR');
 
@@ -441,6 +442,52 @@ export default function OrderDetail() {
           'Could not accept transport quote'
         )
       );
+    } finally {
+      setBusy('');
+    }
+  };
+
+  // A quote's negotiation thread is only "live" at its leaf: the row that
+  // no later counter-quote points back to as a parent.
+  const leafTransportQuotes = (quotes) => {
+    const list = Array.isArray(quotes) ? quotes : [];
+    const parentIds = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
+    return list.filter((q) => !parentIds.has(q.id));
+  };
+
+  const counterQuote = async (quoteId) => {
+    if (!quoteId) return;
+    const amount = Number(transportCounterInputs[quoteId]);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Enter a valid counter amount before sending.');
+      return;
+    }
+
+    setBusy(`quote-${quoteId}`);
+    setError('');
+
+    try {
+      await api.patch(`/transport/quotes/${quoteId}`, { action: 'COUNTER', counterAmount: amount });
+      setTransportCounterInputs((q) => ({ ...q, [quoteId]: '' }));
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not send counter-offer'));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const rejectQuote = async (quoteId) => {
+    if (!quoteId) return;
+
+    setBusy(`quote-${quoteId}`);
+    setError('');
+
+    try {
+      await api.patch(`/transport/quotes/${quoteId}`, { action: 'REJECT' });
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not reject transport quote'));
     } finally {
       setBusy('');
     }
@@ -1539,10 +1586,14 @@ export default function OrderDetail() {
                       Transport quotes
                     </h3>
 
-                    {transportJob.quotes
+                    {leafTransportQuotes(transportJob.quotes)
                       ?.length ? (
-                      transportJob.quotes.map(
-                        (quote) => (
+                      leafTransportQuotes(transportJob.quotes).map(
+                        (quote) => {
+                          const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
+                          const isArrangerTurn = quote.status === 'PENDING' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+                          const isWaitingOnTransporter = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
+                          return (
                           <div
                             className="transporter"
                             key={quote.id}
@@ -1594,22 +1645,30 @@ export default function OrderDetail() {
                                     'PENDING'}
                                 </span>
                               </p>
+                              {isWaitingOnTransporter && (
+                                <p className="muted">
+                                  You countered {money(displayAmount)} ETB — waiting for the transporter to respond.
+                                </p>
+                              )}
                             </div>
 
                             <div>
                               <strong>
                                 {money(
-                                  quote.amount
+                                  displayAmount
                                 )}{' '}
                                 ETB
                               </strong>
 
                               {canChooseQuote &&
-                                quote.status ===
-                                  'PENDING' && (
+                                isArrangerTurn && (
                                   <div
                                     style={{
                                       marginTop: 8,
+                                      display: 'flex',
+                                      gap: 6,
+                                      flexWrap: 'wrap',
+                                      alignItems: 'center',
                                     }}
                                   >
                                     <button
@@ -1630,11 +1689,38 @@ export default function OrderDetail() {
                                         ? 'Accepting…'
                                         : 'Accept quote'}
                                     </button>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      placeholder="Counter (ETB)"
+                                      style={{ width: 120 }}
+                                      value={transportCounterInputs[quote.id] || ''}
+                                      onChange={(e) =>
+                                        setTransportCounterInputs((q) => ({ ...q, [quote.id]: e.target.value }))
+                                      }
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-light"
+                                      disabled={busy === `quote-${quote.id}`}
+                                      onClick={() => counterQuote(quote.id)}
+                                    >
+                                      {busy === `quote-${quote.id}` ? 'Sending…' : 'Counter'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-light"
+                                      disabled={busy === `quote-${quote.id}`}
+                                      onClick={() => rejectQuote(quote.id)}
+                                    >
+                                      {busy === `quote-${quote.id}` ? 'Rejecting…' : 'Reject'}
+                                    </button>
                                   </div>
                                 )}
                             </div>
                           </div>
-                        )
+                          );
+                        }
                       )
                     ) : (
                       <p className="muted">

@@ -186,6 +186,47 @@ export default function TruckOwnerDashboard() {
     finally { setActionLoading(null); }
   }
 
+  // A quote's negotiation thread is only "live" at its leaf: the row that
+  // no later counter-quote points back to as a parent.
+  function leafTransportQuote(quotes) {
+    const list = Array.isArray(quotes) ? quotes : [];
+    const parentIds = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
+    return list.find((q) => !parentIds.has(q.id)) || null;
+  }
+
+  async function acceptTransportQuote(quoteId) {
+    setActionLoading(`quote-${quoteId}`);
+    try {
+      await api.patch(`/transport/quotes/${quoteId}`, { action: 'ACCEPT' });
+      toast('Requester\u2019s price accepted. You have been assigned to this job.');
+      await loadAll(false); setActiveTab('jobs');
+    } catch (err) { toast(getErrorMessage(err, 'Could not accept this negotiation.')); }
+    finally { setActionLoading(null); }
+  }
+
+  async function counterTransportQuote(quoteId) {
+    const amount = window.prompt('Your counter-offer in ETB:');
+    if (amount === null) return;
+    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) { toast('Enter a valid positive amount.'); return; }
+    setActionLoading(`quote-${quoteId}`);
+    try {
+      await api.patch(`/transport/quotes/${quoteId}`, { action: 'COUNTER', counterAmount: Number(amount) });
+      toast('Counter-offer sent to the requester.');
+      await loadAll(false);
+    } catch (err) { toast(getErrorMessage(err, 'Could not send counter-offer.')); }
+    finally { setActionLoading(null); }
+  }
+
+  async function rejectTransportQuote(quoteId) {
+    setActionLoading(`quote-${quoteId}`);
+    try {
+      await api.patch(`/transport/quotes/${quoteId}`, { action: 'REJECT' });
+      toast('Negotiation ended.');
+      await loadAll(false);
+    } catch (err) { toast(getErrorMessage(err, 'Could not reject this negotiation.')); }
+    finally { setActionLoading(null); }
+  }
+
   async function updateStatus(jobId, status) {
     setActionLoading(`status-${jobId}-${status}`);
 
@@ -734,6 +775,11 @@ export default function TruckOwnerDashboard() {
                   actionLoading ===
                   `job-${job.id}-QUOTE`;
 
+                const myLeaf = leafTransportQuote(job.quotes);
+                const hasActiveThread = myLeaf && ['PENDING', 'COUNTERED'].includes(myLeaf.status);
+                const isMyTurn = hasActiveThread && myLeaf.status === 'COUNTERED' && myLeaf.counteredBy === 'REQUESTER';
+                const respondBusy = myLeaf && actionLoading === `quote-${myLeaf.id}`;
+
                 return (
                   <div
                     className="sd-card"
@@ -784,6 +830,14 @@ export default function TruckOwnerDashboard() {
                       </span>
                     </div>
 
+                    {hasActiveThread && (
+                      <p className="sd-muted" style={{ marginTop: 10 }}>
+                        {isMyTurn
+                          ? `The requester countered at ${Number(myLeaf.counterAmount ?? myLeaf.amount).toLocaleString()} ETB.`
+                          : `You quoted ${Number(myLeaf.status === 'COUNTERED' ? (myLeaf.counterAmount ?? myLeaf.amount) : myLeaf.amount).toLocaleString()} ETB — waiting on the requester's decision.`}
+                      </p>
+                    )}
+
                     <div
                       style={{
                         marginTop: 14,
@@ -792,7 +846,17 @@ export default function TruckOwnerDashboard() {
                         flexWrap: 'wrap',
                       }}
                     >
-                      <button type="button" className="sd-btn sd-btn-primary" disabled={quoting} onClick={() => respondToJob(job)}>{quoting ? 'Sending...' : 'Submit transport quote'}</button>
+                      {!hasActiveThread && (
+                        <button type="button" className="sd-btn sd-btn-primary" disabled={quoting} onClick={() => respondToJob(job)}>{quoting ? 'Sending...' : 'Submit transport quote'}</button>
+                      )}
+
+                      {isMyTurn && (
+                        <>
+                          <button type="button" className="sd-btn sd-btn-primary" disabled={respondBusy} onClick={() => acceptTransportQuote(myLeaf.id)}>{respondBusy ? 'Accepting...' : 'Accept'}</button>
+                          <button type="button" className="sd-btn sd-btn-outline" disabled={respondBusy} onClick={() => counterTransportQuote(myLeaf.id)}>{respondBusy ? 'Sending...' : 'Counter'}</button>
+                          <button type="button" className="sd-btn sd-btn-outline" disabled={respondBusy} onClick={() => rejectTransportQuote(myLeaf.id)}>{respondBusy ? 'Rejecting...' : 'Reject'}</button>
+                        </>
+                      )}
                     </div>
 
                   </div>

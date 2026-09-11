@@ -36,6 +36,8 @@ export default function InspectorDashboard() {
   const [quoteMessageInputs, setQuoteMessageInputs] = useState({});
   const [submittingQuoteId, setSubmittingQuoteId] = useState('');
   const [quotedRequestIds, setQuotedRequestIds] = useState(() => new Set());
+  const [quoteCounterInputs, setQuoteCounterInputs] = useState({});
+  const [respondingQuoteId, setRespondingQuoteId] = useState('');
   const [activeRequestId, setActiveRequestId] = useState('');
   const [report, setReport] = useState(EMPTY_REPORT);
   const [reportEvidence, setReportEvidence] = useState({ photoKeys: [], videoKeys: [] });
@@ -134,6 +136,66 @@ export default function InspectorDashboard() {
       );
     } finally {
       setSubmittingQuoteId('');
+    }
+  }
+
+  // A quote's negotiation thread is only "live" at its leaf: the row that
+  // no later counter-quote points back to as a parent.
+  function leafInspectionQuote(quotes) {
+    const list = Array.isArray(quotes) ? quotes : [];
+    const parentIds = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
+    return list.find((q) => !parentIds.has(q.id)) || null;
+  }
+
+  async function acceptInspectionQuote(requestId, quoteId) {
+    setError('');
+    setMsg('');
+    setRespondingQuoteId(quoteId);
+    try {
+      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/accept`);
+      setMsg('Requester\u2019s price accepted. You have been assigned to this job.');
+      setTab('mine');
+      await loadAll();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not accept this negotiation.');
+    } finally {
+      setRespondingQuoteId('');
+    }
+  }
+
+  async function counterInspectionQuote(requestId, quoteId) {
+    setError('');
+    setMsg('');
+    const amount = Number(quoteCounterInputs[quoteId]);
+    if (!amount || amount <= 0) {
+      setError('Enter a valid counter amount before sending.');
+      return;
+    }
+    setRespondingQuoteId(quoteId);
+    try {
+      await api.post(`/inspections/${requestId}/quotes/${quoteId}/counter`, { counterAmount: amount });
+      setMsg('Counter-offer sent to the requester.');
+      setQuoteCounterInputs((q) => ({ ...q, [quoteId]: '' }));
+      await loadAll();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not send counter-offer.');
+    } finally {
+      setRespondingQuoteId('');
+    }
+  }
+
+  async function rejectInspectionQuote(requestId, quoteId) {
+    setError('');
+    setMsg('');
+    setRespondingQuoteId(quoteId);
+    try {
+      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/reject`);
+      setMsg('Negotiation ended.');
+      await loadAll();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not reject this negotiation.');
+    } finally {
+      setRespondingQuoteId('');
     }
   }
 
@@ -404,12 +466,17 @@ export default function InspectorDashboard() {
                           'user'}
                       </p>
 
-                      {Array.isArray(r.quotes) && r.quotes.length > 0 && (
-                        <p className="sd-muted">
-                          You already quoted {Number(r.quotes[0].amount).toLocaleString()} ETB on this job.
-                          Quotes are sealed — you won't see what anyone else bids, and the requester decides.
-                        </p>
-                      )}
+                      {(() => {
+                        const myLeaf = leafInspectionQuote(r.quotes);
+                        if (!myLeaf) return null;
+                        const displayAmount = myLeaf.status === 'COUNTERED' ? (myLeaf.counterAmount ?? myLeaf.amount) : myLeaf.amount;
+                        return (
+                          <p className="sd-muted">
+                            You quoted {Number(displayAmount).toLocaleString()} ETB on this job ({myLeaf.status}).
+                            Quotes are sealed — you won't see what anyone else bids, and the requester decides.
+                          </p>
+                        );
+                      })()}
 
                       <div
                         className="sd-form-grid"
@@ -458,61 +525,120 @@ export default function InspectorDashboard() {
                         Accept job
                       </button>
 
-                      {!(quotedRequestIds.has(r.id) || (Array.isArray(r.quotes) && r.quotes.some((q) => q.inspectorId === currentUserId))) && (
+                      {!(quotedRequestIds.has(r.id) || (() => { const l = leafInspectionQuote(r.quotes); return l && ['PENDING', 'COUNTERED'].includes(l.status); })()) && (
                         <p className="sd-muted" style={{ marginTop: 10, marginBottom: 4 }}>
                           Or submit a sealed quote instead of claiming it outright — the requester compares every inspector's quote and picks one; nobody, including you, sees anyone else's amount.
                         </p>
                       )}
 
-                      {(quotedRequestIds.has(r.id) || (Array.isArray(r.quotes) && r.quotes.some((q) => q.inspectorId === currentUserId))) ? (
-                        <p className="sd-muted" style={{ marginTop: 10 }}>Waiting on the requester's decision.</p>
-                      ) : (
-                        <>
-                          <div
-                            className="sd-form-grid"
-                            style={{ marginTop: 6 }}
-                          >
-                            <div>
-                              <label>Your quote (ETB)</label>
-                              <input
-                                type="number"
-                                min="1"
-                                step="0.01"
-                                placeholder="e.g. 450"
-                                value={quoteAmountInputs[r.id] || ''}
+                      {(() => {
+                        const myLeaf = leafInspectionQuote(r.quotes);
+                        const hasActiveThread = myLeaf && ['PENDING', 'COUNTERED'].includes(myLeaf.status);
+
+                        if (!hasActiveThread) {
+                          if (quotedRequestIds.has(r.id)) {
+                            return <p className="sd-muted" style={{ marginTop: 10 }}>Waiting on the requester's decision.</p>;
+                          }
+                          return (
+                            <>
+                              <div
+                                className="sd-form-grid"
+                                style={{ marginTop: 6 }}
+                              >
+                                <div>
+                                  <label>Your quote (ETB)</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    step="0.01"
+                                    placeholder="e.g. 450"
+                                    value={quoteAmountInputs[r.id] || ''}
+                                    onChange={(e) =>
+                                      setQuoteAmountInputs((q) => ({
+                                        ...q,
+                                        [r.id]: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                </div>
+                              </div>
+
+                              <textarea
+                                placeholder="Optional message to the requester"
+                                value={quoteMessageInputs[r.id] || ''}
                                 onChange={(e) =>
-                                  setQuoteAmountInputs((q) => ({
+                                  setQuoteMessageInputs((q) => ({
                                     ...q,
                                     [r.id]: e.target.value,
                                   }))
                                 }
+                                style={{ marginTop: 6, width: '100%' }}
                               />
+
+                              <button
+                                type="button"
+                                className="sd-btn sd-btn-outline"
+                                style={{ marginTop: 6 }}
+                                disabled={submittingQuoteId === r.id}
+                                onClick={() => submitQuote(r.id)}
+                              >
+                                {submittingQuoteId === r.id ? 'Submitting…' : 'Submit quote'}
+                              </button>
+                            </>
+                          );
+                        }
+
+                        const isMyTurn = myLeaf.status === 'COUNTERED' && myLeaf.counteredBy === 'REQUESTER';
+
+                        if (!isMyTurn) {
+                          return <p className="sd-muted" style={{ marginTop: 10 }}>Waiting on the requester's decision.</p>;
+                        }
+
+                        return (
+                          <div style={{ marginTop: 10 }}>
+                            <p className="sd-muted">
+                              The requester countered at {Number(myLeaf.counterAmount ?? myLeaf.amount).toLocaleString()} ETB.
+                            </p>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                              <button
+                                type="button"
+                                className="sd-btn sd-btn-primary"
+                                disabled={respondingQuoteId === myLeaf.id}
+                                onClick={() => acceptInspectionQuote(r.id, myLeaf.id)}
+                              >
+                                {respondingQuoteId === myLeaf.id ? 'Accepting…' : 'Accept'}
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                step="0.01"
+                                placeholder="Counter (ETB)"
+                                style={{ width: 130 }}
+                                value={quoteCounterInputs[myLeaf.id] || ''}
+                                onChange={(e) =>
+                                  setQuoteCounterInputs((q) => ({ ...q, [myLeaf.id]: e.target.value }))
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="sd-btn sd-btn-outline"
+                                disabled={respondingQuoteId === myLeaf.id}
+                                onClick={() => counterInspectionQuote(r.id, myLeaf.id)}
+                              >
+                                {respondingQuoteId === myLeaf.id ? 'Sending…' : 'Counter'}
+                              </button>
+                              <button
+                                type="button"
+                                className="sd-btn sd-btn-outline"
+                                disabled={respondingQuoteId === myLeaf.id}
+                                onClick={() => rejectInspectionQuote(r.id, myLeaf.id)}
+                              >
+                                {respondingQuoteId === myLeaf.id ? 'Rejecting…' : 'Reject'}
+                              </button>
                             </div>
                           </div>
-
-                          <textarea
-                            placeholder="Optional message to the requester"
-                            value={quoteMessageInputs[r.id] || ''}
-                            onChange={(e) =>
-                              setQuoteMessageInputs((q) => ({
-                                ...q,
-                                [r.id]: e.target.value,
-                              }))
-                            }
-                            style={{ marginTop: 6, width: '100%' }}
-                          />
-
-                          <button
-                            type="button"
-                            className="sd-btn sd-btn-outline"
-                            style={{ marginTop: 6 }}
-                            disabled={submittingQuoteId === r.id}
-                            onClick={() => submitQuote(r.id)}
-                          >
-                            {submittingQuoteId === r.id ? 'Submitting…' : 'Submit quote'}
-                          </button>
-                        </>
-                      )}
+                        );
+                      })()}
                     </div>
                   ))}
 

@@ -22,6 +22,9 @@ export default function ListingDetail() {
   const [quotesByRequest, setQuotesByRequest] = useState({});
   const [loadingQuotesId, setLoadingQuotesId] = useState('');
   const [acceptingQuoteId, setAcceptingQuoteId] = useState('');
+  const [counteringQuoteId, setCounteringQuoteId] = useState('');
+  const [rejectingQuoteId, setRejectingQuoteId] = useState('');
+  const [quoteCounterInputs, setQuoteCounterInputs] = useState({});
   const [buying, setBuying] = useState(false);
   const [buyMethod, setBuyMethod] = useState('TELEBIRR');
   const [buyerCounter, setBuyerCounter] = useState('');
@@ -172,6 +175,47 @@ export default function ListingDetail() {
     }
   }
 
+  async function counterQuote(requestId, quoteId) {
+    setError('');
+    const amount = Number(quoteCounterInputs[quoteId]);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Enter a valid counter amount before sending.');
+      return;
+    }
+    setCounteringQuoteId(quoteId);
+    try {
+      await api.post(`/inspections/${requestId}/quotes/${quoteId}/counter`, { counterAmount: amount });
+      setMsg('Counter-offer sent to the inspector.');
+      setQuoteCounterInputs((q) => ({ ...q, [quoteId]: '' }));
+      await loadQuotes(requestId);
+    } catch (e) {
+      setError(e.response?.data?.error || 'Could not send counter-offer.');
+    } finally {
+      setCounteringQuoteId('');
+    }
+  }
+
+  async function rejectQuote(requestId, quoteId) {
+    setError('');
+    setRejectingQuoteId(quoteId);
+    try {
+      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/reject`);
+      setMsg('Quote rejected.');
+      await loadQuotes(requestId);
+    } catch (e) {
+      setError(e.response?.data?.error || 'Could not reject this quote.');
+    } finally {
+      setRejectingQuoteId('');
+    }
+  }
+
+  // A quote's negotiation thread is only "live" at its leaf: the row that
+  // no later counter-quote points back to as a parent.
+  function leafQuotes(list) {
+    const parentIds = new Set((list || []).map((q) => q.parentQuoteId).filter(Boolean));
+    return (list || []).filter((q) => !parentIds.has(q.id));
+  }
+
   if (!listing) return <main className="section"><div className="container-wide loading">Loading listing…</div></main>;
 
   const isOwner = user?.id === listing.sellerId;
@@ -240,37 +284,71 @@ export default function ListingDetail() {
                         ) : (
                           <div>
                             <p className="muted" style={{ marginBottom: 6 }}>
-                              {quotesByRequest[request.id].filter((q) => q.status === 'PENDING').length} open quote(s).
+                              {quotesByRequest[request.id].filter((q) => ['PENDING', 'COUNTERED'].includes(q.status)).length} open quote(s).
                               {' '}This request has no pre-selected inspector — any inspector may also claim it outright at any time, which closes it to further quotes.
                             </p>
                             {quotesByRequest[request.id].length === 0 && (
                               <p className="muted">No quotes submitted yet.</p>
                             )}
-                            {quotesByRequest[request.id].map((quote) => (
-                              <div key={quote.id} className="evidence" style={{ marginBottom: 6 }}>
-                                <div>
-                                  <strong>{quote.inspector?.name || 'Inspector'}</strong>
-                                  {' — '}{Number(quote.amount).toLocaleString()} ETB
-                                  <span className="badge" style={{ marginLeft: 8 }}>{quote.status}</span>
+                            {leafQuotes(quotesByRequest[request.id]).map((quote) => {
+                              const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
+                              const isRequesterTurn = quote.status === 'PENDING' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+                              const isWaitingOnInspector = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
+                              return (
+                                <div key={quote.id} className="evidence" style={{ marginBottom: 6 }}>
+                                  <div>
+                                    <strong>{quote.inspector?.name || 'Inspector'}</strong>
+                                    {' — '}{Number(displayAmount).toLocaleString()} ETB
+                                    <span className="badge" style={{ marginLeft: 8 }}>{quote.status}</span>
+                                  </div>
+                                  <p className="muted">
+                                    {quote.inspector?.location || 'Location not set'}
+                                    {quote.inspector?.rating != null && ` · Rating ${Number(quote.inspector.rating).toFixed(1)}`}
+                                    {quote.inspector?.verificationStatus && ` · ${quote.inspector.verificationStatus}`}
+                                  </p>
+                                  {quote.message && <p className="muted">"{quote.message}"</p>}
+                                  {isWaitingOnInspector && (
+                                    <p className="muted">You countered {Number(displayAmount).toLocaleString()} ETB — waiting for the inspector to respond.</p>
+                                  )}
+                                  {isRequesterTurn && (
+                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
+                                      <button
+                                        type="button"
+                                        className="btn btn-primary btn-sm"
+                                        disabled={acceptingQuoteId === quote.id}
+                                        onClick={() => acceptQuote(request.id, quote.id)}
+                                      >
+                                        {acceptingQuoteId === quote.id ? 'Accepting…' : 'Accept'}
+                                      </button>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        placeholder="Counter (ETB)"
+                                        style={{ width: 130 }}
+                                        value={quoteCounterInputs[quote.id] || ''}
+                                        onChange={(e) => setQuoteCounterInputs((q) => ({ ...q, [quote.id]: e.target.value }))}
+                                      />
+                                      <button
+                                        type="button"
+                                        className="btn btn-light btn-sm"
+                                        disabled={counteringQuoteId === quote.id}
+                                        onClick={() => counterQuote(request.id, quote.id)}
+                                      >
+                                        {counteringQuoteId === quote.id ? 'Sending…' : 'Counter'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-light btn-sm"
+                                        disabled={rejectingQuoteId === quote.id}
+                                        onClick={() => rejectQuote(request.id, quote.id)}
+                                      >
+                                        {rejectingQuoteId === quote.id ? 'Rejecting…' : 'Reject'}
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
-                                <p className="muted">
-                                  {quote.inspector?.location || 'Location not set'}
-                                  {quote.inspector?.rating != null && ` · Rating ${Number(quote.inspector.rating).toFixed(1)}`}
-                                  {quote.inspector?.verificationStatus && ` · ${quote.inspector.verificationStatus}`}
-                                </p>
-                                {quote.message && <p className="muted">"{quote.message}"</p>}
-                                {quote.status === 'PENDING' && (
-                                  <button
-                                    type="button"
-                                    className="btn btn-primary btn-sm"
-                                    disabled={acceptingQuoteId === quote.id}
-                                    onClick={() => acceptQuote(request.id, quote.id)}
-                                  >
-                                    {acceptingQuoteId === quote.id ? 'Accepting…' : 'Accept this quote'}
-                                  </button>
-                                )}
-                              </div>
-                            ))}
+                              );
+                            })}
                             <button
                               type="button"
                               className="btn btn-light btn-sm"
