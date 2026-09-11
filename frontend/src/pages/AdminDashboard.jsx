@@ -453,12 +453,7 @@ export default function AdminDashboard() {
 
       <section>
         <DashboardWelcome user={user} subtitle="Manage users, verification, account access, roles, disputes, and fraud monitoring." />
-        <span className="sd-eyebrow">ADMINISTRATION</span>
-        <h1>Marketplace control center.</h1>
-        <p className="sd-muted" style={{ maxWidth: 780 }}>
-          Manage users, verification, account access, roles,
-          disputes, and fraud monitoring.
-        </p>
+        <div className="admin-cc-badge">Control Center (CC)</div>
 
         <RoleSwitchCTA current="ADMIN" />
 
