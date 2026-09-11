@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
+import DashboardWelcome from '../components/DashboardWelcome.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const VERIFICATION_OPTIONS = ['PENDING', 'VERIFIED', 'REJECTED'];
 
@@ -16,6 +18,7 @@ const ROLE_OPTIONS = [
 const ACCOUNT_STATUS_OPTIONS = ['ACTIVE', 'SUSPENDED'];
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
   const [tab, setTab] = useState('overview');
 
   const [overview, setOverview] = useState(null);
@@ -412,6 +415,7 @@ export default function AdminDashboard() {
     <div className="sd-dashboard">
 
       <section>
+        <DashboardWelcome user={user} subtitle="Manage users, verification, account access, roles, disputes, and fraud monitoring." />
         <span className="sd-eyebrow">ADMINISTRATION</span>
         <h1>Marketplace control center.</h1>
         <p className="sd-muted" style={{ maxWidth: 780 }}>
