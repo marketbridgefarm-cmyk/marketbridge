@@ -1493,22 +1493,99 @@ form > label:first-of-type,
   }
 }
 
-/* Recent activity strip — sits under the welcome hero on every dashboard */
+/* Recent activity strip — sits under the welcome hero on every dashboard.
+   Now a collapsible dropdown so it stays compact until needed. */
 
 .recent-activity {
   background: #fff;
   border: 1px solid #ddd;
   border-radius: 16px;
-  padding: 18px clamp(16px, 4vw, 22px);
   margin-bottom: 28px;
+  overflow: hidden;
 }
 
-.recent-activity-head {
-  margin-bottom: 10px;
+.recent-activity-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 16px clamp(16px, 4vw, 22px);
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  transition: background .15s var(--ease);
+}
+
+.recent-activity-toggle:hover {
+  background: var(--soft);
+}
+
+.recent-activity-toggle:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+}
+
+.recent-activity-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 15px;
+  font-family: Manrope, system-ui, sans-serif;
+}
+
+.recent-activity-title-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.recent-activity-chevron {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform .22s var(--ease);
+}
+
+.recent-activity.open .recent-activity-chevron {
+  transform: rotate(180deg);
+}
+
+.recent-activity-body {
+  display: none;
+  padding: 0 clamp(16px, 4vw, 22px) 16px;
+  border-top: 1px solid #eee;
+  animation: recentActivityIn .22s var(--ease);
+}
+
+.recent-activity.open .recent-activity-body {
+  display: block;
+}
+
+@keyframes recentActivityIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .recent-activity-empty {
-  margin: 0;
+  margin: 14px 0 0;
 }
 
 .recent-activity-list {
