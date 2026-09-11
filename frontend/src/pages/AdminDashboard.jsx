@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import api from '../api/client';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
@@ -20,6 +20,7 @@ const ACCOUNT_STATUS_OPTIONS = ['ACTIVE', 'SUSPENDED'];
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [tab, setTab] = useState('overview');
+  const performanceModalRef = useRef(null);
 
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
@@ -425,15 +426,38 @@ export default function AdminDashboard() {
 
         <RoleSwitchCTA current="ADMIN" />
 
-        <div className="sd-stat-grid">
-          {cards.map(([label, value]) => (
-            <div className="sd-stat" key={label}>
-              <span>{label.toUpperCase()}</span>
-              <b>{value}</b>
-            </div>
-          ))}
+        <div className="sd-actions" style={{ marginTop: 28 }}>
+          <button
+            type="button"
+            className="sd-btn sd-btn-primary"
+            onClick={() => performanceModalRef.current?.showModal()}
+          >
+            Performance
+          </button>
         </div>
       </section>
+
+      <dialog ref={performanceModalRef} className="sd-dialog">
+        <div className="sd-modal">
+          <button
+            className="sd-close"
+            onClick={() => performanceModalRef.current?.close()}
+          >
+            ×
+          </button>
+          <span className="sd-eyebrow">SNAPSHOT</span>
+          <h2>Marketplace performance</h2>
+
+          <div className="sd-stat-grid" style={{ marginTop: 16 }}>
+            {cards.map(([label, value]) => (
+              <div className="sd-stat" key={label}>
+                <span>{label.toUpperCase()}</span>
+                <b>{value}</b>
+              </div>
+            ))}
+          </div>
+        </div>
+      </dialog>
 
       {error && (
         <section>
