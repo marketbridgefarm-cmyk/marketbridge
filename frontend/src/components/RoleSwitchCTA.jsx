@@ -44,7 +44,7 @@ export default function RoleSwitchCTA({ current }) {
         </div>
       </div>
       <div className="role-cta-links">
-        <Link className="btn btn-primary" to={featured.href}>{featured.question}</Link>
+        <Link className="btn btn-primary" to={featured.href}>{featured.cta}</Link>
         {rest.map((r) => (
           <Link key={r} className="btn btn-light btn-sm" to={ROLE_INFO[r].href}>
             {ROLE_INFO[r].icon} {ROLE_INFO[r].cta}
