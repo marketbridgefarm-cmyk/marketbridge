@@ -177,10 +177,22 @@ enum AdType {
 }
 
 enum AdStatus {
+  // Legacy values retained for backwards compatibility with existing rows.
   PENDING
   ACTIVE
+
+  PENDING_PAYMENT
+  PAID_PENDING_REVIEW
+  APPROVED
+  SCHEDULED
+  PUBLISHED
   EXPIRED
   REJECTED
+}
+
+enum AdvertisementEventType {
+  IMPRESSION
+  CLICK
 }
 
 enum DisputeStatus {
@@ -1007,14 +1019,31 @@ model Advertisement {
 
   type AdType
 
-  status AdStatus @default(PENDING)
+  status AdStatus @default(PENDING_PAYMENT)
 
   startDate DateTime
   endDate   DateTime
 
-  amountPaid Float?
+  // Server-calculated campaign price. Never accept a client-supplied price.
+  priceQuoted Float
+  amountPaid  Float?
+  currency    String @default("ETB")
+
+  campaignReference String @unique
+
+  // Creative and destination metadata. creativeImageKey is a private object-
+  // storage key; clients receive only short-lived signed URLs.
+  headline          String?
+  destinationUrl    String?
+  creativeImageKey  String?
+
+  // Moderation/publication audit trail.
+  rejectionReason       String?
+  publishedAt           DateTime?
+  telegramPostReference String?
 
   payments Payment[]
+  events   AdvertisementEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1022,6 +1051,20 @@ model Advertisement {
   @@index([advertiserId])
   @@index([listingId])
   @@index([status])
+  @@index([type, status, startDate, endDate])
+  @@index([createdAt])
+}
+
+model AdvertisementEvent {
+  id String @id @default(uuid())
+
+  advertisement   Advertisement @relation(fields: [advertisementId], references: [id], onDelete: Cascade)
+  advertisementId String
+
+  eventType AdvertisementEventType
+  createdAt DateTime @default(now())
+
+  @@index([advertisementId, eventType, createdAt])
 }
 
 // ============================================================================
