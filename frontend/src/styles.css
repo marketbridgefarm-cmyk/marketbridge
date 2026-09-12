@@ -3213,3 +3213,92 @@ a.recent-activity-link:hover {
 .ad-template-swatch--bold { background: linear-gradient(180deg, var(--ink) 0%, var(--green-dark) 100%); }
 .ad-template-swatch--minimal { background: var(--paper); border: 1px solid var(--line); }
 .ad-template-swatch--card { background: linear-gradient(135deg, var(--soft) 0%, var(--paper) 60%); border: 1px solid var(--line); }
+
+/* Create-listing popup. Desktop keeps the normal full-page layout; below the
+   tablet breakpoint the page presents as a popup over whatever the user was
+   looking at — a bottom sheet on phones, a centered dialog on tablets. */
+.listing-modal-drag-handle {
+  display: none;
+}
+
+.listing-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.listing-modal-close {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .listing-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, .58);
+    overscroll-behavior: contain;
+  }
+
+  .listing-modal-panel.section {
+    width: min(640px, 100%);
+    max-height: calc(100dvh - 28px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-sizing: border-box;
+    padding: 20px 0;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .28);
+  }
+
+  .listing-modal-header .back-link {
+    display: none;
+  }
+
+  .listing-modal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: #f2f2f2;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+  }
+}
+
+/* Phone width: full bottom sheet with a drag handle instead of a centered card. */
+@media (max-width: 640px) {
+  .listing-modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .listing-modal-panel.section {
+    width: 100%;
+    max-height: 92dvh;
+    border-radius: 20px 20px 0 0;
+    padding-top: 10px;
+  }
+
+  .listing-modal-drag-handle {
+    display: block;
+    width: 42px;
+    height: 4px;
+    margin: 0 auto 14px;
+    border-radius: 999px;
+    background: var(--line);
+  }
+}
