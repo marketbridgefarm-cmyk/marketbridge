@@ -4,8 +4,55 @@ const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
+const { signedMediaUrl } = require('../utils/objectStorage');
+const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 
 const router = express.Router();
+
+/**
+ * Listing photos/videos are stored as private object-storage keys (see
+ * POST /listings/media). Resolve each key to a short-lived signed URL right
+ * before sending a response, rather than persisting a URL that would expire.
+ *
+ * Older listings created back when this form took raw https:// URLs are
+ * still supported: a value that's already an http(s) URL is passed through
+ * unchanged instead of being (incorrectly) treated as a storage key.
+ */
+async function resolveMediaUrl(value) {
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+
+  try {
+    return await signedMediaUrl({ key: value, disposition: 'inline' });
+  } catch (error) {
+    console.error('LISTING MEDIA SIGN ERROR:', error);
+    return null;
+  }
+}
+
+async function attachMediaUrls(listing) {
+  if (!listing) return listing;
+
+  const photoKeys = listing.photos || [];
+  const videoKeys = listing.videos || [];
+
+  const [photos, videos] = await Promise.all([
+    Promise.all(photoKeys.map(resolveMediaUrl)),
+    Promise.all(videoKeys.map(resolveMediaUrl)),
+  ]);
+
+  return {
+    ...listing,
+    photos: photos.filter(Boolean),
+    videos: videos.filter(Boolean),
+    // Raw storage keys/legacy URLs, exposed so the owner's edit UI can
+    // resend "keep this one" without needing to reverse-engineer a key out
+    // of a short-lived signed URL. Not sensitive: a bare object-storage key
+    // grants no access without a server-signed URL.
+    photoKeys,
+    videoKeys,
+  };
+}
 
 /**
  * Fields that are safe to expose on public listing endpoints.
@@ -513,6 +560,10 @@ router.get('/', async (req, res) => {
         where,
       });
 
+    listings = await Promise.all(
+      listings.map(attachMediaUrls)
+    );
+
     return res.json({
       listings,
       total,
@@ -620,7 +671,7 @@ router.get('/:id', async (req, res) => {
     }
 
     return res.json({
-      listing: toPublicListing(listing),
+      listing: await attachMediaUrls(toPublicListing(listing)),
     });
   } catch (error) {
     console.error(
@@ -633,6 +684,49 @@ router.get('/:id', async (req, res) => {
     });
   }
 });
+
+// ============================================================================
+// UPLOAD LISTING MEDIA
+// ============================================================================
+
+/**
+ * Upload photos/short videos for a listing before it exists.
+ *
+ * Mirrors the transport/inspection evidence upload pattern: files go to
+ * private object storage first, the caller gets back opaque keys, and those
+ * keys are then submitted as `photos`/`videos` on POST /listings. Signed,
+ * viewable URLs are generated on read (see attachMediaUrls above) rather
+ * than stored, since a stored signed URL would eventually expire.
+ */
+router.post(
+  '/media',
+  authenticate,
+  requireRole('SELLER', 'INSPECTOR'),
+  evidenceUpload.array('files', 5),
+  async (req, res) => {
+    try {
+      if (!req.files || !req.files.length) {
+        return res.status(400).json({
+          error: 'At least one photo or video file is required',
+        });
+      }
+
+      const { photoKeys, videoKeys } = await uploadEvidenceFiles(
+        'listing',
+        req.user.id,
+        req.files
+      );
+
+      return res.status(201).json({ photoKeys, videoKeys });
+    } catch (error) {
+      console.error('LISTING MEDIA UPLOAD ERROR:', error);
+
+      return res.status(500).json({
+        error: 'Could not upload media',
+      });
+    }
+  }
+);
 
 // ============================================================================
 // CREATE LISTING
@@ -1049,6 +1143,8 @@ router.patch(
         pickupWindowStart,
         pickupWindowEnd,
         description,
+        photos,
+        videos,
       } = req.body;
 
       // ----------------------------------------------------------------------
@@ -1210,6 +1306,56 @@ router.patch(
       }
 
       // ----------------------------------------------------------------------
+      // Validate photos/videos
+      //
+      // The client sends the *full* desired array each time (the keys it
+      // wants to keep, plus any newly-uploaded keys from POST
+      // /listings/media) — this endpoint replaces, it doesn't merge, since
+      // it has no way to tell "leave existing alone" apart from "clear
+      // them" otherwise. Capped at 10 each as a sanity limit.
+      // ----------------------------------------------------------------------
+
+      if (
+        photos !== undefined &&
+        !Array.isArray(photos)
+      ) {
+        return res.status(400).json({
+          error: 'photos must be an array',
+        });
+      }
+
+      if (
+        videos !== undefined &&
+        !Array.isArray(videos)
+      ) {
+        return res.status(400).json({
+          error: 'videos must be an array',
+        });
+      }
+
+      const sanitizedPhotos =
+        photos !== undefined
+          ? photos
+              .filter(
+                (p) =>
+                  typeof p === 'string' &&
+                  p.trim()
+              )
+              .slice(0, 10)
+          : undefined;
+
+      const sanitizedVideos =
+        videos !== undefined
+          ? videos
+              .filter(
+                (v) =>
+                  typeof v === 'string' &&
+                  v.trim()
+              )
+              .slice(0, 10)
+          : undefined;
+
+      // ----------------------------------------------------------------------
       // Update listing
       // ----------------------------------------------------------------------
 
@@ -1265,6 +1411,16 @@ router.patch(
               undefined && {
               description,
             }),
+
+            ...(sanitizedPhotos !==
+              undefined && {
+              photos: sanitizedPhotos,
+            }),
+
+            ...(sanitizedVideos !==
+              undefined && {
+              videos: sanitizedVideos,
+            }),
           },
         });
 
@@ -1288,7 +1444,7 @@ router.patch(
       }
 
       return res.json({
-        listing: updated,
+        listing: await attachMediaUrls(updated),
       });
     } catch (error) {
       console.error(
