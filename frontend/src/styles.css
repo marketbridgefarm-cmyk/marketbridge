@@ -3073,3 +3073,33 @@ a.recent-activity-link:hover {
     animation: none;
   }
 }
+
+/* Advertising */
+.ad-banner {
+  position: relative;
+  max-width: 1200px;
+  margin: 24px auto 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface, #fff);
+  border: 1px solid rgba(0,0,0,.08);
+  box-shadow: 0 8px 30px rgba(0,0,0,.06);
+}
+.ad-banner img {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+}
+.ad-banner-copy {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  display: grid;
+  gap: 3px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: rgba(0,0,0,.72);
+  color: #fff;
+}
+.ad-banner-copy span { font-size: 11px; opacity: .78; text-transform: uppercase; letter-spacing: .08em; }
