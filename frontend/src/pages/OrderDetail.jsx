@@ -449,6 +449,9 @@ export default function OrderDetail() {
 
   // A quote's negotiation thread is only "live" at its leaf: the row that
   // no later counter-quote points back to as a parent.
+  // Transport negotiations are immutable parent -> child chains. The
+  // actionable quote is every quote with no child; never use the root quote
+  // after a counter has been created.
   const leafTransportQuotes = (quotes) => {
     const list = Array.isArray(quotes) ? quotes : [];
     const parentIds = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
