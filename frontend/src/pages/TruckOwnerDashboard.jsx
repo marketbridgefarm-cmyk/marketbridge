@@ -92,7 +92,23 @@ export default function TruckOwnerDashboard() {
   }
 
   useEffect(() => {
-    loadAll(true);
+    let mounted = true;
+    let timer;
+
+    const refresh = async () => {
+      if (!mounted) return;
+      await loadAll(false);
+      if (mounted) timer = window.setTimeout(refresh, 10000);
+    };
+
+    loadAll(true).then(() => {
+      if (mounted) timer = window.setTimeout(refresh, 10000);
+    });
+
+    return () => {
+      mounted = false;
+      if (timer) window.clearTimeout(timer);
+    };
   }, []);
 
   const activeJobs = useMemo(
@@ -203,7 +219,9 @@ export default function TruckOwnerDashboard() {
   function leafTransportQuote(quotes) {
     const list = Array.isArray(quotes) ? quotes : [];
     const parentIds = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
-    return list.find((q) => !parentIds.has(q.id)) || null;
+    // Return the newest actionable leaf, not the root of the negotiation.
+    const leaves = list.filter((q) => !parentIds.has(q.id));
+    return leaves.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))[0] || null;
   }
 
   async function acceptTransportQuote(quoteId) {
