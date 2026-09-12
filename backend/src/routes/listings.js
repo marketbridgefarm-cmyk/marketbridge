@@ -741,10 +741,6 @@ router.post(
   '/',
   authenticate,
   [
-    body('sellerId')
-      .notEmpty()
-      .isString(),
-
     /**
      * DIGITAL intentionally remains excluded here.
      *
@@ -824,8 +820,8 @@ router.post(
         });
       }
 
-      let {
-        sellerId,
+      const {
+        sellerId: requestedSellerId,
         category = 'AGRICULTURAL',
         title,
         cropType,
@@ -846,19 +842,24 @@ router.post(
       // ----------------------------------------------------------------------
       // Permission checks
       // ----------------------------------------------------------------------
-      //
-      // PRODUCT is a true peer-to-peer marketplace: every authenticated
-      // MarketBridge member may sell physical products, even if an older
-      // account still has only the legacy BUYER role. Never trust a client
-      // supplied sellerId for PRODUCT listings.
-      //
-      // AGRICULTURAL keeps the specialized producer/inspector workflow.
-      // Inspectors may create a farm listing on behalf of a farmer, while a
-      // normal agricultural seller must own the listing.
 
-      if (category === 'PRODUCT') {
-        sellerId = req.user.id;
-      } else {
+      // Product/Digital marketplace architecture: every authenticated user
+      // may sell. For generic PRODUCT listings the seller is ALWAYS the
+      // authenticated user; never trust a client-supplied sellerId.
+      //
+      // Agricultural listings keep the specialized seller/inspector flow.
+      const sellerId =
+        category === 'PRODUCT'
+          ? req.user.id
+          : requestedSellerId;
+
+      if (category === 'AGRICULTURAL') {
+        if (!sellerId) {
+          return res.status(400).json({
+            error: 'sellerId is required for agricultural listings',
+          });
+        }
+
         if (
           req.user.roles.includes('INSPECTOR') &&
           !req.user.roles.includes('SELLER') &&
@@ -876,7 +877,7 @@ router.post(
         ) {
           return res.status(403).json({
             error:
-              'You can only create listings under your own account',
+              'You can only create agricultural listings under your own account',
           });
         }
       }
@@ -993,16 +994,17 @@ router.post(
         });
       }
 
-      // PRODUCT sellers do not need the legacy SELLER role. The seller is
-      // always the authenticated user for this category. Agricultural
-      // listings retain the explicit SELLER/INSPECTOR authorization model.
+      // Generic PRODUCT sellers do not need the legacy SELLER role.
+      // Agricultural listings retain the specialized SELLER requirement,
+      // except when an INSPECTOR creates the listing for a farmer.
       if (
         category === 'AGRICULTURAL' &&
-        !seller.roles.includes('SELLER')
+        !seller.roles.includes('SELLER') &&
+        !(req.user.roles.includes('INSPECTOR') && sellerId !== req.user.id)
       ) {
         return res.status(400).json({
           error:
-            'The selected agricultural seller account is not enabled for selling',
+            'The agricultural seller account is not enabled for selling',
         });
       }
 
