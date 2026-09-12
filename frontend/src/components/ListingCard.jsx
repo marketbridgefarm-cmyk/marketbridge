@@ -4,8 +4,15 @@ import { Link } from 'react-router-dom';
 export default function ListingCard({ listing }) {
   const isProduct = listing.category === 'PRODUCT';
   const title = listing.title || listing.cropType || 'Listing';
-  return <article className="listing-card">
-    <div className="listing-photo">{listing.photos?.[0] ? <img src={listing.photos[0]} alt={title}/> : <span>{title.slice(0,2).toUpperCase()}</span>}</div>
+  return <article className={`listing-card${listing.sponsored ? ' listing-card--sponsored' : ''}`}>
+    <div className="listing-photo">
+      {listing.sponsored && <span className="tag tag--sponsored">Sponsored</span>}
+      {listing.photos?.[0]
+        ? <img src={listing.photos[0]} alt={title}/>
+        : listing.videos?.[0]
+          ? <video src={listing.videos[0]} muted />
+          : <span>{title.slice(0,2).toUpperCase()}</span>}
+    </div>
     <div className="listing-body">
       <div className="listing-meta"><span className="tag">{isProduct ? 'PRODUCT' : 'AGRICULTURE'}</span><span>{listing.status}</span></div>
       <h3>{title}</h3>
