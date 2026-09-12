@@ -7,7 +7,7 @@ export default function CreateListing() {
   const { user } = useAuth();
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
-  const initialCategory = searchParams.get('category') === 'PRODUCT' ? 'PRODUCT' : 'AGRICULTURAL';
+  const requestedCategory = searchParams.get('category')?.toUpperCase();
 
   // Below the tablet breakpoint this page renders as a popup (bottom sheet on
   // phones, centered dialog on tablets) over whatever the user was looking
@@ -28,9 +28,10 @@ export default function CreateListing() {
     };
   }, [closeModal]);
 
-  const [category, setCategory] = useState(initialCategory);
+  const [category, setCategory] = useState(requestedCategory === 'PRODUCT' ? 'PRODUCT' : 'AGRICULTURAL');
   const [form, setForm] = useState({
     sellerId: user?.id || '',
+    description: '',
     title: '',
     cropType: '',
     quantity: '',
@@ -40,14 +41,13 @@ export default function CreateListing() {
     location: user?.location || '',
     harvestedDate: '',
     readinessDate: '',
-    description: '',
     photos: [], // [{ key, name, previewUrl }]
     videos: []  // [{ key, name, previewUrl }]
   });
   const [error, setError] = useState('');
   const [mediaError, setMediaError] = useState('');
   const [uploading, setUploading] = useState(false);
-  const set = k => e => setForm({ ...form, [k]: e.target.value });
+  const set = k => e => setForm(prev => ({ ...prev, [k]: e.target.value }));
 
   async function handleMediaSelect(kind, e) {
     const files = Array.from(e.target.files || []);
@@ -98,8 +98,7 @@ export default function CreateListing() {
         askingPrice: Number(form.askingPrice),
         minAcceptablePrice: form.minAcceptablePrice ? Number(form.minAcceptablePrice) : undefined,
         photos: form.photos.map(p => p.key),
-        videos: form.videos.map(v => v.key),
-        description: form.description.trim() || undefined
+        videos: form.videos.map(v => v.key)
       });
       nav(`/listings/${r.data.listing.id}`);
     } catch (e) {
@@ -157,13 +156,15 @@ export default function CreateListing() {
             )}
           </div>
 
-          <label>Description</label>
-          <textarea
-            value={form.description}
-            onChange={set('description')}
-            placeholder={category === 'AGRICULTURAL' ? 'Describe the produce, quality, packaging, and other important details.' : 'Describe the product, condition, specifications, and what is included.'}
-            rows={4}
-          />
+          <div>
+            <label>Description</label>
+            <textarea
+              value={form.description}
+              onChange={set('description')}
+              placeholder={category === 'PRODUCT' ? 'Describe the product, condition, features, brand, size, etc.' : 'Describe the produce, quality and other useful details.'}
+              rows={4}
+            />
+          </div>
 
           {mediaError && <div className="alert error">{mediaError}</div>}
 
