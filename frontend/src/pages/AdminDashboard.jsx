@@ -1079,9 +1079,15 @@ export default function AdminDashboard() {
               <h2>Pending review</h2>
 
               <div className="sd-cards">
-              {pendingAds.map((ad) => (
+              {pendingAds.map((ad) => {
+                const adPaid = (ad.payments || []).some((p) => p.status === 'PAID');
+                return (
                 <div className="sd-card" key={ad.id}>
+                  {ad.creativeImageUrl && (
+                    <img src={ad.creativeImageUrl} alt={ad.headline || 'Campaign creative'} style={{ width: '100%', borderRadius: 8, marginBottom: 8, maxHeight: 120, objectFit: 'cover' }} />
+                  )}
                   <h3>{ad.type.replace(/_/g, ' ')}</h3>
+                  {ad.headline && <p className="sd-muted"><strong>{ad.headline}</strong></p>}
 
                   <p className="sd-muted">
                     {ad.advertiser?.name} ({ad.advertiser?.email})
@@ -1091,9 +1097,9 @@ export default function AdminDashboard() {
                   <p className="sd-muted">
                     {new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}
                     {' · '}
-                    {ad.amountPaid != null
+                    {adPaid
                       ? `${Number(ad.amountPaid).toLocaleString()} ETB paid`
-                      : 'No payment recorded yet'}
+                      : `${Number(ad.amountPaid).toLocaleString()} ETB due, not yet paid`}
                   </p>
 
                   <div className="sd-modal-actions">
@@ -1101,9 +1107,9 @@ export default function AdminDashboard() {
                       className="sd-btn sd-btn-primary"
                       disabled={
                         actionLoading === `ad-${ad.id}` ||
-                        ad.amountPaid == null
+                        !adPaid
                       }
-                      title={ad.amountPaid == null ? 'Waiting on advertiser payment before approval' : undefined}
+                      title={!adPaid ? 'Waiting on advertiser payment before approval' : undefined}
                       onClick={() => setAdStatus(ad.id, 'ACTIVE')}
                     >
                       {actionLoading === `ad-${ad.id}` ? 'Working…' : 'Approve'}
@@ -1118,7 +1124,8 @@ export default function AdminDashboard() {
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
 
               {pendingAds.length === 0 && (
                 <div className="sd-panel">
