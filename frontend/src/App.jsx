@@ -131,7 +131,7 @@ export default function App() {
         <Route
           path="/dashboard/advertiser"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute role="ADVERTISER">
               <AdvertiserDashboard />
             </ProtectedRoute>
           }
