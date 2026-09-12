@@ -188,11 +188,21 @@ enum AdStatus {
   PUBLISHED
   EXPIRED
   REJECTED
+  CANCELLED
 }
 
 enum AdvertisementEventType {
   IMPRESSION
   CLICK
+}
+
+// Visual layout template applied when rendering a BANNER campaign's creative.
+// Non-BANNER campaign types ignore this field entirely.
+enum BannerTemplate {
+  CLASSIC
+  BOLD
+  MINIMAL
+  CARD
 }
 
 enum DisputeStatus {
@@ -1036,6 +1046,9 @@ model Advertisement {
   headline          String?
   destinationUrl    String?
   creativeImageKey  String?
+
+  // Layout template for BANNER creatives only; ignored by every other type.
+  bannerTemplate BannerTemplate @default(CLASSIC)
 
   // Moderation/publication audit trail.
   rejectionReason       String?
