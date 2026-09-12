@@ -168,6 +168,10 @@ export default function BuyerDashboard() {
     }
   }, [counterDrafts, loadAll, toast]);
 
+  // A negotiation chain is represented by parentOfferId. The actionable offer
+  // is the LEAF (an offer that has no child), not the root of the chain.
+  // Using the root here makes the buyer lose the response buttons after a
+  // seller counter-offer.
   const leafOffers = useMemo(() => {
     const parentIds = new Set(offers.map((offer) => offer.parentOfferId).filter(Boolean));
     return offers.filter((offer) => !parentIds.has(offer.id));
