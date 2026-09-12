@@ -18,11 +18,48 @@ export default function CreateListing() {
     location: user?.location || '',
     harvestedDate: '',
     readinessDate: '',
-    photos: '',
-    videos: ''
+    photos: [], // [{ key, name, previewUrl }]
+    videos: []  // [{ key, name, previewUrl }]
   });
   const [error, setError] = useState('');
+  const [mediaError, setMediaError] = useState('');
+  const [uploading, setUploading] = useState(false);
   const set = k => e => setForm({ ...form, [k]: e.target.value });
+
+  async function handleMediaSelect(kind, e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!files.length) return;
+
+    setMediaError('');
+    setUploading(true);
+    try {
+      const body = new FormData();
+      files.forEach(f => body.append('files', f));
+      const { data } = await api.post('/listings/media', body);
+      const keys = kind === 'photo' ? data.photoKeys : data.videoKeys;
+      const items = files.map((f, i) => ({
+        key: keys[i],
+        name: f.name,
+        previewUrl: URL.createObjectURL(f)
+      })).filter(item => item.key);
+      const field = kind === 'photo' ? 'photos' : 'videos';
+      setForm(prev => ({ ...prev, [field]: [...prev[field], ...items] }));
+    } catch (err) {
+      setMediaError(err.response?.data?.error || `Could not upload ${kind === 'photo' ? 'photo' : 'video'}. Try a smaller file.`);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function removeMedia(kind, index) {
+    const field = kind === 'photo' ? 'photos' : 'videos';
+    setForm(prev => {
+      const removed = prev[field][index];
+      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+      return { ...prev, [field]: prev[field].filter((_, i) => i !== index) };
+    });
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -32,13 +69,13 @@ export default function CreateListing() {
         ...form,
         category,
         sellerId: user.id,
-        cropType: category === 'AGRICULTURAL' ? form.cropType : form.title,
+        cropType: category === 'AGRICULTURAL' ? form.cropType : undefined,
         title: form.title || form.cropType,
         quantity: Number(form.quantity),
         askingPrice: Number(form.askingPrice),
         minAcceptablePrice: form.minAcceptablePrice ? Number(form.minAcceptablePrice) : undefined,
-        photos: form.photos ? form.photos.split(',').map(x => x.trim()).filter(Boolean) : [],
-        videos: form.videos ? form.videos.split(',').map(x => x.trim()).filter(Boolean) : []
+        photos: form.photos.map(p => p.key),
+        videos: form.videos.map(v => v.key)
       });
       nav(`/listings/${r.data.listing.id}`);
     } catch (e) {
@@ -91,12 +128,37 @@ export default function CreateListing() {
             )}
           </div>
 
-          <label>Photo URLs <span className="muted">(comma separated)</span></label>
-          <input value={form.photos} onChange={set('photos')} placeholder="https://..." />
-          <label>Video URLs <span className="muted">(comma separated)</span></label>
-          <input value={form.videos} onChange={set('videos')} placeholder="https://..." />
+          {mediaError && <div className="alert error">{mediaError}</div>}
 
-          <button className="btn btn-primary btn-lg full" type="submit">Publish {category === 'AGRICULTURAL' ? 'produce' : 'product'}</button>
+          <label>Photos</label>
+          <input type="file" accept="image/*" multiple onChange={e => handleMediaSelect('photo', e)} disabled={uploading} />
+          {form.photos.length > 0 && (
+            <div className="media-preview-grid">
+              {form.photos.map((p, i) => (
+                <div className="media-preview-item" key={p.key}>
+                  <img src={p.previewUrl} alt={p.name} />
+                  <button type="button" className="media-preview-remove" onClick={() => removeMedia('photo', i)} aria-label={`Remove ${p.name}`}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <label>Short videos</label>
+          <input type="file" accept="video/*" multiple onChange={e => handleMediaSelect('video', e)} disabled={uploading} />
+          {form.videos.length > 0 && (
+            <div className="media-preview-grid">
+              {form.videos.map((v, i) => (
+                <div className="media-preview-item" key={v.key}>
+                  <video src={v.previewUrl} muted />
+                  <button type="button" className="media-preview-remove" onClick={() => removeMedia('video', i)} aria-label={`Remove ${v.name}`}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {uploading && <p className="muted">Uploading media…</p>}
+
+          <button className="btn btn-primary btn-lg full" type="submit" disabled={uploading}>Publish {category === 'AGRICULTURAL' ? 'produce' : 'product'}</button>
         </form>
       </div>
     </main>
