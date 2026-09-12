@@ -2,6 +2,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
+const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { signedMediaUrl } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
@@ -823,7 +824,7 @@ router.post(
         });
       }
 
-      const {
+      let {
         sellerId,
         category = 'AGRICULTURAL',
         title,
@@ -845,34 +846,37 @@ router.post(
       // ----------------------------------------------------------------------
       // Permission checks
       // ----------------------------------------------------------------------
+      //
+      // PRODUCT is a true peer-to-peer marketplace: every authenticated
+      // MarketBridge member may sell physical products, even if an older
+      // account still has only the legacy BUYER role. Never trust a client
+      // supplied sellerId for PRODUCT listings.
+      //
+      // AGRICULTURAL keeps the specialized producer/inspector workflow.
+      // Inspectors may create a farm listing on behalf of a farmer, while a
+      // normal agricultural seller must own the listing.
 
-      // PRODUCT listings follow the current MarketBridge architecture:
-      // every authenticated member may sell physical products. Do not require
-      // a SELLER role and do not allow one member to create a product under
-      // another member's account.
       if (category === 'PRODUCT') {
-        if (sellerId !== req.user.id) {
-          return res.status(403).json({
-            error: 'Product listings can only be created under your own account',
-            code: 'PRODUCT_SELLER_MISMATCH',
-          });
-        }
+        sellerId = req.user.id;
       } else {
-        // AGRICULTURAL keeps the specialized producer/inspector workflow.
-        // Inspectors may create a listing for a farmer, but not as themselves.
         if (
           req.user.roles.includes('INSPECTOR') &&
-          !req.user.roles.includes('SELLER')
+          !req.user.roles.includes('SELLER') &&
+          sellerId === req.user.id
         ) {
-          if (sellerId === req.user.id) {
-            return res.status(403).json({
-              error:
-                'Inspectors cannot list produce as themselves; sellerId must be the farmer.',
-            });
-          }
-        } else if (sellerId !== req.user.id) {
           return res.status(403).json({
-            error: 'You can only create agricultural listings under your own account',
+            error:
+              'Inspectors cannot list produce as themselves; sellerId must be the farmer.',
+          });
+        }
+
+        if (
+          !req.user.roles.includes('INSPECTOR') &&
+          sellerId !== req.user.id
+        ) {
+          return res.status(403).json({
+            error:
+              'You can only create listings under your own account',
           });
         }
       }
@@ -989,13 +993,16 @@ router.post(
         });
       }
 
-      // Product sellers are ordinary authenticated marketplace members; the
-      // legacy SELLER role remains relevant to agricultural workflows but is
-      // not a prerequisite for PRODUCT listings.
-      if (category === 'AGRICULTURAL' && !seller.roles.includes('SELLER')) {
+      // PRODUCT sellers do not need the legacy SELLER role. The seller is
+      // always the authenticated user for this category. Agricultural
+      // listings retain the explicit SELLER/INSPECTOR authorization model.
+      if (
+        category === 'AGRICULTURAL' &&
+        !seller.roles.includes('SELLER')
+      ) {
         return res.status(400).json({
-          error: 'The selected agricultural seller account is not enabled for selling',
-          code: 'AGRICULTURAL_SELLER_ROLE_REQUIRED',
+          error:
+            'The selected agricultural seller account is not enabled for selling',
         });
       }
 
