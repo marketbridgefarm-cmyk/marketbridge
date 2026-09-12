@@ -609,19 +609,27 @@ async function settlePayment({
         // put arbitrary content on the site, so leave it PENDING for an
         // admin to actually look at and approve via PATCH /ads/:id/status.
         // Every other ad type keeps activating immediately on payment.
-        const requiresModeration = payment.advertisement.type === 'BANNER';
+        const requiresModeration = ['BANNER', 'TELEGRAM_PROMOTION'].includes(payment.advertisement.type);
+        const startsInFuture = new Date(payment.advertisement.startDate) > new Date();
+
+        // Payment completion is not the same as publication. Listing-linked
+        // placements can publish/schedule automatically after payment; Banner
+        // and Telegram campaigns remain paid-but-unreviewed until an admin
+        // approves them. This prevents paid arbitrary creative from becoming
+        // public without moderation.
+        const nextStatus = requiresModeration
+          ? 'PAID_PENDING_REVIEW'
+          : (startsInFuture ? 'SCHEDULED' : 'PUBLISHED');
 
         await tx.advertisement.update({
           where: {
-            id:
-              payment.advertisement.id,
+            id: payment.advertisement.id,
           },
 
           data: {
-            amountPaid:
-              payment.amount,
-
-            status: requiresModeration ? 'PENDING' : 'ACTIVE',
+            amountPaid: payment.amount,
+            status: nextStatus,
+            ...(nextStatus === 'PUBLISHED' ? { publishedAt: new Date() } : {}),
           },
         });
       }
