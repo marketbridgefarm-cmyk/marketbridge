@@ -13,6 +13,10 @@ const { recordAuditEvent } = require('../utils/audit');
 const { uploadPrivateObject, signedMediaUrl, deletePrivateObject } = require('../utils/objectStorage');
 const { AD_TYPES, dailyRatesEtb, campaignDays, quotePrice } = require('../utils/adPricing');
 
+// Visual layout template applied when rendering a BANNER creative. Ignored
+// entirely for every other campaign type.
+const BANNER_TEMPLATES = ['CLASSIC', 'BOLD', 'MINIMAL', 'CARD'];
+
 const router = express.Router();
 
 const MAX_CREATIVE_BYTES = Number(process.env.AD_BANNER_MAX_FILE_BYTES || 5 * 1024 * 1024);
@@ -119,7 +123,7 @@ function paymentStatus(ad) {
 // Pricing is deliberately server-owned. The frontend may display these values,
 // but it can never choose the amount charged for a campaign.
 router.get('/pricing', authenticate, (req, res) => {
-  return res.json({ currency: 'ETB', dailyRatesEtb: dailyRatesEtb(), maxCampaignDays: Number(process.env.AD_MAX_CAMPAIGN_DAYS || 90) });
+  return res.json({ currency: 'ETB', dailyRatesEtb: dailyRatesEtb(), maxCampaignDays: Number(process.env.AD_MAX_CAMPAIGN_DAYS || 90), bannerTemplates: BANNER_TEMPLATES });
 });
 
 // Upload banner creative to private object storage. The database only stores
@@ -167,6 +171,7 @@ router.post(
     body('headline').optional({ values: 'falsy' }).isString().trim().isLength({ max: MAX_HEADLINE }),
     body('linkUrl').optional({ values: 'falsy' }).isString().trim().isLength({ max: MAX_URL }),
     body('creativeImageKey').optional({ values: 'falsy' }).isString().trim().isLength({ max: 500 }),
+    body('bannerTemplate').optional({ values: 'falsy' }).isIn(BANNER_TEMPLATES),
   ],
   validate,
   async (req, res) => {
@@ -221,6 +226,7 @@ router.post(
             headline,
             destinationUrl: linkUrl,
             creativeImageKey: type === 'BANNER' ? req.body.creativeImageKey : null,
+            bannerTemplate: type === 'BANNER' ? (req.body.bannerTemplate || 'CLASSIC') : 'CLASSIC',
           },
         });
         await recordAuditEvent(tx, {
@@ -350,6 +356,74 @@ router.patch(
     }
   }
 );
+
+// Cancel a campaign.
+//   - Advertiser (owner): only while PENDING_PAYMENT — backing out before any
+//     money has moved. Any lingering PENDING payment attempt is failed so it
+//     can't be resumed against a cancelled campaign.
+//   - Admin: any non-terminal status, including a paid-but-not-yet-live
+//     campaign (PAID_PENDING_REVIEW/APPROVED/SCHEDULED) or a live one
+//     (PUBLISHED/ACTIVE). Any PAID payment is flagged REFUNDED as a
+//     bookkeeping record, same as order cancellation — there is no live
+//     payment gateway refund call yet (see README).
+router.patch('/:id/cancel', authenticate, [param('id').isUUID(), body('reason').optional({ values: 'falsy' }).isString().trim().isLength({ max: 500 })], validate, async (req, res) => {
+  try {
+    const ad = await prisma.advertisement.findUnique({ where: { id: req.params.id }, include: { payments: true } });
+    if (!ad) return res.status(404).json({ error: 'Advertisement not found' });
+
+    const userIsAdmin = isAdmin(req.user);
+    const isOwner = ad.advertiserId === req.user.id;
+    if (!isOwner && !userIsAdmin) return res.status(403).json({ error: 'Not authorized to cancel this campaign' });
+
+    const TERMINAL_STATUSES = ['REJECTED', 'EXPIRED', 'CANCELLED'];
+    if (TERMINAL_STATUSES.includes(ad.status)) {
+      return res.status(400).json({ error: `Campaign is already ${ad.status.toLowerCase()} and cannot be cancelled` });
+    }
+    if (!userIsAdmin && ad.status !== 'PENDING_PAYMENT') {
+      return res.status(400).json({ error: 'You can only cancel a campaign before it has been paid for. Contact MarketBridge support about a paid campaign.' });
+    }
+
+    const reason = safeText(req.body.reason, 500);
+    const fromStatus = ad.status;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.advertisement.update({
+        where: { id: ad.id },
+        data: { status: 'CANCELLED', rejectionReason: reason || ad.rejectionReason },
+      });
+
+      const pendingPayments = ad.payments.filter((p) => p.status === 'PENDING');
+      const paidPayments = ad.payments.filter((p) => p.status === 'PAID');
+      for (const payment of pendingPayments) {
+        await tx.payment.update({ where: { id: payment.id }, data: { status: 'FAILED' } });
+      }
+      for (const payment of paidPayments) {
+        await tx.payment.update({ where: { id: payment.id }, data: { status: 'REFUNDED' } });
+      }
+
+      await recordAuditEvent(tx, {
+        actorId: req.user.id,
+        action: 'AD_CAMPAIGN_CANCELLED',
+        resourceType: 'Advertisement',
+        resourceId: ad.id,
+        metadata: {
+          fromStatus,
+          reason,
+          cancelledByRole: userIsAdmin && !isOwner ? 'ADMIN' : 'ADVERTISER',
+          refundedPaymentIds: paidPayments.map((p) => p.id),
+          failedPendingPaymentIds: pendingPayments.map((p) => p.id),
+        },
+      });
+
+      return result;
+    });
+
+    return res.json({ ad: updated });
+  } catch (error) {
+    console.error('CANCEL AD ERROR:', error);
+    return res.status(500).json({ error: 'Could not cancel advertisement' });
+  }
+});
 
 router.patch('/:id/telegram-publication', authenticate, [param('id').isUUID(), body('postReference').optional().isString().trim().isLength({ max: 500 })], validate, async (req, res) => {
   try {
