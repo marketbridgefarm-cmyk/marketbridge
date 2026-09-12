@@ -75,6 +75,9 @@ export default function SellerDashboard() {
   useEffect(() => { loadAll(); }, []); // eslint-disable-line
 
   const allOffers = listings.flatMap((l) => (offersByListing[l.id] || []).map((o) => ({ ...o, listing: l })));
+  // Always render the current leaf of each negotiation chain.
+  // The previous root offer is historical and must not receive the action
+  // buttons after a buyer counter-offer.
   const offerParentIds = new Set(allOffers.map((o) => o.parentOfferId).filter(Boolean));
   const latestOffers = allOffers.filter((o) => !offerParentIds.has(o.id));
   const allInspections = listings.flatMap((l) => (inspectionsByListing[l.id] || []).map((r) => ({ ...r, listing: l })));
