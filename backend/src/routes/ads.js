@@ -8,6 +8,7 @@ const path = require('path');
 const { body, param, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
+const { requireRole } = require('../middleware/roleCheck');
 const { isAdmin } = require('../utils/authorization');
 const { recordAuditEvent } = require('../utils/audit');
 const { uploadPrivateObject, signedMediaUrl, deletePrivateObject } = require('../utils/objectStorage');
@@ -135,7 +136,7 @@ function uploadCreative(req, res, next) {
   });
 }
 
-router.post('/creative', authenticate, uploadCreative, async (req, res) => {
+router.post('/creative', authenticate, requireRole('ADVERTISER', 'ADMIN'), uploadCreative, async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Banner image file is required' });
     if (!ALLOWED_IMAGE_TYPES.has(req.file.mimetype)) return res.status(400).json({ error: 'Unsupported banner image type' });
@@ -163,6 +164,7 @@ router.post('/creative', authenticate, uploadCreative, async (req, res) => {
 router.post(
   '/',
   authenticate,
+  requireRole('ADVERTISER', 'ADMIN'),
   [
     body('type').isIn(AD_TYPES),
     body('listingId').optional({ values: 'falsy' }).isUUID(),
