@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function CreateListing() {
   const { user } = useAuth();
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialCategory = searchParams.get('category') === 'PRODUCT' ? 'PRODUCT' : 'AGRICULTURAL';
 
   // Below the tablet breakpoint this page renders as a popup (bottom sheet on
   // phones, centered dialog on tablets) over whatever the user was looking
@@ -26,7 +28,7 @@ export default function CreateListing() {
     };
   }, [closeModal]);
 
-  const [category, setCategory] = useState('AGRICULTURAL');
+  const [category, setCategory] = useState(initialCategory);
   const [form, setForm] = useState({
     sellerId: user?.id || '',
     title: '',
@@ -38,6 +40,7 @@ export default function CreateListing() {
     location: user?.location || '',
     harvestedDate: '',
     readinessDate: '',
+    description: '',
     photos: [], // [{ key, name, previewUrl }]
     videos: []  // [{ key, name, previewUrl }]
   });
@@ -95,7 +98,8 @@ export default function CreateListing() {
         askingPrice: Number(form.askingPrice),
         minAcceptablePrice: form.minAcceptablePrice ? Number(form.minAcceptablePrice) : undefined,
         photos: form.photos.map(p => p.key),
-        videos: form.videos.map(v => v.key)
+        videos: form.videos.map(v => v.key),
+        description: form.description.trim() || undefined
       });
       nav(`/listings/${r.data.listing.id}`);
     } catch (e) {
@@ -152,6 +156,14 @@ export default function CreateListing() {
               </>
             )}
           </div>
+
+          <label>Description</label>
+          <textarea
+            value={form.description}
+            onChange={set('description')}
+            placeholder={category === 'AGRICULTURAL' ? 'Describe the produce, quality, packaging, and other important details.' : 'Describe the product, condition, specifications, and what is included.'}
+            rows={4}
+          />
 
           {mediaError && <div className="alert error">{mediaError}</div>}
 
