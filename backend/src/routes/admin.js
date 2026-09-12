@@ -99,6 +99,13 @@ router.get(
           where: {
             status:
               'ACTIVE',
+            // Nothing flips status to EXPIRED on a schedule, so also
+            // require the campaign's endDate hasn't passed — otherwise
+            // this count keeps including campaigns that stopped running
+            // long ago.
+            endDate: {
+              gte: new Date(),
+            },
           },
         }),
 
