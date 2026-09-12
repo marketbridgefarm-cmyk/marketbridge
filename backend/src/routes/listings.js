@@ -2,7 +2,6 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
-const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { signedMediaUrl } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
@@ -707,7 +706,6 @@ router.get('/:id', async (req, res) => {
 router.post(
   '/media',
   authenticate,
-  requireRole('SELLER', 'INSPECTOR'),
   evidenceUpload.array('files', 5),
   async (req, res) => {
     try {
@@ -741,7 +739,6 @@ router.post(
 router.post(
   '/',
   authenticate,
-  requireRole('SELLER', 'INSPECTOR'),
   [
     body('sellerId')
       .notEmpty()
@@ -849,26 +846,35 @@ router.post(
       // Permission checks
       // ----------------------------------------------------------------------
 
-      if (
-        req.user.roles.includes('INSPECTOR') &&
-        !req.user.roles.includes('SELLER')
-      ) {
-        if (sellerId === req.user.id) {
+      // PRODUCT listings follow the current MarketBridge architecture:
+      // every authenticated member may sell physical products. Do not require
+      // a SELLER role and do not allow one member to create a product under
+      // another member's account.
+      if (category === 'PRODUCT') {
+        if (sellerId !== req.user.id) {
           return res.status(403).json({
-            error:
-              'Inspectors cannot list produce as themselves; sellerId must be the farmer.',
+            error: 'Product listings can only be created under your own account',
+            code: 'PRODUCT_SELLER_MISMATCH',
           });
         }
-      }
-
-      if (
-        !req.user.roles.includes('INSPECTOR') &&
-        sellerId !== req.user.id
-      ) {
-        return res.status(403).json({
-          error:
-            'You can only create listings under your own account',
-        });
+      } else {
+        // AGRICULTURAL keeps the specialized producer/inspector workflow.
+        // Inspectors may create a listing for a farmer, but not as themselves.
+        if (
+          req.user.roles.includes('INSPECTOR') &&
+          !req.user.roles.includes('SELLER')
+        ) {
+          if (sellerId === req.user.id) {
+            return res.status(403).json({
+              error:
+                'Inspectors cannot list produce as themselves; sellerId must be the farmer.',
+            });
+          }
+        } else if (sellerId !== req.user.id) {
+          return res.status(403).json({
+            error: 'You can only create agricultural listings under your own account',
+          });
+        }
       }
 
       // ----------------------------------------------------------------------
@@ -983,10 +989,13 @@ router.post(
         });
       }
 
-      if (!seller.roles.includes('SELLER')) {
+      // Product sellers are ordinary authenticated marketplace members; the
+      // legacy SELLER role remains relevant to agricultural workflows but is
+      // not a prerequisite for PRODUCT listings.
+      if (category === 'AGRICULTURAL' && !seller.roles.includes('SELLER')) {
         return res.status(400).json({
-          error:
-            'The selected account is not enabled for selling',
+          error: 'The selected agricultural seller account is not enabled for selling',
+          code: 'AGRICULTURAL_SELLER_ROLE_REQUIRED',
         });
       }
 
