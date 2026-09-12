@@ -1,2 +1,0 @@
-ALTER TABLE "Advertisement"
-  ALTER COLUMN "status" SET DEFAULT 'PENDING_PAYMENT';
