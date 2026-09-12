@@ -13,6 +13,21 @@ const validate = (req, res, next) => {
   next();
 };
 
+/**
+ * Nothing ever flips an ad's DB status to EXPIRED once its endDate passes
+ * (there's no cron for it), so without this an ad would show as "Active"
+ * forever in both dashboards even though the search-boost query already
+ * excludes it once its endDate is past. Compute the display status instead
+ * of trusting the stored one, rather than requiring a scheduled job just to
+ * keep a label accurate.
+ */
+function withComputedStatus(ad) {
+  if (ad.status === 'ACTIVE' && new Date(ad.endDate) < new Date()) {
+    return { ...ad, status: 'EXPIRED' };
+  }
+  return ad;
+}
+
 router.post(
   '/',
   authenticate,
@@ -96,7 +111,7 @@ router.get('/mine', authenticate, requireRole('ADVERTISER'), async (req, res) =>
       orderBy: { createdAt: 'desc' },
     });
 
-    return res.json({ ads });
+    return res.json({ ads: ads.map(withComputedStatus) });
   } catch (error) {
     console.error('MY ADS ERROR:', error);
     return res.status(500).json({ error: 'Could not load your advertisements' });
@@ -113,7 +128,7 @@ router.get('/', authenticate, requireRole('ADMIN'), async (req, res) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    return res.json({ ads });
+    return res.json({ ads: ads.map(withComputedStatus) });
   } catch (error) {
     console.error('LIST ADS ERROR:', error);
     return res.status(500).json({ error: 'Could not load advertisements' });
