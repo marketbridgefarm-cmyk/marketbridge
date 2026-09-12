@@ -28,11 +28,13 @@ export default function ListingDetail() {
   const [buying, setBuying] = useState(false);
   const [buyMethod, setBuyMethod] = useState('TELEBIRR');
   const [buyerCounter, setBuyerCounter] = useState('');
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0);
 
   async function load() {
     try {
       const response = await api.get(`/listings/${id}`);
       setListing(response.data.listing);
+      setActiveMediaIndex(0);
     } catch (e) {
       setError(e.response?.data?.error || 'Listing not found.');
     }
@@ -229,6 +231,13 @@ export default function ListingDetail() {
   const sellerCounterWaitingForBuyer = myLatestOffer?.status === 'COUNTERED' && myLatestOffer.counteredBy === 'SELLER';
   const buyerCounterWaitingForSeller = myLatestOffer?.status === 'COUNTERED' && myLatestOffer.counteredBy === 'BUYER';
 
+  const media = [
+    ...(listing.photos || []).map((url) => ({ type: 'photo', url })),
+    ...(listing.videos || []).map((url) => ({ type: 'video', url })),
+  ];
+  const activeMediaIndexSafe = media.length ? Math.min(activeMediaIndex, media.length - 1) : 0;
+  const activeMedia = media[activeMediaIndexSafe];
+
   return (
     <main className="section">
       <div className="container-wide">
@@ -236,8 +245,29 @@ export default function ListingDetail() {
         <div className="detail-grid">
           <section>
             <div className="detail-media">
-              {listing.photos?.[0] ? <img src={listing.photos[0]} alt={listing.title || listing.cropType} /> : <div className="media-placeholder">{listing.title || listing.cropType}</div>}
+              {activeMedia ? (
+                activeMedia.type === 'video'
+                  ? <video src={activeMedia.url} controls />
+                  : <img src={activeMedia.url} alt={listing.title || listing.cropType} />
+              ) : (
+                <div className="media-placeholder">{listing.title || listing.cropType}</div>
+              )}
             </div>
+            {media.length > 1 && (
+              <div className="detail-media-thumbs">
+                {media.map((m, i) => (
+                  <button
+                    type="button"
+                    key={`${m.type}-${i}`}
+                    className={`detail-media-thumb ${i === activeMediaIndexSafe ? 'active' : ''}`}
+                    onClick={() => setActiveMediaIndex(i)}
+                  >
+                    {m.type === 'video' ? <video src={m.url} muted /> : <img src={m.url} alt="" />}
+                    {m.type === 'video' && <span className="detail-media-thumb-play">▶</span>}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="card detail-content">
               <div className="listing-meta">
                 <span className="tag">{isAgricultural ? 'AGRICULTURE' : 'PRODUCT'}</span>
