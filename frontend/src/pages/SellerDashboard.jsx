@@ -26,6 +26,12 @@ export default function SellerDashboard() {
   const [toastMsg, setToastMsg] = useState('');
   const [selectedOffer, setSelectedOffer] = useState(null);
   const [editingListing, setEditingListing] = useState(null);
+  const [editKeepPhotos, setEditKeepPhotos] = useState([]); // [{ key, url }]
+  const [editKeepVideos, setEditKeepVideos] = useState([]); // [{ key, url }]
+  const [editNewPhotos, setEditNewPhotos] = useState([]); // [{ key, name, previewUrl }]
+  const [editNewVideos, setEditNewVideos] = useState([]); // [{ key, name, previewUrl }]
+  const [editMediaUploading, setEditMediaUploading] = useState(false);
+  const [editMediaError, setEditMediaError] = useState('');
 
   const listingModalRef = useRef(null);
   const offerModalRef = useRef(null);
@@ -147,7 +153,52 @@ export default function SellerDashboard() {
 
   function openEditModal(listing) {
     setEditingListing(listing);
+    setEditKeepPhotos((listing.photoKeys || []).map((key, i) => ({ key, url: listing.photos?.[i] })));
+    setEditKeepVideos((listing.videoKeys || []).map((key, i) => ({ key, url: listing.videos?.[i] })));
+    setEditNewPhotos([]);
+    setEditNewVideos([]);
+    setEditMediaError('');
     editModalRef.current.showModal();
+  }
+
+  async function handleEditMediaSelect(kind, e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!files.length) return;
+
+    setEditMediaError('');
+    setEditMediaUploading(true);
+    try {
+      const body = new FormData();
+      files.forEach(f => body.append('files', f));
+      const { data } = await api.post('/listings/media', body);
+      const keys = kind === 'photo' ? data.photoKeys : data.videoKeys;
+      const items = files.map((f, i) => ({
+        key: keys[i],
+        name: f.name,
+        previewUrl: URL.createObjectURL(f)
+      })).filter(item => item.key);
+      if (kind === 'photo') setEditNewPhotos(prev => [...prev, ...items]);
+      else setEditNewVideos(prev => [...prev, ...items]);
+    } catch (err) {
+      setEditMediaError(err.response?.data?.error || `Could not upload ${kind === 'photo' ? 'photo' : 'video'}. Try a smaller file.`);
+    } finally {
+      setEditMediaUploading(false);
+    }
+  }
+
+  function removeEditKeepMedia(kind, index) {
+    if (kind === 'photo') setEditKeepPhotos(prev => prev.filter((_, i) => i !== index));
+    else setEditKeepVideos(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function removeEditNewMedia(kind, index) {
+    const setter = kind === 'photo' ? setEditNewPhotos : setEditNewVideos;
+    setter(prev => {
+      const removed = prev[index];
+      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
   }
 
   async function submitEditListing(e) {
@@ -160,6 +211,8 @@ export default function SellerDashboard() {
         minAcceptablePrice: d.get('minimum') ? Number(d.get('minimum')) : null,
         quantity: Number(d.get('quantity')),
         readinessDate: d.get('date') || undefined,
+        photos: [...editKeepPhotos.map(p => p.key), ...editNewPhotos.map(p => p.key)],
+        videos: [...editKeepVideos.map(v => v.key), ...editNewVideos.map(v => v.key)],
       });
       editModalRef.current.close();
       setEditingListing(null);
@@ -438,8 +491,51 @@ export default function SellerDashboard() {
                 <div><label>Readiness date</label><input name="date" type="date" defaultValue={editingListing.readinessDate ? editingListing.readinessDate.slice(0, 10) : ''} /></div>
               </div>
               <div className="sd-notice" style={{ marginTop: 12 }}>Buyers who already made an offer will still see their original offer amount — this only changes your public asking price going forward.</div>
+
+              {editMediaError && <div className="alert error">{editMediaError}</div>}
+
+              <label style={{ marginTop: 12, display: 'block' }}>Photos</label>
+              {(editKeepPhotos.length > 0 || editNewPhotos.length > 0) && (
+                <div className="media-preview-grid">
+                  {editKeepPhotos.map((p, i) => (
+                    <div className="media-preview-item" key={`keep-photo-${p.key}`}>
+                      <img src={p.url} alt="" />
+                      <button type="button" className="media-preview-remove" onClick={() => removeEditKeepMedia('photo', i)}>×</button>
+                    </div>
+                  ))}
+                  {editNewPhotos.map((p, i) => (
+                    <div className="media-preview-item" key={`new-photo-${p.key}`}>
+                      <img src={p.previewUrl} alt={p.name} />
+                      <button type="button" className="media-preview-remove" onClick={() => removeEditNewMedia('photo', i)}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input type="file" accept="image/*" multiple onChange={e => handleEditMediaSelect('photo', e)} disabled={editMediaUploading} />
+
+              <label style={{ marginTop: 12, display: 'block' }}>Short videos</label>
+              {(editKeepVideos.length > 0 || editNewVideos.length > 0) && (
+                <div className="media-preview-grid">
+                  {editKeepVideos.map((v, i) => (
+                    <div className="media-preview-item" key={`keep-video-${v.key}`}>
+                      <video src={v.url} muted />
+                      <button type="button" className="media-preview-remove" onClick={() => removeEditKeepMedia('video', i)}>×</button>
+                    </div>
+                  ))}
+                  {editNewVideos.map((v, i) => (
+                    <div className="media-preview-item" key={`new-video-${v.key}`}>
+                      <video src={v.previewUrl} muted />
+                      <button type="button" className="media-preview-remove" onClick={() => removeEditNewMedia('video', i)}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input type="file" accept="video/*" multiple onChange={e => handleEditMediaSelect('video', e)} disabled={editMediaUploading} />
+
+              {editMediaUploading && <p className="muted">Uploading media…</p>}
+
               <div className="sd-modal-actions" style={{ marginTop: 20 }}>
-                <button className="sd-btn sd-btn-primary">Save changes</button>
+                <button className="sd-btn sd-btn-primary" disabled={editMediaUploading}>Save changes</button>
                 <button type="button" className="sd-btn sd-btn-outline" onClick={() => { editModalRef.current.close(); setEditingListing(null); }}>Cancel</button>
               </div>
             </form>
