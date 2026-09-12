@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -6,6 +6,26 @@ import { useAuth } from '../context/AuthContext.jsx';
 export default function CreateListing() {
   const { user } = useAuth();
   const nav = useNavigate();
+
+  // Below the tablet breakpoint this page renders as a popup (bottom sheet on
+  // phones, centered dialog on tablets) over whatever the user was looking
+  // at, rather than a full page — see .listing-modal-* in styles.css. "Close"
+  // just means "go back to where I was", so reuse the back navigation.
+  const closeModal = useCallback(() => nav('/'), [nav]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') closeModal();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [closeModal]);
+
   const [category, setCategory] = useState('AGRICULTURAL');
   const [form, setForm] = useState({
     sellerId: user?.id || '',
@@ -84,9 +104,14 @@ export default function CreateListing() {
   }
 
   return (
-    <main className="section">
-      <div className="container-narrow">
-        <Link to="/" className="back-link">← Home</Link>
+    <div className="listing-modal-overlay" onClick={closeModal}>
+      <main className="section listing-modal-panel" onClick={e => e.stopPropagation()}>
+        <div className="container-narrow">
+          <div className="listing-modal-drag-handle" aria-hidden="true" />
+          <div className="listing-modal-header">
+            <Link to="/" className="back-link">← Home</Link>
+            <button type="button" className="listing-modal-close" aria-label="Close" onClick={closeModal}>×</button>
+          </div>
         <span className="eyebrow">SELL ON MARKETBRIDGE</span>
         <h1>{category === 'AGRICULTURAL' ? 'List agricultural produce' : 'List a physical product'}</h1>
         <p className="muted">Your account can buy and sell. Agricultural listings keep the farmer as the price authority.</p>
@@ -160,7 +185,8 @@ export default function CreateListing() {
 
           <button className="btn btn-primary btn-lg full" type="submit" disabled={uploading}>Publish {category === 'AGRICULTURAL' ? 'produce' : 'product'}</button>
         </form>
-      </div>
-    </main>
+        </div>
+      </main>
+    </div>
   );
 }
