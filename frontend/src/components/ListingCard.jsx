@@ -1,10 +1,28 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import api from '../api/client';
 
 export default function ListingCard({ listing }) {
   const isProduct = listing.category === 'PRODUCT';
   const title = listing.title || listing.cropType || 'Listing';
-  return <article className={`listing-card${listing.sponsored ? ' listing-card--sponsored' : ''}`}>
+  const cardRef = useRef(null);
+  const recorded = useRef(false);
+
+  useEffect(() => {
+    if (!listing.sponsoredAdId || !cardRef.current || recorded.current) return undefined;
+    const node = cardRef.current;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting) && !recorded.current) {
+        recorded.current = true;
+        api.post(`/ads/${listing.sponsoredAdId}/events`, { eventType: 'IMPRESSION' }).catch(() => undefined);
+        observer.disconnect();
+      }
+    }, { threshold: 0.5 });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [listing.sponsoredAdId]);
+
+  return <article ref={cardRef} className={`listing-card${listing.sponsored ? ' listing-card--sponsored' : ''}`}>
     <div className="listing-photo">
       {listing.sponsored && <span className="tag tag--sponsored">Sponsored</span>}
       {listing.photos?.[0]

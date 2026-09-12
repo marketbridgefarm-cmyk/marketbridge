@@ -101,6 +101,7 @@ export default function Navbar() {
                 {accountOpen && (
                   <div className="nav-dropdown" role="menu">
                     <Link role="menuitem" to={dashboardHref}>Dashboard</Link>
+                    <Link role="menuitem" to="/dashboard/advertiser">Promote / Advertise</Link>
                     <button role="menuitem" onClick={handleLogout}>Log out</button>
                   </div>
                 )}
@@ -141,6 +142,7 @@ export default function Navbar() {
             {user ? (
               <>
                 <Link to={dashboardHref}>Dashboard</Link>
+                <Link to="/dashboard/advertiser">Promote / Advertise</Link>
                 <button className="mobile-logout" onClick={handleLogout}>Log out</button>
               </>
             ) : (
