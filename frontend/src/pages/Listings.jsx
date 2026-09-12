@@ -39,7 +39,7 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
             <h1>{agriculture ? 'Find produce at the source.' : 'Buy and sell physical products.'}</h1>
             <p>{agriculture ? 'Compare bulk farm listings, quantities, locations and asking prices.' : 'A general marketplace for physical goods. Any member can buy and sell.'}</p>
           </div>
-          <Link to={agriculture ? '/create-listing?category=AGRICULTURAL' : '/create-listing?category=PRODUCT'} className="btn btn-primary" aria-label={agriculture ? 'List agricultural produce' : 'List a physical product'}>+ {agriculture ? 'List produce' : 'List product'}</Link>
+          <Link to={agriculture ? '/create-listing?category=AGRICULTURAL' : '/create-listing?category=PRODUCT'} className="btn btn-primary">+ {agriculture ? 'List produce' : 'List product'}</Link>
         </div>
         <div className="search-panel">
           <div>
