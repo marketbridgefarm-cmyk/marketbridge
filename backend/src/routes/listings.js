@@ -108,6 +108,10 @@ function toPublicListing(listing) {
     publicListing.sponsored = listing.sponsored;
   }
 
+  if (listing.sponsoredAdId !== undefined) {
+    publicListing.sponsoredAdId = listing.sponsoredAdId;
+  }
+
   if (listing.offers !== undefined) {
     publicListing.offers = listing.offers;
   }
@@ -383,7 +387,7 @@ router.get('/', async (req, res) => {
     const activeAds =
       await prisma.advertisement.findMany({
         where: {
-          status: 'ACTIVE',
+          status: { in: ['ACTIVE', 'PUBLISHED', 'SCHEDULED'] },
           startDate: { lte: now },
           endDate: { gte: now },
           type: {
@@ -398,35 +402,36 @@ router.get('/', async (req, res) => {
         },
 
         select: {
+          id: true,
           listingId: true,
           type: true,
+          startDate: true,
         },
       });
 
-    const BOOST_RANK = {
-      FEATURED_LISTING: 0,
-      SPONSORED_SEARCH: 0,
-      TOP_OF_CATEGORY: 1,
+    // Deterministic paid-placement score. Advertising never bypasses the
+    // normal listing eligibility filter above (ACTIVE listings only by
+    // default), and sponsored search is only boosted in an actual search.
+    const BOOST_SCORE = {
+      FEATURED_LISTING: 500,
+      TOP_OF_CATEGORY: 1000,
+      SPONSORED_SEARCH: 300,
     };
-
+    const hasSearch = Boolean(cropType || title || location || minPrice || maxPrice || minQuantity || maxQuantity);
     const boostRank = new Map();
+    const boostAdId = new Map();
+    const boostPrimaryScore = new Map();
 
     for (const ad of activeAds) {
-      if (
-        ad.type === 'TOP_OF_CATEGORY' &&
-        !category
-      ) {
-        continue;
-      }
+      if (ad.type === 'TOP_OF_CATEGORY' && !category) continue;
+      if (ad.type === 'SPONSORED_SEARCH' && !hasSearch) continue;
 
-      const rank = BOOST_RANK[ad.type];
-      const existing = boostRank.get(ad.listingId);
-
-      if (
-        existing === undefined ||
-        rank < existing
-      ) {
-        boostRank.set(ad.listingId, rank);
+      const score = BOOST_SCORE[ad.type];
+      const current = boostRank.get(ad.listingId) || 0;
+      boostRank.set(ad.listingId, current + score);
+      if (!boostPrimaryScore.has(ad.listingId) || score > boostPrimaryScore.get(ad.listingId)) {
+        boostPrimaryScore.set(ad.listingId, score);
+        boostAdId.set(ad.listingId, ad.id);
       }
     }
 
@@ -473,8 +478,8 @@ router.get('/', async (req, res) => {
 
       boostedListings.sort(
         (a, b) =>
-          boostRank.get(a.id) -
-          boostRank.get(b.id)
+          (boostRank.get(b.id) || 0) -
+          (boostRank.get(a.id) || 0)
       );
 
       const remainingSlots = Math.max(
@@ -508,6 +513,7 @@ router.get('/', async (req, res) => {
           toPublicListing({
             ...listing,
             sponsored: true,
+            sponsoredAdId: boostAdId.get(listing.id) || null,
           })
         ),
 

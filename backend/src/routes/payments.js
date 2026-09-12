@@ -511,20 +511,23 @@ router.post(
           });
         }
 
-        if (
-          ad.amountPaid != null &&
-          !moneyEqual(
-            amount,
-            ad.amountPaid
-          )
-        ) {
-          return res.status(400).json({
-            error:
-              'Amount mismatch',
+        const expectedAdAmount = Number(ad.priceQuoted ?? ad.amountPaid ?? 0);
 
-            expectedAmount:
-              Number(ad.amountPaid),
+        if (!Number.isFinite(expectedAdAmount) || expectedAdAmount <= 0) {
+          return res.status(400).json({
+            error: 'Advertisement has no valid server-calculated price',
           });
+        }
+
+        if (!moneyEqual(amount, expectedAdAmount)) {
+          return res.status(400).json({
+            error: 'Amount mismatch',
+            expectedAmount: expectedAdAmount,
+          });
+        }
+
+        if (ad.status === 'REJECTED' || ad.status === 'EXPIRED') {
+          return res.status(400).json({ error: `Cannot pay a ${ad.status.toLowerCase()} campaign` });
         }
       }
 
