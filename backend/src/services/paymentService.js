@@ -602,6 +602,15 @@ async function settlePayment({
         payment.type === 'ADVERTISING' &&
         payment.advertisement
       ) {
+        // BANNER campaigns carry free-form advertiser-uploaded creative
+        // (image + headline) shown unmoderated on the public homepage —
+        // unlike the other ad types, which only boost an already-existing,
+        // already-moderated listing. Payment alone shouldn't be enough to
+        // put arbitrary content on the site, so leave it PENDING for an
+        // admin to actually look at and approve via PATCH /ads/:id/status.
+        // Every other ad type keeps activating immediately on payment.
+        const requiresModeration = payment.advertisement.type === 'BANNER';
+
         await tx.advertisement.update({
           where: {
             id:
@@ -612,7 +621,7 @@ async function settlePayment({
             amountPaid:
               payment.amount,
 
-            status: 'ACTIVE',
+            status: requiresModeration ? 'PENDING' : 'ACTIVE',
           },
         });
       }
