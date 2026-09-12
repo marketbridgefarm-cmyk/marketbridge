@@ -1,26 +1,30 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
 import { startChapaPayment, chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 import { useAuth } from '../context/AuthContext.jsx';
-import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import RecentActivity from '../components/RecentActivity.jsx';
 
 const AD_TYPES = [
-  { value: 'FEATURED_LISTING', label: 'Featured Listing' },
-  { value: 'TOP_OF_CATEGORY', label: 'Top of Category' },
-  { value: 'SPONSORED_SEARCH', label: 'Sponsored Search' },
-  { value: 'BANNER', label: 'Banner' },
-  { value: 'TELEGRAM_PROMOTION', label: 'Telegram Promotion' },
+  { value: 'FEATURED_LISTING', label: 'Featured Listing', help: 'Promote an active listing across marketplace results.' },
+  { value: 'TOP_OF_CATEGORY', label: 'Top of Category', help: 'Give an active listing the strongest category placement.' },
+  { value: 'SPONSORED_SEARCH', label: 'Sponsored Search', help: 'Boost an active listing when buyers search.' },
+  { value: 'BANNER', label: 'Banner', help: 'Run a moderated platform-wide image campaign.' },
+  { value: 'TELEGRAM_PROMOTION', label: 'Telegram Promotion', help: 'Pay for a MarketBridge Telegram promotion, then the team publishes it manually.' },
 ];
 
 const LISTING_LINKED_TYPES = ['FEATURED_LISTING', 'TOP_OF_CATEGORY', 'SPONSORED_SEARCH'];
 
 const STATUS_LABELS = {
-  PENDING: 'Pending review',
-  ACTIVE: 'Active',
+  PENDING_PAYMENT: 'Awaiting payment',
+  PAID_PENDING_REVIEW: 'Paid — pending review',
+  APPROVED: 'Approved',
+  SCHEDULED: 'Scheduled',
+  PUBLISHED: 'Published',
+  ACTIVE: 'Published',
   REJECTED: 'Rejected',
   EXPIRED: 'Expired',
+  PENDING: 'Awaiting review',
 };
 
 function todayPlus(days) {
@@ -33,7 +37,13 @@ function campaignDays(startDate, endDate) {
   const start = new Date(startDate);
   const end = new Date(endDate);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return 0;
-  return Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+  return Math.max(1, Math.ceil((end - start) / 86400000));
+}
+
+function statusClass(status) {
+  if (['PUBLISHED', 'ACTIVE', 'APPROVED', 'SCHEDULED'].includes(status)) return 'sd-badge sd-good';
+  if (['REJECTED', 'EXPIRED'].includes(status)) return 'sd-badge sd-red';
+  return 'sd-badge sd-warn';
 }
 
 export default function AdvertiserDashboard() {
@@ -41,15 +51,17 @@ export default function AdvertiserDashboard() {
   const [ads, setAds] = useState([]);
   const [myListings, setMyListings] = useState([]);
   const [dailyRates, setDailyRates] = useState({});
+  const [maxCampaignDays, setMaxCampaignDays] = useState(90);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [payingId, setPayingId] = useState(null);
   const [uploadingCreative, setUploadingCreative] = useState(false);
+  const [analytics, setAnalytics] = useState({});
 
   const [form, setForm] = useState({
-    type: 'BANNER',
+    type: 'FEATURED_LISTING',
     listingId: '',
     startDate: todayPlus(1),
     endDate: todayPlus(8),
@@ -60,17 +72,19 @@ export default function AdvertiserDashboard() {
   });
 
   const loadAll = useCallback(async () => {
+    if (!user?.id) return;
     setLoading(true);
     setError('');
     try {
       const [adsRes, listingsRes, pricingRes] = await Promise.all([
         api.get('/ads/mine'),
-        api.get('/listings', { params: { sellerId: user?.id } }),
+        api.get('/listings', { params: { sellerId: user.id, limit: 50 } }),
         api.get('/ads/pricing'),
       ]);
       setAds(adsRes.data?.ads || []);
-      setMyListings(listingsRes.data?.listings || []);
+      setMyListings((listingsRes.data?.listings || []).filter((l) => l.status === 'ACTIVE'));
       setDailyRates(pricingRes.data?.dailyRatesEtb || {});
+      setMaxCampaignDays(Number(pricingRes.data?.maxCampaignDays || 90));
     } catch (err) {
       setError(err.response?.data?.error || 'Could not load your advertising campaigns');
     } finally {
@@ -78,45 +92,56 @@ export default function AdvertiserDashboard() {
     }
   }, [user?.id]);
 
+  useEffect(() => { loadAll(); }, [loadAll]);
+
   useEffect(() => {
-    loadAll();
-  }, [loadAll]);
+    let cancelled = false;
+    async function loadAnalytics() {
+      const candidates = ads.filter((ad) => ['PUBLISHED', 'ACTIVE', 'SCHEDULED'].includes(ad.status)).slice(0, 20);
+      const pairs = await Promise.all(candidates.map(async (ad) => {
+        try {
+          const { data } = await api.get(`/ads/${ad.id}/analytics`);
+          return [ad.id, data];
+        } catch {
+          return [ad.id, null];
+        }
+      }));
+      if (!cancelled) setAnalytics(Object.fromEntries(pairs));
+    }
+    if (ads.length) loadAnalytics();
+    return () => { cancelled = true; };
+  }, [ads]);
+
+  const needsListing = LISTING_LINKED_TYPES.includes(form.type);
+  const needsCreative = form.type === 'BANNER';
+  const needsHeadline = form.type === 'BANNER' || form.type === 'TELEGRAM_PROMOTION';
+  const days = campaignDays(form.startDate, form.endDate);
+  const estimatedPrice = days > 0 && dailyRates[form.type] ? days * dailyRates[form.type] : null;
+
+  const activityItems = ads.map((ad) => ({
+    id: `ad-${ad.id}`,
+    icon: '📣',
+    text: `${AD_TYPES.find((t) => t.value === ad.type)?.label || 'Campaign'} ${STATUS_LABELS[ad.status] || ad.status}`,
+    time: ad.updatedAt || ad.createdAt,
+    href: ad.listing?.id ? `/listings/${ad.listing.id}` : undefined,
+  }));
 
   function clearMessages() {
     setError('');
     setSuccess('');
   }
 
-  const needsListing = LISTING_LINKED_TYPES.includes(form.type);
-  const needsCreative = form.type === 'BANNER';
-  const days = campaignDays(form.startDate, form.endDate);
-  const estimatedPrice = days > 0 && dailyRates[form.type] ? days * dailyRates[form.type] : null;
-
-  const activityItems = ads.map((ad) => {
-    const typeLabel = AD_TYPES.find((t) => t.value === ad.type)?.label || 'Campaign';
-    const statusLabel = STATUS_LABELS[ad.status] || ad.status;
-    const listingSuffix = ad.listing?.cropType || ad.listing?.title ? ` for ${ad.listing.cropType || ad.listing.title}` : '';
-    return {
-      id: `ad-${ad.id}`,
-      icon: '📣',
-      text: `${typeLabel}${listingSuffix} is ${statusLabel.toLowerCase()}`,
-      time: ad.updatedAt || ad.createdAt,
-      href: ad.listing?.id ? `/listings/${ad.listing.id}` : undefined,
-    };
-  });
-
   async function handleCreativeSelect(e) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-
     clearMessages();
     setUploadingCreative(true);
     try {
       const body = new FormData();
       body.append('file', file);
       const { data } = await api.post('/ads/creative', body);
-      setForm((f) => ({ ...f, creativeImageKey: data.key, creativePreviewUrl: URL.createObjectURL(file) }));
+      setForm((f) => ({ ...f, creativeImageKey: data.key, creativePreviewUrl: data.previewUrl || URL.createObjectURL(file) }));
     } catch (err) {
       setError(err.response?.data?.error || 'Could not upload banner image');
     } finally {
@@ -127,29 +152,24 @@ export default function AdvertiserDashboard() {
   async function submitAd(e) {
     e.preventDefault();
     clearMessages();
-
-    if (needsListing && !form.listingId) {
-      setError('Select a listing to feature for this campaign type.');
-      return;
-    }
-
-    if (needsCreative && (!form.headline || !form.creativeImageKey)) {
-      setError('Banner campaigns need a headline and an uploaded image.');
-      return;
-    }
+    if (needsListing && !form.listingId) return setError('Select an active listing for this campaign type.');
+    if (needsHeadline && !form.headline.trim()) return setError('Enter the campaign headline/message.');
+    if (needsCreative && !form.creativeImageKey) return setError('Upload the banner image first.');
+    if (days <= 0) return setError('Choose a valid campaign date range.');
+    if (days > maxCampaignDays) return setError(`Campaigns can run for at most ${maxCampaignDays} days.`);
 
     setSubmitting(true);
     try {
-      await api.post('/ads', {
+      const { data } = await api.post('/ads', {
         type: form.type,
         listingId: needsListing ? form.listingId : undefined,
-        startDate: new Date(form.startDate).toISOString(),
-        endDate: new Date(form.endDate).toISOString(),
+        startDate: new Date(`${form.startDate}T00:00:00`).toISOString(),
+        endDate: new Date(`${form.endDate}T00:00:00`).toISOString(),
         headline: form.headline || undefined,
         linkUrl: form.linkUrl || undefined,
         creativeImageKey: needsCreative ? form.creativeImageKey : undefined,
       });
-      setSuccess('Campaign submitted — pay below to activate it.');
+      setSuccess(`Campaign ${data.ad.campaignReference} created. The server fixed the price at ${Number(data.ad.priceQuoted).toLocaleString()} ETB.`);
       setForm((f) => ({ ...f, listingId: '', headline: '', linkUrl: '', creativeImageKey: '', creativePreviewUrl: '' }));
       await loadAll();
     } catch (err) {
@@ -163,12 +183,7 @@ export default function AdvertiserDashboard() {
     clearMessages();
     setPayingId(ad.id);
     try {
-      await startChapaPayment({
-        type: 'ADVERTISING',
-        advertisementId: ad.id,
-        amount: Number(ad.amountPaid),
-        method: 'TELEBIRR',
-      });
+      await startChapaPayment({ type: 'ADVERTISING', advertisementId: ad.id, amount: Number(ad.priceQuoted || ad.amountDue), method: 'TELEBIRR' });
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Could not start payment');
       setPayingId(null);
@@ -186,29 +201,25 @@ export default function AdvertiserDashboard() {
     }
   }
 
+  const liveCount = useMemo(() => ads.filter((a) => ['PUBLISHED', 'ACTIVE'].includes(a.status)).length, [ads]);
+
   if (loading && ads.length === 0) {
-    return (
-      <main className="section">
-        <div className="container-wide loading">Loading your campaigns…</div>
-      </main>
-    );
+    return <main className="section"><div className="container-wide loading">Loading advertising center…</div></main>;
   }
 
   return (
     <main className="section">
       <div className="container-wide">
-        <DashboardWelcome user={user} subtitle="Promote a listing, or run a platform-wide banner or Telegram placement." />
+        <DashboardWelcome user={user} subtitle="Promote your listing or run a moderated platform campaign." />
         <div className="page-header">
           <div>
-            <span className="eyebrow">ADVERTISING</span>
-            <h1>Your campaigns.</h1>
-            <p>Promote a listing, or run a platform-wide banner or Telegram placement.</p>
+            <span className="eyebrow">ADVERTISING CENTER</span>
+            <h1>Promote on MarketBridge.</h1>
+            <p>Advertising is a capability available to every signed-in user; no permanent advertiser role is required.</p>
           </div>
         </div>
 
-        <RoleSwitchCTA current="ADVERTISER" />
         <RecentActivity items={activityItems} emptyText="No campaigns yet — create one below." />
-
         {error && <div className="alert error">{error}</div>}
         {success && <div className="alert">{success}</div>}
 
@@ -217,183 +228,112 @@ export default function AdvertiserDashboard() {
             <h2>New campaign</h2>
             <form onSubmit={submitAd}>
               <label>Campaign type</label>
-              <select
-                value={form.type}
-                onChange={(e) => setForm((f) => ({ ...f, type: e.target.value, listingId: '' }))}
-              >
-                {AD_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
+              <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value, listingId: '', headline: '', creativeImageKey: '', creativePreviewUrl: '' }))}>
+                {AD_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
+              <p className="muted">{AD_TYPES.find((t) => t.value === form.type)?.help}</p>
 
               {needsListing && (
                 <>
-                  <label>Listing to feature</label>
-                  <select
-                    value={form.listingId}
-                    onChange={(e) => setForm((f) => ({ ...f, listingId: e.target.value }))}
-                    required
-                  >
-                    <option value="">Select one of your listings…</option>
-                    {myListings.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.title || l.cropType} — {l.id.slice(0, 8)}
-                      </option>
-                    ))}
+                  <label>Active listing</label>
+                  <select value={form.listingId} onChange={(e) => setForm((f) => ({ ...f, listingId: e.target.value }))} required>
+                    <option value="">Select one of your active listings…</option>
+                    {myListings.map((l) => <option key={l.id} value={l.id}>{l.title || l.cropType || l.id.slice(0, 8)}</option>)}
                   </select>
-                  {myListings.length === 0 && (
-                    <p className="muted">You have no active listings to feature yet.</p>
-                  )}
+                  {myListings.length === 0 && <p className="muted">Create an active listing first.</p>}
+                </>
+              )}
+
+              {needsHeadline && (
+                <>
+                  <label>{form.type === 'TELEGRAM_PROMOTION' ? 'Promotion message' : 'Banner headline'}</label>
+                  <input value={form.headline} onChange={(e) => setForm((f) => ({ ...f, headline: e.target.value }))} maxLength={140} required placeholder={form.type === 'TELEGRAM_PROMOTION' ? 'What should MarketBridge post?' : 'What the banner says'} />
                 </>
               )}
 
               {needsCreative && (
                 <>
-                  <label>Headline</label>
-                  <input
-                    value={form.headline}
-                    onChange={(e) => setForm((f) => ({ ...f, headline: e.target.value }))}
-                    placeholder="What the banner says"
-                    maxLength={140}
-                    required
-                  />
-                  <label>Link (optional)</label>
-                  <input
-                    value={form.linkUrl}
-                    onChange={(e) => setForm((f) => ({ ...f, linkUrl: e.target.value }))}
-                    placeholder="https://... where clicking the banner goes"
-                  />
                   <label>Banner image</label>
-                  <input type="file" accept="image/*" onChange={handleCreativeSelect} disabled={uploadingCreative} />
-                  {form.creativePreviewUrl && (
-                    <div className="media-preview-grid">
-                      <div className="media-preview-item">
-                        <img src={form.creativePreviewUrl} alt="Banner preview" />
-                      </div>
-                    </div>
-                  )}
-                  {uploadingCreative && <p className="muted">Uploading image…</p>}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleCreativeSelect} disabled={uploadingCreative} />
+                  <p className="muted">JPEG, PNG, or WebP. Maximum 5 MB. Creative is private until the campaign is approved.</p>
+                  {form.creativePreviewUrl && <div className="media-preview-grid"><div className="media-preview-item"><img src={form.creativePreviewUrl} alt="Banner preview" /></div></div>}
+                  {uploadingCreative && <p className="muted">Uploading securely…</p>}
                 </>
               )}
 
-              {form.type === 'TELEGRAM_PROMOTION' && (
-                <>
-                  <label>Promotion message</label>
-                  <input
-                    value={form.headline}
-                    onChange={(e) => setForm((f) => ({ ...f, headline: e.target.value }))}
-                    placeholder="What you'd like posted"
-                    maxLength={140}
-                  />
-                  <p className="muted">Telegram promotions are posted manually by the MarketBridge team after payment — there's no automatic posting yet.</p>
-                </>
-              )}
+              <label>Destination link (optional)</label>
+              <input value={form.linkUrl} onChange={(e) => setForm((f) => ({ ...f, linkUrl: e.target.value }))} placeholder="https://example.com or /listings/..." maxLength={2000} />
+              <p className="muted">Only HTTPS external URLs or safe internal paths are accepted.</p>
 
               <label>Start date</label>
-              <input
-                type="date"
-                value={form.startDate}
-                min={todayPlus(0)}
-                onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
-                required
-              />
-
+              <input type="date" value={form.startDate} min={todayPlus(0)} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} required />
               <label>End date</label>
-              <input
-                type="date"
-                value={form.endDate}
-                min={form.startDate}
-                onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
-                required
-              />
+              <input type="date" value={form.endDate} min={form.startDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} required />
 
-              {estimatedPrice != null && (
-                <p className="muted" style={{ marginTop: 8 }}>
-                  Estimated price: <strong>{estimatedPrice.toLocaleString()} ETB</strong> for {days} day{days === 1 ? '' : 's'} ({dailyRates[form.type]?.toLocaleString()} ETB/day)
+              <div className="sd-panel" style={{ marginTop: 14 }}>
+                <strong>Server pricing</strong>
+                <p className="muted" style={{ marginBottom: 0 }}>
+                  {estimatedPrice != null ? `${estimatedPrice.toLocaleString()} ETB estimated for ${days} day${days === 1 ? '' : 's'} at ${Number(dailyRates[form.type] || 0).toLocaleString()} ETB/day.` : 'Choose dates to see the current rate.'}
                 </p>
-              )}
+                <small className="muted">Final amount is recalculated and fixed by the backend when you submit.</small>
+              </div>
 
               <div className="sd-modal-actions" style={{ marginTop: 20 }}>
-                <button className="btn btn-primary" type="submit" disabled={submitting || uploadingCreative}>
-                  {submitting ? 'Submitting…' : 'Submit campaign'}
-                </button>
+                <button className="btn btn-primary" type="submit" disabled={submitting || uploadingCreative}>{submitting ? 'Creating…' : 'Create campaign'}</button>
               </div>
             </form>
           </div>
 
           <div className="card">
-            <h2>How it works</h2>
-            <p className="muted">
-              1. Submit a campaign — its exact price is fixed by MarketBridge at that point, based on campaign type and how many days you chose.
-            </p>
-            <p className="muted">
-              2. Pay the fixed amount shown on the campaign card below.
-            </p>
-            <p className="muted">
-              3. Once Chapa confirms your payment, the campaign automatically goes <strong>Active</strong> for the dates you chose — except Banner campaigns, which also need a quick admin content check first since they show your own image and text on the homepage.
-            </p>
+            <h2>Campaign lifecycle</h2>
+            <p className="muted"><strong>1. Create:</strong> MarketBridge validates the listing, creative, URL, dates and calculates the price.</p>
+            <p className="muted"><strong>2. Pay:</strong> Chapa payment must equal the server quote exactly.</p>
+            <p className="muted"><strong>3. Publish:</strong> Featured/Top/Search campaigns schedule or publish after payment. Banner and Telegram remain <strong>Paid — pending review</strong>.</p>
+            <p className="muted"><strong>4. Review:</strong> Admin approves or rejects banner/Telegram content.</p>
+            <p className="muted"><strong>5. Expire:</strong> Campaigns stop serving automatically at endDate even if no cleanup job runs.</p>
+            <p className="muted"><strong>Live campaigns:</strong> {liveCount}</p>
           </div>
         </div>
 
         <div className="card" style={{ marginTop: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <h2>My campaigns</h2>
-            <button type="button" className="btn btn-light" onClick={loadAll} disabled={loading}>
-              {loading ? 'Refreshing…' : 'Refresh'}
-            </button>
+            <button type="button" className="btn btn-light" onClick={loadAll} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
           </div>
 
           {ads.length === 0 && <p className="muted">You haven't created any campaigns yet.</p>}
-
           <div className="sd-flow">
             {ads.map((ad) => {
               const pending = (ad.payments || []).find((p) => p.status === 'PENDING');
               const paid = (ad.payments || []).find((p) => p.status === 'PAID');
-
+              const stats = analytics[ad.id];
+              const amountDue = Number(ad.priceQuoted || ad.amountDue || 0);
               return (
                 <div className="sd-panel" key={ad.id}>
-                  {ad.creativeImageUrl && (
-                    <img src={ad.creativeImageUrl} alt={ad.headline || 'Campaign creative'} style={{ width: '100%', borderRadius: 10, marginBottom: 10, maxHeight: 140, objectFit: 'cover' }} />
-                  )}
-                  <h3>{AD_TYPES.find((t) => t.value === ad.type)?.label || ad.type}</h3>
+                  {ad.creativeImageUrl && <img src={ad.creativeImageUrl} alt={ad.headline || 'Campaign creative'} style={{ width: '100%', borderRadius: 10, marginBottom: 10, maxHeight: 180, objectFit: 'cover' }} />}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <h3>{AD_TYPES.find((t) => t.value === ad.type)?.label || ad.type}</h3>
+                    <span className={statusClass(ad.status)}>{STATUS_LABELS[ad.status] || ad.status}</span>
+                  </div>
+                  <p className="muted"><strong>Reference:</strong> {ad.campaignReference || ad.id}</p>
                   {ad.headline && <p className="muted">{ad.headline}</p>}
-                  <p className="muted">
-                    {ad.listing ? `Featuring: ${ad.listing.title || ad.listing.cropType}` : 'Platform-wide placement'}
-                  </p>
-                  <p className="muted">
-                    {new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}
-                  </p>
-                  <span className="sd-badge">{STATUS_LABELS[ad.status] || ad.status}</span>
-                  <p className="muted" style={{ marginTop: 8 }}>
-                    {paid ? `Paid: ${Number(ad.amountPaid).toLocaleString()} ETB` : `Amount due: ${Number(ad.amountPaid).toLocaleString()} ETB`}
-                  </p>
+                  <p className="muted">{ad.listing ? `Listing: ${ad.listing.title || ad.listing.cropType}` : 'Platform-wide placement'}</p>
+                  <p className="muted">{new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}</p>
+                  <p className="muted"><strong>Quoted:</strong> {amountDue.toLocaleString()} {ad.currency || 'ETB'} · <strong>Paid:</strong> {paid ? Number(ad.amountPaid || paid.amount || 0).toLocaleString() : '0'} {ad.currency || 'ETB'}</p>
+                  {stats && <p className="muted"><strong>Performance:</strong> {stats.impressions} impressions · {stats.clicks} clicks · {stats.ctr}% CTR</p>}
+                  {ad.rejectionReason && <p className="alert error">Rejected: {ad.rejectionReason}</p>}
 
                   {!paid && pending && (
                     <div style={{ marginTop: 12 }}>
-                      <p className="muted">Your payment hasn't completed yet.</p>
-                      <button
-                        type="button"
-                        className="sd-btn sd-btn-primary"
-                        disabled={payingId === ad.id}
-                        onClick={() => resumeAdPayment(pending.id, ad.id)}
-                      >
-                        {payingId === ad.id ? 'Redirecting…' : 'Resume payment'}
-                      </button>
+                      <p className="muted">Payment is still pending.</p>
+                      <button type="button" className="sd-btn sd-btn-primary" disabled={payingId === ad.id} onClick={() => resumeAdPayment(pending.id, ad.id)}>{payingId === ad.id ? 'Redirecting…' : 'Resume payment'}</button>
                     </div>
                   )}
-
-                  {!paid && !pending && ad.status === 'PENDING' && (
-                    <div style={{ marginTop: 12 }}>
-                      <button
-                        type="button"
-                        className="sd-btn sd-btn-primary"
-                        disabled={payingId === ad.id}
-                        onClick={() => payForAd(ad)}
-                      >
-                        {payingId === ad.id ? 'Redirecting…' : `Pay ${Number(ad.amountPaid).toLocaleString()} ETB`}
-                      </button>
-                    </div>
+                  {!paid && !pending && ad.status === 'PENDING_PAYMENT' && (
+                    <button type="button" className="sd-btn sd-btn-primary" disabled={payingId === ad.id} onClick={() => payForAd(ad)}>{payingId === ad.id ? 'Redirecting…' : `Pay ${amountDue.toLocaleString()} ETB`}</button>
                   )}
+                  {ad.status === 'PAID_PENDING_REVIEW' && <p className="muted" style={{ marginTop: 10 }}><strong>Paid.</strong> Waiting for MarketBridge content review.</p>}
+                  {ad.type === 'TELEGRAM_PROMOTION' && ['APPROVED', 'SCHEDULED', 'PUBLISHED'].includes(ad.status) && <p className="muted">Telegram publication is handled manually by MarketBridge.</p>}
                 </div>
               );
             })}

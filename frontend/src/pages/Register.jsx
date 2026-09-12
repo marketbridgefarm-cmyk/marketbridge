@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext.jsx';
 const optional = [
   ['INSPECTOR', 'Independent Inspector'],
   ['TRUCK_OWNER', 'Truck Owner / Driver'],
-  ['ADVERTISER', 'Advertiser'],
 ];
 
 export default function Register() {
@@ -41,7 +40,7 @@ export default function Register() {
           <ul className="auth-points">
             <li><b>🌾</b> List crops or products in minutes</li>
             <li><b>🛒</b> Browse and buy from verified sellers</li>
-            <li><b>🔍</b> Add inspector, transport, or advertiser roles anytime</li>
+            <li><b>🔍</b> Add specialist inspector or transport capabilities anytime; advertising is available to every signed-in user</li>
           </ul>
         </aside>
         <div className="auth-card">

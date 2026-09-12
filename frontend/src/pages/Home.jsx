@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import AdvertisementBanner from '../components/AdvertisementBanner.jsx';
 
 const pillars = [
   ['01', 'Agricultural marketplace', 'Connect farmers, agricultural producers, investors and buyers for farm-produced goods, including bulk and time-sensitive harvests.'],
@@ -44,6 +45,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <AdvertisementBanner />
 
       <section className="section">
         <div className="container-wide">

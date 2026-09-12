@@ -110,9 +110,9 @@ export default function AdminDashboard() {
   }, [tabMenuOpen]);
 
   function statusBadgeClass(status) {
-    if (['VERIFIED', 'ACTIVE', 'RESOLVED'].includes(status)) return 'sd-badge sd-good';
+    if (['VERIFIED', 'ACTIVE', 'APPROVED', 'PUBLISHED', 'SCHEDULED', 'RESOLVED'].includes(status)) return 'sd-badge sd-good';
     if (['REJECTED', 'SUSPENDED'].includes(status)) return 'sd-badge sd-red';
-    if (['PENDING', 'EXPIRED'].includes(status)) return 'sd-badge sd-warn';
+    if (['PENDING', 'PENDING_PAYMENT', 'PAID_PENDING_REVIEW', 'EXPIRED'].includes(status)) return 'sd-badge sd-warn';
     return 'sd-badge';
   }
 
@@ -304,12 +304,31 @@ export default function AdminDashboard() {
     }
   }
 
+  async function markTelegramPublished(adId) {
+    clearMessages();
+    const postReference = window.prompt('Telegram post reference/link (optional):') || undefined;
+    setActionLoading(`ad-${adId}`);
+    try {
+      await api.patch(`/ads/${adId}/telegram-publication`, { postReference });
+      setSuccess('Telegram publication recorded.');
+      await loadAll();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not record Telegram publication');
+    } finally {
+      setActionLoading('');
+    }
+  }
+
   async function setAdStatus(adId, status) {
     clearMessages();
     setActionLoading(`ad-${adId}`);
 
     try {
-      await api.patch(`/ads/${adId}/status`, { status });
+      let rejectionReason;
+      if (status === 'REJECTED') {
+        rejectionReason = window.prompt('Reason for rejecting this campaign (optional):') || undefined;
+      }
+      await api.patch(`/ads/${adId}/status`, { status, rejectionReason });
       setSuccess(`Campaign ${status.toLowerCase()} successfully.`);
       await loadAll();
     } catch (err) {
@@ -428,11 +447,12 @@ export default function AdminDashboard() {
   );
 
   const pendingAds = ads.filter(
-    (a) => a.status === 'PENDING'
+    (a) => a.status === 'PAID_PENDING_REVIEW' ||
+      (a.status === 'PENDING' && ['BANNER', 'TELEGRAM_PROMOTION'].includes(a.type))
   );
 
   const reviewedAds = ads.filter(
-    (a) => a.status !== 'PENDING'
+    (a) => !pendingAds.some((pending) => pending.id === a.id)
   );
 
   const tabItems = [
@@ -1073,109 +1093,116 @@ export default function AdminDashboard() {
 
         {tab === 'advertising' && (
           <div className="sd-workspace">
-
             <div>
-              <span className="sd-eyebrow">PENDING</span>
-              <h2>Pending review</h2>
+              <span className="sd-eyebrow">ADVERTISING</span>
+              <h2>Campaign control</h2>
+              <p className="sd-muted">
+                Review paid creative, publish approved campaigns, record Telegram publication, and end campaigns early when necessary.
+              </p>
+            </div>
 
-              <div className="sd-cards">
+            <div className="sd-cards">
               {pendingAds.map((ad) => {
                 const adPaid = (ad.payments || []).some((p) => p.status === 'PAID');
+                const impressions = (ad.events || []).filter((e) => e.eventType === 'IMPRESSION').length;
+                const clicks = (ad.events || []).filter((e) => e.eventType === 'CLICK').length;
+                const ctr = impressions ? ((clicks / impressions) * 100).toFixed(2) : '0.00';
                 return (
-                <div className="sd-card" key={ad.id}>
-                  {ad.creativeImageUrl && (
-                    <img src={ad.creativeImageUrl} alt={ad.headline || 'Campaign creative'} style={{ width: '100%', borderRadius: 8, marginBottom: 8, maxHeight: 120, objectFit: 'cover' }} />
-                  )}
-                  <h3>{ad.type.replace(/_/g, ' ')}</h3>
-                  {ad.headline && <p className="sd-muted"><strong>{ad.headline}</strong></p>}
+                  <div className="sd-card" key={ad.id}>
+                    {ad.creativeImageUrl && (
+                      <img src={ad.creativeImageUrl} alt={ad.headline || 'Campaign creative'} style={{ width: '100%', borderRadius: 8, marginBottom: 8, maxHeight: 160, objectFit: 'cover' }} />
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <h3>{ad.type.replace(/_/g, ' ')}</h3>
+                      <span className={statusBadgeClass(ad.status)}>{ad.status}</span>
+                    </div>
+                    {ad.headline && <p className="sd-muted"><strong>{ad.headline}</strong></p>}
+                    <p className="sd-muted">
+                      <strong>Ref:</strong> {ad.campaignReference || ad.id.slice(0, 8)} · <strong>Advertiser:</strong> {ad.advertiser?.name} ({ad.advertiser?.email})
+                    </p>
+                    <p className="sd-muted">
+                      {ad.listing ? <>Featuring <strong>{ad.listing.title || ad.listing.cropType}</strong> · </> : 'Platform-wide · '}
+                      {new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}
+                    </p>
+                    <p className="sd-muted">
+                      <strong>Quoted:</strong> {Number(ad.priceQuoted || 0).toLocaleString()} {ad.currency || 'ETB'} · <strong>Paid:</strong> {adPaid ? Number(ad.amountPaid || 0).toLocaleString() : '0'} {ad.currency || 'ETB'} · <strong>CTR:</strong> {ctr}%
+                    </p>
+                    {ad.destinationUrl && <p className="sd-muted" style={{ wordBreak: 'break-word' }}>Destination: {ad.destinationUrl}</p>}
 
-                  <p className="sd-muted">
-                    {ad.advertiser?.name} ({ad.advertiser?.email})
-                    {ad.listing && <> — featuring "{ad.listing.title || ad.listing.cropType}"</>}
-                  </p>
-
-                  <p className="sd-muted">
-                    {new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}
-                    {' · '}
-                    {adPaid
-                      ? `${Number(ad.amountPaid).toLocaleString()} ETB paid`
-                      : `${Number(ad.amountPaid).toLocaleString()} ETB due, not yet paid`}
-                  </p>
-
-                  <div className="sd-modal-actions">
-                    <button
-                      className="sd-btn sd-btn-primary"
-                      disabled={
-                        actionLoading === `ad-${ad.id}` ||
-                        !adPaid
-                      }
-                      title={!adPaid ? 'Waiting on advertiser payment before approval' : undefined}
-                      onClick={() => setAdStatus(ad.id, 'ACTIVE')}
-                    >
-                      {actionLoading === `ad-${ad.id}` ? 'Working…' : 'Approve'}
-                    </button>
-
-                    <button
-                      className="sd-btn sd-btn-outline"
-                      disabled={actionLoading === `ad-${ad.id}`}
-                      onClick={() => setAdStatus(ad.id, 'REJECTED')}
-                    >
-                      Reject
-                    </button>
+                    <div className="sd-modal-actions">
+                      <button
+                        className="sd-btn sd-btn-primary"
+                        disabled={actionLoading === `ad-${ad.id}` || !adPaid}
+                        title={!adPaid ? 'Waiting for payment' : undefined}
+                        onClick={() => setAdStatus(ad.id, 'APPROVED')}
+                      >
+                        {actionLoading === `ad-${ad.id}` ? 'Working…' : 'Approve'}
+                      </button>
+                      <button
+                        className="sd-btn sd-btn-outline"
+                        disabled={actionLoading === `ad-${ad.id}`}
+                        onClick={() => setAdStatus(ad.id, 'REJECTED')}
+                      >Reject</button>
+                    </div>
                   </div>
-                </div>
                 );
               })}
 
               {pendingAds.length === 0 && (
                 <div className="sd-panel">
-                  <p className="sd-muted">No campaigns waiting on review.</p>
+                  <p className="sd-muted">No campaigns waiting on content review.</p>
                 </div>
               )}
-              </div>
             </div>
 
             <div className="sd-panel sd-table-wrap">
-              <h2>Reviewed campaigns</h2>
-
+              <h2>Campaign ledger</h2>
               <table className="sd-table sd-table--stack">
                 <thead>
                   <tr>
                     <th>Campaign</th>
                     <th>Advertiser</th>
+                    <th>Dates</th>
+                    <th>Financials</th>
+                    <th>Analytics</th>
                     <th>Status</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {reviewedAds.slice(0, 15).map((ad) => (
-                    <tr key={ad.id}>
-                      <td data-label="Campaign"><strong>{ad.type.replace(/_/g, ' ')}</strong></td>
-                      <td data-label="Advertiser" className="sd-muted">{ad.advertiser?.name}</td>
-                      <td data-label="Status"><span className={statusBadgeClass(ad.status)}>{ad.status}</span></td>
-                      <td data-label="">
-                        {ad.status === 'ACTIVE' && (
-                          <button
-                            className="sd-btn sd-btn-outline"
-                            disabled={actionLoading === `ad-${ad.id}`}
-                            onClick={() => setAdStatus(ad.id, 'EXPIRED')}
-                          >
-                            {actionLoading === `ad-${ad.id}` ? 'Working…' : 'End early'}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-
+                  {reviewedAds.slice(0, 30).map((ad) => {
+                    const impressions = (ad.events || []).filter((e) => e.eventType === 'IMPRESSION').length;
+                    const clicks = (ad.events || []).filter((e) => e.eventType === 'CLICK').length;
+                    const ctr = impressions ? ((clicks / impressions) * 100).toFixed(2) : '0.00';
+                    return (
+                      <tr key={ad.id}>
+                        <td data-label="Campaign"><strong>{ad.campaignReference || ad.type.replace(/_/g, ' ')}</strong><br /><span className="sd-muted">{ad.type.replace(/_/g, ' ')}</span></td>
+                        <td data-label="Advertiser" className="sd-muted">{ad.advertiser?.name}</td>
+                        <td data-label="Dates" className="sd-muted">{new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}</td>
+                        <td data-label="Financials" className="sd-muted">{Number(ad.priceQuoted || 0).toLocaleString()} {ad.currency || 'ETB'} quoted<br />{Number(ad.amountPaid || 0).toLocaleString()} paid</td>
+                        <td data-label="Analytics" className="sd-muted">{impressions} imp · {clicks} clicks · {ctr}% CTR</td>
+                        <td data-label="Status"><span className={statusBadgeClass(ad.status)}>{ad.status}</span></td>
+                        <td data-label="">
+                          {['PUBLISHED', 'ACTIVE'].includes(ad.status) && (
+                            <button className="sd-btn sd-btn-outline" disabled={actionLoading === `ad-${ad.id}`} onClick={() => setAdStatus(ad.id, 'EXPIRED')}>
+                              {actionLoading === `ad-${ad.id}` ? 'Working…' : 'End early'}
+                            </button>
+                          )}
+                          {ad.type === 'TELEGRAM_PROMOTION' && ['APPROVED', 'SCHEDULED'].includes(ad.status) && (
+                            <button className="sd-btn sd-btn-primary" disabled={actionLoading === `ad-${ad.id}`} onClick={() => markTelegramPublished(ad.id)}>
+                              Mark Telegram published
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {reviewedAds.length === 0 && (
-                    <tr>
-                      <td colSpan="4" className="sd-muted">Nothing reviewed yet.</td>
-                    </tr>
+                    <tr><td colSpan="7" className="sd-muted">No reviewed campaigns yet.</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
-
           </div>
         )}
 
