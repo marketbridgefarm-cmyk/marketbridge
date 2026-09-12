@@ -13,6 +13,13 @@ const AD_TYPES = [
   { value: 'TELEGRAM_PROMOTION', label: 'Telegram Promotion', help: 'Pay for a MarketBridge Telegram promotion, then the team publishes it manually.' },
 ];
 
+const BANNER_TEMPLATE_OPTIONS = [
+  { value: 'CLASSIC', label: 'Classic', help: 'Full-width image with a dark caption strip over the bottom-left corner.' },
+  { value: 'BOLD', label: 'Bold', help: 'Large centered headline over a high-contrast color wash — best for a short, punchy message.' },
+  { value: 'MINIMAL', label: 'Minimal', help: 'Clean image with a small caption below it, no overlay text on the photo.' },
+  { value: 'CARD', label: 'Card', help: 'Framed card with a corner "Sponsored" ribbon and the headline in a text block beneath the image.' },
+];
+
 const LISTING_LINKED_TYPES = ['FEATURED_LISTING', 'TOP_OF_CATEGORY', 'SPONSORED_SEARCH'];
 
 const STATUS_LABELS = {
@@ -24,6 +31,7 @@ const STATUS_LABELS = {
   ACTIVE: 'Published',
   REJECTED: 'Rejected',
   EXPIRED: 'Expired',
+  CANCELLED: 'Cancelled',
   PENDING: 'Awaiting review',
 };
 
@@ -42,7 +50,7 @@ function campaignDays(startDate, endDate) {
 
 function statusClass(status) {
   if (['PUBLISHED', 'ACTIVE', 'APPROVED', 'SCHEDULED'].includes(status)) return 'sd-badge sd-good';
-  if (['REJECTED', 'EXPIRED'].includes(status)) return 'sd-badge sd-red';
+  if (['REJECTED', 'EXPIRED', 'CANCELLED'].includes(status)) return 'sd-badge sd-red';
   return 'sd-badge sd-warn';
 }
 
@@ -69,6 +77,7 @@ export default function AdvertiserDashboard() {
     linkUrl: '',
     creativeImageKey: '',
     creativePreviewUrl: '',
+    bannerTemplate: 'CLASSIC',
   });
 
   const loadAll = useCallback(async () => {
@@ -168,9 +177,10 @@ export default function AdvertiserDashboard() {
         headline: form.headline || undefined,
         linkUrl: form.linkUrl || undefined,
         creativeImageKey: needsCreative ? form.creativeImageKey : undefined,
+        bannerTemplate: needsCreative ? form.bannerTemplate : undefined,
       });
       setSuccess(`Campaign ${data.ad.campaignReference} created. The server fixed the price at ${Number(data.ad.priceQuoted).toLocaleString()} ETB.`);
-      setForm((f) => ({ ...f, listingId: '', headline: '', linkUrl: '', creativeImageKey: '', creativePreviewUrl: '' }));
+      setForm((f) => ({ ...f, listingId: '', headline: '', linkUrl: '', creativeImageKey: '', creativePreviewUrl: '', bannerTemplate: 'CLASSIC' }));
       await loadAll();
     } catch (err) {
       setError(err.response?.data?.error || 'Could not create campaign');
@@ -186,6 +196,21 @@ export default function AdvertiserDashboard() {
       await startChapaPayment({ type: 'ADVERTISING', advertisementId: ad.id, amount: Number(ad.priceQuoted || ad.amountDue), method: 'TELEBIRR' });
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Could not start payment');
+      setPayingId(null);
+    }
+  }
+
+  async function cancelAd(ad) {
+    clearMessages();
+    if (!window.confirm('Cancel this campaign? This cannot be undone.')) return;
+    setPayingId(ad.id);
+    try {
+      await api.patch(`/ads/${ad.id}/cancel`, {});
+      setSuccess('Campaign cancelled.');
+      await loadAll();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not cancel campaign');
+    } finally {
       setPayingId(null);
     }
   }
@@ -228,7 +253,7 @@ export default function AdvertiserDashboard() {
             <h2>New campaign</h2>
             <form onSubmit={submitAd}>
               <label>Campaign type</label>
-              <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value, listingId: '', headline: '', creativeImageKey: '', creativePreviewUrl: '' }))}>
+              <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value, listingId: '', headline: '', creativeImageKey: '', creativePreviewUrl: '', bannerTemplate: 'CLASSIC' }))}>
                 {AD_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
               <p className="muted">{AD_TYPES.find((t) => t.value === form.type)?.help}</p>
@@ -258,6 +283,22 @@ export default function AdvertiserDashboard() {
                   <p className="muted">JPEG, PNG, or WebP. Maximum 5 MB. Creative is private until the campaign is approved.</p>
                   {form.creativePreviewUrl && <div className="media-preview-grid"><div className="media-preview-item"><img src={form.creativePreviewUrl} alt="Banner preview" /></div></div>}
                   {uploadingCreative && <p className="muted">Uploading securely…</p>}
+
+                  <label>Banner style</label>
+                  <div className="ad-template-picker">
+                    {BANNER_TEMPLATE_OPTIONS.map((tpl) => (
+                      <button
+                        type="button"
+                        key={tpl.value}
+                        className={`ad-template-option${form.bannerTemplate === tpl.value ? ' ad-template-option--active' : ''}`}
+                        onClick={() => setForm((f) => ({ ...f, bannerTemplate: tpl.value }))}
+                      >
+                        <span className={`ad-template-swatch ad-template-swatch--${tpl.value.toLowerCase()}`} aria-hidden="true" />
+                        <strong>{tpl.label}</strong>
+                        <span className="muted" style={{ fontSize: 12 }}>{tpl.help}</span>
+                      </button>
+                    ))}
+                  </div>
                 </>
               )}
 
@@ -317,6 +358,7 @@ export default function AdvertiserDashboard() {
                   </div>
                   <p className="muted"><strong>Reference:</strong> {ad.campaignReference || ad.id}</p>
                   {ad.headline && <p className="muted">{ad.headline}</p>}
+                  {ad.type === 'BANNER' && <p className="muted"><strong>Style:</strong> {BANNER_TEMPLATE_OPTIONS.find((t) => t.value === ad.bannerTemplate)?.label || 'Classic'}</p>}
                   <p className="muted">{ad.listing ? `Listing: ${ad.listing.title || ad.listing.cropType}` : 'Platform-wide placement'}</p>
                   <p className="muted">{new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}</p>
                   <p className="muted"><strong>Quoted:</strong> {amountDue.toLocaleString()} {ad.currency || 'ETB'} · <strong>Paid:</strong> {paid ? Number(ad.amountPaid || paid.amount || 0).toLocaleString() : '0'} {ad.currency || 'ETB'}</p>
@@ -324,13 +366,19 @@ export default function AdvertiserDashboard() {
                   {ad.rejectionReason && <p className="alert error">Rejected: {ad.rejectionReason}</p>}
 
                   {!paid && pending && (
-                    <div style={{ marginTop: 12 }}>
-                      <p className="muted">Payment is still pending.</p>
-                      <button type="button" className="sd-btn sd-btn-primary" disabled={payingId === ad.id} onClick={() => resumeAdPayment(pending.id, ad.id)}>{payingId === ad.id ? 'Redirecting…' : 'Resume payment'}</button>
+                    <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ flex: '1 1 auto' }}>
+                        <p className="muted" style={{ marginBottom: 6 }}>Payment is still pending.</p>
+                        <button type="button" className="sd-btn sd-btn-primary" disabled={payingId === ad.id} onClick={() => resumeAdPayment(pending.id, ad.id)}>{payingId === ad.id ? 'Redirecting…' : 'Resume payment'}</button>
+                      </div>
+                      <button type="button" className="sd-btn sd-btn-outline" disabled={payingId === ad.id} onClick={() => cancelAd(ad)}>Cancel campaign</button>
                     </div>
                   )}
                   {!paid && !pending && ad.status === 'PENDING_PAYMENT' && (
-                    <button type="button" className="sd-btn sd-btn-primary" disabled={payingId === ad.id} onClick={() => payForAd(ad)}>{payingId === ad.id ? 'Redirecting…' : `Pay ${amountDue.toLocaleString()} ETB`}</button>
+                    <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <button type="button" className="sd-btn sd-btn-primary" disabled={payingId === ad.id} onClick={() => payForAd(ad)}>{payingId === ad.id ? 'Redirecting…' : `Pay ${amountDue.toLocaleString()} ETB`}</button>
+                      <button type="button" className="sd-btn sd-btn-outline" disabled={payingId === ad.id} onClick={() => cancelAd(ad)}>Cancel campaign</button>
+                    </div>
                   )}
                   {ad.status === 'PAID_PENDING_REVIEW' && <p className="muted" style={{ marginTop: 10 }}><strong>Paid.</strong> Waiting for MarketBridge content review.</p>}
                   {ad.type === 'TELEGRAM_PROMOTION' && ['APPROVED', 'SCHEDULED', 'PUBLISHED'].includes(ad.status) && <p className="muted">Telegram publication is handled manually by MarketBridge.</p>}
