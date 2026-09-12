@@ -8,6 +8,7 @@ export default function CreateListing() {
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedCategory = searchParams.get('category')?.toUpperCase();
+  const isProductRequest = requestedCategory === 'PRODUCT';
 
   // Below the tablet breakpoint this page renders as a popup (bottom sheet on
   // phones, centered dialog on tablets) over whatever the user was looking
@@ -28,7 +29,7 @@ export default function CreateListing() {
     };
   }, [closeModal]);
 
-  const [category, setCategory] = useState(requestedCategory === 'PRODUCT' ? 'PRODUCT' : 'AGRICULTURAL');
+  const [category, setCategory] = useState(isProductRequest ? 'PRODUCT' : 'AGRICULTURAL');
   const [form, setForm] = useState({
     sellerId: user?.id || '',
     description: '',
@@ -47,6 +48,7 @@ export default function CreateListing() {
   const [error, setError] = useState('');
   const [mediaError, setMediaError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const set = k => e => setForm(prev => ({ ...prev, [k]: e.target.value }));
 
   async function handleMediaSelect(kind, e) {
@@ -87,22 +89,65 @@ export default function CreateListing() {
   async function submit(e) {
     e.preventDefault();
     setError('');
+
+    if (!user?.id) {
+      setError('Your session is not ready. Please log in again.');
+      return;
+    }
+
+    const title = form.title.trim();
+    const location = form.location.trim();
+    const quantity = Number(form.quantity);
+    const askingPrice = Number(form.askingPrice);
+
+    if (category === 'PRODUCT' && !title) {
+      setError('Product title is required.');
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setError('Enter a quantity greater than 0.');
+      return;
+    }
+    if (!Number.isFinite(askingPrice) || askingPrice <= 0) {
+      setError('Enter an asking price greater than 0 ETB.');
+      return;
+    }
+    if (!location) {
+      setError('Location is required.');
+      return;
+    }
+
+    setSubmitting(true);
     try {
-      const r = await api.post('/listings', {
-        ...form,
+      const payload = {
         category,
         sellerId: user.id,
-        cropType: category === 'AGRICULTURAL' ? form.cropType : undefined,
-        title: form.title || form.cropType,
-        quantity: Number(form.quantity),
-        askingPrice: Number(form.askingPrice),
-        minAcceptablePrice: form.minAcceptablePrice ? Number(form.minAcceptablePrice) : undefined,
+        title: category === 'PRODUCT' ? title : (title || form.cropType.trim()),
+        cropType: category === 'AGRICULTURAL' ? form.cropType.trim() : undefined,
+        quantity,
+        unit: form.unit.trim() || (category === 'PRODUCT' ? 'piece' : 'quintal'),
+        askingPrice,
+        minAcceptablePrice: category === 'AGRICULTURAL' && form.minAcceptablePrice ? Number(form.minAcceptablePrice) : undefined,
+        location,
+        harvestedDate: category === 'AGRICULTURAL' ? form.harvestedDate || undefined : undefined,
+        readinessDate: category === 'AGRICULTURAL' ? form.readinessDate || undefined : undefined,
+        description: form.description.trim() || undefined,
         photos: form.photos.map(p => p.key),
         videos: form.videos.map(v => v.key)
-      });
-      nav(`/listings/${r.data.listing.id}`);
+      };
+
+      const r = await api.post('/listings', payload);
+      const listingId = r.data?.listing?.id;
+      if (!listingId) throw new Error('The server did not return the new listing ID.');
+      nav(`/listings/${listingId}`);
     } catch (e) {
-      setError(e.response?.data?.error || 'Could not create listing');
+      const data = e.response?.data;
+      const validation = Array.isArray(data?.errors)
+        ? data.errors.map(x => x.msg || x.message).filter(Boolean).join(' ')
+        : '';
+      setError(data?.error || validation || e.message || 'Could not create listing.');
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -118,7 +163,7 @@ export default function CreateListing() {
         <span className="eyebrow">SELL ON MARKETBRIDGE</span>
         <h1>{category === 'AGRICULTURAL' ? 'List agricultural produce' : 'List a physical product'}</h1>
         <p className="muted">Your account can buy and sell. Agricultural listings keep the farmer as the price authority.</p>
-        <form className="card form-card" onSubmit={submit}>
+        <form className="card form-card" onSubmit={submit} noValidate>
           {error && <div className="alert error">{error}</div>}
           <label>Marketplace</label>
           <div className="choice-grid">
@@ -195,8 +240,9 @@ export default function CreateListing() {
           )}
 
           {uploading && <p className="muted">Uploading media…</p>}
+          {submitting && <p className="muted">Creating your product listing…</p>}
 
-          <button className="btn btn-primary btn-lg full" type="submit" disabled={uploading}>Publish {category === 'AGRICULTURAL' ? 'produce' : 'product'}</button>
+          <button className="btn btn-primary btn-lg full" type="submit" disabled={uploading || submitting}>Publish {category === 'AGRICULTURAL' ? 'produce' : 'product'}</button>
         </form>
         </div>
       </main>
