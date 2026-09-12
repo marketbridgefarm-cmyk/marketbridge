@@ -111,7 +111,7 @@ export default function AdminDashboard() {
 
   function statusBadgeClass(status) {
     if (['VERIFIED', 'ACTIVE', 'APPROVED', 'PUBLISHED', 'SCHEDULED', 'RESOLVED'].includes(status)) return 'sd-badge sd-good';
-    if (['REJECTED', 'SUSPENDED'].includes(status)) return 'sd-badge sd-red';
+    if (['REJECTED', 'SUSPENDED', 'CANCELLED'].includes(status)) return 'sd-badge sd-red';
     if (['PENDING', 'PENDING_PAYMENT', 'PAID_PENDING_REVIEW', 'EXPIRED'].includes(status)) return 'sd-badge sd-warn';
     return 'sd-badge';
   }
@@ -314,6 +314,22 @@ export default function AdminDashboard() {
       await loadAll();
     } catch (err) {
       setError(err.response?.data?.error || 'Could not record Telegram publication');
+    } finally {
+      setActionLoading('');
+    }
+  }
+
+  async function cancelAdCampaign(adId) {
+    clearMessages();
+    if (!window.confirm('Cancel this campaign? Any paid amount is flagged REFUNDED as a bookkeeping record.')) return;
+    const reason = window.prompt('Reason for cancelling this campaign (optional):') || undefined;
+    setActionLoading(`ad-${adId}`);
+    try {
+      await api.patch(`/ads/${adId}/cancel`, { reason });
+      setSuccess('Campaign cancelled.');
+      await loadAll();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not cancel campaign');
     } finally {
       setActionLoading('');
     }
@@ -1186,6 +1202,11 @@ export default function AdminDashboard() {
                           {['PUBLISHED', 'ACTIVE'].includes(ad.status) && (
                             <button className="sd-btn sd-btn-outline" disabled={actionLoading === `ad-${ad.id}`} onClick={() => setAdStatus(ad.id, 'EXPIRED')}>
                               {actionLoading === `ad-${ad.id}` ? 'Working…' : 'End early'}
+                            </button>
+                          )}
+                          {['PAID_PENDING_REVIEW', 'APPROVED', 'SCHEDULED'].includes(ad.status) && (
+                            <button className="sd-btn sd-btn-outline" disabled={actionLoading === `ad-${ad.id}`} onClick={() => cancelAdCampaign(ad.id)} style={{ marginLeft: 8 }}>
+                              {actionLoading === `ad-${ad.id}` ? 'Working…' : 'Cancel & refund'}
                             </button>
                           )}
                           {ad.type === 'TELEGRAM_PROMOTION' && ['APPROVED', 'SCHEDULED'].includes(ad.status) && (
