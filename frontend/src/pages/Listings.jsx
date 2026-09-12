@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/client';
 import ListingCard from '../components/ListingCard.jsx';
+import AdvertisementBanner from '../components/AdvertisementBanner.jsx';
 import { Link } from 'react-router-dom';
 
 export default function Listings({ category = 'AGRICULTURAL' }) {
@@ -60,6 +61,7 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
           <button className="btn btn-primary" onClick={fetchListings}>Search</button>
         </div>
         {error && <div className="alert error">{error}</div>}
+        <AdvertisementBanner />
         <div className="market-toolbar">
           <strong>{loading ? 'Loading…' : `${listings.length} listing${listings.length === 1 ? '' : 's'}`}</strong>
           <span className="muted">{agriculture ? 'Independent inspection can support bulk transactions.' : 'Buyers and sellers transact directly through MarketBridge workflows.'}</span>
