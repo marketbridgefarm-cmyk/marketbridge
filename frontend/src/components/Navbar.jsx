@@ -19,8 +19,8 @@ function resolveDashboard(user) {
 }
 
 const MARKET_LINKS = [
-  { to: '/agricultural', label: 'Agricultural', match: (p) => p === '/agricultural' || p === '/listings' },
-  { to: '/products', label: 'Product', match: (p) => p.startsWith('/products') },
+  { to: '/agricultural', label: 'Farm Produces', match: (p) => p === '/agricultural' || p === '/listings' },
+  { to: '/products', label: 'Products', match: (p) => p.startsWith('/products') },
   { to: '/digital', label: 'Digital', match: (p) => p.startsWith('/digital') },
 ];
 
@@ -80,17 +80,31 @@ export default function Navbar() {
     <>
       <header className="site-header">
         <nav className="navbar container-wide">
-          <Link to="/" className="brand">
-            <span className="brand-mark">MB</span>
-            <span>Market<span>Bridge</span></span>
-          </Link>
+          <div className="navbar-start">
+            <Link to="/" className="brand">
+              <span className="brand-mark">MB</span>
+              <span>Market<span>Bridge</span></span>
+            </Link>
+
+            {/* Marketplace switcher: always visible, right after the brand */}
+            <div className="market-switcher">
+              <span className="market-switcher-label">Want to buy/sell:</span>
+              <div className="market-pills">
+                {MARKET_LINKS.map((l) => (
+                  <Link
+                    key={l.to}
+                    className={`market-pill${l.match(location.pathname) ? ' active' : ''}`}
+                    to={l.to}
+                  >
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
 
           {/* Desktop links */}
           <div className="nav-links">
-            {MARKET_LINKS.map((l) => (
-              <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{l.label}</Link>
-            ))}
-
             {user ? (
               <div className="nav-account" ref={accountRef}>
                 <button className="nav-user" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((v) => !v)}>
@@ -135,6 +149,7 @@ export default function Navbar() {
         <>
           <div className="mobile-menu-backdrop" onClick={() => setMobileOpen(false)} aria-hidden="true" />
           <div className="mobile-menu" role="dialog" aria-modal="true">
+            <span className="mobile-menu-label">Want to buy/sell:</span>
             {MARKET_LINKS.map((l) => (
               <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{l.label}</Link>
             ))}
