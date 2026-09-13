@@ -921,7 +921,7 @@ model Payment {
   orderId String?
 
   // User who created the payment
-  createdBy   User?  @relation("PaymentCreatedBy", fields: [createdById], references: [id])
+  createdBy   User? @relation("PaymentCreatedBy", fields: [createdById], references: [id])
   createdById String?
 
   // Digital product payment
@@ -942,6 +942,13 @@ model Payment {
 
   // Digital purchase
   digitalPurchase DigitalPurchase?
+
+  // --------------------------------------------------------------------------
+  // PAYMENT OBLIGATION
+  // --------------------------------------------------------------------------
+  // One payment may satisfy one PaymentObligation.
+  // The relation is explicitly named to match PaymentObligation.payment.
+  paymentObligation PaymentObligation? @relation("PaymentObligationPayment")
 
   // --------------------------------------------------------------------------
   // PAYMENT DATA
