@@ -1620,11 +1620,20 @@ router.get(
         status,
       } = req.query;
 
+      // status may arrive as a single value ("PENDING") or, via
+      // axios's default array serialization (status[]=A&status[]=B),
+      // as an array — support both so the admin queue can ask for
+      // more than one status at once (e.g. PENDING + RECONCILIATION_REQUIRED).
+      const statusFilter =
+        Array.isArray(status)
+          ? { in: status }
+          : status;
+
       const payments =
         await prisma.payment.findMany({
           where: {
             ...(status && {
-              status,
+              status: statusFilter,
             }),
           },
 
