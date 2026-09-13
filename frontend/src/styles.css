@@ -568,7 +568,7 @@ p {
 
 .search-panel {
   display: grid;
-  grid-template-columns: 1.3fr 1fr .8fr auto;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
   align-items: end;
   background: #fff;
@@ -664,12 +664,17 @@ p {
 
 .listing-meta {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   color: #78827b;
   font-size: 11px;
   text-transform: uppercase;
+}
+
+.listing-meta > span:last-child {
+  margin-left: auto;
 }
 
 .tag {
@@ -681,6 +686,16 @@ p {
   font-weight: 800;
   font-size: 10px;
   letter-spacing: .5px;
+}
+
+.tag--good {
+  background: #e6f6ea;
+  color: var(--green);
+}
+
+.verified-mark {
+  color: var(--green);
+  font-weight: 700;
 }
 
 .listing-location {
