@@ -367,7 +367,33 @@ router.post(
             });
           }
 
-          // Agricultural purchase payment is independent from transport.
+          // HARD AGRICULTURAL PAYMENT SEQUENCE:
+          // If an inspection was requested before the goods payment is
+          // created, the buyer must wait for the independent inspection to
+          // reach COMPLETED. This prevents paying for bulk produce before the
+          // agreed quality verification is available. Existing orders that
+          // were already paid remain valid; this gate only controls creation
+          // of a new marketplace payment.
+          if (order.listing?.category === 'AGRICULTURAL') {
+            const inspectionRequests = (order.listing.inspectionRequests || []).filter(
+              (request) => request.status !== 'CANCELLED'
+            );
+            const incompleteInspection = inspectionRequests.find(
+              (request) => request.status !== 'COMPLETED'
+            );
+            if (incompleteInspection) {
+              return res.status(409).json({
+                code: 'INSPECTION_REQUIRED_BEFORE_GOODS_PAYMENT',
+                error: 'Complete the agricultural inspection before paying for the goods.',
+                inspectionRequestId: incompleteInspection.id,
+                inspectionStatus: incompleteInspection.status,
+              });
+            }
+          }
+
+          // Agricultural purchase payment is intentionally gated by inspection
+          // when an inspection request exists. Transport remains independently
+          // arranged, quoted and paid, and PICKUP is separately gated below.
           // The buyer may pay for the produce before or after arranging
           // transport. PICKUP is separately gated on the backend until
           // all required payments are PAID, so the truck cannot collect

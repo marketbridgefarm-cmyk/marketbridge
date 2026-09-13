@@ -49,6 +49,14 @@ const orderInclude = {
           report: true,
           inspector: { select: { id: true, name: true, phone: true } },
           payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
+          quotes: {
+            where: { status: { in: ['PENDING', 'COUNTERED'] } },
+            select: {
+              id: true, inspectorId: true, amount: true, status: true,
+              parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true,
+            },
+            orderBy: { createdAt: 'asc' },
+          },
         },
       },
     },
