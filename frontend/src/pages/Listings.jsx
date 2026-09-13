@@ -7,7 +7,16 @@ import { Link } from 'react-router-dom';
 export default function Listings({ category = 'AGRICULTURAL' }) {
   const agriculture = category === 'AGRICULTURAL';
   const [listings, setListings] = useState([]);
-  const [filters, setFilters] = useState({ cropType: '', title: '', location: '', minQuantity: '' });
+  const [filters, setFilters] = useState({
+    cropType: '',
+    title: '',
+    location: '',
+    minQuantity: '',
+    minPrice: '',
+    maxPrice: '',
+    readyAfter: '',
+    readyBy: '',
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -15,9 +24,14 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
     setLoading(true);
     setError('');
     try {
-      const r = await api.get('/listings', {
-        params: { ...filters, category }
-      });
+      const { readyAfter, readyBy, ...rest } = filters;
+      const params = { ...rest, category };
+      // Readiness-window filtering only makes sense for agricultural listings.
+      if (agriculture) {
+        if (readyAfter) params.readyAfter = readyAfter;
+        if (readyBy) params.readyBy = readyBy;
+      }
+      const r = await api.get('/listings', { params });
       setListings(r.data.listings || []);
     } catch (e) {
       setError('Could not load marketplace listings.');
@@ -58,6 +72,26 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
             <label>Minimum quantity</label>
             <input type="number" value={filters.minQuantity} onChange={e => setFilters({ ...filters, minQuantity: e.target.value })} />
           </div>
+          <div>
+            <label>Min price (ETB)</label>
+            <input type="number" min="0" value={filters.minPrice} onChange={e => setFilters({ ...filters, minPrice: e.target.value })} />
+          </div>
+          <div>
+            <label>Max price (ETB)</label>
+            <input type="number" min="0" value={filters.maxPrice} onChange={e => setFilters({ ...filters, maxPrice: e.target.value })} />
+          </div>
+          {agriculture && (
+            <>
+              <div>
+                <label>Ready after</label>
+                <input type="date" value={filters.readyAfter} onChange={e => setFilters({ ...filters, readyAfter: e.target.value })} />
+              </div>
+              <div>
+                <label>Ready by</label>
+                <input type="date" value={filters.readyBy} onChange={e => setFilters({ ...filters, readyBy: e.target.value })} />
+              </div>
+            </>
+          )}
           <button className="btn btn-primary" onClick={fetchListings}>Search</button>
         </div>
         {error && <div className="alert error">{error}</div>}
