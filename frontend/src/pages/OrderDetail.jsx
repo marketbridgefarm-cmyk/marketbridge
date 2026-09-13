@@ -11,6 +11,9 @@ import { useAuth } from '../context/AuthContext.jsx';
 import RatingBox from '../components/RatingBox.jsx';
 import MessageThread from '../components/MessageThread.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
+import ActionCenter from '../components/ActionCenter.jsx';
+import OrderTimeline from '../components/OrderTimeline.jsx';
+import PaymentStatus from '../components/PaymentStatus.jsx';
 
 const shortId = (id) => id?.slice(0, 8) || '—';
 
@@ -53,6 +56,7 @@ export default function OrderDetail() {
   const { user } = useAuth();
 
   const [order, setOrder] = useState(null);
+  const [workflow, setWorkflow] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -83,9 +87,26 @@ export default function OrderDetail() {
       setError('');
 
       try {
-        const response = await api.get(`/orders/${orderId}`);
+        const [orderResponse, workflowResponse] = await Promise.allSettled([
+          api.get(`/orders/${orderId}`),
+          api.get(`/orders/${orderId}/workflow`),
+        ]);
 
-        setOrder(response.data?.order || null);
+        if (orderResponse.status === 'fulfilled') {
+          setOrder(orderResponse.value.data?.order || null);
+        } else {
+          throw orderResponse.reason;
+        }
+
+        // The workflow endpoint is a summary of the same order — if it
+        // fails for some reason the page still works from `order` alone,
+        // it just falls back to no Action Center / timeline / payment
+        // summary rather than blocking the whole page.
+        setWorkflow(
+          workflowResponse.status === 'fulfilled'
+            ? workflowResponse.value.data?.workflow || null
+            : null
+        );
       } catch (err) {
         setError(
           getError(err, 'Could not load order')
@@ -946,108 +967,16 @@ export default function OrderDetail() {
         {/* ================================================================== */}
         {/* NEXT ACTION CENTER */}
         {/* ================================================================== */}
+        {/* Driven by GET /orders/:id/workflow (orderWorkflowService.js) rather */}
+        {/* than reconstructing these rules per role here. See ActionCenter.jsx. */}
 
-        <div className="card next-action-card" id="next-action">
-          <div className="row-between">
-            <div>
+        {workflow ? (
+          <ActionCenter workflow={workflow} onScroll={scrollToSection} />
+        ) : (
+          isInspector && (
+            <div className="card next-action-card" id="next-action">
               <span className="eyebrow">NEXT STEP</span>
-              <h2 style={{ marginBottom: 6 }}>What happens next?</h2>
-              <p className="muted">The next action is assigned to the party responsible for it. Payment, inspection, transport movement and receipt are separate steps.</p>
-            </div>
-          </div>
-
-          {isBuyer && (
-            <div className="next-action-panel">
-              <strong>Buyer action</strong>
-              {order.status === 'PENDING_PAYMENT' && !marketplacePaid ? (
-                <p>Pay the seller for the agreed order amount.</p>
-              ) : transportJob?.status === 'ACCEPTED' && (
-                !marketplacePaid || !transportPaid || !inspectionPaymentsComplete
-              ) ? (
-                <p>Complete the remaining required payments before the transporter can start.</p>
-              ) : transportJob?.status === 'DELIVERED' ? (
-                <p>The produce has been delivered. Confirm physical receipt to complete the order.</p>
-              ) : transportJob?.status === 'IN_TRANSIT' ? (
-                <p>Transport is in progress. Wait for delivery confirmation.</p>
-              ) : transportJob?.status === 'PICKUP' ? (
-                <p>Pickup is confirmed. The transporter will start the trip shortly.</p>
-              ) : transportJob?.status === 'ACCEPTED' ? (
-                <p>Transporter selected. Continue with the payment center below.</p>
-              ) : !transportJob ? (
-                <p>Choose who will arrange transport.</p>
-              ) : (
-                <p>Monitor the order and continue from the payment or transport section below.</p>
-              )}
-
-              <div className="next-action-buttons">
-                {isBuyer && !marketplacePaid && (
-                  canResumeMarketplacePayment ? (
-                    <button type="button" className="btn btn-primary" onClick={() => scrollToSection('payment-center')}>Resume seller/order payment</button>
-                  ) : canPayMarketplace ? (
-                    <button type="button" className="btn btn-primary" onClick={() => scrollToSection('payment-center')}>Pay seller / order now</button>
-                  ) : null
-                )}
-                {isBuyer && transportJob?.status === 'ACCEPTED' && transportJob.method === 'HIRE_TRANSPORTER' && !transportPaid && (
-                  <button type="button" className="btn btn-primary" onClick={() => scrollToSection('payment-center')}>Pay transporter now</button>
-                )}
-                {isBuyer && transportJob?.status === 'ACCEPTED' && (!marketplacePaid || !transportPaid || !inspectionPaymentsComplete) && (
-                  <button type="button" className="btn btn-outline" onClick={() => scrollToSection('payment-center')}>Open payment center</button>
-                )}
-                {!transportJob && isParticipant && (
-                  <Link className="btn btn-primary" to={`/orders/${order.id}/transport`}>Arrange transport</Link>
-                )}
-                {transportJob && (
-                  <button type="button" className="btn btn-outline" onClick={() => scrollToSection('transport-section')}>Open transport steps</button>
-                )}
-                {transportJob?.status === 'DELIVERED' && (
-                  <button type="button" className="btn btn-primary" onClick={() => scrollToSection('confirm-receipt')}>Confirm receipt</button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {isSeller && (
-            <div className="next-action-panel">
-              <strong>Seller action</strong>
-              {isTransportArranger && transportJob && !transportJob.truckOwnerId && ['REQUESTED', 'QUOTED'].includes(transportJob.status) ? (
-                <p>Choose one of the transporter's quotes to assign the transport job.</p>
-              ) : !transportJob ? (
-                <p>Arrange transport yourself or leave the transport arrangement to the buyer.</p>
-              ) : transportJob.status === 'ACCEPTED' ? (
-                <p>Transporter has been assigned. The buyer must complete all required payments before the transporter can pick up the goods.</p>
-              ) : transportJob.status === 'PICKUP' ? (
-                <p>Payments are complete and pickup is confirmed. Waiting for the transporter to start the trip.</p>
-              ) : transportJob.status === 'IN_TRANSIT' ? (
-                <p>Produce is in transit. Wait for delivery confirmation.</p>
-              ) : transportJob.status === 'DELIVERED' ? (
-                <p>Delivery is complete. The buyer must confirm receipt.</p>
-              ) : (
-                <p>Continue monitoring the order from the transport and payment sections.</p>
-              )}
-              <div className="next-action-buttons">
-                {!transportJob && <Link className="btn btn-primary" to={`/orders/${order.id}/transport`}>Arrange transport</Link>}
-                {transportJob && isTransportArranger && !transportJob.truckOwnerId && ['REQUESTED', 'QUOTED'].includes(transportJob.status) && <button type="button" className="btn btn-primary" onClick={() => scrollToSection('transport-section')}>Review transport quotes</button>}
-                {transportJob && <button type="button" className="btn btn-outline" onClick={() => scrollToSection('transport-section')}>Open transport steps</button>}
-              </div>
-            </div>
-          )}
-
-          {isTransporter && (
-            <div className="next-action-panel">
-              <strong>Transporter action</strong>
-              {transportJob.status === 'ACCEPTED' && <p>All required payments must be PAID before you can mark the load picked up.</p>}
-              {transportJob.status === 'PICKUP' && <p>Pickup confirmed. Add pickup evidence and mark the trip IN_TRANSIT.</p>}
-              {transportJob.status === 'IN_TRANSIT' && <p>Complete delivery and submit delivery evidence.</p>}
-              {transportJob.status === 'DELIVERED' && <p>Trip complete. The buyer is now responsible for confirming receipt.</p>}
-              <div className="next-action-buttons">
-                <Link className="btn btn-primary" to="/dashboard/truck-owner">Open transport job dashboard</Link>
-              </div>
-            </div>
-          )}
-
-          {isInspector && (
-            <div className="next-action-panel">
-              <strong>Inspector action</strong>
+              <h2 style={{ marginBottom: 6 }}>Inspector action</h2>
               {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
               {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
               {assignedInspection.status === 'COMPLETED' && <p>Inspection report is published. The buyer can now complete any required inspection payment and continue the order.</p>}
@@ -1055,16 +984,25 @@ export default function OrderDetail() {
                 <Link className="btn btn-primary" to="/dashboard/inspector">Open inspection dashboard</Link>
               </div>
             </div>
-          )}
+          )
+        )}
 
-          {isAdmin && (
-            <div className="next-action-panel">
-              <strong>Administrator</strong>
-              <p>Review the order, payment ledger and transport state from the relevant operational dashboard.</p>
-              <div className="next-action-buttons"><Link className="btn btn-outline" to="/dashboard/admin">Open admin dashboard</Link></div>
+        {/* ================================================================== */}
+        {/* TIMELINE + PAYMENT STATUS */}
+        {/* ================================================================== */}
+
+        {workflow && (
+          <div className="card-grid two-col">
+            <div className="card">
+              <h2>Order timeline</h2>
+              <OrderTimeline steps={workflow.timeline} />
             </div>
-          )}
-        </div>
+            <div className="card">
+              <h2>Payment status</h2>
+              <PaymentStatus payments={workflow.payments} />
+            </div>
+          </div>
+        )}
 
         {/* ================================================================== */}
         {/* ORDER DETAILS */}
