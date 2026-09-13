@@ -4,6 +4,7 @@ const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { recordAuditEvent } = require('../utils/audit');
 const { isAdmin } = require('../utils/authorization');
+const { computeOrderWorkflow } = require('../services/orderWorkflowService');
 
 const router = express.Router();
 
@@ -188,6 +189,48 @@ router.get('/:id', authenticate, async (req, res) => {
   } catch (error) {
     console.error('GET ORDER ERROR:', error);
     return res.status(500).json({ error: 'Failed to load order' });
+  }
+});
+
+// ============================================================================
+// GET ORDER WORKFLOW
+// ============================================================================
+// Server-authoritative summary of where this order stands: current stage,
+// whose turn it is, outstanding payment obligations, a progress timeline,
+// and the exact set of actions available right now (each tagged with
+// whether the requesting user is allowed to perform it). The frontend
+// should render from this rather than re-deriving these rules per page.
+// ============================================================================
+
+router.get('/:id/workflow', authenticate, async (req, res) => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: orderInclude,
+    });
+
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    const assignedInspector = Boolean(
+      order.listing?.inspectionRequests?.some(
+        (request) => request.inspectorId === req.user.id
+      )
+    );
+
+    const allowed = req.user.roles?.includes('ADMIN') ||
+      order.buyerId === req.user.id ||
+      order.sellerId === req.user.id ||
+      order.transportJob?.truckOwnerId === req.user.id ||
+      assignedInspector;
+
+    if (!allowed) return res.status(403).json({ error: 'Not authorized to view this order' });
+
+    const workflow = computeOrderWorkflow(order, req.user.id, req.user.roles || []);
+
+    return res.json({ workflow });
+  } catch (error) {
+    console.error('GET ORDER WORKFLOW ERROR:', error);
+    return res.status(500).json({ error: 'Failed to compute order workflow' });
   }
 });
 
