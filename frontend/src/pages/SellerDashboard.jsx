@@ -83,7 +83,7 @@ export default function SellerDashboard() {
   const allInspections = listings.flatMap((l) => (inspectionsByListing[l.id] || []).map((r) => ({ ...r, listing: l })));
   const openOffers = latestOffers.filter((o) => o.status === 'PENDING' || (o.status === 'COUNTERED' && o.counteredBy === 'BUYER'));
   const confirmedSales = orders.filter((o) => ['CONFIRMED', 'TRANSPORT_ARRANGED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'].includes(o.status));
-  const grossSales = confirmedSales.reduce((sum, o) => sum + o.finalPrice, 0);
+  const grossSales = confirmedSales.reduce((sum, o) => sum + Number(o.finalPrice || 0), 0);
 
   const activityItems = [
     ...latestOffers.map((o) => ({
@@ -302,7 +302,7 @@ export default function SellerDashboard() {
                 <tbody>
                   {listings.map((l) => {
                     const offers = offersByListing[l.id] || [];
-                    const best = offers.reduce((max, o) => (o.amount > (max?.amount || 0) ? o : max), null);
+                    const best = offers.reduce((max, o) => (Number(o.amount || 0) > Number(max?.amount || 0) ? o : max), null);
                     const insp = inspectionsByListing[l.id] || [];
                     const latestInsp = insp[0];
                     return (
