@@ -1,3 +1,217 @@
+# Pass 4 — Money fields: Float → Decimal(18,2)
+
+Implements PDF recommendation #12 (Financial Data Type).
+
+## Schema
+
+Every genuine currency field in `backend/prisma/schema.prisma` moved from
+`Float` to `Decimal @db.Decimal(18, 2)`:
+
+`Listing.askingPrice`/`minAcceptablePrice` · `Offer.amount`/`counterAmount`
+· `InspectionRequest.fee` · `InspectionQuote.amount`/`counterAmount` ·
+`Order.finalPrice` · `TransportJob.agreedAmount` ·
+`TransportQuote.amount`/`counterAmount` · `DigitalProduct.price` ·
+`Payment.amount`/`commissionAmount`/`netAmount` ·
+`PaymentLedgerEntry.amount` · `Advertisement.priceQuoted`/`amountPaid`.
+
+Left as `Float` on purpose, because they aren't currency: `User.rating`,
+`Truck.rating`, `Listing.quantity`, `Offer.quantity`,
+`InspectionReport.quantity`/`moisture`, `Truck.capacity`,
+`TransportJob.requiredCapacity`, and `Payment.commissionRate` (a
+percentage, 0–100, not an amount).
+
+## Migration
+
+`202609130002_money_fields_to_decimal` — a guarded `DO $$` block that
+loops over the (table, column) pairs above and, only where the column is
+still `double precision`, runs
+`ALTER COLUMN ... TYPE numeric(18,2) USING ...::numeric(18,2)`. The
+explicit `USING` cast rounds any existing floating-point drift (e.g.
+`19.990000000000002`) to a clean 2-decimal value as part of the type
+change, rather than reinterpreting raw bytes. Safe to re-run.
+
+## Why this matters, concretely
+
+Floats can't exactly represent most 2-decimal currency values in binary,
+and repeated arithmetic (commission math, negotiation counters, refunds)
+on them accumulates drift. `numeric(18,2)` stores and compares the exact
+decimal value at the database layer — this is the literal ask in PDF
+recommendation #12 ("avoid floating-point money fields... particularly
+important for seller earnings, transporter payments, inspector fees,
+commissions, refunds, advertising and reconciliation").
+
+## The real risk of this change, and how it was handled
+
+Prisma Client returns `Decimal` fields as `Decimal.js` instances at
+runtime (not plain JS numbers), and serializes them to JSON as **strings**
+(e.g. `"150.00"`, not `150`). Any code doing raw arithmetic or comparison
+on these fields directly — `a + b`, `a > b` — silently breaks: string
+concatenation instead of addition, lexicographic instead of numeric
+comparison. `Number(x)` on a `Decimal` instance or a numeric string
+always works correctly, though, since `Decimal.valueOf()` returns the
+value as a string and `Number("150.00")` parses fine.
+
+**Audited every money field across the whole repo** for this exact
+pattern (`grep` for `+`/`-`/`*`/`/`/`>`/`<` directly adjacent to a money
+field name, backend and frontend):
+
+- **Backend was already almost entirely safe.** Every money computation
+  goes through `Number(...)`-wrapping helpers — `moneyEqual`/`roundMoney`
+  in `paymentService.js`, `money()` in `admin.js` (which wraps all the
+  `_sum.amount`/`_sum.commissionAmount` aggregate results too — Prisma's
+  `_sum` on a Decimal column also returns a `Decimal`, not a number, so
+  this mattered). It looks like this was written anticipating a Decimal
+  migration.
+- **One real, live bug found and fixed:** `backend/src/routes/listings.js`
+  — the "best offer" calculation on a listing did
+  `offer.amount > (max?.amount || 0)` directly. Fixed to
+  `Number(offer.amount || 0) > Number(max?.amount || 0)`.
+- **Two more found and fixed in `frontend/src/pages/SellerDashboard.jsx`**
+  (currently dead/unreachable code since the Pass 2 unified-dashboard
+  migration, but fixed anyway to avoid a latent bug if it's ever
+  resurrected): a `grossSales` reduce doing `sum + o.finalPrice`, and the
+  same "best offer" `o.amount > (max?.amount || 0)` pattern as the
+  listings.js one.
+- Every other reduce/sort/comparison touching a money field anywhere in
+  the frontend (`Dashboard.jsx`, `BuyerDashboard.jsx`, `OrderDetail.jsx`,
+  `ListingDetail.jsx`, `InspectorDashboard.jsx`) was already wrapped in
+  `Number(...)`.
+
+## Verified this pass
+
+- Every backend `.js` file: `node --check` — all pass.
+- Every frontend `.jsx`/`.js` file: `esbuild --jsx=automatic` — all parse
+  clean.
+- `schema.prisma` brace-balance sanity check (53 open / 53 close,
+  unchanged from before this pass's edits).
+- Manually re-read every model touched to confirm the right fields moved
+  and the right ones (ratings/quantities/capacity/rate) stayed `Float`.
+- **Not run** (no network/DB in this environment, same limitation as
+  every prior pass): `prisma validate`, `prisma migrate dev`/`deploy`
+  against a real Postgres instance, `npm run build`, the Jest suite.
+  Please run these — especially the migration itself — before merging.
+  In particular, run `prisma migrate dev` (or apply the SQL directly and
+  then `prisma db pull`/regenerate the client) so `@prisma/client` is
+  regenerated against the new schema before deploying any code from this
+  pass or Pass 3.
+
+## Known gaps / explicitly deferred (still true after this pass)
+
+- This migration fixes storage/comparison precision at the **database
+  layer** (the literal PDF ask). It does not rewrite in-application
+  arithmetic to use `Prisma.Decimal`/`decimal.js` throughout — commission
+  math in `paymentService.js` still computes in JS `Number` space
+  (`Math.round(value * 100) / 100`) before handing a plain number to
+  Prisma to store as a `Decimal`. That's a smaller, separate precision
+  concern (JS float arithmetic can still produce a value like
+  `19.990000000000002` before the final rounding step) and a much larger
+  refactor; out of scope here.
+- No `OrderPaymentObligation` model (#13), no `OrderEvent` timeline model
+  (#18), no automated E2E test suite (#15), Admin Control Center is still
+  the existing dashboard rather than the fuller metrics/alerts surface
+  (#17), Product marketplace still leans on agricultural listing fields
+  (#10).
+
+---
+
+# Pass 3 — Dispute UI + Payment Idempotency-Key
+
+## Backend
+
+- **Schema:** `Payment.idempotencyKey String? @unique` added (migration
+  `202609130001_add_payment_idempotency_key`, guarded/re-runnable like the
+  other late-added-column migrations in this repo).
+- **`backend/src/services/paymentService.js` — `createPayment`:** wraps
+  the insert in a try/catch for `P2002` on `idempotencyKey` and returns
+  the already-existing payment instead of throwing, mirroring the exact
+  pattern `settlePayment` already used for `PaymentEvent.eventId`.
+- **`backend/src/routes/orders.js` (via `orderWorkflowService.js`):**
+  `RAISE_DISPUTE` now reports `viewerCanPerform: true` for the assigned
+  truck owner too, not just buyer/seller — `POST /disputes` already
+  accepted a truck owner as a participant, the workflow read-model just
+  hadn't caught up.
+
+### Why: `POST /payments` had a real TOCTOU race
+
+The existing "duplicate payment protection" in `routes/payments.js` was a
+find-then-create check — not atomic. Two near-simultaneous requests (a
+retried request after a timeout, a double-tapped pay button, a mobile
+network retry) could both pass the check before either insert landed,
+creating two payment intents for the same obligation. This is exactly PDF
+recommendation #14 ("Add Idempotency-Key support to payment creation").
+
+`POST /payments` now reads an `Idempotency-Key` header (or
+`body.idempotencyKey`). If a payment already exists for that key:
+it's returned as-is (`200`, `replayed: true`) if it belongs to the same
+user, or `409` if it doesn't. If two requests with the same brand-new key
+race each other, the database's unique constraint lets exactly one insert
+win and `createPayment` hands the loser the winner's row — so the
+behavior is correct even in the exact race the app-level check couldn't
+close. Sending the header is optional; requests without one behave
+exactly as before.
+
+- `frontend/src/utils/chapaCheckout.js` — `startChapaPayment`, the single
+  shared entry point every payment flow in the app already goes through
+  (goods, inspection, transport, digital, advertising), now generates one
+  `crypto.randomUUID()` key per attempt and sends it as `Idempotency-Key`.
+  No other frontend file calls `POST /payments` directly, so this one
+  change covers every payment type without touching each page.
+
+## Frontend
+
+- **New:** a "Raise a dispute" form on `frontend/src/pages/OrderDetail.jsx`
+  (`id="raise-dispute"`) — closes the gap flagged at the end of Pass 1:
+  `POST /disputes` existed and the workflow engine already reported
+  `RAISE_DISPUTE` as available, but there was no UI anywhere to actually
+  raise one. Visible to the buyer, seller, or assigned truck owner on any
+  order that isn't `COMPLETED`/`CANCELLED`/already `DISPUTED`. Lets the
+  user pick which other participant it's against (buyer/seller/truck
+  owner, whichever aren't themselves), a type, and a description; shows a
+  "dispute open, an admin is reviewing it" notice instead once
+  `order.status === 'DISPUTED'`.
+- `frontend/src/components/WorkflowActions.jsx` — `RAISE_DISPUTE` now
+  maps to a scroll-to-`raise-dispute` button, same as the other action
+  codes.
+
+## Verified this pass
+
+- Every backend `.js` file: `node --check` — all pass.
+- Every frontend `.jsx`/`.js` file: `esbuild --jsx=automatic` — all parse
+  clean (used a bundled copy under `tsx`'s `node_modules` since this
+  environment still has no registry access to install esbuild/Vite
+  directly — same limitation as Pass 1/2).
+- Manually traced `Payment.idempotencyKey` through schema → migration →
+  `paymentService.createPayment` → `routes/payments.js` → the one
+  frontend call site, and confirmed no other call site creates a payment
+  directly (`grep`'d the whole frontend for `api.post` payment calls).
+- **Not run** (no network/DB in this environment): `prisma validate` /
+  `prisma migrate dev`, `npm run build`, the existing Jest suite
+  (`backend/test/*.test.js`). Please run these — especially applying the
+  new migration against a real Postgres instance — before merging.
+
+## Known gaps / explicitly deferred (still true after this pass)
+
+- Money is still `Float` everywhere in `schema.prisma`, not `Decimal`
+  (PDF #12) — the highest-value remaining P0 item, and a schema-wide
+  migration, so deliberately not attempted in this same pass as the
+  idempotency-key migration.
+- No `OrderPaymentObligation` model (#13), no `OrderEvent` timeline model
+  (#18), no automated E2E test suite (#15), Admin Control Center is still
+  the existing dashboard rather than the fuller metrics/alerts surface
+  (#17), Product marketplace still leans on agricultural listing fields
+  (#10).
+- Idempotency-Key is now wired for `POST /payments` specifically, per the
+  PDF's own top example — other financial mutations it also names
+  ("offer acceptance, inspection assignment, transport quote acceptance,
+  truck allocation, order creation") are already `$transaction`-wrapped
+  in `offers.js`/`inspections.js`/`transport.js`/`orders.js` (verified via
+  `grep -c '$transaction'` on each), so they don't have the same
+  find-then-create race `POST /payments` had — a request-level
+  Idempotency-Key for those routes would be a smaller, separate
+  enhancement, not a race-condition fix.
+
+---
+
 # MarketBridge — Workflow Engine + Action Center pass
 
 Implements PDF recommendation #4 (Server-Side Workflow Engine) and #5/#8
