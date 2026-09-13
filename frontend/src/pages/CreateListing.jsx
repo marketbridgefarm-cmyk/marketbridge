@@ -96,14 +96,21 @@ export default function CreateListing() {
         title: form.title || form.cropType,
         cropType: category === 'AGRICULTURAL' ? form.cropType : undefined,
         quantity: Number(form.quantity),
+        unit: form.unit,
         askingPrice: Number(form.askingPrice),
         minAcceptablePrice: form.minAcceptablePrice ? Number(form.minAcceptablePrice) : undefined,
+        location: form.location,
+        description: form.description || undefined,
         photos: form.photos.map(p => p.key),
         videos: form.videos.map(v => v.key)
       });
       nav(`/listings/${r.data.listing.id}`);
     } catch (e) {
-      setError(e.response?.data?.error || 'Could not create listing');
+      const data = e.response?.data;
+      const detail = data?.errors?.length
+        ? data.errors.map(er => er.msg).join(' ')
+        : data?.error;
+      setError(detail || 'Could not create listing');
     }
   }
 
