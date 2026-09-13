@@ -24,10 +24,8 @@ export default function Login() {
       const u = await login(email, password);
       const path = u.roles?.includes('ADMIN')
         ? '/dashboard/admin'
-        : u.roles?.includes('SELLER')
-        ? '/dashboard/seller'
-        : u.roles?.includes('BUYER')
-        ? '/dashboard/buyer'
+        : u.roles?.includes('BUYER') || u.roles?.includes('SELLER')
+        ? '/dashboard'
         : u.roles?.includes('INSPECTOR')
         ? '/dashboard/inspector'
         : u.roles?.includes('TRUCK_OWNER')
