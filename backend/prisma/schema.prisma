@@ -361,8 +361,12 @@ model Listing {
   cropType  String?
   quantity  Float
   unit      String
-  askingPrice Float
-  minAcceptablePrice Float?
+  // Money fields use Decimal(18,2) rather than Float — floating-point
+  // binary representation can't exactly store amounts like 19.99, and
+  // repeated arithmetic (commission math, negotiation, refunds) on Floats
+  // accumulates rounding drift. PDF recommendation #12.
+  askingPrice Decimal @db.Decimal(18, 2)
+  minAcceptablePrice Decimal? @db.Decimal(18, 2)
 
   location String
 
@@ -411,7 +415,7 @@ model Offer {
   seller   User   @relation("SellerOffers", fields: [sellerId], references: [id])
   sellerId String
 
-  amount Float
+  amount Decimal @db.Decimal(18, 2)
   quantity Float?
 
   // Immutable negotiation chain. A counter-offer is a new child offer.
@@ -426,7 +430,7 @@ model Offer {
   status OfferStatus @default(PENDING)
 
   // The latest negotiated price.
-  counterAmount Float?
+  counterAmount Decimal? @db.Decimal(18, 2)
 
   // Identifies whose turn it is after a counter-offer.
   //
@@ -472,7 +476,7 @@ model InspectionRequest {
 
   status InspectionStatus @default(REQUESTED)
 
-  fee Float?
+  fee Decimal? @db.Decimal(18, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -502,7 +506,7 @@ model InspectionQuote {
   inspector   User @relation(fields: [inspectorId], references: [id])
   inspectorId String
 
-  amount Float
+  amount Decimal @db.Decimal(18, 2)
   status InspectionQuoteStatus @default(PENDING)
   message String?
 
@@ -513,7 +517,7 @@ model InspectionQuote {
   childQuotes   InspectionQuote[] @relation("InspectionQuoteChain")
 
   // The latest negotiated price once a counter has been made.
-  counterAmount Float?
+  counterAmount Decimal? @db.Decimal(18, 2)
 
   // Whose turn it is to respond after a counter. REQUESTER means the
   // requester (buyer/seller) most recently countered, so the inspector
@@ -602,7 +606,7 @@ model Order {
   seller   User   @relation("SellerOrders", fields: [sellerId], references: [id])
   sellerId String
 
-  finalPrice Float
+  finalPrice Decimal @db.Decimal(18, 2)
 
   status OrderStatus @default(PENDING_PAYMENT)
 
@@ -688,7 +692,7 @@ model TransportJob {
 
   specialRequirements String?
 
-  agreedAmount Float?
+  agreedAmount Decimal? @db.Decimal(18, 2)
 
   status TransportStatus @default(REQUESTED)
 
@@ -753,7 +757,7 @@ model TransportQuote {
   truck   Truck  @relation(fields: [truckId], references: [id])
   truckId String
 
-  amount Float
+  amount Decimal @db.Decimal(18, 2)
 
   status TransportQuoteStatus @default(PENDING)
 
@@ -764,7 +768,7 @@ model TransportQuote {
   parentQuote   TransportQuote?  @relation("TransportQuoteChain", fields: [parentQuoteId], references: [id])
   childQuotes   TransportQuote[] @relation("TransportQuoteChain")
 
-  counterAmount Float?
+  counterAmount Decimal? @db.Decimal(18, 2)
 
   // REQUESTER = arranging party (buyer/seller) countered last, truck owner
   // must respond. PROVIDER = truck owner countered last, arranging party
@@ -797,7 +801,7 @@ model DigitalProduct {
   title       String
   productType String
 
-  price Float
+  price Decimal @db.Decimal(18, 2)
 
   // Private object-storage key.
   // New products should use fileKey.
@@ -866,7 +870,7 @@ model Payment {
 
   type PaymentType
 
-  amount Float
+  amount Decimal @db.Decimal(18, 2)
 
   currency String @default("ETB")
 
@@ -876,6 +880,14 @@ model Payment {
 
   // Internal/reference supplied by MarketBridge
   reference String?
+
+  // Client-supplied idempotency key (Idempotency-Key header on
+  // POST /payments). Lets the same "create this payment intent" request
+  // be safely retried/duplicated by a flaky network or a double-tapped
+  // button without creating two payment intents for the same obligation.
+  // PostgreSQL permits multiple NULLs, so requests that omit the header
+  // are unaffected.
+  idempotencyKey String? @unique
 
   // Payment provider
   provider String?
@@ -887,11 +899,13 @@ model Payment {
   // COMMISSION
   // --------------------------------------------------------------------------
 
+  // commissionRate stays a Float here — it's a percentage (0-100), not a
+  // currency amount, so it isn't subject to the same PDF #12 concern.
   commissionRate Float?
 
-  commissionAmount Float?
+  commissionAmount Decimal? @db.Decimal(18, 2)
 
-  netAmount Float?
+  netAmount Decimal? @db.Decimal(18, 2)
 
   // --------------------------------------------------------------------------
   // TIMESTAMPS
@@ -940,7 +954,7 @@ model PaymentLedgerEntry {
 
   type PaymentLedgerEntryType
 
-  amount Float
+  amount Decimal @db.Decimal(18, 2)
 
   currency String @default("ETB")
 
@@ -1035,8 +1049,8 @@ model Advertisement {
   endDate   DateTime
 
   // Server-calculated campaign price. Never accept a client-supplied price.
-  priceQuoted Float
-  amountPaid  Float?
+  priceQuoted Decimal @db.Decimal(18, 2)
+  amountPaid  Decimal? @db.Decimal(18, 2)
   currency    String @default("ETB")
 
   campaignReference String @unique
