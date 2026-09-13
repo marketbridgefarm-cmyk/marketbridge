@@ -1,19 +1,10 @@
 import React from 'react';
 import WorkflowActions from './WorkflowActions.jsx';
 
-// ============================================================================
-// ACTION CENTER
-// ============================================================================
-// Displays the current user's available next actions for an order, driven
-// entirely by GET /orders/:id/workflow (see orderWorkflowService.js on the
-// backend). This replaces per-role hand-written "what happens next" copy —
-// the stage, the responsible party, and which actions are ready all come
-// from the server so the page can't drift out of sync with the real rules.
-// ============================================================================
-
 const STAGE_COPY = {
   PENDING_PAYMENT: 'Waiting for the buyer to pay for the goods.',
-  ARRANGING_TRANSPORT: 'Transport still needs to be arranged.',
+  INSPECTION: 'Agricultural inspection must be completed before the goods payment can proceed.',
+  ARRANGING_TRANSPORT: 'Transport still needs to be arranged or a transport quote needs a response.',
   PAYMENT: 'One or more required payments are still outstanding.',
   PICKUP_READY: 'All required payments are complete. The transporter can start pickup.',
   PICKED_UP: 'The goods have been picked up. Waiting for the trip to start.',
@@ -33,13 +24,13 @@ const ACTOR_LABEL = {
   ADMIN: 'Administrator',
 };
 
-export default function ActionCenter({ workflow, onScroll }) {
+export default function ActionCenter({ workflow, onScroll, onActionComplete }) {
   if (!workflow) return null;
 
   const { currentStage, nextActor, viewerRole, actions } = workflow;
-
   const viewerActions = (actions || []).filter((a) => a.viewerCanPerform);
   const viewerHasReadyAction = viewerActions.some((a) => a.ready);
+  const stageLabel = String(currentStage || '').replace(/_/g, ' ');
 
   return (
     <div className="card next-action-card" id="next-action">
@@ -54,7 +45,7 @@ export default function ActionCenter({ workflow, onScroll }) {
             )}
           </p>
         </div>
-        <span className="badge">{currentStage.replace(/_/g, ' ')}</span>
+        <span className="badge">{stageLabel}</span>
       </div>
 
       {viewerRole === 'OTHER' ? (
@@ -69,6 +60,7 @@ export default function ActionCenter({ workflow, onScroll }) {
               actions={viewerActions}
               orderId={workflow.orderId}
               onScroll={onScroll}
+              onActionComplete={onActionComplete}
             />
           )}
         </div>

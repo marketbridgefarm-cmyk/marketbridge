@@ -1,38 +1,30 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import api from '../api/client';
 
 // ============================================================================
-// WORKFLOW ACTIONS
+// SERVER-DRIVEN WORKFLOW ACTIONS
 // ============================================================================
-// Renders the `actions` array returned by GET /orders/:id/workflow as a
-// consistent list of buttons/links. This component does not decide *whether*
-// an action is available — that already happened on the backend
-// (orderWorkflowService.js). It only decides *how* to trigger each action
-// code: some map to an existing on-page control (scroll to it), some
-// navigate to another page, and the rest render nothing so we never point
-// the user at a dead link.
-//
-// Reusable anywhere an order's workflow actions need to be shown (order
-// detail page today; dashboards can reuse the same component later).
+// The backend is authoritative about readiness and authorization. This
+// component executes actions that are safe to execute directly and routes to
+// the existing specialist UI when a form/evidence workflow is required.
 // ============================================================================
 
-// Action codes this component knows how to trigger, and how.
-// `kind: 'scroll'` -> scroll to an existing on-page section that already
-//   contains the real control (keeps a single source of execution logic).
-// `kind: 'link'`   -> navigate to another page that handles it.
-// Anything not listed here is display-only (shown in the "waiting on" line
-// via ActionCenter) and renders no button.
 const ACTION_UI = {
   PAY_MARKETPLACE: { kind: 'scroll', target: 'payment-center', label: 'Pay for goods' },
   PAY_INSPECTION: { kind: 'scroll', target: 'payment-center', label: 'Pay inspection fee' },
   PAY_TRANSPORT: { kind: 'scroll', target: 'payment-center', label: 'Pay transport' },
   ARRANGE_TRANSPORT: { kind: 'link', label: 'Arrange transport' },
   REVIEW_TRANSPORT_QUOTES: { kind: 'scroll', target: 'transport-section', label: 'Review transport quotes' },
-  START_PICKUP: { kind: 'link', to: '/dashboard/truck-owner', label: 'Open transport job dashboard' },
-  MARK_IN_TRANSIT: { kind: 'link', to: '/dashboard/truck-owner', label: 'Open transport job dashboard' },
-  MARK_DELIVERED: { kind: 'link', to: '/dashboard/truck-owner', label: 'Open transport job dashboard' },
+  REVIEW_INSPECTION_QUOTES: { kind: 'scroll', target: 'inspection-section', label: 'Review inspection quotes' },
+  START_INSPECTION: { kind: 'execute', label: 'Start inspection' },
+  SUBMIT_INSPECTION_REPORT: { kind: 'link', to: '/dashboard/inspector', label: 'Complete inspection report' },
+  START_PICKUP: { kind: 'execute', label: 'Start pickup' },
+  MARK_IN_TRANSIT: { kind: 'execute', label: 'Mark in transit' },
+  MARK_DELIVERED: { kind: 'execute', label: 'Mark delivered' },
   CONFIRM_RECEIPT: { kind: 'scroll', target: 'confirm-receipt', label: 'Confirm receipt' },
   RAISE_DISPUTE: { kind: 'scroll', target: 'raise-dispute', label: 'Raise a dispute' },
+  CANCEL_ORDER: { kind: 'execute', label: 'Cancel order' },
 };
 
 const ACTOR_LABEL = {
@@ -44,48 +36,116 @@ const ACTOR_LABEL = {
   ADMIN: 'an administrator',
 };
 
-export default function WorkflowActions({ actions, orderId, onScroll, emphasizeFirst = true }) {
-  const visible = (actions || []).filter((a) => ACTION_UI[a.code]);
+function errorMessage(error, fallback) {
+  return error?.response?.data?.error || error?.response?.data?.message || fallback;
+}
 
+export default function WorkflowActions({
+  actions,
+  orderId,
+  onScroll,
+  onActionComplete,
+  emphasizeFirst = true,
+}) {
+  const navigate = useNavigate();
+  const [busyCode, setBusyCode] = useState('');
+  const [localError, setLocalError] = useState('');
+
+  const visible = (actions || []).filter((a) => ACTION_UI[a.code]);
   if (visible.length === 0) return null;
 
+  async function execute(action) {
+    if (!action?.route?.method || !action?.route?.path) return;
+
+    setBusyCode(action.code);
+    setLocalError('');
+    try {
+      const method = action.route.method.toLowerCase();
+      const config = action.route.body ? { data: action.route.body } : undefined;
+      await api.request({ method, url: action.route.path, ...(config || {}) });
+      await onActionComplete?.(action);
+    } catch (error) {
+      setLocalError(errorMessage(error, `Could not complete: ${action.label || action.code}`));
+      // A stale workflow is common after another party acts. Refresh it so
+      // the user immediately sees the new server-authoritative next step.
+      await onActionComplete?.(action, { error });
+    } finally {
+      setBusyCode('');
+    }
+  }
+
+  function handleLink(action, ui) {
+    if (ui.to) {
+      const separator = ui.to.includes('?') ? '&' : '?';
+      if (action.inspectionRequestId && ui.to === '/dashboard/inspector') {
+        navigate(`${ui.to}${separator}inspectionId=${encodeURIComponent(action.inspectionRequestId)}`);
+        return;
+      }
+      navigate(ui.to);
+      return;
+    }
+    navigate(`/orders/${orderId}/transport`);
+  }
+
   return (
-    <div className="next-action-buttons">
-      {visible.map((action, index) => {
-        const ui = ACTION_UI[action.code];
-        const key = `${action.code}-${action.inspectionRequestId || index}`;
-        const primary = emphasizeFirst && index === 0 && action.enabled;
-        const btnClass = `btn ${primary ? 'btn-primary' : 'btn-outline'} btn-sm`;
+    <div>
+      {localError && <div className="alert alert-error" role="alert">{localError}</div>}
+      <div className="next-action-buttons">
+        {visible.map((action, index) => {
+          const ui = ACTION_UI[action.code];
+          const key = `${action.code}-${action.inspectionRequestId || index}`;
+          const primary = emphasizeFirst && index === 0 && action.enabled;
+          const btnClass = `btn ${primary ? 'btn-primary' : 'btn-outline'} btn-sm`;
+          const isBusy = busyCode === action.code;
 
-        if (!action.enabled) {
-          return (
-            <span key={key} className="workflow-action-pending muted">
-              {ui.label} — waiting on {ACTOR_LABEL[action.actorRole] || 'the responsible party'}
-              {action.reason ? ` (${action.reason})` : ''}
-            </span>
-          );
-        }
+          if (!action.enabled) {
+            return (
+              <span key={key} className="workflow-action-pending muted">
+                {ui.label} — waiting on {ACTOR_LABEL[action.actorRole] || 'the responsible party'}
+                {action.reason ? ` (${action.reason})` : ''}
+              </span>
+            );
+          }
 
-        if (ui.kind === 'link') {
-          const to = ui.to || `/orders/${orderId}/transport`;
+          if (ui.kind === 'link') {
+            return (
+              <button
+                key={key}
+                type="button"
+                className={btnClass}
+                onClick={() => handleLink(action, ui)}
+              >
+                {ui.label}
+              </button>
+            );
+          }
+
+          if (ui.kind === 'execute') {
+            return (
+              <button
+                key={key}
+                type="button"
+                className={btnClass}
+                disabled={isBusy}
+                onClick={() => execute(action)}
+              >
+                {isBusy ? 'Working…' : ui.label}
+              </button>
+            );
+          }
+
           return (
-            <Link key={key} className={btnClass} to={to}>
+            <button
+              key={key}
+              type="button"
+              className={btnClass}
+              onClick={() => onScroll?.(ui.target)}
+            >
               {ui.label}
-            </Link>
+            </button>
           );
-        }
-
-        return (
-          <button
-            key={key}
-            type="button"
-            className={btnClass}
-            onClick={() => onScroll?.(ui.target)}
-          >
-            {ui.label}
-          </button>
-        );
-      })}
+        })}
+      </div>
     </div>
   );
 }
