@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 
 import Navbar from './components/Navbar.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
@@ -12,8 +12,7 @@ import ListingDetail from './pages/ListingDetail.jsx';
 import CreateListing from './pages/CreateListing.jsx';
 import DigitalMarketplace from './pages/DigitalMarketplace.jsx';
 
-import SellerDashboard from './pages/SellerDashboard.jsx';
-import BuyerDashboard from './pages/BuyerDashboard.jsx';
+import Dashboard from './pages/Dashboard.jsx';
 import InspectorDashboard from './pages/InspectorDashboard.jsx';
 import TruckOwnerDashboard from './pages/TruckOwnerDashboard.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
@@ -83,23 +82,22 @@ export default function App() {
         />
 
         {/* Dashboards */}
+        {/* Unified buyer/seller dashboard (PDF recommendation #2) — every
+           registered user has both BUYER and SELLER roles by default
+           (see backend/src/routes/auth.js DEFAULT_ROLES), so this is a
+           single home base rather than two separate pages. The old
+           per-role routes below now just redirect here. */}
         <Route
-          path="/dashboard/seller"
+          path="/dashboard"
           element={
-            <ProtectedRoute role="SELLER">
-              <SellerDashboard />
+            <ProtectedRoute>
+              <Dashboard />
             </ProtectedRoute>
           }
         />
 
-        <Route
-          path="/dashboard/buyer"
-          element={
-            <ProtectedRoute role="BUYER">
-              <BuyerDashboard />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/dashboard/seller" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard/buyer" element={<Navigate to="/dashboard" replace />} />
 
         <Route
           path="/dashboard/inspector"
