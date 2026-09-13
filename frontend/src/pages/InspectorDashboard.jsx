@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
@@ -23,6 +23,7 @@ function modeLabel(mode) {
 
 export default function InspectorDashboard() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const currentUserId = user?.id || user?.userId || user?._id || null;
 
   const [tab, setTab] = useState('available');
@@ -70,6 +71,19 @@ export default function InspectorDashboard() {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  // Order Action Center can deep-link an inspector directly to the report
+  // workspace. This removes the dead-end of being sent to a dashboard and
+  // having to find the inspection manually.
+  useEffect(() => {
+    const requestedId = searchParams.get('inspectionId');
+    if (!requestedId || !mine.length) return;
+    const request = mine.find((item) => item.id === requestedId);
+    if (request?.status === 'IN_PROGRESS') {
+      openReportForm(request.id);
+      setTab('mine');
+    }
+  }, [searchParams, mine]);
 
   async function accept(id) {
     setError('');

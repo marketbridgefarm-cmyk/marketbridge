@@ -1042,7 +1042,11 @@ export default function OrderDetail() {
         {/* than reconstructing these rules per role here. See ActionCenter.jsx. */}
 
         {workflow ? (
-          <ActionCenter workflow={workflow} onScroll={scrollToSection} />
+          <ActionCenter
+            workflow={workflow}
+            onScroll={scrollToSection}
+            onActionComplete={() => load({ silent: true })}
+          />
         ) : (
           isInspector && (
             <div className="card next-action-card" id="next-action">
