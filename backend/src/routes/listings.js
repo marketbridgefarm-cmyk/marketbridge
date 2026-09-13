@@ -816,6 +816,7 @@ router.post(
 
       if (!errors.isEmpty()) {
         return res.status(400).json({
+          error: errors.array()[0]?.msg || 'Validation failed',
           errors: errors.array(),
         });
       }
