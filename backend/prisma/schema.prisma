@@ -138,6 +138,12 @@ enum TruckAvailability {
   OFFLINE
 }
 
+enum PaymentObligationStatus {
+  OPEN
+  PAID
+  CANCELLED
+}
+
 enum PaymentType {
   MARKETPLACE
   TRANSPORT
@@ -299,6 +305,9 @@ model User {
 
   // Payments
   paymentsCreated Payment[] @relation("PaymentCreatedBy")
+  paymentObligationsAsPayer PaymentObligation[] @relation("PaymentObligationPayer")
+  paymentObligationsAsBeneficiary PaymentObligation[] @relation("PaymentObligationBeneficiary")
+  orderEvents OrderEvent[] @relation("OrderEventActor")
 
   auditEvents AuditEvent[] @relation("AuditActor")
   transportEvidenceCreated TransportEvidence[] @relation("TransportEvidenceCreator")
@@ -484,6 +493,7 @@ model InspectionRequest {
   report InspectionReport?
 
   payments Payment[]
+  paymentObligations PaymentObligation[]
   quotes   InspectionQuote[]
 
   @@index([listingId])
@@ -619,6 +629,9 @@ model Order {
 
   payments Payment[]
 
+  paymentObligations PaymentObligation[]
+  events OrderEvent[]
+
   disputes Dispute[]
 
   ratings Rating[]
@@ -709,6 +722,7 @@ model TransportJob {
 
   // Transport payments
   payments Payment[]
+  paymentObligations PaymentObligation[]
 
   @@index([truckOwnerId])
   @@index([truckId])
@@ -828,6 +842,71 @@ model DigitalProduct {
 
   @@index([sellerId])
   @@index([status])
+}
+
+// ============================================================================
+// PAYMENT OBLIGATION
+// ============================================================================
+model PaymentObligation {
+  id String @id @default(uuid())
+
+  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+
+  type PaymentType
+  obligationKey String @unique
+
+  inspectionRequest   InspectionRequest? @relation(fields: [inspectionRequestId], references: [id], onDelete: SetNull)
+  inspectionRequestId String?
+
+  transportJob   TransportJob? @relation(fields: [transportJobId], references: [id], onDelete: SetNull)
+  transportJobId String?
+
+  payer   User @relation("PaymentObligationPayer", fields: [payerId], references: [id])
+  payerId String
+
+  beneficiary   User? @relation("PaymentObligationBeneficiary", fields: [beneficiaryId], references: [id])
+  beneficiaryId String?
+
+  amount Decimal @db.Decimal(18, 2)
+  currency String @default("ETB")
+  status PaymentObligationStatus @default(OPEN)
+
+  payment Payment?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId, status])
+  @@index([payerId, status])
+  @@index([beneficiaryId])
+  @@index([type])
+  @@index([inspectionRequestId])
+  @@index([transportJobId])
+}
+
+// ============================================================================
+// ORDER EVENT
+// ============================================================================
+model OrderEvent {
+  id String @id @default(uuid())
+
+  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+
+  actor   User? @relation("OrderEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorId String?
+
+  type String
+  fromStatus String?
+  toStatus String?
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([type, createdAt])
 }
 
 // ============================================================================
