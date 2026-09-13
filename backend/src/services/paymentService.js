@@ -86,28 +86,45 @@ async function createPayment(data) {
   );
 
   return prisma.$transaction(async (tx) => {
-    const payment = await tx.payment.create({
-      data: {
-        ...data,
+    let payment;
 
-        amount,
+    try {
+      payment = await tx.payment.create({
+        data: {
+          ...data,
 
-        currency:
-          data.currency ||
-          'ETB',
+          amount,
 
-        commissionRate:
-          rate,
+          currency:
+            data.currency ||
+            'ETB',
 
-        commissionAmount:
-          commission,
+          commissionRate:
+            rate,
 
-        netAmount,
+          commissionAmount:
+            commission,
 
-        status:
-          'PENDING',
-      },
-    });
+          netAmount,
+
+          status:
+            'PENDING',
+        },
+      });
+    } catch (error) {
+      // Idempotency-Key race: two requests carrying the same key both got
+      // past the route's pre-check and reached the create call at the same
+      // time. The unique constraint on Payment.idempotencyKey lets exactly
+      // one of them win; the loser returns the winner's row instead of
+      // erroring, so the caller sees one consistent payment either way.
+      if (error.code === 'P2002' && data.idempotencyKey) {
+        const existing = await tx.payment.findUnique({
+          where: { idempotencyKey: data.idempotencyKey },
+        });
+        if (existing) return existing;
+      }
+      throw error;
+    }
 
     await recordAuditEvent(tx, {
       actorId: data.createdById || null,
