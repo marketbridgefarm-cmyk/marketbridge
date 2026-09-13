@@ -77,9 +77,7 @@ enum InspectionQuoteStatus {
   EXPIRED
 }
 
-// Identifies whose turn it is in a quote negotiation (inspection or
-// transport). REQUESTER is the buyer/seller who requested the service;
-// PROVIDER is the inspector or truck owner who quoted on it.
+// Identifies whose turn it is in a quote negotiation.
 enum QuoteCounterParty {
   REQUESTER
   PROVIDER
@@ -183,7 +181,7 @@ enum AdType {
 }
 
 enum AdStatus {
-  // Legacy values retained for backwards compatibility with existing rows.
+  // Legacy values retained for backwards compatibility.
   PENDING
   ACTIVE
 
@@ -202,8 +200,6 @@ enum AdvertisementEventType {
   CLICK
 }
 
-// Visual layout template applied when rendering a BANNER campaign's creative.
-// Non-BANNER campaign types ignore this field entirely.
 enum BannerTemplate {
   CLASSIC
   BOLD
@@ -250,6 +246,7 @@ model User {
   phone        String?
   passwordHash String
 
+  // Normal users can act as both buyer and seller.
   roles Role[] @default([BUYER, SELLER])
 
   location           String?
@@ -265,14 +262,17 @@ model User {
   listings Listing[] @relation("SellerListings")
 
   // Offers
-  offersMade Offer[] @relation("BuyerOffers")
+  offersMade     Offer[] @relation("BuyerOffers")
   offersReceived Offer[] @relation("SellerOffers")
 
   // Inspections
   inspectionsRequested InspectionRequest[] @relation("Requester")
   inspectionsPerformed InspectionRequest[] @relation("Inspector")
-  inspectionQuotes    InspectionQuote[]
-  inspectionEvidenceCreated InspectionEvidence[] @relation("InspectionEvidenceCreator")
+
+  inspectionQuotes InspectionQuote[]
+
+  inspectionEvidenceCreated InspectionEvidence[]
+    @relation("InspectionEvidenceCreator")
 
   // Trucks
   trucks Truck[]
@@ -282,7 +282,7 @@ model User {
   ordersAsSeller Order[] @relation("SellerOrders")
 
   // Transport
-  transportJobsHauled TransportJob[]   @relation("TruckOwnerJobs")
+  transportJobsHauled TransportJob[] @relation("TruckOwnerJobs")
   transportQuotes     TransportQuote[] @relation("TruckOwnerQuotes")
 
   // Digital products
@@ -305,17 +305,26 @@ model User {
 
   // Payments
   paymentsCreated Payment[] @relation("PaymentCreatedBy")
-  paymentObligationsAsPayer PaymentObligation[] @relation("PaymentObligationPayer")
-  paymentObligationsAsBeneficiary PaymentObligation[] @relation("PaymentObligationBeneficiary")
+
+  paymentObligationsAsPayer PaymentObligation[]
+    @relation("PaymentObligationPayer")
+
+  paymentObligationsAsBeneficiary PaymentObligation[]
+    @relation("PaymentObligationBeneficiary")
+
+  // Order events
   orderEvents OrderEvent[] @relation("OrderEventActor")
 
+  // Audit
   auditEvents AuditEvent[] @relation("AuditActor")
-  transportEvidenceCreated TransportEvidence[] @relation("TransportEvidenceCreator")
+
+  transportEvidenceCreated TransportEvidence[]
+    @relation("TransportEvidenceCreator")
 
   // Digital purchases
   digitalPurchases DigitalPurchase[] @relation("DigitalPurchases")
 
-  // Ledger
+  // Financial ledger
   ledgerEntries PaymentLedgerEntry[]
 
   @@index([email])
@@ -325,10 +334,6 @@ model User {
 
 // ============================================================================
 // AUDIT EVENT
-// ============================================================================
-//
-// Append-only application audit record. Critical domain mutations write an
-// event inside the same transaction as the state change whenever possible.
 // ============================================================================
 
 model AuditEvent {
@@ -341,7 +346,7 @@ model AuditEvent {
   resourceType String
   resourceId   String?
 
-  // Structured context. Never use this field for secrets, passwords or tokens.
+  // Never store passwords, tokens, or secrets here.
   metadata Json?
 
   ipAddress String?
@@ -366,26 +371,24 @@ model Listing {
 
   category ListingCategory @default(AGRICULTURAL)
 
-  title     String?
-  cropType  String?
-  quantity  Float
-  unit      String
-  // Money fields use Decimal(18,2) rather than Float — floating-point
-  // binary representation can't exactly store amounts like 19.99, and
-  // repeated arithmetic (commission math, negotiation, refunds) on Floats
-  // accumulates rounding drift. PDF recommendation #12.
-  askingPrice Decimal @db.Decimal(18, 2)
+  title    String?
+  cropType String?
+
+  quantity Float
+  unit     String
+
+  askingPrice       Decimal  @db.Decimal(18, 2)
   minAcceptablePrice Decimal? @db.Decimal(18, 2)
 
   location String
 
-  harvestedDate DateTime?
-  readinessDate DateTime?
+  harvestedDate    DateTime?
+  readinessDate    DateTime?
   pickupWindowStart DateTime?
-  pickupWindowEnd DateTime?
+  pickupWindowEnd   DateTime?
 
-  photos  String[]
-  videos  String[]
+  photos String[]
+  videos String[]
 
   description String?
 
@@ -396,10 +399,10 @@ model Listing {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  offers            Offer[]
+  offers             Offer[]
   inspectionRequests InspectionRequest[]
-  orders            Order[]
-  ads               Advertisement[]
+  orders             Order[]
+  ads                Advertisement[]
 
   @@index([sellerId])
   @@index([category])
@@ -424,30 +427,22 @@ model Offer {
   seller   User   @relation("SellerOffers", fields: [sellerId], references: [id])
   sellerId String
 
-  amount Decimal @db.Decimal(18, 2)
+  amount   Decimal @db.Decimal(18, 2)
   quantity Float?
 
-  // Immutable negotiation chain. A counter-offer is a new child offer.
+  // Immutable negotiation chain.
   parentOfferId String?
-  parentOffer Offer? @relation("OfferChain", fields: [parentOfferId], references: [id])
-  childOffers Offer[] @relation("OfferChain")
+  parentOffer   Offer?  @relation("OfferChain", fields: [parentOfferId], references: [id])
+  childOffers   Offer[] @relation("OfferChain")
 
-  // Optional deadline. New agricultural offers/counters receive a server-side
-  // expiry; existing rows remain nullable for backwards compatibility.
   expiresAt DateTime?
 
   status OfferStatus @default(PENDING)
 
-  // The latest negotiated price.
   counterAmount Decimal? @db.Decimal(18, 2)
 
-  // Identifies whose turn it is after a counter-offer.
-  //
-  // SELLER means the seller most recently countered,
-  // so the buyer must respond.
-  //
-  // BUYER means the buyer most recently countered,
-  // so the seller must respond.
+  // SELLER = seller most recently countered; buyer responds.
+  // BUYER  = buyer most recently countered; seller responds.
   counteredBy OfferCounterParty?
 
   message String?
@@ -457,12 +452,13 @@ model Offer {
 
   @@index([listingId])
   @@index([buyerId])
+  @@index([sellerId])
   @@index([status])
   @@index([counteredBy])
-  @@index([sellerId])
   @@index([parentOfferId])
   @@index([expiresAt])
 }
+
 // ============================================================================
 // INSPECTION REQUEST
 // ============================================================================
@@ -493,8 +489,10 @@ model InspectionRequest {
   report InspectionReport?
 
   payments Payment[]
+
   paymentObligations PaymentObligation[]
-  quotes   InspectionQuote[]
+
+  quotes InspectionQuote[]
 
   @@index([listingId])
   @@index([requestedById])
@@ -513,26 +511,28 @@ model InspectionQuote {
   inspectionRequest   InspectionRequest @relation(fields: [inspectionRequestId], references: [id])
   inspectionRequestId String
 
-  inspector   User @relation(fields: [inspectorId], references: [id])
+  inspector   User   @relation(fields: [inspectorId], references: [id])
   inspectorId String
 
   amount Decimal @db.Decimal(18, 2)
+
   status InspectionQuoteStatus @default(PENDING)
+
   message String?
 
-  // Immutable negotiation chain, mirroring Offer. A counter is a new child
-  // quote row rather than a mutation of the original.
+  // Immutable negotiation chain.
   parentQuoteId String?
-  parentQuote   InspectionQuote?  @relation("InspectionQuoteChain", fields: [parentQuoteId], references: [id])
-  childQuotes   InspectionQuote[] @relation("InspectionQuoteChain")
 
-  // The latest negotiated price once a counter has been made.
+  parentQuote InspectionQuote?
+    @relation("InspectionQuoteChain", fields: [parentQuoteId], references: [id])
+
+  childQuotes InspectionQuote[]
+    @relation("InspectionQuoteChain")
+
   counterAmount Decimal? @db.Decimal(18, 2)
 
-  // Whose turn it is to respond after a counter. REQUESTER means the
-  // requester (buyer/seller) most recently countered, so the inspector
-  // must respond next. PROVIDER means the inspector most recently
-  // countered, so the requester must respond next.
+  // REQUESTER = requester most recently countered.
+  // PROVIDER  = inspector most recently countered.
   counteredBy QuoteCounterParty?
 
   expiresAt DateTime?
@@ -555,7 +555,7 @@ model InspectionReport {
   id String @id @default(uuid())
 
   request   InspectionRequest @relation(fields: [requestId], references: [id])
-  requestId String             @unique
+  requestId String @unique
 
   quantity Float
 
@@ -589,12 +589,16 @@ model InspectionEvidence {
 
   photos String[]
   videos String[]
+
   gpsLocation String?
-  notes String?
+  notes       String?
 
   capturedAt DateTime @default(now())
+
   createdById String
-  createdBy User @relation("InspectionEvidenceCreator", fields: [createdById], references: [id])
+
+  createdBy User
+    @relation("InspectionEvidenceCreator", fields: [createdById], references: [id])
 
   @@index([reportId, type])
   @@index([createdById, capturedAt])
@@ -629,7 +633,10 @@ model Order {
 
   payments Payment[]
 
+  // Durable payment obligations for the order.
   paymentObligations PaymentObligation[]
+
+  // Durable customer-facing workflow events.
   events OrderEvent[]
 
   disputes Dispute[]
@@ -694,7 +701,7 @@ model TransportJob {
   truckOwner   User?  @relation("TruckOwnerJobs", fields: [truckOwnerId], references: [id])
   truckOwnerId String?
 
-  truck   Truck?  @relation(fields: [truckId], references: [id])
+  truck   Truck? @relation(fields: [truckId], references: [id])
   truckId String?
 
   pickupLocation String
@@ -709,7 +716,7 @@ model TransportJob {
 
   status TransportStatus @default(REQUESTED)
 
-  pickupConfirmedAt    DateTime?
+  pickupConfirmedAt   DateTime?
   deliveredConfirmedAt DateTime?
 
   incidentNotes String?
@@ -718,10 +725,11 @@ model TransportJob {
   updatedAt DateTime @updatedAt
 
   quotes TransportQuote[]
+
   evidence TransportEvidence[]
 
-  // Transport payments
   payments Payment[]
+
   paymentObligations PaymentObligation[]
 
   @@index([truckOwnerId])
@@ -744,12 +752,16 @@ model TransportEvidence {
 
   photos String[]
   videos String[]
+
   gpsLocation String?
-  notes String?
+  notes       String?
 
   capturedAt DateTime @default(now())
+
   createdById String
-  createdBy User @relation("TransportEvidenceCreator", fields: [createdById], references: [id])
+
+  createdBy User
+    @relation("TransportEvidenceCreator", fields: [createdById], references: [id])
 
   @@index([transportJobId, type])
   @@index([createdById, capturedAt])
@@ -768,7 +780,7 @@ model TransportQuote {
   truckOwner   User   @relation("TruckOwnerQuotes", fields: [truckOwnerId], references: [id])
   truckOwnerId String
 
-  truck   Truck  @relation(fields: [truckId], references: [id])
+  truck   Truck   @relation(fields: [truckId], references: [id])
   truckId String
 
   amount Decimal @db.Decimal(18, 2)
@@ -777,16 +789,19 @@ model TransportQuote {
 
   message String?
 
-  // Immutable negotiation chain, mirroring Offer/InspectionQuote.
+  // Immutable negotiation chain.
   parentQuoteId String?
-  parentQuote   TransportQuote?  @relation("TransportQuoteChain", fields: [parentQuoteId], references: [id])
-  childQuotes   TransportQuote[] @relation("TransportQuoteChain")
+
+  parentQuote TransportQuote?
+    @relation("TransportQuoteChain", fields: [parentQuoteId], references: [id])
+
+  childQuotes TransportQuote[]
+    @relation("TransportQuoteChain")
 
   counterAmount Decimal? @db.Decimal(18, 2)
 
-  // REQUESTER = arranging party (buyer/seller) countered last, truck owner
-  // must respond. PROVIDER = truck owner countered last, arranging party
-  // must respond.
+  // REQUESTER = arranging party most recently countered.
+  // PROVIDER  = truck owner most recently countered.
   counteredBy QuoteCounterParty?
 
   expiresAt DateTime?
@@ -818,7 +833,6 @@ model DigitalProduct {
   price Decimal @db.Decimal(18, 2)
 
   // Private object-storage key.
-  // New products should use fileKey.
   fileKey String?
 
   fileName      String?
@@ -826,7 +840,7 @@ model DigitalProduct {
   fileSizeBytes Int?
 
   // Legacy field retained for migration/reference.
-  // It should not be exposed publicly.
+  // Should not be exposed publicly.
   fileUrl String?
 
   description String?
@@ -847,32 +861,59 @@ model DigitalProduct {
 // ============================================================================
 // PAYMENT OBLIGATION
 // ============================================================================
+//
+// Durable financial obligation generated from an order workflow.
+//
+// IMPORTANT:
+// The foreign key lives on Payment as Payment.obligationId.
+// Therefore this model contains the inverse relation only:
+//
+//     payment Payment? @relation("PaymentObligationPayment")
+//
+// Do NOT add paymentId here.
+// ============================================================================
+
 model PaymentObligation {
   id String @id @default(uuid())
 
-  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderId String
 
   type PaymentType
+
+  // Stable business key used to prevent duplicate obligations.
   obligationKey String @unique
 
-  inspectionRequest   InspectionRequest? @relation(fields: [inspectionRequestId], references: [id], onDelete: SetNull)
+  inspectionRequest   InspectionRequest?
+    @relation(fields: [inspectionRequestId], references: [id], onDelete: SetNull)
+
   inspectionRequestId String?
 
-  transportJob   TransportJob? @relation(fields: [transportJobId], references: [id], onDelete: SetNull)
+  transportJob   TransportJob?
+    @relation(fields: [transportJobId], references: [id], onDelete: SetNull)
+
   transportJobId String?
 
-  payer   User @relation("PaymentObligationPayer", fields: [payerId], references: [id])
+  payer User
+    @relation("PaymentObligationPayer", fields: [payerId], references: [id])
+
   payerId String
 
-  beneficiary   User? @relation("PaymentObligationBeneficiary", fields: [beneficiaryId], references: [id])
+  beneficiary User?
+    @relation("PaymentObligationBeneficiary", fields: [beneficiaryId], references: [id])
+
   beneficiaryId String?
 
   amount Decimal @db.Decimal(18, 2)
+
   currency String @default("ETB")
+
   status PaymentObligationStatus @default(OPEN)
 
+  // INVERSE SIDE of Payment.obligation.
+  // The actual FK is Payment.obligationId.
   payment Payment?
+    @relation("PaymentObligationPayment")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -888,18 +929,28 @@ model PaymentObligation {
 // ============================================================================
 // ORDER EVENT
 // ============================================================================
+//
+// Durable customer-facing workflow history.
+// Separate from AuditEvent so users can see meaningful order progress
+// without exposing internal audit information.
+// ============================================================================
+
 model OrderEvent {
   id String @id @default(uuid())
 
-  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderId String
 
-  actor   User? @relation("OrderEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actor User?
+    @relation("OrderEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
   actorId String?
 
   type String
+
   fromStatus String?
-  toStatus String?
+  toStatus   String?
+
   metadata Json?
 
   createdAt DateTime @default(now())
@@ -916,39 +967,75 @@ model OrderEvent {
 model Payment {
   id String @id @default(uuid())
 
-  // Marketplace/order payment
+  // --------------------------------------------------------------------------
+  // MARKETPLACE / ORDER PAYMENT
+  // --------------------------------------------------------------------------
+
   order   Order?  @relation(fields: [orderId], references: [id])
   orderId String?
 
-  // User who created the payment
-  createdBy   User? @relation("PaymentCreatedBy", fields: [createdById], references: [id])
+  // --------------------------------------------------------------------------
+  // USER WHO CREATED THE PAYMENT
+  // --------------------------------------------------------------------------
+
+  createdBy   User?  @relation("PaymentCreatedBy", fields: [createdById], references: [id])
   createdById String?
 
-  // Digital product payment
+  // --------------------------------------------------------------------------
+  // DIGITAL PRODUCT PAYMENT
+  // --------------------------------------------------------------------------
+
   digitalProduct   DigitalProduct? @relation(fields: [digitalProductId], references: [id])
   digitalProductId String?
 
-  // Advertising payment
+  // --------------------------------------------------------------------------
+  // ADVERTISING PAYMENT
+  // --------------------------------------------------------------------------
+
   advertisement   Advertisement? @relation(fields: [advertisementId], references: [id])
   advertisementId String?
 
-  // Inspection payment
+  // --------------------------------------------------------------------------
+  // INSPECTION PAYMENT
+  // --------------------------------------------------------------------------
+
   inspectionRequest   InspectionRequest? @relation(fields: [inspectionRequestId], references: [id])
   inspectionRequestId String?
 
-  // Transport payment
+  // --------------------------------------------------------------------------
+  // TRANSPORT PAYMENT
+  // --------------------------------------------------------------------------
+
   transportJob   TransportJob? @relation(fields: [transportJobId], references: [id])
   transportJobId String?
 
-  // Digital purchase
+  // --------------------------------------------------------------------------
+  // DIGITAL PURCHASE
+  // --------------------------------------------------------------------------
+
   digitalPurchase DigitalPurchase?
 
   // --------------------------------------------------------------------------
   // PAYMENT OBLIGATION
   // --------------------------------------------------------------------------
-  // One payment may satisfy one PaymentObligation.
-  // The relation is explicitly named to match PaymentObligation.payment.
-  paymentObligation PaymentObligation? @relation("PaymentObligationPayment")
+  //
+  // IMPORTANT:
+  // Payment owns the foreign key.
+  //
+  // One Payment may satisfy one PaymentObligation.
+  // One PaymentObligation may have at most one Payment.
+  //
+  // This is intentionally named so it matches:
+  //
+  // PaymentObligation.payment
+  //
+  // in the PaymentObligation model.
+  // --------------------------------------------------------------------------
+
+  obligation   PaymentObligation?
+    @relation("PaymentObligationPayment", fields: [obligationId], references: [id])
+
+  obligationId String? @unique
 
   // --------------------------------------------------------------------------
   // PAYMENT DATA
@@ -964,29 +1051,22 @@ model Payment {
 
   status PaymentStatus @default(PENDING)
 
-  // Internal/reference supplied by MarketBridge
+  // Internal/reference supplied by MarketBridge.
   reference String?
 
-  // Client-supplied idempotency key (Idempotency-Key header on
-  // POST /payments). Lets the same "create this payment intent" request
-  // be safely retried/duplicated by a flaky network or a double-tapped
-  // button without creating two payment intents for the same obligation.
-  // PostgreSQL permits multiple NULLs, so requests that omit the header
-  // are unaffected.
+  // Client-supplied idempotency key.
   idempotencyKey String? @unique
 
-  // Payment provider
+  // Payment provider.
   provider String?
 
-  // Chapa/provider transaction reference
+  // Provider transaction reference.
   providerTransactionId String?
 
   // --------------------------------------------------------------------------
   // COMMISSION
   // --------------------------------------------------------------------------
 
-  // commissionRate stays a Float here — it's a percentage (0-100), not a
-  // currency amount, so it isn't subject to the same PDF #12 concern.
   commissionRate Float?
 
   commissionAmount Decimal? @db.Decimal(18, 2)
@@ -1059,7 +1139,7 @@ model PaymentLedgerEntry {
 // PAYMENT EVENT
 // ============================================================================
 //
-// Stores webhook/provider events for idempotency and audit purposes.
+// Stores provider/webhook events for idempotency and audit purposes.
 // ============================================================================
 
 model PaymentEvent {
@@ -1134,20 +1214,21 @@ model Advertisement {
   startDate DateTime
   endDate   DateTime
 
-  // Server-calculated campaign price. Never accept a client-supplied price.
+  // Server-calculated campaign price.
   priceQuoted Decimal @db.Decimal(18, 2)
-  amountPaid  Decimal? @db.Decimal(18, 2)
-  currency    String @default("ETB")
+
+  amountPaid Decimal? @db.Decimal(18, 2)
+
+  currency String @default("ETB")
 
   campaignReference String @unique
 
-  // Creative and destination metadata. creativeImageKey is a private object-
-  // storage key; clients receive only short-lived signed URLs.
-  headline          String?
-  destinationUrl    String?
-  creativeImageKey  String?
+  // Creative/destination metadata.
+  headline         String?
+  destinationUrl   String?
+  creativeImageKey String?
 
-  // Layout template for BANNER creatives only; ignored by every other type.
+  // Banner layout template.
   bannerTemplate BannerTemplate @default(CLASSIC)
 
   // Moderation/publication audit trail.
@@ -1156,7 +1237,8 @@ model Advertisement {
   telegramPostReference String?
 
   payments Payment[]
-  events   AdvertisementEvent[]
+
+  events AdvertisementEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1168,6 +1250,10 @@ model Advertisement {
   @@index([createdAt])
 }
 
+// ============================================================================
+// ADVERTISEMENT EVENT
+// ============================================================================
+
 model AdvertisementEvent {
   id String @id @default(uuid())
 
@@ -1175,6 +1261,7 @@ model AdvertisementEvent {
   advertisementId String
 
   eventType AdvertisementEventType
+
   createdAt DateTime @default(now())
 
   @@index([advertisementId, eventType, createdAt])
