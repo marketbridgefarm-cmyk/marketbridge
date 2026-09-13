@@ -93,6 +93,7 @@ function buildPaymentSnapshot(order) {
     inspections,
     transport,
     inspectionRequestsExist: inspectionRequests.length > 0,
+    inspectionRequests: inspectionRequests.map((r) => ({ id: r.id, status: r.status, inspectorId: r.inspectorId, requestedById: r.requestedById, fee: r.fee })),
     allInspectionsPaid,
     allInspectionsCompleted,
     allPaid: marketplace.paid && allInspectionsPaid && transportPaid,
@@ -194,6 +195,18 @@ function computeStage(order, payments) {
   if (order.status === 'COMPLETED') return 'COMPLETED';
 
   const job = order.transportJob || null;
+  const agricultural = order.listing?.category === 'AGRICULTURAL';
+
+  // For agricultural orders, an accepted/in-progress inspection is a hard
+  // commercial gate: the buyer must see the inspection result before paying
+  // for the produce. A still-unassigned request remains a negotiation stage.
+  if (agricultural && payments.inspectionRequestsExist) {
+    if (!payments.allInspectionsCompleted) {
+      const requests = payments.inspectionRequests || [];
+      if (requests.some((r) => ['REQUESTED'].includes(r.status))) return 'INSPECTION';
+      return 'INSPECTION';
+    }
+  }
 
   if (!payments.marketplace.paid && !job) return 'PENDING_PAYMENT';
   if (!job) return payments.marketplace.paid ? 'ARRANGING_TRANSPORT' : 'PENDING_PAYMENT';
@@ -236,22 +249,81 @@ function cancelEligibility(order, isBuyer, isSeller, isAdmin) {
 // ----------------------------------------------------------------------------
 
 function buildActions(order, payments, viewer) {
-  const { isBuyer, isSeller, isTruckOwner, isAdmin } = viewer;
+  const { isBuyer, isSeller, isTruckOwner, isInspector, isAdmin } = viewer;
   const job = order.transportJob || null;
   const terminal = TERMINAL_ORDER_STATUSES.includes(order.status);
   const actions = [];
 
   const push = (action) => actions.push({ reason: null, ...action, enabled: action.ready && action.viewerCanPerform });
 
-  // 1. Pay for the goods.
+  // 1. Agricultural inspection workflow. Inspection actions are executable
+  // from the order Action Center so an assigned inspector is never stranded
+  // on a generic dashboard link.
+  const inspectionRequests = (order.listing?.inspectionRequests || []).filter(
+    (r) => r.status !== 'CANCELLED'
+  );
+
+  for (const request of inspectionRequests) {
+    const assignedToViewer = request.inspectorId === viewer.userId;
+    const requesterCanManage = request.requestedById === viewer.userId || isBuyer || isSeller || isAdmin;
+
+    if (request.status === 'REQUESTED' && requesterCanManage) {
+      const pendingQuotes = (request.quotes || []).filter((q) =>
+        ['PENDING', 'COUNTERED'].includes(q.status)
+      );
+      push({
+        code: 'REVIEW_INSPECTION_QUOTES',
+        label: 'Review inspection quotes',
+        actorRole: 'BUYER_OR_SELLER',
+        inspectionRequestId: request.id,
+        viewerCanPerform: true,
+        ready: pendingQuotes.length > 0,
+        reason: pendingQuotes.length ? null : 'Waiting for an inspector quote',
+        pendingQuoteCount: pendingQuotes.length,
+        route: { method: 'GET', path: `/inspections/${request.id}/quotes` },
+      });
+    }
+
+    if (request.status === 'ACCEPTED' && assignedToViewer) {
+      push({
+        code: 'START_INSPECTION',
+        label: 'Start inspection',
+        actorRole: 'INSPECTOR',
+        inspectionRequestId: request.id,
+        viewerCanPerform: isInspector,
+        ready: true,
+        route: { method: 'POST', path: `/inspections/${request.id}/start` },
+      });
+    }
+
+    if (request.status === 'IN_PROGRESS' && assignedToViewer) {
+      push({
+        code: 'SUBMIT_INSPECTION_REPORT',
+        label: 'Complete inspection report',
+        actorRole: 'INSPECTOR',
+        inspectionRequestId: request.id,
+        viewerCanPerform: isInspector,
+        ready: true,
+        route: { method: 'POST', path: `/inspections/${request.id}/report` },
+      });
+    }
+  }
+
+  // 2. Pay for the goods. For agricultural orders with an active inspection
+  // request, payment is intentionally unavailable until every inspection is
+  // completed. The same rule is enforced server-side in /payments.
   if (!payments.marketplace.paid) {
     push({
       code: 'PAY_MARKETPLACE',
       label: 'Pay for goods',
       actorRole: 'BUYER',
       viewerCanPerform: isBuyer,
-      ready: !terminal,
-      reason: terminal ? 'Order is no longer active' : null,
+      ready: !terminal && (!order.listing || order.listing.category !== 'AGRICULTURAL' || !payments.inspectionRequestsExist || payments.allInspectionsCompleted),
+      reason: terminal
+        ? 'Order is no longer active'
+        : (order.listing?.category === 'AGRICULTURAL' && payments.inspectionRequestsExist && !payments.allInspectionsCompleted
+          ? 'Complete the agricultural inspection before paying for the goods'
+          : null),
       route: {
         method: 'POST',
         path: '/payments',
@@ -437,9 +509,12 @@ function computeOrderWorkflow(order, viewerUserId, viewerRoles = []) {
   const isBuyer = order.buyerId === viewerUserId;
   const isSeller = order.sellerId === viewerUserId;
   const isTruckOwner = order.transportJob?.truckOwnerId === viewerUserId;
+  const isInspector = Boolean(
+    order.listing?.inspectionRequests?.some((request) => request.inspectorId === viewerUserId)
+  );
   const isAdmin = (viewerRoles || []).includes('ADMIN');
 
-  const viewer = { userId: viewerUserId, isBuyer, isSeller, isTruckOwner, isAdmin };
+  const viewer = { userId: viewerUserId, isBuyer, isSeller, isTruckOwner, isInspector, isAdmin };
 
   const payments = buildPaymentSnapshot(order);
   const currentStage = computeStage(order, payments);
@@ -461,6 +536,8 @@ function computeOrderWorkflow(order, viewerUserId, viewerRoles = []) {
       ? 'SELLER'
       : isTruckOwner
       ? 'TRUCK_OWNER'
+      : isInspector
+      ? 'INSPECTOR'
       : 'OTHER',
     payments,
     transport: order.transportJob
