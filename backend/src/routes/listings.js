@@ -1575,8 +1575,8 @@ router.get(
       const bestOffer =
         listing.offers.reduce(
           (max, offer) =>
-            offer.amount >
-            (max?.amount || 0)
+            Number(offer.amount || 0) >
+            Number(max?.amount || 0)
               ? offer
               : max,
           null
