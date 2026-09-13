@@ -61,7 +61,7 @@ export default function AdminDashboard() {
         api.get('/disputes'),
         api.get('/admin/fraud-flags'),
         api.get('/ads'),
-        api.get('/payments', { params: { status: 'PENDING' } }),
+        api.get('/payments', { params: { status: ['PENDING', 'RECONCILIATION_REQUIRED'] } }),
         api.get('/payments/commissions/summary'),
         api.get('/orders'),
       ]);
@@ -113,6 +113,7 @@ export default function AdminDashboard() {
     if (['VERIFIED', 'ACTIVE', 'APPROVED', 'PUBLISHED', 'SCHEDULED', 'RESOLVED'].includes(status)) return 'sd-badge sd-good';
     if (['REJECTED', 'SUSPENDED', 'CANCELLED'].includes(status)) return 'sd-badge sd-red';
     if (['PENDING', 'PENDING_PAYMENT', 'PAID_PENDING_REVIEW', 'EXPIRED'].includes(status)) return 'sd-badge sd-warn';
+    if (status === 'RECONCILIATION_REQUIRED') return 'sd-badge sd-red';
     return 'sd-badge';
   }
 
@@ -1319,12 +1320,14 @@ export default function AdminDashboard() {
             <div className="sd-toolbar">
               <div>
                 <span className="sd-eyebrow">RECONCILIATION</span>
-                <h2>Pending payment reconciliation</h2>
+                <h2>Payment reconciliation</h2>
                 <p className="sd-muted">
-                  These are payment records waiting to be confirmed. Prefer a
-                  signed provider webhook where available — use manual confirm
-                  only once you've verified the funds arrived (e.g. checking a
-                  Telebirr/CBE reference).
+                  These are payment records waiting to be confirmed, plus any
+                  flagged for reconciliation after a mismatch or failed
+                  automatic verification. Prefer a signed provider webhook
+                  where available — use manual confirm only once you've
+                  verified the funds arrived (e.g. checking a Telebirr/CBE
+                  reference).
                 </p>
               </div>
             </div>
@@ -1333,7 +1336,8 @@ export default function AdminDashboard() {
               {payments.map((p) => (
                 <div className="sd-card" key={p.id}>
                   <h3>
-                    {Number(p.amount).toLocaleString()} ETB — {p.type} via {p.method}
+                    {Number(p.amount).toLocaleString()} ETB — {p.type} via {p.method}{' '}
+                    <span className={statusBadgeClass(p.status)}>{p.status?.replace(/_/g, ' ')}</span>
                   </h3>
 
                   <p className="sd-muted">
@@ -1371,7 +1375,7 @@ export default function AdminDashboard() {
 
               {payments.length === 0 && (
                 <div className="sd-panel">
-                  <p className="sd-muted">No pending payments right now.</p>
+                  <p className="sd-muted">No payments awaiting reconciliation right now.</p>
                 </div>
               )}
             </div>
