@@ -2,6 +2,8 @@
 
 const prisma = require('../config/db');
 const { recordAuditEvent } = require('../utils/audit');
+const { syncOrderPaymentObligations, findPaymentObligation } = require('./paymentObligationService');
+const { recordOrderEvent } = require('./orderEventService');
 
 // ============================================================================
 // CONSTANTS
@@ -87,11 +89,26 @@ async function createPayment(data) {
 
   return prisma.$transaction(async (tx) => {
     let payment;
+    let obligation = null;
+
+    if (data.orderId) {
+      await syncOrderPaymentObligations(tx, data.orderId);
+      obligation = await findPaymentObligation(tx, data);
+      if (obligation) {
+        if (obligation.status === 'PAID') {
+          throw Object.assign(new Error('This payment obligation is already paid'), { status: 409 });
+        }
+        if (!moneyEqual(amount, obligation.amount)) {
+          throw Object.assign(new Error('Payment amount does not match the payment obligation'), { status: 409 });
+        }
+      }
+    }
 
     try {
       payment = await tx.payment.create({
         data: {
           ...data,
+          obligationId: obligation?.id || null,
 
           amount,
 
@@ -558,6 +575,34 @@ async function settlePayment({
             payment.reference,
         },
       });
+
+    if (updated.obligationId) {
+      await tx.paymentObligation.update({
+        where: { id: updated.obligationId },
+        data: {
+          status: status === 'PAID'
+            ? 'PAID'
+            : status === 'REFUNDED'
+              ? 'CANCELLED'
+              : undefined,
+        },
+      });
+    }
+
+    if (updated.orderId) {
+      await recordOrderEvent(tx, {
+        orderId: updated.orderId,
+        type: 'PAYMENT_STATUS_CHANGED',
+        metadata: {
+          paymentId: updated.id,
+          paymentType: updated.type,
+          fromStatus: payment.status,
+          toStatus: status,
+          obligationId: updated.obligationId || null,
+          amount: String(updated.amount),
+        },
+      });
+    }
 
     await recordAuditEvent(tx, {
       actorId: null,

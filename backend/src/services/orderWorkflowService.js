@@ -37,15 +37,28 @@ function isPaid(payments, type) {
 
 function buildPaymentSnapshot(order) {
   const orderPayments = order.payments || [];
+  const durable = order.paymentObligations || [];
 
+  const findObligation = (type, inspectionRequestId = null, transportJobId = null) =>
+    durable.find((o) =>
+      o.type === type &&
+      (type !== 'INSPECTOR' || o.inspectionRequestId === inspectionRequestId) &&
+      (type !== 'TRANSPORT' || o.transportJobId === transportJobId)
+    );
+
+  const marketplaceObligation = findObligation('MARKETPLACE');
   const marketplace = {
     type: 'MARKETPLACE',
     label: 'Goods payment',
     required: true,
-    amount: Number(order.finalPrice),
-    paid: isPaid(orderPayments, 'MARKETPLACE'),
+    amount: marketplaceObligation?.amount ?? order.finalPrice,
+    paid: marketplaceObligation?.status === 'PAID' ||
+      isPaid(orderPayments, 'MARKETPLACE'),
     payerRole: 'BUYER',
+    payerId: marketplaceObligation?.payerId || order.buyerId,
     beneficiaryRole: 'SELLER',
+    beneficiaryId: marketplaceObligation?.beneficiaryId || order.sellerId,
+    obligationId: marketplaceObligation?.id || null,
   };
 
   const inspectionRequests = (order.listing?.inspectionRequests || []).filter(
@@ -54,31 +67,46 @@ function buildPaymentSnapshot(order) {
 
   const inspections = inspectionRequests
     .filter((r) => r.fee != null && Number(r.fee) > 0)
-    .map((r) => ({
-      type: 'INSPECTOR',
-      label: 'Inspection fee',
-      inspectionRequestId: r.id,
-      requestedById: r.requestedById,
-      required: true,
-      amount: Number(r.fee),
-      paid: isPaid(r.payments, 'INSPECTOR'),
-      payerRole: 'BUYER',
-      beneficiaryRole: 'INSPECTOR',
-      inspectionStatus: r.status,
-    }));
+    .map((r) => {
+      const o = findObligation('INSPECTOR', r.id);
+      return {
+        type: 'INSPECTOR',
+        label: 'Inspection fee',
+        inspectionRequestId: r.id,
+        requestedById: r.requestedById,
+        required: true,
+        amount: o?.amount ?? r.fee,
+        paid: o?.status === 'PAID' ||
+          isPaid(r.payments, 'INSPECTOR'),
+        payerRole: 'BUYER',
+        payerId: o?.payerId || order.buyerId,
+        beneficiaryRole: 'INSPECTOR',
+        beneficiaryId: o?.beneficiaryId || r.inspectorId || null,
+        inspectionStatus: r.status,
+        obligationId: o?.id || null,
+      };
+    });
 
   const job = order.transportJob || null;
   const transportRequired = Boolean(job) && job.method === 'HIRE_TRANSPORTER';
+  const transportObligation = job
+    ? findObligation('TRANSPORT', null, job.id)
+    : null;
 
   const transport = job
     ? {
         type: 'TRANSPORT',
         label: 'Transport payment',
         required: transportRequired,
-        amount: job.agreedAmount != null ? Number(job.agreedAmount) : null,
-        paid: !transportRequired || isPaid(orderPayments, 'TRANSPORT'),
+        amount: transportObligation?.amount ?? (job.agreedAmount != null ? job.agreedAmount : null),
+        paid: !transportRequired ||
+          transportObligation?.status === 'PAID' ||
+          isPaid(orderPayments, 'TRANSPORT'),
         payerRole: 'BUYER',
+        payerId: transportObligation?.payerId || order.buyerId,
         beneficiaryRole: 'TRUCK_OWNER',
+        beneficiaryId: transportObligation?.beneficiaryId || job.truckOwnerId || null,
+        obligationId: transportObligation?.id || null,
       }
     : null;
 
@@ -93,10 +121,27 @@ function buildPaymentSnapshot(order) {
     inspections,
     transport,
     inspectionRequestsExist: inspectionRequests.length > 0,
-    inspectionRequests: inspectionRequests.map((r) => ({ id: r.id, status: r.status, inspectorId: r.inspectorId, requestedById: r.requestedById, fee: r.fee })),
+    inspectionRequests: inspectionRequests.map((r) => ({
+      id: r.id,
+      status: r.status,
+      inspectorId: r.inspectorId,
+      requestedById: r.requestedById,
+      fee: r.fee,
+    })),
     allInspectionsPaid,
     allInspectionsCompleted,
     allPaid: marketplace.paid && allInspectionsPaid && transportPaid,
+    durableObligations: durable.map((o) => ({
+      id: o.id,
+      type: o.type,
+      amount: o.amount,
+      status: o.status,
+      payerId: o.payerId,
+      beneficiaryId: o.beneficiaryId,
+      inspectionRequestId: o.inspectionRequestId,
+      transportJobId: o.transportJobId,
+      paymentId: o.payment?.id || null,
+    })),
   };
 }
 
@@ -182,7 +227,20 @@ function buildTimeline(order, payments) {
     at: null,
   });
 
-  return steps;
+  // Durable events are appended to the canonical milestone steps. The
+  // frontend can show both progress milestones and the actual recorded
+  // business mutations.
+  const events = (order.events || []).map((event) => ({
+    id: event.id,
+    type: event.type,
+    at: event.createdAt,
+    actor: event.actor ? { id: event.actor.id, name: event.actor.name } : null,
+    fromStatus: event.fromStatus,
+    toStatus: event.toStatus,
+    metadata: event.metadata || null,
+  }));
+
+  return { steps, events };
 }
 
 // ----------------------------------------------------------------------------
