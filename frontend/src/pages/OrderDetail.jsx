@@ -70,6 +70,12 @@ export default function OrderDetail() {
   const [findingInspector, setFindingInspector] = useState(false);
   const [requestingInspection, setRequestingInspection] = useState(false);
 
+  const [disputeAgainstId, setDisputeAgainstId] = useState('');
+  const [disputeType, setDisputeType] = useState('NOT_DELIVERED');
+  const [disputeDescription, setDisputeDescription] = useState('');
+  const [submittingDispute, setSubmittingDispute] = useState(false);
+  const [disputeSubmitted, setDisputeSubmitted] = useState(false);
+
   // ==========================================================================
   // LOAD ORDER
   // ==========================================================================
@@ -736,6 +742,71 @@ export default function OrderDetail() {
       );
     } finally {
       setBusy('');
+    }
+  };
+
+  // ==========================================================================
+  // RAISE DISPUTE
+  // ==========================================================================
+  // PDF recommendation #5/#18: RAISE_DISPUTE is already reported as an
+  // available action by GET /orders/:id/workflow and POST /disputes already
+  // exists on the backend, but there was previously no UI anywhere to raise
+  // one. Every other participant on this order (buyer, seller, and the
+  // hired truck owner if one is assigned) is a valid target.
+
+  const disputeCounterparties = useMemo(() => {
+    if (!order) return [];
+    const parties = [
+      order.buyer && { id: order.buyer.id, name: order.buyer.name, role: 'Buyer' },
+      order.seller && { id: order.seller.id, name: order.seller.name, role: 'Seller' },
+      transportJob?.truckOwner && {
+        id: transportJob.truckOwner.id,
+        name: transportJob.truckOwner.name,
+        role: 'Truck owner',
+      },
+    ].filter(Boolean);
+    return parties.filter((p) => p.id !== currentUserId);
+  }, [order, transportJob, currentUserId]);
+
+  const canRaiseDispute = Boolean(
+    order &&
+    !['COMPLETED', 'CANCELLED', 'DISPUTED'].includes(order.status) &&
+    (isBuyer || isSeller || isTransporter) &&
+    disputeCounterparties.length > 0
+  );
+
+  const raiseDispute = async (event) => {
+    event.preventDefault();
+    if (!order || !canRaiseDispute) return;
+
+    if (!disputeAgainstId) {
+      setError('Choose who the dispute is against');
+      return;
+    }
+
+    if (!disputeDescription.trim()) {
+      setError('Describe what went wrong');
+      return;
+    }
+
+    setSubmittingDispute(true);
+    setError('');
+
+    try {
+      await api.post('/disputes', {
+        orderId: order.id,
+        againstId: disputeAgainstId,
+        disputeType,
+        description: disputeDescription.trim(),
+      });
+
+      setDisputeSubmitted(true);
+      setDisputeDescription('');
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not raise dispute'));
+    } finally {
+      setSubmittingDispute(false);
     }
   };
 
@@ -1989,6 +2060,90 @@ export default function OrderDetail() {
               </button>
             </div>
           )}
+
+        {/* ================================================================== */}
+        {/* RAISE DISPUTE */}
+        {/* ================================================================== */}
+
+        {order.status === 'DISPUTED' ? (
+          <div className="card" id="raise-dispute">
+            <h2>Dispute open</h2>
+            <p className="muted" style={{ marginBottom: 0 }}>
+              An admin is reviewing this order. It will resume its previous
+              status once the dispute is resolved.
+            </p>
+          </div>
+        ) : (
+          canRaiseDispute && (
+            <div className="card" id="raise-dispute">
+              <h2>Raise a dispute</h2>
+              <p className="muted">
+                Use this if something went wrong with this order — for
+                example goods not delivered, quality issues, or a payment
+                problem. An admin will review it.
+              </p>
+
+              {disputeSubmitted ? (
+                <div className="alert success">
+                  Dispute submitted. The order is now marked as disputed
+                  while an admin reviews it.
+                </div>
+              ) : (
+                <form onSubmit={raiseDispute}>
+                  <label>
+                    Dispute against
+                    <select
+                      value={disputeAgainstId}
+                      onChange={(e) => setDisputeAgainstId(e.target.value)}
+                      required
+                    >
+                      <option value="">Select who this is about…</option>
+                      {disputeCounterparties.map((party) => (
+                        <option key={party.id} value={party.id}>
+                          {party.name} ({party.role})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Type
+                    <select
+                      value={disputeType}
+                      onChange={(e) => setDisputeType(e.target.value)}
+                    >
+                      <option value="NOT_DELIVERED">Goods not delivered</option>
+                      <option value="QUALITY_ISSUE">Quality issue</option>
+                      <option value="DAMAGED_GOODS">Damaged goods</option>
+                      <option value="PAYMENT_ISSUE">Payment issue</option>
+                      <option value="TRANSPORT_ISSUE">Transport issue</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    What happened?
+                    <textarea
+                      value={disputeDescription}
+                      onChange={(e) => setDisputeDescription(e.target.value)}
+                      rows={4}
+                      placeholder="Describe the issue in detail"
+                      required
+                    />
+                  </label>
+
+                  <button
+                    type="submit"
+                    className="btn btn-outline"
+                    disabled={submittingDispute}
+                  >
+                    {submittingDispute ? 'Submitting…' : 'Raise dispute'}
+                  </button>
+                </form>
+              )}
+            </div>
+          )
+        )}
 
         {/* ================================================================== */}
         {/* COMPLETED */}
