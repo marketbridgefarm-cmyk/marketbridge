@@ -3394,3 +3394,120 @@ a.recent-activity-link:hover {
     background: var(--line);
   }
 }
+
+/* ========================================================================== */
+/* WORKFLOW: ACTION CENTER / TIMELINE / PAYMENT STATUS                       */
+/* Backs ActionCenter.jsx, WorkflowActions.jsx, OrderTimeline.jsx and        */
+/* PaymentStatus.jsx, all driven by GET /orders/:id/workflow.                */
+/* ========================================================================== */
+
+.workflow-action-pending {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12.5px;
+  padding: 6px 2px;
+}
+
+.badge-success {
+  background: #edf5ee;
+  color: var(--green);
+}
+
+.badge-pending {
+  background: #fbf1e0;
+  color: var(--gold);
+}
+
+.card-grid.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gutter);
+}
+
+@media (max-width: 720px) {
+  .card-grid.two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Order timeline -------------------------------------------------- */
+
+.order-timeline {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.order-timeline-step {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding: 0 0 20px 4px;
+}
+
+.order-timeline-step:last-child {
+  padding-bottom: 0;
+}
+
+.order-timeline-step::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 20px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--line);
+}
+
+.order-timeline-step:last-child::before {
+  display: none;
+}
+
+.order-timeline-dot {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+  background: #fff;
+  margin-top: 1px;
+}
+
+.order-timeline-step.is-complete .order-timeline-dot {
+  border-color: var(--green);
+  background: var(--green);
+}
+
+.order-timeline-step.is-current .order-timeline-dot {
+  border-color: var(--green-light);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(47, 145, 89, 0.18);
+}
+
+.order-timeline-label {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.order-timeline-step.is-pending .order-timeline-label {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.order-timeline-date {
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+/* --- Payment status ---------------------------------------------------- */
+
+.payment-status-row {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.payment-status .payment-status-row:first-of-type {
+  border-top: none;
+}
