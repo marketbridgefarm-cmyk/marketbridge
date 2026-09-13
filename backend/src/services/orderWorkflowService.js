@@ -394,13 +394,15 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 10. Raise a dispute — always available on an active order.
+  // 10. Raise a dispute — available to any participant on an active order
+  // (mirrors POST /disputes, which accepts buyer, seller, or the assigned
+  // truck owner as a participant).
   if (!terminal) {
     push({
       code: 'RAISE_DISPUTE',
       label: 'Raise a dispute',
       actorRole: 'BUYER_OR_SELLER',
-      viewerCanPerform: isBuyer || isSeller,
+      viewerCanPerform: isBuyer || isSeller || isTruckOwner,
       ready: true,
       route: { method: 'POST', path: '/disputes', body: { orderId: order.id } },
     });
