@@ -314,6 +314,8 @@ router.get('/', async (req, res) => {
       limit = 20,
       minPrice,
       maxPrice,
+      readyBy,
+      readyAfter,
     } = req.query;
 
     const pageNumber = Math.max(Number(page) || 1, 1);
@@ -371,6 +373,13 @@ router.get('/', async (req, res) => {
         },
       }),
 
+      ...((readyBy || readyAfter) && {
+        readinessDate: {
+          ...(readyAfter && { gte: new Date(readyAfter) }),
+          ...(readyBy && { lte: new Date(readyBy) }),
+        },
+      }),
+
       status: status || 'ACTIVE',
     };
 
@@ -417,7 +426,7 @@ router.get('/', async (req, res) => {
       TOP_OF_CATEGORY: 1000,
       SPONSORED_SEARCH: 300,
     };
-    const hasSearch = Boolean(cropType || title || location || minPrice || maxPrice || minQuantity || maxQuantity);
+    const hasSearch = Boolean(cropType || title || location || minPrice || maxPrice || minQuantity || maxQuantity || readyBy || readyAfter);
     const boostRank = new Map();
     const boostAdId = new Map();
     const boostPrimaryScore = new Map();
@@ -467,6 +476,14 @@ router.get('/', async (req, res) => {
             seller: {
               select: sellerSelect,
             },
+
+            inspectionRequests: {
+              select: {
+                id: true,
+                status: true,
+                report: { select: { id: true } },
+              },
+            },
           },
 
           orderBy: {
@@ -497,6 +514,14 @@ router.get('/', async (req, res) => {
 
                 seller: {
                   select: sellerSelect,
+                },
+
+                inspectionRequests: {
+                  select: {
+                    id: true,
+                    status: true,
+                    report: { select: { id: true } },
+                  },
                 },
               },
 
@@ -541,6 +566,14 @@ router.get('/', async (req, res) => {
 
             seller: {
               select: sellerSelect,
+            },
+
+            inspectionRequests: {
+              select: {
+                id: true,
+                status: true,
+                report: { select: { id: true } },
+              },
             },
           },
 
