@@ -5,6 +5,8 @@ const { authenticate } = require('../middleware/auth');
 const { recordAuditEvent } = require('../utils/audit');
 const { isAdmin } = require('../utils/authorization');
 const { computeOrderWorkflow } = require('../services/orderWorkflowService');
+const { recordOrderEvent } = require('../services/orderEventService');
+const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
 
 const router = express.Router();
 
@@ -69,6 +71,19 @@ const orderInclude = {
       ledgerEntries: true,
     },
   },
+  paymentObligations: {
+    include: {
+      payment: { select: { id: true, status: true, amount: true, method: true, reference: true } },
+      payer: { select: { id: true, name: true } },
+      beneficiary: { select: { id: true, name: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  },
+  events: {
+    orderBy: { createdAt: 'asc' },
+    take: 200,
+    include: { actor: { select: { id: true, name: true } } },
+  },
   disputes: true,
   ratings: true,
   messages: { orderBy: { createdAt: 'asc' } },
@@ -118,6 +133,15 @@ router.post('/buy-now', authenticate, async (req, res) => {
           finalPrice: Number(listing.askingPrice),
           status: 'PENDING_PAYMENT',
         },
+      });
+
+      await syncOrderPaymentObligations(tx, order.id);
+      await recordOrderEvent(tx, {
+        orderId: order.id,
+        actorId: req.user.id,
+        type: 'ORDER_CREATED',
+        toStatus: order.status,
+        metadata: { listingId: listing.id, via: 'buy-now' },
       });
 
       await tx.listing.update({
@@ -294,6 +318,14 @@ router.patch('/:id/confirm-receipt', authenticate, async (req, res) => {
         include: orderInclude,
       });
 
+      await recordOrderEvent(tx, {
+        orderId: current.id,
+        actorId: req.user.id,
+        type: 'RECEIPT_CONFIRMED',
+        fromStatus: current.status,
+        toStatus: 'COMPLETED',
+      });
+
       await recordAuditEvent(tx, {
         actorId: req.user.id,
         action: 'ORDER_RECEIPT_CONFIRMED',
@@ -391,6 +423,20 @@ router.patch(
         await tx.order.update({
           where: { id: current.id },
           data: { status: 'CANCELLED' },
+        });
+
+        await tx.paymentObligation.updateMany({
+          where: { orderId: current.id, status: 'OPEN' },
+          data: { status: 'CANCELLED' },
+        });
+
+        await recordOrderEvent(tx, {
+          orderId: current.id,
+          actorId: req.user.id,
+          type: 'ORDER_CANCELLED',
+          fromStatus: current.status,
+          toStatus: 'CANCELLED',
+          metadata: { reason, cancelledByRole },
         });
 
         // Free the listing back up so it can be sold again.

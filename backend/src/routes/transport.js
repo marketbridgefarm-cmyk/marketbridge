@@ -4,6 +4,8 @@ const { body, param, validationResult } = require('express-validator');
 
 const prisma = require('../config/db');
 const { recordAuditEvent } = require('../utils/audit');
+const { recordOrderEvent } = require('../services/orderEventService');
+const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
@@ -1686,6 +1688,21 @@ router.patch(
                       : job.deliveredConfirmedAt,
                 },
               });
+
+            await syncOrderPaymentObligations(tx, job.orderId);
+            await recordOrderEvent(tx, {
+              orderId: job.orderId,
+              actorId: req.user.id,
+              type: 'TRANSPORT_STATUS_CHANGED',
+              fromStatus: current,
+              toStatus: next,
+              metadata: {
+                transportJobId: job.id,
+                truckId: job.truckId,
+                arrangingParty: job.arrangingParty,
+                method: job.method,
+              },
+            });
 
             if (next === 'DELIVERED') {
               await tx.order.update({

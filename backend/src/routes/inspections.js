@@ -4,6 +4,8 @@ const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
+const { recordOrderEvent } = require('../services/orderEventService');
+const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 
@@ -637,6 +639,24 @@ router.patch(
           },
         });
 
+        const relatedOrders = await tx.order.findMany({
+          where: { listingId: request.listingId, status: { not: 'CANCELLED' } },
+          select: { id: true, status: true },
+        });
+        for (const relatedOrder of relatedOrders) {
+          await syncOrderPaymentObligations(tx, relatedOrder.id);
+          await recordOrderEvent(tx, {
+            orderId: relatedOrder.id,
+            actorId: req.user.id,
+            type: 'INSPECTION_ACCEPTED',
+            metadata: {
+              inspectionRequestId: request.id,
+              inspectorId: acceptedQuote.inspectorId,
+              amount: String(finalAmount),
+            },
+          });
+        }
+
         await recordAuditEvent(tx, {
           actorId: req.user.id,
           action: 'INSPECTION_QUOTE_ACCEPTED',
@@ -1000,6 +1020,19 @@ router.post(
 
         if (updatedCount.count !== 1) {
           return false;
+        }
+
+        const relatedOrders = await tx.order.findMany({
+          where: { listingId: request.listingId, status: { not: 'CANCELLED' } },
+          select: { id: true },
+        });
+        for (const relatedOrder of relatedOrders) {
+          await recordOrderEvent(tx, {
+            orderId: relatedOrder.id,
+            actorId: req.user.id,
+            type: 'INSPECTION_STARTED',
+            metadata: { inspectionRequestId: request.id },
+          });
         }
 
         await recordAuditEvent(tx, {
@@ -1429,6 +1462,20 @@ router.post(
 
         if (completed.count !== 1) {
           throw new Error('INSPECTION_STATUS_CHANGED');
+        }
+
+        const relatedOrders = await tx.order.findMany({
+          where: { listingId: request.listingId, status: { not: 'CANCELLED' } },
+          select: { id: true },
+        });
+        for (const relatedOrder of relatedOrders) {
+          await syncOrderPaymentObligations(tx, relatedOrder.id);
+          await recordOrderEvent(tx, {
+            orderId: relatedOrder.id,
+            actorId: req.user.id,
+            type: 'INSPECTION_COMPLETED',
+            metadata: { inspectionRequestId: request.id, reportId: createdReport.id },
+          });
         }
 
         await recordAuditEvent(tx, {
