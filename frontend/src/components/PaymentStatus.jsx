@@ -16,12 +16,17 @@ const money = (value) =>
     ? '—'
     : Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
-function Row({ label, amount, paid, note }) {
+function Row({ label, amount, paid, note, payer, beneficiary }) {
   return (
     <div className="payment-status-row row-between">
       <div>
         <div>{label}</div>
         {note && <div className="muted" style={{ fontSize: 12 }}>{note}</div>}
+        {(payer || beneficiary) && (
+          <div className="muted" style={{ fontSize: 12 }}>
+            {payer ? `Payer: ${payer}` : ''}{payer && beneficiary ? ' · ' : ''}{beneficiary ? `Recipient: ${beneficiary}` : ''}
+          </div>
+        )}
       </div>
       <div className="row-between" style={{ gap: 10 }}>
         <span>{money(amount)} ETB</span>
@@ -53,7 +58,13 @@ export default function PaymentStatus({ payments }) {
         )}
       </div>
 
-      <Row label="Goods payment (to seller)" amount={marketplace.amount} paid={marketplace.paid} />
+      <Row
+        label="Goods payment (to seller)"
+        amount={marketplace.amount}
+        paid={marketplace.paid}
+        payer="Buyer"
+        beneficiary="Seller"
+      />
 
       {inspections.map((obligation) => (
         <Row
@@ -66,11 +77,19 @@ export default function PaymentStatus({ payments }) {
               ? `Inspection status: ${obligation.inspectionStatus}`
               : null
           }
+          payer="Buyer"
+          beneficiary="Inspector"
         />
       ))}
 
       {transport?.required && (
-        <Row label="Transport payment (to transporter)" amount={transport.amount} paid={transport.paid} />
+        <Row
+          label="Transport payment (to transporter)"
+          amount={transport.amount}
+          paid={transport.paid}
+          payer="Buyer"
+          beneficiary="Transporter"
+        />
       )}
 
       {!transport?.required && transport && (

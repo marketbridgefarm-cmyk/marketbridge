@@ -23,17 +23,19 @@ const formatDate = (value) => {
   }
 };
 
-export default function OrderTimeline({ steps }) {
-  if (!Array.isArray(steps) || steps.length === 0) return null;
+export default function OrderTimeline({ steps, events = [] }) {
+  const milestoneSteps = Array.isArray(steps) ? steps : [];
+  const durableEvents = Array.isArray(events) ? events : [];
+  if (milestoneSteps.length === 0 && durableEvents.length === 0) return null;
 
-  const lastCompletedIndex = steps.reduce(
+  const lastCompletedIndex = milestoneSteps.reduce(
     (acc, step, index) => (step.completed ? index : acc),
     -1
   );
 
   return (
     <ol className="order-timeline">
-      {steps.map((step, index) => {
+      {milestoneSteps.map((step, index) => {
         const isCurrent = !step.completed && index === lastCompletedIndex + 1;
         const stateClass = step.completed ? 'is-complete' : isCurrent ? 'is-current' : 'is-pending';
         const at = formatDate(step.at);
@@ -48,6 +50,24 @@ export default function OrderTimeline({ steps }) {
           </li>
         );
       })}
+
+      {durableEvents.length > 0 && (
+        <li className="order-timeline-step is-recorded">
+          <span className="order-timeline-dot" aria-hidden="true" />
+          <div style={{ width: '100%' }}>
+            <div className="order-timeline-label">Activity history</div>
+            <div style={{ marginTop: 6 }}>
+              {durableEvents.map((event) => (
+                <div key={event.id} className="muted" style={{ fontSize: 12, marginBottom: 5 }}>
+                  <strong>{String(event.type || '').replace(/_/g, ' ')}</strong>
+                  {event.actor?.name ? ` — ${event.actor.name}` : ''}
+                  {formatDate(event.at) ? ` · ${formatDate(event.at)}` : ''}
+                </div>
+              ))}
+            </div>
+          </div>
+        </li>
+      )}
     </ol>
   );
 }
