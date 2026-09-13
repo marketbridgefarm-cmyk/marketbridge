@@ -1070,7 +1070,7 @@ export default function OrderDetail() {
           <div className="card-grid two-col">
             <div className="card">
               <h2>Order timeline</h2>
-              <OrderTimeline steps={workflow.timeline} />
+              <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
             </div>
             <div className="card">
               <h2>Payment status</h2>
