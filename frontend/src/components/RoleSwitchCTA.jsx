@@ -6,8 +6,8 @@ import { useAuth } from '../context/AuthContext.jsx';
 // other roles — replaces flat "Buyer" / "Seller" navbar labels with a
 // contextual prompt shown on the dashboard itself.
 const ROLE_INFO = {
-  BUYER: { icon: '🛒', href: '/dashboard/buyer', question: 'What do you want to buy today?', hint: 'Browse fresh listings and place an order.', cta: 'Buy something' },
-  SELLER: { icon: '🌾', href: '/dashboard/seller', question: 'Got something to sell?', hint: 'List your harvest or product for buyers to find.', cta: 'List an item' },
+  BUYER: { icon: '🛒', href: '/dashboard', question: 'What do you want to buy today?', hint: 'Browse fresh listings and place an order.', cta: 'Buy something' },
+  SELLER: { icon: '🌾', href: '/dashboard', question: 'Got something to sell?', hint: 'List your harvest or product for buyers to find.', cta: 'List an item' },
   INSPECTOR: { icon: '🔍', href: '/dashboard/inspector', question: 'Inspections waiting on you?', hint: 'Review requests and file quality reports.', cta: 'Inspections' },
   TRUCK_OWNER: { icon: '🚛', href: '/dashboard/truck-owner', question: 'Got a truck to put to work?', hint: 'Find hire requests and manage your fleet.', cta: 'Transport' },
   ADVERTISER: { icon: '📣', href: '/dashboard/advertiser', question: 'Want more eyes on a listing?', hint: 'Run a featured or banner campaign.', cta: 'Advertise' },

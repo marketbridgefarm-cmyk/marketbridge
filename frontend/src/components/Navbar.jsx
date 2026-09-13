@@ -7,8 +7,8 @@ import { useAuth } from '../context/AuthContext.jsx';
 // live on the dashboards themselves (see RoleSwitchCTA), not here.
 const DASHBOARD_BY_ROLE = [
   ['ADMIN', '/dashboard/admin'],
-  ['SELLER', '/dashboard/seller'],
-  ['BUYER', '/dashboard/buyer'],
+  ['SELLER', '/dashboard'],
+  ['BUYER', '/dashboard'],
   ['INSPECTOR', '/dashboard/inspector'],
   ['TRUCK_OWNER', '/dashboard/truck-owner'],
   ['ADVERTISER', '/dashboard/advertiser'],
