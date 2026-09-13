@@ -32,6 +32,7 @@ const ACTION_UI = {
   MARK_IN_TRANSIT: { kind: 'link', to: '/dashboard/truck-owner', label: 'Open transport job dashboard' },
   MARK_DELIVERED: { kind: 'link', to: '/dashboard/truck-owner', label: 'Open transport job dashboard' },
   CONFIRM_RECEIPT: { kind: 'scroll', target: 'confirm-receipt', label: 'Confirm receipt' },
+  RAISE_DISPUTE: { kind: 'scroll', target: 'raise-dispute', label: 'Raise a dispute' },
 };
 
 const ACTOR_LABEL = {
