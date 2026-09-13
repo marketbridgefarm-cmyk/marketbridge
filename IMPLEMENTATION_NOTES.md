@@ -18,3 +18,25 @@ After replacing the files:
 1. Commit and push to GitHub.
 2. Run backend tests/build and Prisma validation in CI/deployment.
 3. Test the complete agricultural path: inspection request -> quote/accept -> inspector start -> report complete -> goods payment -> transport accept -> transport payment -> pickup -> in transit -> delivered -> buyer receipt.
+
+
+## P1 implementation — payment obligations + order events (2026-09-13)
+
+Implemented:
+- Durable `PaymentObligation` records for marketplace, inspection and hired-transport obligations.
+- `Payment` can link to exactly one obligation through `obligationId`.
+- Idempotent obligation synchronisation for new/legacy orders.
+- Durable customer-facing `OrderEvent` history separate from `AuditEvent`.
+- Payment settlement updates the obligation and records an order event.
+- Order creation, cancellation and receipt confirmation record domain events.
+- Inspection acceptance/start/completion records domain events and refreshes obligations.
+- Transport status changes record domain events and refresh hired-transport obligations.
+- Workflow now exposes payer/beneficiary/obligation IDs and durable activity history.
+- Frontend payment status now shows payer/recipient; order timeline renders durable activity.
+- Migration backfills obligations and initial ORDER_CREATED events for existing orders.
+
+Migration:
+`backend/prisma/migrations/202609130003_payment_obligations_order_events/migration.sql`
+
+Deployment:
+`npx prisma migrate deploy` (the backend start script already runs this in production).
