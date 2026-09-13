@@ -52,6 +52,21 @@ export async function chapaInitializeAndRedirect(paymentId) {
  * The caller is responsible for supplying the appropriate
  * payment payload and authorization context.
  */
+// PDF recommendation #14 (Idempotency & Concurrency). One key per
+// "create this payment intent" attempt: a page refresh mid-request, a
+// double-tapped pay button, or an axios retry on a flaky connection all
+// resend the exact same request, and the key lets the backend recognize
+// the retry and hand back the original payment instead of creating a
+// second one. crypto.randomUUID() is available in every browser this app
+// already targets (same API level Chapa checkout redirects require); the
+// timestamp+random fallback only matters for very old browsers/webviews.
+function newIdempotencyKey() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `idem-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export async function startChapaPayment(paymentPayload) {
   if (!paymentPayload || typeof paymentPayload !== 'object') {
     throw new Error('Payment information is required');
@@ -60,7 +75,8 @@ export async function startChapaPayment(paymentPayload) {
   try {
     const { data } = await api.post(
       '/payments',
-      paymentPayload
+      paymentPayload,
+      { headers: { 'Idempotency-Key': newIdempotencyKey() } }
     );
 
     const paymentId = data?.payment?.id;
