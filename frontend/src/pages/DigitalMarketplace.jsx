@@ -94,6 +94,12 @@ export default function DigitalMarketplace() {
     return myPurchases.find(pu => pu.product?.id === productId);
   }
 
+  function statusBadgeClass(status) {
+    if (status === 'PAID' || status === 'COMPLETED') return 'sd-badge sd-good';
+    if (status === 'RECONCILIATION_REQUIRED' || status === 'FAILED') return 'sd-badge sd-red';
+    return 'sd-badge sd-warn';
+  }
+
   return (
     <main className="section">
       <div className="container-wide">
@@ -128,6 +134,55 @@ export default function DigitalMarketplace() {
             <button className="btn btn-primary" onClick={submit}>Publish securely</button>
           </div>
         )}
+
+        {user?.roles?.includes('BUYER') && myPurchases.length > 0 && (
+          <div className="card" style={{ marginBottom: 20 }}>
+            <h2>Your purchases</h2>
+            <p className="muted">
+              Everything you've bought stays here and stays downloadable — independent of
+              whether a listing is still active in the catalog below.
+            </p>
+            <div className="listing-grid">
+              {myPurchases.map((pu) => {
+                const productId = pu.product?.id;
+                const paymentStatus = pu.payment?.status;
+                return (
+                  <article className="digital-card card" key={pu.id}>
+                    <div className="digital-icon">{pu.product?.productType?.slice(0, 1).toUpperCase() || '?'}</div>
+                    <span className="tag">{pu.product?.productType?.replaceAll('_', ' ') || 'digital product'}</span>
+                    <h3>{pu.product?.title || 'Digital product'}</h3>
+                    <p className="muted">
+                      Purchased {new Date(pu.createdAt).toLocaleDateString()}
+                      {pu.downloadCount > 0 && ` · Downloaded ${pu.downloadCount} time${pu.downloadCount === 1 ? '' : 's'}`}
+                    </p>
+                    <div className="row-between">
+                      <strong>{Number(pu.product?.price || 0).toLocaleString()} ETB</strong>
+                      <span className={statusBadgeClass(paymentStatus)}>{paymentStatus?.replaceAll('_', ' ')}</span>
+                    </div>
+                    {paymentStatus === 'PAID' && (
+                      <button className="btn btn-primary" disabled={busyId === productId} onClick={() => download(pu.id, productId)}>
+                        {busyId === productId ? 'Getting link…' : 'Download again'}
+                      </button>
+                    )}
+                    {paymentStatus === 'PENDING' && (
+                      <button className="btn btn-primary" disabled={busyId === productId} onClick={() => resumePurchase(pu.payment.id, productId)}>
+                        {busyId === productId ? 'Redirecting…' : 'Resume payment'}
+                      </button>
+                    )}
+                    {paymentStatus === 'RECONCILIATION_REQUIRED' && (
+                      <p className="small muted">Payment is being reconciled by our team — check back shortly.</p>
+                    )}
+                    {(paymentStatus === 'FAILED' || paymentStatus === 'REFUNDED') && (
+                      <p className="small muted">{paymentStatus === 'FAILED' ? 'This payment was not completed.' : 'This purchase was refunded.'}</p>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {(user?.roles?.includes('BUYER') && myPurchases.length > 0) && <h2 style={{ marginTop: 8 }}>Browse the marketplace</h2>}
 
         <div className="listing-grid">
           {products.map(p => {
