@@ -231,6 +231,47 @@ router.post(
       let transportJobId = null;
 
       // ======================================================================
+      // IDEMPOTENCY KEY
+      // ======================================================================
+      // PDF recommendation #14. Optional: requests that don't send one keep
+      // working exactly as before (the existing active-payment check below
+      // still applies). Clients that generate one key per "create this
+      // payment intent" attempt and retry with the same key get the same
+      // payment back instead of a second one, even under a race — see the
+      // P2002 handling in paymentService.createPayment.
+      const idempotencyKey =
+        req.get('Idempotency-Key') ||
+        req.body.idempotencyKey ||
+        null;
+
+      if (idempotencyKey && String(idempotencyKey).length > 200) {
+        return res.status(400).json({
+          error: 'Idempotency-Key must be 200 characters or fewer',
+        });
+      }
+
+      if (idempotencyKey) {
+        const replay = await prisma.payment.findUnique({
+          where: { idempotencyKey: String(idempotencyKey) },
+        });
+
+        if (replay) {
+          if (replay.createdById !== req.user.id) {
+            return res.status(409).json({
+              error: 'Idempotency-Key already used by a different request',
+            });
+          }
+
+          return res.status(200).json({
+            message: 'Payment intent already exists for this Idempotency-Key.',
+            payment: replay,
+            paymentConfirmed: false,
+            replayed: true,
+          });
+        }
+      }
+
+      // ======================================================================
       // MARKETPLACE / TRANSPORT
       // ======================================================================
 
@@ -689,6 +730,9 @@ router.post(
             inspectionRequestId || null,
 
           transportJobId,
+
+          idempotencyKey:
+            idempotencyKey ? String(idempotencyKey) : null,
         });
 
       return res.status(201).json({
