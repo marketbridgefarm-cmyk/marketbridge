@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import NotificationCenter from './NotificationCenter.jsx';
 
 // Order of preference when resolving a single "Dashboard" destination for a
 // user with multiple roles. Per-role prompts to switch between capabilities
@@ -106,7 +107,9 @@ export default function Navbar() {
           {/* Desktop links */}
           <div className="nav-links">
             {user ? (
-              <div className="nav-account" ref={accountRef}>
+              <>
+                <NotificationCenter />
+                <div className="nav-account" ref={accountRef}>
                 <button className="nav-user" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((v) => !v)}>
                   <span className="avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
                   {user.name}
@@ -119,7 +122,8 @@ export default function Navbar() {
                     <button role="menuitem" onClick={handleLogout}>Log out</button>
                   </div>
                 )}
-              </div>
+                </div>
+              </>
             ) : (
               <>
                 <Link to="/login">Log in</Link>
@@ -156,6 +160,9 @@ export default function Navbar() {
             <div className="mobile-menu-divider" />
             {user ? (
               <>
+                <div className="mobile-notification-link">
+                  <NotificationCenter />
+                </div>
                 <Link to={dashboardHref}>Dashboard</Link>
                 <Link to="/dashboard/advertiser">Promote / Advertise</Link>
                 <button className="mobile-logout" onClick={handleLogout}>Log out</button>
