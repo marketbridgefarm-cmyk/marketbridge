@@ -3,6 +3,7 @@
 const prisma = require('../config/db');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('./orderEventService');
+const { cancelOrderInTransaction } = require('./orderCancellationService');
 
 const LOCK_KEY = 82461327;
 
@@ -61,6 +62,61 @@ async function expireAdvertisements(now = new Date()) {
   return { expired: result.count };
 }
 
+/**
+ * Automatic inventory release for abandoned orders. An order sits in
+ * PENDING_PAYMENT the moment it's created — via buy-now or offer
+ * acceptance — with the sold quantity already deducted from the listing
+ * (see inventoryService.reserveListingQuantity / the buy-now atomic claim).
+ * If the buyer never completes payment, that quantity would otherwise stay
+ * locked forever, since nothing else transitions the order out of
+ * PENDING_PAYMENT. This finds every such order past its paymentDueAt
+ * deadline and cancels it through the same path as a manual cancel
+ * (cancelOrderInTransaction), which returns the quantity to the listing,
+ * closes open payment obligations, and records the audit/event trail.
+ *
+ * Orders created before the paymentDueAt column existed have it as NULL
+ * and are deliberately left alone here — only orders that were given an
+ * explicit deadline at creation are auto-expired.
+ */
+async function expireUnpaidOrders(now = new Date()) {
+  const candidates = await prisma.order.findMany({
+    where: { status: 'PENDING_PAYMENT', paymentDueAt: { lte: now } },
+    select: { id: true },
+    take: 200,
+  });
+
+  let expired = 0;
+  for (const candidate of candidates) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Re-read and re-check inside the transaction: a payment may have
+        // settled (or the buyer/seller may have already cancelled) between
+        // the query above and this job actually running on this order.
+        const current = await tx.order.findUnique({
+          where: { id: candidate.id },
+          include: { transportJob: true, payments: true },
+        });
+
+        if (!current || current.status !== 'PENDING_PAYMENT' || !current.paymentDueAt || current.paymentDueAt > now) {
+          return;
+        }
+
+        await cancelOrderInTransaction(tx, {
+          order: current,
+          actorId: null,
+          reason: 'Payment window expired without a completed payment',
+          cancelledByRole: 'SYSTEM',
+        });
+      });
+      expired += 1;
+    } catch (error) {
+      console.error(`Failed to auto-expire unpaid order ${candidate.id}:`, error);
+    }
+  }
+
+  return { expired };
+}
+
 async function createPickupReminders(now = new Date()) {
   const until = hoursFromNow(24);
   const orders = await prisma.order.findMany({
@@ -87,10 +143,10 @@ async function runMaintenanceCycle() {
   return withJobLock(async () => {
     const startedAt = Date.now();
     const now = new Date();
-    const [offers, listings, ads, reminders] = await Promise.all([
-      expireOffers(now), expireListings(now), expireAdvertisements(now), createPickupReminders(now),
+    const [offers, listings, ads, reminders, unpaidOrders] = await Promise.all([
+      expireOffers(now), expireListings(now), expireAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now),
     ]);
-    return { durationMs: Date.now() - startedAt, offers, listings, ads, reminders };
+    return { durationMs: Date.now() - startedAt, offers, listings, ads, reminders, unpaidOrders };
   });
 }
 
