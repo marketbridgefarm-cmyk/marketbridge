@@ -22,18 +22,38 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Shared by password login, register, and a completed MFA challenge —
+  // all three end the same way: store the access token, set the user.
+  const completeSession = (data) => {
+    localStorage.setItem('mb_token', data.token);
+    setUser(data.user);
+    return data.user;
+  };
+
+  // Admin accounts with MFA enabled don't get a session back from
+  // /auth/login — they get { mfaRequired, challengeId, methods } instead.
+  // The caller (Login page) is responsible for noticing that shape and
+  // walking the user through verifyMfa() before a session exists.
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
-    localStorage.setItem('mb_token', res.data.token);
-    setUser(res.data.user);
-    return res.data.user;
+    if (res.data?.mfaRequired) {
+      return res.data;
+    }
+    return completeSession(res.data);
+  };
+
+  const requestMfaEmailCode = async (challengeId) => {
+    await api.post('/auth/mfa/challenge/email', { challengeId });
+  };
+
+  const verifyMfa = async (challengeId, code, method) => {
+    const res = await api.post('/auth/mfa/verify', { challengeId, code, method });
+    return completeSession(res.data);
   };
 
   const register = async (data) => {
     const res = await api.post('/auth/register', data);
-    localStorage.setItem('mb_token', res.data.token);
-    setUser(res.data.user);
-    return res.data.user;
+    return completeSession(res.data);
   };
 
   const logout = async () => {
@@ -61,7 +81,9 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, requestMfaEmailCode, verifyMfa, register, logout, refreshUser }}
+    >
       {children}
     </AuthContext.Provider>
   );
