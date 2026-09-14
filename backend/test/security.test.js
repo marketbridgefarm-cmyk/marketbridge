@@ -312,3 +312,31 @@ test(
     );
   }
 );
+
+test(
+  'public listing serializer excludes negotiation, order, inspection, and storage-key data',
+  () => {
+    const listing = {
+      id: 'listing-private-data',
+      sellerId: 'seller-1',
+      title: 'Tomatoes',
+      askingPrice: 1000,
+      minAcceptablePrice: 700,
+      photoKeys: ['private/photo-key'],
+      videoKeys: ['private/video-key'],
+      offers: [{ id: 'offer-1', amount: 800, buyerId: 'buyer-1' }],
+      orders: [{ id: 'order-1', buyerId: 'buyer-1', sellerId: 'seller-1' }],
+      inspectionRequests: [{ id: 'inspection-1', status: 'COMPLETED' }],
+      seller: { id: 'seller-1', name: 'Farmer', rating: 4.8 },
+    };
+
+    const publicListing = listingsRouter.toPublicListing(listing);
+
+    assert.equal('minAcceptablePrice' in publicListing, false);
+    assert.equal('photoKeys' in publicListing, false);
+    assert.equal('videoKeys' in publicListing, false);
+    assert.equal('offers' in publicListing, false);
+    assert.equal('orders' in publicListing, false);
+    assert.equal('inspectionRequests' in publicListing, false);
+  }
+);
