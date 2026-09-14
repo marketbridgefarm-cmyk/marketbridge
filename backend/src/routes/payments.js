@@ -25,6 +25,7 @@ const chapa =
 
 const {
   paymentLimiter,
+  webhookLimiter,
 } = require('../middleware/rateLimit');
 
 const paymentService =
@@ -1346,6 +1347,7 @@ router.get(
 
 router.post(
   '/webhooks/chapa',
+  webhookLimiter,
   async (req, res) => {
     const rawBody =
       req.rawBody;
@@ -1570,6 +1572,8 @@ router.post(
 
 router.post(
   '/webhooks/generic',
+
+  webhookLimiter,
 
   express.json({
     limit:
