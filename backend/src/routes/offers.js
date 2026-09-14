@@ -428,11 +428,33 @@ async function acceptOfferAndCreateOrder(
   sellerId,
   actorId = sellerId
 ) {
+  // The listing transition is the authoritative concurrency gate. Two
+  // buyers/sellers can be negotiating different offers at the same time;
+  // only the first transaction that changes this listing to SOLD may create
+  // the order. The row-level lock acquired by updateMany also makes this safe
+  // when the requests arrive concurrently.
+  const saleClaim = await tx.listing.updateMany({
+    where: {
+      id: offer.listingId,
+      status: { in: ['ACTIVE', 'UNDER_NEGOTIATION'] },
+    },
+    data: { status: 'SOLD' },
+  });
+
+  if (saleClaim.count !== 1) {
+    throw offerError(
+      'This listing is no longer available for purchase',
+      409
+    );
+  }
+
   const existingOrder =
     await tx.order.findFirst({
       where: {
         listingId: offer.listingId,
+        status: { not: 'CANCELLED' },
       },
+      select: { id: true },
     });
 
   if (existingOrder) {
@@ -468,16 +490,6 @@ async function acceptOfferAndCreateOrder(
 
     data: {
       status: 'REJECTED',
-    },
-  });
-
-  await tx.listing.update({
-    where: {
-      id: offer.listingId,
-    },
-
-    data: {
-      status: 'SOLD',
     },
   });
 

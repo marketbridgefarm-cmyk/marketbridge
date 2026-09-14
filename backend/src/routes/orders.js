@@ -114,6 +114,23 @@ router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req,
         throw Object.assign(new Error('You cannot purchase your own listing'), { status: 400 });
       }
 
+      // Database-authoritative sale claim. The conditional update is the
+      // concurrency gate: PostgreSQL locks the listing row while the update
+      // is evaluated, so only one concurrent buyer can transition ACTIVE ->
+      // SOLD. A preceding read/check is not sufficient here because two
+      // requests can otherwise observe ACTIVE before either commits.
+      const claim = await tx.listing.updateMany({
+        where: {
+          id: listingId,
+          status: 'ACTIVE',
+        },
+        data: { status: 'SOLD' },
+      });
+
+      if (claim.count !== 1) {
+        throw Object.assign(new Error('This product is currently reserved or sold'), { status: 409 });
+      }
+
       const existing = await tx.order.findFirst({
         where: {
           listingId,
@@ -122,7 +139,6 @@ router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req,
         orderBy: { createdAt: 'desc' },
       });
       if (existing) {
-        if (existing.buyerId === req.user.id) return existing;
         throw Object.assign(new Error('This product is currently reserved or sold'), { status: 409 });
       }
 
@@ -143,11 +159,6 @@ router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req,
         type: 'ORDER_CREATED',
         toStatus: order.status,
         metadata: { listingId: listing.id, via: 'buy-now' },
-      });
-
-      await tx.listing.update({
-        where: { id: listing.id },
-        data: { status: 'SOLD' },
       });
 
       await recordAuditEvent(tx, {

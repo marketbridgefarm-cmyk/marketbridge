@@ -83,6 +83,30 @@ function withComputedStatus(ad) {
   return ad;
 }
 
+async function resolveListingMedia(value) {
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  try {
+    return await signedMediaUrl({ key: value, disposition: 'inline' });
+  } catch (error) {
+    console.error('AD LISTING MEDIA SIGN ERROR:', error);
+    return null;
+  }
+}
+
+async function attachListingMedia(listing) {
+  if (!listing) return listing;
+  const [photos, videos] = await Promise.all([
+    Promise.all((listing.photos || []).map(resolveListingMedia)),
+    Promise.all((listing.videos || []).map(resolveListingMedia)),
+  ]);
+  return {
+    ...listing,
+    photos: photos.filter(Boolean),
+    videos: videos.filter(Boolean),
+  };
+}
+
 async function attachCreativeUrl(ad) {
   if (!ad) return ad;
   const result = { ...ad };
@@ -257,7 +281,12 @@ router.get('/active', async (req, res) => {
       include: { listing: { select: { id: true, sellerId: true, category: true, title: true, cropType: true, quantity: true, unit: true, askingPrice: true, location: true, photos: true, videos: true, description: true, status: true } } },
       orderBy: { startDate: 'asc' },
     });
-    const enriched = await Promise.all(ads.map(attachCreativeUrl));
+    const enriched = await Promise.all(
+      ads.map(async (ad) => attachCreativeUrl({
+        ...ad,
+        listing: await attachListingMedia(ad.listing),
+      }))
+    );
     return res.json({ ads: enriched.map(withComputedStatus) });
   } catch (error) {
     console.error('ACTIVE ADS ERROR:', error);
