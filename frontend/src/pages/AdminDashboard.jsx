@@ -32,6 +32,9 @@ export default function AdminDashboard() {
   const [payments, setPayments] = useState([]);
   const [orders, setOrders] = useState([]);
   const [commissionSummary, setCommissionSummary] = useState(null);
+  const [operations, setOperations] = useState(null);
+  const [orderEvents, setOrderEvents] = useState([]);
+  const [auditEvents, setAuditEvents] = useState([]);
 
   const [userSearch, setUserSearch] = useState('');
   const [roleSelections, setRoleSelections] = useState({});
@@ -55,6 +58,9 @@ export default function AdminDashboard() {
         paymentsRes,
         commissionRes,
         ordersRes,
+        operationsRes,
+        orderEventsRes,
+        auditEventsRes,
       ] = await Promise.all([
         api.get('/admin/overview'),
         api.get('/admin/users'),
@@ -64,6 +70,9 @@ export default function AdminDashboard() {
         api.get('/payments', { params: { status: ['PENDING', 'RECONCILIATION_REQUIRED'] } }),
         api.get('/payments/commissions/summary'),
         api.get('/orders'),
+        api.get('/admin/operations/summary'),
+        api.get('/admin/order-events', { params: { limit: 100 } }),
+        api.get('/admin/audit-events', { params: { limit: 100 } }),
       ]);
 
       setOverview(overviewRes.data);
@@ -74,6 +83,9 @@ export default function AdminDashboard() {
       setPayments(paymentsRes.data?.payments || []);
       setCommissionSummary(commissionRes.data);
       setOrders(ordersRes.data?.orders || []);
+      setOperations(operationsRes.data || null);
+      setOrderEvents(orderEventsRes.data?.events || []);
+      setAuditEvents(auditEventsRes.data?.events || []);
     } catch (err) {
       setError(
         err.response?.data?.error ||
@@ -480,6 +492,11 @@ export default function AdminDashboard() {
     { key: 'advertising', label: 'Advertising', count: pendingAds.length },
     { key: 'orders', label: 'Orders', count: orders.length },
     { key: 'payments', label: 'Payments', count: payments.length },
+    {
+      key: 'operations',
+      label: 'Operations & Audit',
+      count: (operations?.queues?.reconciliationPayments || 0) + (operations?.queues?.openDisputes || 0),
+    },
   ];
 
   const activeTabItem =
@@ -1294,6 +1311,108 @@ export default function AdminDashboard() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {tab === 'operations' && (
+          <div>
+            <div className="sd-panel">
+              <div className="sd-toolbar">
+                <div>
+                  <h2>Operations & audit</h2>
+                  <p className="sd-muted">
+                    Monitor live workflow queues from durable OrderEvent records and review the internal audit trail.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="sd-btn sd-btn-outline"
+                  onClick={loadAll}
+                  disabled={loading}
+                >
+                  {loading ? 'Refreshing…' : 'Refresh'}
+                </button>
+              </div>
+
+              <div className="sd-stat-grid" style={{ marginTop: 16 }}>
+                {[
+                  ['Pending payments', operations?.queues?.pendingPayments || 0],
+                  ['Reconciliation queue', operations?.queues?.reconciliationPayments || 0],
+                  ['Open disputes', operations?.queues?.openDisputes || 0],
+                  ['Active orders', operations?.activeOrders || 0],
+                  ['Active transport', operations?.activeTransportJobs || 0],
+                ].map(([label, value]) => (
+                  <div className="sd-stat" key={label}>
+                    <span>{label.toUpperCase()}</span>
+                    <b>{value}</b>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="sd-panel" style={{ marginTop: 20 }}>
+              <h2>Recent workflow events</h2>
+              <p className="sd-muted">
+                Customer-facing order lifecycle events. This is read-only operational visibility.
+              </p>
+              <div className="sd-table-wrap">
+                <table className="sd-table sd-table--stack">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Event</th>
+                      <th>Order</th>
+                      <th>Transition</th>
+                      <th>Actor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orderEvents.length === 0 ? (
+                      <tr><td colSpan="5" className="sd-muted">No workflow events recorded yet.</td></tr>
+                    ) : orderEvents.map((event) => (
+                      <tr key={event.id}>
+                        <td data-label="Time">{new Date(event.createdAt).toLocaleString()}</td>
+                        <td data-label="Event"><span className="sd-badge">{event.type}</span></td>
+                        <td data-label="Order"><code>{event.orderId.slice(0, 10)}</code></td>
+                        <td data-label="Transition">{event.fromStatus || '—'} → {event.toStatus || '—'}</td>
+                        <td data-label="Actor">{event.actor?.name || event.actor?.email || 'System'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="sd-panel" style={{ marginTop: 20 }}>
+              <h2>Recent audit events</h2>
+              <p className="sd-muted">
+                Internal administrative/security trail. Secrets and tokens are not exposed here.
+              </p>
+              <div className="sd-table-wrap">
+                <table className="sd-table sd-table--stack">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Action</th>
+                      <th>Resource</th>
+                      <th>Actor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditEvents.length === 0 ? (
+                      <tr><td colSpan="4" className="sd-muted">No audit events recorded yet.</td></tr>
+                    ) : auditEvents.map((event) => (
+                      <tr key={event.id}>
+                        <td data-label="Time">{new Date(event.createdAt).toLocaleString()}</td>
+                        <td data-label="Action"><span className="sd-badge">{event.action}</span></td>
+                        <td data-label="Resource">{event.resourceType}{event.resourceId ? ` · ${event.resourceId.slice(0, 10)}` : ''}</td>
+                        <td data-label="Actor">{event.actor?.name || event.actor?.email || 'System'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
