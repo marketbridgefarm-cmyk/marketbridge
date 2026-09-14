@@ -3754,3 +3754,295 @@ a.recent-activity-link:hover {
     display: none;
   }
 }
+
+
+/* ================================================================
+   MarketBridge UI/UX Enhancement — production marketplace polish
+   Keeps existing component classes and behavior; visual layer only.
+   ================================================================ */
+:root {
+  --mb-surface: #ffffff;
+  --mb-surface-soft: #f3f7f3;
+  --mb-border: #d9e4da;
+  --mb-border-strong: #c5d5c8;
+  --mb-green-50: #edf7ef;
+  --mb-green-100: #dcefe0;
+  --mb-text: #15221a;
+  --mb-text-soft: #56635a;
+  --mb-focus: rgba(23,107,58,.18);
+}
+
+::selection { background: var(--green-100); color: var(--green-dark); }
+
+body {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(47,145,89,.055), transparent 30rem),
+    radial-gradient(circle at 100% 10%, rgba(183,123,27,.035), transparent 28rem),
+    var(--bg);
+}
+
+.site-header {
+  background: rgba(255,255,255,.88);
+  box-shadow: 0 1px 0 rgba(23,35,27,.04), 0 8px 24px rgba(23,35,27,.035);
+}
+
+.navbar { min-height: 76px; }
+.brand-mark {
+  box-shadow: 0 6px 16px rgba(23,107,58,.20);
+  letter-spacing: 0;
+}
+.market-pills { gap: 5px; }
+.market-pill {
+  border: 1px solid transparent;
+  transition: background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease), transform .18s var(--ease);
+}
+.market-pill:hover { transform: translateY(-1px); border-color: var(--mb-border); }
+.market-pill.active { border-color: #cfe0d1; box-shadow: inset 0 0 0 1px rgba(23,107,58,.025); }
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--mb-border);
+}
+.hero::before,
+.hero::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  border-radius: 999px;
+  filter: blur(1px);
+}
+.hero::before {
+  width: 340px; height: 340px; right: -130px; top: -160px;
+  background: rgba(47,145,89,.08);
+}
+.hero::after {
+  width: 260px; height: 260px; left: -140px; bottom: -180px;
+  background: rgba(183,123,27,.045);
+}
+.hero > * { position: relative; z-index: 1; }
+.hero h1 { letter-spacing: -1.4px; }
+.hero-card,
+.feature-card,
+.mini-panel,
+.card,
+.form-card,
+.dashboard-card,
+.order-card,
+.sd-card {
+  border-color: var(--mb-border);
+  box-shadow: 0 8px 26px rgba(20,45,28,.045);
+}
+
+.section-alt {
+  background: linear-gradient(180deg, #eff5ef 0%, #eaf2eb 100%);
+  border-top: 1px solid rgba(217,228,218,.65);
+  border-bottom: 1px solid rgba(217,228,218,.65);
+}
+.section-heading { margin-bottom: 30px; }
+.eyebrow { letter-spacing: 2px; }
+
+.btn {
+  min-height: 44px;
+  border-radius: 11px;
+  padding-inline: 17px;
+  box-shadow: 0 2px 0 rgba(0,0,0,.02);
+}
+.btn-primary {
+  box-shadow: 0 7px 18px rgba(23,107,58,.15);
+}
+.btn-light { box-shadow: none; }
+.btn:focus-visible,
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--mb-focus);
+  outline-offset: 2px;
+}
+
+.text-link { transition: color .15s ease, transform .15s ease; display: inline-flex; align-items: center; }
+.text-link:hover { color: var(--green-dark); transform: translateX(1px); }
+
+.page-header { padding-top: 4px; }
+.page-header h1 { letter-spacing: -1px; }
+.search-panel {
+  background: var(--mb-surface);
+  border: 1px solid var(--mb-border);
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 7px 22px rgba(20,45,28,.045);
+}
+.search-panel input,
+.search-panel select {
+  min-height: 44px;
+  border: 1px solid var(--mb-border-strong);
+  border-radius: 10px;
+  background: #fbfdfb;
+}
+
+.listing-grid { gap: 20px; }
+.listing-card {
+  border-radius: 18px;
+  box-shadow: 0 7px 22px rgba(20,45,28,.045);
+}
+.listing-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 18px 40px rgba(20,45,28,.11);
+}
+.listing-photo {
+  aspect-ratio: 4 / 3;
+  background: linear-gradient(135deg,#e2eee4,#f7f9f5);
+}
+.listing-photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 55%, rgba(10,35,18,.08));
+  pointer-events: none;
+}
+.listing-body { padding: 19px; }
+.listing-body h3 { font-size: 21px; letter-spacing: -.35px; margin-top: 11px; }
+.listing-meta > span:last-child { font-weight: 700; }
+.listing-stats { margin: 17px 0; padding: 13px 0; }
+.listing-stats strong { font-size: 15px; }
+.listing-footer { padding-top: 2px; }
+
+.detail-grid { gap: 28px; }
+.detail-media {
+  border: 1px solid var(--mb-border);
+  box-shadow: 0 10px 30px rgba(20,45,28,.06);
+}
+.detail-content { padding: clamp(20px,3vw,30px); }
+.detail-content h1 { font-size: clamp(32px,4vw,52px); }
+.detail-facts {
+  border: 1px solid var(--mb-border);
+  border-radius: 14px;
+  background: #fbfdfb;
+  padding: 4px 0;
+}
+.detail-facts > div { padding: 13px 15px; }
+
+.card,
+.form-card,
+.dashboard-card,
+.order-card,
+.evidence,
+.workflow-card {
+  border-radius: 16px;
+}
+.form-card { padding: clamp(20px,3vw,30px); }
+.form-card input,
+.form-card select,
+.form-card textarea,
+form input,
+form select,
+form textarea {
+  border-color: var(--mb-border-strong);
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+.form-card input:focus,
+.form-card select:focus,
+.form-card textarea:focus,
+form input:focus,
+form select:focus,
+form textarea:focus {
+  border-color: var(--green-light);
+  box-shadow: 0 0 0 4px var(--mb-focus);
+  background: #fff;
+}
+
+.badge,
+.tag { line-height: 1.25; }
+.badge-success,
+.tag--good { background: #e7f6ea; color: #146b38; }
+.badge-pending { background: #fff5df; color: #875b12; }
+
+.notification-trigger {
+  border: 1px solid transparent;
+  transition: background .16s ease, border-color .16s ease, color .16s ease;
+}
+.notification-trigger:hover { border-color: var(--mb-border); }
+.notification-panel {
+  border-radius: 16px;
+  box-shadow: 0 20px 55px rgba(20,45,28,.16);
+}
+
+/* Dashboard hierarchy */
+.dashboard-grid,
+.sd-stat-grid { gap: 16px; }
+.dashboard-card:hover,
+.order-card:hover,
+.sd-card:hover {
+  box-shadow: 0 14px 34px rgba(20,45,28,.08);
+}
+.dashboard-welcome,
+.sd-welcome {
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(20,45,28,.06);
+}
+
+/* Tables/lists used by admin and operational dashboards */
+.table-wrap,
+.data-table-wrap { overflow-x: auto; border: 1px solid var(--mb-border); border-radius: 14px; background: #fff; }
+table { border-collapse: collapse; width: 100%; }
+th { background: #f5f8f5; color: #526057; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+th, td { padding: 12px 14px; border-bottom: 1px solid #e8eee9; text-align: left; }
+tr:last-child td { border-bottom: 0; }
+
+/* Improve long workflow pages without changing markup. */
+.order-timeline,
+.workflow-actions,
+.payment-status,
+.sd-list { border-radius: 14px; }
+.loading {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+/* Small screens: prioritize touch targets and reduce visual density. */
+@media (max-width: 900px) {
+  .navbar { min-height: 68px; }
+  .market-switcher { margin-left: auto; }
+  .market-pills { overflow-x: auto; scrollbar-width: none; max-width: 52vw; }
+  .market-pills::-webkit-scrollbar { display: none; }
+  .hero-grid { gap: 26px; }
+  .hero-card { padding: 20px; }
+  .detail-grid { gap: 18px; }
+}
+
+@media (max-width: 620px) {
+  .section { padding: 36px 0; }
+  .hero { padding: 44px 0 40px; }
+  .hero h1 { letter-spacing: -.9px; }
+  .hero-card { border-radius: 16px; }
+  .feature-card { min-height: auto; }
+  .listing-grid { grid-template-columns: 1fr; }
+  .listing-card { border-radius: 16px; }
+  .listing-photo { aspect-ratio: 16 / 10; }
+  .listing-footer { align-items: flex-end; }
+  .detail-media { border-radius: 14px; }
+  .detail-content h1 { font-size: 34px; }
+  .detail-facts { grid-template-columns: 1fr; }
+  .btn { min-height: 46px; }
+  .btn-sm { min-height: 38px; }
+  .search-panel { padding: 10px; }
+}
+
+@media (max-width: 420px) {
+  .container-wide, .container-narrow { padding-left: 14px; padding-right: 14px; }
+  .market-pills { max-width: 58vw; }
+  .market-pill { font-size: 10px; }
+  .listing-body { padding: 16px; }
+  .listing-stats { grid-template-columns: 1fr; gap: 10px; }
+  .listing-stats > div + div { padding-top: 10px; border-top: 1px solid var(--line); }
+  .listing-footer { flex-direction: column; align-items: flex-start; }
+  .listing-footer .text-link { width: 100%; justify-content: space-between; }
+}
+
+.tag--negotiable { background: #f2eee4; color: #76561b; }
