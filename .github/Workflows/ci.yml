@@ -1,1 +1,114 @@
+name: CI
 
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  backend:
+    name: Backend (lint, migrations, tests)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: marketbridge
+          POSTGRES_PASSWORD: marketbridge
+          POSTGRES_DB: marketbridge_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://marketbridge:marketbridge@localhost:5432/marketbridge_ci
+      E2E_DATABASE_URL: postgresql://marketbridge:marketbridge@localhost:5432/marketbridge_ci
+      NODE_ENV: test
+      JWT_SECRET: ci-test-jwt-secret-value-not-used-in-prod
+      JWT_REFRESH_SECRET: ci-test-refresh-secret-value-not-used-in-prod
+      MARKETPLACE_COMMISSION_RATE: '0.05'
+      TRANSPORT_COMMISSION_RATE: '0.05'
+      INSPECTION_COMMISSION_RATE: '0.05'
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Validate schema
+        run: npx prisma validate
+
+      - name: Check for a pending, un-migrated schema drift
+        # Fails the build if schema.prisma has changes that aren't captured
+        # by a migration file — this is exactly the recurring "migration
+        # gap" bug class (TransportQuote, Dispute.previousOrderStatus,
+        # Payment.currency, etc.) that has repeatedly broken production.
+        run: npx prisma migrate diff --from-migrations ./prisma/migrations --to-schema-datamodel ./prisma/schema.prisma --shadow-database-url "$DATABASE_URL" --exit-code
+
+      - name: Apply migrations to a disposable database
+        run: npx prisma migrate deploy
+
+      - name: Run fast unit/integration tests
+        run: npm test
+
+      - name: Run opt-in refresh-session tests
+        env:
+          MARKETBRIDGE_AUTH_SESSION_TEST: '1'
+        run: npm test -- --test-name-pattern="refresh-session"
+
+      - name: Run full marketplace E2E suite
+        env:
+          MARKETBRIDGE_E2E: '1'
+        run: npm test
+
+  frontend:
+    name: Frontend (build)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        # A placeholder API URL is enough to prove the production build
+        # compiles cleanly; it isn't used to make any real requests here.
+        env:
+          VITE_API_URL: https://ci-placeholder.invalid
+        run: npm run build
