@@ -10,11 +10,12 @@ router.post('/run', authenticate, requireRole('ADMIN'), async (req, res) => {
   catch (error) { console.error('MAINTENANCE RUN ERROR:', error); return res.status(500).json({ error: 'Maintenance cycle failed' }); }
 });
 router.get('/status', authenticate, requireRole('ADMIN'), async (req, res) => {
-  const [expiredOffers, expiredListings, openReconciliation] = await Promise.all([
+  const [expiredOffers, expiredListings, openReconciliation, unpaidOrdersDue] = await Promise.all([
     prisma.offer.count({ where: { status: { in: ['PENDING', 'COUNTERED'] }, expiresAt: { lte: new Date() } } }),
     prisma.listing.count({ where: { status: { in: ['ACTIVE', 'UNDER_NEGOTIATION'] }, category: 'AGRICULTURAL', pickupWindowEnd: { lte: new Date() } } }),
     prisma.paymentReconciliation.count({ where: { status: 'OPEN' } }),
+    prisma.order.count({ where: { status: 'PENDING_PAYMENT', paymentDueAt: { lte: new Date() } } }),
   ]);
-  res.json({ healthy: true, due: { expiredOffers, expiredListings, openReconciliation } });
+  res.json({ healthy: true, due: { expiredOffers, expiredListings, openReconciliation, unpaidOrdersDue } });
 });
 module.exports = router;
