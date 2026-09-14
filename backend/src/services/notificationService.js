@@ -49,6 +49,36 @@ const EVENT_COPY = {
     body: 'This order has been cancelled. Review the order for the latest details.',
     action: 'order',
   },
+  PAYMENT_REFUND_REQUESTED: {
+    type: 'PAYMENT',
+    title: 'Refund requested',
+    body: 'A refund has been requested for a payment connected to this order.',
+    action: 'order',
+  },
+  PAYMENT_REFUNDED: {
+    type: 'PAYMENT',
+    title: 'Payment refunded',
+    body: 'A payment connected to this order has been refunded.',
+    action: 'order',
+  },
+  PAYMENT_REFUND_FAILED: {
+    type: 'PAYMENT',
+    title: 'Refund could not be completed',
+    body: 'A requested refund could not be completed. Review the order for the latest financial status.',
+    action: 'order',
+  },
+  PAYMENT_RECONCILIATION_REQUIRED: {
+    type: 'PAYMENT',
+    title: 'Payment requires review',
+    body: 'A payment connected to this order requires financial reconciliation before it can be treated as settled.',
+    action: 'order',
+  },
+  PAYMENT_RECONCILIATION_RESOLVED: {
+    type: 'PAYMENT',
+    title: 'Payment reconciliation resolved',
+    body: 'A payment reconciliation issue connected to this order has been resolved.',
+    action: 'order',
+  },
 };
 
 const ACTIONABLE_EVENTS = new Set(Object.keys(EVENT_COPY));
@@ -73,6 +103,10 @@ function buildCopy(type, metadata = {}) {
 
   if (type === 'PAYMENT_STATUS_CHANGED' && metadata.toStatus) {
     body = `A payment connected to this order is now ${String(metadata.toStatus).replace(/_/g, ' ').toLowerCase()}. Review the order for the next step.`;
+  }
+
+  if (type === 'TRANSPORT_STATUS_CHANGED' && String(metadata.toStatus || '').toUpperCase() === 'DELIVERED') {
+    body = 'Transport has been marked delivered. The buyer should review the delivery and confirm receipt when satisfied.';
   }
 
   return { ...copy, body };
@@ -135,7 +169,15 @@ async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) 
       recipients = [order.sellerId];
       break;
     case 'ORDER_CANCELLED':
-      recipients = buyerSeller;
+    case 'PAYMENT_REFUND_REQUESTED':
+    case 'PAYMENT_REFUNDED':
+    case 'PAYMENT_REFUND_FAILED':
+    case 'PAYMENT_RECONCILIATION_REQUIRED':
+    case 'PAYMENT_RECONCILIATION_RESOLVED':
+      recipients = [...buyerSeller];
+      if (String(metadata.paymentType || '').toUpperCase() === 'TRANSPORT') {
+        recipients.push(...transportUsers);
+      }
       break;
     default:
       recipients = buyerSeller;

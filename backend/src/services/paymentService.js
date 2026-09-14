@@ -4,6 +4,7 @@ const prisma = require('../config/db');
 const { recordAuditEvent } = require('../utils/audit');
 const { syncOrderPaymentObligations, findPaymentObligation } = require('./paymentObligationService');
 const { recordOrderEvent } = require('./orderEventService');
+const { createReconciliationIssue } = require('./paymentReconciliationService');
 
 // ============================================================================
 // CONSTANTS
@@ -471,30 +472,32 @@ async function settlePayment({
 
     if (
       payload.amount != null &&
-      !moneyEqual(
-        payment.amount,
-        payload.amount
-      )
+      !moneyEqual(payment.amount, payload.amount)
     ) {
-      throw Object.assign(
-        new Error('Payment amount mismatch'),
-        { status: 409 }
-      );
+      await createReconciliationIssue(tx, {
+        paymentId: payment.id, provider: provider || payment.provider || 'UNKNOWN',
+        observedStatus: status, expectedAmount: payment.amount, observedAmount: payload.amount,
+        expectedCurrency: payment.currency, observedCurrency: payload.currency || null,
+        reason: 'PROVIDER_AMOUNT_MISMATCH', payload,
+      });
+      const flagged = await tx.payment.update({ where: { id: payment.id }, data: { status: 'RECONCILIATION_REQUIRED', provider: provider || payment.provider || null, providerTransactionId: providerTransactionId || payment.providerTransactionId || null, reference: reference || payment.reference || null } });
+      await recordAuditEvent(tx, { actorId: null, action: 'PAYMENT_RECONCILIATION_REQUIRED', resourceType: 'Payment', resourceId: payment.id, metadata: { reason: 'PROVIDER_AMOUNT_MISMATCH', observedAmount: payload.amount, expectedAmount: payment.amount, eventId: eventId || null } });
+      return flagged;
     }
 
     // ------------------------------------------------------------------------
     // CURRENCY VALIDATION
     // ------------------------------------------------------------------------
 
-    if (
-      payload.currency &&
-      String(payload.currency).toUpperCase() !==
-        String(payment.currency).toUpperCase()
-    ) {
-      throw Object.assign(
-        new Error('Payment currency mismatch'),
-        { status: 409 }
-      );
+    if (payload.currency && String(payload.currency).toUpperCase() !== String(payment.currency).toUpperCase()) {
+      await createReconciliationIssue(tx, {
+        paymentId: payment.id, provider: provider || payment.provider || 'UNKNOWN', observedStatus: status,
+        expectedAmount: payment.amount, observedAmount: payload.amount ?? null, expectedCurrency: payment.currency,
+        observedCurrency: payload.currency, reason: 'PROVIDER_CURRENCY_MISMATCH', payload,
+      });
+      const flagged = await tx.payment.update({ where: { id: payment.id }, data: { status: 'RECONCILIATION_REQUIRED', provider: provider || payment.provider || null, providerTransactionId: providerTransactionId || payment.providerTransactionId || null, reference: reference || payment.reference || null } });
+      await recordAuditEvent(tx, { actorId: null, action: 'PAYMENT_RECONCILIATION_REQUIRED', resourceType: 'Payment', resourceId: payment.id, metadata: { reason: 'PROVIDER_CURRENCY_MISMATCH', observedCurrency: payload.currency, expectedCurrency: payment.currency, eventId: eventId || null } });
+      return flagged;
     }
 
     // ------------------------------------------------------------------------
