@@ -8,8 +8,8 @@ const { computeOrderWorkflow } = require('../services/orderWorkflowService');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
 const { idempotency } = require('../middleware/idempotency');
-const { requestRefund } = require('../services/paymentRefundService');
-const { releaseListingQuantity } = require('../services/inventoryService');
+const { computePaymentDueAt } = require('../utils/orderTiming');
+const { cancelOrderInTransaction } = require('../services/orderCancellationService');
 
 const router = express.Router();
 
@@ -152,6 +152,7 @@ router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req,
           finalPrice: Number(listing.askingPrice),
           quantity: Number(listing.quantity),
           status: 'PENDING_PAYMENT',
+          paymentDueAt: computePaymentDueAt(),
         },
       });
 
@@ -431,73 +432,11 @@ router.patch(
           include: { transportJob: true, payments: true },
         });
 
-        if (!current || NON_CANCELLABLE_STATUSES.includes(current.status)) {
-          throw Object.assign(new Error('Order is no longer cancellable'), { status: 409 });
-        }
-
-        await tx.order.update({
-          where: { id: current.id },
-          data: { status: 'CANCELLED' },
-        });
-
-        await tx.paymentObligation.updateMany({
-          where: { orderId: current.id, status: 'OPEN' },
-          data: { status: 'CANCELLED' },
-        });
-
-        await recordOrderEvent(tx, {
-          orderId: current.id,
+        await cancelOrderInTransaction(tx, {
+          order: current,
           actorId: req.user.id,
-          type: 'ORDER_CANCELLED',
-          fromStatus: current.status,
-          toStatus: 'CANCELLED',
-          metadata: { reason, cancelledByRole },
-        });
-
-        // Return allocated agricultural quantity to inventory. Generic
-        // products remain whole-listing sales and simply become ACTIVE again.
-        const restoredListing = await releaseListingQuantity(tx, current);
-        if (!restoredListing) {
-          await tx.listing.update({
-            where: { id: current.listingId },
-            data: { status: 'ACTIVE', availableQuantity: current.quantity },
-          });
-        }
-
-        // Cascade-cancel a transport job that hasn't moved yet.
-        if (current.transportJob && !['DELIVERED', 'CANCELLED'].includes(current.transportJob.status)) {
-          await tx.transportJob.update({
-            where: { id: current.transportJob.id },
-            data: { status: 'CANCELLED' },
-          });
-        }
-
-        // Create durable refund requests for paid funds. A refund is only
-        // marked REFUNDED after the payment provider (or authorized admin
-        // settlement flow) confirms completion.
-        const paidOrderPayments = current.payments.filter((p) => p.status === 'PAID');
-        const paidTransportPayments = current.transportJob
-          ? await tx.payment.findMany({ where: { transportJobId: current.transportJob.id, status: 'PAID' } })
-          : [];
-        const toRefund = [...paidOrderPayments, ...paidTransportPayments];
-        const refundRequests = [];
-        for (const payment of toRefund) {
-          const refund = await requestRefund(tx, { paymentId: payment.id, amount: payment.amount, reason: reason || 'Order cancellation', requestedById: req.user.id });
-          refundRequests.push(refund);
-        }
-
-        await recordAuditEvent(tx, {
-          actorId: req.user.id,
-          action: 'ORDER_CANCELLED',
-          resourceType: 'Order',
-          resourceId: current.id,
-          metadata: {
-            fromStatus: current.status,
-            toStatus: 'CANCELLED',
-            cancelledByRole,
-            reason,
-            refundedPaymentIds: toRefund.map((p) => p.id),
-          },
+          reason,
+          cancelledByRole,
         });
 
         return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
