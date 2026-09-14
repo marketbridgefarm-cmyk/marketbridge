@@ -7,7 +7,7 @@ if (process.env.MARKETBRIDGE_AUTH_SESSION_TEST !== '1') {
   const http = require('http');
   const bcrypt = require('bcryptjs');
   const prisma = require('../src/config/db');
-  const app = require('../src/index').app;
+  const app = require('../src/index');
 
   let server;
   let baseUrl;
