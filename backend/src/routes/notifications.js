@@ -84,6 +84,26 @@ router.patch(
   }
 );
 
+router.patch(
+  '/:id/unread',
+  authenticate,
+  [param('id').isUUID()],
+  validate,
+  async (req, res) => {
+    try {
+      const result = await prisma.notification.updateMany({
+        where: { id: req.params.id, userId: req.user.id },
+        data: { readAt: null },
+      });
+      if (result.count === 0) return res.status(404).json({ error: 'Notification not found' });
+      return res.json({ success: true, notificationId: req.params.id });
+    } catch (error) {
+      console.error('MARK NOTIFICATION UNREAD ERROR:', error);
+      return res.status(500).json({ error: 'Could not mark notification as unread' });
+    }
+  }
+);
+
 router.post('/read-all', authenticate, async (req, res) => {
   try {
     const result = await prisma.notification.updateMany({

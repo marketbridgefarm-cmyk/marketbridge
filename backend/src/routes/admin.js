@@ -12,6 +12,8 @@ const {
   recordAuditEvent,
 } = require('../utils/audit');
 const { revokeAllSessions } = require('../services/refreshSessionService');
+const { completeRefund, failRefund } = require('../services/paymentRefundService');
+const { resolveReconciliation } = require('../services/paymentReconciliationService');
 
 const router = express.Router();
 
@@ -1877,6 +1879,80 @@ router.get(
 
 
 // ============================================================================
+// PROVIDER ROLE REQUESTS
+// ============================================================================
+
+router.get('/provider-role-requests', async (req, res) => {
+  try {
+    const requests = await prisma.providerRoleRequest.findMany({
+      include: { user: { select: { id: true, name: true, email: true, roles: true, verificationStatus: true, accountStatus: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    return res.json({ requests });
+  } catch (error) {
+    console.error('ADMIN PROVIDER ROLE REQUESTS ERROR:', error);
+    return res.status(500).json({ error: 'Could not load provider role requests' });
+  }
+});
+
+router.patch('/provider-role-requests/:id', async (req, res) => {
+  try {
+    const { status, rejectionReason } = req.body || {};
+    if (!['APPROVED', 'REJECTED'].includes(status)) {
+      return res.status(400).json({ error: 'Status must be APPROVED or REJECTED' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const request = await tx.providerRoleRequest.findUnique({ where: { id: req.params.id } });
+      if (!request) {
+        const error = new Error('Provider role request not found');
+        error.statusCode = 404;
+        throw error;
+      }
+      if (request.status !== 'PENDING') {
+        const error = new Error('Provider role request has already been reviewed');
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const updatedRequest = await tx.providerRoleRequest.update({
+        where: { id: request.id },
+        data: {
+          status,
+          reviewedById: req.user.id,
+          reviewedAt: new Date(),
+          rejectionReason: status === 'REJECTED' ? String(rejectionReason || '').trim().slice(0, 500) || null : null,
+        },
+      });
+
+      if (status === 'APPROVED') {
+        const user = await tx.user.findUnique({ where: { id: request.userId }, select: { roles: true } });
+        const roles = Array.from(new Set([...(user?.roles || []), request.role]));
+        await tx.user.update({
+          where: { id: request.userId },
+          data: { roles, verificationStatus: 'VERIFIED' },
+        });
+      }
+
+      await recordAuditEvent(tx, {
+        actorId: req.user.id,
+        action: `PROVIDER_ROLE_REQUEST_${status}`,
+        resourceType: 'ProviderRoleRequest',
+        resourceId: request.id,
+        metadata: { userId: request.userId, role: request.role, status },
+      });
+      return updatedRequest;
+    });
+
+    return res.json({ request: result });
+  } catch (error) {
+    console.error('ADMIN PROVIDER ROLE REVIEW ERROR:', error);
+    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not review provider role request' });
+  }
+});
+
+
+// ============================================================================
 // VERIFY USER
 // ============================================================================
 
@@ -2619,6 +2695,90 @@ router.get(
     }
   }
 );
+
+// ============================================================================
+// FINANCIAL OPERATIONS: REFUNDS
+// ============================================================================
+
+router.get('/financial/refunds', async (req, res) => {
+  try {
+    const status = req.query.status ? String(req.query.status) : undefined;
+    const refunds = await prisma.paymentRefund.findMany({
+      where: status ? { status } : {},
+      include: {
+        payment: { select: { id: true, type: true, amount: true, currency: true, status: true, orderId: true, provider: true, providerTransactionId: true } },
+        requestedBy: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+    return res.json({ refunds, count: refunds.length });
+  } catch (error) {
+    console.error('ADMIN REFUNDS ERROR:', error);
+    return res.status(500).json({ error: 'Could not load refund queue' });
+  }
+});
+
+router.patch('/financial/refunds/:id/complete', async (req, res) => {
+  try {
+    const refund = await prisma.$transaction((tx) => completeRefund(tx, {
+      refundId: req.params.id,
+      provider: req.body.provider || null,
+      providerRefundId: req.body.providerRefundId || null,
+      actorId: req.user.id,
+      note: req.body.note || null,
+    }));
+    return res.json({ refund });
+  } catch (error) {
+    console.error('ADMIN COMPLETE REFUND ERROR:', error);
+    return res.status(error.status || 500).json({ error: error.message || 'Could not complete refund' });
+  }
+});
+
+router.patch('/financial/refunds/:id/fail', async (req, res) => {
+  try {
+    const refund = await prisma.$transaction((tx) => failRefund(tx, {
+      refundId: req.params.id,
+      failureReason: req.body.failureReason || 'Provider refund failed',
+      actorId: req.user.id,
+    }));
+    return res.json({ refund });
+  } catch (error) {
+    console.error('ADMIN FAIL REFUND ERROR:', error);
+    return res.status(error.status || 500).json({ error: error.message || 'Could not fail refund' });
+  }
+});
+
+router.get('/financial/reconciliation', async (req, res) => {
+  try {
+    const status = req.query.status ? String(req.query.status) : 'OPEN';
+    const records = await prisma.paymentReconciliation.findMany({
+      where: { status },
+      include: { payment: { select: { id: true, type: true, amount: true, currency: true, status: true, orderId: true, provider: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+    return res.json({ records, count: records.length });
+  } catch (error) {
+    console.error('ADMIN RECONCILIATION ERROR:', error);
+    return res.status(500).json({ error: 'Could not load reconciliation queue' });
+  }
+});
+
+router.patch('/financial/reconciliation/:id/resolve', async (req, res) => {
+  try {
+    const record = await resolveReconciliation({
+      reconciliationId: req.params.id,
+      status: req.body.status,
+      actorId: req.user.id,
+      note: req.body.note || null,
+    });
+    return res.json({ record });
+  } catch (error) {
+    console.error('ADMIN RESOLVE RECONCILIATION ERROR:', error);
+    return res.status(error.status || 500).json({ error: error.message || 'Could not resolve reconciliation' });
+  }
+});
 
 // ============================================================================
 // EXPORT

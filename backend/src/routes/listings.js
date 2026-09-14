@@ -6,6 +6,7 @@ const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { signedMediaUrl } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
+const { validateListingReferences } = require('../utils/evidenceValidator');
 
 const router = express.Router();
 
@@ -65,6 +66,7 @@ const PUBLIC_LISTING_FIELDS = {
   title: true,
   cropType: true,
   quantity: true,
+  availableQuantity: true,
   unit: true,
   askingPrice: true,
   location: true,
@@ -1040,6 +1042,9 @@ router.post(
         });
       }
 
+      const safePhotos = Array.isArray(photos) ? validateListingReferences(photos, req.user.id, 'photos') : [];
+      const safeVideos = Array.isArray(videos) ? validateListingReferences(videos, req.user.id, 'videos') : [];
+
       // ----------------------------------------------------------------------
       // Create listing
       // ----------------------------------------------------------------------
@@ -1065,6 +1070,7 @@ router.post(
             description,
 
             quantity: Number(quantity),
+            availableQuantity: Number(quantity),
 
             unit,
 
@@ -1109,15 +1115,9 @@ router.post(
                 ? parseDate(pickupWindowEnd)
                 : null,
 
-            photos:
-              Array.isArray(photos)
-                ? photos
-                : [],
+            photos: safePhotos,
 
-            videos:
-              Array.isArray(videos)
-                ? videos
-                : [],
+            videos: safeVideos,
 
             status: 'ACTIVE',
 
@@ -1281,6 +1281,24 @@ router.patch(
         });
       }
 
+      const currentAvailableQuantity = Number(listing.availableQuantity);
+      const allocatedQuantity = Math.max(
+        Number(listing.quantity) - (Number.isFinite(currentAvailableQuantity) ? currentAvailableQuantity : Number(listing.quantity)),
+        0
+      );
+
+      let nextAvailableQuantity;
+      if (quantity !== undefined) {
+        const requestedQuantity = Number(quantity);
+        if (requestedQuantity + 1e-9 < allocatedQuantity) {
+          return res.status(409).json({ error: `quantity cannot be lower than already allocated quantity (${allocatedQuantity})` });
+        }
+        if (listing.status === 'SOLD' && listing.category === 'AGRICULTURAL' && requestedQuantity > Number(listing.quantity)) {
+          return res.status(400).json({ error: 'A sold agricultural listing cannot be increased in place; create a new listing for additional produce' });
+        }
+        nextAvailableQuantity = requestedQuantity - allocatedQuantity;
+      }
+
       // ----------------------------------------------------------------------
       // Validate readinessDate
       // ----------------------------------------------------------------------
@@ -1438,6 +1456,8 @@ router.patch(
               undefined && {
               quantity:
                 Number(quantity),
+              availableQuantity:
+                nextAvailableQuantity,
             }),
 
             ...(status !==

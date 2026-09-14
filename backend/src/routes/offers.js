@@ -10,6 +10,7 @@ const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { idempotency } = require('../middleware/idempotency');
+const { reserveListingQuantity } = require('../services/inventoryService');
 
 const router = express.Router();
 
@@ -135,10 +136,12 @@ router.post(
 
       const listingId = req.body.listingId;
       const amount = Number(req.body.amount);
-      const quantity = req.body.quantity === undefined ? null : Number(req.body.quantity);
+      const requestedQuantity = req.body.quantity === undefined || req.body.quantity === null || req.body.quantity === ''
+        ? null
+        : Number(req.body.quantity);
       const message = req.body.message || null;
 
-      if (quantity !== null && (!Number.isFinite(quantity) || quantity <= 0)) {
+      if (requestedQuantity !== null && (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0)) {
         return res.status(400).json({ error: 'quantity must be greater than zero' });
       }
 
@@ -158,6 +161,22 @@ router.post(
         return res.status(400).json({
           error:
             'Offers are currently available for agricultural listings only',
+        });
+      }
+
+      const availableQuantity = Number(listing.availableQuantity);
+      const offerQuantity = requestedQuantity === null
+        ? availableQuantity
+        : requestedQuantity;
+
+      if (!Number.isFinite(availableQuantity) || availableQuantity <= 0) {
+        return res.status(409).json({ error: 'No agricultural quantity remains available for negotiation' });
+      }
+
+      if (offerQuantity > availableQuantity + 1e-9) {
+        return res.status(409).json({
+          error: 'Requested quantity exceeds the currently available quantity',
+          availableQuantity,
         });
       }
 
@@ -217,7 +236,7 @@ router.post(
                 buyerId: req.user.id,
                 sellerId: listing.sellerId,
                 amount,
-                quantity,
+                quantity: offerQuantity,
                 expiresAt: negotiationExpiresAt,
                 message,
                 status: 'PENDING',
@@ -428,70 +447,53 @@ async function acceptOfferAndCreateOrder(
   sellerId,
   actorId = sellerId
 ) {
-  // The listing transition is the authoritative concurrency gate. Two
-  // buyers/sellers can be negotiating different offers at the same time;
-  // only the first transaction that changes this listing to SOLD may create
-  // the order. The row-level lock acquired by updateMany also makes this safe
-  // when the requests arrive concurrently.
-  const saleClaim = await tx.listing.updateMany({
-    where: {
-      id: offer.listingId,
-      status: { in: ['ACTIVE', 'UNDER_NEGOTIATION'] },
-    },
-    data: { status: 'SOLD' },
-  });
-
-  if (saleClaim.count !== 1) {
-    throw offerError(
-      'This listing is no longer available for purchase',
-      409
-    );
+  if (offer.listing.category !== 'AGRICULTURAL') {
+    throw offerError('Only agricultural offers can create quantity-allocated orders', 400);
   }
 
-  const existingOrder =
-    await tx.order.findFirst({
+  const requestedQuantity = Number(offer.quantity);
+  if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
+    throw offerError('Offer has no valid quantity', 400);
+  }
+
+  // Claim the offer itself before allocating inventory. This prevents the
+  // same offer from being accepted twice by concurrent requests. If the
+  // inventory reservation fails, the whole transaction rolls back this claim.
+  const offerClaim = await tx.offer.updateMany({
+    where: {
+      id: offer.id,
+      status: { in: ['PENDING', 'COUNTERED'] },
+    },
+    data: { status: 'ACCEPTED' },
+  });
+
+  if (offerClaim.count !== 1) {
+    throw offerError('This offer has already been acted on', 409);
+  }
+
+  const reservation = await reserveListingQuantity(
+    tx,
+    offer.listingId,
+    requestedQuantity
+  );
+
+  const updatedOffer = await tx.offer.findUnique({
+    where: { id: offer.id },
+  });
+
+  // A full-quantity sale closes the negotiation. A partial agricultural
+  // sale deliberately leaves other negotiations alive for the remaining
+  // produce; their acceptance is re-checked against current inventory.
+  if (reservation.remainingQuantity <= 1e-9) {
+    await tx.offer.updateMany({
       where: {
         listingId: offer.listingId,
-        status: { not: 'CANCELLED' },
+        id: { not: offer.id },
+        status: { in: ['PENDING', 'COUNTERED'] },
       },
-      select: { id: true },
+      data: { status: 'REJECTED' },
     });
-
-  if (existingOrder) {
-    throw offerError(
-      'An order already exists for this listing',
-      409
-    );
   }
-
-  const updatedOffer =
-    await tx.offer.update({
-      where: {
-        id: offer.id,
-      },
-
-      data: {
-        status: 'ACCEPTED',
-      },
-    });
-
-  await tx.offer.updateMany({
-    where: {
-      listingId: offer.listingId,
-
-      id: {
-        not: offer.id,
-      },
-
-      status: {
-        in: ['PENDING', 'COUNTERED'],
-      },
-    },
-
-    data: {
-      status: 'REJECTED',
-    },
-  });
 
   const order =
     await tx.order.create({
@@ -500,6 +502,7 @@ async function acceptOfferAndCreateOrder(
         buyerId: offer.buyerId,
         sellerId,
         finalPrice,
+        quantity: requestedQuantity,
         status: 'PENDING_PAYMENT',
       },
     });

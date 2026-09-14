@@ -8,6 +8,8 @@ const { computeOrderWorkflow } = require('../services/orderWorkflowService');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
 const { idempotency } = require('../middleware/idempotency');
+const { requestRefund } = require('../services/paymentRefundService');
+const { releaseListingQuantity } = require('../services/inventoryService');
 
 const router = express.Router();
 
@@ -124,7 +126,7 @@ router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req,
           id: listingId,
           status: 'ACTIVE',
         },
-        data: { status: 'SOLD' },
+        data: { status: 'SOLD', availableQuantity: 0 },
       });
 
       if (claim.count !== 1) {
@@ -148,6 +150,7 @@ router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req,
           buyerId: req.user.id,
           sellerId: listing.sellerId,
           finalPrice: Number(listing.askingPrice),
+          quantity: Number(listing.quantity),
           status: 'PENDING_PAYMENT',
         },
       });
@@ -451,11 +454,15 @@ router.patch(
           metadata: { reason, cancelledByRole },
         });
 
-        // Free the listing back up so it can be sold again.
-        await tx.listing.update({
-          where: { id: current.listingId },
-          data: { status: 'ACTIVE' },
-        });
+        // Return allocated agricultural quantity to inventory. Generic
+        // products remain whole-listing sales and simply become ACTIVE again.
+        const restoredListing = await releaseListingQuantity(tx, current);
+        if (!restoredListing) {
+          await tx.listing.update({
+            where: { id: current.listingId },
+            data: { status: 'ACTIVE', availableQuantity: current.quantity },
+          });
+        }
 
         // Cascade-cancel a transport job that hasn't moved yet.
         if (current.transportJob && !['DELIVERED', 'CANCELLED'].includes(current.transportJob.status)) {
@@ -465,24 +472,18 @@ router.patch(
           });
         }
 
-        // Payment gateways are stubbed (see README) — there's no live
-        // provider to call for a refund here, so anything already PAID on
-        // this order gets flagged REFUNDED as a bookkeeping record rather
-        // than silently written off. A real gateway integration should
-        // trigger an actual refund call from this same branch.
+        // Create durable refund requests for paid funds. A refund is only
+        // marked REFUNDED after the payment provider (or authorized admin
+        // settlement flow) confirms completion.
         const paidOrderPayments = current.payments.filter((p) => p.status === 'PAID');
         const paidTransportPayments = current.transportJob
-          ? await tx.payment.findMany({
-              where: { transportJobId: current.transportJob.id, status: 'PAID' },
-            })
+          ? await tx.payment.findMany({ where: { transportJobId: current.transportJob.id, status: 'PAID' } })
           : [];
-
         const toRefund = [...paidOrderPayments, ...paidTransportPayments];
+        const refundRequests = [];
         for (const payment of toRefund) {
-          await tx.payment.update({
-            where: { id: payment.id },
-            data: { status: 'REFUNDED' },
-          });
+          const refund = await requestRefund(tx, { paymentId: payment.id, amount: payment.amount, reason: reason || 'Order cancellation', requestedById: req.user.id });
+          refundRequests.push(refund);
         }
 
         await recordAuditEvent(tx, {
