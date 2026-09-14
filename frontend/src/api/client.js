@@ -9,7 +9,8 @@ const api = axios.create({ baseURL });
 
 // Separate plain axios instance (no interceptors) for the refresh call
 // itself, so a failed refresh can't recursively trigger this same
-// response interceptor and loop.
+// response interceptor and loop. Refresh tokens are persistent, rotated
+// server-side sessions; every successful refresh replaces the stored token.
 const refreshClient = axios.create({ baseURL });
 
 api.interceptors.request.use((config) => {
@@ -67,8 +68,8 @@ function refreshSession() {
 // first — the backend issues a 7-day refresh token specifically so a
 // short-lived (15m default) access token doesn't force active users back
 // to the login screen. Only fall back to clearing the session and
-// redirecting to /login if the refresh itself fails (refresh token
-// missing, expired, or the account is suspended). Other 403s are ordinary
+// redirecting to /login if the persistent refresh session itself fails
+// (missing, expired, revoked, or the account is suspended). Other 403s are ordinary
 // "you're not allowed to do this one thing" authorization denials and
 // must NOT trigger a refresh or a logout.
 api.interceptors.response.use(
