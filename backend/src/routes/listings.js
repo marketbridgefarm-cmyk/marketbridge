@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, optionalAuthenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { signedMediaUrl } = require('../utils/objectStorage');
@@ -30,7 +30,7 @@ async function resolveMediaUrl(value) {
   }
 }
 
-async function attachMediaUrls(listing) {
+async function attachMediaUrls(listing, { includePrivateKeys = false } = {}) {
   if (!listing) return listing;
 
   const photoKeys = listing.photos || [];
@@ -45,12 +45,7 @@ async function attachMediaUrls(listing) {
     ...listing,
     photos: photos.filter(Boolean),
     videos: videos.filter(Boolean),
-    // Raw storage keys/legacy URLs, exposed so the owner's edit UI can
-    // resend "keep this one" without needing to reverse-engineer a key out
-    // of a short-lived signed URL. Not sensitive: a bare object-storage key
-    // grants no access without a server-signed URL.
-    photoKeys,
-    videoKeys,
+    ...(includePrivateKeys ? { photoKeys, videoKeys } : {}),
   };
 }
 
@@ -110,19 +105,6 @@ function toPublicListing(listing) {
 
   if (listing.sponsoredAdId !== undefined) {
     publicListing.sponsoredAdId = listing.sponsoredAdId;
-  }
-
-  if (listing.offers !== undefined) {
-    publicListing.offers = listing.offers;
-  }
-
-  if (listing.orders !== undefined) {
-    publicListing.orders = listing.orders;
-  }
-
-  if (listing.inspectionRequests !== undefined) {
-    publicListing.inspectionRequests =
-      listing.inspectionRequests;
   }
 
   return publicListing;
@@ -299,7 +281,7 @@ function validatePickupWindow(
 // PUBLIC LISTINGS — browse/search
 // ============================================================================
 
-router.get('/', async (req, res) => {
+router.get('/', optionalAuthenticate, async (req, res) => {
   try {
     const {
       cropType,
@@ -600,7 +582,13 @@ router.get('/', async (req, res) => {
       });
 
     listings = await Promise.all(
-      listings.map(attachMediaUrls)
+      listings.map((listing) =>
+        attachMediaUrls(listing, {
+          includePrivateKeys: Boolean(
+            req.user && listing.sellerId === req.user.id
+          ),
+        })
+      )
     );
 
     return res.json({
@@ -628,99 +616,109 @@ router.get('/', async (req, res) => {
 // GET SINGLE PUBLIC LISTING
 // ============================================================================
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', optionalAuthenticate, async (req, res) => {
   try {
-    const listing =
-      await prisma.listing.findUnique({
-        where: {
-          id: req.params.id,
-        },
-
-        select: {
-          ...PUBLIC_LISTING_FIELDS,
-
-          seller: {
-            select: {
-              id: true,
-              name: true,
-              rating: true,
-              location: true,
-              verificationStatus: true,
-            },
-          },
-
-          offers: true,
-
-          orders: {
-            where: {
-              status: {
-                not: 'CANCELLED',
-              },
-            },
-
-            select: {
-              id: true,
-              buyerId: true,
-              sellerId: true,
-              status: true,
-            },
-          },
-
-          inspectionRequests: {
-            include: {
-              report: true,
-
-              inspector: {
-                select: {
-                  id: true,
-                  name: true,
-                  rating: true,
-                  location: true,
-                  verificationStatus: true,
-                },
-              },
-
-              payments: {
-                select: {
-                  id: true,
-                  status: true,
-                },
-              },
-
-              // Quote amounts/messages are NOT included here. This route has
-              // no `authenticate` middleware — it's public — so embedding
-              // quotes here would leak every inspector's bid to anyone,
-              // including competing inspectors who never called the
-              // requester-only GET /inspections/:id/quotes endpoint.
-              // The requester fetches quotes through that protected route
-              // instead.
-            },
-
-            orderBy: {
-              createdAt: 'desc',
-            },
+    const listing = await prisma.listing.findUnique({
+      where: { id: req.params.id },
+      select: {
+        ...PUBLIC_LISTING_FIELDS,
+        seller: {
+          select: {
+            id: true,
+            name: true,
+            rating: true,
+            location: true,
+            verificationStatus: true,
           },
         },
-      });
+      },
+    });
 
     if (!listing) {
-      return res.status(404).json({
-        error: 'Listing not found',
-      });
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+
+    const publicListing = toPublicListing(listing);
+
+    // Negotiations, orders, and inspection details are private operational
+    // data. They are attached only when the authenticated user is actually
+    // entitled to see them. This keeps the public listing contract safe
+    // without breaking the authenticated ListingDetail experience.
+    if (req.user) {
+      const isAdmin = Array.isArray(req.user.roles) && req.user.roles.includes('ADMIN');
+      const isSeller = listing.sellerId === req.user.id;
+
+      const [offers, orders, inspectionRequests] = await Promise.all([
+        prisma.offer.findMany({
+          where: isAdmin || isSeller
+            ? { listingId: listing.id }
+            : { listingId: listing.id, buyerId: req.user.id },
+          include: isAdmin || isSeller
+            ? {
+                buyer: {
+                  select: {
+                    id: true,
+                    name: true,
+                    phone: true,
+                    rating: true,
+                    verificationStatus: true,
+                  },
+                },
+              }
+            : undefined,
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.order.findMany({
+          where: isAdmin || isSeller
+            ? { listingId: listing.id, status: { not: 'CANCELLED' } }
+            : { listingId: listing.id, buyerId: req.user.id, status: { not: 'CANCELLED' } },
+          select: {
+            id: true,
+            buyerId: true,
+            sellerId: true,
+            status: true,
+          },
+        }),
+        prisma.inspectionRequest.findMany({
+          where: isAdmin || isSeller
+            ? { listingId: listing.id }
+            : {
+                listingId: listing.id,
+                OR: [
+                  { requestedById: req.user.id },
+                  { inspectorId: req.user.id },
+                ],
+              },
+          include: {
+            report: true,
+            inspector: {
+              select: {
+                id: true,
+                name: true,
+                rating: true,
+                location: true,
+                verificationStatus: true,
+              },
+            },
+            payments: {
+              select: { id: true, status: true },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ]);
+
+      publicListing.offers = offers;
+      publicListing.orders = orders;
+      publicListing.inspectionRequests = inspectionRequests;
     }
 
     return res.json({
-      listing: await attachMediaUrls(toPublicListing(listing)),
+      listing: await attachMediaUrls(publicListing),
     });
   } catch (error) {
-    console.error(
-      'GET LISTING ERROR:',
-      error
-    );
-
-    return res.status(500).json({
-      error: 'Could not load listing',
-    });
+    console.error('GET LISTING ERROR:', error);
+    return res.status(500).json({ error: 'Could not load listing' });
   }
 });
 

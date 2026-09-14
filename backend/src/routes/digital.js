@@ -5,6 +5,7 @@ const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { makeDigitalKey, uploadPrivateObject, deletePrivateObject, signedDownloadUrl } = require('../utils/objectStorage');
+const { createPayment } = require('../services/paymentService');
 
 const router = express.Router();
 
@@ -257,35 +258,45 @@ router.post(
         });
       }
 
-      const result = await prisma.$transaction(async (tx) => {
-        const payment = await tx.payment.create({
-          data: {
-            createdById: req.user.id,
-            digitalProductId: product.id,
-            type: 'DIGITAL',
-            amount: product.price,
-            method: req.body.method,
-            reference: req.body.reference || null,
-            status: 'PENDING',
-          },
+      // A retry of an unfinished purchase should reuse the existing payment
+      // rather than orphaning it and attaching a new payment to the same
+      // DigitalPurchase. This also keeps digital checkout on the same
+      // commission/audit/idempotency path as every other MarketBridge payment.
+      if (existing?.payment && ['PENDING', 'PAID', 'RECONCILIATION_REQUIRED'].includes(existing.payment.status)) {
+        return res.status(200).json({
+          message: 'Purchase already exists. Continue the existing payment.',
+          payment: existing.payment,
+          purchase: existing,
+          paymentConfirmed: existing.payment.status === 'PAID',
+          replayed: true,
         });
+      }
 
-        const purchase = existing
-          ? await tx.digitalPurchase.update({
-              where: { id: existing.id },
-              data: { paymentId: payment.id, status: 'PENDING' },
-            })
-          : await tx.digitalPurchase.create({
-              data: {
-                productId: product.id,
-                buyerId: req.user.id,
-                paymentId: payment.id,
-                status: 'PENDING',
-              },
-            });
+      const idempotencyKey = req.get('Idempotency-Key') || req.body.idempotencyKey || null;
+      if (idempotencyKey && String(idempotencyKey).length > 200) {
+        return res.status(400).json({ error: 'Idempotency-Key must be 200 characters or fewer' });
+      }
 
-        return { payment, purchase };
+      const payment = await createPayment({
+        createdById: req.user.id,
+        digitalProductId: product.id,
+        type: 'DIGITAL',
+        amount: product.price,
+        method: req.body.method,
+        reference: req.body.reference || null,
+        idempotencyKey: idempotencyKey ? String(idempotencyKey) : null,
       });
+
+      const purchase = await prisma.digitalPurchase.create({
+        data: {
+          productId: product.id,
+          buyerId: req.user.id,
+          paymentId: payment.id,
+          status: 'PENDING',
+        },
+      });
+
+      const result = { payment, purchase };
 
       return res.status(201).json({
         message: 'Purchase created. Complete payment; access is granted only after verified payment.',

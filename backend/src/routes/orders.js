@@ -7,6 +7,7 @@ const { isAdmin } = require('../utils/authorization');
 const { computeOrderWorkflow } = require('../services/orderWorkflowService');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
+const { idempotency } = require('../middleware/idempotency');
 
 const router = express.Router();
 
@@ -91,7 +92,7 @@ const orderInclude = {
 
 // BUY NOW for normal physical products.
 // Agricultural listings continue to use the offer/negotiation workflow.
-router.post('/buy-now', authenticate, async (req, res) => {
+router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req, res) => {
   try {
     if (!req.user.roles?.includes('BUYER')) {
       return res.status(403).json({ error: 'Only buyers can purchase listings' });
@@ -266,7 +267,7 @@ router.get('/:id/workflow', authenticate, async (req, res) => {
   }
 });
 
-router.patch('/:id/confirm-receipt', authenticate, async (req, res) => {
+router.patch('/:id/confirm-receipt', authenticate, idempotency('orders.confirm-receipt'), async (req, res) => {
   try {
     const order = await prisma.order.findUnique({
       where: { id: req.params.id },

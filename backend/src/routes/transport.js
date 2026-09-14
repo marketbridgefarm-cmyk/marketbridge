@@ -11,6 +11,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { isOrderParticipant, isAdmin } = require('../utils/authorization');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
+const { idempotency } = require('../middleware/idempotency');
 
 const router = express.Router();
 
@@ -1775,6 +1776,7 @@ router.patch(
 router.post(
   '/:id/quotes',
   authenticate,
+  idempotency('transport.quote-create'),
   requireRole('TRUCK_OWNER'),
   [
     param('id').isUUID(),
@@ -2198,6 +2200,7 @@ async function loadTransportQuoteForNegotiation(req, res) {
 router.patch(
   '/quotes/:quoteId',
   authenticate,
+  idempotency('transport.quote-action'),
   [
     param('quoteId').isUUID(),
 

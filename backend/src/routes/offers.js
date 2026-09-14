@@ -8,6 +8,8 @@ const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
+const { recordOrderEvent } = require('../services/orderEventService');
+const { idempotency } = require('../middleware/idempotency');
 
 const router = express.Router();
 
@@ -105,6 +107,7 @@ router.post(
   '/',
   authenticate,
   requireRole('BUYER'),
+  idempotency('offers.create'),
   [
     body('listingId')
       .notEmpty()
@@ -489,6 +492,18 @@ async function acceptOfferAndCreateOrder(
       },
     });
 
+  await recordOrderEvent(tx, {
+    orderId: order.id,
+    actorId,
+    type: 'ORDER_CREATED',
+    toStatus: order.status,
+    metadata: {
+      listingId: offer.listingId,
+      offerId: updatedOffer.id,
+      via: 'offer-acceptance',
+    },
+  });
+
   await recordAuditEvent(tx, {
     actorId,
     action: 'OFFER_ACCEPTED',
@@ -558,6 +573,7 @@ async function acceptOfferAndCreateOrder(
 router.patch(
   '/:id',
   authenticate,
+  idempotency('offers.action'),
   async (req, res) => {
     try {
       const {

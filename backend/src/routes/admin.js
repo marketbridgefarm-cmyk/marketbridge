@@ -11,6 +11,7 @@ const {
 const {
   recordAuditEvent,
 } = require('../utils/audit');
+const { revokeAllSessions } = require('../services/refreshSessionService');
 
 const router = express.Router();
 
@@ -2106,6 +2107,10 @@ router.patch(
           },
         });
 
+        if (accountStatus === 'SUSPENDED') {
+          await revokeAllSessions(tx, updated.id, 'account-suspended');
+        }
+
         await recordAuditEvent(tx, {
           actorId: req.user.id,
           action: 'ADMIN_USER_ACCOUNT_STATUS_CHANGED',
@@ -2517,6 +2522,103 @@ router.get(
   }
 );
 
+
+// ============================================================================
+// ORDER EVENTS / OPERATIONS FEED
+// ============================================================================
+//
+// The OrderEvent stream is the durable workflow backbone.  Admins get a
+// read-only operational view of recent customer-facing workflow events; the
+// existing audit-events endpoint below remains the source for internal audit
+// records.
+
+router.get(
+  '/order-events',
+  async (req, res) => {
+    try {
+      const rawLimit = Number(req.query.limit || 100);
+      const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 100, 1), 250);
+
+      const where = {};
+      if (req.query.type) where.type = String(req.query.type);
+      if (req.query.orderId) where.orderId = String(req.query.orderId);
+
+      const events = await prisma.orderEvent.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        include: {
+          actor: {
+            select: { id: true, name: true, email: true },
+          },
+          order: {
+            select: {
+              id: true,
+              status: true,
+              finalPrice: true,
+              buyer: { select: { id: true, name: true, email: true } },
+              seller: { select: { id: true, name: true, email: true } },
+            },
+          },
+        },
+      });
+
+      return res.json({ events, count: events.length });
+    } catch (error) {
+      console.error('ADMIN ORDER EVENTS ERROR:', error);
+      return res.status(500).json({ error: 'Could not load order events' });
+    }
+  }
+);
+
+// ============================================================================
+// OPERATIONAL HEALTH SNAPSHOT
+// ============================================================================
+
+router.get(
+  '/operations/summary',
+  async (req, res) => {
+    try {
+      const [
+        pendingPayments,
+        reconciliationPayments,
+        openDisputes,
+        activeOrders,
+        activeTransportJobs,
+        recentEvents,
+      ] = await Promise.all([
+        prisma.payment.count({ where: { status: 'PENDING' } }),
+        prisma.payment.count({ where: { status: 'RECONCILIATION_REQUIRED' } }),
+        prisma.dispute.count({ where: { status: 'OPEN' } }),
+        prisma.order.count({
+          where: {
+            status: { in: ['CONFIRMED', 'TRANSPORT_ARRANGED', 'IN_TRANSIT', 'DELIVERED'] },
+          },
+        }),
+        prisma.transportJob.count({
+          where: {
+            status: { in: ['REQUESTED', 'QUOTED', 'ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'] },
+          },
+        }),
+        prisma.orderEvent.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: 12,
+          select: { id: true, orderId: true, type: true, fromStatus: true, toStatus: true, createdAt: true },
+        }),
+      ]);
+
+      return res.json({
+        queues: { pendingPayments, reconciliationPayments, openDisputes },
+        activeOrders,
+        activeTransportJobs,
+        recentEvents,
+      });
+    } catch (error) {
+      console.error('ADMIN OPERATIONS SUMMARY ERROR:', error);
+      return res.status(500).json({ error: 'Could not load operational summary' });
+    }
+  }
+);
 
 // ============================================================================
 // EXPORT
