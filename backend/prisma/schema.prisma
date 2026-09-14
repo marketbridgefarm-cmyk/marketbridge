@@ -669,8 +669,6 @@ model Order {
 
   notifications Notification[]
 
-  refreshSessions RefreshSession[]
-
   disputes Dispute[]
 
   ratings Rating[]
@@ -1005,6 +1003,8 @@ model OrderEvent {
   metadata Json?
 
   createdAt DateTime @default(now())
+
+  notifications Notification[]
 
   @@index([orderId, createdAt])
   @@index([actorId, createdAt])
