@@ -28,6 +28,7 @@ const ratingRoutes = require('./routes/ratings');
 const digitalRoutes = require('./routes/digital');
 const messageRoutes = require('./routes/messages');
 const adminRoutes = require('./routes/admin');
+const notificationRoutes = require('./routes/notifications');
 
 const prisma = require('./config/db');
 
@@ -108,7 +109,6 @@ async function testDatabase() {
   }
 }
 
-testDatabase();
 
 // ============================================================================
 // SECURITY
@@ -253,6 +253,8 @@ app.use('/api/messages', messageRoutes);
 
 app.use('/api/admin', adminRoutes);
 
+app.use('/api/notifications', notificationRoutes);
+
 // ============================================================================
 // API 404
 // ============================================================================
@@ -368,18 +370,27 @@ app.use((err, req, res, next) => {
 
 const PORT = Number(process.env.PORT) || 4000;
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(
-    `🚀 MarketBridge API listening on port ${PORT}`
-  );
+// Export the Express app so the automated E2E suite can exercise the exact
+// production routes without opening a second listener. The normal Render/
+// Node entrypoint still starts the server when this file is executed directly.
+if (require.main === module) {
+  testDatabase();
 
-  console.log(
-    `   Environment: ${
-      isProduction ? 'production' : 'development'
-    }`
-  );
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(
+      `🚀 MarketBridge API listening on port ${PORT}`
+    );
 
-  console.log(
-    `   Health: http://localhost:${PORT}/health`
-  );
-});
+    console.log(
+      `   Environment: ${
+        isProduction ? 'production' : 'development'
+      }`
+    );
+
+    console.log(
+      `   Health: http://localhost:${PORT}/health`
+    );
+  });
+}
+
+module.exports = app;
