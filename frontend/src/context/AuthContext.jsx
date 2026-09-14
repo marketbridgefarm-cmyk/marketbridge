@@ -14,7 +14,6 @@ export function AuthProvider({ children }) {
         .then(res => setUser(res.data.user))
         .catch(() => {
           localStorage.removeItem('mb_token');
-          localStorage.removeItem('mb_refresh_token');
           setUser(null);
         })
         .finally(() => setLoading(false));
@@ -26,7 +25,6 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
     localStorage.setItem('mb_token', res.data.token);
-    localStorage.setItem('mb_refresh_token', res.data.refreshToken);
     setUser(res.data.user);
     return res.data.user;
   };
@@ -34,7 +32,6 @@ export function AuthProvider({ children }) {
   const register = async (data) => {
     const res = await api.post('/auth/register', data);
     localStorage.setItem('mb_token', res.data.token);
-    localStorage.setItem('mb_refresh_token', res.data.refreshToken);
     setUser(res.data.user);
     return res.data.user;
   };
@@ -49,7 +46,6 @@ export function AuthProvider({ children }) {
       console.warn('Logout request failed; clearing local session:', error);
     } finally {
       localStorage.removeItem('mb_token');
-      localStorage.removeItem('mb_refresh_token');
       setUser(null);
     }
   };
