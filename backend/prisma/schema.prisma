@@ -710,6 +710,14 @@ model Order {
 
   arrangingParty ArrangingParty?
 
+  // Automatic inventory release for abandoned/unpaid orders. Set at order
+  // creation (buy-now / offer-acceptance) to now + ORDER_PAYMENT_TIMEOUT_HOURS.
+  // The maintenance scheduler (maintenanceService.js) cancels any order still
+  // PENDING_PAYMENT past this timestamp and returns its reserved quantity to
+  // the listing. Null for orders created before this field existed, or for
+  // any order that has already moved past PENDING_PAYMENT.
+  paymentDueAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -735,6 +743,7 @@ model Order {
   @@index([sellerId])
   @@index([listingId])
   @@index([status])
+  @@index([status, paymentDueAt])
 }
 
 // ============================================================================
