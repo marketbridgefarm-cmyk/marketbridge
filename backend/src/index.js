@@ -7,6 +7,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
 
 const {
   apiLimiter,
@@ -201,6 +202,11 @@ app.use(
     limit: '5mb',
   })
 );
+
+// Cookie parsing — required for the HttpOnly refresh-token cookie
+// (see routes/auth.js). Only auth.js reads req.cookies; no secret needed
+// since the cookie's own value is a signed JWT.
+app.use(cookieParser());
 
 // ============================================================================
 // HEALTH CHECK
