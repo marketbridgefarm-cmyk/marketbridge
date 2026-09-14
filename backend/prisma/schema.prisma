@@ -38,6 +38,7 @@ enum ListingStatus {
   UNDER_NEGOTIATION
   SOLD
   CANCELLED
+  EXPIRED
 }
 
 enum OfferStatus {
