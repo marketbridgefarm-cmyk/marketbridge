@@ -11,6 +11,7 @@ const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { idempotency } = require('../middleware/idempotency');
 const { reserveListingQuantity } = require('../services/inventoryService');
+const { computePaymentDueAt } = require('../utils/orderTiming');
 
 const router = express.Router();
 
@@ -504,6 +505,7 @@ async function acceptOfferAndCreateOrder(
         finalPrice,
         quantity: requestedQuantity,
         status: 'PENDING_PAYMENT',
+        paymentDueAt: computePaymentDueAt(),
       },
     });
 
