@@ -47,6 +47,7 @@ export default function ListingCard({ listing }) {
     <div className="listing-body">
       <div className="listing-meta">
         <span className="tag">{isProduct ? 'PRODUCT' : 'AGRICULTURE'}</span>
+        {!isProduct && <span className="tag tag--negotiable">Negotiable</span>}
         {!isProduct && inspectionLabel && (
           <span className={`tag ${hasInspectionReport ? 'tag--good' : ''}`}>{inspectionLabel}</span>
         )}
