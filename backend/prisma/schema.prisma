@@ -271,8 +271,7 @@ model User {
 
   inspectionQuotes InspectionQuote[]
 
-  inspectionEvidenceCreated InspectionEvidence[]
-    @relation("InspectionEvidenceCreator")
+  inspectionEvidenceCreated InspectionEvidence[] @relation("InspectionEvidenceCreator")
 
   // Trucks
   trucks Truck[]
@@ -306,11 +305,9 @@ model User {
   // Payments
   paymentsCreated Payment[] @relation("PaymentCreatedBy")
 
-  paymentObligationsAsPayer PaymentObligation[]
-    @relation("PaymentObligationPayer")
+  paymentObligationsAsPayer PaymentObligation[] @relation("PaymentObligationPayer")
 
-  paymentObligationsAsBeneficiary PaymentObligation[]
-    @relation("PaymentObligationBeneficiary")
+  paymentObligationsAsBeneficiary PaymentObligation[] @relation("PaymentObligationBeneficiary")
 
   // Order events
   orderEvents OrderEvent[] @relation("OrderEventActor")
@@ -318,8 +315,7 @@ model User {
   // Audit
   auditEvents AuditEvent[] @relation("AuditActor")
 
-  transportEvidenceCreated TransportEvidence[]
-    @relation("TransportEvidenceCreator")
+  transportEvidenceCreated TransportEvidence[] @relation("TransportEvidenceCreator")
 
   // Digital purchases
   digitalPurchases DigitalPurchase[] @relation("DigitalPurchases")
@@ -523,11 +519,9 @@ model InspectionQuote {
   // Immutable negotiation chain.
   parentQuoteId String?
 
-  parentQuote InspectionQuote?
-    @relation("InspectionQuoteChain", fields: [parentQuoteId], references: [id])
+  parentQuote InspectionQuote? @relation("InspectionQuoteChain", fields: [parentQuoteId], references: [id])
 
-  childQuotes InspectionQuote[]
-    @relation("InspectionQuoteChain")
+  childQuotes InspectionQuote[] @relation("InspectionQuoteChain")
 
   counterAmount Decimal? @db.Decimal(18, 2)
 
@@ -597,8 +591,7 @@ model InspectionEvidence {
 
   createdById String
 
-  createdBy User
-    @relation("InspectionEvidenceCreator", fields: [createdById], references: [id])
+  createdBy User @relation("InspectionEvidenceCreator", fields: [createdById], references: [id])
 
   @@index([reportId, type])
   @@index([createdById, capturedAt])
@@ -760,8 +753,7 @@ model TransportEvidence {
 
   createdById String
 
-  createdBy User
-    @relation("TransportEvidenceCreator", fields: [createdById], references: [id])
+  createdBy User @relation("TransportEvidenceCreator", fields: [createdById], references: [id])
 
   @@index([transportJobId, type])
   @@index([createdById, capturedAt])
@@ -792,11 +784,9 @@ model TransportQuote {
   // Immutable negotiation chain.
   parentQuoteId String?
 
-  parentQuote TransportQuote?
-    @relation("TransportQuoteChain", fields: [parentQuoteId], references: [id])
+  parentQuote TransportQuote? @relation("TransportQuoteChain", fields: [parentQuoteId], references: [id])
 
-  childQuotes TransportQuote[]
-    @relation("TransportQuoteChain")
+  childQuotes TransportQuote[] @relation("TransportQuoteChain")
 
   counterAmount Decimal? @db.Decimal(18, 2)
 
@@ -884,23 +874,19 @@ model PaymentObligation {
   // Stable business key used to prevent duplicate obligations.
   obligationKey String @unique
 
-  inspectionRequest   InspectionRequest?
-    @relation(fields: [inspectionRequestId], references: [id], onDelete: SetNull)
+  inspectionRequest   InspectionRequest? @relation(fields: [inspectionRequestId], references: [id], onDelete: SetNull)
 
   inspectionRequestId String?
 
-  transportJob   TransportJob?
-    @relation(fields: [transportJobId], references: [id], onDelete: SetNull)
+  transportJob   TransportJob? @relation(fields: [transportJobId], references: [id], onDelete: SetNull)
 
   transportJobId String?
 
-  payer User
-    @relation("PaymentObligationPayer", fields: [payerId], references: [id])
+  payer User @relation("PaymentObligationPayer", fields: [payerId], references: [id])
 
   payerId String
 
-  beneficiary User?
-    @relation("PaymentObligationBeneficiary", fields: [beneficiaryId], references: [id])
+  beneficiary User? @relation("PaymentObligationBeneficiary", fields: [beneficiaryId], references: [id])
 
   beneficiaryId String?
 
@@ -912,8 +898,7 @@ model PaymentObligation {
 
   // INVERSE SIDE of Payment.obligation.
   // The actual FK is Payment.obligationId.
-  payment Payment?
-    @relation("PaymentObligationPayment")
+  payment Payment? @relation("PaymentObligationPayment")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -941,8 +926,7 @@ model OrderEvent {
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderId String
 
-  actor User?
-    @relation("OrderEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actor User? @relation("OrderEventActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   actorId String?
 
@@ -1032,8 +1016,7 @@ model Payment {
   // in the PaymentObligation model.
   // --------------------------------------------------------------------------
 
-  obligation   PaymentObligation?
-    @relation("PaymentObligationPayment", fields: [obligationId], references: [id])
+  obligation   PaymentObligation? @relation("PaymentObligationPayment", fields: [obligationId], references: [id])
 
   obligationId String? @unique
 
