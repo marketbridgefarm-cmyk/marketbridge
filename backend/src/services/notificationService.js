@@ -1,6 +1,7 @@
 'use strict';
 
 const EVENT_COPY = {
+  PICKUP_WINDOW_REMINDER: { type: 'ORDER', title: 'Pickup window approaching', body: 'The agricultural pickup window begins within 24 hours. Confirm transport and pickup readiness.', action: 'order' },
   ORDER_CREATED: {
     type: 'ORDER',
     title: 'New order created',
@@ -143,6 +144,9 @@ async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) 
   let recipients;
 
   switch (type) {
+    case 'PICKUP_WINDOW_REMINDER':
+      recipients = buyerSeller;
+      break;
     case 'ORDER_CREATED':
       // Notify the participant who did not create/accept the order. This works
       // for both Buy Now (buyer creates it) and negotiated offer acceptance
