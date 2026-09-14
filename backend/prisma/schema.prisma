@@ -637,6 +637,10 @@ model InspectionEvidence {
 // ============================================================================
 
 model Order {
+  // Business invariant: a listing may have at most one non-cancelled order.
+  // PostgreSQL enforces the conditional uniqueness through migration
+  // 202609140004_order_listing_sale_invariant because Prisma cannot express
+  // partial unique indexes in the schema DSL.
   id String @id @default(uuid())
 
   listing   Listing @relation(fields: [listingId], references: [id])
