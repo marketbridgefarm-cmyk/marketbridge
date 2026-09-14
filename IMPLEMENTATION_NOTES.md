@@ -1,42 +1,28 @@
-# MarketBridge P0 Workflow Implementation
+# MarketBridge — Step 7 Remaining: Database Sale Invariants & Concurrency Tests
 
-Replace the files in this bundle at the same paths in the GitHub repository.
+## Implemented
 
-Implemented:
-- Server-authoritative agricultural inspection stage.
-- Agricultural goods-payment gate when an inspection request exists and is not completed.
-- Inspector actions exposed by the order workflow: start inspection and complete-report deep link.
-- Requester inspection quote review action in the order Action Center.
-- Direct execution of transporter pickup/in-transit/delivered actions from the Order Action Center.
-- Direct execution of order cancellation and inspection start actions.
-- Inspector report deep link with `inspectionId` so the report form opens automatically.
-- Existing transport payment/PICKUP payment gate remains enforced server-side.
+1. Added PostgreSQL partial unique index `Order_listingId_active_unique` so a listing can have at most one non-cancelled order.
+2. Documented the invariant in `backend/prisma/schema.prisma`.
+3. Added opt-in concurrency E2E coverage for:
+   - simultaneous Buy Now requests from two different buyers;
+   - simultaneous acceptance of two competing agricultural offers.
+4. Tests use different idempotency keys so they exercise the database/workflow concurrency guard rather than idempotency deduplication.
 
-No Prisma schema migration is required for these changes.
+## Migration
 
-After replacing the files:
-1. Commit and push to GitHub.
-2. Run backend tests/build and Prisma validation in CI/deployment.
-3. Test the complete agricultural path: inspection request -> quote/accept -> inspector start -> report complete -> goods payment -> transport accept -> transport payment -> pickup -> in transit -> delivered -> buyer receipt.
+Run the normal production/staging migration process:
 
+    npx prisma migrate deploy
 
-## P1 implementation — payment obligations + order events (2026-09-13)
+Do not manually delete or rewrite previously applied migrations.
 
-Implemented:
-- Durable `PaymentObligation` records for marketplace, inspection and hired-transport obligations.
-- `Payment` can link to exactly one obligation through `obligationId`.
-- Idempotent obligation synchronisation for new/legacy orders.
-- Durable customer-facing `OrderEvent` history separate from `AuditEvent`.
-- Payment settlement updates the obligation and records an order event.
-- Order creation, cancellation and receipt confirmation record domain events.
-- Inspection acceptance/start/completion records domain events and refreshes obligations.
-- Transport status changes record domain events and refresh hired-transport obligations.
-- Workflow now exposes payer/beneficiary/obligation IDs and durable activity history.
-- Frontend payment status now shows payer/recipient; order timeline renders durable activity.
-- Migration backfills obligations and initial ORDER_CREATED events for existing orders.
+## Validation
 
-Migration:
-`backend/prisma/migrations/202609130003_payment_obligations_order_events/migration.sql`
+JavaScript syntax checks passed. The concurrency test passes its default opt-in skip when no E2E database is configured.
 
-Deployment:
-`npx prisma migrate deploy` (the backend start script already runs this in production).
+To execute it against a disposable PostgreSQL database:
+
+    MARKETBRIDGE_E2E=1 E2E_DATABASE_URL="<disposable-postgres-url>" npm test -- --test-name-pattern="concurrency"
+
+The current execution environment does not have the backend `node_modules` installed, so dependency-backed execution against PostgreSQL could not be performed here.
