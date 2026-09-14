@@ -312,6 +312,10 @@ model User {
   // Order events
   orderEvents OrderEvent[] @relation("OrderEventActor")
 
+  notifications Notification[]
+
+  refreshSessions RefreshSession[]
+
   // Audit
   auditEvents AuditEvent[] @relation("AuditActor")
 
@@ -326,6 +330,37 @@ model User {
   @@index([email])
   @@index([accountStatus])
   @@index([verificationStatus])
+}
+
+
+// ============================================================================
+// REFRESH SESSION
+// ============================================================================
+
+model RefreshSession {
+  id String @id @default(uuid())
+
+  userId String
+  familyId String
+  tokenHash String @unique
+
+  expiresAt DateTime
+  lastUsedAt DateTime?
+  rotatedAt DateTime?
+  revokedAt DateTime?
+  revokedReason String?
+
+  userAgent String?
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([familyId, revokedAt])
+  @@index([createdAt])
 }
 
 // ============================================================================
@@ -632,6 +667,10 @@ model Order {
   // Durable customer-facing workflow events.
   events OrderEvent[]
 
+  notifications Notification[]
+
+  refreshSessions RefreshSession[]
+
   disputes Dispute[]
 
   ratings Rating[]
@@ -848,6 +887,34 @@ model DigitalProduct {
   @@index([status])
 }
 
+
+// ============================================================================
+// REQUEST IDEMPOTENCY
+// ============================================================================
+// Optional request-level idempotency for state-changing API operations.
+// A client may safely retry a request with the same key and scope without
+// creating a second business mutation.
+
+model IdempotencyRequest {
+  id String @id @default(uuid())
+
+  userId String
+  scope String
+  keyHash String
+  requestHash String
+
+  status String @default("PROCESSING")
+  statusCode Int?
+  response Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  expiresAt DateTime
+
+  @@unique([userId, scope, keyHash])
+  @@index([expiresAt])
+}
+
 // ============================================================================
 // PAYMENT OBLIGATION
 // ============================================================================
@@ -942,6 +1009,45 @@ model OrderEvent {
   @@index([orderId, createdAt])
   @@index([actorId, createdAt])
   @@index([type, createdAt])
+}
+
+// ============================================================================
+// NOTIFICATION
+// ============================================================================
+//
+// Durable in-app notifications generated from OrderEvent records.
+// Notifications are intentionally separate from AuditEvent: users can act on
+// them without exposing internal audit information.
+// ============================================================================
+
+model Notification {
+  id String @id @default(uuid())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  order   Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String?
+
+  orderEvent   OrderEvent @relation(fields: [orderEventId], references: [id], onDelete: Cascade)
+  orderEventId String
+
+  type  String
+  title String
+  body  String
+
+  // Optional client navigation target, e.g. { "path": "/orders/<id>" }.
+  action   Json?
+  metadata Json?
+
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([orderEventId, userId])
+  @@index([userId, readAt, createdAt])
+  @@index([orderId, createdAt])
+  @@index([orderEventId])
 }
 
 // ============================================================================
