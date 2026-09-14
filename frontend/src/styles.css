@@ -549,6 +549,32 @@ p {
   font-size: 12px;
 }
 
+.btn-danger {
+  background: #b3261e;
+}
+
+.btn-danger:hover {
+  background: #8c1e18;
+}
+
+/* Inline text-styled button (e.g. "resend code") — same look as .text-link
+   but usable on a <button> since it needs a click handler, not navigation. */
+.btn-link {
+  display: inline;
+  border: none;
+  background: none;
+  padding: 0;
+  min-height: 0;
+  color: var(--green);
+  font: 700 14px "DM Sans", sans-serif;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.btn-link:hover {
+  color: var(--green-dark);
+}
+
 .full {
   width: 100%;
 }

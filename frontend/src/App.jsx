@@ -7,6 +7,9 @@ import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Home from './pages/Home.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
+import ForgotPassword from './pages/ForgotPassword.jsx';
+import ResetPassword from './pages/ResetPassword.jsx';
+import AdminSecuritySettings from './pages/AdminSecuritySettings.jsx';
 import Listings from './pages/Listings.jsx';
 import ListingDetail from './pages/ListingDetail.jsx';
 import CreateListing from './pages/CreateListing.jsx';
@@ -36,6 +39,8 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         <Route path="/listings" element={<Listings />} />
         <Route path="/agricultural" element={<Listings />} />
@@ -122,6 +127,15 @@ export default function App() {
           element={
             <ProtectedRoute role="ADMIN">
               <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/dashboard/admin/security"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminSecuritySettings />
             </ProtectedRoute>
           }
         />
