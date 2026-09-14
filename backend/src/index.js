@@ -29,6 +29,8 @@ const digitalRoutes = require('./routes/digital');
 const messageRoutes = require('./routes/messages');
 const adminRoutes = require('./routes/admin');
 const notificationRoutes = require('./routes/notifications');
+const maintenanceRoutes = require('./routes/maintenance');
+const { startMaintenanceScheduler } = require('./services/maintenanceService');
 
 const prisma = require('./config/db');
 
@@ -204,6 +206,15 @@ app.use(
 // HEALTH CHECK
 // ============================================================================
 
+app.get('/ready', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return res.status(200).json({ status: 'ready', service: 'marketbridge-api', database: 'ok', timestamp: new Date().toISOString() });
+  } catch (error) {
+    return res.status(503).json({ status: 'not_ready', service: 'marketbridge-api', database: 'unavailable' });
+  }
+});
+
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
@@ -254,6 +265,8 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
 
 app.use('/api/notifications', notificationRoutes);
+
+app.use('/api/maintenance', maintenanceRoutes);
 
 // ============================================================================
 // API 404
@@ -373,6 +386,8 @@ const PORT = Number(process.env.PORT) || 4000;
 // Export the Express app so the automated E2E suite can exercise the exact
 // production routes without opening a second listener. The normal Render/
 // Node entrypoint still starts the server when this file is executed directly.
+let maintenanceTimer = null;
+
 if (require.main === module) {
   testDatabase();
 
@@ -387,10 +402,18 @@ if (require.main === module) {
       }`
     );
 
+    maintenanceTimer = startMaintenanceScheduler();
+
     console.log(
       `   Health: http://localhost:${PORT}/health`
     );
   });
 }
+
+process.on('SIGTERM', async () => {
+  if (maintenanceTimer) clearInterval(maintenanceTimer);
+  await prisma.$disconnect();
+  process.exit(0);
+});
 
 module.exports = app;
