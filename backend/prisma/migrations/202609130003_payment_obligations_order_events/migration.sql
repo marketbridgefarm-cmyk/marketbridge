@@ -138,7 +138,7 @@ SELECT
   gen_random_uuid()::text,
   o."id",
   'TRANSPORT'::"PaymentType",
-  'ORDER:' || o."id" || ':TRANSPORT",
+  'ORDER:' || o."id" || ':TRANSPORT',
   tj."id",
   o."buyerId",
   tj."truckOwnerId",
