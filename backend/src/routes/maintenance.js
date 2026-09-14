@@ -1,0 +1,20 @@
+'use strict';
+const express = require('express');
+const prisma = require('../config/db');
+const { authenticate } = require('../middleware/auth');
+const { requireRole } = require('../middleware/roleCheck');
+const { runMaintenanceCycle } = require('../services/maintenanceService');
+const router = express.Router();
+router.post('/run', authenticate, requireRole('ADMIN'), async (req, res) => {
+  try { return res.json({ success: true, result: await runMaintenanceCycle() }); }
+  catch (error) { console.error('MAINTENANCE RUN ERROR:', error); return res.status(500).json({ error: 'Maintenance cycle failed' }); }
+});
+router.get('/status', authenticate, requireRole('ADMIN'), async (req, res) => {
+  const [expiredOffers, expiredListings, openReconciliation] = await Promise.all([
+    prisma.offer.count({ where: { status: { in: ['PENDING', 'COUNTERED'] }, expiresAt: { lte: new Date() } } }),
+    prisma.listing.count({ where: { status: { in: ['ACTIVE', 'UNDER_NEGOTIATION'] }, category: 'AGRICULTURAL', pickupWindowEnd: { lte: new Date() } } }),
+    prisma.paymentReconciliation.count({ where: { status: 'OPEN' } }),
+  ]);
+  res.json({ healthy: true, due: { expiredOffers, expiredListings, openReconciliation } });
+});
+module.exports = router;

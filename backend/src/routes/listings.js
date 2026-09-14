@@ -7,6 +7,8 @@ const { recordAuditEvent } = require('../utils/audit');
 const { signedMediaUrl } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { validateListingReferences } = require('../utils/evidenceValidator');
+const { searchListings } = require('../services/searchService');
+const { getRecommendations } = require('../services/recommendationService');
 
 const router = express.Router();
 
@@ -282,6 +284,32 @@ function validatePickupWindow(
 // ============================================================================
 // PUBLIC LISTINGS — browse/search
 // ============================================================================
+// ============================================================================
+// SEARCH — PostgreSQL full-text search with bounded pagination
+// ============================================================================
+
+router.get('/search', optionalAuthenticate, async (req, res) => {
+  try {
+    const result = await searchListings(req.query);
+    result.listings = await Promise.all(result.listings.map((listing) => attachMediaUrls(toPublicListing(listing))));
+    return res.json(result);
+  } catch (error) {
+    console.error('LISTING SEARCH ERROR:', error);
+    return res.status(500).json({ error: 'Could not search listings' });
+  }
+});
+
+router.get('/recommendations', authenticate, async (req, res) => {
+  try {
+    const result = await getRecommendations(req.user.id, { limit: req.query.limit });
+    result.listings = await Promise.all(result.listings.map((listing) => attachMediaUrls(toPublicListing(listing))));
+    return res.json(result);
+  } catch (error) {
+    console.error('LISTING RECOMMENDATIONS ERROR:', error);
+    return res.status(500).json({ error: 'Could not load recommendations' });
+  }
+});
+
 
 router.get('/', optionalAuthenticate, async (req, res) => {
   try {
