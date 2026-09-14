@@ -1,5 +1,7 @@
 'use strict';
 
+const { createNotificationsForOrderEvent } = require('./notificationService');
+
 async function recordOrderEvent(tx, {
   orderId,
   actorId = null,
@@ -9,7 +11,7 @@ async function recordOrderEvent(tx, {
   metadata = null,
 }) {
   if (!orderId || !type) return null;
-  return tx.orderEvent.create({
+  const event = await tx.orderEvent.create({
     data: {
       orderId,
       actorId,
@@ -19,6 +21,12 @@ async function recordOrderEvent(tx, {
       metadata: metadata || undefined,
     },
   });
+
+  // Notifications are generated in the same transaction as the workflow
+  // event, so the user inbox cannot drift away from durable OrderEvent data.
+  await createNotificationsForOrderEvent(tx, event);
+
+  return event;
 }
 
 async function listOrderEvents(tx, orderId, limit = 100) {
