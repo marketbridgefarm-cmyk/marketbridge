@@ -160,22 +160,36 @@ WHERE tj."method" = 'HIRE_TRANSPORTER'
   AND tj."truckOwnerId" IS NOT NULL;
 
 -- Link existing payments to the canonical obligation rows.
+-- Rank candidate payments per obligation (PAID first, then most recently
+-- created) and link only the top-ranked one, so a duplicate FAILED attempt
+-- alongside a later retry can never collide on the unique obligationId index.
+WITH ranked AS (
+  SELECT
+    p."id" AS payment_id,
+    o."id" AS obligation_id,
+    ROW_NUMBER() OVER (
+      PARTITION BY o."id"
+      ORDER BY
+        CASE WHEN p."status" = 'PAID'::"PaymentStatus" THEN 0 ELSE 1 END,
+        p."createdAt" DESC
+    ) AS rn
+  FROM "Payment" p
+  JOIN "PaymentObligation" o
+    ON o."type" = p."type"
+    AND (
+      (p."type" = 'MARKETPLACE'::"PaymentType" AND o."orderId" = p."orderId")
+      OR
+      (p."type" = 'TRANSPORT'::"PaymentType" AND o."transportJobId" = p."transportJobId")
+      OR
+      (p."type" = 'INSPECTOR'::"PaymentType" AND o."inspectionRequestId" = p."inspectionRequestId")
+    )
+  WHERE p."obligationId" IS NULL
+)
 UPDATE "Payment" p
-SET "obligationId" = o."id"
-FROM "PaymentObligation" o
-WHERE p."obligationId" IS NULL
-  AND o."type" = p."type"
-  AND (
-    (p."type" = 'MARKETPLACE'::"PaymentType" AND o."orderId" = p."orderId")
-    OR
-    (p."type" = 'TRANSPORT'::"PaymentType" AND o."transportJobId" = p."transportJobId")
-    OR
-    (p."type" = 'INSPECTOR'::"PaymentType" AND o."inspectionRequestId" = p."inspectionRequestId")
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM "Payment" p2
-    WHERE p2."obligationId" = o."id"
-  );
+SET "obligationId" = ranked.obligation_id
+FROM ranked
+WHERE p."id" = ranked.payment_id
+  AND ranked.rn = 1;
 
 -- Record the existing order creation as the first durable domain event.
 INSERT INTO "OrderEvent"
@@ -188,4 +202,3 @@ SELECT
   jsonb_build_object('backfilled', true),
   o."createdAt"
 FROM "Order" o;
-
