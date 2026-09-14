@@ -20,6 +20,38 @@ const router = express.Router();
 const OPTIONAL_ROLES = ['INSPECTOR', 'TRUCK_OWNER', 'ADVERTISER'];
 const DEFAULT_ROLES = ['BUYER', 'SELLER'];
 
+// Refresh tokens live in an HttpOnly cookie, never in the JSON response body
+// or localStorage — this is what keeps a stolen/XSS'd page from being able
+// to mint fresh sessions indefinitely. The access token (short-lived) still
+// goes back in the body for the frontend to hold in memory/localStorage,
+// since its short TTL makes that an acceptable, lower-value target.
+const REFRESH_COOKIE_NAME = 'mb_refresh';
+const isProduction = process.env.NODE_ENV === 'production';
+
+function refreshCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    // Frontend and backend are on different domains in production
+    // (Vercel + Render), which requires SameSite=None + Secure for the
+    // cookie to be sent at all. Locally (http, same-site) Lax is fine.
+    sameSite: isProduction ? 'none' : 'lax',
+    // Scoped to the auth routes only — the browser won't attach this
+    // cookie to ordinary API calls, just /api/auth/refresh and /api/auth/logout.
+    path: '/api/auth',
+    maxAge: REFRESH_TTL_MS,
+  };
+}
+
+function setRefreshCookie(res, refreshToken) {
+  res.cookie(REFRESH_COOKIE_NAME, refreshToken, refreshCookieOptions());
+}
+
+function clearRefreshCookie(res) {
+  const { maxAge, ...opts } = refreshCookieOptions();
+  res.clearCookie(REFRESH_COOKIE_NAME, opts);
+}
+
 function signToken(user, sessionId) {
   return jwt.sign({ sub: user.id, sid: sessionId }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '15m',
@@ -111,7 +143,8 @@ router.post(
       });
 
       const session = await issueSession(user, req);
-      return res.status(201).json({ user: sanitize(user), ...session });
+      setRefreshCookie(res, session.refreshToken);
+      return res.status(201).json({ user: sanitize(user), token: session.token, expiresIn: session.expiresIn });
     } catch (error) {
       console.error('Register error:', error);
       return res.status(500).json({ error: 'Registration failed' });
@@ -146,7 +179,8 @@ router.post(
       }
 
       const session = await issueSession(user, req);
-      return res.json({ user: sanitize(user), ...session });
+      setRefreshCookie(res, session.refreshToken);
+      return res.json({ user: sanitize(user), token: session.token, expiresIn: session.expiresIn });
     } catch (error) {
       console.error('Login error:', error);
       return res.status(500).json({ error: 'Login failed' });
@@ -157,8 +191,8 @@ router.post(
 // Refresh token: persistent session + one-time rotation.
 router.post('/refresh', authLimiter, async (req, res) => {
   try {
-    const { refreshToken } = req.body;
-    if (!refreshToken) return res.status(400).json({ error: 'Refresh token is required' });
+    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
+    if (!refreshToken) return res.status(401).json({ error: 'Refresh token is required', code: 'INVALID_REFRESH_SESSION' });
 
     let payload;
     try {
@@ -172,19 +206,25 @@ router.post('/refresh', authLimiter, async (req, res) => {
     }
 
     if (payload.type !== 'refresh' || !payload.sub || !payload.sid || payload.jti !== payload.sid) {
+      clearRefreshCookie(res);
       return res.status(401).json({ error: 'Refresh session is invalid or expired', code: 'INVALID_REFRESH_SESSION' });
     }
 
     const session = await prisma.refreshSession.findUnique({ where: { id: payload.sid } });
     if (!session || session.userId !== payload.sub) {
+      clearRefreshCookie(res);
       return res.status(401).json({ error: 'Refresh session is invalid or expired', code: 'INVALID_REFRESH_SESSION' });
     }
 
     const user = await prisma.user.findUnique({ where: { id: payload.sub } });
-    if (!user) return res.status(401).json({ error: 'User no longer exists' });
+    if (!user) {
+      clearRefreshCookie(res);
+      return res.status(401).json({ error: 'User no longer exists' });
+    }
 
     if (user.accountStatus === 'SUSPENDED') {
       await revokeAllSessions(prisma, user.id, 'account-suspended');
+      clearRefreshCookie(res);
       return res.status(403).json({ error: 'This account has been suspended. Contact support for assistance.' });
     }
 
@@ -202,16 +242,17 @@ router.post('/refresh', authLimiter, async (req, res) => {
     );
 
     if (!rotation.ok) {
+      clearRefreshCookie(res);
       return res.status(401).json({
         error: 'Refresh token is no longer valid. Please sign in again.',
         code: 'REFRESH_SESSION_REVOKED',
       });
     }
 
+    setRefreshCookie(res, newRefreshToken);
     return res.json({
       user: sanitize(user),
       token: signToken(user, nextSessionId),
-      refreshToken: newRefreshToken,
       expiresIn: process.env.JWT_EXPIRES_IN || '15m',
     });
   } catch (error) {
@@ -229,12 +270,14 @@ router.get('/me', authenticate, async (req, res) => {
 // accepted by the auth middleware and therefore become invalid immediately.
 router.post('/logout', authenticate, async (req, res) => {
   await revokeFamily(prisma, req.authSessionFamilyId, 'logout');
+  clearRefreshCookie(res);
   res.json({ message: 'Logged out successfully' });
 });
 
 // Revoke every active refresh session for the current account.
 router.post('/logout-all', authenticate, async (req, res) => {
   const result = await revokeAllSessions(prisma, req.user.id, 'logout-all');
+  clearRefreshCookie(res);
   res.json({ message: 'All sessions have been logged out', revokedSessions: result.count });
 });
 
