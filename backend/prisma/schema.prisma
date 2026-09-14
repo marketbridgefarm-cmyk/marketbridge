@@ -221,9 +221,29 @@ enum VerificationStatus {
   REJECTED
 }
 
+enum ProviderRoleRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ============================================================================
 // FINANCIAL LEDGER ENUM
 // ============================================================================
+
+enum PaymentRefundStatus {
+  REQUESTED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentReconciliationStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
 
 enum PaymentLedgerEntryType {
   SELLER_EARNING
@@ -304,6 +324,8 @@ model User {
 
   // Payments
   paymentsCreated Payment[] @relation("PaymentCreatedBy")
+  paymentRefundsRequested PaymentRefund[] @relation("PaymentRefundRequestedBy")
+  paymentReconciliationsResolved PaymentReconciliation[] @relation("PaymentReconciliationResolvedBy")
 
   paymentObligationsAsPayer PaymentObligation[] @relation("PaymentObligationPayer")
 
@@ -315,6 +337,8 @@ model User {
   notifications Notification[]
 
   refreshSessions RefreshSession[]
+
+  providerRoleRequests ProviderRoleRequest[]
 
   // Audit
   auditEvents AuditEvent[] @relation("AuditActor")
@@ -330,6 +354,31 @@ model User {
   @@index([email])
   @@index([accountStatus])
   @@index([verificationStatus])
+}
+
+
+// ============================================================================
+// PROVIDER ROLE REQUEST
+// ============================================================================
+
+model ProviderRoleRequest {
+  id String @id @default(uuid())
+
+  userId String
+  role Role
+  status ProviderRoleRequestStatus @default(PENDING)
+  reviewedById String?
+  reviewedAt DateTime?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@index([status])
+  @@index([userId])
 }
 
 
@@ -405,8 +454,9 @@ model Listing {
   title    String?
   cropType String?
 
-  quantity Float
-  unit     String
+  quantity          Float
+  availableQuantity Float
+  unit              String
 
   askingPrice       Decimal  @db.Decimal(18, 2)
   minAcceptablePrice Decimal? @db.Decimal(18, 2)
@@ -653,6 +703,7 @@ model Order {
   sellerId String
 
   finalPrice Decimal @db.Decimal(18, 2)
+  quantity   Float
 
   status OrderStatus @default(PENDING_PAYMENT)
 
@@ -1181,6 +1232,9 @@ model Payment {
 
   events PaymentEvent[]
 
+  refunds PaymentRefund[]
+  reconciliations PaymentReconciliation[]
+
   @@index([orderId])
   @@index([createdById])
   @@index([digitalProductId])
@@ -1256,6 +1310,75 @@ model PaymentEvent {
   @@index([createdAt])
 
   @@unique([provider, eventId])
+}
+
+
+// ============================================================================
+// PAYMENT REFUND
+// ============================================================================
+// Refunds are durable financial instructions. A payment is not marked
+// REFUNDED until the provider (or an authorized settlement process) confirms
+// the refund. This prevents order cancellation from silently fabricating a
+// completed refund.
+// ============================================================================
+
+model PaymentRefund {
+  id String @id @default(uuid())
+
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  paymentId String
+
+  requestedBy   User? @relation("PaymentRefundRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  requestedById String?
+
+  amount Decimal @db.Decimal(18, 2)
+  currency String @default("ETB")
+  reason String?
+  status PaymentRefundStatus @default(REQUESTED)
+  provider String?
+  providerRefundId String?
+  failureReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  completedAt DateTime?
+
+  @@index([paymentId, status])
+  @@index([status, createdAt])
+  @@unique([provider, providerRefundId])
+}
+
+// ============================================================================
+// PAYMENT RECONCILIATION
+// ============================================================================
+
+model PaymentReconciliation {
+  id String @id @default(uuid())
+
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  paymentId String
+
+  provider String
+  observedStatus String?
+  expectedAmount Decimal @db.Decimal(18, 2)
+  observedAmount Decimal? @db.Decimal(18, 2)
+  expectedCurrency String
+  observedCurrency String?
+  reason String
+  payload Json?
+
+  status PaymentReconciliationStatus @default(OPEN)
+  resolvedBy   User? @relation("PaymentReconciliationResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedById String?
+  resolvedAt DateTime?
+  resolutionNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([paymentId, status])
+  @@index([status, createdAt])
+  @@index([provider, createdAt])
 }
 
 // ============================================================================
