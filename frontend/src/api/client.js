@@ -5,13 +5,18 @@ const baseURL = configuredApiUrl ? `${configuredApiUrl}/api` : '/api';
 
 const SUSPENDED_MESSAGE = 'This account has been suspended. Contact support for assistance.';
 
-const api = axios.create({ baseURL });
+// withCredentials: true is required so the browser sends/accepts the
+// HttpOnly refresh-token cookie set by the backend (routes/auth.js). The
+// refresh token itself is never touched by JS — it lives only in that
+// cookie, scoped to /api/auth, and is invisible to this code and to any
+// XSS running on the page.
+const api = axios.create({ baseURL, withCredentials: true });
 
 // Separate plain axios instance (no interceptors) for the refresh call
 // itself, so a failed refresh can't recursively trigger this same
 // response interceptor and loop. Refresh tokens are persistent, rotated
-// server-side sessions; every successful refresh replaces the stored token.
-const refreshClient = axios.create({ baseURL });
+// server-side sessions; every successful refresh replaces the cookie.
+const refreshClient = axios.create({ baseURL, withCredentials: true });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('mb_token');
@@ -26,7 +31,6 @@ api.interceptors.request.use((config) => {
 
 function clearSession() {
   localStorage.removeItem('mb_token');
-  localStorage.removeItem('mb_refresh_token');
 }
 
 function goToLogin(reason) {
@@ -42,22 +46,17 @@ let refreshPromise = null;
 
 function refreshSession() {
   if (!refreshPromise) {
-    const storedRefreshToken = localStorage.getItem('mb_refresh_token');
-
-    if (!storedRefreshToken) {
-      refreshPromise = Promise.reject(new Error('No refresh token available'));
-    } else {
-      refreshPromise = refreshClient
-        .post('/auth/refresh', { refreshToken: storedRefreshToken })
-        .then((res) => {
-          localStorage.setItem('mb_token', res.data.token);
-          localStorage.setItem('mb_refresh_token', res.data.refreshToken);
-          return res.data.token;
-        })
-        .finally(() => {
-          refreshPromise = null;
-        });
-    }
+    // No refresh token to read or send here — it's an HttpOnly cookie the
+    // browser attaches automatically to this same-origin-scoped request.
+    refreshPromise = refreshClient
+      .post('/auth/refresh')
+      .then((res) => {
+        localStorage.setItem('mb_token', res.data.token);
+        return res.data.token;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
   }
 
   return refreshPromise;
@@ -65,7 +64,7 @@ function refreshSession() {
 
 // If the session is no longer valid (expired/invalid token, or the account
 // has been suspended since the token was issued), try a silent refresh
-// first — the backend issues a 7-day refresh token specifically so a
+// first — the backend issues a 7-day refresh session specifically so a
 // short-lived (15m default) access token doesn't force active users back
 // to the login screen. Only fall back to clearing the session and
 // redirecting to /login if the persistent refresh session itself fails
@@ -100,7 +99,7 @@ api.interceptors.response.use(
 
     // Only attempt a refresh on a genuine 401, and only once per request
     // (config._retried guards against a refreshed-but-still-401 loop, e.g.
-    // if the refresh token itself is invalid).
+    // if the refresh cookie itself is invalid).
     if (status === 401 && !config._retried && localStorage.getItem('mb_token')) {
       config._retried = true;
 
