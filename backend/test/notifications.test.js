@@ -47,6 +47,7 @@ test('notification integration suite is opt-in', async () => {
         askingPrice: 100,
         unit: 'item',
         quantity: 1,
+        availableQuantity: 1,
         location: 'Addis Ababa',
         status: 'ACTIVE',
       },
@@ -58,6 +59,7 @@ test('notification integration suite is opt-in', async () => {
         buyerId: buyer.id,
         sellerId: seller.id,
         finalPrice: 100,
+        quantity: 1,
         status: 'PENDING_PAYMENT',
       },
     });
@@ -68,22 +70,44 @@ test('notification integration suite is opt-in', async () => {
         actorId: buyer.id,
         type: 'ORDER_CREATED',
       });
+      await recordOrderEvent(tx, {
+        orderId: order.id,
+        actorId: null,
+        type: 'PAYMENT_REFUNDED',
+        metadata: { paymentId: 'test-payment', paymentType: 'MARKETPLACE' },
+      });
+      await recordOrderEvent(tx, {
+        orderId: order.id,
+        actorId: null,
+        type: 'TRANSPORT_STATUS_CHANGED',
+        fromStatus: 'IN_TRANSIT',
+        toStatus: 'DELIVERED',
+      });
     });
 
     const sellerInbox = await listNotifications(prisma, seller.id);
-    assert.equal(sellerInbox.notifications.length, 1);
-    assert.equal(sellerInbox.notifications[0].orderEventId != null, true);
-    assert.equal(sellerInbox.notifications[0].orderId, order.id);
-    assert.equal(sellerInbox.unreadCount, 1);
+    assert.equal(sellerInbox.notifications.length, 3);
+    assert.equal(sellerInbox.unreadCount, 3);
 
     const buyerInbox = await listNotifications(prisma, buyer.id);
-    assert.equal(buyerInbox.notifications.length, 0, 'event actor should not receive an echo notification');
+    assert.equal(buyerInbox.notifications.length, 2);
+    assert.equal(buyerInbox.unreadCount, 2);
 
-    const event = await prisma.orderEvent.findFirst({ where: { orderId: order.id } });
-    assert.ok(event);
+    const firstNotification = sellerInbox.notifications[0];
+    await prisma.notification.update({
+      where: { id: firstNotification.id },
+      data: { readAt: new Date() },
+    });
+    const afterRead = await listNotifications(prisma, seller.id, { unreadOnly: true });
+    assert.equal(afterRead.unreadCount, 2);
+    assert.equal(afterRead.notifications.length, 2);
 
-    const notificationCount = await prisma.notification.count({ where: { orderEventId: event.id } });
-    assert.equal(notificationCount, 1);
+    const eventIds = await prisma.orderEvent.findMany({
+      where: { orderId: order.id },
+      select: { id: true },
+    });
+    const notificationCount = await prisma.notification.count({ where: { orderEventId: { in: eventIds.map((e) => e.id) } } });
+    assert.equal(notificationCount, 5);
   } finally {
     if (order) {
       await prisma.notification.deleteMany({ where: { orderId: order.id } });

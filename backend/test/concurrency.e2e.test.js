@@ -133,6 +133,7 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
         category: 'PRODUCT',
         title: 'Concurrency Product',
         quantity: 10,
+        availableQuantity: 10,
         unit: 'kg',
         askingPrice: 100,
         location: 'Addis Ababa',
@@ -175,7 +176,7 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
     created.orderIds.push(orders[0].id);
   });
 
-  test('concurrent acceptance of competing offers creates exactly one order', async () => {
+  test('concurrent acceptance of competing partial offers cannot oversell produce', async () => {
     const seller = await makeUser('offer-seller');
     const buyerA = await makeUser('offer-a');
     const buyerB = await makeUser('offer-b');
@@ -187,6 +188,7 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
         title: 'Concurrency Produce',
         cropType: 'Tomato',
         quantity: 100,
+        availableQuantity: 100,
         unit: 'kg',
         askingPrice: 1000,
         minAcceptablePrice: 700,
@@ -248,20 +250,22 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
     const successes = results.filter((result) => result.status === 200);
     const conflicts = results.filter((result) => result.status === 409);
 
-    assert.equal(successes.length, 1, JSON.stringify(results));
-    assert.equal(conflicts.length, 1, JSON.stringify(results));
+    assert.equal(successes.length, 2, JSON.stringify(results));
+    assert.equal(conflicts.length, 0, JSON.stringify(results));
 
     const orders = await prisma.order.findMany({ where: { listingId: listing.id } });
-    assert.equal(orders.length, 1);
-    assert.equal(orders[0].status, 'PENDING_PAYMENT');
+    assert.equal(orders.length, 2);
+    assert.equal(orders.reduce((sum, order) => sum + Number(order.quantity), 0), 100);
+    assert.equal(new Set(orders.map((order) => order.buyerId)).size, 2);
 
     const offers = await prisma.offer.findMany({ where: { listingId: listing.id } });
-    assert.equal(offers.filter((offer) => offer.status === 'ACCEPTED').length, 1);
-    assert.equal(offers.filter((offer) => offer.status === 'REJECTED').length, 1);
+    assert.equal(offers.filter((offer) => offer.status === 'ACCEPTED').length, 2);
+    assert.equal(offers.filter((offer) => offer.status === 'REJECTED').length, 0);
 
     const storedListing = await prisma.listing.findUnique({ where: { id: listing.id } });
+    assert.equal(Number(storedListing.availableQuantity), 0);
     assert.equal(storedListing.status, 'SOLD');
 
-    created.orderIds.push(orders[0].id);
+    created.orderIds.push(...orders.map((order) => order.id));
   });
 }
