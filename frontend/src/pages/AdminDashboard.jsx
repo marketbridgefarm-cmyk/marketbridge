@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../api/client';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
@@ -519,6 +520,7 @@ export default function AdminDashboard() {
           >
             Performance
           </button>
+          <Link to="/dashboard/admin/security" className="sd-btn">Security</Link>
         </div>
       </section>
 
