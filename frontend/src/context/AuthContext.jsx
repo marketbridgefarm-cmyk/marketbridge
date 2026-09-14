@@ -39,10 +39,19 @@ export function AuthProvider({ children }) {
     return res.data.user;
   };
 
-  const logout = () => {
-    localStorage.removeItem('mb_token');
-    localStorage.removeItem('mb_refresh_token');
-    setUser(null);
+  const logout = async () => {
+    try {
+      if (localStorage.getItem('mb_token')) {
+        await api.post('/auth/logout');
+      }
+    } catch (error) {
+      // Local cleanup still happens if the network/session is already gone.
+      console.warn('Logout request failed; clearing local session:', error);
+    } finally {
+      localStorage.removeItem('mb_token');
+      localStorage.removeItem('mb_refresh_token');
+      setUser(null);
+    }
   };
 
   const refreshUser = async () => {
