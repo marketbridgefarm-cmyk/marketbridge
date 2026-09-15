@@ -24,6 +24,7 @@ const {
   findMatchingBackupCodeIndex,
 } = require('../services/mfaService');
 const { createResetToken, consumeResetToken } = require('../services/passwordResetService');
+const { sendMail } = require('../utils/mailer');
 
 const router = express.Router();
 
@@ -37,6 +38,15 @@ const DEFAULT_ROLES = ['BUYER', 'SELLER'];
 // since its short TTL makes that an acceptable, lower-value target.
 const REFRESH_COOKIE_NAME = 'mb_refresh';
 const isProduction = process.env.NODE_ENV === 'production';
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function refreshCookieOptions() {
   return {
@@ -529,12 +539,9 @@ router.post(
 // ============================================================================
 
 // Always responds with the same generic message regardless of whether the
-// email is registered, so this endpoint can't be used to enumerate
-// accounts. NOTE: this platform has no email/SMS provider wired up yet
-// (see the Top-10 roadmap item on Amharic/Afaan Oromo + SMS notifications)
-// — until one exists, the raw reset link is logged server-side so Alex can
-// retrieve it manually, and is only ever included in the API response
-// itself outside production, for local/manual testing.
+// email is registered, so this endpoint can't be used to enumerate accounts.
+// In production the raw reset token is never logged or returned; it is sent
+// only through the configured transactional mail provider.
 router.post(
   '/forgot-password',
   authLimiter,
@@ -556,11 +563,22 @@ router.post(
       const rawToken = await createResetToken(prisma, { userId: user.id, requestedIp: requestIp(req) });
       const resetUrl = `${(process.env.APP_BASE_URL || '').replace(/\/$/, '')}/reset-password?token=${rawToken}`;
 
-      // TODO(priority-9): replace this console.log with a real email/SMS
-      // send once a provider is wired up. Until then this is the only way
-      // the token reaches anyone, so it's logged at a level Alex can find
-      // in Render's logs.
-      console.log(`[password-reset] ${user.email} -> ${resetUrl}`);
+      const safeName = escapeHtml(user.name || 'MarketBridge user');
+
+      await sendMail({
+        to: user.email,
+        subject: 'MarketBridge password reset',
+        text: [
+          `Hello ${user.name || 'MarketBridge user'},`,
+          '',
+          'We received a request to reset your MarketBridge password.',
+          `Reset your password here: ${resetUrl}`,
+          '',
+          'This link expires in 30 minutes and can be used only once.',
+          'If you did not request this, you can safely ignore this email.',
+        ].join('\n'),
+        html: `<p>Hello ${safeName},</p><p>We received a request to reset your MarketBridge password.</p><p><a href="${resetUrl}">Reset your password</a></p><p>This link expires in 30 minutes and can be used only once.</p><p>If you did not request this, you can safely ignore this email.</p>`,
+      });
 
       return res.json({
         ...genericResponse,
