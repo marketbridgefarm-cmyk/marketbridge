@@ -41,6 +41,7 @@ export default function AdminDashboard() {
   const [roleSelections, setRoleSelections] = useState({});
 
   const [error, setError] = useState('');
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState('');
@@ -48,6 +49,7 @@ export default function AdminDashboard() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     setError('');
+    setMfaRequired(false);
 
     try {
       const [
@@ -88,10 +90,14 @@ export default function AdminDashboard() {
       setOrderEvents(orderEventsRes.data?.events || []);
       setAuditEvents(auditEventsRes.data?.events || []);
     } catch (err) {
-      setError(
-        err.response?.data?.error ||
-        'Could not load admin data'
-      );
+      if (err.response?.data?.code === 'MFA_SETUP_REQUIRED') {
+        setMfaRequired(true);
+      } else {
+        setError(
+          err.response?.data?.error ||
+          'Could not load admin data'
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -503,6 +509,23 @@ export default function AdminDashboard() {
   const activeTabItem =
     tabItems.find((item) => item.key === tab) || tabItems[0];
 
+  if (mfaRequired) {
+    return (
+      <div className="sd-dashboard">
+        <section>
+          <DashboardWelcome user={user} subtitle="Manage users, verification, account access, roles, disputes, and fraud monitoring." />
+        </section>
+        <section>
+          <div className="card" style={{ maxWidth: 520 }}>
+            <h2>Set up MFA to continue</h2>
+            <p>Admin actions on MarketBridge now require multi-factor authentication. This takes about a minute with an authenticator app (Google Authenticator, Authy, etc.).</p>
+            <Link to="/account/security" className="btn btn-primary">Set up MFA</Link>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="sd-dashboard">
 
@@ -520,7 +543,7 @@ export default function AdminDashboard() {
           >
             Performance
           </button>
-          <Link to="/dashboard/admin/security" className="sd-btn">Security</Link>
+          <Link to="/account/security" className="sd-btn">Account security</Link>
         </div>
       </section>
 
