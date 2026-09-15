@@ -2,14 +2,14 @@
 const express = require('express');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
-const { requireRole } = require('../middleware/roleCheck');
+const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { runMaintenanceCycle } = require('../services/maintenanceService');
 const router = express.Router();
-router.post('/run', authenticate, requireRole('ADMIN'), async (req, res) => {
+router.post('/run', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
   try { return res.json({ success: true, result: await runMaintenanceCycle() }); }
   catch (error) { console.error('MAINTENANCE RUN ERROR:', error); return res.status(500).json({ error: 'Maintenance cycle failed' }); }
 });
-router.get('/status', authenticate, requireRole('ADMIN'), async (req, res) => {
+router.get('/status', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
   const [expiredOffers, expiredListings, openReconciliation, unpaidOrdersDue] = await Promise.all([
     prisma.offer.count({ where: { status: { in: ['PENDING', 'COUNTERED'] }, expiresAt: { lte: new Date() } } }),
     prisma.listing.count({ where: { status: { in: ['ACTIVE', 'UNDER_NEGOTIATION'] }, category: 'AGRICULTURAL', pickupWindowEnd: { lte: new Date() } } }),
