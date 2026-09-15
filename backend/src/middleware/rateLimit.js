@@ -55,4 +55,19 @@ const webhookLimiter = rateLimit({
   message: { error: 'Too many webhook requests.' },
 });
 
-module.exports = { apiLimiter, authLimiter, paymentLimiter, webhookLimiter };
+const stores = [apiLimiter, authLimiter, paymentLimiter, webhookLimiter]
+  .map((limiter) => limiter.store)
+  .filter((store) => store && typeof store.ping === 'function');
+
+async function checkRedisHealth() {
+  if (!process.env.REDIS_URL) return true;
+  if (!stores.length) return false;
+  const results = await Promise.all(stores.map((store) => store.ping()));
+  return results.every(Boolean);
+}
+
+async function shutdownRateLimitStores() {
+  await Promise.all(stores.map((store) => store.shutdown().catch(() => undefined)));
+}
+
+module.exports = { apiLimiter, authLimiter, paymentLimiter, webhookLimiter, checkRedisHealth, shutdownRateLimitStores };
