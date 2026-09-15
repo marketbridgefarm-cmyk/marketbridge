@@ -9,6 +9,8 @@ const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload
 const { validateListingReferences } = require('../utils/evidenceValidator');
 const { searchListings } = require('../services/searchService');
 const { getRecommendations } = require('../services/recommendationService');
+const { REGIONS, REGION_VALUES } = require('../constants/ethiopianRegions');
+const { haversineSql } = require('../utils/geo');
 
 const router = express.Router();
 
@@ -72,7 +74,12 @@ const PUBLIC_LISTING_FIELDS = {
   unit: true,
   askingPrice: true,
   location: true,
-  locationId: true,
+  region: true,
+  zone: true,
+  woreda: true,
+  kebele: true,
+  latitude: true,
+  longitude: true,
   harvestedDate: true,
   readinessDate: true,
   pickupWindowStart: true,
@@ -84,7 +91,6 @@ const PUBLIC_LISTING_FIELDS = {
   createdByInspectorId: true,
   createdAt: true,
   updatedAt: true,
-      locationRef: { select: { id: true, name: true, nameAm: true, nameOm: true, code: true, level: true, parentId: true, latitude: true, longitude: true } },
 };
 
 /**
@@ -101,8 +107,9 @@ function toPublicListing(listing) {
     }
   }
 
-  if (listing.seller) publicListing.seller = listing.seller;
-  if (listing.locationRef) publicListing.locationRef = listing.locationRef;
+  if (listing.seller) {
+    publicListing.seller = listing.seller;
+  }
 
   if (listing.sponsored !== undefined) {
     publicListing.sponsored = listing.sponsored;
@@ -318,7 +325,7 @@ router.get('/', optionalAuthenticate, async (req, res) => {
       cropType,
       title,
       location,
-      locationId,
+      region,
       status,
       minQuantity,
       maxQuantity,
@@ -337,6 +344,10 @@ router.get('/', optionalAuthenticate, async (req, res) => {
     const take = Math.min(requestedLimit, 50);
     const skip = (pageNumber - 1) * take;
 
+    if (region && !REGION_VALUES.includes(region)) {
+      return res.status(400).json({ error: `Invalid region. Must be one of: ${REGION_VALUES.join(', ')}` });
+    }
+
     const where = {
       ...(cropType && {
         cropType: {
@@ -353,9 +364,13 @@ router.get('/', optionalAuthenticate, async (req, res) => {
       }),
 
       ...(location && {
-        location: { contains: location, mode: 'insensitive' },
+        location: {
+          contains: location,
+          mode: 'insensitive',
+        },
       }),
-      ...(locationId && { locationId }),
+
+      ...(region && { region }),
 
       ...(category && { category }),
 
@@ -400,6 +415,7 @@ router.get('/', optionalAuthenticate, async (req, res) => {
       name: true,
       rating: true,
       location: true,
+      region: true,
       verificationStatus: true,
     };
 
@@ -438,7 +454,7 @@ router.get('/', optionalAuthenticate, async (req, res) => {
       TOP_OF_CATEGORY: 1000,
       SPONSORED_SEARCH: 300,
     };
-    const hasSearch = Boolean(cropType || title || location || minPrice || maxPrice || minQuantity || maxQuantity || readyBy || readyAfter);
+    const hasSearch = Boolean(cropType || title || location || region || minPrice || maxPrice || minQuantity || maxQuantity || readyBy || readyAfter);
     const boostRank = new Map();
     const boostAdId = new Map();
     const boostPrimaryScore = new Map();
@@ -643,6 +659,81 @@ router.get('/', optionalAuthenticate, async (req, res) => {
 });
 
 // ============================================================================
+// STRUCTURED ETHIOPIAN GEOGRAPHY
+// ============================================================================
+
+// Region dropdown data for the frontend. Public and static — same list as
+// constants/ethiopianRegions.js and the Region enum in schema.prisma.
+router.get('/meta/regions', (req, res) => {
+  res.json({ regions: REGIONS });
+});
+
+// "Nearby produce discovery": listings within radiusKm of (lat, lng),
+// sorted nearest-first. Kept as its own endpoint rather than folded into
+// the main search above so it doesn't have to interact with that route's
+// sponsored/boosted-ad ranking — distance ordering and paid placement are
+// two different sort orders, and mixing them would need real product
+// decisions about precedence that are out of scope here.
+router.get('/nearby', optionalAuthenticate, async (req, res) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    const radiusKm = Number(req.query.radiusKm) || 50;
+    const { category, cropType, status } = req.query;
+
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+      return res.status(400).json({ error: 'Valid lat and lng query parameters are required' });
+    }
+
+    const take = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
+    const distanceExpr = haversineSql('Listing', 1, 2);
+
+    const rows = await prisma.$queryRawUnsafe(
+      `
+      SELECT "id", ${distanceExpr} AS "distanceKm"
+      FROM "Listing"
+      WHERE "latitude" IS NOT NULL
+        AND "longitude" IS NOT NULL
+        AND "status" = $3
+        AND ($4::"ListingCategory" IS NULL OR "category" = $4::"ListingCategory")
+        AND ($5::text IS NULL OR "cropType" ILIKE '%' || $5::text || '%')
+        AND ${distanceExpr} <= $6
+      ORDER BY "distanceKm" ASC
+      LIMIT $7
+      `,
+      lat,
+      lng,
+      status || 'ACTIVE',
+      category || null,
+      cropType || null,
+      radiusKm,
+      take
+    );
+
+    const distanceById = new Map(rows.map((r) => [r.id, Number(r.distanceKm)]));
+    const ids = rows.map((r) => r.id);
+
+    const listings = ids.length
+      ? await prisma.listing.findMany({ where: { id: { in: ids } }, select: PUBLIC_LISTING_FIELDS })
+      : [];
+
+    const withDistance = await Promise.all(
+      listings
+        .sort((a, b) => distanceById.get(a.id) - distanceById.get(b.id))
+        .map(async (listing) => ({
+          ...(await attachMediaUrls(listing)),
+          distanceKm: Math.round(distanceById.get(listing.id) * 10) / 10,
+        }))
+    );
+
+    return res.json({ listings: withDistance, center: { lat, lng }, radiusKm });
+  } catch (error) {
+    console.error('LISTINGS NEARBY ERROR:', error);
+    return res.status(500).json({ error: 'Could not load nearby listings' });
+  }
+});
+
+// ============================================================================
 // GET SINGLE PUBLIC LISTING
 // ============================================================================
 
@@ -658,6 +749,7 @@ router.get('/:id', optionalAuthenticate, async (req, res) => {
             name: true,
             rating: true,
             location: true,
+            region: true,
             verificationStatus: true,
           },
         },
@@ -840,6 +932,33 @@ router.post(
       .isString()
       .trim(),
 
+    body('region')
+      .optional({ nullable: true })
+      .isIn(REGION_VALUES),
+
+    body('zone')
+      .optional({ nullable: true })
+      .isString()
+      .trim(),
+
+    body('woreda')
+      .optional({ nullable: true })
+      .isString()
+      .trim(),
+
+    body('kebele')
+      .optional({ nullable: true })
+      .isString()
+      .trim(),
+
+    body('latitude')
+      .optional({ nullable: true })
+      .isFloat({ min: -90, max: 90 }),
+
+    body('longitude')
+      .optional({ nullable: true })
+      .isFloat({ min: -180, max: 180 }),
+
     body('minAcceptablePrice')
       .optional({
         nullable: true,
@@ -892,7 +1011,12 @@ router.post(
         askingPrice,
         minAcceptablePrice,
         location,
-        locationId,
+        region,
+        zone,
+        woreda,
+        kebele,
+        latitude,
+        longitude,
         harvestedDate,
         readinessDate,
         pickupWindowStart,
@@ -1117,7 +1241,13 @@ router.post(
                   ),
 
             location,
-            ...(locationId ? { locationId } : {}),
+
+            region: region || null,
+            zone: zone || null,
+            woreda: woreda || null,
+            kebele: kebele || null,
+            latitude: latitude === undefined || latitude === null || latitude === '' ? null : Number(latitude),
+            longitude: longitude === undefined || longitude === null || longitude === '' ? null : Number(longitude),
 
             harvestedDate:
               category === 'AGRICULTURAL' &&
@@ -1231,11 +1361,29 @@ router.patch(
         description,
         photos,
         videos,
+        region,
+        zone,
+        woreda,
+        kebele,
+        latitude,
+        longitude,
       } = req.body;
 
       // ----------------------------------------------------------------------
       // Validate update values before touching the database
       // ----------------------------------------------------------------------
+
+      if (region !== undefined && region !== null && !REGION_VALUES.includes(region)) {
+        return res.status(400).json({ error: `Invalid region. Must be one of: ${REGION_VALUES.join(', ')}` });
+      }
+
+      if (latitude !== undefined && latitude !== null && latitude !== '' && (!Number.isFinite(Number(latitude)) || Number(latitude) < -90 || Number(latitude) > 90)) {
+        return res.status(400).json({ error: 'latitude must be between -90 and 90' });
+      }
+
+      if (longitude !== undefined && longitude !== null && longitude !== '' && (!Number.isFinite(Number(longitude)) || Number(longitude) < -180 || Number(longitude) > 180)) {
+        return res.status(400).json({ error: 'longitude must be between -180 and 180' });
+      }
 
       if (
         askingPrice !== undefined &&
@@ -1470,6 +1618,30 @@ router.patch(
           },
 
           data: {
+            ...(region !== undefined && {
+              region: region || null,
+            }),
+
+            ...(zone !== undefined && {
+              zone: zone || null,
+            }),
+
+            ...(woreda !== undefined && {
+              woreda: woreda || null,
+            }),
+
+            ...(kebele !== undefined && {
+              kebele: kebele || null,
+            }),
+
+            ...(latitude !== undefined && {
+              latitude: latitude === null || latitude === '' ? null : Number(latitude),
+            }),
+
+            ...(longitude !== undefined && {
+              longitude: longitude === null || longitude === '' ? null : Number(longitude),
+            }),
+
             ...(askingPrice !==
               undefined && {
               askingPrice:
