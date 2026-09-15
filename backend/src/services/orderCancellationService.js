@@ -4,6 +4,7 @@ const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('./orderEventService');
 const { releaseListingQuantity } = require('./inventoryService');
 const { requestRefund } = require('./paymentRefundService');
+const { transitionOrderStatus } = require('./orderStateMachine');
 
 const NON_CANCELLABLE_STATUSES = ['COMPLETED', 'CANCELLED'];
 
@@ -28,10 +29,12 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
     throw Object.assign(new Error('Order is no longer cancellable'), { status: 409 });
   }
 
-  await tx.order.update({
-    where: { id: order.id },
-    data: { status: 'CANCELLED' },
-  });
+  await transitionOrderStatus(
+    tx,
+    order.id,
+    order.status,
+    'CANCELLED'
+  );
 
   await tx.paymentObligation.updateMany({
     where: { orderId: order.id, status: 'OPEN' },
