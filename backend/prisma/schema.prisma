@@ -167,9 +167,11 @@ enum PaymentMethod {
 
 enum PaymentStatus {
   PENDING
+  PROCESSING
   PAID
   FAILED
   REFUNDED
+  REFUND_PENDING
   RECONCILIATION_REQUIRED
 }
 
