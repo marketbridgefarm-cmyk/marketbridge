@@ -49,4 +49,30 @@ function requireAllRoles(...requiredRoles) {
   };
 }
 
-module.exports = { requireRole, requireAllRoles };
+// Gate for routes that require the account to have MFA enabled — currently
+// applied to admin-exclusive routes (see routes/admin.js, maintenance.js,
+// disputes.js) since admin access is the highest-value target on the
+// platform. Deliberately separate from requireRole so it composes cleanly:
+// requireRole establishes *who* can be here, this establishes that the
+// account has taken the extra step to protect that access. Existing admin
+// accounts are not locked out by this shipping — they can still log in and
+// use non-admin-only endpoints; this only blocks admin-only actions until
+// they visit POST /auth/mfa/setup once.
+function requireMfa() {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Not authenticated', code: 'NOT_AUTHENTICATED' });
+    }
+
+    if (!req.user.mfaEnabled) {
+      return res.status(403).json({
+        error: 'This action requires multi-factor authentication to be enabled on your account. Set it up under Account Security, then try again.',
+        code: 'MFA_SETUP_REQUIRED',
+      });
+    }
+
+    next();
+  };
+}
+
+module.exports = { requireRole, requireAllRoles, requireMfa };
