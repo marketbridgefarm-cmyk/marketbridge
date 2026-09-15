@@ -234,6 +234,12 @@ enum BannerTemplate {
   BOLD
   MINIMAL
   CARD
+  SPLIT
+  EDITORIAL
+  FRESH
+  DARK_LUXE
+  MARKET
+  GRADIENT
 }
 
 enum DisputeStatus {
