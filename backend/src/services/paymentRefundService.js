@@ -19,6 +19,9 @@ async function requestRefund(tx, { paymentId, amount, reason, requestedById }) {
   });
   if (existing) return existing;
 
+  assertTransition(payment.status, 'REFUND_PENDING');
+  await tx.payment.update({ where: { id: payment.id }, data: { status: 'REFUND_PENDING' } });
+
   const refund = await tx.paymentRefund.create({
     data: { paymentId, amount: refundAmount, currency: payment.currency, reason: reason || null, requestedById: requestedById || null },
   });
@@ -54,6 +57,8 @@ async function completeRefund(tx, { refundId, provider, providerRefundId, actorI
     throw Object.assign(new Error('Refund amount must equal payment amount'), { status: 409 });
   }
 
+  assertTransition(payment.status, 'REFUNDED');
+
   const updated = await tx.paymentRefund.update({
     where: { id: refund.id },
     data: { status: 'COMPLETED', provider: provider || refund.provider || null, providerRefundId: providerRefundId || refund.providerRefundId || null, completedAt: new Date(), failureReason: null },
@@ -86,6 +91,8 @@ async function failRefund(tx, { refundId, failureReason, actorId }) {
   const refund = await tx.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
   if (!refund) throw Object.assign(new Error('Refund request not found'), { status: 404 });
   if (refund.status === 'COMPLETED') throw Object.assign(new Error('Completed refund cannot be failed'), { status: 409 });
+  assertTransition(payment.status, 'REFUNDED');
+
   const updated = await tx.paymentRefund.update({ where: { id: refundId }, data: { status: 'FAILED', failureReason: failureReason || 'Provider refund failed' } });
   if (refund.payment?.orderId) {
     await recordOrderEvent(tx, {

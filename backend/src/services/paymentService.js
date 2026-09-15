@@ -5,6 +5,7 @@ const { recordAuditEvent } = require('../utils/audit');
 const { syncOrderPaymentObligations, findPaymentObligation } = require('./paymentObligationService');
 const { recordOrderEvent } = require('./orderEventService');
 const { createReconciliationIssue } = require('./paymentReconciliationService');
+const { assertTransition } = require('./paymentStateMachine');
 
 // ============================================================================
 // CONSTANTS
@@ -553,6 +554,33 @@ async function settlePayment({
     }
 
     // ------------------------------------------------------------------------
+    // STRICT PAYMENT STATE MACHINE
+    // ------------------------------------------------------------------------
+    // A verified provider success is allowed to advance PENDING -> PROCESSING
+    // -> PAID in one database transaction. Clients/providers cannot skip the
+    // lifecycle in any other direction.
+    if (status === 'PAID' && payment.status === 'PENDING') {
+      assertTransition(payment.status, 'PROCESSING');
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: 'PROCESSING',
+          provider: provider || payment.provider,
+          providerTransactionId: providerTransactionId || payment.providerTransactionId,
+          reference: reference || payment.reference,
+        },
+      });
+    }
+
+    const effectiveFromStatus = status === 'PAID' && payment.status === 'PENDING'
+      ? 'PROCESSING'
+      : payment.status;
+
+    if (effectiveFromStatus !== status) {
+      assertTransition(effectiveFromStatus, status);
+    }
+
+    // ------------------------------------------------------------------------
     // UPDATE PAYMENT
     // ------------------------------------------------------------------------
 
@@ -599,7 +627,7 @@ async function settlePayment({
         metadata: {
           paymentId: updated.id,
           paymentType: updated.type,
-          fromStatus: payment.status,
+          fromStatus: effectiveFromStatus,
           toStatus: status,
           obligationId: updated.obligationId || null,
           amount: String(updated.amount),
@@ -613,7 +641,7 @@ async function settlePayment({
       resourceType: 'Payment',
       resourceId: payment.id,
       metadata: {
-        fromStatus: payment.status,
+        fromStatus: effectiveFromStatus,
         toStatus: status,
         provider: provider || payment.provider || null,
         providerTransactionId: providerTransactionId || payment.providerTransactionId || null,
