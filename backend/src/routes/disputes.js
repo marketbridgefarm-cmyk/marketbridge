@@ -85,7 +85,7 @@ router.post(
 
       return res.status(201).json({ dispute: result });
     } catch (error) {
-      console.error('CREATE DISPUTE ERROR:', error);
+      req.log.error({ err: error }, 'CREATE DISPUTE ERROR:');
       if (error.code === 'ORDER_TRANSITION_CONFLICT') {
         return res.status(409).json({ error: 'This order changed status just now; please refresh and try again.' });
       }
@@ -107,7 +107,7 @@ router.get('/', authenticate, requireRole('ADMIN'), requireMfa(), async (req, re
 
     return res.json({ disputes });
   } catch (error) {
-    console.error('LIST DISPUTES ERROR:', error);
+    req.log.error({ err: error }, 'LIST DISPUTES ERROR:');
     return res.status(500).json({ error: 'Could not load disputes' });
   }
 });
@@ -155,7 +155,7 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
 
     return res.json({ dispute: result });
   } catch (error) {
-    console.error('RESOLVE DISPUTE ERROR:', error);
+    req.log.error({ err: error }, 'RESOLVE DISPUTE ERROR:');
     if (error.code === 'ORDER_TRANSITION_CONFLICT' || error.code === 'INVALID_ORDER_TRANSITION') {
       return res.status(error.status || 409).json({ error: error.message });
     }

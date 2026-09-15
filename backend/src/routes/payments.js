@@ -776,10 +776,7 @@ router.post(
       });
 
     } catch (error) {
-      console.error(
-        'CREATE PAYMENT ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'CREATE PAYMENT ERROR:');
 
       return res.status(
         error.status || 500
@@ -985,10 +982,7 @@ router.post(
       });
 
     } catch (error) {
-      console.error(
-        'PAYMENT PROVIDER INIT ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'PAYMENT PROVIDER INIT ERROR:');
 
       return res.status(
         error.status || 500
@@ -1027,9 +1021,7 @@ router.get(
 
     try {
       if (!txRef) {
-        console.error(
-          'CHAPA CALLBACK: missing tx_ref'
-        );
+        req.log.warn('CHAPA CALLBACK: missing tx_ref');
 
         if (appUrl) {
           return res.redirect(
@@ -1058,10 +1050,7 @@ router.get(
         });
 
       if (!payment) {
-        console.error(
-          'CHAPA CALLBACK: payment not found:',
-          txRef
-        );
+        req.log.error({ txRef, paymentId }, 'CHAPA CALLBACK: payment not found');
 
         if (appUrl) {
           return res.redirect(
@@ -1151,10 +1140,7 @@ router.get(
       );
 
     } catch (error) {
-      console.error(
-        'CHAPA CALLBACK ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'CHAPA CALLBACK ERROR:');
 
       // The frontend PaymentReturn page will perform its own verification.
       if (
@@ -1342,10 +1328,7 @@ router.get(
       });
 
     } catch (error) {
-      console.error(
-        'CHAPA VERIFY ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'CHAPA VERIFY ERROR:');
 
       return res.status(
         error.status || 500
@@ -1393,9 +1376,7 @@ router.post(
         req.headers
       )
     ) {
-      console.error(
-        'CHAPA WEBHOOK: invalid signature'
-      );
+      req.log.warn('CHAPA WEBHOOK: invalid signature');
 
       return res.status(401).json({
         error:
@@ -1413,9 +1394,7 @@ router.post(
       req.body?.reference;
 
     if (!txRef) {
-      console.error(
-        'CHAPA WEBHOOK: missing tx_ref'
-      );
+      req.log.warn('CHAPA WEBHOOK: missing tx_ref');
 
       return res.status(400).json({
         error:
@@ -1443,10 +1422,7 @@ router.post(
         });
 
       if (!payment) {
-        console.error(
-          'CHAPA WEBHOOK: payment not found:',
-          txRef
-        );
+        req.log.error({ txRef, paymentId }, 'CHAPA WEBHOOK: payment not found');
 
         // Acknowledge the webhook without trying to create a payment.
         return res.json({
@@ -1572,10 +1548,7 @@ router.post(
       });
 
     } catch (error) {
-      console.error(
-        'CHAPA WEBHOOK ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'CHAPA WEBHOOK ERROR:');
 
       return res.status(
         error.status || 500
@@ -1683,10 +1656,7 @@ router.post(
       });
 
     } catch (error) {
-      console.error(
-        'GENERIC WEBHOOK ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'GENERIC WEBHOOK ERROR:');
 
       return res.status(
         error.status || 500
@@ -1802,10 +1772,7 @@ router.get(
       });
 
     } catch (error) {
-      console.error(
-        'ADMIN PAYMENTS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN PAYMENTS ERROR:');
 
       return res.status(500).json({
         error:
@@ -1917,10 +1884,7 @@ router.get(
       });
 
     } catch (error) {
-      console.error(
-        'COMMISSION SUMMARY ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'COMMISSION SUMMARY ERROR:');
 
       return res.status(500).json({
         error:
@@ -2022,10 +1986,7 @@ router.patch(
       });
 
     } catch (error) {
-      console.error(
-        'ADMIN CONFIRM ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN CONFIRM ERROR:');
 
       return res.status(
         error.status || 500
@@ -2111,10 +2072,7 @@ router.get(
       });
 
     } catch (error) {
-      console.error(
-        'GET ORDER PAYMENTS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'GET ORDER PAYMENTS ERROR:');
 
       return res.status(500).json({
         error:
@@ -2196,10 +2154,7 @@ router.get(
       });
 
     } catch (error) {
-      console.error(
-        'GET PAYMENT ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'GET PAYMENT ERROR:');
 
       return res.status(500).json({
         error:

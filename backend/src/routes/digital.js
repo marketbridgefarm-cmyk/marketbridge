@@ -101,7 +101,7 @@ router.get('/', async (req, res) => {
 
     return res.json({ products });
   } catch (error) {
-    console.error('LIST DIGITAL PRODUCTS ERROR:', error);
+    req.log.error({ err: error }, 'LIST DIGITAL PRODUCTS ERROR:');
     return res.status(500).json({ error: 'Could not load digital products' });
   }
 });
@@ -130,7 +130,7 @@ router.get('/mine', authenticate, requireRole('SELLER'), async (req, res) => {
 
     return res.json({ products });
   } catch (error) {
-    console.error('MY DIGITAL PRODUCTS ERROR:', error);
+    req.log.error({ err: error }, 'MY DIGITAL PRODUCTS ERROR:');
     return res.status(500).json({ error: 'Could not load your digital products' });
   }
 });
@@ -168,7 +168,7 @@ router.post(
           contentType: req.file.mimetype,
         });
       } catch (uploadError) {
-        console.error('S3 UPLOAD ERROR:', uploadError);
+        req.log.error({ err: uploadError }, 'S3 UPLOAD ERROR:');
         return res.status(502).json({ error: 'Could not store digital product file' });
       }
 
@@ -202,11 +202,11 @@ router.post(
       } catch (dbError) {
         // Rollback: delete the uploaded file if DB insert fails
         await deletePrivateObject(key).catch(() => {});
-        console.error('DIGITAL PRODUCT CREATE ERROR:', dbError);
+        req.log.error({ err: dbError }, 'DIGITAL PRODUCT CREATE ERROR:');
         return res.status(500).json({ error: 'Could not create digital product' });
       }
     } catch (error) {
-      console.error('DIGITAL PRODUCT UPLOAD ERROR:', error);
+      req.log.error({ err: error }, 'DIGITAL PRODUCT UPLOAD ERROR:');
       return res.status(500).json({ error: 'Could not upload digital product' });
     }
   }
@@ -304,7 +304,7 @@ router.post(
         paymentConfirmed: false,
       });
     } catch (error) {
-      console.error('DIGITAL PURCHASE ERROR:', error);
+      req.log.error({ err: error }, 'DIGITAL PURCHASE ERROR:');
       return res.status(500).json({ error: 'Could not create purchase' });
     }
   }
@@ -366,11 +366,11 @@ router.get(
           ),
         });
       } catch (downloadError) {
-        console.error('DOWNLOAD ERROR:', downloadError);
+        req.log.error({ err: downloadError }, 'DOWNLOAD ERROR:');
         return res.status(503).json({ error: 'Secure download service is unavailable' });
       }
     } catch (error) {
-      console.error('DIGITAL DOWNLOAD ERROR:', error);
+      req.log.error({ err: error }, 'DIGITAL DOWNLOAD ERROR:');
       return res.status(500).json({ error: 'Could not process download request' });
     }
   }
@@ -408,7 +408,7 @@ router.get('/purchases/mine', authenticate, requireRole('BUYER'), async (req, re
 
     return res.json({ purchases });
   } catch (error) {
-    console.error('MY PURCHASES ERROR:', error);
+    req.log.error({ err: error }, 'MY PURCHASES ERROR:');
     return res.status(500).json({ error: 'Could not load your purchases' });
   }
 });

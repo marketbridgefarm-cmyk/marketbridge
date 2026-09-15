@@ -64,7 +64,7 @@ router.post(
 
       return res.status(201).json({ message });
     } catch (error) {
-      console.error('CREATE MESSAGE ERROR:', error);
+      req.log.error({ err: error }, 'CREATE MESSAGE ERROR:');
       return res.status(500).json({ error: 'Could not send message' });
     }
   }
@@ -114,7 +114,7 @@ router.get(
 
       return res.json({ messages });
     } catch (error) {
-      console.error('GET THREAD ERROR:', error);
+      req.log.error({ err: error }, 'GET THREAD ERROR:');
       return res.status(500).json({ error: 'Could not load conversation' });
     }
   }

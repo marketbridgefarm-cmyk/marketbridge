@@ -12,7 +12,7 @@ const router = express.Router();
 
 router.get('/analytics/me', authenticate, async (req, res) => {
   try { return res.json({ analytics: await getMarketplaceAnalytics(req.user.id) }); }
-  catch (error) { console.error('GROWTH ANALYTICS ERROR:', error); return res.status(500).json({ error: 'Could not load analytics' }); }
+  catch (error) { req.log.error({ err: error }, 'GROWTH ANALYTICS ERROR:'); return res.status(500).json({ error: 'Could not load analytics' }); }
 });
 
 router.post('/promotions/validate', authenticate, [body('code').isString().trim().isLength({ min: 3, max: 32 }), body('subtotal').isFloat({ min: 0 })], async (req, res) => {
@@ -30,7 +30,7 @@ router.post('/promotions/validate', authenticate, [body('code').isString().trim(
     const raw = promo.discountType === 'PERCENTAGE' ? subtotal * Number(promo.discountValue) / 100 : Number(promo.discountValue);
     const discount = Math.min(subtotal, promo.maxDiscount == null ? raw : Math.min(raw, Number(promo.maxDiscount)));
     return res.json({ valid: true, code: promo.code, discount: Number(discount.toFixed(2)), total: Number((subtotal - discount).toFixed(2)), currency: 'ETB' });
-  } catch (error) { console.error('PROMOTION VALIDATE ERROR:', error); return res.status(500).json({ error: 'Could not validate promotion' }); }
+  } catch (error) { req.log.error({ err: error }, 'PROMOTION VALIDATE ERROR:'); return res.status(500).json({ error: 'Could not validate promotion' }); }
 });
 
 router.get('/promotions', authenticate, async (req, res) => {
@@ -54,7 +54,7 @@ router.post('/referrals/claim', authenticate, [body('code').isString().trim().is
       return created;
     });
     return res.status(201).json({ claimed: true, claimId: claim.id });
-  } catch (error) { console.error('REFERRAL CLAIM ERROR:', error); return res.status(500).json({ error: 'Could not claim referral code' }); }
+  } catch (error) { req.log.error({ err: error }, 'REFERRAL CLAIM ERROR:'); return res.status(500).json({ error: 'Could not claim referral code' }); }
 });
 
 router.post('/referrals/mine', authenticate, async (req, res) => {

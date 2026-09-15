@@ -164,7 +164,7 @@ router.post(
 
       return res.status(201).json({ request });
     } catch (error) {
-      console.error('CREATE INSPECTION REQUEST ERROR:', error);
+      req.log.error({ err: error }, 'CREATE INSPECTION REQUEST ERROR:');
 
       return res.status(500).json({
         error: 'Could not create inspection request',
@@ -217,7 +217,7 @@ router.get('/inspectors', authenticate, async (req, res) => {
 
     return res.json({ inspectors });
   } catch (error) {
-    console.error('GET INSPECTORS ERROR:', error);
+    req.log.error({ err: error }, 'GET INSPECTORS ERROR:');
 
     return res.status(500).json({
       error: 'Could not load inspectors',
@@ -308,7 +308,7 @@ router.get(
 
       return res.json({ requests });
     } catch (error) {
-      console.error('AVAILABLE INSPECTIONS ERROR:', error);
+      req.log.error({ err: error }, 'AVAILABLE INSPECTIONS ERROR:');
 
       return res.status(500).json({
         error: 'Could not load available inspections',
@@ -425,7 +425,7 @@ router.post(
         quote,
       });
     } catch (error) {
-      console.error('CREATE INSPECTION QUOTE ERROR:', error);
+      req.log.error({ err: error }, 'CREATE INSPECTION QUOTE ERROR:');
 
       return res.status(500).json({
         error: 'Could not submit inspection quote',
@@ -504,7 +504,7 @@ router.get(
         quotes,
       });
     } catch (error) {
-      console.error('GET INSPECTION QUOTES ERROR:', error);
+      req.log.error({ err: error }, 'GET INSPECTION QUOTES ERROR:');
 
       return res.status(500).json({
         error: 'Could not load inspection quotes',
@@ -679,7 +679,7 @@ router.patch(
         });
       }
 
-      console.error('ACCEPT INSPECTION QUOTE ERROR:', error);
+      req.log.error({ err: error }, 'ACCEPT INSPECTION QUOTE ERROR:');
 
       return res.status(500).json({
         error: 'Could not accept inspection quote',
@@ -793,7 +793,7 @@ router.post(
         return res.status(error.statusCode).json({ error: error.message });
       }
 
-      console.error('COUNTER INSPECTION QUOTE ERROR:', error);
+      req.log.error({ err: error }, 'COUNTER INSPECTION QUOTE ERROR:');
 
       return res.status(500).json({ error: 'Could not counter inspection quote' });
     }
@@ -843,7 +843,7 @@ router.patch(
 
       return res.json({ message: 'Quote rejected', quote: updated });
     } catch (error) {
-      console.error('REJECT INSPECTION QUOTE ERROR:', error);
+      req.log.error({ err: error }, 'REJECT INSPECTION QUOTE ERROR:');
       return res.status(500).json({ error: 'Could not reject inspection quote' });
     }
   }
@@ -964,7 +964,7 @@ router.patch(
         request: updated,
       });
     } catch (error) {
-      console.error('ACCEPT INSPECTION ERROR:', error);
+      req.log.error({ err: error }, 'ACCEPT INSPECTION ERROR:');
 
       return res.status(500).json({
         error: 'Could not accept inspection request',
@@ -1094,7 +1094,7 @@ router.post(
         request: updated,
       });
     } catch (error) {
-      console.error('START INSPECTION ERROR:', error);
+      req.log.error({ err: error }, 'START INSPECTION ERROR:');
 
       return res.status(500).json({
         error: 'Could not start inspection',
@@ -1156,7 +1156,7 @@ router.get(
         requests,
       });
     } catch (error) {
-      console.error('MY INSPECTIONS ERROR:', error);
+      req.log.error({ err: error }, 'MY INSPECTIONS ERROR:');
 
       return res.status(500).json({
         error: 'Could not load your inspections',
@@ -1197,7 +1197,7 @@ router.get('/:id/evidence', authenticate, async (req, res) => {
     });
     return res.json({ evidence });
   } catch (error) {
-    console.error('GET INSPECTION EVIDENCE ERROR:', error);
+    req.log.error({ err: error }, 'GET INSPECTION EVIDENCE ERROR:');
     return res.status(500).json({ error: 'Could not load inspection evidence' });
   }
 });
@@ -1248,7 +1248,7 @@ router.get('/:id/evidence/:evidenceId/media', authenticate, [
 
     return res.json({ evidenceId: evidence.id, expiresInSeconds: Math.min(Math.max(Number(process.env.MEDIA_SIGNED_URL_EXPIRES_SECONDS || 300), 60), 900), media });
   } catch (error) {
-    console.error('SIGN INSPECTION EVIDENCE MEDIA ERROR:', error);
+    req.log.error({ err: error }, 'SIGN INSPECTION EVIDENCE MEDIA ERROR:');
     return res.status(503).json({ error: 'Protected media is temporarily unavailable' });
   }
 });
@@ -1270,7 +1270,7 @@ router.post('/:id/evidence/media', authenticate, requireRole('INSPECTOR'), evide
 
     return res.status(201).json({ photoKeys, videoKeys });
   } catch (error) {
-    console.error('UPLOAD INSPECTION EVIDENCE MEDIA ERROR:', error);
+    req.log.error({ err: error }, 'UPLOAD INSPECTION EVIDENCE MEDIA ERROR:');
     return res.status(500).json({ error: error.message || 'Could not upload evidence media' });
   }
 });
@@ -1304,7 +1304,7 @@ router.post('/:id/evidence', authenticate, requireRole('INSPECTOR'), [
     });
     return res.status(201).json({ evidence });
   } catch (error) {
-    console.error('ADD INSPECTION EVIDENCE ERROR:', error);
+    req.log.error({ err: error }, 'ADD INSPECTION EVIDENCE ERROR:');
     return res.status(500).json({ error: 'Could not add inspection evidence' });
   }
 });
@@ -1499,7 +1499,7 @@ router.post(
         });
       }
 
-      console.error('CREATE INSPECTION REPORT ERROR:', error);
+      req.log.error({ err: error }, 'CREATE INSPECTION REPORT ERROR:');
 
       return res.status(500).json({
         error: 'Could not submit inspection report',

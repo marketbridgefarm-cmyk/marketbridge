@@ -14,7 +14,7 @@ router.get('/ethiopia', async (req, res) => {
     });
     res.json({ locations });
   } catch (error) {
-    console.error('LOCATION LOOKUP ERROR:', error);
+    req.log.error({ err: error }, 'LOCATION LOOKUP ERROR:');
     res.status(500).json({ error: 'Could not load Ethiopian locations' });
   }
 });

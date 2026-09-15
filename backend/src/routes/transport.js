@@ -236,7 +236,7 @@ router.post(
         truck,
       });
     } catch (error) {
-      console.error('REGISTER TRUCK ERROR:', error);
+      req.log.error({ err: error }, 'REGISTER TRUCK ERROR:');
 
       if (error.code === 'P2002') {
         return res.status(409).json({
@@ -273,10 +273,7 @@ router.get(
         trucks,
       });
     } catch (error) {
-      console.error(
-        'MY TRUCKS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'MY TRUCKS ERROR:');
 
       return res.status(500).json({
         error: 'Could not load your trucks',
@@ -381,10 +378,7 @@ router.patch(
         truck: result,
       });
     } catch (error) {
-      console.error(
-        'UPDATE TRUCK AVAILABILITY ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'UPDATE TRUCK AVAILABILITY ERROR:');
 
       if (error.statusCode) {
         return res.status(error.statusCode).json({
@@ -461,10 +455,7 @@ router.get(
         jobs,
       });
     } catch (error) {
-      console.error(
-        'OPEN TRANSPORT JOBS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'OPEN TRANSPORT JOBS ERROR:');
 
       return res.status(500).json({
         error:
@@ -537,10 +528,7 @@ router.get(
         jobs,
       });
     } catch (error) {
-      console.error(
-        'MY TRANSPORT JOBS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'MY TRANSPORT JOBS ERROR:');
 
       return res.status(500).json({
         error:
@@ -563,7 +551,7 @@ router.get('/match', authenticate, async (req, res) => {
     });
     return res.json({ trucks });
   } catch (error) {
-    console.error('MATCH TRUCKS ERROR:', error);
+    req.log.error({ err: error }, 'MATCH TRUCKS ERROR:');
     return res.status(500).json({ error: 'Could not find matching trucks' });
   }
 });
@@ -985,10 +973,7 @@ router.post(
         transportJob: result,
       });
     } catch (error) {
-      console.error(
-        'CREATE TRANSPORT ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'CREATE TRANSPORT ERROR:');
 
       if (error.statusCode) {
         return res.status(
@@ -1097,10 +1082,7 @@ router.get(
           null,
       });
     } catch (error) {
-      console.error(
-        'GET TRANSPORT ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'GET TRANSPORT ERROR:');
 
       return res.status(500).json({
         error:
@@ -1155,7 +1137,7 @@ router.post(
 
       return res.status(201).json({ photoKeys, videoKeys });
     } catch (error) {
-      console.error('UPLOAD TRANSPORT EVIDENCE MEDIA ERROR:', error);
+      req.log.error({ err: error }, 'UPLOAD TRANSPORT EVIDENCE MEDIA ERROR:');
       return res.status(500).json({ error: error.message || 'Could not upload evidence media' });
     }
   }
@@ -1249,7 +1231,7 @@ router.post(
 
       return res.status(201).json({ evidence });
     } catch (error) {
-      console.error('ADD TRANSPORT EVIDENCE ERROR:', error);
+      req.log.error({ err: error }, 'ADD TRANSPORT EVIDENCE ERROR:');
       return res.status(500).json({ error: 'Could not add transport evidence' });
     }
   }
@@ -1285,7 +1267,7 @@ router.get(
 
       return res.json({ evidence });
     } catch (error) {
-      console.error('LIST TRANSPORT EVIDENCE ERROR:', error);
+      req.log.error({ err: error }, 'LIST TRANSPORT EVIDENCE ERROR:');
       return res.status(500).json({ error: 'Could not load transport evidence' });
     }
   }
@@ -1352,7 +1334,7 @@ router.get(
 
       return res.json({ evidenceId: evidence.id, expiresInSeconds: Math.min(Math.max(Number(process.env.MEDIA_SIGNED_URL_EXPIRES_SECONDS || 300), 60), 900), media });
     } catch (error) {
-      console.error('SIGN TRANSPORT EVIDENCE MEDIA ERROR:', error);
+      req.log.error({ err: error }, 'SIGN TRANSPORT EVIDENCE MEDIA ERROR:');
       return res.status(503).json({ error: 'Protected media is temporarily unavailable' });
     }
   }
@@ -1705,10 +1687,7 @@ router.patch(
         transportJob: result,
       });
     } catch (error) {
-      console.error(
-        'UPDATE TRANSPORT STATUS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'UPDATE TRANSPORT STATUS ERROR:');
 
       if (error.statusCode) {
         return res.status(error.statusCode).json({
@@ -1960,10 +1939,7 @@ router.post(
         quote,
       });
     } catch (error) {
-      console.error(
-        'CREATE QUOTE ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'CREATE QUOTE ERROR:');
 
       if (error.statusCode) {
         return res.status(
@@ -2093,10 +2069,7 @@ router.get(
         quotes,
       });
     } catch (error) {
-      console.error(
-        'LIST QUOTES ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'LIST QUOTES ERROR:');
 
       return res.status(500).json({
         error:
@@ -2404,10 +2377,7 @@ router.patch(
         quote: result,
       });
     } catch (error) {
-      console.error(
-        'ACCEPT/REJECT/COUNTER QUOTE ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ACCEPT/REJECT/COUNTER QUOTE ERROR:');
 
       if (error.statusCode) {
         return res.status(

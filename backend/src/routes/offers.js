@@ -276,10 +276,7 @@ router.post(
         offer,
       });
     } catch (error) {
-      console.error(
-        'CREATE OFFER ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'CREATE OFFER ERROR:');
 
       return res.status(500).json({
         error: 'Could not create offer',
@@ -322,10 +319,7 @@ router.get(
         count: offers.length,
       });
     } catch (error) {
-      console.error(
-        'MY OFFERS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'MY OFFERS ERROR:');
 
       return res.status(500).json({
         error: 'Could not load your offers',
@@ -424,10 +418,7 @@ router.get(
         count: offers.length,
       });
     } catch (error) {
-      console.error(
-        'GET LISTING OFFERS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'GET LISTING OFFERS ERROR:');
 
       return res.status(500).json({
         error:
@@ -1306,10 +1297,7 @@ router.patch(
           'Unsupported offer action',
       });
     } catch (error) {
-      console.error(
-        'RESPOND TO OFFER ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'RESPOND TO OFFER ERROR:');
 
       if (error.statusCode) {
         return res

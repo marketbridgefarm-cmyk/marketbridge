@@ -7,7 +7,7 @@ const { runMaintenanceCycle } = require('../services/maintenanceService');
 const router = express.Router();
 router.post('/run', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
   try { return res.json({ success: true, result: await runMaintenanceCycle() }); }
-  catch (error) { console.error('MAINTENANCE RUN ERROR:', error); return res.status(500).json({ error: 'Maintenance cycle failed' }); }
+  catch (error) { req.log.error({ err: error }, 'MAINTENANCE RUN ERROR:'); return res.status(500).json({ error: 'Maintenance cycle failed' }); }
 });
 router.get('/status', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
   const [expiredOffers, expiredListings, openReconciliation, unpaidOrdersDue] = await Promise.all([

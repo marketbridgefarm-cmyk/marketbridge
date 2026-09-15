@@ -81,7 +81,7 @@ router.post(
 
       return res.status(201).json({ rating });
     } catch (error) {
-      console.error('CREATE RATING ERROR:', error);
+      req.log.error({ err: error }, 'CREATE RATING ERROR:');
       return res.status(500).json({ error: 'Could not create rating' });
     }
   }
@@ -97,7 +97,7 @@ router.get('/user/:userId', async (req, res) => {
 
     return res.json({ ratings });
   } catch (error) {
-    console.error('GET USER RATINGS ERROR:', error);
+    req.log.error({ err: error }, 'GET USER RATINGS ERROR:');
     return res.status(500).json({ error: 'Could not load ratings' });
   }
 });

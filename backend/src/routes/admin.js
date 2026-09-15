@@ -200,10 +200,7 @@ router.get(
           ),
       });
     } catch (error) {
-      console.error(
-        'ADMIN OVERVIEW ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN OVERVIEW ERROR:');
 
       return res.status(500).json({
         error:
@@ -496,10 +493,7 @@ router.get(
         },
       });
     } catch (error) {
-      console.error(
-        'ADMIN PAYMENT OVERVIEW ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN PAYMENT OVERVIEW ERROR:');
 
       return res.status(500).json({
         error:
@@ -617,10 +611,7 @@ router.get(
           payments.length,
       });
     } catch (error) {
-      console.error(
-        'ADMIN PAYMENTS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN PAYMENTS ERROR:');
 
       return res.status(500).json({
         error:
@@ -826,10 +817,7 @@ router.get(
         },
       });
     } catch (error) {
-      console.error(
-        'ADMIN COMMISSION STATS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN COMMISSION STATS ERROR:');
 
       return res.status(500).json({
         error:
@@ -956,10 +944,7 @@ router.get(
           ),
       });
     } catch (error) {
-      console.error(
-        'ADMIN COMMISSIONS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN COMMISSIONS ERROR:');
 
       return res.status(500).json({
         error:
@@ -1058,10 +1043,7 @@ router.get(
           money(total),
       });
     } catch (error) {
-      console.error(
-        'ADMIN SELLER EARNINGS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN SELLER EARNINGS ERROR:');
 
       return res.status(500).json({
         error:
@@ -1188,10 +1170,7 @@ router.get(
           money(total),
       });
     } catch (error) {
-      console.error(
-        'ADMIN TRANSPORTER EARNINGS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN TRANSPORTER EARNINGS ERROR:');
 
       return res.status(500).json({
         error:
@@ -1299,10 +1278,7 @@ router.get(
           entries.length,
       });
     } catch (error) {
-      console.error(
-        'ADMIN LEDGER ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN LEDGER ERROR:');
 
       return res.status(500).json({
         error:
@@ -1565,10 +1541,7 @@ router.get(
         },
       });
     } catch (error) {
-      console.error(
-        'ADMIN ORDER FINANCIALS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN ORDER FINANCIALS ERROR:');
 
       return res.status(500).json({
         error:
@@ -1635,10 +1608,7 @@ router.get(
         users,
       });
     } catch (error) {
-      console.error(
-        'ADMIN USERS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN USERS ERROR:');
 
       return res.status(500).json({
         error:
@@ -1866,10 +1836,7 @@ router.get(
         user,
       });
     } catch (error) {
-      console.error(
-        'ADMIN USER DETAILS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN USER DETAILS ERROR:');
 
       return res.status(500).json({
         error:
@@ -1892,7 +1859,7 @@ router.get('/provider-role-requests', async (req, res) => {
     });
     return res.json({ requests });
   } catch (error) {
-    console.error('ADMIN PROVIDER ROLE REQUESTS ERROR:', error);
+    req.log.error({ err: error }, 'ADMIN PROVIDER ROLE REQUESTS ERROR:');
     return res.status(500).json({ error: 'Could not load provider role requests' });
   }
 });
@@ -1948,7 +1915,7 @@ router.patch('/provider-role-requests/:id', async (req, res) => {
 
     return res.json({ request: result });
   } catch (error) {
-    console.error('ADMIN PROVIDER ROLE REVIEW ERROR:', error);
+    req.log.error({ err: error }, 'ADMIN PROVIDER ROLE REVIEW ERROR:');
     return res.status(error.statusCode || 500).json({ error: error.message || 'Could not review provider role request' });
   }
 });
@@ -2035,10 +2002,7 @@ router.patch(
         user,
       });
     } catch (error) {
-      console.error(
-        'ADMIN VERIFY USER ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN VERIFY USER ERROR:');
 
       return res.status(500).json({
         error:
@@ -2208,10 +2172,7 @@ router.patch(
         user,
       });
     } catch (error) {
-      console.error(
-        'ADMIN ACCOUNT STATUS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN ACCOUNT STATUS ERROR:');
 
       return res.status(500).json({
         error:
@@ -2346,10 +2307,7 @@ router.patch(
           updatedUser,
       });
     } catch (error) {
-      console.error(
-        'ADMIN ADD ROLE ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN ADD ROLE ERROR:');
 
       return res.status(500).json({
         error:
@@ -2539,10 +2497,7 @@ router.patch(
           updatedUser,
       });
     } catch (error) {
-      console.error(
-        'ADMIN REMOVE ROLE ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN REMOVE ROLE ERROR:');
 
       return res.status(500).json({
         error:
@@ -2587,10 +2542,7 @@ router.get(
         suspiciousUsers,
       });
     } catch (error) {
-      console.error(
-        'ADMIN FRAUD FLAGS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'ADMIN FRAUD FLAGS ERROR:');
 
       return res.status(500).json({
         error:
@@ -2643,7 +2595,7 @@ router.get(
 
       return res.json({ events, count: events.length });
     } catch (error) {
-      console.error('ADMIN ORDER EVENTS ERROR:', error);
+      req.log.error({ err: error }, 'ADMIN ORDER EVENTS ERROR:');
       return res.status(500).json({ error: 'Could not load order events' });
     }
   }
@@ -2692,7 +2644,7 @@ router.get(
         recentEvents,
       });
     } catch (error) {
-      console.error('ADMIN OPERATIONS SUMMARY ERROR:', error);
+      req.log.error({ err: error }, 'ADMIN OPERATIONS SUMMARY ERROR:');
       return res.status(500).json({ error: 'Could not load operational summary' });
     }
   }
@@ -2716,7 +2668,7 @@ router.get('/financial/refunds', async (req, res) => {
     });
     return res.json({ refunds, count: refunds.length });
   } catch (error) {
-    console.error('ADMIN REFUNDS ERROR:', error);
+    req.log.error({ err: error }, 'ADMIN REFUNDS ERROR:');
     return res.status(500).json({ error: 'Could not load refund queue' });
   }
 });
@@ -2732,7 +2684,7 @@ router.patch('/financial/refunds/:id/complete', async (req, res) => {
     }));
     return res.json({ refund });
   } catch (error) {
-    console.error('ADMIN COMPLETE REFUND ERROR:', error);
+    req.log.error({ err: error }, 'ADMIN COMPLETE REFUND ERROR:');
     return res.status(error.status || 500).json({ error: error.message || 'Could not complete refund' });
   }
 });
@@ -2746,23 +2698,100 @@ router.patch('/financial/refunds/:id/fail', async (req, res) => {
     }));
     return res.json({ refund });
   } catch (error) {
-    console.error('ADMIN FAIL REFUND ERROR:', error);
+    req.log.error({ err: error }, 'ADMIN FAIL REFUND ERROR:');
     return res.status(error.status || 500).json({ error: error.message || 'Could not fail refund' });
   }
 });
 
+// Reconciliation dashboard — searchable across payment ID, order ID,
+// customer, provider, provider transaction ID, expected/received amount,
+// currency, status and a created-at date range (PDF section "Reconciliation
+// dashboard"). `status` still defaults to OPEN so the queue view is
+// unchanged for the common case; pass status=ALL to search across every
+// status instead.
 router.get('/financial/reconciliation', async (req, res) => {
   try {
-    const status = req.query.status ? String(req.query.status) : 'OPEN';
+    const {
+      status: statusParam,
+      paymentId,
+      orderId,
+      customer,
+      provider,
+      providerTransactionId,
+      currency,
+      minAmount,
+      maxAmount,
+      from,
+      to,
+    } = req.query;
+
+    const status = statusParam ? String(statusParam) : 'OPEN';
+    const where = {};
+
+    if (status !== 'ALL') where.status = status;
+    if (paymentId) where.paymentId = String(paymentId);
+    if (provider) where.provider = { contains: String(provider), mode: 'insensitive' };
+    if (currency) {
+      where.OR = [
+        { expectedCurrency: String(currency).toUpperCase() },
+        { observedCurrency: String(currency).toUpperCase() },
+      ];
+    }
+
+    const minAmountNum = minAmount !== undefined ? Number(minAmount) : null;
+    const maxAmountNum = maxAmount !== undefined ? Number(maxAmount) : null;
+    if (Number.isFinite(minAmountNum) || Number.isFinite(maxAmountNum)) {
+      where.expectedAmount = {
+        ...(Number.isFinite(minAmountNum) ? { gte: minAmountNum } : {}),
+        ...(Number.isFinite(maxAmountNum) ? { lte: maxAmountNum } : {}),
+      };
+    }
+
+    if (from || to) {
+      where.createdAt = {
+        ...(from ? { gte: new Date(String(from)) } : {}),
+        ...(to ? { lte: new Date(String(to)) } : {}),
+      };
+    }
+
+    // Filters that live on the related Payment/Order/User rows can't be
+    // expressed as plain `where` columns on PaymentReconciliation itself,
+    // so they're applied via a `payment.is` relation filter instead.
+    const paymentFilter = {};
+    if (orderId) paymentFilter.orderId = String(orderId);
+    if (providerTransactionId) paymentFilter.providerTransactionId = String(providerTransactionId);
+    if (customer) {
+      paymentFilter.createdBy = {
+        OR: [
+          { name: { contains: String(customer), mode: 'insensitive' } },
+          { email: { contains: String(customer), mode: 'insensitive' } },
+          { phone: { contains: String(customer), mode: 'insensitive' } },
+        ],
+      };
+    }
+    if (Object.keys(paymentFilter).length > 0) where.payment = { is: paymentFilter };
+
+    const rawLimit = Number(req.query.limit || 500);
+    const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 500, 1), 500);
+
     const records = await prisma.paymentReconciliation.findMany({
-      where: { status },
-      include: { payment: { select: { id: true, type: true, amount: true, currency: true, status: true, orderId: true, provider: true } } },
+      where,
+      include: {
+        payment: {
+          select: {
+            id: true, type: true, amount: true, currency: true, status: true,
+            orderId: true, provider: true, providerTransactionId: true,
+            createdBy: { select: { id: true, name: true, email: true, phone: true } },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
-      take: 500,
+      take: limit,
     });
+
     return res.json({ records, count: records.length });
   } catch (error) {
-    console.error('ADMIN RECONCILIATION ERROR:', error);
+    req.log.error({ err: error }, 'ADMIN RECONCILIATION ERROR');
     return res.status(500).json({ error: 'Could not load reconciliation queue' });
   }
 });
@@ -2777,7 +2806,7 @@ router.patch('/financial/reconciliation/:id/resolve', async (req, res) => {
     });
     return res.json({ record });
   } catch (error) {
-    console.error('ADMIN RESOLVE RECONCILIATION ERROR:', error);
+    req.log.error({ err: error }, 'ADMIN RESOLVE RECONCILIATION ERROR');
     return res.status(error.status || 500).json({ error: error.message || 'Could not resolve reconciliation' });
   }
 });
@@ -2832,7 +2861,7 @@ router.get(
         count: events.length,
       });
     } catch (error) {
-      console.error('ADMIN AUDIT EVENTS ERROR:', error);
+      req.log.error({ err: error }, 'ADMIN AUDIT EVENTS ERROR:');
 
       return res.status(500).json({
         error: 'Could not load audit events',

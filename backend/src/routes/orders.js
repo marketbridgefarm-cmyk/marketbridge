@@ -188,7 +188,7 @@ router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req,
       paymentConfirmed: false,
     });
   } catch (error) {
-    console.error('BUY NOW ERROR:', error);
+    req.log.error({ err: error }, 'BUY NOW ERROR:');
     return res.status(error.status || 500).json({
       error: error.status ? error.message : 'Could not create order',
     });
@@ -206,7 +206,7 @@ router.get('/', authenticate, async (req, res) => {
 
     return res.json({ orders, count: orders.length });
   } catch (error) {
-    console.error('GET ORDERS ERROR:', error);
+    req.log.error({ err: error }, 'GET ORDERS ERROR:');
     return res.status(500).json({ error: 'Failed to load orders' });
   }
 });
@@ -236,7 +236,7 @@ router.get('/:id', authenticate, async (req, res) => {
 
     return res.json({ order });
   } catch (error) {
-    console.error('GET ORDER ERROR:', error);
+    req.log.error({ err: error }, 'GET ORDER ERROR:');
     return res.status(500).json({ error: 'Failed to load order' });
   }
 });
@@ -278,7 +278,7 @@ router.get('/:id/workflow', authenticate, async (req, res) => {
 
     return res.json({ workflow });
   } catch (error) {
-    console.error('GET ORDER WORKFLOW ERROR:', error);
+    req.log.error({ err: error }, 'GET ORDER WORKFLOW ERROR:');
     return res.status(500).json({ error: 'Failed to compute order workflow' });
   }
 });
@@ -360,7 +360,7 @@ router.patch('/:id/confirm-receipt', authenticate, idempotency('orders.confirm-r
 
     return res.json({ message: 'Receipt confirmed. Order completed.', order: updated });
   } catch (error) {
-    console.error('CONFIRM RECEIPT ERROR:', error);
+    req.log.error({ err: error }, 'CONFIRM RECEIPT ERROR:');
     if (error.message.includes('confirm receipt') || error.message.includes('already been completed') || error.message.includes('UNKNOWN')) {
       return res.status(400).json({ error: error.message });
     }
@@ -446,7 +446,7 @@ router.patch(
 
       return res.json({ message: 'Order cancelled.', order: updated });
     } catch (error) {
-      console.error('CANCEL ORDER ERROR:', error);
+      req.log.error({ err: error }, 'CANCEL ORDER ERROR:');
       return res.status(error.status || 500).json({
         error: error.status ? error.message : 'Failed to cancel order',
       });

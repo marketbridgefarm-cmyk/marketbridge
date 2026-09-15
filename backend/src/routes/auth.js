@@ -64,6 +64,43 @@ function clearRefreshCookie(res) {
   res.clearCookie(REFRESH_COOKIE_NAME, opts);
 }
 
+// CSRF hardening for the two cookie-authenticated endpoints.
+//
+// Every other route in this API uses a Bearer access token, which a
+// cross-site page cannot attach (it isn't a cookie, so the browser never
+// sends it automatically) — the standard reason "the API is Bearer-only,
+// so CSRF doesn't apply" holds for them. /refresh and /logout are the
+// exception: they read an HttpOnly cookie, and that cookie is
+// SameSite=None in production (required because the SPA and API are on
+// different domains), so the browser WILL attach it to a cross-site POST.
+// The response body can't be read cross-origin (CORS still blocks that),
+// but the request still executes server-side — an attacker page could
+// silently trigger session rotation or logout. Requiring the request's
+// Origin (or Referer, as a fallback for older/odd clients) to match an
+// allowed origin closes that gap without touching the Bearer-only routes.
+const trustedOrigins = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(',').map((o) => o.trim()).filter(Boolean)
+  : [];
+
+function requireTrustedOrigin(req, res, next) {
+  if (!isProduction || trustedOrigins.length === 0) return next();
+
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+  let candidate = origin || null;
+  if (!candidate && referer) {
+    try {
+      candidate = new URL(referer).origin;
+    } catch {
+      candidate = null;
+    }
+  }
+
+  if (candidate && trustedOrigins.includes(candidate)) return next();
+
+  return res.status(403).json({ error: 'Request origin not allowed', code: 'UNTRUSTED_ORIGIN' });
+}
+
 function signToken(user, sessionId) {
   return jwt.sign({ sub: user.id, sid: sessionId }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '15m',
@@ -179,7 +216,7 @@ router.post(
       setRefreshCookie(res, session.refreshToken);
       return res.status(201).json({ user: sanitize(user), token: session.token, expiresIn: session.expiresIn });
     } catch (error) {
-      console.error('Register error:', error);
+      req.log.error({ err: error }, 'Register error:');
       return res.status(500).json({ error: 'Registration failed' });
     }
   }
@@ -226,14 +263,14 @@ router.post(
       setRefreshCookie(res, session.refreshToken);
       return res.json({ user: sanitize(user), token: session.token, expiresIn: session.expiresIn });
     } catch (error) {
-      console.error('Login error:', error);
+      req.log.error({ err: error }, 'Login error:');
       return res.status(500).json({ error: 'Login failed' });
     }
   }
 );
 
 // Refresh token: persistent session + one-time rotation.
-router.post('/refresh', authLimiter, async (req, res) => {
+router.post('/refresh', authLimiter, requireTrustedOrigin, async (req, res) => {
   try {
     const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
     if (!refreshToken) return res.status(401).json({ error: 'Refresh token is required', code: 'INVALID_REFRESH_SESSION' });
@@ -300,7 +337,7 @@ router.post('/refresh', authLimiter, async (req, res) => {
       expiresIn: process.env.JWT_EXPIRES_IN || '15m',
     });
   } catch (error) {
-    console.error('Refresh token error:', error);
+    req.log.error({ err: error }, 'Refresh token error:');
     return res.status(500).json({ error: 'Token refresh failed' });
   }
 });
@@ -348,7 +385,7 @@ router.patch(
 
       return res.json({ user: sanitize(user) });
     } catch (error) {
-      console.error('Update preferences error:', error);
+      req.log.error({ err: error }, 'Update preferences error:');
       return res.status(500).json({ error: 'Could not update preferences' });
     }
   }
@@ -430,7 +467,7 @@ router.post(
         usedBackupCode,
       });
     } catch (error) {
-      console.error('MFA verify-login error:', error);
+      req.log.error({ err: error }, 'MFA verify-login error:');
       return res.status(500).json({ error: 'Login failed' });
     }
   }
@@ -460,7 +497,7 @@ router.post('/mfa/setup', authenticate, async (req, res) => {
 
     return res.json({ secret, otpAuthUri, qrCodeDataUrl });
   } catch (error) {
-    console.error('MFA setup error:', error);
+    req.log.error({ err: error }, 'MFA setup error:');
     return res.status(500).json({ error: 'Could not start MFA setup' });
   }
 });
@@ -516,7 +553,7 @@ router.post(
         backupCodes,
       });
     } catch (error) {
-      console.error('MFA verify-setup error:', error);
+      req.log.error({ err: error }, 'MFA verify-setup error:');
       return res.status(500).json({ error: 'Could not enable MFA' });
     }
   }
@@ -564,7 +601,7 @@ router.post(
 
       return res.json({ message: 'MFA has been disabled on your account.' });
     } catch (error) {
-      console.error('MFA disable error:', error);
+      req.log.error({ err: error }, 'MFA disable error:');
       return res.status(500).json({ error: 'Could not disable MFA' });
     }
   }
@@ -613,7 +650,7 @@ router.post(
         ...(isProduction ? {} : { devResetUrl: resetUrl, devToken: rawToken }),
       });
     } catch (error) {
-      console.error('Forgot-password error:', error);
+      req.log.error({ err: error }, 'Forgot-password error:');
       return res.status(500).json({ error: 'Could not process password reset request' });
     }
   }
@@ -654,7 +691,7 @@ router.post(
 
       return res.json({ message: 'Your password has been reset. Please log in again.' });
     } catch (error) {
-      console.error('Reset-password error:', error);
+      req.log.error({ err: error }, 'Reset-password error:');
       return res.status(500).json({ error: 'Could not reset password' });
     }
   }

@@ -89,7 +89,7 @@ async function resolveListingMedia(value) {
   try {
     return await signedMediaUrl({ key: value, disposition: 'inline' });
   } catch (error) {
-    console.error('AD LISTING MEDIA SIGN ERROR:', error);
+    req.log.error({ err: error }, 'AD LISTING MEDIA SIGN ERROR:');
     return null;
   }
 }
@@ -114,7 +114,7 @@ async function attachCreativeUrl(ad) {
     try {
       result.creativeImageUrl = await signedMediaUrl({ key: ad.creativeImageKey, disposition: 'inline' });
     } catch (error) {
-      console.error('AD CREATIVE SIGN ERROR:', error);
+      req.log.error({ err: error }, 'AD CREATIVE SIGN ERROR:');
       result.creativeImageUrl = null;
     }
   } else {
@@ -180,7 +180,7 @@ router.post('/creative', authenticate, uploadCreative, async (req, res) => {
     const previewUrl = await signedMediaUrl({ key, disposition: 'inline' });
     return res.status(201).json({ key, previewUrl, contentType: req.file.mimetype, bytes: req.file.size });
   } catch (error) {
-    console.error('AD CREATIVE UPLOAD ERROR:', error);
+    req.log.error({ err: error }, 'AD CREATIVE UPLOAD ERROR:');
     return res.status(400).json({ error: error.message || 'Could not upload banner image' });
   }
 });
@@ -266,7 +266,7 @@ router.post(
 
       return res.status(201).json({ ad: { ...ad, amountDue: priceQuoted, days, paymentStatus: 'UNPAID' } });
     } catch (error) {
-      console.error('CREATE AD ERROR:', error);
+      req.log.error({ err: error }, 'CREATE AD ERROR:');
       return res.status(500).json({ error: 'Could not create advertisement' });
     }
   }
@@ -288,7 +288,7 @@ router.get('/active', async (req, res) => {
     );
     return res.json({ ads: enriched.map(withComputedStatus) });
   } catch (error) {
-    console.error('ACTIVE ADS ERROR:', error);
+    req.log.error({ err: error }, 'ACTIVE ADS ERROR:');
     return res.status(500).json({ error: 'Could not load active advertisements' });
   }
 });
@@ -306,7 +306,7 @@ router.get('/mine', authenticate, async (req, res) => {
     const enriched = await Promise.all(ads.map(attachCreativeUrl));
     return res.json({ ads: enriched.map((ad) => ({ ...withComputedStatus(ad), amountDue: Number(ad.priceQuoted || 0), paymentStatus: paymentStatus(ad) })) });
   } catch (error) {
-    console.error('MY ADS ERROR:', error);
+    req.log.error({ err: error }, 'MY ADS ERROR:');
     return res.status(500).json({ error: 'Could not load your advertisements' });
   }
 });
@@ -326,7 +326,7 @@ router.get('/', authenticate, async (req, res) => {
     const enriched = await Promise.all(ads.map(attachCreativeUrl));
     return res.json({ ads: enriched.map((ad) => ({ ...withComputedStatus(ad), paymentStatus: paymentStatus(ad) })) });
   } catch (error) {
-    console.error('LIST ADS ERROR:', error);
+    req.log.error({ err: error }, 'LIST ADS ERROR:');
     return res.status(500).json({ error: 'Could not load advertisements' });
   }
 });
@@ -339,7 +339,7 @@ router.post('/:id/events', adEventLimiter, [param('id').isUUID(), body('eventTyp
     await prisma.advertisementEvent.create({ data: { advertisementId: ad.id, eventType: req.body.eventType } });
     return res.status(204).end();
   } catch (error) {
-    console.error('AD EVENT ERROR:', error);
+    req.log.error({ err: error }, 'AD EVENT ERROR:');
     return res.status(500).json({ error: 'Could not record campaign event' });
   }
 });
@@ -353,7 +353,7 @@ router.get('/:id/analytics', authenticate, [param('id').isUUID()], validate, asy
     const clicks = ad.events.filter((e) => e.eventType === 'CLICK').length;
     return res.json({ campaignReference: ad.campaignReference, impressions, clicks, ctr: impressions ? Number(((clicks / impressions) * 100).toFixed(2)) : 0, publishedAt: ad.publishedAt, telegramPostReference: ad.telegramPostReference });
   } catch (error) {
-    console.error('AD ANALYTICS ERROR:', error);
+    req.log.error({ err: error }, 'AD ANALYTICS ERROR:');
     return res.status(500).json({ error: 'Could not load campaign analytics' });
   }
 });
@@ -381,7 +381,7 @@ router.patch(
       });
       return res.json({ ad: updated });
     } catch (error) {
-      console.error('UPDATE AD STATUS ERROR:', error);
+      req.log.error({ err: error }, 'UPDATE AD STATUS ERROR:');
       return res.status(500).json({ error: 'Could not update advertisement status' });
     }
   }
@@ -450,7 +450,7 @@ router.patch('/:id/cancel', authenticate, [param('id').isUUID(), body('reason').
 
     return res.json({ ad: updated });
   } catch (error) {
-    console.error('CANCEL AD ERROR:', error);
+    req.log.error({ err: error }, 'CANCEL AD ERROR:');
     return res.status(500).json({ error: 'Could not cancel advertisement' });
   }
 });
@@ -469,7 +469,7 @@ router.patch('/:id/telegram-publication', authenticate, [param('id').isUUID(), b
     const updated = await prisma.advertisement.update({ where: { id: ad.id }, data: { status: 'PUBLISHED', publishedAt: new Date(), telegramPostReference: safeText(req.body.postReference, 500) } });
     return res.json({ ad: updated });
   } catch (error) {
-    console.error('TELEGRAM PUBLICATION ERROR:', error);
+    req.log.error({ err: error }, 'TELEGRAM PUBLICATION ERROR:');
     return res.status(500).json({ error: 'Could not record Telegram publication' });
   }
 });

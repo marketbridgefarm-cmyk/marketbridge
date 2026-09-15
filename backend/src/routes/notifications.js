@@ -33,7 +33,7 @@ router.get(
 
       return res.json(result);
     } catch (error) {
-      console.error('LIST NOTIFICATIONS ERROR:', error);
+      req.log.error({ err: error }, 'LIST NOTIFICATIONS ERROR:');
       return res.status(500).json({ error: 'Could not load notifications' });
     }
   }
@@ -47,7 +47,7 @@ router.get('/unread-count', authenticate, async (req, res) => {
 
     return res.json({ unreadCount });
   } catch (error) {
-    console.error('UNREAD NOTIFICATION COUNT ERROR:', error);
+    req.log.error({ err: error }, 'UNREAD NOTIFICATION COUNT ERROR:');
     return res.status(500).json({ error: 'Could not load notification count' });
   }
 });
@@ -78,7 +78,7 @@ router.patch(
 
       return res.json({ success: true, notificationId: req.params.id });
     } catch (error) {
-      console.error('MARK NOTIFICATION READ ERROR:', error);
+      req.log.error({ err: error }, 'MARK NOTIFICATION READ ERROR:');
       return res.status(500).json({ error: 'Could not mark notification as read' });
     }
   }
@@ -98,7 +98,7 @@ router.patch(
       if (result.count === 0) return res.status(404).json({ error: 'Notification not found' });
       return res.json({ success: true, notificationId: req.params.id });
     } catch (error) {
-      console.error('MARK NOTIFICATION UNREAD ERROR:', error);
+      req.log.error({ err: error }, 'MARK NOTIFICATION UNREAD ERROR:');
       return res.status(500).json({ error: 'Could not mark notification as unread' });
     }
   }
@@ -113,7 +113,7 @@ router.post('/read-all', authenticate, async (req, res) => {
 
     return res.json({ success: true, markedRead: result.count });
   } catch (error) {
-    console.error('MARK ALL NOTIFICATIONS READ ERROR:', error);
+    req.log.error({ err: error }, 'MARK ALL NOTIFICATIONS READ ERROR:');
     return res.status(500).json({ error: 'Could not mark notifications as read' });
   }
 });

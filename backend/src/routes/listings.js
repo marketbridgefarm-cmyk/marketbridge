@@ -30,7 +30,7 @@ async function resolveMediaUrl(value) {
   try {
     return await signedMediaUrl({ key: value, disposition: 'inline' });
   } catch (error) {
-    console.error('LISTING MEDIA SIGN ERROR:', error);
+    req.log.error({ err: error }, 'LISTING MEDIA SIGN ERROR:');
     return null;
   }
 }
@@ -302,7 +302,7 @@ router.get('/search', optionalAuthenticate, async (req, res) => {
     result.listings = await Promise.all(result.listings.map((listing) => attachMediaUrls(toPublicListing(listing))));
     return res.json(result);
   } catch (error) {
-    console.error('LISTING SEARCH ERROR:', error);
+    req.log.error({ err: error }, 'LISTING SEARCH ERROR:');
     return res.status(500).json({ error: 'Could not search listings' });
   }
 });
@@ -313,7 +313,7 @@ router.get('/recommendations', authenticate, async (req, res) => {
     result.listings = await Promise.all(result.listings.map((listing) => attachMediaUrls(toPublicListing(listing))));
     return res.json(result);
   } catch (error) {
-    console.error('LISTING RECOMMENDATIONS ERROR:', error);
+    req.log.error({ err: error }, 'LISTING RECOMMENDATIONS ERROR:');
     return res.status(500).json({ error: 'Could not load recommendations' });
   }
 });
@@ -647,10 +647,7 @@ router.get('/', optionalAuthenticate, async (req, res) => {
       ),
     });
   } catch (error) {
-    console.error(
-      'LIST LISTINGS ERROR:',
-      error
-    );
+    req.log.error({ err: error }, 'LIST LISTINGS ERROR:');
 
     return res.status(500).json({
       error: 'Could not load listings',
@@ -728,7 +725,7 @@ router.get('/nearby', optionalAuthenticate, async (req, res) => {
 
     return res.json({ listings: withDistance, center: { lat, lng }, radiusKm });
   } catch (error) {
-    console.error('LISTINGS NEARBY ERROR:', error);
+    req.log.error({ err: error }, 'LISTINGS NEARBY ERROR:');
     return res.status(500).json({ error: 'Could not load nearby listings' });
   }
 });
@@ -839,7 +836,7 @@ router.get('/:id', optionalAuthenticate, async (req, res) => {
       listing: await attachMediaUrls(publicListing),
     });
   } catch (error) {
-    console.error('GET LISTING ERROR:', error);
+    req.log.error({ err: error }, 'GET LISTING ERROR:');
     return res.status(500).json({ error: 'Could not load listing' });
   }
 });
@@ -877,7 +874,7 @@ router.post(
 
       return res.status(201).json({ photoKeys, videoKeys });
     } catch (error) {
-      console.error('LISTING MEDIA UPLOAD ERROR:', error);
+      req.log.error({ err: error }, 'LISTING MEDIA UPLOAD ERROR:');
 
       return res.status(500).json({
         error: 'Could not upload media',
@@ -1306,10 +1303,7 @@ router.post(
         listing,
       });
     } catch (error) {
-      console.error(
-        'CREATE LISTING ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'CREATE LISTING ERROR:');
 
       return res.status(500).json({
         error: 'Could not create listing',
@@ -1725,10 +1719,7 @@ router.patch(
         listing: await attachMediaUrls(updated),
       });
     } catch (error) {
-      console.error(
-        'UPDATE LISTING ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'UPDATE LISTING ERROR:');
 
       return res.status(500).json({
         error: 'Could not update listing',
@@ -1855,10 +1846,7 @@ router.get(
         },
       });
     } catch (error) {
-      console.error(
-        'PRICE INSIGHTS ERROR:',
-        error
-      );
+      req.log.error({ err: error }, 'PRICE INSIGHTS ERROR:');
 
       return res.status(500).json({
         error:
