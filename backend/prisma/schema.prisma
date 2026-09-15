@@ -274,6 +274,16 @@ model User {
   verificationStatus VerificationStatus @default(UNVERIFIED)
   accountStatus      AccountStatus      @default(ACTIVE)
 
+  // Multi-factor authentication (TOTP). mfaSecret is set as soon as setup
+  // begins but only takes effect once mfaEnabled is flipped true by a
+  // verified code + password confirmation (see routes/auth.js mfa/*).
+  // Backup codes are stored bcrypt-hashed, one-time-use, consumed on use.
+  mfaEnabled      Boolean  @default(false)
+  mfaSecret       String?
+  mfaBackupCodes  String[] @default([])
+
+  passwordResetTokens PasswordResetToken[]
+
   rating Float @default(0)
 
   createdAt DateTime @default(now())
@@ -411,6 +421,33 @@ model RefreshSession {
   @@index([userId, revokedAt, expiresAt])
   @@index([familyId, revokedAt])
   @@index([createdAt])
+}
+
+// ============================================================================
+// PASSWORD RESET
+// ============================================================================
+//
+// Same pattern as RefreshSession: the raw token is emailed to the user and
+// never stored; only its sha256 hash lives here, so a database read alone
+// can never be used to reset an account's password.
+// ============================================================================
+
+model PasswordResetToken {
+  id String @id @default(uuid())
+
+  userId    String
+  tokenHash String @unique
+
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  requestedIp String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt, expiresAt])
 }
 
 // ============================================================================
