@@ -163,4 +163,4 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
   }
 });
 
-module.exports = router;module.exports = router;
+module.exports = router;
