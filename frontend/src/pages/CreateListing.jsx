@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
+import { REGIONS as FALLBACK_REGIONS } from '../utils/ethiopianRegions';
 
 export default function CreateListing() {
   const { user } = useAuth();
@@ -54,13 +55,20 @@ export default function CreateListing() {
   });
   const [error, setError] = useState('');
   const [mediaError, setMediaError] = useState('');
-  const [regions, setRegions] = useState([]);
+  // Seed with the static list so the dropdown is never empty, then sync
+  // with the backend in the background — if that call fails, we keep
+  // showing the fallback instead of silently emptying the dropdown.
+  const [regions, setRegions] = useState(FALLBACK_REGIONS);
   const [geoStatus, setGeoStatus] = useState('');
 
   useEffect(() => {
     api.get('/listings/meta/regions')
-      .then((r) => setRegions(r.data.regions || []))
-      .catch(() => {});
+      .then((r) => {
+        if (r.data.regions?.length) setRegions(r.data.regions);
+      })
+      .catch((err) => {
+        console.warn('Could not sync region list from server, using built-in list.', err);
+      });
   }, []);
 
   function useMyLocation() {
