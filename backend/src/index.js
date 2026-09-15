@@ -6,8 +6,10 @@ require('express-async-errors');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
+
+const { requestIdMiddleware, attachRequestId } = require('./middleware/requestId');
+const logger = require('./utils/logger');
 
 const {
   apiLimiter,
@@ -71,28 +73,22 @@ function validateEnv() {
   );
 
   if (missing.length > 0) {
-    console.error(
-      `FATAL: Missing required environment variables in production: ${missing.join(', ')}`
-    );
+    logger.error({ missing }, 'FATAL: Missing required environment variables in production');
     process.exit(1);
   }
 
   if (process.env.JWT_SECRET.length < 32) {
-    console.error('FATAL: JWT_SECRET must be at least 32 characters');
+    logger.error('FATAL: JWT_SECRET must be at least 32 characters');
     process.exit(1);
   }
 
   if (process.env.PAYMENT_WEBHOOK_SECRET.length < 32) {
-    console.error(
-      'FATAL: PAYMENT_WEBHOOK_SECRET must be at least 32 characters'
-    );
+    logger.error('FATAL: PAYMENT_WEBHOOK_SECRET must be at least 32 characters');
     process.exit(1);
   }
 
   if (process.env.CHAPA_WEBHOOK_SECRET.length < 32) {
-    console.error(
-      'FATAL: CHAPA_WEBHOOK_SECRET must be at least 32 characters'
-    );
+    logger.error('FATAL: CHAPA_WEBHOOK_SECRET must be at least 32 characters');
     process.exit(1);
   }
 }
@@ -106,9 +102,9 @@ validateEnv();
 async function testDatabase() {
   try {
     await prisma.$connect();
-    console.log('✅ Database connection established');
+    logger.info('Database connection established');
   } catch (error) {
-    console.error('❌ Database connection failed:', error.message);
+    logger.error({ err: error }, 'Database connection failed');
     process.exit(1);
   }
 }
@@ -137,9 +133,7 @@ const allowedOrigins = process.env.CLIENT_URL
   : [];
 
 if (isProduction && allowedOrigins.length === 0) {
-  console.error(
-    'FATAL: CLIENT_URL is not set. Refusing to start in production with an open CORS policy.'
-  );
+  logger.error('FATAL: CLIENT_URL is not set. Refusing to start in production with an open CORS policy.');
   process.exit(1);
 }
 
@@ -170,10 +164,16 @@ app.use(
 );
 
 // ============================================================================
-// LOGGING
+// LOGGING + REQUEST CORRELATION
 // ============================================================================
+//
+// Structured JSON access logs (pino-http) plus a per-request correlation
+// ID: generated here, echoed as X-Request-Id, attached to req.requestId,
+// and available to every handler via req.log for business-event logging
+// (see utils/logger.js). Replaces morgan's plain-text access log.
 
-app.use(morgan(isProduction ? 'combined' : 'dev'));
+app.use(requestIdMiddleware);
+app.use(attachRequestId);
 
 // ============================================================================
 // RAW BODY + JSON PARSING
@@ -292,7 +292,8 @@ app.use((req, res) => {
 // ============================================================================
 
 app.use((err, req, res, next) => {
-  console.error('MarketBridge API error:', err);
+  const log = req.log || logger;
+  log.error({ err, requestId: req.requestId }, 'MarketBridge API error');
 
   // --------------------------------------------------------------------------
   // CORS
@@ -378,6 +379,10 @@ app.use((err, req, res, next) => {
       isProduction && status === 500
         ? 'Internal server error'
         : err.message || 'Internal server error',
+    // Always returned, including on 500s: lets a user hand support one ID
+    // that's directly grep-able against structured logs, audit events and
+    // (for payment errors) PaymentReconciliation rows.
+    requestId: req.requestId,
 
     ...(isProduction && status === 500
       ? {}
@@ -400,25 +405,41 @@ if (require.main === module) {
   testDatabase();
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(
-      `🚀 MarketBridge API listening on port ${PORT}`
-    );
-
-    console.log(
-      `   Environment: ${
-        isProduction ? 'production' : 'development'
-      }`
+    logger.info(
+      { port: PORT, environment: isProduction ? 'production' : 'development' },
+      'MarketBridge API listening'
     );
 
     maintenanceTimer = startMaintenanceScheduler();
-
-    console.log(
-      `   Health: http://localhost:${PORT}/health`
-    );
   });
 }
 
+// ============================================================================
+// PROCESS-LEVEL CRASH VISIBILITY
+// ============================================================================
+//
+// Without these, an unhandled rejection or sync throw outside Express's
+// request cycle (e.g. inside the maintenance scheduler's setInterval, or a
+// stray promise in a service) either crashes the process silently or — for
+// unhandledRejection specifically — is swallowed by Node entirely on older
+// versions, with nothing in the logs to explain a Render restart. This is
+// what PDF section "Monitoring and alerts" means by "job failures" /
+// "conditions requiring human intervention": at minimum they must be
+// logged loudly before the process exits, so Render's crash/restart signal
+// has a paired log line explaining why.
+
+process.on('unhandledRejection', (reason) => {
+  logger.error({ err: reason }, 'Unhandled promise rejection — process will exit');
+  process.exit(1);
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error({ err }, 'Uncaught exception — process will exit');
+  process.exit(1);
+});
+
 process.on('SIGTERM', async () => {
+  logger.info('SIGTERM received, shutting down');
   if (maintenanceTimer) clearInterval(maintenanceTimer);
   await prisma.$disconnect();
   process.exit(0);
