@@ -121,6 +121,16 @@ p {
   font-family: inherit;
 }
 
+.lang-switcher {
+  border: 1px solid #d7e2da;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+}
+
 .small {
   font-size: 13px;
 }
@@ -4067,5 +4077,3 @@ tr:last-child td { border-bottom: 0; }
 }
 
 .tag--negotiable { background: #f2eee4; color: #76561b; }
-.language-select select { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--surface); color: inherit; }
-.language-select--mobile { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 0; }
