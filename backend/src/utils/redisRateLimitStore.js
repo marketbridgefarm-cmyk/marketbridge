@@ -79,6 +79,11 @@ class RedisRateLimitStore {
     await this.redis.del(`${this.prefix}${key}`);
   }
 
+  async ping() {
+    await this._ensureConnected();
+    return (await this.redis.ping()) === 'PONG';
+  }
+
   async shutdown() {
     if (this.redis.status !== 'end') {
       await this.redis.quit();
