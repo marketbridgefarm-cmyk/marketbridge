@@ -14,9 +14,12 @@ async function searchListings(params = {}) {
   const category = params.category ? String(params.category).toUpperCase() : null;
   const location = String(params.location || '').trim();
   const cropType = String(params.cropType || '').trim();
-  const locationId = String(params.locationId || '').trim();
   const minPrice = params.minPrice === undefined ? null : Number(params.minPrice);
   const maxPrice = params.maxPrice === undefined ? null : Number(params.maxPrice);
+  const minQuantity = params.minQuantity === undefined ? null : Number(params.minQuantity);
+  const maxQuantity = params.maxQuantity === undefined ? null : Number(params.maxQuantity);
+  const unit = String(params.unit || '').trim().toUpperCase();
+  const sort = String(params.sort || 'relevance').toLowerCase();
   const page = positiveInt(params.page, 1, 1000000);
   const limit = positiveInt(params.limit, 20, 50);
   const offset = (page - 1) * limit;
@@ -25,15 +28,18 @@ async function searchListings(params = {}) {
   if (q) clauses.push(Prisma.sql`to_tsvector('simple', concat_ws(' ', l.title, l."cropType", l.description, l.location)) @@ websearch_to_tsquery('simple', ${q})`);
   if (category) clauses.push(Prisma.sql`l.category = ${category}::"ListingCategory"`);
   if (location) clauses.push(Prisma.sql`l.location ILIKE ${`%${location}%`}`);
-  if (locationId) clauses.push(Prisma.sql`l."locationId" = ${locationId}`);
   if (cropType) clauses.push(Prisma.sql`l."cropType" ILIKE ${`%${cropType}%`}`);
   if (Number.isFinite(minPrice)) clauses.push(Prisma.sql`l."askingPrice" >= ${minPrice}`);
   if (Number.isFinite(maxPrice)) clauses.push(Prisma.sql`l."askingPrice" <= ${maxPrice}`);
+  if (Number.isFinite(minQuantity)) clauses.push(Prisma.sql`l."availableQuantity" >= ${minQuantity}`);
+  if (Number.isFinite(maxQuantity)) clauses.push(Prisma.sql`l."availableQuantity" <= ${maxQuantity}`);
+  if (unit) clauses.push(Prisma.sql`upper(l.unit) = ${unit}`);
 
   const where = Prisma.join(clauses, ' AND ');
-  const rank = q
+  const rank = q && sort === 'relevance'
     ? Prisma.sql`ts_rank(to_tsvector('simple', concat_ws(' ', l.title, l."cropType", l.description, l.location)), websearch_to_tsquery('simple', ${q})) DESC,`
     : Prisma.empty;
+  const ordering = sort === 'price_asc' ? Prisma.sql`l."askingPrice" ASC,` : sort === 'price_desc' ? Prisma.sql`l."askingPrice" DESC,` : sort === 'quantity_desc' ? Prisma.sql`l."availableQuantity" DESC,` : sort === 'newest' ? Prisma.sql`l."createdAt" DESC,` : Prisma.empty;
 
   const rows = await prisma.$queryRaw`
     SELECT l.id,
@@ -41,7 +47,7 @@ async function searchListings(params = {}) {
       CASE WHEN ${q !== ''} THEN ts_rank(to_tsvector('simple', concat_ws(' ', l.title, l."cropType", l.description, l.location)), websearch_to_tsquery('simple', ${q})) ELSE 0 END AS rank
     FROM "Listing" l
     WHERE ${where}
-    ORDER BY ${rank} l."createdAt" DESC, l.id DESC
+    ORDER BY ${rank} ${ordering} l."createdAt" DESC, l.id DESC
     LIMIT ${limit} OFFSET ${offset}
   `;
 
@@ -54,7 +60,6 @@ async function searchListings(params = {}) {
       unit: true, askingPrice: true, location: true, harvestedDate: true, readinessDate: true,
       pickupWindowStart: true, pickupWindowEnd: true, photos: true, videos: true, description: true,
       status: true, createdByInspectorId: true, createdAt: true, updatedAt: true,
-      locationRef: { select: { id: true, name: true, nameAm: true, nameOm: true, code: true, level: true, parentId: true, latitude: true, longitude: true } },
     },
   });
   const byId = new Map(listings.map((l) => [l.id, l]));
