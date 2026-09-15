@@ -1,0 +1,12 @@
+{
+  "nav.dashboard": "Daashboordii",
+  "nav.orders": "Ajajawwan",
+  "nav.login": "Seeni",
+  "nav.register": "Galmaa'i",
+  "nav.logout": "Ba'i",
+
+  "common.submit": "Ergi",
+  "common.cancel": "Dhiisi",
+  "common.save": "Olkaa'i",
+  "common.confirm": "Mirkaneessi"
+}

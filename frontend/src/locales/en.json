@@ -1,0 +1,26 @@
+{
+  "nav.farmProduces": "Farm Produces",
+  "nav.products": "Products",
+  "nav.digital": "Digital",
+  "nav.dashboard": "Dashboard",
+  "nav.orders": "Orders",
+  "nav.accountSecurity": "Account security",
+  "nav.login": "Log in",
+  "nav.register": "Create account",
+  "nav.logout": "Log out",
+
+  "auth.welcomeBack": "Welcome back",
+  "auth.loginTitle": "Log in to MarketBridge",
+  "auth.email": "Email",
+  "auth.password": "Password",
+  "auth.forgotPassword": "Forgot your password?",
+  "auth.newToMarketBridge": "New to MarketBridge?",
+  "auth.createAccount": "Create an account",
+  "auth.backToLogin": "Back to login",
+
+  "common.submit": "Submit",
+  "common.cancel": "Cancel",
+  "common.save": "Save",
+  "common.loading": "Loading…",
+  "common.confirm": "Confirm"
+}

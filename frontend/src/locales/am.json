@@ -1,0 +1,26 @@
+{
+  "nav.farmProduces": "የእርሻ ውጤቶች",
+  "nav.products": "ምርቶች",
+  "nav.digital": "ዲጂታል",
+  "nav.dashboard": "ዳሽቦርድ",
+  "nav.orders": "ትዕዛዞች",
+  "nav.accountSecurity": "የመለያ ደህንነት",
+  "nav.login": "ግባ",
+  "nav.register": "መለያ ክፈት",
+  "nav.logout": "ውጣ",
+
+  "auth.welcomeBack": "እንኳን ደህና መጡ",
+  "auth.loginTitle": "ወደ ማርኬትብሪጅ ይግቡ",
+  "auth.email": "ኢሜይል",
+  "auth.password": "የይለፍ ቃል",
+  "auth.forgotPassword": "የይለፍ ቃልዎን ረሱ?",
+  "auth.newToMarketBridge": "ለማርኬትብሪጅ አዲስ ነዎት?",
+  "auth.createAccount": "መለያ ይፍጠሩ",
+  "auth.backToLogin": "ወደ መግቢያ ተመለስ",
+
+  "common.submit": "አስገባ",
+  "common.cancel": "ሰርዝ",
+  "common.save": "አስቀምጥ",
+  "common.loading": "በመጫን ላይ…",
+  "common.confirm": "አረጋግጥ"
+}
