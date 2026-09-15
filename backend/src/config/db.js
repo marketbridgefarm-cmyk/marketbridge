@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const logger = require('../utils/logger');
 
 // Single shared Prisma instance across the app
 // Enhanced with connection pooling and graceful shutdown
@@ -10,10 +11,10 @@ const prisma = new PrismaClient({
 async function testConnection() {
   try {
     await prisma.$connect();
-    console.log('✅ Database connection established');
+    logger.info('Database connection established');
     return true;
   } catch (error) {
-    console.error('❌ Database connection failed:', error.message);
+    logger.error({ err: error }, 'Database connection failed');
     return false;
   }
 }
@@ -24,7 +25,7 @@ process.on('beforeExit', async () => {
 });
 
 process.on('SIGINT', async () => {
-  console.log('\nShutting down gracefully...');
+  logger.info('SIGINT received, shutting down gracefully');
   await prisma.$disconnect();
   process.exit(0);
 });

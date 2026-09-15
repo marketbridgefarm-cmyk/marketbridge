@@ -1,3 +1,5 @@
+const logger = require('../utils/logger');
+
 // Platform commission rates by payment type.
 // These are configurable via environment variables for flexibility.
 //
@@ -23,7 +25,7 @@ function getEnvRate(type, defaultRate) {
 
   // Validate: must be between 0 and 100
   if (!Number.isFinite(value) || value < 0 || value > 100) {
-    console.warn(`Invalid commission rate for ${type}: ${value}. Using default ${defaultRate}`);
+    logger.warn({ type, value, defaultRate }, 'Invalid commission rate env var, using default');
     return defaultRate;
   }
 
