@@ -12,6 +12,7 @@ const { requireRole } = require('../middleware/roleCheck');
 const { isOrderParticipant, isAdmin } = require('../utils/authorization');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { idempotency } = require('../middleware/idempotency');
+const { transitionOrderStatus } = require('../services/orderStateMachine');
 
 const router = express.Router();
 
@@ -1706,14 +1707,19 @@ router.patch(
             });
 
             if (next === 'DELIVERED') {
-              await tx.order.update({
-                where: {
-                  id: job.orderId,
-                },
-                data: {
-                  status: 'DELIVERED',
-                },
+              const currentOrder = await tx.order.findUnique({
+                where: { id: job.orderId },
+                select: { status: true },
               });
+              if (!currentOrder) {
+                throw Object.assign(new Error('Order not found'), { status: 404 });
+              }
+              await transitionOrderStatus(
+                tx,
+                job.orderId,
+                currentOrder.status,
+                'DELIVERED'
+              );
 
               await releaseTruck(
                 tx,
@@ -2426,10 +2432,12 @@ router.patch(
         });
 
         if (freshJob.order.status === 'CONFIRMED') {
-          await tx.order.update({
-            where: { id: freshJob.order.id },
-            data: { status: 'TRANSPORT_ARRANGED' },
-          });
+          await transitionOrderStatus(
+            tx,
+            freshJob.order.id,
+            freshJob.order.status,
+            'TRANSPORT_ARRANGED'
+          );
         }
 
         await recordAuditEvent(tx, {

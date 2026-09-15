@@ -10,6 +10,7 @@ const { syncOrderPaymentObligations } = require('../services/paymentObligationSe
 const { idempotency } = require('../middleware/idempotency');
 const { computePaymentDueAt } = require('../utils/orderTiming');
 const { cancelOrderInTransaction } = require('../services/orderCancellationService');
+const { transitionOrderStatus } = require('../services/orderStateMachine');
 
 const router = express.Router();
 
@@ -328,9 +329,10 @@ router.patch('/:id/confirm-receipt', authenticate, idempotency('orders.confirm-r
         throw new Error(`Receipt cannot be confirmed while transport status is ${current.transportJob?.status || 'UNKNOWN'}`);
       }
 
-      const updatedOrder = await tx.order.update({
+      await transitionOrderStatus(tx, current.id, current.status, 'COMPLETED');
+
+      const updatedOrder = await tx.order.findUnique({
         where: { id: current.id },
-        data: { status: 'COMPLETED' },
         include: orderInclude,
       });
 
