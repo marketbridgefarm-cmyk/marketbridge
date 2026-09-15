@@ -101,6 +101,20 @@ async function expireUnpaidOrders(now = new Date()) {
           return;
         }
 
+        // Belt-and-suspenders: settlePayment() (paymentService.js) is what
+        // normally moves an order out of PENDING_PAYMENT the moment its
+        // MARKETPLACE payment is marked PAID, so this order's status should
+        // already reflect a completed payment. If a PAID payment is
+        // somehow still attached to a PENDING_PAYMENT order — a narrow
+        // window between the payment write and the order-status write
+        // inside that same transaction — do not cancel and take the goods
+        // away from a buyer who already paid; skip and let the next cycle
+        // re-evaluate once the picture is consistent.
+        if (current.payments.some((p) => p.status === 'PAID')) {
+          console.warn(`Skipping auto-expire for order ${current.id}: has a PAID payment despite PENDING_PAYMENT status.`);
+          return;
+        }
+
         await cancelOrderInTransaction(tx, {
           order: current,
           actorId: null,
