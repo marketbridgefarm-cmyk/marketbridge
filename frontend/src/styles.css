@@ -110,6 +110,17 @@ p {
   color: var(--muted);
 }
 
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--primary, #1a7f37);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+}
+
 .small {
   font-size: 13px;
 }
@@ -538,6 +549,16 @@ p {
   background: var(--soft);
 }
 
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+
+.btn-danger:hover {
+  filter: brightness(0.92);
+}
+
 .btn-lg {
   padding: 13px 19px;
   min-height: 48px;
@@ -547,32 +568,6 @@ p {
   padding: 7px 10px;
   min-height: 34px;
   font-size: 12px;
-}
-
-.btn-danger {
-  background: #b3261e;
-}
-
-.btn-danger:hover {
-  background: #8c1e18;
-}
-
-/* Inline text-styled button (e.g. "resend code") — same look as .text-link
-   but usable on a <button> since it needs a click handler, not navigation. */
-.btn-link {
-  display: inline;
-  border: none;
-  background: none;
-  padding: 0;
-  min-height: 0;
-  color: var(--green);
-  font: 700 14px "DM Sans", sans-serif;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.btn-link:hover {
-  color: var(--green-dark);
 }
 
 .full {
