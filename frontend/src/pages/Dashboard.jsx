@@ -251,6 +251,35 @@ export default function Dashboard() {
           <RecentActivity items={activityItems} emptyText="No activity yet — browse listings or create one to get started." />
         </DashboardWelcome>
 
+        <section className="service-access" aria-labelledby="service-access-title">
+          <div className="service-access-header">
+            <div>
+              <span className="eyebrow">MARKET SERVICES</span>
+              <h2 id="service-access-title">Need help with your transaction?</h2>
+              <p className="muted">Buyers and sellers can request transport or inspection directly. You do not need to become a transporter or inspector.</p>
+            </div>
+            <Link className="btn btn-light" to="/services">View all services</Link>
+          </div>
+          <div className="service-access-grid">
+            <Link to="/orders" className="service-access-card">
+              <span className="service-access-icon" aria-hidden="true">🚛</span>
+              <span className="service-access-copy">
+                <strong>Arrange Transport</strong>
+                <span>Hire a registered transporter or manage your own truck for an existing order.</span>
+              </span>
+              <span className="service-access-arrow" aria-hidden="true">→</span>
+            </Link>
+            <Link to="/agricultural" className="service-access-card">
+              <span className="service-access-icon" aria-hidden="true">🔍</span>
+              <span className="service-access-copy">
+                <strong>Request Inspection</strong>
+                <span>Open an agricultural listing and request a registered inspector before you buy or sell.</span>
+              </span>
+              <span className="service-access-arrow" aria-hidden="true">→</span>
+            </Link>
+          </div>
+        </section>
+
         {error && <div className="alert error">{error}</div>}
         {toastMsg && <div className="sd-toast">{toastMsg}</div>}
 

@@ -15,9 +15,15 @@ const AD_TYPES = [
 
 const BANNER_TEMPLATE_OPTIONS = [
   { value: 'CLASSIC', label: 'Classic', help: 'Full-width image with a dark caption strip over the bottom-left corner.' },
-  { value: 'BOLD', label: 'Bold', help: 'Large centered headline over a high-contrast color wash — best for a short, punchy message.' },
-  { value: 'MINIMAL', label: 'Minimal', help: 'Clean image with a small caption below it, no overlay text on the photo.' },
-  { value: 'CARD', label: 'Card', help: 'Framed card with a corner "Sponsored" ribbon and the headline in a text block beneath the image.' },
+  { value: 'BOLD', label: 'Bold', help: 'Large centered headline over a high-contrast color wash.' },
+  { value: 'MINIMAL', label: 'Minimal', help: 'Clean image with a small caption below it and no photo overlay.' },
+  { value: 'CARD', label: 'Card', help: 'Framed card with a Sponsored ribbon and headline beneath the image.' },
+  { value: 'SPLIT', label: 'Split', help: 'Elegant two-column composition with image on one side and message on the other.' },
+  { value: 'EDITORIAL', label: 'Editorial', help: 'Premium magazine-style treatment with refined typography and a soft image veil.' },
+  { value: 'FRESH', label: 'Farm Fresh', help: 'Warm agricultural style with a fresh badge and strong callout.' },
+  { value: 'DARK_LUXE', label: 'Dark Luxe', help: 'Premium dark treatment with a subtle gold accent for high-end campaigns.' },
+  { value: 'MARKET', label: 'Market', help: 'Energetic marketplace treatment with a compact promotional badge.' },
+  { value: 'GRADIENT', label: 'Gradient', help: 'Modern full-bleed image with a polished gradient headline panel.' },
 ];
 
 const LISTING_LINKED_TYPES = ['FEATURED_LISTING', 'TOP_OF_CATEGORY', 'SPONSORED_SEARCH'];
