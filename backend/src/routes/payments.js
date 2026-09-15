@@ -24,6 +24,7 @@ const chapa =
   require('../config/chapa');
 
 const { getAdapter } = require('../services/paymentProviders');
+const { inc } = require('../utils/metrics');
 const { assertTransition } = require('../services/paymentStateMachine');
 
 const {
@@ -1216,6 +1217,7 @@ router.get(
         payment.status ===
         'PAID'
       ) {
+        inc('marketbridge_payment_webhooks_total', { provider: 'chapa', outcome: 'already_paid' });
         return res.json({
           status:
             'PAID',
@@ -1360,6 +1362,7 @@ router.post(
   '/webhooks/chapa',
   webhookLimiter,
   async (req, res) => {
+    inc('marketbridge_payment_webhooks_total', { provider: 'chapa', outcome: 'received' });
     const rawBody =
       req.rawBody;
 
@@ -1376,6 +1379,7 @@ router.post(
         req.headers
       )
     ) {
+      inc('marketbridge_payment_webhooks_total', { provider: 'chapa', outcome: 'invalid_signature' });
       req.log.warn('CHAPA WEBHOOK: invalid signature');
 
       return res.status(401).json({
@@ -1394,6 +1398,7 @@ router.post(
       req.body?.reference;
 
     if (!txRef) {
+      inc('marketbridge_payment_webhooks_total', { provider: 'chapa', outcome: 'missing_reference' });
       req.log.warn('CHAPA WEBHOOK: missing tx_ref');
 
       return res.status(400).json({
@@ -1424,6 +1429,7 @@ router.post(
       if (!payment) {
         req.log.error({ txRef, paymentId }, 'CHAPA WEBHOOK: payment not found');
 
+        inc('marketbridge_payment_webhooks_total', { provider: 'chapa', outcome: 'payment_not_found' });
         // Acknowledge the webhook without trying to create a payment.
         return res.json({
           ok:
@@ -1473,6 +1479,7 @@ router.post(
         status !==
         'success'
       ) {
+        inc('marketbridge_payment_webhooks_total', { provider: 'chapa', outcome: 'provider_not_success' });
         return res.json({
           ok:
             true,
@@ -1540,6 +1547,7 @@ router.post(
           },
         });
 
+      inc('marketbridge_payment_webhooks_total', { provider: 'chapa', outcome: 'settled' });
       return res.json({
         ok:
           true,
@@ -1549,6 +1557,7 @@ router.post(
       });
 
     } catch (error) {
+      inc('marketbridge_payment_webhooks_total', { provider: 'chapa', outcome: 'error' });
       req.log.error({ err: error }, 'CHAPA WEBHOOK ERROR:');
 
       return res.status(
