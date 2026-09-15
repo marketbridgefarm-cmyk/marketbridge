@@ -3,6 +3,7 @@ import api from '../api/client';
 import ListingCard from '../components/ListingCard.jsx';
 import AdvertisementBanner from '../components/AdvertisementBanner.jsx';
 import { Link } from 'react-router-dom';
+import { REGIONS as FALLBACK_REGIONS } from '../utils/ethiopianRegions';
 
 export default function Listings({ category = 'AGRICULTURAL' }) {
   const agriculture = category === 'AGRICULTURAL';
@@ -20,7 +21,10 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [regions, setRegions] = useState([]);
+  // Seed with the static list so the dropdown is never empty, then sync
+  // with the backend in the background — if that call fails, we keep
+  // showing the fallback instead of silently emptying the dropdown.
+  const [regions, setRegions] = useState(FALLBACK_REGIONS);
 
   // "Near me" is a distinct search mode (distance-sorted, via
   // /listings/nearby) rather than another filter field — see the backend
@@ -31,8 +35,12 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
 
   useEffect(() => {
     api.get('/listings/meta/regions')
-      .then((r) => setRegions(r.data.regions || []))
-      .catch(() => {});
+      .then((r) => {
+        if (r.data.regions?.length) setRegions(r.data.regions);
+      })
+      .catch((err) => {
+        console.warn('Could not sync region list from server, using built-in list.', err);
+      });
   }, []);
 
   async function fetchListings() {
