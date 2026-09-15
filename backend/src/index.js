@@ -10,6 +10,8 @@ const cookieParser = require('cookie-parser');
 
 const { requestIdMiddleware, attachRequestId } = require('./middleware/requestId');
 const logger = require('./utils/logger');
+const { collectHttpMetrics, metricsHandler } = require('./utils/metrics');
+const { shutdownRateLimitStores } = require('./middleware/rateLimit');
 
 const {
   apiLimiter,
@@ -174,6 +176,7 @@ app.use(
 
 app.use(requestIdMiddleware);
 app.use(attachRequestId);
+app.use(collectHttpMetrics);
 
 // ============================================================================
 // RAW BODY + JSON PARSING
@@ -210,16 +213,38 @@ app.use(
 app.use(cookieParser());
 
 // ============================================================================
-// HEALTH CHECK
+// HEALTH CHECK + METRICS
 // ============================================================================
 
+// Metrics are intentionally outside /api so they are not counted against the
+// public API rate limit. In production, set METRICS_TOKEN and have the
+// monitoring system send Authorization: Bearer <token>.
+app.get('/metrics', metricsHandler);
+
 app.get('/ready', async (req, res) => {
+  const checks = { database: 'ok', redis: 'not_configured' };
   try {
     await prisma.$queryRaw`SELECT 1`;
-    return res.status(200).json({ status: 'ready', service: 'marketbridge-api', database: 'ok', timestamp: new Date().toISOString() });
   } catch (error) {
-    return res.status(503).json({ status: 'not_ready', service: 'marketbridge-api', database: 'unavailable' });
+    checks.database = 'unavailable';
   }
+
+  if (process.env.REDIS_URL) {
+    try {
+      const { checkRedisHealth } = require('./middleware/rateLimit');
+      checks.redis = (await checkRedisHealth()) ? 'ok' : 'unavailable';
+    } catch (error) {
+      checks.redis = 'unavailable';
+    }
+  }
+
+  const ready = checks.database === 'ok' && checks.redis !== 'unavailable';
+  return res.status(ready ? 200 : 503).json({
+    status: ready ? 'ready' : 'not_ready',
+    service: 'marketbridge-api',
+    checks,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.get('/health', (req, res) => {
@@ -438,10 +463,19 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
+process.on('SIGINT', async () => {
+  logger.info('SIGINT received, shutting down');
+  if (maintenanceTimer) clearInterval(maintenanceTimer);
+  await prisma.$disconnect();
+  await shutdownRateLimitStores();
+  process.exit(0);
+});
+
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down');
   if (maintenanceTimer) clearInterval(maintenanceTimer);
   await prisma.$disconnect();
+  await shutdownRateLimitStores();
   process.exit(0);
 });
 
