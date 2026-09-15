@@ -10,16 +10,20 @@ import NotificationCenter from './NotificationCenter.jsx';
 // live on the dashboards themselves (see RoleSwitchCTA), not here.
 const DASHBOARD_BY_ROLE = [
   ['ADMIN', '/dashboard/admin'],
-  ['SELLER', '/dashboard'],
-  ['BUYER', '/dashboard'],
   ['INSPECTOR', '/dashboard/inspector'],
   ['TRUCK_OWNER', '/dashboard/truck-owner'],
-  ['ADVERTISER', '/dashboard/advertiser'],
+  ['SELLER', '/dashboard'],
+  ['BUYER', '/dashboard'],
 ];
 
 function resolveDashboard(user) {
   return DASHBOARD_BY_ROLE.find(([r]) => user?.roles?.includes(r))?.[1] || '/';
 }
+
+const ROLE_DASHBOARD_LINKS = [
+  ['INSPECTOR', '/dashboard/inspector', '🔍 Inspector'],
+  ['TRUCK_OWNER', '/dashboard/truck-owner', '🚛 Transporter'],
+];
 
 const MARKET_LINKS = [
   { to: '/agricultural', labelKey: 'nav.farmProduces', label: 'Farm Produces', match: (p) => p === '/agricultural' || p === '/listings' },
@@ -112,6 +116,13 @@ export default function Navbar() {
             {user ? (
               <>
                 <NotificationCenter />
+                <Link className={location.pathname === '/services' ? 'active' : ''} to="/services">Services</Link>
+                <div className="nav-role-links" aria-label="Specialist dashboards">
+                  {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
+                    <Link key={role} className={location.pathname === to ? 'active' : ''} to={to}>{label}</Link>
+                  ))}
+                  <Link className={location.pathname === '/dashboard/advertiser' ? 'active' : ''} to="/dashboard/advertiser">📣 Advertise</Link>
+                </div>
                 <div className="nav-account" ref={accountRef}>
                 <button className="nav-user" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((v) => !v)}>
                   <span className="avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
@@ -121,7 +132,11 @@ export default function Navbar() {
                 {accountOpen && (
                   <div className="nav-dropdown" role="menu">
                     <Link role="menuitem" to={dashboardHref}>{t('nav.dashboard')}</Link>
-                    <Link role="menuitem" to="/dashboard/advertiser">Promote / Advertise</Link>
+                    <Link role="menuitem" to="/services">🧰 Services</Link>
+                    {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
+                      <Link key={role} role="menuitem" to={to}>{label} Dashboard</Link>
+                    ))}
+                    <Link role="menuitem" to="/dashboard/advertiser">📣 Advertise Dashboard</Link>
                     <Link role="menuitem" to="/account/security">{t('nav.accountSecurity')}</Link>
                     <button role="menuitem" onClick={handleLogout}>{t('nav.logout')}</button>
                   </div>
@@ -169,7 +184,11 @@ export default function Navbar() {
                   <NotificationCenter />
                 </div>
                 <Link to={dashboardHref}>{t('nav.dashboard')}</Link>
-                <Link to="/dashboard/advertiser">Promote / Advertise</Link>
+                <Link className={location.pathname === '/services' ? 'active' : ''} to="/services">🧰 Services</Link>
+                {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
+                  <Link key={role} to={to}>{label} Dashboard</Link>
+                ))}
+                <Link to="/dashboard/advertiser">📣 Advertise Dashboard</Link>
                 <Link to="/account/security">{t('nav.accountSecurity')}</Link>
                 <button className="mobile-logout" onClick={handleLogout}>{t('nav.logout')}</button>
               </>

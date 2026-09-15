@@ -20,48 +20,39 @@ function pickRandomBanner(ads) {
 // fall back to classic.
 function BannerContent({ ad }) {
   const template = ad.bannerTemplate || 'CLASSIC';
+  const headline = ad.headline || 'Discover more on MarketBridge';
+  const image = <img src={ad.creativeImageUrl} alt={headline || 'MarketBridge advertisement'} />;
+  const sponsored = <span className="ad-banner-tag">Sponsored</span>;
 
   if (template === 'BOLD') {
-    return (
-      <div className="ad-banner ad-banner--bold">
-        <img src={ad.creativeImageUrl} alt={ad.headline || 'MarketBridge advertisement'} />
-        <div className="ad-banner-bold-overlay">
-          <span className="ad-banner-tag">Sponsored</span>
-          {ad.headline && <strong>{ad.headline}</strong>}
-        </div>
-      </div>
-    );
+    return <div className="ad-banner ad-banner--bold">{image}<div className="ad-banner-bold-overlay">{sponsored}<strong>{headline}</strong></div></div>;
   }
-
   if (template === 'MINIMAL') {
-    return (
-      <div className="ad-banner ad-banner--minimal">
-        <img src={ad.creativeImageUrl} alt={ad.headline || 'MarketBridge advertisement'} />
-        <div className="ad-banner-minimal-caption">
-          <span className="ad-banner-tag ad-banner-tag--outline">Sponsored</span>
-          {ad.headline && <span>{ad.headline}</span>}
-        </div>
-      </div>
-    );
+    return <div className="ad-banner ad-banner--minimal">{image}<div className="ad-banner-minimal-caption"><span className="ad-banner-tag ad-banner-tag--outline">Sponsored</span><span>{headline}</span></div></div>;
   }
-
   if (template === 'CARD') {
-    return (
-      <div className="ad-banner ad-banner--card">
-        <span className="ad-banner-ribbon">Sponsored</span>
-        <img src={ad.creativeImageUrl} alt={ad.headline || 'MarketBridge advertisement'} />
-        {ad.headline && <div className="ad-banner-card-copy"><strong>{ad.headline}</strong></div>}
-      </div>
-    );
+    return <div className="ad-banner ad-banner--card"><span className="ad-banner-ribbon">Sponsored</span>{image}<div className="ad-banner-card-copy"><strong>{headline}</strong></div></div>;
+  }
+  if (template === 'SPLIT') {
+    return <div className="ad-banner ad-banner--split"><div className="ad-banner-split-image">{image}</div><div className="ad-banner-split-copy">{sponsored}<strong>{headline}</strong><span>Shop, sell and grow with MarketBridge.</span></div></div>;
+  }
+  if (template === 'EDITORIAL') {
+    return <div className="ad-banner ad-banner--editorial">{image}<div className="ad-banner-editorial-copy">{sponsored}<strong>{headline}</strong><span>MarketBridge • Agriculture • Trade</span></div></div>;
+  }
+  if (template === 'FRESH') {
+    return <div className="ad-banner ad-banner--fresh">{image}<div className="ad-banner-fresh-overlay"><span className="ad-banner-fresh-badge">🌿 FARM FRESH</span><strong>{headline}</strong><span>Fresh opportunities. Better markets.</span></div></div>;
+  }
+  if (template === 'DARK_LUXE') {
+    return <div className="ad-banner ad-banner--dark-luxe">{image}<div className="ad-banner-luxe-copy">{sponsored}<strong>{headline}</strong><span>Premium MarketBridge placement</span></div></div>;
+  }
+  if (template === 'MARKET') {
+    return <div className="ad-banner ad-banner--market">{image}<div className="ad-banner-market-copy"><span className="ad-banner-market-badge">MARKETBRIDGE</span><strong>{headline}</strong><span>Explore today's opportunity</span></div></div>;
+  }
+  if (template === 'GRADIENT') {
+    return <div className="ad-banner ad-banner--gradient">{image}<div className="ad-banner-gradient-copy">{sponsored}<strong>{headline}</strong></div></div>;
   }
 
-  // CLASSIC (default / legacy campaigns with no template set)
-  return (
-    <div className="ad-banner ad-banner--classic" role="region" aria-label="Advertisement">
-      <img src={ad.creativeImageUrl} alt={ad.headline || 'MarketBridge advertisement'} />
-      {ad.headline && <div className="ad-banner-copy"><strong>{ad.headline}</strong><span>Sponsored</span></div>}
-    </div>
-  );
+  return <div className="ad-banner ad-banner--classic" role="region" aria-label="Advertisement">{image}<div className="ad-banner-copy"><strong>{headline}</strong><span>Sponsored</span></div></div>;
 }
 
 export default function AdvertisementBanner() {
