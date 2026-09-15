@@ -633,7 +633,7 @@ async function settlePayment({
         payment.type === 'MARKETPLACE' &&
         payment.orderId
       ) {
-        await tx.order.updateMany({
+        const orderClaim = await tx.order.updateMany({
           where: {
             id: payment.orderId,
             status: 'PENDING_PAYMENT',
@@ -643,6 +643,49 @@ async function settlePayment({
             status: 'CONFIRMED',
           },
         });
+
+        // orderClaim.count === 0 means the order was not in PENDING_PAYMENT
+        // when this payment settled. That's harmless if it's already
+        // CONFIRMED (an idempotent replay of the same PAID event, or a
+        // second webhook for the same payment). It is NOT harmless if the
+        // order is CANCELLED: that means the automatic unpaid-order expiry
+        // (maintenanceService.expireUnpaidOrders) or a manual cancel raced
+        // ahead of this payment and already released the reserved
+        // quantity — possibly to another buyer. Money has now arrived for
+        // an order marketplace considers dead, which is exactly the "money
+        // received but state disagrees" case a strict state machine must
+        // surface rather than silently swallow.
+        if (orderClaim.count === 0) {
+          const currentOrder = await tx.order.findUnique({
+            where: { id: payment.orderId },
+            select: { status: true },
+          });
+
+          if (currentOrder?.status === 'CANCELLED') {
+            await createReconciliationIssue(tx, {
+              paymentId: payment.id,
+              provider: provider || payment.provider || 'UNKNOWN',
+              observedStatus: status,
+              expectedAmount: payment.amount,
+              observedAmount: payload.amount ?? payment.amount,
+              expectedCurrency: payment.currency,
+              observedCurrency: payload.currency || payment.currency,
+              reason: 'PAYMENT_RECEIVED_FOR_CANCELLED_ORDER',
+              payload,
+            });
+            await recordAuditEvent(tx, {
+              actorId: null,
+              action: 'PAYMENT_RECONCILIATION_REQUIRED',
+              resourceType: 'Payment',
+              resourceId: payment.id,
+              metadata: {
+                reason: 'PAYMENT_RECEIVED_FOR_CANCELLED_ORDER',
+                orderId: payment.orderId,
+                eventId: eventId || null,
+              },
+            });
+          }
+        }
       }
 
       // Digital purchase
