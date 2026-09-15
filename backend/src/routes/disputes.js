@@ -2,8 +2,9 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
-const { requireRole } = require('../middleware/roleCheck');
+const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
+const { transitionOrder, DISPUTABLE_STATUSES } = require('../services/orderStateMachine');
 
 const router = express.Router();
 
@@ -44,6 +45,10 @@ router.post(
         return res.status(409).json({ error: 'This order already has an open dispute' });
       }
 
+      if (!DISPUTABLE_STATUSES.includes(order.status)) {
+        return res.status(400).json({ error: `An order in ${order.status} status cannot be disputed` });
+      }
+
       const result = await prisma.$transaction(async (tx) => {
         const dispute = await tx.dispute.create({
           data: {
@@ -57,10 +62,10 @@ router.post(
           },
         });
 
-        await tx.order.update({
-          where: { id: orderId },
-          data: { status: 'DISPUTED' },
-        });
+        // Atomic claim: fails with ORDER_TRANSITION_CONFLICT if another
+        // dispute (or any other status change) landed on this order
+        // between the pre-check above and this transaction.
+        await transitionOrder(tx, orderId, { from: order.status, to: 'DISPUTED' });
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
@@ -81,12 +86,15 @@ router.post(
       return res.status(201).json({ dispute: result });
     } catch (error) {
       console.error('CREATE DISPUTE ERROR:', error);
+      if (error.code === 'ORDER_TRANSITION_CONFLICT') {
+        return res.status(409).json({ error: 'This order changed status just now; please refresh and try again.' });
+      }
       return res.status(500).json({ error: 'Could not create dispute' });
     }
   }
 );
 
-router.get('/', authenticate, requireRole('ADMIN'), async (req, res) => {
+router.get('/', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
   try {
     const disputes = await prisma.dispute.findMany({
       include: {
@@ -104,7 +112,7 @@ router.get('/', authenticate, requireRole('ADMIN'), async (req, res) => {
   }
 });
 
-router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), async (req, res) => {
+router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
   try {
     const { resolution, status } = req.body;
 
@@ -123,9 +131,11 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), async (req, res
         data: { resolution, status: finalStatus },
       });
 
-      await tx.order.update({
-        where: { id: updated.orderId },
-        data: { status: updated.previousOrderStatus || 'CONFIRMED' },
+      // Atomic claim: fails with ORDER_TRANSITION_CONFLICT if the order
+      // somehow left DISPUTED before this resolution landed.
+      await transitionOrder(tx, updated.orderId, {
+        from: 'DISPUTED',
+        to: updated.previousOrderStatus || 'CONFIRMED',
       });
 
       await recordAuditEvent(tx, {
@@ -146,8 +156,11 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), async (req, res
     return res.json({ dispute: result });
   } catch (error) {
     console.error('RESOLVE DISPUTE ERROR:', error);
+    if (error.code === 'ORDER_TRANSITION_CONFLICT' || error.code === 'INVALID_ORDER_TRANSITION') {
+      return res.status(error.status || 409).json({ error: error.message });
+    }
     return res.status(500).json({ error: 'Could not resolve dispute' });
   }
 });
 
-module.exports = router;
+module.exports = router;module.exports = router;
