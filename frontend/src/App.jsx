@@ -7,9 +7,6 @@ import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Home from './pages/Home.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
-import ForgotPassword from './pages/ForgotPassword.jsx';
-import ResetPassword from './pages/ResetPassword.jsx';
-import AdminSecuritySettings from './pages/AdminSecuritySettings.jsx';
 import Listings from './pages/Listings.jsx';
 import ListingDetail from './pages/ListingDetail.jsx';
 import CreateListing from './pages/CreateListing.jsx';
@@ -28,6 +25,10 @@ import OrderDetail from './pages/OrderDetail.jsx';
 import Orders from './pages/Orders.jsx';
 
 import PaymentReturn from './pages/PaymentReturn.jsx';
+
+import ForgotPassword from './pages/ForgotPassword.jsx';
+import ResetPassword from './pages/ResetPassword.jsx';
+import AccountSecurity from './pages/AccountSecurity.jsx';
 
 export default function App() {
   return (
@@ -132,15 +133,6 @@ export default function App() {
         />
 
         <Route
-          path="/dashboard/admin/security"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminSecuritySettings />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
           path="/dashboard/advertiser"
           element={
             <ProtectedRoute role="ADVERTISER">
@@ -155,6 +147,18 @@ export default function App() {
           element={
             <ProtectedRoute>
               <PaymentReturn />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Account security (MFA setup/disable) — any logged-in user, but
+           required in practice for ADMIN accounts since admin-only backend
+           routes now gate on requireMfa(). */}
+        <Route
+          path="/account/security"
+          element={
+            <ProtectedRoute>
+              <AccountSecurity />
             </ProtectedRoute>
           }
         />
