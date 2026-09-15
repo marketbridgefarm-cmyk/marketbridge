@@ -6,6 +6,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { makeDigitalKey, uploadPrivateObject, deletePrivateObject, signedDownloadUrl } = require('../utils/objectStorage');
 const { createPayment } = require('../services/paymentService');
+const { optimizeUpload } = require('../utils/imageProcessor');
 
 const router = express.Router();
 
@@ -26,12 +27,8 @@ const ALLOWED_MIME_TYPES = [
   'image/png',
   'image/gif',
   'image/webp',
-  'image/svg+xml',
   'text/plain',
   'text/markdown',
-  'text/html',
-  'text/css',
-  'text/javascript',
   'application/json',
   'video/mp4',
   'audio/mpeg',
@@ -159,13 +156,32 @@ router.post(
       }
 
       const id = require('crypto').randomUUID();
-      const key = makeDigitalKey(id, req.file.originalname);
+      let uploadBuffer = req.file.buffer;
+      let uploadContentType = req.file.mimetype;
+      let uploadExtension = require('path').extname(req.file.originalname).toLowerCase();
+      let imageStats = null;
+
+      if (req.file.mimetype.startsWith('image/')) {
+        const optimized = await optimizeUpload({
+          buffer: req.file.buffer,
+          mime: req.file.mimetype,
+          maxWidth: Number(process.env.DIGITAL_IMAGE_MAX_WIDTH || 2400),
+          maxHeight: Number(process.env.DIGITAL_IMAGE_MAX_HEIGHT || 2400),
+          quality: Number(process.env.DIGITAL_IMAGE_QUALITY || 84),
+        });
+        uploadBuffer = optimized.buffer;
+        uploadContentType = optimized.contentType;
+        uploadExtension = optimized.extension;
+        imageStats = optimized;
+      }
+
+      const key = makeDigitalKey(id, `upload${uploadExtension}`);
 
       try {
         await uploadPrivateObject({
           key,
-          buffer: req.file.buffer,
-          contentType: req.file.mimetype,
+          buffer: uploadBuffer,
+          contentType: uploadContentType,
         });
       } catch (uploadError) {
         req.log.error({ err: uploadError }, 'S3 UPLOAD ERROR:');
@@ -182,8 +198,8 @@ router.post(
             price: Number(req.body.price),
             fileKey: key,
             fileName: req.file.originalname.slice(0, 255),
-            mimeType: req.file.mimetype.slice(0, 150),
-            fileSizeBytes: req.file.size,
+            mimeType: uploadContentType.slice(0, 150),
+            fileSizeBytes: uploadBuffer.length,
             description: req.body.description || null,
           },
         });

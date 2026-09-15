@@ -13,6 +13,7 @@ const { recordAuditEvent } = require('../utils/audit');
 const { requestRefund } = require('../services/paymentRefundService');
 const { uploadPrivateObject, signedMediaUrl, deletePrivateObject } = require('../utils/objectStorage');
 const { AD_TYPES, dailyRatesEtb, campaignDays, quotePrice } = require('../utils/adPricing');
+const { optimizeUpload } = require('../utils/imageProcessor');
 
 // Visual layout template applied when rendering a BANNER creative. Ignored
 // entirely for every other campaign type.
@@ -89,7 +90,6 @@ async function resolveListingMedia(value) {
   try {
     return await signedMediaUrl({ key: value, disposition: 'inline' });
   } catch (error) {
-    req.log.error({ err: error }, 'AD LISTING MEDIA SIGN ERROR:');
     return null;
   }
 }
@@ -114,7 +114,6 @@ async function attachCreativeUrl(ad) {
     try {
       result.creativeImageUrl = await signedMediaUrl({ key: ad.creativeImageKey, disposition: 'inline' });
     } catch (error) {
-      req.log.error({ err: error }, 'AD CREATIVE SIGN ERROR:');
       result.creativeImageUrl = null;
     }
   } else {
@@ -166,19 +165,26 @@ router.post('/creative', authenticate, uploadCreative, async (req, res) => {
     if (!ALLOWED_IMAGE_TYPES.has(req.file.mimetype)) return res.status(400).json({ error: 'Unsupported banner image type' });
     if (!hasValidImageSignature(req.file.buffer, req.file.mimetype)) return res.status(400).json({ error: 'Banner file contents do not match the declared image type' });
 
-    const key = `advertisements/banner/${req.user.id}/${crypto.randomUUID()}${path.extname(req.file.originalname).toLowerCase()}`;
-    await uploadPrivateObject({ key, buffer: req.file.buffer, contentType: req.file.mimetype });
+    const optimized = await optimizeUpload({
+      buffer: req.file.buffer,
+      mime: req.file.mimetype,
+      maxWidth: Number(process.env.AD_IMAGE_MAX_WIDTH || 1600),
+      maxHeight: Number(process.env.AD_IMAGE_MAX_HEIGHT || 900),
+      quality: Number(process.env.AD_IMAGE_QUALITY || 84),
+    });
+    const key = `advertisements/banner/${req.user.id}/${crypto.randomUUID()}.webp`;
+    await uploadPrivateObject({ key, buffer: optimized.buffer, contentType: optimized.contentType });
 
     await recordAuditEvent(prisma, {
       actorId: req.user.id,
       action: 'AD_CREATIVE_UPLOADED',
       resourceType: 'AdvertisementCreative',
       resourceId: key,
-      metadata: { contentType: req.file.mimetype, bytes: req.file.size },
+      metadata: { contentType: optimized.contentType, originalBytes: optimized.originalBytes, optimizedBytes: optimized.optimizedBytes, width: optimized.width, height: optimized.height },
     });
 
     const previewUrl = await signedMediaUrl({ key, disposition: 'inline' });
-    return res.status(201).json({ key, previewUrl, contentType: req.file.mimetype, bytes: req.file.size });
+    return res.status(201).json({ key, previewUrl, contentType: optimized.contentType, bytes: optimized.optimizedBytes, originalBytes: optimized.originalBytes, width: optimized.width, height: optimized.height });
   } catch (error) {
     req.log.error({ err: error }, 'AD CREATIVE UPLOAD ERROR:');
     return res.status(400).json({ error: error.message || 'Could not upload banner image' });
