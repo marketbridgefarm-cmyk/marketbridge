@@ -32,6 +32,34 @@ enum ListingCategory {
   DIGITAL
 }
 
+// Ethiopia's current top-level administrative divisions: 12 regional
+// states plus the two federally-chartered city administrations, which
+// function the same way for "where is this listing" purposes. Sourced
+// from the current (2026) subdivision, including the 2023
+// Central/South/South West Ethiopia Peoples' region formations.
+// Zone/woreda/kebele are deliberately kept as free-text fields on Listing
+// rather than their own enums/lookup tables — Ethiopia has 60+ zones and
+// well over a thousand woredas, actively being redrawn, and no reference
+// table for them ships with this migration; a region dropdown plus
+// free-text zone/woreda/kebele is the practical middle ground until a
+// verified administrative dataset is sourced.
+enum Region {
+  TIGRAY
+  AFAR
+  AMHARA
+  OROMIA
+  SOMALI
+  BENISHANGUL_GUMUZ
+  GAMBELA
+  HARARI
+  SIDAMA
+  SOUTH_ETHIOPIA
+  SOUTH_WEST_ETHIOPIA_PEOPLES
+  CENTRAL_ETHIOPIA
+  ADDIS_ABABA
+  DIRE_DAWA
+}
+
 enum ListingStatus {
   DRAFT
   ACTIVE
@@ -271,6 +299,9 @@ model User {
   roles Role[] @default([BUYER, SELLER])
 
   location           String?
+  region             Region?
+  latitude           Float?
+  longitude          Float?
   verificationStatus VerificationStatus @default(UNVERIFIED)
   accountStatus      AccountStatus      @default(ACTIVE)
 
@@ -281,6 +312,16 @@ model User {
   mfaEnabled      Boolean  @default(false)
   mfaSecret       String?
   mfaBackupCodes  String[] @default([])
+
+  // Notification/localization preferences. SMS defaults to off — it costs
+  // money per message and needs explicit opt-in, not just a phone number
+  // being present. preferredLanguage drives which language SMS bodies (and
+  // eventually the frontend UI) are shown in; "en" is the only language
+  // guaranteed to be fully translated right now (see frontend/src/i18n).
+  smsNotificationsEnabled Boolean @default(false)
+  preferredLanguage       String  @default("en")
+
+  smsOutboxEntries SmsOutboxEntry[]
 
   passwordResetTokens PasswordResetToken[]
 
@@ -351,10 +392,6 @@ model User {
 
   providerRoleRequests ProviderRoleRequest[]
 
-  promotionRedemptions PromotionRedemption[]
-  referralCode ReferralCode?
-  referralClaims ReferralClaim[]
-
   // Audit
   auditEvents AuditEvent[] @relation("AuditActor")
 
@@ -369,6 +406,7 @@ model User {
   @@index([email])
   @@index([accountStatus])
   @@index([verificationStatus])
+  @@index([region])
 }
 
 
@@ -455,6 +493,45 @@ model PasswordResetToken {
 }
 
 // ============================================================================
+// SMS OUTBOX
+// ============================================================================
+//
+// Transactional outbox: rows are written in the same DB transaction as the
+// event that triggers them (see services/notificationService.js), so an
+// SMS is never queued for an action that ends up rolling back — and the
+// actual network send happens later, out-of-transaction, from the
+// maintenance scheduler (services/maintenanceService.js sendPendingSms).
+// This keeps a flaky/slow SMS provider from ever holding open a DB
+// transaction or from touching every call site that records an order event.
+// ============================================================================
+
+enum SmsOutboxStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model SmsOutboxEntry {
+  id String @id @default(uuid())
+
+  userId String
+  phone  String // denormalized at write time so a later phone-number change doesn't retarget an already-queued message
+  body   String
+
+  status   SmsOutboxStatus @default(PENDING)
+  attempts Int             @default(0)
+  lastError String?
+
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([userId])
+}
+
+// ============================================================================
 // AUDIT EVENT
 // ============================================================================
 
@@ -505,6 +582,19 @@ model Listing {
 
   location String
 
+  // Structured Ethiopian geography layered on top of the free-text
+  // `location` label above (kept for backward compatibility with
+  // existing listings and as a human-readable display string). All
+  // optional so existing listings and simple entry flows keep working;
+  // populating region+lat/lng is what unlocks the /listings/nearby
+  // distance search and the region filter on the main search endpoint.
+  region    Region?
+  zone      String?
+  woreda    String?
+  kebele    String?
+  latitude  Float?
+  longitude Float?
+
   harvestedDate    DateTime?
   readinessDate    DateTime?
   pickupWindowStart DateTime?
@@ -531,6 +621,8 @@ model Listing {
   @@index([category])
   @@index([status])
   @@index([location])
+  @@index([region])
+  @@index([latitude, longitude])
   @@index([pickupWindowStart, pickupWindowEnd])
 }
 
@@ -745,10 +837,6 @@ model Order {
   sellerId String
 
   finalPrice Decimal @db.Decimal(18, 2)
-  discountAmount Decimal @default(0) @db.Decimal(18, 2)
-  promotionCodeId String?
-  promotionCode PromotionCode? @relation(fields: [promotionCodeId], references: [id], onDelete: SetNull)
-  promotionRedemption PromotionRedemption?
   quantity   Float
 
   status OrderStatus @default(PENDING_PAYMENT)
@@ -1463,75 +1551,6 @@ model DigitalPurchase {
   @@index([buyerId])
   @@index([productId])
   @@index([status])
-}
-
-// ============================================================================
-// GROWTH: PROMOTIONS & REFERRALS
-// ============================================================================
-
-enum PromotionDiscountType {
-  PERCENTAGE
-  FIXED
-}
-
-model PromotionCode {
-  id String @id @default(uuid())
-  code String @unique
-  discountType PromotionDiscountType
-  discountValue Decimal @db.Decimal(18, 2)
-  maxDiscount Decimal? @db.Decimal(18, 2)
-  minimumSubtotal Decimal @default(0) @db.Decimal(18, 2)
-  maxUses Int?
-  usedCount Int @default(0)
-  active Boolean @default(true)
-  startsAt DateTime
-  endsAt DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  redemptions PromotionRedemption[]
-  orders Order[]
-
-  @@index([active, startsAt, endsAt])
-}
-
-model PromotionRedemption {
-  id String @id @default(uuid())
-  promotionCode PromotionCode @relation(fields: [promotionCodeId], references: [id], onDelete: Cascade)
-  promotionCodeId String
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId String
-  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  orderId String? @unique
-  discountAmount Decimal @db.Decimal(18, 2)
-  createdAt DateTime @default(now())
-
-  @@unique([promotionCodeId, userId])
-  @@index([userId, createdAt])
-}
-
-model ReferralCode {
-  id String @id @default(uuid())
-  code String @unique
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  ownerId String @unique
-  claimCount Int @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  claims ReferralClaim[]
-}
-
-model ReferralClaim {
-  id String @id @default(uuid())
-  referralCode ReferralCode @relation(fields: [referralCodeId], references: [id], onDelete: Cascade)
-  referralCodeId String
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId String
-  createdAt DateTime @default(now())
-
-  @@unique([referralCodeId, userId])
-  @@index([userId, createdAt])
 }
 
 // ============================================================================
