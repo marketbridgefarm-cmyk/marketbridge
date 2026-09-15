@@ -1,25 +1,10 @@
 const express = require('express');
-const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const qrcode = require('qrcode');
 const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
-const { requireRole } = require('../middleware/roleCheck');
-const { authLimiter, mfaLimiter, passwordResetLimiter } = require('../middleware/rateLimit');
-const { recordAuditEvent } = require('../utils/audit');
-const { sendMail } = require('../utils/mailer');
-const {
-  generateTotpSecret,
-  buildOtpauthUrl,
-  verifyTotp,
-  encryptTotpSecret,
-  generateEmailOtp,
-  hashCode,
-  compareCode,
-  generateBackupCodes,
-} = require('../utils/mfa');
+const { authLimiter } = require('../middleware/rateLimit');
 const {
   REFRESH_TTL_MS,
   createRefreshSession,
@@ -29,14 +14,18 @@ const {
   revokeAllSessions,
   newSessionId,
 } = require('../services/refreshSessionService');
+const {
+  generateSecret,
+  buildOtpAuthUri,
+  generateQrCodeDataUrl,
+  verifyTotp,
+  generateBackupCodes,
+  hashBackupCodes,
+  findMatchingBackupCodeIndex,
+} = require('../services/mfaService');
+const { createResetToken, consumeResetToken } = require('../services/passwordResetService');
 
 const router = express.Router();
-
-// How long a login-time MFA challenge stays valid. Deliberately short: the
-// user is mid-login, actively holding their authenticator app or inbox.
-const MFA_CHALLENGE_TTL_MS = 10 * 60 * 1000;
-const MFA_CHALLENGE_MAX_ATTEMPTS = 5;
-const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
 
 const OPTIONAL_ROLES = ['INSPECTOR', 'TRUCK_OWNER', 'ADVERTISER'];
 const DEFAULT_ROLES = ['BUYER', 'SELLER'];
@@ -92,8 +81,29 @@ function signRefreshToken(user, sessionId) {
 }
 
 function sanitize(user) {
-  const { passwordHash, ...rest } = user;
+  const { passwordHash, mfaSecret, mfaBackupCodes, ...rest } = user;
   return rest;
+}
+
+// Short-lived, single-purpose token: proves "this device just supplied the
+// correct password for this account" without yet granting a session. Only
+// POST /auth/mfa/verify-login accepts it, and only within 5 minutes.
+const MFA_CHALLENGE_TTL = '5m';
+
+function signMfaChallenge(user) {
+  return jwt.sign(
+    { sub: user.id, type: 'mfa_challenge' },
+    process.env.JWT_SECRET,
+    { expiresIn: MFA_CHALLENGE_TTL, algorithm: 'HS256' }
+  );
+}
+
+function verifyMfaChallenge(token) {
+  const payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
+  if (payload.type !== 'mfa_challenge' || !payload.sub) {
+    throw new Error('Not an MFA challenge token');
+  }
+  return payload.sub;
 }
 
 function requestIp(req) {
@@ -199,21 +209,14 @@ router.post(
         return res.status(403).json({ error: 'This account has been suspended. Contact support for assistance.' });
       }
 
-      // Admin accounts with MFA confirmed don't get a session on a correct
-      // password alone — a second factor is required first. No session,
-      // access token, or refresh cookie is issued here; the client must
-      // complete POST /auth/mfa/verify with the returned challengeId.
-      if (user.roles.includes('ADMIN') && user.mfaEnabled) {
-        const challenge = await prisma.mfaChallenge.create({
-          data: {
-            userId: user.id,
-            expiresAt: new Date(Date.now() + MFA_CHALLENGE_TTL_MS),
-          },
-        });
+      // MFA-enabled accounts don't get a session from a password alone —
+      // password verification only earns a short-lived challenge token,
+      // which POST /auth/mfa/verify-login exchanges for the real session
+      // once a valid TOTP/backup code is presented too.
+      if (user.mfaEnabled) {
         return res.json({
           mfaRequired: true,
-          challengeId: challenge.id,
-          methods: ['totp', 'email', 'backup'],
+          challengeToken: signMfaChallenge(user),
         });
       }
 
@@ -223,389 +226,6 @@ router.post(
     } catch (error) {
       console.error('Login error:', error);
       return res.status(500).json({ error: 'Login failed' });
-    }
-  }
-);
-
-// Request an email OTP for a pending MFA challenge (the fallback factor,
-// used when the user doesn't have their authenticator app handy).
-router.post(
-  '/mfa/challenge/email',
-  mfaLimiter,
-  [body('challengeId').isString().trim().notEmpty()],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
-      }
-
-      const challenge = await prisma.mfaChallenge.findUnique({ where: { id: req.body.challengeId } });
-      if (!challenge || challenge.consumedAt || challenge.expiresAt < new Date()) {
-        return res.status(400).json({ error: 'This login challenge has expired. Please log in again.' });
-      }
-
-      const user = await prisma.user.findUnique({ where: { id: challenge.userId } });
-      if (!user) {
-        return res.status(400).json({ error: 'This login challenge has expired. Please log in again.' });
-      }
-
-      const { code, expiresAt } = generateEmailOtp();
-      await prisma.mfaChallenge.update({
-        where: { id: challenge.id },
-        data: { emailOtpHash: await hashCode(code), emailOtpExpiresAt: expiresAt },
-      });
-
-      await sendMail({
-        to: user.email,
-        subject: 'Your MarketBridge sign-in code',
-        text: `Your MarketBridge verification code is ${code}. It expires in 10 minutes. If you didn't try to sign in, you can ignore this email.`,
-      });
-
-      return res.json({ message: 'Verification code sent' });
-    } catch (error) {
-      console.error('MFA email challenge error:', error);
-      return res.status(500).json({ error: 'Failed to send verification code' });
-    }
-  }
-);
-
-// Complete a login-time MFA challenge with a TOTP code, an emailed OTP, or
-// a backup code, and issue the session exactly as a normal /login would.
-router.post(
-  '/mfa/verify',
-  mfaLimiter,
-  [
-    body('challengeId').isString().trim().notEmpty(),
-    body('code').isString().trim().isLength({ min: 4, max: 20 }),
-    body('method').isIn(['totp', 'email', 'backup']),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
-      }
-
-      const { challengeId, code, method } = req.body;
-      const challenge = await prisma.mfaChallenge.findUnique({ where: { id: challengeId } });
-      if (!challenge || challenge.consumedAt || challenge.expiresAt < new Date()) {
-        return res.status(400).json({ error: 'This login challenge has expired. Please log in again.' });
-      }
-
-      if (challenge.attempts >= MFA_CHALLENGE_MAX_ATTEMPTS) {
-        await prisma.mfaChallenge.update({ where: { id: challenge.id }, data: { consumedAt: new Date() } });
-        return res.status(401).json({ error: 'Too many incorrect attempts. Please log in again.' });
-      }
-
-      const user = await prisma.user.findUnique({ where: { id: challenge.userId } });
-      if (!user || !user.mfaEnabled) {
-        return res.status(400).json({ error: 'This login challenge has expired. Please log in again.' });
-      }
-
-      let ok = false;
-      if (method === 'totp') {
-        ok = verifyTotp(user.mfaSecret, code);
-      } else if (method === 'email') {
-        ok =
-          !!challenge.emailOtpHash &&
-          !!challenge.emailOtpExpiresAt &&
-          challenge.emailOtpExpiresAt > new Date() &&
-          (await compareCode(code, challenge.emailOtpHash));
-      } else if (method === 'backup') {
-        const unused = await prisma.mfaBackupCode.findMany({ where: { userId: user.id, usedAt: null } });
-        for (const candidate of unused) {
-          // eslint-disable-next-line no-await-in-loop
-          if (await compareCode(code, candidate.codeHash)) {
-            await prisma.mfaBackupCode.update({ where: { id: candidate.id }, data: { usedAt: new Date() } });
-            ok = true;
-            break;
-          }
-        }
-      }
-
-      if (!ok) {
-        await prisma.mfaChallenge.update({ where: { id: challenge.id }, data: { attempts: { increment: 1 } } });
-        return res.status(401).json({ error: 'Incorrect code' });
-      }
-
-      await prisma.mfaChallenge.update({ where: { id: challenge.id }, data: { consumedAt: new Date() } });
-
-      const session = await issueSession(user, req);
-      setRefreshCookie(res, session.refreshToken);
-      await recordAuditEvent(prisma, {
-        actorId: user.id,
-        action: 'MFA_LOGIN_VERIFIED',
-        resourceType: 'User',
-        resourceId: user.id,
-        metadata: { method },
-        ...requestMeta(req),
-      });
-      return res.json({ user: sanitize(user), token: session.token, expiresIn: session.expiresIn });
-    } catch (error) {
-      console.error('MFA verify error:', error);
-      return res.status(500).json({ error: 'Verification failed' });
-    }
-  }
-);
-
-// Begin admin MFA setup: generates a new TOTP secret (encrypted at rest),
-// stores it unconfirmed, and returns everything needed to add it to an
-// authenticator app. mfaEnabled stays false until /mfa/setup/confirm
-// succeeds, so a half-finished setup never silently locks the account out.
-router.post('/mfa/setup/start', authenticate, requireRole('ADMIN'), async (req, res) => {
-  try {
-    const secret = generateTotpSecret();
-    await prisma.user.update({
-      where: { id: req.user.id },
-      data: { mfaSecret: encryptTotpSecret(secret), mfaEnabled: false, mfaConfirmedAt: null },
-    });
-
-    const otpauthUrl = buildOtpauthUrl(req.user.email, secret);
-    const qrDataUrl = await qrcode.toDataURL(otpauthUrl);
-
-    return res.json({ secret, otpauthUrl, qrDataUrl });
-  } catch (error) {
-    console.error('MFA setup start error:', error);
-    return res.status(500).json({ error: 'Failed to start MFA setup' });
-  }
-});
-
-// Confirm setup with a live code from the authenticator app. Success turns
-// MFA on and issues one-time-viewable backup codes.
-router.post(
-  '/mfa/setup/confirm',
-  authenticate,
-  requireRole('ADMIN'),
-  [body('code').isString().trim().isLength({ min: 6, max: 6 })],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
-      }
-
-      const current = await prisma.user.findUnique({ where: { id: req.user.id } });
-      if (!current?.mfaSecret) {
-        return res.status(400).json({ error: 'Start MFA setup before confirming it' });
-      }
-
-      if (!verifyTotp(current.mfaSecret, req.body.code)) {
-        return res.status(401).json({ error: 'Incorrect code' });
-      }
-
-      const { codes, hashed } = await generateBackupCodes();
-
-      await prisma.$transaction(async (tx) => {
-        await tx.user.update({
-          where: { id: req.user.id },
-          data: { mfaEnabled: true, mfaConfirmedAt: new Date() },
-        });
-        // Setup can be re-run (e.g. switching authenticator apps); drop any
-        // previous backup codes so only the newly issued set is valid.
-        await tx.mfaBackupCode.deleteMany({ where: { userId: req.user.id } });
-        await tx.mfaBackupCode.createMany({
-          data: hashed.map((codeHash) => ({ userId: req.user.id, codeHash })),
-        });
-        await recordAuditEvent(tx, {
-          actorId: req.user.id,
-          action: 'MFA_ENABLED',
-          resourceType: 'User',
-          resourceId: req.user.id,
-          ...requestMeta(req),
-        });
-      });
-
-      return res.json({ message: 'MFA enabled', backupCodes: codes });
-    } catch (error) {
-      console.error('MFA setup confirm error:', error);
-      return res.status(500).json({ error: 'Failed to confirm MFA setup' });
-    }
-  }
-);
-
-// Disable MFA. Requires the current password as a step-up check, since this
-// is a security-downgrade action on an account that (by definition, to
-// reach this route) currently has MFA enabled.
-router.post(
-  '/mfa/disable',
-  authenticate,
-  requireRole('ADMIN'),
-  [body('password').isString().notEmpty()],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
-      }
-
-      const current = await prisma.user.findUnique({ where: { id: req.user.id } });
-      const match = await bcrypt.compare(req.body.password, current.passwordHash);
-      if (!match) {
-        return res.status(401).json({ error: 'Incorrect password' });
-      }
-
-      await prisma.$transaction(async (tx) => {
-        await tx.user.update({
-          where: { id: req.user.id },
-          data: { mfaEnabled: false, mfaSecret: null, mfaConfirmedAt: null },
-        });
-        await tx.mfaBackupCode.deleteMany({ where: { userId: req.user.id } });
-        await recordAuditEvent(tx, {
-          actorId: req.user.id,
-          action: 'MFA_DISABLED',
-          resourceType: 'User',
-          resourceId: req.user.id,
-          ...requestMeta(req),
-        });
-      });
-
-      return res.json({ message: 'MFA disabled' });
-    } catch (error) {
-      console.error('MFA disable error:', error);
-      return res.status(500).json({ error: 'Failed to disable MFA' });
-    }
-  }
-);
-
-// Invalidate all existing backup codes and issue a fresh set. Requires the
-// current password, same reasoning as /mfa/disable.
-router.post(
-  '/mfa/backup-codes/regenerate',
-  authenticate,
-  requireRole('ADMIN'),
-  [body('password').isString().notEmpty()],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
-      }
-
-      const current = await prisma.user.findUnique({ where: { id: req.user.id } });
-      if (!current.mfaEnabled) {
-        return res.status(400).json({ error: 'MFA is not enabled on this account' });
-      }
-
-      const match = await bcrypt.compare(req.body.password, current.passwordHash);
-      if (!match) {
-        return res.status(401).json({ error: 'Incorrect password' });
-      }
-
-      const { codes, hashed } = await generateBackupCodes();
-      await prisma.$transaction(async (tx) => {
-        await tx.mfaBackupCode.deleteMany({ where: { userId: req.user.id } });
-        await tx.mfaBackupCode.createMany({
-          data: hashed.map((codeHash) => ({ userId: req.user.id, codeHash })),
-        });
-        await recordAuditEvent(tx, {
-          actorId: req.user.id,
-          action: 'MFA_BACKUP_CODES_REGENERATED',
-          resourceType: 'User',
-          resourceId: req.user.id,
-          ...requestMeta(req),
-        });
-      });
-
-      return res.json({ backupCodes: codes });
-    } catch (error) {
-      console.error('MFA backup code regeneration error:', error);
-      return res.status(500).json({ error: 'Failed to regenerate backup codes' });
-    }
-  }
-);
-
-// Request a password reset link. Always returns the same generic response
-// whether or not the email is registered, so this endpoint can't be used to
-// enumerate accounts.
-router.post(
-  '/password/forgot',
-  passwordResetLimiter,
-  [body('email').isEmail().normalizeEmail()],
-  async (req, res) => {
-    const genericResponse = {
-      message: 'If an account exists for that email, a password reset link has been sent.',
-    };
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
-      }
-
-      const user = await prisma.user.findUnique({ where: { email: req.body.email } });
-      if (!user) {
-        return res.json(genericResponse);
-      }
-
-      const token = crypto.randomBytes(32).toString('hex');
-      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-      await prisma.passwordResetToken.create({
-        data: {
-          userId: user.id,
-          tokenHash,
-          expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
-        },
-      });
-
-      const resetUrl = `${process.env.CLIENT_URL?.split(',')[0] || ''}/reset-password?token=${token}`;
-      await sendMail({
-        to: user.email,
-        subject: 'Reset your MarketBridge password',
-        text: `We received a request to reset your MarketBridge password. This link expires in 30 minutes:\n\n${resetUrl}\n\nIf you didn't request this, you can ignore this email — your password won't change.`,
-      });
-
-      return res.json(genericResponse);
-    } catch (error) {
-      console.error('Password forgot error:', error);
-      // Still return the generic response — don't leak whether the failure
-      // was "no such account" vs. a server error.
-      return res.json(genericResponse);
-    }
-  }
-);
-
-// Complete a password reset. Revokes every active refresh session for the
-// account afterward, so a reset also logs the account out everywhere —
-// important if the reset was triggered because credentials were exposed.
-router.post(
-  '/password/reset',
-  passwordResetLimiter,
-  [
-    body('token').isString().trim().notEmpty(),
-    body('password').isString().isLength({ min: 8, max: 128 }),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
-      }
-
-      const tokenHash = crypto.createHash('sha256').update(req.body.token).digest('hex');
-      const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
-      if (!record || record.usedAt || record.expiresAt < new Date()) {
-        return res.status(400).json({ error: 'This reset link is invalid or has expired' });
-      }
-
-      const passwordHash = await bcrypt.hash(req.body.password, 12);
-
-      await prisma.$transaction(async (tx) => {
-        await tx.user.update({ where: { id: record.userId }, data: { passwordHash } });
-        await tx.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } });
-        await recordAuditEvent(tx, {
-          actorId: record.userId,
-          action: 'PASSWORD_RESET',
-          resourceType: 'User',
-          resourceId: record.userId,
-          ...requestMeta(req),
-        });
-      });
-
-      await revokeAllSessions(prisma, record.userId, 'password-reset');
-      return res.json({ message: 'Password updated. Please log in again.' });
-    } catch (error) {
-      console.error('Password reset error:', error);
-      return res.status(500).json({ error: 'Failed to reset password' });
     }
   }
 );
@@ -702,5 +322,296 @@ router.post('/logout-all', authenticate, async (req, res) => {
   clearRefreshCookie(res);
   res.json({ message: 'All sessions have been logged out', revokedSessions: result.count });
 });
+
+// ============================================================================
+// MULTI-FACTOR AUTHENTICATION (TOTP)
+// ============================================================================
+
+// Step 2 of login for an MFA-enabled account: exchange the short-lived
+// challenge token (proof of a correct password) plus a current TOTP code
+// (or a one-time backup code) for a real session.
+router.post(
+  '/mfa/verify-login',
+  authLimiter,
+  [
+    body('challengeToken').isString().notEmpty(),
+    body('code').isString().trim().isLength({ min: 4, max: 12 }),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
+      }
+
+      let userId;
+      try {
+        userId = verifyMfaChallenge(req.body.challengeToken);
+      } catch {
+        return res.status(401).json({ error: 'This login attempt has expired. Please log in again.', code: 'MFA_CHALLENGE_EXPIRED' });
+      }
+
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user || !user.mfaEnabled) {
+        return res.status(401).json({ error: 'Invalid login attempt' });
+      }
+
+      if (user.accountStatus === 'SUSPENDED') {
+        return res.status(403).json({ error: 'This account has been suspended. Contact support for assistance.' });
+      }
+
+      const code = req.body.code;
+      let usedBackupCode = false;
+
+      if (!verifyTotp(user.mfaSecret, code)) {
+        const backupIndex = await findMatchingBackupCodeIndex(user.mfaBackupCodes, code);
+        if (backupIndex === -1) {
+          return res.status(401).json({ error: 'Invalid authentication code', code: 'INVALID_MFA_CODE' });
+        }
+        usedBackupCode = true;
+        // Backup codes are one-time use: drop the consumed one immediately.
+        const remaining = [...user.mfaBackupCodes];
+        remaining.splice(backupIndex, 1);
+        await prisma.user.update({ where: { id: user.id }, data: { mfaBackupCodes: remaining } });
+      }
+
+      const session = await issueSession(user, req);
+      setRefreshCookie(res, session.refreshToken);
+      return res.json({
+        user: sanitize(user),
+        token: session.token,
+        expiresIn: session.expiresIn,
+        usedBackupCode,
+      });
+    } catch (error) {
+      console.error('MFA verify-login error:', error);
+      return res.status(500).json({ error: 'Login failed' });
+    }
+  }
+);
+
+router.get('/mfa/status', authenticate, async (req, res) => {
+  res.json({
+    mfaEnabled: req.user.mfaEnabled,
+    remainingBackupCodes: req.user.mfaEnabled ? req.user.mfaBackupCodes.length : null,
+  });
+});
+
+// Begin (or restart) enrollment: generates a fresh secret and QR code.
+// Nothing takes effect until POST /mfa/verify-setup confirms the user
+// actually scanned it and can produce a valid code.
+router.post('/mfa/setup', authenticate, async (req, res) => {
+  try {
+    if (req.user.mfaEnabled) {
+      return res.status(409).json({ error: 'MFA is already enabled on this account. Disable it first to re-enroll.' });
+    }
+
+    const secret = generateSecret();
+    await prisma.user.update({ where: { id: req.user.id }, data: { mfaSecret: secret } });
+
+    const otpAuthUri = buildOtpAuthUri(req.user.email, secret);
+    const qrCodeDataUrl = await generateQrCodeDataUrl(otpAuthUri);
+
+    return res.json({ secret, otpAuthUri, qrCodeDataUrl });
+  } catch (error) {
+    console.error('MFA setup error:', error);
+    return res.status(500).json({ error: 'Could not start MFA setup' });
+  }
+});
+
+// Confirm enrollment. Requires the current password in addition to a valid
+// code: this is the step that actually turns MFA on, so it deserves the
+// same bar as any other sensitive account change — a hijacked but
+// still-logged-in session shouldn't be able to silently lock the real
+// owner into an attacker-controlled authenticator.
+router.post(
+  '/mfa/verify-setup',
+  authenticate,
+  [
+    body('code').isString().trim().isLength({ min: 4, max: 12 }),
+    body('password').isString().notEmpty(),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
+      }
+
+      if (req.user.mfaEnabled) {
+        return res.status(409).json({ error: 'MFA is already enabled on this account.' });
+      }
+
+      if (!req.user.mfaSecret) {
+        return res.status(400).json({ error: 'No MFA setup in progress. Call /auth/mfa/setup first.' });
+      }
+
+      const passwordOk = await bcrypt.compare(req.body.password, req.user.passwordHash);
+      if (!passwordOk) {
+        return res.status(401).json({ error: 'Incorrect password' });
+      }
+
+      if (!verifyTotp(req.user.mfaSecret, req.body.code)) {
+        return res.status(400).json({ error: 'That code did not match. Check the time on your device and try again.', code: 'INVALID_MFA_CODE' });
+      }
+
+      const backupCodes = generateBackupCodes();
+      const hashed = await hashBackupCodes(backupCodes);
+
+      await prisma.user.update({
+        where: { id: req.user.id },
+        data: { mfaEnabled: true, mfaBackupCodes: hashed },
+      });
+
+      // The only moment these plaintext codes ever exist outside the
+      // user's own device — not stored, not logged, shown exactly once.
+      return res.json({
+        message: 'MFA is now enabled on your account.',
+        backupCodes,
+      });
+    } catch (error) {
+      console.error('MFA verify-setup error:', error);
+      return res.status(500).json({ error: 'Could not enable MFA' });
+    }
+  }
+);
+
+// Disable MFA. Requires both the password and a currently-valid code
+// (TOTP or backup) — the same "don't let a hijacked session quietly weaken
+// account security" reasoning as verify-setup, doubled, since disabling is
+// the more damaging direction.
+router.post(
+  '/mfa/disable',
+  authenticate,
+  [
+    body('password').isString().notEmpty(),
+    body('code').isString().trim().isLength({ min: 4, max: 12 }),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
+      }
+
+      if (!req.user.mfaEnabled) {
+        return res.status(400).json({ error: 'MFA is not enabled on this account.' });
+      }
+
+      const passwordOk = await bcrypt.compare(req.body.password, req.user.passwordHash);
+      if (!passwordOk) {
+        return res.status(401).json({ error: 'Incorrect password' });
+      }
+
+      let codeOk = verifyTotp(req.user.mfaSecret, req.body.code);
+      if (!codeOk) {
+        codeOk = (await findMatchingBackupCodeIndex(req.user.mfaBackupCodes, req.body.code)) !== -1;
+      }
+      if (!codeOk) {
+        return res.status(401).json({ error: 'Invalid authentication code', code: 'INVALID_MFA_CODE' });
+      }
+
+      await prisma.user.update({
+        where: { id: req.user.id },
+        data: { mfaEnabled: false, mfaSecret: null, mfaBackupCodes: [] },
+      });
+
+      return res.json({ message: 'MFA has been disabled on your account.' });
+    } catch (error) {
+      console.error('MFA disable error:', error);
+      return res.status(500).json({ error: 'Could not disable MFA' });
+    }
+  }
+);
+
+// ============================================================================
+// PASSWORD RECOVERY
+// ============================================================================
+
+// Always responds with the same generic message regardless of whether the
+// email is registered, so this endpoint can't be used to enumerate
+// accounts. NOTE: this platform has no email/SMS provider wired up yet
+// (see the Top-10 roadmap item on Amharic/Afaan Oromo + SMS notifications)
+// — until one exists, the raw reset link is logged server-side so Alex can
+// retrieve it manually, and is only ever included in the API response
+// itself outside production, for local/manual testing.
+router.post(
+  '/forgot-password',
+  authLimiter,
+  [body('email').isEmail().normalizeEmail()],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
+      }
+
+      const genericResponse = { message: 'If that email is registered, a password reset link has been sent.' };
+
+      const user = await prisma.user.findUnique({ where: { email: req.body.email } });
+      if (!user || user.accountStatus === 'SUSPENDED') {
+        return res.json(genericResponse);
+      }
+
+      const rawToken = await createResetToken(prisma, { userId: user.id, requestedIp: requestIp(req) });
+      const resetUrl = `${(process.env.APP_BASE_URL || '').replace(/\/$/, '')}/reset-password?token=${rawToken}`;
+
+      // TODO(priority-9): replace this console.log with a real email/SMS
+      // send once a provider is wired up. Until then this is the only way
+      // the token reaches anyone, so it's logged at a level Alex can find
+      // in Render's logs.
+      console.log(`[password-reset] ${user.email} -> ${resetUrl}`);
+
+      return res.json({
+        ...genericResponse,
+        ...(isProduction ? {} : { devResetUrl: resetUrl, devToken: rawToken }),
+      });
+    } catch (error) {
+      console.error('Forgot-password error:', error);
+      return res.status(500).json({ error: 'Could not process password reset request' });
+    }
+  }
+);
+
+router.post(
+  '/reset-password',
+  authLimiter,
+  [
+    body('token').isString().notEmpty(),
+    body('password').isString().isLength({ min: 8, max: 128 }),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        const userId = await consumeResetToken(tx, req.body.token);
+        if (!userId) return null;
+
+        const passwordHash = await bcrypt.hash(req.body.password, 12);
+        const user = await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+        return user;
+      });
+
+      if (!result) {
+        return res.status(400).json({ error: 'This reset link is invalid or has expired. Request a new one.', code: 'INVALID_RESET_TOKEN' });
+      }
+
+      // A password reset is a strong enough signal of account takeover
+      // risk (or at least "the previous password may be compromised") to
+      // sign every other device out, the same way changing a password
+      // manually would.
+      await revokeAllSessions(prisma, result.id, 'password-reset');
+
+      return res.json({ message: 'Your password has been reset. Please log in again.' });
+    } catch (error) {
+      console.error('Reset-password error:', error);
+      return res.status(500).json({ error: 'Could not reset password' });
+    }
+  }
+);
 
 module.exports = router;
