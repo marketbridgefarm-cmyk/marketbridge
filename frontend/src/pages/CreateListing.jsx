@@ -31,20 +31,6 @@ export default function CreateListing() {
   }, [closeModal]);
 
   const [category, setCategory] = useState(initialCategory);
-  const [locations, setLocations] = useState({ REGION: [], ZONE: [], WOREDA: [], KEBELE: [] });
-  const [selectedLocation, setSelectedLocation] = useState({ REGION: '', ZONE: '', WOREDA: '', KEBELE: '' });
-  useEffect(() => { api.get('/locations/ethiopia', { params: { level: 'REGION' } }).then(r => setLocations(v => ({ ...v, REGION: r.data.locations || [] }))).catch(() => undefined); }, []);
-  async function selectLocation(level, id) {
-    const next = { ...selectedLocation, [level]: id };
-    const levels = ['REGION','ZONE','WOREDA','KEBELE'];
-    const idx = levels.indexOf(level);
-    levels.slice(idx + 1).forEach(l => { next[l] = ''; });
-    setSelectedLocation(next);
-    const child = levels[idx + 1];
-    if (id && child) { try { const r = await api.get('/locations/ethiopia', { params: { parentId: id, level: child } }); setLocations(v => ({ ...v, [child]: r.data.locations || [] })); } catch {} }
-    const picked = next[levels[idx]];
-    setForm(prev => ({ ...prev, locationId: picked || '', location: (locations[level] || []).find(x => x.id === picked)?.name || prev.location }));
-  }
   const [form, setForm] = useState({
     sellerId: user?.id || '',
     title: '',
@@ -54,7 +40,12 @@ export default function CreateListing() {
     askingPrice: '',
     minAcceptablePrice: '',
     location: user?.location || '',
-    locationId: '',
+    region: user?.region || '',
+    zone: '',
+    woreda: '',
+    kebele: '',
+    latitude: '',
+    longitude: '',
     harvestedDate: '',
     readinessDate: '',
     photos: [], // [{ key, name, previewUrl }]
@@ -63,6 +54,34 @@ export default function CreateListing() {
   });
   const [error, setError] = useState('');
   const [mediaError, setMediaError] = useState('');
+  const [regions, setRegions] = useState([]);
+  const [geoStatus, setGeoStatus] = useState('');
+
+  useEffect(() => {
+    api.get('/listings/meta/regions')
+      .then((r) => setRegions(r.data.regions || []))
+      .catch(() => {});
+  }, []);
+
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      setGeoStatus('Geolocation is not available in this browser.');
+      return;
+    }
+    setGeoStatus('Locating…');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm((f) => ({
+          ...f,
+          latitude: String(pos.coords.latitude),
+          longitude: String(pos.coords.longitude),
+        }));
+        setGeoStatus('Location captured.');
+      },
+      () => setGeoStatus('Could not get your location. You can skip this — it just helps buyers find nearby produce.'),
+      { timeout: 10000 }
+    );
+  }
   const [uploading, setUploading] = useState(false);
   const set = k => e => setForm(prev => ({ ...prev, [k]: e.target.value }));
 
@@ -115,6 +134,12 @@ export default function CreateListing() {
         askingPrice: Number(form.askingPrice),
         minAcceptablePrice: form.minAcceptablePrice ? Number(form.minAcceptablePrice) : undefined,
         location: form.location,
+        region: form.region || undefined,
+        zone: form.zone || undefined,
+        woreda: form.woreda || undefined,
+        kebele: form.kebele || undefined,
+        latitude: form.latitude !== '' ? Number(form.latitude) : undefined,
+        longitude: form.longitude !== '' ? Number(form.longitude) : undefined,
         description: form.description || undefined,
         photos: form.photos.map(p => p.key),
         videos: form.videos.map(v => v.key)
@@ -167,19 +192,29 @@ export default function CreateListing() {
             </div>
           )}
 
-          {category === 'AGRICULTURAL' && (
-            <div className="form-grid">
-              {['REGION','ZONE','WOREDA','KEBELE'].map(level => (
-                <div key={level}><label>{level.charAt(0) + level.slice(1).toLowerCase()}</label><select value={selectedLocation[level]} onChange={e => selectLocation(level, e.target.value)} disabled={level !== 'REGION' && !selectedLocation[['REGION','ZONE','WOREDA','KEBELE'][['REGION','ZONE','WOREDA','KEBELE'].indexOf(level)-1]]}>
-                  <option value="">Select {level.toLowerCase()}</option>{locations[level].map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select></div>
-              ))}
-            </div>
-          )}
           <div className="form-grid">
             <div><label>Asking price (ETB)</label><input required type="number" min="0.01" value={form.askingPrice} onChange={set('askingPrice')} /></div>
             {category === 'AGRICULTURAL' && <div><label>Minimum acceptable price</label><input type="number" min="0" value={form.minAcceptablePrice} onChange={set('minAcceptablePrice')} /></div>}
-            <div><label>Location</label><input required value={form.location} onChange={set('location')} /></div>
+            <div><label>Location</label><input required value={form.location} onChange={set('location')} placeholder="e.g. Bahir Dar, near the grain market" /></div>
+            <div>
+              <label>Region</label>
+              <select value={form.region} onChange={set('region')}>
+                <option value="">Select a region (optional)</option>
+                {regions.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+            <div><label>Zone</label><input value={form.zone} onChange={set('zone')} placeholder="Optional" /></div>
+            <div><label>Woreda</label><input value={form.woreda} onChange={set('woreda')} placeholder="Optional" /></div>
+            <div>
+              <label>Precise location (optional)</label>
+              <button type="button" className="btn btn-light" onClick={useMyLocation}>Use my current location</button>
+              {geoStatus && <p className="small muted">{geoStatus}</p>}
+              {form.latitude && form.longitude && (
+                <p className="small muted">Captured: {Number(form.latitude).toFixed(4)}, {Number(form.longitude).toFixed(4)}</p>
+              )}
+            </div>
             {category === 'AGRICULTURAL' && (
               <>
                 <div><label>Harvest date</label><input type="date" value={form.harvestedDate} onChange={set('harvestedDate')} /></div>

@@ -11,6 +11,7 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
     cropType: '',
     title: '',
     location: '',
+    region: '',
     minQuantity: '',
     minPrice: '',
     maxPrice: '',
@@ -19,10 +20,25 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [regions, setRegions] = useState([]);
+
+  // "Near me" is a distinct search mode (distance-sorted, via
+  // /listings/nearby) rather than another filter field — see the backend
+  // route comment for why it's kept separate from the regular search/ad
+  // ranking above.
+  const [nearMode, setNearMode] = useState(false);
+  const [nearStatus, setNearStatus] = useState('');
+
+  useEffect(() => {
+    api.get('/listings/meta/regions')
+      .then((r) => setRegions(r.data.regions || []))
+      .catch(() => {});
+  }, []);
 
   async function fetchListings() {
     setLoading(true);
     setError('');
+    setNearMode(false);
     try {
       const { readyAfter, readyBy, ...rest } = filters;
       const params = { ...rest, category };
@@ -40,8 +56,43 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
     }
   }
 
+  function findNearMe() {
+    if (!navigator.geolocation) {
+      setNearStatus('Geolocation is not available in this browser.');
+      return;
+    }
+    setNearStatus('Locating…');
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        setLoading(true);
+        setError('');
+        try {
+          const r = await api.get('/listings/nearby', {
+            params: {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              radiusKm: 100,
+              category,
+              cropType: agriculture ? filters.cropType || undefined : undefined,
+            },
+          });
+          setListings(r.data.listings || []);
+          setNearMode(true);
+          setNearStatus('');
+        } catch (e) {
+          setNearStatus('Could not load nearby listings.');
+        } finally {
+          setLoading(false);
+        }
+      },
+      () => setNearStatus('Could not get your location.'),
+      { timeout: 10000 }
+    );
+  }
+
   useEffect(() => {
     fetchListings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
   return (
@@ -69,6 +120,15 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
             <input value={filters.location} onChange={e => setFilters({ ...filters, location: e.target.value })} placeholder="Region, town or district" />
           </div>
           <div>
+            <label>Region</label>
+            <select value={filters.region} onChange={e => setFilters({ ...filters, region: e.target.value })}>
+              <option value="">Any region</option>
+              {regions.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label>Minimum quantity</label>
             <input type="number" value={filters.minQuantity} onChange={e => setFilters({ ...filters, minQuantity: e.target.value })} />
           </div>
@@ -93,19 +153,32 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
             </>
           )}
           <button className="btn btn-primary" onClick={fetchListings}>Search</button>
+          <button className="btn btn-light" type="button" onClick={findNearMe}>📍 Near me</button>
         </div>
+        {nearStatus && <p className="small muted">{nearStatus}</p>}
         {error && <div className="alert error">{error}</div>}
         <AdvertisementBanner />
         <div className="market-toolbar">
           <strong>{loading ? 'Loading…' : `${listings.length} listing${listings.length === 1 ? '' : 's'}`}</strong>
-          <span className="muted">{agriculture ? 'Independent inspection can support bulk transactions.' : 'Buyers and sellers transact directly through MarketBridge workflows.'}</span>
+          <span className="muted">
+            {nearMode
+              ? 'Sorted by distance from your current location.'
+              : agriculture ? 'Independent inspection can support bulk transactions.' : 'Buyers and sellers transact directly through MarketBridge workflows.'}
+          </span>
         </div>
         {loading ? (
           <div className="loading">Loading marketplace…</div>
         ) : (
           <div className="listing-grid">
-            {listings.map(l => <ListingCard key={l.id} listing={l} />)}
-            {!listings.length && <div className="empty card"><h3>No matching listings</h3><p>Try a broader search.</p></div>}
+            {listings.map(l => (
+              <div key={l.id}>
+                <ListingCard listing={l} />
+                {nearMode && typeof l.distanceKm === 'number' && (
+                  <p className="small muted" style={{ marginTop: -6 }}>{l.distanceKm} km away</p>
+                )}
+              </div>
+            ))}
+            {!listings.length && <div className="empty card"><h3>No matching listings</h3><p>Try a broader search{nearMode ? ' or a larger radius' : ''}.</p></div>}
           </div>
         )}
       </div>

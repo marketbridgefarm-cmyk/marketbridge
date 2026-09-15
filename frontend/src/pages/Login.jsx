@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useTranslation } from '../i18n/I18nContext.jsx';
 
 const SESSION_MESSAGES = {
   suspended: 'This account has been suspended. Contact support for assistance.',
@@ -23,6 +24,7 @@ function dashboardPathFor(u) {
 
 export default function Login() {
   const { login, completeMfaLogin } = useAuth();
+  const { t } = useTranslation();
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
@@ -111,25 +113,25 @@ export default function Login() {
               </form>
               <p className="muted mt">
                 <button type="button" className="link-button" onClick={() => { setMfaChallenge(null); setMfaCode(''); setError(''); }}>
-                  ← Back to login
+                  ← {t('auth.backToLogin')}
                 </button>
               </p>
             </>
           ) : (
             <>
-              <span className="eyebrow">WELCOME BACK</span>
-              <h1>Log in to MarketBridge</h1>
+              <span className="eyebrow">{t('auth.welcomeBack').toUpperCase()}</span>
+              <h1>{t('auth.loginTitle')}</h1>
               {sessionMessage && !error && <div className="alert error">{sessionMessage}</div>}
               {error && <div className="alert error">{error}</div>}
               <form onSubmit={submit}>
-                <label>Email</label>
+                <label>{t('auth.email')}</label>
                 <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-                <label>Password</label>
+                <label>{t('auth.password')}</label>
                 <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-                <button className="btn btn-primary btn-lg full mt" type="submit">Log in</button>
+                <button className="btn btn-primary btn-lg full mt" type="submit">{t('nav.login')}</button>
               </form>
-              <p className="muted mt"><Link to="/forgot-password">Forgot your password?</Link></p>
-              <p className="muted mt">New to MarketBridge? <Link to="/register">Create an account</Link></p>
+              <p className="muted mt"><Link to="/forgot-password">{t('auth.forgotPassword')}</Link></p>
+              <p className="muted mt">{t('auth.newToMarketBridge')} <Link to="/register">{t('auth.createAccount')}</Link></p>
             </>
           )}
         </div>
