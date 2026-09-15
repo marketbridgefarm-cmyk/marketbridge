@@ -25,7 +25,7 @@ const {
 } = require('../services/mfaService');
 const { createResetToken, consumeResetToken } = require('../services/passwordResetService');
 const { normalizeEthiopianPhone } = require('../services/smsService');
-const { SUPPORTED_SMS_LANGUAGES } = require('../i18n/notificationCopy');
+const { SUPPORTED_SMS_LANGUAGES } = require('../services/notificationCopy');
 
 const router = express.Router();
 
