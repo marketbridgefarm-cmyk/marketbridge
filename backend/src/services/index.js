@@ -1,6 +1,6 @@
 'use strict';
 
-const chapa = require('../../config/chapa');
+const chapa = require('../config/chapa');
 
 /**
  * Provider adapter boundary.
