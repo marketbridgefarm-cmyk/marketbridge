@@ -53,6 +53,7 @@ export default function Dashboard() {
   const { user } = useAuth();
 
   const [activeTab, setActiveTab] = useState('buying');
+  const [tabsOpen, setTabsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toastMsg, setToastMsg] = useState('');
@@ -245,7 +246,7 @@ export default function Dashboard() {
   }
 
   return (
-    <main className="section">
+    <main className="section dashboard-page">
       <div className="container-wide">
         <DashboardWelcome user={user} subtitle="Buying, selling, and everything in between — all in one place.">
           <RecentActivity items={activityItems} emptyText="No activity yet — browse listings or create one to get started." />
@@ -283,22 +284,39 @@ export default function Dashboard() {
         {error && <div className="alert error">{error}</div>}
         {toastMsg && <div className="sd-toast">{toastMsg}</div>}
 
-        <div className="sd-tabs" role="tablist">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              className={`sd-tab ${activeTab === tab.id ? 'sd-active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-              {tab.id === 'offers' && myTurnOffers.length > 0 && (
+        <div className={`sd-tabs-nav${tabsOpen ? ' sd-tabs-open' : ''}`}>
+          <button
+            type="button"
+            className="sd-tabs-current"
+            aria-expanded={tabsOpen}
+            aria-controls="dashboard-tabs-list"
+            onClick={() => setTabsOpen((open) => !open)}
+          >
+            <span>
+              {TABS.find((tab) => tab.id === activeTab)?.label || 'Dashboard'}
+              {activeTab === 'offers' && myTurnOffers.length > 0 && (
                 <span className="sd-tab-count">{myTurnOffers.length}</span>
               )}
-            </button>
-          ))}
+            </span>
+            <span className="sd-tabs-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div id="dashboard-tabs-list" className="sd-tabs-list" role="tablist" aria-label="Dashboard sections">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                className={`sd-tab ${activeTab === tab.id ? 'sd-active' : ''}`}
+                onClick={() => { setActiveTab(tab.id); setTabsOpen(false); }}
+              >
+                {tab.label}
+                {tab.id === 'offers' && myTurnOffers.length > 0 && (
+                  <span className="sd-tab-count">{myTurnOffers.length}</span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ==================================================================== */}
@@ -314,15 +332,15 @@ export default function Dashboard() {
             {offersSent.length === 0 ? (
               <p className="muted">You haven't made an offer yet.</p>
             ) : (
-              <table className="sd-table">
+              <table className="sd-table sd-table--mobile-cards">
                 <thead><tr><th>Listing</th><th>Amount</th><th>Status</th><th /></tr></thead>
                 <tbody>
                   {offersSent.slice(0, 8).map((o) => (
                     <tr key={o.id}>
-                      <td>{listingLabel(o.listing)}</td>
-                      <td>{money(o.amount)}</td>
-                      <td>{o.status}</td>
-                      <td><Link to={`/listings/${o.listing?.id}`}>View</Link></td>
+                      <td data-label="Listing">{listingLabel(o.listing)}</td>
+                      <td data-label="Amount">{money(o.amount)}</td>
+                      <td data-label="Status">{o.status}</td>
+                      <td data-label="Action"><Link className="sd-mobile-action" to={`/listings/${o.listing?.id}`}>View</Link></td>
                     </tr>
                   ))}
                 </tbody>
@@ -364,15 +382,15 @@ export default function Dashboard() {
             {myListings.length === 0 ? (
               <p className="muted">You haven't listed anything yet.</p>
             ) : (
-              <table className="sd-table">
+              <table className="sd-table sd-table--mobile-cards">
                 <thead><tr><th>Listing</th><th>Status</th><th>Offers</th><th /></tr></thead>
                 <tbody>
                   {myListings.map((l) => (
                     <tr key={l.id}>
-                      <td>{listingLabel(l)}</td>
-                      <td><span className="badge">{l.status}</span></td>
-                      <td>{offersReceived.filter((o) => o.listing?.id === l.id).length}</td>
-                      <td><Link to={`/listings/${l.id}`}>Manage</Link></td>
+                      <td data-label="Listing">{listingLabel(l)}</td>
+                      <td data-label="Status"><span className="badge">{l.status}</span></td>
+                      <td data-label="Offers">{offersReceived.filter((o) => o.listing?.id === l.id).length}</td>
+                      <td data-label="Action"><Link className="sd-mobile-action" to={`/listings/${l.id}`}>Manage</Link></td>
                     </tr>
                   ))}
                 </tbody>
@@ -390,18 +408,18 @@ export default function Dashboard() {
             {allOffers.length === 0 ? (
               <p className="muted">No offers yet.</p>
             ) : (
-              <table className="sd-table">
+              <table className="sd-table sd-table--mobile-cards">
                 <thead><tr><th>Listing</th><th>Role</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
                 <tbody>
                   {allOffers.map((o) => {
                     const myTurn = myTurnOffers.some((mt) => mt.id === o.id);
                     return (
                       <tr key={o.id}>
-                        <td>{listingLabel(o.listing)}</td>
-                        <td>{o.viewerRole}</td>
-                        <td>{money(o.amount)}</td>
-                        <td>{o.status}{o.status === 'COUNTERED' ? ` (${o.counteredBy === 'SELLER' ? 'seller' : 'buyer'} countered)` : ''}</td>
-                        <td>
+                        <td data-label="Listing">{listingLabel(o.listing)}</td>
+                        <td data-label="Role">{o.viewerRole}</td>
+                        <td data-label="Amount">{money(o.amount)}</td>
+                        <td data-label="Status">{o.status}{o.status === 'COUNTERED' ? ` (${o.counteredBy === 'SELLER' ? 'seller' : 'buyer'} countered)` : ''}</td>
+                        <td data-label="Action">
                           {myTurn ? (
                             <div className="sd-actions">
                               <button
@@ -460,16 +478,16 @@ export default function Dashboard() {
             {ordersTagged.length === 0 ? (
               <p className="muted">No orders yet.</p>
             ) : (
-              <table className="sd-table">
+              <table className="sd-table sd-table--mobile-cards">
                 <thead><tr><th>Order</th><th>Listing</th><th>Role</th><th>Status</th><th /></tr></thead>
                 <tbody>
                   {ordersTagged.map((o) => (
                     <tr key={o.id}>
-                      <td>{shortId(o.id)}</td>
-                      <td>{listingLabel(o.listing)}</td>
-                      <td>{o.viewerRole}</td>
-                      <td><span className="badge">{o.status}</span></td>
-                      <td><Link to={`/orders/${o.id}`}>Open</Link></td>
+                      <td data-label="Order">{shortId(o.id)}</td>
+                      <td data-label="Listing">{listingLabel(o.listing)}</td>
+                      <td data-label="Role">{o.viewerRole}</td>
+                      <td data-label="Status"><span className="badge">{o.status}</span></td>
+                      <td data-label="Action"><Link className="sd-mobile-action" to={`/orders/${o.id}`}>Open</Link></td>
                     </tr>
                   ))}
                 </tbody>
@@ -531,16 +549,16 @@ export default function Dashboard() {
             {allPayments.length === 0 ? (
               <p className="muted">No payments yet.</p>
             ) : (
-              <table className="sd-table">
+              <table className="sd-table sd-table--mobile-cards">
                 <thead><tr><th>Order</th><th>Type</th><th>Amount</th><th>Status</th><th /></tr></thead>
                 <tbody>
                   {allPayments.map((p) => (
                     <tr key={p.id}>
-                      <td>{shortId(p.orderId)}</td>
-                      <td>{p.type}</td>
-                      <td>{money(p.amount)}</td>
-                      <td><span className={`badge ${p.status === 'PAID' ? 'badge-success' : 'badge-pending'}`}>{p.status}</span></td>
-                      <td><Link to={`/orders/${p.order.id}`}>Open order</Link></td>
+                      <td data-label="Order">{shortId(p.orderId)}</td>
+                      <td data-label="Type">{p.type}</td>
+                      <td data-label="Amount">{money(p.amount)}</td>
+                      <td data-label="Status"><span className={`badge ${p.status === 'PAID' ? 'badge-success' : 'badge-pending'}`}>{p.status}</span></td>
+                      <td data-label="Action"><Link className="sd-mobile-action" to={`/orders/${p.order.id}`}>Open order</Link></td>
                     </tr>
                   ))}
                 </tbody>
@@ -563,15 +581,15 @@ export default function Dashboard() {
             {confirmedSales.length === 0 ? (
               <p className="muted">No confirmed sales yet.</p>
             ) : (
-              <table className="sd-table">
+              <table className="sd-table sd-table--mobile-cards">
                 <thead><tr><th>Order</th><th>Listing</th><th>Amount</th><th>Status</th></tr></thead>
                 <tbody>
                   {confirmedSales.map((o) => (
                     <tr key={o.id}>
-                      <td><Link to={`/orders/${o.id}`}>{shortId(o.id)}</Link></td>
-                      <td>{listingLabel(o.listing)}</td>
-                      <td>{money(o.finalPrice)}</td>
-                      <td>{o.status}</td>
+                      <td data-label="Order"><Link className="sd-mobile-action" to={`/orders/${o.id}`}>{shortId(o.id)}</Link></td>
+                      <td data-label="Listing">{listingLabel(o.listing)}</td>
+                      <td data-label="Amount">{money(o.finalPrice)}</td>
+                      <td data-label="Status">{o.status}</td>
                     </tr>
                   ))}
                 </tbody>
