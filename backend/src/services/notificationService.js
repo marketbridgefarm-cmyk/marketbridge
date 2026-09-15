@@ -1,6 +1,6 @@
 'use strict';
 
-const { localizedTitle } = require('../i18n/notificationCopy');
+const { localizedTitle } = require('./notificationCopy');
 
 const EVENT_COPY = {
   PICKUP_WINDOW_REMINDER: { type: 'ORDER', title: 'Pickup window approaching', body: 'The agricultural pickup window begins within 24 hours. Confirm transport and pickup readiness.', action: 'order' },
