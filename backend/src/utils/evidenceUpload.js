@@ -5,30 +5,21 @@ const crypto = require('crypto');
 const path = require('path');
 
 const { uploadPrivateObject } = require('./objectStorage');
+const { optimizeUpload } = require('./imageProcessor');
 
-const MAX_BYTES = Number(process.env.EVIDENCE_MAX_FILE_BYTES || 15 * 1024 * 1024); // 15MB default
+const MAX_BYTES = Number(process.env.EVIDENCE_MAX_FILE_BYTES || 15 * 1024 * 1024);
 const MAX_FILES = Number(process.env.EVIDENCE_MAX_FILES || 5);
 
 const ALLOWED_MIME_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/heic',
-  'video/mp4',
-  'video/quicktime',
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic',
+  'video/mp4', 'video/quicktime',
 ];
 
-// Multer config shared by transport and inspection evidence uploads.
 const evidenceUpload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: MAX_BYTES,
-    files: MAX_FILES,
-  },
+  limits: { fileSize: MAX_BYTES, files: MAX_FILES },
   fileFilter: (req, file, cb) => {
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      return cb(new Error(`Unsupported file type: ${file.mimetype}`));
-    }
+    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) return cb(new Error(`Unsupported file type: ${file.mimetype}`));
     cb(null, true);
   },
 });
@@ -38,41 +29,38 @@ function safeExtension(name = '') {
   return /^[.][a-z0-9]{1,10}$/.test(ext) ? ext : '';
 }
 
-// Builds a private-storage key namespaced under the given resource, e.g.
-// "evidence/transport/<jobId>/<uuid>.jpg" or
-// "evidence/inspection/<reportId>/<uuid>.jpg".
-function makeEvidenceKey(namespace, resourceId, originalName) {
-  return `evidence/${namespace}/${resourceId}/${crypto.randomUUID()}${safeExtension(originalName)}`;
+function makeEvidenceKey(namespace, resourceId, originalName, extensionOverride) {
+  const ext = extensionOverride || safeExtension(originalName);
+  return `evidence/${namespace}/${resourceId}/${crypto.randomUUID()}${ext}`;
 }
 
-// Uploads each file in req.files to private object storage and returns
-// { photoKeys, videoKeys } split by MIME type.
 async function uploadEvidenceFiles(namespace, resourceId, files = []) {
   const photoKeys = [];
   const videoKeys = [];
+  const mediaStats = [];
 
   for (const file of files) {
-    const key = makeEvidenceKey(namespace, resourceId, file.originalname);
-
-    await uploadPrivateObject({
-      key,
-      buffer: file.buffer,
-      contentType: file.mimetype,
-    });
-
-    if (file.mimetype.startsWith('video/')) {
-      videoKeys.push(key);
-    } else {
+    if (file.mimetype.startsWith('image/')) {
+      const optimized = await optimizeUpload({
+        buffer: file.buffer,
+        mime: file.mimetype,
+        maxWidth: Number(process.env.EVIDENCE_IMAGE_MAX_WIDTH || 1920),
+        maxHeight: Number(process.env.EVIDENCE_IMAGE_MAX_HEIGHT || 1920),
+        quality: Number(process.env.EVIDENCE_IMAGE_QUALITY || 82),
+      });
+      const key = makeEvidenceKey(namespace, resourceId, file.originalname, optimized.extension);
+      await uploadPrivateObject({ key, buffer: optimized.buffer, contentType: optimized.contentType });
       photoKeys.push(key);
+      mediaStats.push({ type: 'image', originalBytes: optimized.originalBytes, optimizedBytes: optimized.optimizedBytes, width: optimized.width, height: optimized.height });
+    } else {
+      const key = makeEvidenceKey(namespace, resourceId, file.originalname);
+      await uploadPrivateObject({ key, buffer: file.buffer, contentType: file.mimetype });
+      videoKeys.push(key);
+      mediaStats.push({ type: 'video', originalBytes: file.size, optimizedBytes: file.size });
     }
   }
 
-  return { photoKeys, videoKeys };
+  return { photoKeys, videoKeys, mediaStats };
 }
 
-module.exports = {
-  evidenceUpload,
-  uploadEvidenceFiles,
-};
-
-
+module.exports = { evidenceUpload, uploadEvidenceFiles };
