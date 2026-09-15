@@ -167,11 +167,9 @@ enum PaymentMethod {
 
 enum PaymentStatus {
   PENDING
-  PROCESSING
   PAID
   FAILED
   REFUNDED
-  REFUND_PENDING
   RECONCILIATION_REQUIRED
 }
 
@@ -215,6 +213,13 @@ enum DisputeStatus {
   UNDER_REVIEW
   RESOLVED
   REJECTED
+}
+
+enum LocationLevel {
+  REGION
+  ZONE
+  WOREDA
+  KEBELE
 }
 
 enum VerificationStatus {
@@ -273,6 +278,8 @@ model User {
   roles Role[] @default([BUYER, SELLER])
 
   location           String?
+  locationId         String?
+  locationRef        EthiopiaLocation? @relation(fields: [locationId], references: [id])
   verificationStatus VerificationStatus @default(UNVERIFIED)
   accountStatus      AccountStatus      @default(ACTIVE)
 
@@ -483,6 +490,31 @@ model AuditEvent {
 // LISTING
 // ============================================================================
 
+model EthiopiaLocation {
+  id        String @id @default(uuid())
+  name      String
+  nameAm    String?
+  nameOm    String?
+  code      String @unique
+  level     LocationLevel
+  latitude  Float?
+  longitude Float?
+  parentId  String?
+  parent    EthiopiaLocation? @relation("LocationHierarchy", fields: [parentId], references: [id])
+  children  EthiopiaLocation[] @relation("LocationHierarchy")
+  users     User[]
+  listings  Listing[]
+  trucks    Truck[]
+  pickupJobs TransportJob[] @relation("TransportPickupLocation")
+  destinationJobs TransportJob[] @relation("TransportDestinationLocation")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([level])
+  @@index([parentId])
+  @@index([latitude, longitude])
+}
+
 model Listing {
   id String @id @default(uuid())
 
@@ -502,6 +534,8 @@ model Listing {
   minAcceptablePrice Decimal? @db.Decimal(18, 2)
 
   location String
+  locationId String?
+  locationRef EthiopiaLocation? @relation(fields: [locationId], references: [id])
 
   harvestedDate    DateTime?
   readinessDate    DateTime?
@@ -529,6 +563,7 @@ model Listing {
   @@index([category])
   @@index([status])
   @@index([location])
+  @@index([locationId])
   @@index([pickupWindowStart, pickupWindowEnd])
 }
 
@@ -799,6 +834,8 @@ model Truck {
   truckType    String
   capacity     Float
   operatingArea String
+  operatingLocationId String?
+  operatingLocation EthiopiaLocation? @relation(fields: [operatingLocationId], references: [id])
 
   availability TruckAvailability @default(AVAILABLE)
 
@@ -815,6 +852,7 @@ model Truck {
   @@index([ownerId])
   @@index([availability])
   @@index([operatingArea])
+  @@index([operatingLocationId])
   @@index([registration])
 }
 
@@ -840,6 +878,10 @@ model TransportJob {
 
   pickupLocation String
   destination    String
+  pickupLocationId String?
+  destinationLocationId String?
+  pickupLocationRef EthiopiaLocation? @relation("TransportPickupLocation", fields: [pickupLocationId], references: [id])
+  destinationLocationRef EthiopiaLocation? @relation("TransportDestinationLocation", fields: [destinationLocationId], references: [id])
   load           String
 
   requiredCapacity Float?
