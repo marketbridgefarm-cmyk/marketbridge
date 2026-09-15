@@ -22,38 +22,30 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // Shared by password login, register, and a completed MFA challenge —
-  // all three end the same way: store the access token, set the user.
-  const completeSession = (data) => {
-    localStorage.setItem('mb_token', data.token);
-    setUser(data.user);
-    return data.user;
-  };
-
-  // Admin accounts with MFA enabled don't get a session back from
-  // /auth/login — they get { mfaRequired, challengeId, methods } instead.
-  // The caller (Login page) is responsible for noticing that shape and
-  // walking the user through verifyMfa() before a session exists.
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
-    if (res.data?.mfaRequired) {
-      return res.data;
+    if (res.data.mfaRequired) {
+      // Caller (Login.jsx) is responsible for collecting a code and calling
+      // completeMfaLogin — no token exists yet, so nothing to store here.
+      return { mfaRequired: true, challengeToken: res.data.challengeToken };
     }
-    return completeSession(res.data);
+    localStorage.setItem('mb_token', res.data.token);
+    setUser(res.data.user);
+    return res.data.user;
   };
 
-  const requestMfaEmailCode = async (challengeId) => {
-    await api.post('/auth/mfa/challenge/email', { challengeId });
-  };
-
-  const verifyMfa = async (challengeId, code, method) => {
-    const res = await api.post('/auth/mfa/verify', { challengeId, code, method });
-    return completeSession(res.data);
+  const completeMfaLogin = async (challengeToken, code) => {
+    const res = await api.post('/auth/mfa/verify-login', { challengeToken, code });
+    localStorage.setItem('mb_token', res.data.token);
+    setUser(res.data.user);
+    return res.data.user;
   };
 
   const register = async (data) => {
     const res = await api.post('/auth/register', data);
-    return completeSession(res.data);
+    localStorage.setItem('mb_token', res.data.token);
+    setUser(res.data.user);
+    return res.data.user;
   };
 
   const logout = async () => {
@@ -81,9 +73,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider
-      value={{ user, loading, login, requestMfaEmailCode, verifyMfa, register, logout, refreshUser }}
-    >
+    <AuthContext.Provider value={{ user, loading, login, completeMfaLogin, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
