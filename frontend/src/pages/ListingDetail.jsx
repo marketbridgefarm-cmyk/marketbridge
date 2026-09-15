@@ -42,6 +42,16 @@ export default function ListingDetail() {
 
   useEffect(() => { load(); }, [id]);
 
+  useEffect(() => {
+    if (!listing) return;
+    const title = listing.title || listing.cropType || 'Marketplace listing';
+    const description = listing.description || `${title} available on MarketBridge, an Ethiopian marketplace.`;
+    document.title = `${title} | MarketBridge`;
+    let meta = document.querySelector('meta[name=description]');
+    if (!meta) { meta = document.createElement('meta'); meta.name = 'description'; document.head.appendChild(meta); }
+    meta.setAttribute('content', description.slice(0, 155));
+  }, [listing]);
+
   async function submitOffer(e) {
     e.preventDefault();
     setError('');
