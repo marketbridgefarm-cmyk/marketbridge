@@ -2,6 +2,7 @@
 
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('./orderEventService');
+const { assertTransition } = require('./paymentStateMachine');
 
 async function requestRefund(tx, { paymentId, amount, reason, requestedById }) {
   const payment = await tx.payment.findUnique({ where: { id: paymentId }, select: { id: true, amount: true, currency: true, status: true, orderId: true, type: true } });
@@ -91,7 +92,13 @@ async function failRefund(tx, { refundId, failureReason, actorId }) {
   const refund = await tx.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
   if (!refund) throw Object.assign(new Error('Refund request not found'), { status: 404 });
   if (refund.status === 'COMPLETED') throw Object.assign(new Error('Completed refund cannot be failed'), { status: 409 });
-  assertTransition(payment.status, 'REFUNDED');
+
+  // Note: failing a refund does NOT move Payment.status anywhere — it stays
+  // wherever it was (typically REFUND_PENDING), which is what allows a
+  // retry via another requestRefund/completeRefund attempt after a
+  // provider-side failure. There is deliberately no assertTransition call
+  // here: this function only ever writes PaymentRefund.status, never
+  // Payment.status, so there's no payment transition to validate.
 
   const updated = await tx.paymentRefund.update({ where: { id: refundId }, data: { status: 'FAILED', failureReason: failureReason || 'Provider refund failed' } });
   if (refund.payment?.orderId) {
