@@ -94,6 +94,25 @@ function validateEnv() {
     );
     process.exit(1);
   }
+
+  const mfaKey = String(process.env.MFA_ENCRYPTION_KEY || '');
+  const isValidMfaKey = /^[A-Fa-f0-9]{64}$/.test(mfaKey) || /^[A-Za-z0-9+/]{43}={0,2}$/.test(mfaKey);
+  if (!isValidMfaKey) {
+    console.error('FATAL: MFA_ENCRYPTION_KEY must be a 32-byte base64 value or 64-character hex value');
+    process.exit(1);
+  }
+
+  const smtpRequired = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'MAIL_FROM'];
+  const missingSmtp = smtpRequired.filter((key) => !process.env[key] || !String(process.env[key]).trim());
+  if (missingSmtp.length > 0) {
+    console.error(`FATAL: Missing required SMTP environment variables in production: ${missingSmtp.join(', ')}`);
+    process.exit(1);
+  }
+  const smtpPort = Number(process.env.SMTP_PORT);
+  if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
+    console.error('FATAL: SMTP_PORT must be a valid TCP port');
+    process.exit(1);
+  }
 }
 
 validateEnv();
@@ -117,10 +136,39 @@ async function testDatabase() {
 // SECURITY
 // ============================================================================
 
+const cspDirectives = {
+  defaultSrc: ["'self'"],
+  baseUri: ["'self'"],
+  objectSrc: ["'none'"],
+  frameAncestors: ["'none'"],
+  formAction: ["'self'"],
+  imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+  mediaSrc: ["'self'", 'blob:', 'https:'],
+  connectSrc: ["'self'", 'https:'],
+  scriptSrc: ["'self'"],
+  styleSrc: ["'self'", "'unsafe-inline'"],
+  fontSrc: ["'self'", 'data:', 'https:'],
+};
+
+if (isProduction) {
+  cspDirectives.upgradeInsecureRequests = [];
+}
+
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: cspDirectives,
+      reportOnly: String(process.env.CSP_REPORT_ONLY || '').toLowerCase() === 'true',
+    },
     crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: { policy: 'same-origin' },
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+    frameguard: { action: 'deny' },
+    noSniff: true,
+    hidePoweredBy: true,
   })
 );
 
@@ -207,6 +255,26 @@ app.use(
 // (see routes/auth.js). Only auth.js reads req.cookies; no secret needed
 // since the cookie's own value is a signed JWT.
 app.use(cookieParser());
+
+// ============================================================================
+// CSP REPORTING
+// ============================================================================
+
+app.post('/csp-report', express.json({ limit: '32kb', type: ['application/json', 'application/csp-report'] }), (req, res) => {
+  if (process.env.CSP_REPORTING_ENABLED !== 'true') {
+    return res.status(204).end();
+  }
+
+  const report = req.body?.['csp-report'] || req.body || {};
+  console.warn('[csp-report]', {
+    documentUri: report['document-uri'] || report.documentURL || null,
+    blockedUri: report['blocked-uri'] || report.blockedURL || null,
+    violatedDirective: report['violated-directive'] || report.effectiveDirective || null,
+    sourceFile: report['source-file'] || report.sourceFile || null,
+  });
+
+  return res.status(204).end();
+});
 
 // ============================================================================
 // HEALTH CHECK
