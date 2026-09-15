@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import NotificationCenter from './NotificationCenter.jsx';
+import { getLanguage, setLanguage, supportedLanguages, t } from '../utils/i18n.js';
 
 // Order of preference when resolving a single "Dashboard" destination for a
 // user with multiple roles. Per-role prompts to switch between capabilities
@@ -20,9 +21,9 @@ function resolveDashboard(user) {
 }
 
 const MARKET_LINKS = [
-  { to: '/agricultural', label: 'Farm Produces', match: (p) => p === '/agricultural' || p === '/listings' },
-  { to: '/products', label: 'Products', match: (p) => p.startsWith('/products') },
-  { to: '/digital', label: 'Digital', match: (p) => p.startsWith('/digital') },
+  { to: '/agricultural', labelKey: 'farmProduce', match: (p) => p === '/agricultural' || p === '/listings' },
+  { to: '/products', labelKey: 'products', match: (p) => p.startsWith('/products') },
+  { to: '/digital', labelKey: 'digital', match: (p) => p.startsWith('/digital') },
 ];
 
 export default function Navbar() {
@@ -32,6 +33,8 @@ export default function Navbar() {
   const dashboardHref = resolveDashboard(user);
 
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [language, setLanguageState] = useState(getLanguage());
+  function changeLanguage(e) { const value = e.target.value; setLanguage(value); setLanguageState(value); window.dispatchEvent(new Event('mb-language-change')); }
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef(null);
 
@@ -106,6 +109,7 @@ export default function Navbar() {
 
           {/* Desktop links */}
           <div className="nav-links">
+            <label className="language-select" title={t('language', language)}><span className="sr-only">{t('language', language)}</span><select value={language} onChange={changeLanguage}>{supportedLanguages.map(([code,name]) => <option key={code} value={code}>{name}</option>)}</select></label>
             {user ? (
               <>
                 <NotificationCenter />
@@ -155,9 +159,10 @@ export default function Navbar() {
           <div className="mobile-menu" role="dialog" aria-modal="true">
             <span className="mobile-menu-label">Want to buy/sell:</span>
             {MARKET_LINKS.map((l) => (
-              <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{l.label}</Link>
+              <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{t(l.labelKey, language)}</Link>
             ))}
             <div className="mobile-menu-divider" />
+            <label className="language-select language-select--mobile"><span>{t('language', language)}</span><select value={language} onChange={changeLanguage}>{supportedLanguages.map(([code,name]) => <option key={code} value={code}>{name}</option>)}</select></label>
             {user ? (
               <>
                 <div className="mobile-notification-link">
