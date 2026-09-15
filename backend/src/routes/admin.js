@@ -7,6 +7,7 @@ const {
 } = require('../middleware/auth');
 const {
   requireRole,
+  requireMfa,
 } = require('../middleware/roleCheck');
 const {
   recordAuditEvent,
@@ -24,7 +25,8 @@ const router = express.Router();
 
 router.use(
   authenticate,
-  requireRole('ADMIN')
+  requireRole('ADMIN'),
+  requireMfa()
 );
 
 
