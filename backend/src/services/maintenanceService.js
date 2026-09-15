@@ -5,6 +5,7 @@ const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('./orderEventService');
 const { cancelOrderInTransaction } = require('./orderCancellationService');
 const { sendSms } = require('./smsService');
+const logger = require('../utils/logger');
 
 const LOCK_KEY = 82461327;
 
@@ -112,7 +113,7 @@ async function expireUnpaidOrders(now = new Date()) {
         // away from a buyer who already paid; skip and let the next cycle
         // re-evaluate once the picture is consistent.
         if (current.payments.some((p) => p.status === 'PAID')) {
-          console.warn(`Skipping auto-expire for order ${current.id}: has a PAID payment despite PENDING_PAYMENT status.`);
+          logger.warn({ orderId: current.id }, 'Skipping auto-expire: order has a PAID payment despite PENDING_PAYMENT status');
           return;
         }
 
@@ -125,7 +126,7 @@ async function expireUnpaidOrders(now = new Date()) {
       });
       expired += 1;
     } catch (error) {
-      console.error(`Failed to auto-expire unpaid order ${candidate.id}:`, error);
+      logger.error({ err: error, orderId: candidate.id }, 'Failed to auto-expire unpaid order');
     }
   }
 
@@ -195,7 +196,7 @@ async function sendPendingSms(now = new Date()) {
         },
       });
       if (giveUp) failed += 1;
-      console.error(`SMS send failed for outbox entry ${entry.id} (attempt ${attempts}):`, error.message || error);
+      logger.error({ err: error, outboxId: entry.id, attempts }, 'SMS send failed for outbox entry');
     }
   }
 
@@ -220,8 +221,8 @@ function startMaintenanceScheduler() {
   const tick = async () => {
     if (running) return;
     running = true;
-    try { const result = await runMaintenanceCycle(); console.log('[jobs] maintenance cycle', JSON.stringify(result)); }
-    catch (error) { console.error('[jobs] maintenance cycle failed:', error); }
+    try { const result = await runMaintenanceCycle(); logger.info({ result }, 'maintenance cycle complete'); }
+    catch (error) { logger.error({ err: error }, 'maintenance cycle failed'); }
     finally { running = false; }
   };
   void tick();
