@@ -8,7 +8,6 @@ const path = require('path');
 const { body, param, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
-const { requireRole } = require('../middleware/roleCheck');
 const { isAdmin } = require('../utils/authorization');
 const { recordAuditEvent } = require('../utils/audit');
 const { requestRefund } = require('../services/paymentRefundService');
@@ -17,7 +16,7 @@ const { AD_TYPES, dailyRatesEtb, campaignDays, quotePrice } = require('../utils/
 
 // Visual layout template applied when rendering a BANNER creative. Ignored
 // entirely for every other campaign type.
-const BANNER_TEMPLATES = ['CLASSIC', 'BOLD', 'MINIMAL', 'CARD'];
+const BANNER_TEMPLATES = ['CLASSIC', 'BOLD', 'MINIMAL', 'CARD', 'SPLIT', 'EDITORIAL', 'FRESH', 'DARK_LUXE', 'MARKET', 'GRADIENT'];
 
 const router = express.Router();
 
@@ -161,7 +160,7 @@ function uploadCreative(req, res, next) {
   });
 }
 
-router.post('/creative', authenticate, requireRole('ADVERTISER', 'ADMIN'), uploadCreative, async (req, res) => {
+router.post('/creative', authenticate, uploadCreative, async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Banner image file is required' });
     if (!ALLOWED_IMAGE_TYPES.has(req.file.mimetype)) return res.status(400).json({ error: 'Unsupported banner image type' });
@@ -189,7 +188,6 @@ router.post('/creative', authenticate, requireRole('ADVERTISER', 'ADMIN'), uploa
 router.post(
   '/',
   authenticate,
-  requireRole('ADVERTISER', 'ADMIN'),
   [
     body('type').isIn(AD_TYPES),
     body('listingId').optional({ values: 'falsy' }).isUUID(),
