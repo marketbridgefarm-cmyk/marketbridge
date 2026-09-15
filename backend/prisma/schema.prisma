@@ -215,13 +215,6 @@ enum DisputeStatus {
   REJECTED
 }
 
-enum LocationLevel {
-  REGION
-  ZONE
-  WOREDA
-  KEBELE
-}
-
 enum VerificationStatus {
   UNVERIFIED
   PENDING
@@ -278,8 +271,6 @@ model User {
   roles Role[] @default([BUYER, SELLER])
 
   location           String?
-  locationId         String?
-  locationRef        EthiopiaLocation? @relation(fields: [locationId], references: [id])
   verificationStatus VerificationStatus @default(UNVERIFIED)
   accountStatus      AccountStatus      @default(ACTIVE)
 
@@ -359,6 +350,10 @@ model User {
   refreshSessions RefreshSession[]
 
   providerRoleRequests ProviderRoleRequest[]
+
+  promotionRedemptions PromotionRedemption[]
+  referralCode ReferralCode?
+  referralClaims ReferralClaim[]
 
   // Audit
   auditEvents AuditEvent[] @relation("AuditActor")
@@ -490,31 +485,6 @@ model AuditEvent {
 // LISTING
 // ============================================================================
 
-model EthiopiaLocation {
-  id        String @id @default(uuid())
-  name      String
-  nameAm    String?
-  nameOm    String?
-  code      String @unique
-  level     LocationLevel
-  latitude  Float?
-  longitude Float?
-  parentId  String?
-  parent    EthiopiaLocation? @relation("LocationHierarchy", fields: [parentId], references: [id])
-  children  EthiopiaLocation[] @relation("LocationHierarchy")
-  users     User[]
-  listings  Listing[]
-  trucks    Truck[]
-  pickupJobs TransportJob[] @relation("TransportPickupLocation")
-  destinationJobs TransportJob[] @relation("TransportDestinationLocation")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([level])
-  @@index([parentId])
-  @@index([latitude, longitude])
-}
-
 model Listing {
   id String @id @default(uuid())
 
@@ -534,8 +504,6 @@ model Listing {
   minAcceptablePrice Decimal? @db.Decimal(18, 2)
 
   location String
-  locationId String?
-  locationRef EthiopiaLocation? @relation(fields: [locationId], references: [id])
 
   harvestedDate    DateTime?
   readinessDate    DateTime?
@@ -563,7 +531,6 @@ model Listing {
   @@index([category])
   @@index([status])
   @@index([location])
-  @@index([locationId])
   @@index([pickupWindowStart, pickupWindowEnd])
 }
 
@@ -778,6 +745,10 @@ model Order {
   sellerId String
 
   finalPrice Decimal @db.Decimal(18, 2)
+  discountAmount Decimal @default(0) @db.Decimal(18, 2)
+  promotionCodeId String?
+  promotionCode PromotionCode? @relation(fields: [promotionCodeId], references: [id], onDelete: SetNull)
+  promotionRedemption PromotionRedemption?
   quantity   Float
 
   status OrderStatus @default(PENDING_PAYMENT)
@@ -834,8 +805,6 @@ model Truck {
   truckType    String
   capacity     Float
   operatingArea String
-  operatingLocationId String?
-  operatingLocation EthiopiaLocation? @relation(fields: [operatingLocationId], references: [id])
 
   availability TruckAvailability @default(AVAILABLE)
 
@@ -852,7 +821,6 @@ model Truck {
   @@index([ownerId])
   @@index([availability])
   @@index([operatingArea])
-  @@index([operatingLocationId])
   @@index([registration])
 }
 
@@ -878,10 +846,6 @@ model TransportJob {
 
   pickupLocation String
   destination    String
-  pickupLocationId String?
-  destinationLocationId String?
-  pickupLocationRef EthiopiaLocation? @relation("TransportPickupLocation", fields: [pickupLocationId], references: [id])
-  destinationLocationRef EthiopiaLocation? @relation("TransportDestinationLocation", fields: [destinationLocationId], references: [id])
   load           String
 
   requiredCapacity Float?
@@ -1499,6 +1463,75 @@ model DigitalPurchase {
   @@index([buyerId])
   @@index([productId])
   @@index([status])
+}
+
+// ============================================================================
+// GROWTH: PROMOTIONS & REFERRALS
+// ============================================================================
+
+enum PromotionDiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+model PromotionCode {
+  id String @id @default(uuid())
+  code String @unique
+  discountType PromotionDiscountType
+  discountValue Decimal @db.Decimal(18, 2)
+  maxDiscount Decimal? @db.Decimal(18, 2)
+  minimumSubtotal Decimal @default(0) @db.Decimal(18, 2)
+  maxUses Int?
+  usedCount Int @default(0)
+  active Boolean @default(true)
+  startsAt DateTime
+  endsAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  redemptions PromotionRedemption[]
+  orders Order[]
+
+  @@index([active, startsAt, endsAt])
+}
+
+model PromotionRedemption {
+  id String @id @default(uuid())
+  promotionCode PromotionCode @relation(fields: [promotionCodeId], references: [id], onDelete: Cascade)
+  promotionCodeId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId String? @unique
+  discountAmount Decimal @db.Decimal(18, 2)
+  createdAt DateTime @default(now())
+
+  @@unique([promotionCodeId, userId])
+  @@index([userId, createdAt])
+}
+
+model ReferralCode {
+  id String @id @default(uuid())
+  code String @unique
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId String @unique
+  claimCount Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  claims ReferralClaim[]
+}
+
+model ReferralClaim {
+  id String @id @default(uuid())
+  referralCode ReferralCode @relation(fields: [referralCodeId], references: [id], onDelete: Cascade)
+  referralCodeId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  createdAt DateTime @default(now())
+
+  @@unique([referralCodeId, userId])
+  @@index([userId, createdAt])
 }
 
 // ============================================================================
