@@ -72,6 +72,7 @@ const PUBLIC_LISTING_FIELDS = {
   unit: true,
   askingPrice: true,
   location: true,
+  locationId: true,
   harvestedDate: true,
   readinessDate: true,
   pickupWindowStart: true,
@@ -83,6 +84,7 @@ const PUBLIC_LISTING_FIELDS = {
   createdByInspectorId: true,
   createdAt: true,
   updatedAt: true,
+      locationRef: { select: { id: true, name: true, nameAm: true, nameOm: true, code: true, level: true, parentId: true, latitude: true, longitude: true } },
 };
 
 /**
@@ -99,9 +101,8 @@ function toPublicListing(listing) {
     }
   }
 
-  if (listing.seller) {
-    publicListing.seller = listing.seller;
-  }
+  if (listing.seller) publicListing.seller = listing.seller;
+  if (listing.locationRef) publicListing.locationRef = listing.locationRef;
 
   if (listing.sponsored !== undefined) {
     publicListing.sponsored = listing.sponsored;
@@ -317,6 +318,7 @@ router.get('/', optionalAuthenticate, async (req, res) => {
       cropType,
       title,
       location,
+      locationId,
       status,
       minQuantity,
       maxQuantity,
@@ -351,11 +353,9 @@ router.get('/', optionalAuthenticate, async (req, res) => {
       }),
 
       ...(location && {
-        location: {
-          contains: location,
-          mode: 'insensitive',
-        },
+        location: { contains: location, mode: 'insensitive' },
       }),
+      ...(locationId && { locationId }),
 
       ...(category && { category }),
 
@@ -892,6 +892,7 @@ router.post(
         askingPrice,
         minAcceptablePrice,
         location,
+        locationId,
         harvestedDate,
         readinessDate,
         pickupWindowStart,
@@ -1116,6 +1117,7 @@ router.post(
                   ),
 
             location,
+            ...(locationId ? { locationId } : {}),
 
             harvestedDate:
               category === 'AGRICULTURAL' &&

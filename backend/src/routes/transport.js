@@ -12,7 +12,7 @@ const { requireRole } = require('../middleware/roleCheck');
 const { isOrderParticipant, isAdmin } = require('../utils/authorization');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { idempotency } = require('../middleware/idempotency');
-const { transitionOrderStatus } = require('../services/orderStateMachine');
+const { matchTrucks } = require('../services/transportMatchingService');
 
 const router = express.Router();
 
@@ -208,6 +208,7 @@ router.post(
     body('truckType').isString().trim().notEmpty(),
     body('capacity').isFloat({ gt: 0 }),
     body('operatingArea').optional().isString().trim(),
+    body('operatingLocationId').optional().isUUID(),
   ],
   validate,
   async (req, res) => {
@@ -217,6 +218,7 @@ router.post(
         truckType,
         capacity,
         operatingArea,
+        operatingLocationId,
       } = req.body;
 
       const truck = await prisma.truck.create({
@@ -226,6 +228,7 @@ router.post(
           truckType: truckType.trim(),
           capacity: Number(capacity),
           operatingArea: operatingArea?.trim() || '',
+          ...(operatingLocationId ? { operatingLocationId } : {}),
         },
       });
 
@@ -551,67 +554,19 @@ router.get(
 // MATCH AVAILABLE TRUCKS
 // ============================================================================
 
-router.get(
-  '/match',
-  authenticate,
-  async (req, res) => {
-    try {
-      const {
-        minCapacity,
-        area,
-      } = req.query;
-
-      const where = {
-        availability: 'AVAILABLE',
-      };
-
-      if (minCapacity) {
-        where.capacity = {
-          gte: Number(minCapacity),
-        };
-      }
-
-      if (area) {
-        where.operatingArea = {
-          contains: area,
-          mode: 'insensitive',
-        };
-      }
-
-      const trucks =
-        await prisma.truck.findMany({
-          where,
-          include: {
-            owner: {
-              select: {
-                id: true,
-                name: true,
-                rating: true,
-              },
-            },
-          },
-          orderBy: {
-            rating: 'desc',
-          },
-          take: 50,
-        });
-
-      return res.json({
-        trucks,
-      });
-    } catch (error) {
-      console.error(
-        'MATCH TRUCKS ERROR:',
-        error
-      );
-
-      return res.status(500).json({
-        error:
-          'Could not find matching trucks',
-      });
-    }
+router.get('/match', authenticate, async (req, res) => {
+  try {
+    const trucks = await matchTrucks({
+      pickupLocationId: req.query.pickupLocationId,
+      requiredCapacity: req.query.minCapacity,
+      limit: req.query.limit,
+    });
+    return res.json({ trucks });
+  } catch (error) {
+    console.error('MATCH TRUCKS ERROR:', error);
+    return res.status(500).json({ error: 'Could not find matching trucks' });
   }
-);
+});
 
 // ============================================================================
 // CREATE TRANSPORT JOB
@@ -1707,19 +1662,14 @@ router.patch(
             });
 
             if (next === 'DELIVERED') {
-              const currentOrder = await tx.order.findUnique({
-                where: { id: job.orderId },
-                select: { status: true },
+              await tx.order.update({
+                where: {
+                  id: job.orderId,
+                },
+                data: {
+                  status: 'DELIVERED',
+                },
               });
-              if (!currentOrder) {
-                throw Object.assign(new Error('Order not found'), { status: 404 });
-              }
-              await transitionOrderStatus(
-                tx,
-                job.orderId,
-                currentOrder.status,
-                'DELIVERED'
-              );
 
               await releaseTruck(
                 tx,
@@ -2432,12 +2382,10 @@ router.patch(
         });
 
         if (freshJob.order.status === 'CONFIRMED') {
-          await transitionOrderStatus(
-            tx,
-            freshJob.order.id,
-            freshJob.order.status,
-            'TRANSPORT_ARRANGED'
-          );
+          await tx.order.update({
+            where: { id: freshJob.order.id },
+            data: { status: 'TRANSPORT_ARRANGED' },
+          });
         }
 
         await recordAuditEvent(tx, {
