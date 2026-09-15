@@ -107,7 +107,7 @@ function idempotency(scope, options = {}) {
             await prisma.idempotencyRequest.delete({ where: { id: req.idempotency.id } }).catch(() => {});
           }
         } catch (error) {
-          console.error('IDEMPOTENCY CACHE ERROR:', error);
+          req.log.error({ err: error }, 'IDEMPOTENCY CACHE ERROR');
         }
       };
 
@@ -123,7 +123,7 @@ function idempotency(scope, options = {}) {
 
       return next();
     } catch (error) {
-      console.error('IDEMPOTENCY MIDDLEWARE ERROR:', error);
+      req.log.error({ err: error }, 'IDEMPOTENCY MIDDLEWARE ERROR');
       return res.status(500).json({ error: 'Could not initialize request idempotency' });
     }
   };

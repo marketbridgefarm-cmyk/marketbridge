@@ -124,11 +124,11 @@ async function authenticate(req, res, next) {
     return next();
   } catch (error) {
     if (error.status === 500) {
-      console.error('authenticate() misconfiguration:', error.message);
+      req.log.error({ err: error }, 'authenticate() misconfiguration');
       return res.status(500).json({ error: 'Server misconfiguration' });
     }
 
-    console.error('authenticate() error:', error);
+    req.log.error({ err: error }, 'authenticate() error');
     return res.status(500).json({ error: 'Authentication failed' });
   }
 }
@@ -157,11 +157,11 @@ async function optionalAuthenticate(req, res, next) {
     return next();
   } catch (error) {
     if (error.status === 500) {
-      console.error('optionalAuthenticate() misconfiguration:', error.message);
+      req.log.error({ err: error }, 'optionalAuthenticate() misconfiguration');
       return res.status(500).json({ error: 'Server misconfiguration' });
     }
 
-    console.error('optionalAuthenticate() error:', error);
+    req.log.error({ err: error }, 'optionalAuthenticate() error');
     return res.status(500).json({ error: 'Authentication failed' });
   }
 }
