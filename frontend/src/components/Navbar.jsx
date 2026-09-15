@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useTranslation } from '../i18n/I18nContext.jsx';
+import LanguageSwitcher from './LanguageSwitcher.jsx';
 import NotificationCenter from './NotificationCenter.jsx';
 
 // Order of preference when resolving a single "Dashboard" destination for a
@@ -20,13 +22,14 @@ function resolveDashboard(user) {
 }
 
 const MARKET_LINKS = [
-  { to: '/agricultural', label: 'Farm Produces', match: (p) => p === '/agricultural' || p === '/listings' },
-  { to: '/products', label: 'Products', match: (p) => p.startsWith('/products') },
-  { to: '/digital', label: 'Digital', match: (p) => p.startsWith('/digital') },
+  { to: '/agricultural', labelKey: 'nav.farmProduces', label: 'Farm Produces', match: (p) => p === '/agricultural' || p === '/listings' },
+  { to: '/products', labelKey: 'nav.products', label: 'Products', match: (p) => p.startsWith('/products') },
+  { to: '/digital', labelKey: 'nav.digital', label: 'Digital', match: (p) => p.startsWith('/digital') },
 ];
 
 export default function Navbar() {
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const dashboardHref = resolveDashboard(user);
@@ -97,7 +100,7 @@ export default function Navbar() {
                     className={`market-pill${l.match(location.pathname) ? ' active' : ''}`}
                     to={l.to}
                   >
-                    {l.label}
+                    {t(l.labelKey)}
                   </Link>
                 ))}
               </div>
@@ -117,20 +120,21 @@ export default function Navbar() {
                 </button>
                 {accountOpen && (
                   <div className="nav-dropdown" role="menu">
-                    <Link role="menuitem" to={dashboardHref}>Dashboard</Link>
-                    <Link role="menuitem" to="/dashboard/growth">Growth & Analytics</Link>
+                    <Link role="menuitem" to={dashboardHref}>{t('nav.dashboard')}</Link>
                     <Link role="menuitem" to="/dashboard/advertiser">Promote / Advertise</Link>
-                    <button role="menuitem" onClick={handleLogout}>Log out</button>
+                    <Link role="menuitem" to="/account/security">{t('nav.accountSecurity')}</Link>
+                    <button role="menuitem" onClick={handleLogout}>{t('nav.logout')}</button>
                   </div>
                 )}
                 </div>
               </>
             ) : (
               <>
-                <Link to="/login">Log in</Link>
+                <Link to="/login">{t('nav.login')}</Link>
                 <Link className="nav-cta" to="/register">Join MarketBridge</Link>
               </>
             )}
+            <LanguageSwitcher />
           </div>
 
           {/* Mobile hamburger */}
@@ -156,7 +160,7 @@ export default function Navbar() {
           <div className="mobile-menu" role="dialog" aria-modal="true">
             <span className="mobile-menu-label">Want to buy/sell:</span>
             {MARKET_LINKS.map((l) => (
-              <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{l.label}</Link>
+              <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{t(l.labelKey)}</Link>
             ))}
             <div className="mobile-menu-divider" />
             {user ? (
@@ -164,17 +168,18 @@ export default function Navbar() {
                 <div className="mobile-notification-link">
                   <NotificationCenter />
                 </div>
-                <Link to={dashboardHref}>Dashboard</Link>
-                <Link to="/dashboard/growth">Growth & Analytics</Link>
+                <Link to={dashboardHref}>{t('nav.dashboard')}</Link>
                 <Link to="/dashboard/advertiser">Promote / Advertise</Link>
-                <button className="mobile-logout" onClick={handleLogout}>Log out</button>
+                <Link to="/account/security">{t('nav.accountSecurity')}</Link>
+                <button className="mobile-logout" onClick={handleLogout}>{t('nav.logout')}</button>
               </>
             ) : (
               <>
-                <Link to="/login">Log in</Link>
+                <Link to="/login">{t('nav.login')}</Link>
                 <Link className="nav-cta" to="/register">Join MarketBridge</Link>
               </>
             )}
+            <LanguageSwitcher className="mobile-lang-switcher" />
           </div>
         </>
       )}
