@@ -19,6 +19,7 @@ import AdminDashboard from './pages/AdminDashboard.jsx';
 import AdvertiserDashboard from './pages/AdvertiserDashboard.jsx';
 
 import ArrangeTransport from './pages/ArrangeTransport.jsx';
+import Services from './pages/Services.jsx';
 import ProductMarketplace from './pages/ProductMarketplace.jsx';
 
 import OrderDetail from './pages/OrderDetail.jsx';
@@ -49,6 +50,16 @@ export default function App() {
 
         <Route path="/products" element={<ProductMarketplace />} />
         <Route path="/digital" element={<DigitalMarketplace />} />
+
+        {/* Protected service hub: buyers and sellers can reach transport and inspection without needing provider roles. */}
+        <Route
+          path="/services"
+          element={
+            <ProtectedRoute>
+              <Services />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Protected marketplace pages */}
         <Route
@@ -135,7 +146,7 @@ export default function App() {
         <Route
           path="/dashboard/advertiser"
           element={
-            <ProtectedRoute role="ADVERTISER">
+            <ProtectedRoute>
               <AdvertiserDashboard />
             </ProtectedRoute>
           }
