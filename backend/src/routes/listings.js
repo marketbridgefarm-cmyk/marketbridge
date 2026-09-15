@@ -9,7 +9,7 @@ const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload
 const { validateListingReferences } = require('../utils/evidenceValidator');
 const { searchListings } = require('../services/searchService');
 const { getRecommendations } = require('../services/recommendationService');
-const { REGIONS, REGION_VALUES } = require('../constants/ethiopianRegions');
+const { REGIONS, REGION_VALUES } = require('../utils/ethiopianRegions');
 const { haversineSql } = require('../utils/geo');
 
 const router = express.Router();
