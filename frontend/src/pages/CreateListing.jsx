@@ -31,6 +31,20 @@ export default function CreateListing() {
   }, [closeModal]);
 
   const [category, setCategory] = useState(initialCategory);
+  const [locations, setLocations] = useState({ REGION: [], ZONE: [], WOREDA: [], KEBELE: [] });
+  const [selectedLocation, setSelectedLocation] = useState({ REGION: '', ZONE: '', WOREDA: '', KEBELE: '' });
+  useEffect(() => { api.get('/locations/ethiopia', { params: { level: 'REGION' } }).then(r => setLocations(v => ({ ...v, REGION: r.data.locations || [] }))).catch(() => undefined); }, []);
+  async function selectLocation(level, id) {
+    const next = { ...selectedLocation, [level]: id };
+    const levels = ['REGION','ZONE','WOREDA','KEBELE'];
+    const idx = levels.indexOf(level);
+    levels.slice(idx + 1).forEach(l => { next[l] = ''; });
+    setSelectedLocation(next);
+    const child = levels[idx + 1];
+    if (id && child) { try { const r = await api.get('/locations/ethiopia', { params: { parentId: id, level: child } }); setLocations(v => ({ ...v, [child]: r.data.locations || [] })); } catch {} }
+    const picked = next[levels[idx]];
+    setForm(prev => ({ ...prev, locationId: picked || '', location: (locations[level] || []).find(x => x.id === picked)?.name || prev.location }));
+  }
   const [form, setForm] = useState({
     sellerId: user?.id || '',
     title: '',
@@ -40,6 +54,7 @@ export default function CreateListing() {
     askingPrice: '',
     minAcceptablePrice: '',
     location: user?.location || '',
+    locationId: '',
     harvestedDate: '',
     readinessDate: '',
     photos: [], // [{ key, name, previewUrl }]
@@ -152,6 +167,15 @@ export default function CreateListing() {
             </div>
           )}
 
+          {category === 'AGRICULTURAL' && (
+            <div className="form-grid">
+              {['REGION','ZONE','WOREDA','KEBELE'].map(level => (
+                <div key={level}><label>{level.charAt(0) + level.slice(1).toLowerCase()}</label><select value={selectedLocation[level]} onChange={e => selectLocation(level, e.target.value)} disabled={level !== 'REGION' && !selectedLocation[['REGION','ZONE','WOREDA','KEBELE'][['REGION','ZONE','WOREDA','KEBELE'].indexOf(level)-1]]}>
+                  <option value="">Select {level.toLowerCase()}</option>{locations[level].map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select></div>
+              ))}
+            </div>
+          )}
           <div className="form-grid">
             <div><label>Asking price (ETB)</label><input required type="number" min="0.01" value={form.askingPrice} onChange={set('askingPrice')} /></div>
             {category === 'AGRICULTURAL' && <div><label>Minimum acceptable price</label><input type="number" min="0" value={form.minAcceptablePrice} onChange={set('minAcceptablePrice')} /></div>}
