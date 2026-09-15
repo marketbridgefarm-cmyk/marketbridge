@@ -9,17 +9,19 @@ const SESSION_MESSAGES = {
 };
 
 function dashboardPathFor(u) {
-  return u.roles?.includes('ADMIN')
-    ? '/dashboard/admin'
-    : u.roles?.includes('BUYER') || u.roles?.includes('SELLER')
-    ? '/dashboard'
-    : u.roles?.includes('INSPECTOR')
-    ? '/dashboard/inspector'
-    : u.roles?.includes('TRUCK_OWNER')
-    ? '/dashboard/truck-owner'
-    : u.roles?.includes('ADVERTISER')
-    ? '/dashboard/advertiser'
-    : '/';
+  const roles = Array.isArray(u?.roles) ? u.roles : [];
+
+  // Specialist roles must win over the default BUYER/SELLER roles.
+  // Otherwise an inspector or transporter who also has marketplace
+  // capabilities is silently sent to /dashboard and may never discover
+  // their operational dashboard.
+  if (roles.includes('ADMIN')) return '/dashboard/admin';
+  if (roles.includes('INSPECTOR')) return '/dashboard/inspector';
+  if (roles.includes('TRUCK_OWNER')) return '/dashboard/truck-owner';
+  if (roles.includes('BUYER') || roles.includes('SELLER')) return '/dashboard';
+
+  // Advertising is an authenticated capability, not a required account role.
+  return '/';
 }
 
 export default function Login() {
