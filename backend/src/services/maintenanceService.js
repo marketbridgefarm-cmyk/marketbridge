@@ -4,6 +4,7 @@ const prisma = require('../config/db');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('./orderEventService');
 const { cancelOrderInTransaction } = require('./orderCancellationService');
+const { sendSms } = require('./smsService');
 
 const LOCK_KEY = 82461327;
 
@@ -153,14 +154,62 @@ async function createPickupReminders(now = new Date()) {
   return { created };
 }
 
+const SMS_MAX_ATTEMPTS = 3;
+
+/**
+ * Actually send queued SMS notifications (see services/notificationService.js,
+ * which writes PENDING rows in the same DB transaction as the triggering
+ * event — this is the "outbox" half of that pattern: send outside any
+ * transaction, so a slow/flaky SMS provider never holds a DB lock).
+ */
+async function sendPendingSms(now = new Date()) {
+  const pending = await prisma.smsOutboxEntry.findMany({
+    where: { status: 'PENDING' },
+    orderBy: { createdAt: 'asc' },
+    take: 50,
+  });
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const entry of pending) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await sendSms({ to: entry.phone, body: entry.body });
+      // eslint-disable-next-line no-await-in-loop
+      await prisma.smsOutboxEntry.update({
+        where: { id: entry.id },
+        data: { status: 'SENT', sentAt: now },
+      });
+      sent += 1;
+    } catch (error) {
+      const attempts = entry.attempts + 1;
+      const giveUp = attempts >= SMS_MAX_ATTEMPTS;
+      // eslint-disable-next-line no-await-in-loop
+      await prisma.smsOutboxEntry.update({
+        where: { id: entry.id },
+        data: {
+          attempts,
+          lastError: String(error.message || error).slice(0, 500),
+          ...(giveUp ? { status: 'FAILED' } : {}),
+        },
+      });
+      if (giveUp) failed += 1;
+      console.error(`SMS send failed for outbox entry ${entry.id} (attempt ${attempts}):`, error.message || error);
+    }
+  }
+
+  return { sent, failed, remaining: pending.length - sent - failed };
+}
+
 async function runMaintenanceCycle() {
   return withJobLock(async () => {
     const startedAt = Date.now();
     const now = new Date();
-    const [offers, listings, ads, reminders, unpaidOrders] = await Promise.all([
-      expireOffers(now), expireListings(now), expireAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now),
+    const [offers, listings, ads, reminders, unpaidOrders, sms] = await Promise.all([
+      expireOffers(now), expireListings(now), expireAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), sendPendingSms(now),
     ]);
-    return { durationMs: Date.now() - startedAt, offers, listings, ads, reminders, unpaidOrders };
+    return { durationMs: Date.now() - startedAt, offers, listings, ads, reminders, unpaidOrders, sms };
   });
 }
 
@@ -179,4 +228,4 @@ function startMaintenanceScheduler() {
   return setInterval(tick, intervalMs);
 }
 
-module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, createPickupReminders };
+module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, createPickupReminders, sendPendingSms };

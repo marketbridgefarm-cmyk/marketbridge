@@ -1,5 +1,7 @@
 'use strict';
 
+const { localizedTitle } = require('../i18n/notificationCopy');
+
 const EVENT_COPY = {
   PICKUP_WINDOW_REMINDER: { type: 'ORDER', title: 'Pickup window approaching', body: 'The agricultural pickup window begins within 24 hours. Confirm transport and pickup readiness.', action: 'order' },
   ORDER_CREATED: {
@@ -229,7 +231,37 @@ async function createNotificationsForOrderEvent(tx, event) {
     skipDuplicates: true,
   });
 
+  await queueSmsForRecipients(tx, { recipients, copy, orderId: event.orderId, eventType: event.type });
+
   return data;
+}
+
+/**
+ * Queue an SMS outbox row (same transaction, no network call here — see
+ * services/smsService.js and maintenanceService.js's sendPendingSms for the
+ * actual send) for any recipient who has opted in and has a phone number
+ * on file. SMS is short and link-free by design: it's a nudge to open the
+ * app, not the full notification body.
+ */
+async function queueSmsForRecipients(tx, { recipients, copy, orderId, eventType }) {
+  const users = await tx.user.findMany({
+    where: {
+      id: { in: recipients },
+      smsNotificationsEnabled: true,
+      phone: { not: null },
+    },
+    select: { id: true, phone: true, preferredLanguage: true },
+  });
+
+  if (users.length === 0) return;
+
+  await tx.smsOutboxEntry.createMany({
+    data: users.map((u) => ({
+      userId: u.id,
+      phone: u.phone,
+      body: `MarketBridge: ${localizedTitle(eventType, u.preferredLanguage)}.`.slice(0, 300),
+    })),
+  });
 }
 
 async function listNotifications(prisma, userId, { limit = 50, unreadOnly = false } = {}) {
