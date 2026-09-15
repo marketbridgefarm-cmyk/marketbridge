@@ -967,7 +967,7 @@ router.post(
 
         data: {
           provider:
-            adapter.provider,
+            getAdapter(payment.method).provider,
 
           // Tracks the tx_ref actually on file with Chapa for this
           // attempt, so verify/callback/webhook can look it up correctly.
@@ -1107,7 +1107,7 @@ router.get(
             'PAID',
 
           provider:
-            adapter.provider,
+            getAdapter(payment.method).provider,
 
           providerTransactionId:
             raw?.data?.reference ||
@@ -1505,7 +1505,7 @@ router.post(
             'PAID',
 
           provider:
-            adapter.provider,
+            getAdapter(payment.method).provider,
 
           providerTransactionId:
             raw?.data?.reference ||
@@ -1520,7 +1520,8 @@ router.post(
 
           eventId:
             req.body?.event_id ||
-            `chapa-webhook-${payment.id}-${Date.now()}`,
+            req.body?.trx_ref ||
+            String(txRef),
 
           payload: {
             ...req.body,
@@ -1641,7 +1642,9 @@ router.post(
             null,
 
           eventId:
-            `generic-${paymentId}-${Date.now()}`,
+            req.body?.eventId ||
+            req.body?.event_id ||
+            `${provider || 'generic'}-${paymentId}-${status}-${providerTransactionId || reference || 'no-ref'}`,
 
           payload:
             req.body,
