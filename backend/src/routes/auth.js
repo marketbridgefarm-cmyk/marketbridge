@@ -24,7 +24,8 @@ const {
   findMatchingBackupCodeIndex,
 } = require('../services/mfaService');
 const { createResetToken, consumeResetToken } = require('../services/passwordResetService');
-const { sendMail } = require('../utils/mailer');
+const { normalizeEthiopianPhone } = require('../services/smsService');
+const { SUPPORTED_SMS_LANGUAGES } = require('../i18n/notificationCopy');
 
 const router = express.Router();
 
@@ -38,15 +39,6 @@ const DEFAULT_ROLES = ['BUYER', 'SELLER'];
 // since its short TTL makes that an acceptable, lower-value target.
 const REFRESH_COOKIE_NAME = 'mb_refresh';
 const isProduction = process.env.NODE_ENV === 'production';
-
-function escapeHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 function refreshCookieOptions() {
   return {
@@ -318,6 +310,50 @@ router.get('/me', authenticate, async (req, res) => {
   res.json({ user: sanitize(req.user) });
 });
 
+// Notification/localization preferences. Deliberately narrow (just these
+// three fields) rather than a general profile-edit endpoint — phone/name/
+// etc. changes go through whatever profile flow already exists elsewhere.
+router.patch(
+  '/me/preferences',
+  authenticate,
+  [
+    body('smsNotificationsEnabled').optional().isBoolean(),
+    body('preferredLanguage').optional().isIn(SUPPORTED_SMS_LANGUAGES),
+    body('phone').optional({ nullable: true }).isString().trim(),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
+      }
+
+      const { smsNotificationsEnabled, preferredLanguage, phone } = req.body;
+
+      if (smsNotificationsEnabled === true) {
+        const effectivePhone = phone !== undefined ? phone : req.user.phone;
+        if (!normalizeEthiopianPhone(effectivePhone)) {
+          return res.status(400).json({ error: 'A valid Ethiopian phone number is required to enable SMS notifications.' });
+        }
+      }
+
+      const user = await prisma.user.update({
+        where: { id: req.user.id },
+        data: {
+          ...(smsNotificationsEnabled !== undefined && { smsNotificationsEnabled }),
+          ...(preferredLanguage !== undefined && { preferredLanguage }),
+          ...(phone !== undefined && { phone: phone || null }),
+        },
+      });
+
+      return res.json({ user: sanitize(user) });
+    } catch (error) {
+      console.error('Update preferences error:', error);
+      return res.status(500).json({ error: 'Could not update preferences' });
+    }
+  }
+);
+
 // Revoke only the current persistent session. Access-token session IDs are
 // accepted by the auth middleware and therefore become invalid immediately.
 router.post('/logout', authenticate, async (req, res) => {
@@ -539,9 +575,12 @@ router.post(
 // ============================================================================
 
 // Always responds with the same generic message regardless of whether the
-// email is registered, so this endpoint can't be used to enumerate accounts.
-// In production the raw reset token is never logged or returned; it is sent
-// only through the configured transactional mail provider.
+// email is registered, so this endpoint can't be used to enumerate
+// accounts. NOTE: this platform has no email/SMS provider wired up yet
+// (see the Top-10 roadmap item on Amharic/Afaan Oromo + SMS notifications)
+// — until one exists, the raw reset link is logged server-side so Alex can
+// retrieve it manually, and is only ever included in the API response
+// itself outside production, for local/manual testing.
 router.post(
   '/forgot-password',
   authLimiter,
@@ -563,22 +602,11 @@ router.post(
       const rawToken = await createResetToken(prisma, { userId: user.id, requestedIp: requestIp(req) });
       const resetUrl = `${(process.env.APP_BASE_URL || '').replace(/\/$/, '')}/reset-password?token=${rawToken}`;
 
-      const safeName = escapeHtml(user.name || 'MarketBridge user');
-
-      await sendMail({
-        to: user.email,
-        subject: 'MarketBridge password reset',
-        text: [
-          `Hello ${user.name || 'MarketBridge user'},`,
-          '',
-          'We received a request to reset your MarketBridge password.',
-          `Reset your password here: ${resetUrl}`,
-          '',
-          'This link expires in 30 minutes and can be used only once.',
-          'If you did not request this, you can safely ignore this email.',
-        ].join('\n'),
-        html: `<p>Hello ${safeName},</p><p>We received a request to reset your MarketBridge password.</p><p><a href="${resetUrl}">Reset your password</a></p><p>This link expires in 30 minutes and can be used only once.</p><p>If you did not request this, you can safely ignore this email.</p>`,
-      });
+      // TODO(priority-9): replace this console.log with a real email/SMS
+      // send once a provider is wired up. Until then this is the only way
+      // the token reaches anyone, so it's logged at a level Alex can find
+      // in Render's logs.
+      console.log(`[password-reset] ${user.email} -> ${resetUrl}`);
 
       return res.json({
         ...genericResponse,
