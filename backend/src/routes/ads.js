@@ -11,6 +11,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { isAdmin } = require('../utils/authorization');
 const { recordAuditEvent } = require('../utils/audit');
+const { requestRefund } = require('../services/paymentRefundService');
 const { uploadPrivateObject, signedMediaUrl, deletePrivateObject } = require('../utils/objectStorage');
 const { AD_TYPES, dailyRatesEtb, campaignDays, quotePrice } = require('../utils/adPricing');
 
@@ -429,7 +430,7 @@ router.patch('/:id/cancel', authenticate, [param('id').isUUID(), body('reason').
         await tx.payment.update({ where: { id: payment.id }, data: { status: 'FAILED' } });
       }
       for (const payment of paidPayments) {
-        await tx.payment.update({ where: { id: payment.id }, data: { status: 'REFUNDED' } });
+        await requestRefund(tx, { paymentId: payment.id, amount: payment.amount, reason: reason || 'Advertisement cancelled', requestedById: req.user.id });
       }
 
       await recordAuditEvent(tx, {

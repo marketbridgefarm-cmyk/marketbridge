@@ -23,6 +23,9 @@ const {
 const chapa =
   require('../config/chapa');
 
+const { getAdapter } = require('../services/paymentProviders');
+const { assertTransition } = require('../services/paymentStateMachine');
+
 const {
   paymentLimiter,
   webhookLimiter,
@@ -881,10 +884,26 @@ router.post(
       const chapaTxRef =
         `${payment.id}_${Date.now()}`;
 
-      const {
-        checkoutUrl,
-      } =
-        await chapa.initializeTransaction({
+      const adapter = getAdapter(payment.method);
+
+      // Claim the intent before contacting the provider. This prevents two
+      // browser tabs from opening independent checkout attempts for the same
+      // payment. If provider initialization fails, the intent is returned to
+      // PENDING so the user can safely retry.
+      assertTransition(payment.status, 'PROCESSING');
+      const processingClaim = await prisma.payment.updateMany({
+        where: { id: payment.id, status: 'PENDING' },
+        data: { status: 'PROCESSING' },
+      });
+      if (processingClaim.count !== 1) {
+        return res.status(409).json({
+          error: 'Payment checkout is already being initialized. Please retry shortly.',
+        });
+      }
+
+      let checkout;
+      try {
+        checkout = await adapter.initialize({
           txRef:
             chapaTxRef,
 
@@ -933,6 +952,15 @@ router.post(
           description:
             `MarketBridge ${payment.type} payment`,
         });
+      } catch (providerError) {
+        await prisma.payment.updateMany({
+          where: { id: payment.id, status: 'PROCESSING' },
+          data: { status: 'PENDING' },
+        });
+        throw providerError;
+      }
+
+      const { checkoutUrl } = checkout;
 
       await prisma.payment.update({
         where: {
@@ -942,7 +970,7 @@ router.post(
 
         data: {
           provider:
-            'chapa',
+            adapter.provider,
 
           // Tracks the tx_ref actually on file with Chapa for this
           // attempt, so verify/callback/webhook can look it up correctly.
@@ -958,7 +986,7 @@ router.post(
 
     } catch (error) {
       console.error(
-        'CHAPA INIT ERROR:',
+        'PAYMENT PROVIDER INIT ERROR:',
         error
       );
 
@@ -1090,7 +1118,7 @@ router.get(
             'PAID',
 
           provider:
-            'chapa',
+            adapter.provider,
 
           providerTransactionId:
             raw?.data?.reference ||
@@ -1501,7 +1529,7 @@ router.post(
             'PAID',
 
           provider:
-            'chapa',
+            adapter.provider,
 
           providerTransactionId:
             raw?.data?.reference ||
