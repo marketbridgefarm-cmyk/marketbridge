@@ -68,6 +68,14 @@ function validateEnv() {
     'CLIENT_URL',
     'APP_BASE_URL',
     'API_BASE_URL',
+    // Password-reset emails go through utils/mailer.js — without these,
+    // POST /auth/forgot-password silently fails to deliver the reset link
+    // to real users in production (see routes/auth.js).
+    'SMTP_HOST',
+    'SMTP_PORT',
+    'SMTP_USER',
+    'SMTP_PASS',
+    'MAIL_FROM',
   ];
 
   const missing = required.filter(
