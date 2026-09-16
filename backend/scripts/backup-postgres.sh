@@ -1,12 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${DATABASE_URL:?DATABASE_URL must be set}"
+# --- Configuration & Defaults ---
+DB_HOST="${POSTGRES_HOST:-localhost}"
+DB_PORT="${POSTGRES_PORT:-5432}"
+DB_USER="${POSTGRES_USER:-postgres}"
+DB_NAME="${POSTGRES_DB:-marketbridge}"
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
-mkdir -p "$BACKUP_DIR"
-TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-OUTPUT="${BACKUP_DIR}/marketbridge-${TIMESTAMP}.dump"
+RETENTION_DAYS="${RETENTION_DAYS:-7}"
 
-pg_dump "$DATABASE_URL" --format=custom --no-owner --no-privileges --file="$OUTPUT"
-pg_restore --list "$OUTPUT" >/dev/null
-printf 'Backup created and verified: %s\n' "$OUTPUT"
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+BACKUP_FILE="${BACKUP_DIR}/${DB_NAME}_${TIMESTAMP}.dump"
+
+# Ensure backup directory exists
+mkdir -p "${BACKUP_DIR}"
+
+echo "Starting PostgreSQL backup for database: ${DB_NAME}..."
+
+# --- Execute pg_dump (Custom Format for flexibility) ---
+PGPASSWORD="${POSTGRES_PASSWORD:-}" pg_dump \
+  -h "${DB_HOST}" \
+  -p "${DB_PORT}" \
+  -U "${DB_USER}" \
+  -d "${DB_NAME}" \
+  -F c \
+  -b \
+  -v \
+  -f "${BACKUP_FILE}"
+
+echo "Backup successfully created at: ${BACKUP_FILE}"
+
+# --- Retention Cleanup ---
+echo "Cleaning up backups older than ${RETENTION_DAYS} days..."
+find "${BACKUP_DIR}" -type f -name "${DB_NAME}_*.dump" -mtime +"${RETENTION_DAYS}" -delete
+
+echo "Backup pipeline completed successfully."
