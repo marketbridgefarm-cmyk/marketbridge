@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { useTranslation } from '../i18n/I18nContext.jsx';
+import { useTranslation } from '../context/I18nContext.jsx';
 import LanguageSwitcher from './LanguageSwitcher.jsx';
 import NotificationCenter from './NotificationCenter.jsx';
 
