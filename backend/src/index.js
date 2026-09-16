@@ -176,6 +176,14 @@ app.use(
         return callback(null, true);
       }
 
+      // Any localhost/127.0.0.1 origin, any port — covers local dev tools
+      // and mobile code-editor preview servers, which assign a random port
+      // per session. Still safe in production: "localhost" only ever means
+      // the machine making the request, never a real external caller.
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
+
       // Development mode.
       if (!isProduction) {
         return callback(null, true);
