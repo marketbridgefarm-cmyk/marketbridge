@@ -93,6 +93,16 @@ jobs:
           MARKETBRIDGE_E2E: '1'
         run: npm test
 
+      - name: Check openapi.json is up to date
+        # Regenerates the spec from the route source and fails the build if
+        # that produces a diff — catches a route changed without re-running
+        # `npm run docs:generate`, the same drift class as the Prisma
+        # migration check above but for openapi/openapi.json. See
+        # backend/openapi/README.md.
+        run: |
+          npm run docs:generate
+          git diff --exit-code -- openapi/openapi.json
+
   frontend:
     name: Frontend (build)
     runs-on: ubuntu-latest
