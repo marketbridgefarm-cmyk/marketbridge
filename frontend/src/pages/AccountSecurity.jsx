@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
-import { LANGUAGES, useTranslation } from '../i18n/I18nContext.jsx';
+import { LANGUAGES, useTranslation } from '../context/I18nContext.jsx';
 
 // Self-service MFA (TOTP) enrollment/disable. Linked from AdminDashboard
 // (admin-only backend routes now require MFA — see requireMfa() in
