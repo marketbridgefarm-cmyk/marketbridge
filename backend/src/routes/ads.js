@@ -337,7 +337,7 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-router.post('/:id/events', adEventLimiter, [param('id').isUUID(), body('eventType').isIn(['IMPRESSION', 'CLICK'])], validate, async (req, res) => {
+router.post('/:id/events', adEventLimiter, [param('id').isUUID(), body('eventType').isIn(['IMPRESSION', 'CLICK', 'CONVERSION'])], validate, async (req, res) => {
   try {
     const ad = await prisma.advertisement.findUnique({ where: { id: req.params.id }, select: { id: true, status: true, startDate: true, endDate: true } });
     const now = new Date();
@@ -352,12 +352,52 @@ router.post('/:id/events', adEventLimiter, [param('id').isUUID(), body('eventTyp
 
 router.get('/:id/analytics', authenticate, [param('id').isUUID()], validate, async (req, res) => {
   try {
-    const ad = await prisma.advertisement.findUnique({ where: { id: req.params.id }, include: { events: { select: { eventType: true } } } });
+    const ad = await prisma.advertisement.findUnique({
+      where: { id: req.params.id },
+      include: {
+        events: { select: { eventType: true } },
+        payments: { where: { status: 'PAID' }, select: { amount: true } },
+        listing: {
+          select: {
+            orders: {
+              where: { status: { in: ['PAID', 'DELIVERED', 'COMPLETED'] } },
+              select: { totalPrice: true }
+            }
+          }
+        }
+      }
+    });
+
     if (!ad) return res.status(404).json({ error: 'Advertisement not found' });
     if (ad.advertiserId !== req.user.id && !isAdmin(req.user)) return res.status(403).json({ error: 'Not authorized' });
+
     const impressions = ad.events.filter((e) => e.eventType === 'IMPRESSION').length;
     const clicks = ad.events.filter((e) => e.eventType === 'CLICK').length;
-    return res.json({ campaignReference: ad.campaignReference, impressions, clicks, ctr: impressions ? Number(((clicks / impressions) * 100).toFixed(2)) : 0, publishedAt: ad.publishedAt, telegramPostReference: ad.telegramPostReference });
+    const explicitConversions = ad.events.filter((e) => e.eventType === 'CONVERSION').length;
+
+    const listingOrders = ad.listing?.orders || [];
+    const conversions = explicitConversions || listingOrders.length;
+
+    const ctr = impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0;
+    const cvr = clicks > 0 ? Number(((conversions / clicks) * 100).toFixed(2)) : 0;
+
+    const spend = Number(ad.priceQuoted || ad.payments.reduce((acc, p) => acc + Number(p.amount || 0), 0));
+    const revenueGenerated = listingOrders.reduce((acc, order) => acc + Number(order.totalPrice || 0), 0);
+    const roas = spend > 0 ? Number((revenueGenerated / spend).toFixed(2)) : 0;
+
+    return res.json({
+      campaignReference: ad.campaignReference,
+      impressions,
+      clicks,
+      conversions,
+      ctr,
+      cvr,
+      roas,
+      spend,
+      revenueGenerated,
+      publishedAt: ad.publishedAt,
+      telegramPostReference: ad.telegramPostReference
+    });
   } catch (error) {
     req.log.error({ err: error }, 'AD ANALYTICS ERROR:');
     return res.status(500).json({ error: 'Could not load campaign analytics' });
@@ -394,14 +434,6 @@ router.patch(
 );
 
 // Cancel a campaign.
-//   - Advertiser (owner): only while PENDING_PAYMENT — backing out before any
-//     money has moved. Any lingering PENDING payment attempt is failed so it
-//     can't be resumed against a cancelled campaign.
-//   - Admin: any non-terminal status, including a paid-but-not-yet-live
-//     campaign (PAID_PENDING_REVIEW/APPROVED/SCHEDULED) or a live one
-//     (PUBLISHED/ACTIVE). Any PAID payment is flagged REFUNDED as a
-//     bookkeeping record, same as order cancellation — there is no live
-//     payment gateway refund call yet (see README).
 router.patch('/:id/cancel', authenticate, [param('id').isUUID(), body('reason').optional({ values: 'falsy' }).isString().trim().isLength({ max: 500 })], validate, async (req, res) => {
   try {
     const ad = await prisma.advertisement.findUnique({ where: { id: req.params.id }, include: { payments: true } });
