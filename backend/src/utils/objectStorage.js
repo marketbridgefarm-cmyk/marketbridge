@@ -49,6 +49,11 @@ async function uploadPrivateObject({ key, buffer, contentType }) {
     Key: key,
     Body: buffer,
     ContentType: contentType || 'application/octet-stream',
+    // Every key is a fresh, content-addressed-ish random UUID (never
+    // reused/overwritten for a given upload), so the bytes behind a key
+    // never change — safe to tell any cache that respects stored object
+    // metadata to hold onto it indefinitely.
+    CacheControl: 'public, max-age=31536000, immutable',
   }));
 }
 
@@ -104,6 +109,12 @@ async function signedMediaUrl({ key, fileName, contentType, disposition = 'inlin
     Bucket: c.bucket,
     Key: normalized,
     ResponseContentDisposition: `${safeDisposition}; filename="${safeName}"`,
+    // The presigned URL itself expires quickly (access control), but the
+    // bytes it points at never change — tell the browser it can cache the
+    // response for as long as *this particular signed URL* stays valid,
+    // instead of defaulting to no caching guidance at all and re-fetching
+    // the same photo on every render that reuses this exact URL.
+    ResponseCacheControl: `public, max-age=${expires}, immutable`,
     ...(contentType ? { ResponseContentType: contentType } : {}),
   });
   return getSignedUrl(client(), command, { expiresIn: expires });
