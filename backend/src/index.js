@@ -3,6 +3,11 @@
 require('dotenv').config();
 require('express-async-errors');
 
+// Must be required (and, if configured, initialized) before other modules
+// so its auto-instrumentation covers as much of the request lifecycle as
+// possible. No-ops entirely when SENTRY_DSN isn't set.
+const sentry = require('./utils/sentry');
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -348,6 +353,12 @@ app.use((req, res) => {
 // CENTRAL ERROR HANDLER
 // ============================================================================
 
+// Registered right before the app's own error handler, per Sentry's Express
+// integration contract: it captures (5xx by default) and re-throws so the
+// handler below still runs and shapes the JSON response as before — this
+// only adds error tracking, it doesn't change any response.
+sentry.setupExpressErrorHandler(app);
+
 app.use((err, req, res, next) => {
   const log = req.log || logger;
   log.error({ err, requestId: req.requestId }, 'MarketBridge API error');
@@ -485,13 +496,17 @@ if (require.main === module) {
 // logged loudly before the process exits, so Render's crash/restart signal
 // has a paired log line explaining why.
 
-process.on('unhandledRejection', (reason) => {
+process.on('unhandledRejection', async (reason) => {
   logger.error({ err: reason }, 'Unhandled promise rejection — process will exit');
+  sentry.captureException(reason);
+  await sentry.flush();
   process.exit(1);
 });
 
-process.on('uncaughtException', (err) => {
+process.on('uncaughtException', async (err) => {
   logger.error({ err }, 'Uncaught exception — process will exit');
+  sentry.captureException(err);
+  await sentry.flush();
   process.exit(1);
 });
 
