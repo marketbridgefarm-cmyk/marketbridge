@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { useTranslation } from '../i18n/I18nContext.jsx';
+import { useTranslation } from '../context/I18nContext.jsx';
 
 const SESSION_MESSAGES = {
   suspended: 'This account has been suspended. Contact support for assistance.',
