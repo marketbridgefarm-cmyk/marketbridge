@@ -1,15 +1,16 @@
--- Advertising production hardening. The preceding migration adds and commits
--- all AdStatus enum values before this migration uses them.
+-- Advertising Production Hardening Migration
 
+-- 1. Create Event Type Enum including CONVERSION
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_type WHERE typname = 'AdvertisementEventType'
   ) THEN
-    CREATE TYPE "AdvertisementEventType" AS ENUM ('IMPRESSION', 'CLICK');
+    CREATE TYPE "AdvertisementEventType" AS ENUM ('IMPRESSION', 'CLICK', 'CONVERSION');
   END IF;
 END $$;
 
+-- 2. Add Missing Columns to Advertisement Table
 ALTER TABLE "Advertisement"
   ADD COLUMN IF NOT EXISTS "priceQuoted" DOUBLE PRECISION,
   ADD COLUMN IF NOT EXISTS "currency" TEXT NOT NULL DEFAULT 'ETB',
@@ -17,11 +18,12 @@ ALTER TABLE "Advertisement"
   ADD COLUMN IF NOT EXISTS "headline" TEXT,
   ADD COLUMN IF NOT EXISTS "destinationUrl" TEXT,
   ADD COLUMN IF NOT EXISTS "creativeImageKey" TEXT,
+  ADD COLUMN IF NOT EXISTS "bannerTemplate" TEXT NOT NULL DEFAULT 'CLASSIC',
   ADD COLUMN IF NOT EXISTS "rejectionReason" TEXT,
   ADD COLUMN IF NOT EXISTS "publishedAt" TIMESTAMP(3),
   ADD COLUMN IF NOT EXISTS "telegramPostReference" TEXT;
 
--- Preserve existing paid amounts as quoted prices where possible.
+-- 3. Backfill Legacy Data & Enforce Constraints
 UPDATE "Advertisement"
 SET "priceQuoted" = COALESCE("priceQuoted", "amountPaid", 0)
 WHERE "priceQuoted" IS NULL;
@@ -37,6 +39,7 @@ WHERE "campaignReference" IS NULL;
 ALTER TABLE "Advertisement"
   ALTER COLUMN "campaignReference" SET NOT NULL;
 
+-- 4. Unique & Performance Indexes
 CREATE UNIQUE INDEX IF NOT EXISTS "Advertisement_campaignReference_key"
   ON "Advertisement"("campaignReference");
 
@@ -46,6 +49,7 @@ CREATE INDEX IF NOT EXISTS "Advertisement_type_status_startDate_endDate_idx"
 CREATE INDEX IF NOT EXISTS "Advertisement_createdAt_idx"
   ON "Advertisement"("createdAt");
 
+-- 5. AdvertisementEvent Table Setup
 CREATE TABLE IF NOT EXISTS "AdvertisementEvent" (
   "id" TEXT NOT NULL,
   "advertisementId" TEXT NOT NULL,
