@@ -68,9 +68,14 @@ function validateEnv() {
     'CLIENT_URL',
     'APP_BASE_URL',
     'API_BASE_URL',
-    // Password-reset emails go through utils/mailer.js — without these,
-    // POST /auth/forgot-password silently fails to deliver the reset link
-    // to real users in production (see routes/auth.js).
+  ];
+
+  // Password-reset emails go through utils/mailer.js. These are only
+  // "recommended" rather than hard-required: if they're missing, the app
+  // still boots, but POST /auth/forgot-password will not be able to
+  // deliver reset links to real users until they're configured (see
+  // utils/mailer.js, which logs instead of sending when unconfigured).
+  const recommendedForEmail = [
     'SMTP_HOST',
     'SMTP_PORT',
     'SMTP_USER',
@@ -85,6 +90,17 @@ function validateEnv() {
   if (missing.length > 0) {
     logger.error({ missing }, 'FATAL: Missing required environment variables in production');
     process.exit(1);
+  }
+
+  const missingEmail = recommendedForEmail.filter(
+    (key) => !process.env[key] || !String(process.env[key]).trim()
+  );
+
+  if (missingEmail.length > 0) {
+    logger.warn(
+      { missing: missingEmail },
+      'SMTP is not configured — password-reset emails will not be sent until these are set'
+    );
   }
 
   if (process.env.JWT_SECRET.length < 32) {
