@@ -1,87 +1,33 @@
+'use strict';
+
 const prisma = require('../config/db');
 
-// Production threshold configuration for ad performance evaluation
-const PERFORMANCE_THRESHOLDS = {
-  MIN_CTR: 2.5,        // 2.5% Click-Through Rate
-  MIN_ROAS: 3.0        // 3.0x Return on Ad Spend (revenue / amount paid)
-};
+function money(value) { return Number(value || 0); }
 
-class GrowthAnalyticsService {
-  /**
-   * Build a marketplace growth/advertising summary for a single advertiser.
-   * Pulls the advertiser's campaigns, their impression/click events, and
-   * what they've paid, then rolls it up into headline KPIs plus a
-   * per-campaign breakdown.
-   */
-  async getMarketplaceAnalytics(userId) {
-    const advertisements = await prisma.advertisement.findMany({
-      where: { advertiserId: userId },
-      include: {
-        events: { select: { eventType: true } }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+async function getMarketplaceAnalytics(userId) {
+  const [sales, purchases, listings, ratings, ads] = await Promise.all([
+    prisma.order.findMany({ where: { sellerId: userId, status: { in: ['CONFIRMED','TRANSPORT_ARRANGED','IN_TRANSIT','DELIVERED','COMPLETED'] } }, select: { finalPrice: true, quantity: true, createdAt: true } }),
+    prisma.order.findMany({ where: { buyerId: userId }, select: { finalPrice: true, status: true, createdAt: true } }),
+    prisma.listing.findMany({ where: { sellerId: userId }, select: { status: true, askingPrice: true, availableQuantity: true, createdAt: true } }),
+    prisma.rating.findMany({ where: { toUserId: userId }, select: { score: true } }),
+    prisma.advertisement.findMany({ where: { advertiserId: userId }, include: { events: { select: { eventType: true } } } }),
+  ]);
 
-    const campaigns = advertisements.map((ad) => {
-      const impressions = ad.events.filter((e) => e.eventType === 'IMPRESSION').length;
-      const clicks = ad.events.filter((e) => e.eventType === 'CLICK').length;
-      const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
-      // Advertisement.amountPaid is kept in sync by paymentService on each
-      // successful ADVERTISING payment (see paymentService.js) — no need to
-      // re-derive it from the payments relation, and Payment's own amount
-      // field is called `amount`, not `amountPaid`.
-      const spend = Number(ad.amountPaid || 0);
+  const completedSales = sales.length;
+  const grossSales = sales.reduce((sum, o) => sum + money(o.finalPrice), 0);
+  const completedPurchases = purchases.filter(o => ['CONFIRMED','TRANSPORT_ARRANGED','IN_TRANSIT','DELIVERED','COMPLETED'].includes(o.status));
+  const spend = completedPurchases.reduce((sum, o) => sum + money(o.finalPrice), 0);
+  const activeListings = listings.filter(l => l.status === 'ACTIVE').length;
+  const soldListings = listings.filter(l => l.status === 'SOLD').length;
+  const averageRating = ratings.length ? ratings.reduce((s, r) => s + r.score, 0) / ratings.length : 0;
+  const impressions = ads.reduce((s, ad) => s + ad.events.filter(e => e.eventType === 'IMPRESSION').length, 0);
+  const clicks = ads.reduce((s, ad) => s + ad.events.filter(e => e.eventType === 'CLICK').length, 0);
 
-      return {
-        id: ad.id,
-        campaignReference: ad.campaignReference,
-        type: ad.type,
-        status: ad.status,
-        startDate: ad.startDate,
-        endDate: ad.endDate,
-        impressions,
-        clicks,
-        ctr: parseFloat(ctr.toFixed(2)),
-        spend: parseFloat(spend.toFixed(2)),
-        meetsCtrTarget: ctr >= PERFORMANCE_THRESHOLDS.MIN_CTR
-      };
-    });
-
-    const totals = campaigns.reduce(
-      (acc, c) => {
-        acc.impressions += c.impressions;
-        acc.clicks += c.clicks;
-        acc.spend += c.spend;
-        return acc;
-      },
-      { impressions: 0, clicks: 0, spend: 0 }
-    );
-
-    const overallCtr = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0;
-    const activeCampaigns = campaigns.filter((c) => ['PUBLISHED', 'ACTIVE', 'SCHEDULED'].includes(c.status)).length;
-
-    return {
-      totals: {
-        campaignCount: campaigns.length,
-        activeCampaigns,
-        impressions: totals.impressions,
-        clicks: totals.clicks,
-        ctr: parseFloat(overallCtr.toFixed(2)),
-        spend: parseFloat(totals.spend.toFixed(2))
-      },
-      thresholds: PERFORMANCE_THRESHOLDS,
-      campaigns
-    };
-  }
-
-  /**
-   * Record an impression or click event against an advertisement.
-   */
-  async logCampaignEvent(advertisementId, eventType = 'IMPRESSION') {
-    return prisma.advertisementEvent.create({
-      data: { advertisementId, eventType }
-    });
-  }
+  return {
+    seller: { completedSales, grossSales, activeListings, soldListings, averageRating: Number(averageRating.toFixed(2)) },
+    buyer: { completedPurchases: completedPurchases.length, spend },
+    advertising: { campaigns: ads.length, impressions, clicks, ctr: impressions ? Number(((clicks / impressions) * 100).toFixed(2)) : 0 },
+  };
 }
 
-module.exports = new GrowthAnalyticsService();
+module.exports = { getMarketplaceAnalytics };
