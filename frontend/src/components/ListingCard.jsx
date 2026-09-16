@@ -39,7 +39,7 @@ export default function ListingCard({ listing }) {
     <div className="listing-photo">
       {listing.sponsored && <span className="tag tag--sponsored">Sponsored</span>}
       {listing.photos?.[0]
-        ? <img src={listing.photos[0]} alt={title}/>
+        ? <img src={listing.photos[0]} alt={title} loading="lazy" decoding="async"/>
         : listing.videos?.[0]
           ? <video src={listing.videos[0]} muted />
           : <span>{title.slice(0,2).toUpperCase()}</span>}

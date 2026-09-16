@@ -67,7 +67,7 @@ export default function EvidenceGallery({ listUrl, mediaUrl }) {
             <div className="evidence-media-grid">
               {signed[item.id].photos?.map((p) => (
                 <a key={p.url} href={p.url} target="_blank" rel="noreferrer">
-                  <img src={p.url} alt="Evidence" className="evidence-thumb" />
+                  <img src={p.url} alt="Evidence" className="evidence-thumb" loading="lazy" decoding="async" />
                 </a>
               ))}
               {signed[item.id].videos?.map((v) => (
