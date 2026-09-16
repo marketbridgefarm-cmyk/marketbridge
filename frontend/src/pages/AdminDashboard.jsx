@@ -1169,7 +1169,7 @@ export default function AdminDashboard() {
                 return (
                   <div className="sd-card" key={ad.id}>
                     {ad.creativeImageUrl && (
-                      <img src={ad.creativeImageUrl} alt={ad.headline || 'Campaign creative'} style={{ width: '100%', borderRadius: 8, marginBottom: 8, maxHeight: 160, objectFit: 'cover' }} />
+                      <img src={ad.creativeImageUrl} alt={ad.headline || 'Campaign creative'} loading="lazy" decoding="async" style={{ width: '100%', borderRadius: 8, marginBottom: 8, maxHeight: 160, objectFit: 'cover' }} />
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                       <h3>{ad.type.replace(/_/g, ' ')}</h3>

@@ -272,7 +272,7 @@ export default function ListingDetail() {
                     className={`detail-media-thumb ${i === activeMediaIndexSafe ? 'active' : ''}`}
                     onClick={() => setActiveMediaIndex(i)}
                   >
-                    {m.type === 'video' ? <video src={m.url} muted /> : <img src={m.url} alt="" />}
+                    {m.type === 'video' ? <video src={m.url} muted /> : <img src={m.url} alt="" loading="lazy" decoding="async" />}
                     {m.type === 'video' && <span className="detail-media-thumb-play">▶</span>}
                   </button>
                 ))}

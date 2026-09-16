@@ -357,7 +357,7 @@ export default function AdvertiserDashboard() {
               const amountDue = Number(ad.priceQuoted || ad.amountDue || 0);
               return (
                 <div className="sd-panel" key={ad.id}>
-                  {ad.creativeImageUrl && <img src={ad.creativeImageUrl} alt={ad.headline || 'Campaign creative'} style={{ width: '100%', borderRadius: 10, marginBottom: 10, maxHeight: 180, objectFit: 'cover' }} />}
+                  {ad.creativeImageUrl && <img src={ad.creativeImageUrl} alt={ad.headline || 'Campaign creative'} loading="lazy" decoding="async" style={{ width: '100%', borderRadius: 10, marginBottom: 10, maxHeight: 180, objectFit: 'cover' }} />}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <h3>{AD_TYPES.find((t) => t.value === ad.type)?.label || ad.type}</h3>
                     <span className={statusClass(ad.status)}>{STATUS_LABELS[ad.status] || ad.status}</span>
