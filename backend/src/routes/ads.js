@@ -11,21 +11,18 @@ const { authenticate } = require('../middleware/auth');
 const { isAdmin } = require('../utils/authorization');
 const { recordAuditEvent } = require('../utils/audit');
 const { requestRefund } = require('../services/paymentRefundService');
-const { uploadPrivateObject, signedMediaUrl, deletePrivateObject } = require('../utils/objectStorage');
+const { uploadPrivateObject, signedMediaUrl } = require('../utils/objectStorage');
 const { AD_TYPES, dailyRatesEtb, campaignDays, quotePrice } = require('../utils/adPricing');
 const { optimizeUpload } = require('../utils/imageProcessor');
 
-// Visual layout template applied when rendering a BANNER creative. Ignored
-// entirely for every other campaign type.
 const BANNER_TEMPLATES = ['CLASSIC', 'BOLD', 'MINIMAL', 'CARD', 'SPLIT', 'EDITORIAL', 'FRESH', 'DARK_LUXE', 'MARKET', 'GRADIENT'];
-
-const router = express.Router();
-
 const MAX_CREATIVE_BYTES = Number(process.env.AD_BANNER_MAX_FILE_BYTES || 5 * 1024 * 1024);
 const MAX_HEADLINE = 140;
 const MAX_URL = 2000;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+
+const router = express.Router();
 const adEventLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
 
 const creativeUpload = multer({
@@ -42,7 +39,7 @@ const creativeUpload = multer({
 
 function hasValidImageSignature(buffer, mime) {
   if (!buffer || !Buffer.isBuffer(buffer)) return false;
-  if (mime === 'image/png') return buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+  if (mime === 'image/png') return buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   if (mime === 'image/jpeg') return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
   if (mime === 'image/webp') return buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
   return false;
@@ -66,7 +63,7 @@ function safeDestinationUrl(value) {
   if (raw.startsWith('/') && !raw.startsWith('//')) return raw.slice(0, MAX_URL);
   try {
     const url = new URL(raw);
-    if (url.protocol !== 'https:') throw new Error('Only HTTPS destination URLs are allowed');
+    if (url.protocol !== 'https:') throw new Error('Only HTTPS destination URLs allowed');
     return url.toString().slice(0, MAX_URL);
   } catch {
     return null;
@@ -89,7 +86,7 @@ async function resolveListingMedia(value) {
   if (/^https?:\/\//i.test(value)) return value;
   try {
     return await signedMediaUrl({ key: value, disposition: 'inline' });
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -113,7 +110,7 @@ async function attachCreativeUrl(ad) {
   if (ad.creativeImageKey) {
     try {
       result.creativeImageUrl = await signedMediaUrl({ key: ad.creativeImageKey, disposition: 'inline' });
-    } catch (error) {
+    } catch {
       result.creativeImageUrl = null;
     }
   } else {
@@ -131,39 +128,25 @@ function activeStatusWhere(now) {
   };
 }
 
-function isReviewRequired(type) {
-  return type === 'BANNER' || type === 'TELEGRAM_PROMOTION';
-}
-
-function statusAfterApproval(ad) {
-  return new Date(ad.startDate) > new Date() ? 'SCHEDULED' : 'PUBLISHED';
-}
-
 function paymentStatus(ad) {
   const payments = ad.payments || [];
   return payments.some((p) => p.status === 'PAID') ? 'PAID' : payments.some((p) => p.status === 'PENDING') ? 'PENDING' : 'UNPAID';
 }
 
-// Pricing is deliberately server-owned. The frontend may display these values,
-// but it can never choose the amount charged for a campaign.
 router.get('/pricing', authenticate, (req, res) => {
-  return res.json({ currency: 'ETB', dailyRatesEtb: dailyRatesEtb(), maxCampaignDays: Number(process.env.AD_MAX_CAMPAIGN_DAYS || 90), bannerTemplates: BANNER_TEMPLATES });
+  return res.json({
+    currency: 'ETB',
+    dailyRatesEtb: dailyRatesEtb(),
+    maxCampaignDays: Number(process.env.AD_MAX_CAMPAIGN_DAYS || 90),
+    bannerTemplates: BANNER_TEMPLATES,
+  });
 });
 
-// Upload banner creative to private object storage. The database only stores
-// the opaque key; public clients receive short-lived signed URLs.
-function uploadCreative(req, res, next) {
-  creativeUpload.single('file')(req, res, (error) => {
-    if (error) return res.status(400).json({ error: error.message || 'Invalid banner image' });
-    next();
-  });
-}
-
-router.post('/creative', authenticate, uploadCreative, async (req, res) => {
+router.post('/creative', authenticate, creativeUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Banner image file is required' });
     if (!ALLOWED_IMAGE_TYPES.has(req.file.mimetype)) return res.status(400).json({ error: 'Unsupported banner image type' });
-    if (!hasValidImageSignature(req.file.buffer, req.file.mimetype)) return res.status(400).json({ error: 'Banner file contents do not match the declared image type' });
+    if (!hasValidImageSignature(req.file.buffer, req.file.mimetype)) return res.status(400).json({ error: 'Banner content mismatch' });
 
     const optimized = await optimizeUpload({
       buffer: req.file.buffer,
@@ -172,6 +155,7 @@ router.post('/creative', authenticate, uploadCreative, async (req, res) => {
       maxHeight: Number(process.env.AD_IMAGE_MAX_HEIGHT || 900),
       quality: Number(process.env.AD_IMAGE_QUALITY || 84),
     });
+
     const key = `advertisements/banner/${req.user.id}/${crypto.randomUUID()}.webp`;
     await uploadPrivateObject({ key, buffer: optimized.buffer, contentType: optimized.contentType });
 
@@ -180,11 +164,11 @@ router.post('/creative', authenticate, uploadCreative, async (req, res) => {
       action: 'AD_CREATIVE_UPLOADED',
       resourceType: 'AdvertisementCreative',
       resourceId: key,
-      metadata: { contentType: optimized.contentType, originalBytes: optimized.originalBytes, optimizedBytes: optimized.optimizedBytes, width: optimized.width, height: optimized.height },
+      metadata: { width: optimized.width, height: optimized.height, bytes: optimized.optimizedBytes },
     });
 
     const previewUrl = await signedMediaUrl({ key, disposition: 'inline' });
-    return res.status(201).json({ key, previewUrl, contentType: optimized.contentType, bytes: optimized.optimizedBytes, originalBytes: optimized.originalBytes, width: optimized.width, height: optimized.height });
+    return res.status(201).json({ key, previewUrl, width: optimized.width, height: optimized.height });
   } catch (error) {
     req.log.error({ err: error }, 'AD CREATIVE UPLOAD ERROR:');
     return res.status(400).json({ error: error.message || 'Could not upload banner image' });
@@ -214,7 +198,8 @@ router.post(
       const maxDays = Number(process.env.AD_MAX_CAMPAIGN_DAYS || 90);
 
       if (endDate <= startDate) return res.status(400).json({ error: 'endDate must be after startDate' });
-      if (startDate < new Date(now.getTime() - 60000)) return res.status(400).json({ error: 'Campaign start cannot be in the past' });
+      if (startDate < new Date(now.getTime() - 60000)) return res.status(400).json({ error: 'Start date cannot be in the past' });
+      
       const days = campaignDays(startDate, endDate);
       if (days > maxDays) return res.status(400).json({ error: `Campaign cannot exceed ${maxDays} days` });
 
@@ -222,22 +207,23 @@ router.post(
       if (needsListing && !listingId) return res.status(400).json({ error: `${type} requires listingId` });
       if (!needsListing && listingId) return res.status(400).json({ error: `${type} does not accept listingId` });
 
-      let listing = null;
       if (listingId) {
-        listing = await prisma.listing.findUnique({ where: { id: listingId }, select: { id: true, sellerId: true, status: true, category: true, title: true, cropType: true } });
+        const listing = await prisma.listing.findUnique({ where: { id: listingId }, select: { id: true, sellerId: true, status: true } });
         if (!listing) return res.status(404).json({ error: 'Listing not found' });
-        if (listing.sellerId !== req.user.id && !isAdmin(req.user)) return res.status(403).json({ error: 'You may only advertise your own listing' });
-        if (listing.status !== 'ACTIVE') return res.status(400).json({ error: 'Only an active listing can be promoted' });
+        if (listing.sellerId !== req.user.id && !isAdmin(req.user)) return res.status(403).json({ error: 'Not authorized for this listing' });
+        if (listing.status !== 'ACTIVE') return res.status(400).json({ error: 'Only active listings can be promoted' });
       }
 
       const headline = safeText(req.body.headline);
       const linkUrl = safeDestinationUrl(req.body.linkUrl);
-      if (req.body.linkUrl && !linkUrl) return res.status(400).json({ error: 'Destination link must be an HTTPS URL or a safe internal path' });
+      if (req.body.linkUrl && !linkUrl) return res.status(400).json({ error: 'Destination link must be HTTPS or safe internal path' });
 
       if ((type === 'BANNER' || type === 'TELEGRAM_PROMOTION') && !headline) {
-        return res.status(400).json({ error: `${type === 'BANNER' ? 'Banner' : 'Telegram promotion'} requires a headline/message` });
+        return res.status(400).json({ error: 'Headline is required' });
       }
-      if (type === 'BANNER' && !req.body.creativeImageKey) return res.status(400).json({ error: 'Banner campaigns require an uploaded image' });
+      if (type === 'BANNER' && !req.body.creativeImageKey) {
+        return res.status(400).json({ error: 'Banner requires an uploaded creative key' });
+      }
 
       const priceQuoted = quotePrice(type, startDate, endDate);
       const campaignReference = `MB-AD-${new Date().getUTCFullYear()}-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
@@ -260,13 +246,15 @@ router.post(
             bannerTemplate: type === 'BANNER' ? (req.body.bannerTemplate || 'CLASSIC') : 'CLASSIC',
           },
         });
+
         await recordAuditEvent(tx, {
           actorId: req.user.id,
           action: 'AD_CAMPAIGN_CREATED',
           resourceType: 'Advertisement',
           resourceId: created.id,
-          metadata: { type, listingId: listingId || null, priceQuoted, currency: 'ETB', campaignReference },
+          metadata: { priceQuoted, campaignReference },
         });
+
         return created;
       });
 
@@ -283,14 +271,12 @@ router.get('/active', async (req, res) => {
     const now = new Date();
     const ads = await prisma.advertisement.findMany({
       where: { ...activeStatusWhere(now) },
-      include: { listing: { select: { id: true, sellerId: true, category: true, title: true, cropType: true, quantity: true, unit: true, askingPrice: true, location: true, photos: true, videos: true, description: true, status: true } } },
+      include: { listing: { select: { id: true, title: true, cropType: true, askingPrice: true, photos: true, videos: true, status: true } } },
       orderBy: { startDate: 'asc' },
     });
+
     const enriched = await Promise.all(
-      ads.map(async (ad) => attachCreativeUrl({
-        ...ad,
-        listing: await attachListingMedia(ad.listing),
-      }))
+      ads.map(async (ad) => attachCreativeUrl({ ...ad, listing: await attachListingMedia(ad.listing) }))
     );
     return res.json({ ads: enriched.map(withComputedStatus) });
   } catch (error) {
@@ -304,8 +290,8 @@ router.get('/mine', authenticate, async (req, res) => {
     const ads = await prisma.advertisement.findMany({
       where: { advertiserId: req.user.id },
       include: {
-        listing: { select: { id: true, title: true, cropType: true, category: true, status: true } },
-        payments: { select: { id: true, status: true, amount: true, method: true, provider: true, createdAt: true } },
+        listing: { select: { id: true, title: true, cropType: true, status: true } },
+        payments: { select: { id: true, status: true, amount: true, method: true, createdAt: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -317,36 +303,18 @@ router.get('/mine', authenticate, async (req, res) => {
   }
 });
 
-router.get('/', authenticate, async (req, res) => {
-  if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admin access required' });
-  try {
-    const ads = await prisma.advertisement.findMany({
-      include: {
-        listing: { select: { id: true, title: true, cropType: true, category: true, status: true } },
-        advertiser: { select: { id: true, name: true, email: true } },
-        payments: { select: { id: true, status: true, amount: true, method: true, provider: true, createdAt: true } },
-        events: { select: { eventType: true, createdAt: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    const enriched = await Promise.all(ads.map(attachCreativeUrl));
-    return res.json({ ads: enriched.map((ad) => ({ ...withComputedStatus(ad), paymentStatus: paymentStatus(ad) })) });
-  } catch (error) {
-    req.log.error({ err: error }, 'LIST ADS ERROR:');
-    return res.status(500).json({ error: 'Could not load advertisements' });
-  }
-});
-
 router.post('/:id/events', adEventLimiter, [param('id').isUUID(), body('eventType').isIn(['IMPRESSION', 'CLICK', 'CONVERSION'])], validate, async (req, res) => {
   try {
     const ad = await prisma.advertisement.findUnique({ where: { id: req.params.id }, select: { id: true, status: true, startDate: true, endDate: true } });
     const now = new Date();
-    if (!ad || !['ACTIVE', 'PUBLISHED'].includes(ad.status) || ad.startDate > now || ad.endDate < now) return res.status(404).json({ error: 'Active campaign not found' });
+    if (!ad || !['ACTIVE', 'PUBLISHED'].includes(ad.status) || ad.startDate > now || ad.endDate < now) {
+      return res.status(404).json({ error: 'Active campaign not found' });
+    }
     await prisma.advertisementEvent.create({ data: { advertisementId: ad.id, eventType: req.body.eventType } });
     return res.status(204).end();
   } catch (error) {
     req.log.error({ err: error }, 'AD EVENT ERROR:');
-    return res.status(500).json({ error: 'Could not record campaign event' });
+    return res.status(500).json({ error: 'Could not record event' });
   }
 });
 
@@ -361,11 +329,11 @@ router.get('/:id/analytics', authenticate, [param('id').isUUID()], validate, asy
           select: {
             orders: {
               where: { status: { in: ['PAID', 'DELIVERED', 'COMPLETED'] } },
-              select: { totalPrice: true }
-            }
-          }
-        }
-      }
+              select: { totalPrice: true },
+            },
+          },
+        },
+      },
     });
 
     if (!ad) return res.status(404).json({ error: 'Advertisement not found' });
@@ -396,119 +364,11 @@ router.get('/:id/analytics', authenticate, [param('id').isUUID()], validate, asy
       spend,
       revenueGenerated,
       publishedAt: ad.publishedAt,
-      telegramPostReference: ad.telegramPostReference
+      telegramPostReference: ad.telegramPostReference,
     });
   } catch (error) {
     req.log.error({ err: error }, 'AD ANALYTICS ERROR:');
     return res.status(500).json({ error: 'Could not load campaign analytics' });
-  }
-});
-
-router.patch(
-  '/:id/status',
-  authenticate,
-  [param('id').isUUID(), body('status').isIn(['APPROVED', 'SCHEDULED', 'PUBLISHED', 'REJECTED', 'EXPIRED'])],
-  validate,
-  async (req, res) => {
-    try {
-      if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admin access required' });
-      const ad = await prisma.advertisement.findUnique({ where: { id: req.params.id }, include: { payments: true } });
-      if (!ad) return res.status(404).json({ error: 'Advertisement not found' });
-      const paid = ad.payments.some((p) => p.status === 'PAID');
-      if (['APPROVED', 'SCHEDULED', 'PUBLISHED'].includes(req.body.status) && !paid) return res.status(400).json({ error: 'Campaign must be paid before approval/publication' });
-      if (req.body.status === 'PUBLISHED' && (ad.startDate > new Date() || ad.endDate < new Date())) return res.status(400).json({ error: 'Campaign dates do not allow publication' });
-      if (req.body.status === 'APPROVED' && !isReviewRequired(ad.type)) return res.status(400).json({ error: 'This campaign type does not require manual approval' });
-
-      const status = req.body.status === 'APPROVED' ? statusAfterApproval(ad) : req.body.status;
-      const updated = await prisma.$transaction(async (tx) => {
-        const result = await tx.advertisement.update({ where: { id: ad.id }, data: { status, ...(status === 'PUBLISHED' ? { publishedAt: new Date() } : {}), ...(status === 'REJECTED' ? { rejectionReason: safeText(req.body.rejectionReason, 500) } : {}) } });
-        await recordAuditEvent(tx, { actorId: req.user.id, action: `AD_STATUS_${status}`, resourceType: 'Advertisement', resourceId: ad.id, metadata: { from: ad.status, to: status, rejectionReason: result.rejectionReason || null } });
-        return result;
-      });
-      return res.json({ ad: updated });
-    } catch (error) {
-      req.log.error({ err: error }, 'UPDATE AD STATUS ERROR:');
-      return res.status(500).json({ error: 'Could not update advertisement status' });
-    }
-  }
-);
-
-// Cancel a campaign.
-router.patch('/:id/cancel', authenticate, [param('id').isUUID(), body('reason').optional({ values: 'falsy' }).isString().trim().isLength({ max: 500 })], validate, async (req, res) => {
-  try {
-    const ad = await prisma.advertisement.findUnique({ where: { id: req.params.id }, include: { payments: true } });
-    if (!ad) return res.status(404).json({ error: 'Advertisement not found' });
-
-    const userIsAdmin = isAdmin(req.user);
-    const isOwner = ad.advertiserId === req.user.id;
-    if (!isOwner && !userIsAdmin) return res.status(403).json({ error: 'Not authorized to cancel this campaign' });
-
-    const TERMINAL_STATUSES = ['REJECTED', 'EXPIRED', 'CANCELLED'];
-    if (TERMINAL_STATUSES.includes(ad.status)) {
-      return res.status(400).json({ error: `Campaign is already ${ad.status.toLowerCase()} and cannot be cancelled` });
-    }
-    if (!userIsAdmin && ad.status !== 'PENDING_PAYMENT') {
-      return res.status(400).json({ error: 'You can only cancel a campaign before it has been paid for. Contact MarketBridge support about a paid campaign.' });
-    }
-
-    const reason = safeText(req.body.reason, 500);
-    const fromStatus = ad.status;
-
-    const updated = await prisma.$transaction(async (tx) => {
-      const result = await tx.advertisement.update({
-        where: { id: ad.id },
-        data: { status: 'CANCELLED', rejectionReason: reason || ad.rejectionReason },
-      });
-
-      const pendingPayments = ad.payments.filter((p) => p.status === 'PENDING');
-      const paidPayments = ad.payments.filter((p) => p.status === 'PAID');
-      for (const payment of pendingPayments) {
-        await tx.payment.update({ where: { id: payment.id }, data: { status: 'FAILED' } });
-      }
-      for (const payment of paidPayments) {
-        await requestRefund(tx, { paymentId: payment.id, amount: payment.amount, reason: reason || 'Advertisement cancelled', requestedById: req.user.id });
-      }
-
-      await recordAuditEvent(tx, {
-        actorId: req.user.id,
-        action: 'AD_CAMPAIGN_CANCELLED',
-        resourceType: 'Advertisement',
-        resourceId: ad.id,
-        metadata: {
-          fromStatus,
-          reason,
-          cancelledByRole: userIsAdmin && !isOwner ? 'ADMIN' : 'ADVERTISER',
-          refundedPaymentIds: paidPayments.map((p) => p.id),
-          failedPendingPaymentIds: pendingPayments.map((p) => p.id),
-        },
-      });
-
-      return result;
-    });
-
-    return res.json({ ad: updated });
-  } catch (error) {
-    req.log.error({ err: error }, 'CANCEL AD ERROR:');
-    return res.status(500).json({ error: 'Could not cancel advertisement' });
-  }
-});
-
-router.patch('/:id/telegram-publication', authenticate, [param('id').isUUID(), body('postReference').optional().isString().trim().isLength({ max: 500 })], validate, async (req, res) => {
-  try {
-    if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admin access required' });
-    const ad = await prisma.advertisement.findUnique({ where: { id: req.params.id } });
-    if (!ad) return res.status(404).json({ error: 'Advertisement not found' });
-    if (ad.type !== 'TELEGRAM_PROMOTION') return res.status(400).json({ error: 'Only Telegram campaigns can be marked published here' });
-    if (!['APPROVED', 'SCHEDULED'].includes(ad.status)) return res.status(400).json({ error: 'Telegram campaign must be approved before publication' });
-    const paid = await prisma.payment.findFirst({ where: { advertisementId: ad.id, type: 'ADVERTISING', status: 'PAID' }, select: { id: true } });
-    if (!paid) return res.status(400).json({ error: 'Telegram campaign must be paid before publication' });
-    if (ad.startDate > new Date()) return res.status(400).json({ error: 'Campaign start date has not arrived' });
-    if (ad.endDate < new Date()) return res.status(400).json({ error: 'Campaign has expired' });
-    const updated = await prisma.advertisement.update({ where: { id: ad.id }, data: { status: 'PUBLISHED', publishedAt: new Date(), telegramPostReference: safeText(req.body.postReference, 500) } });
-    return res.json({ ad: updated });
-  } catch (error) {
-    req.log.error({ err: error }, 'TELEGRAM PUBLICATION ERROR:');
-    return res.status(500).json({ error: 'Could not record Telegram publication' });
   }
 });
 
