@@ -8,11 +8,13 @@ const path = require('path');
 const { body, param, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
+const { requireRole } = require('../middleware/roleCheck');
 const { isAdmin } = require('../utils/authorization');
 const { recordAuditEvent } = require('../utils/audit');
 const { signedMediaUrl, uploadPrivateObject } = require('../utils/objectStorage');
 const { AD_TYPES, dailyRatesEtb, campaignDays, quotePrice } = require('../utils/adPricing');
 const { optimizeUpload } = require('../utils/imageProcessor');
+const { requestRefund, completeRefund } = require('../services/paymentRefundService');
 
 const BANNER_TEMPLATES = ['CLASSIC', 'BOLD', 'MINIMAL', 'CARD', 'SPLIT', 'EDITORIAL', 'FRESH', 'DARK_LUXE', 'MARKET', 'GRADIENT'];
 const MAX_CREATIVE_BYTES = Number(process.env.AD_BANNER_MAX_FILE_BYTES || 5 * 1024 * 1024);
@@ -239,6 +241,29 @@ router.post(
   }
 );
 
+// Full campaign list for admin moderation/ledger (AdminDashboard's
+// "Advertising" tab: pending review + full campaign history).
+router.get('/', authenticate, requireRole('ADMIN'), async (req, res) => {
+  try {
+    const ads = await prisma.advertisement.findMany({
+      include: {
+        advertiser: { select: { id: true, name: true, email: true } },
+        listing: { select: { id: true, title: true, cropType: true } },
+        payments: { select: { id: true, status: true, amount: true, method: true, createdAt: true } },
+        events: { select: { eventType: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+
+    const enriched = await Promise.all(ads.map((ad) => attachCreativeUrl(withComputedStatus(ad))));
+    return res.json({ ads: enriched });
+  } catch (error) {
+    req.log?.error({ err: error }, 'ADMIN ADS LIST ERROR');
+    return res.status(500).json({ error: 'Could not fetch campaigns' });
+  }
+});
+
 router.get('/active', async (req, res) => {
   try {
     const now = new Date();
@@ -386,5 +411,189 @@ router.get('/:id/analytics', authenticate, [param('id').isUUID()], validate, asy
     return res.status(500).json({ error: 'Could not fetch analytics' });
   }
 });
+
+// Admin content moderation: approve/reject campaigns paymentService left in
+// PAID_PENDING_REVIEW (Banner + Telegram creative — see paymentService.js's
+// advertising branch), or end a live campaign early.
+router.patch(
+  '/:id/status',
+  authenticate,
+  requireRole('ADMIN'),
+  [
+    param('id').isUUID(),
+    body('status').isIn(['APPROVED', 'REJECTED', 'EXPIRED']),
+    body('rejectionReason').optional({ values: 'falsy' }).isString().trim().isLength({ max: 500 }),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const ad = await prisma.advertisement.findUnique({
+        where: { id: req.params.id },
+        include: { payments: { select: { status: true } } },
+      });
+      if (!ad) return res.status(404).json({ error: 'Advertisement campaign not found' });
+
+      const { status, rejectionReason } = req.body;
+
+      if (status === 'EXPIRED') {
+        if (!['PUBLISHED', 'ACTIVE'].includes(ad.status)) {
+          return res.status(409).json({ error: 'Only published campaigns can be ended early' });
+        }
+      } else {
+        if (ad.status !== 'PAID_PENDING_REVIEW') {
+          return res.status(409).json({ error: `Cannot ${status.toLowerCase()} a campaign that is not pending review` });
+        }
+        if (!ad.payments.some((p) => p.status === 'PAID')) {
+          return res.status(409).json({ error: 'Campaign has not been paid yet' });
+        }
+      }
+
+      const now = new Date();
+      const startsInFuture = new Date(ad.startDate) > now;
+      let data;
+      if (status === 'APPROVED') {
+        // Mirrors the auto-activation path non-moderated ad types already
+        // get on payment (see paymentService.js), now that a human has
+        // signed off on the creative.
+        data = startsInFuture ? { status: 'SCHEDULED' } : { status: 'PUBLISHED', publishedAt: now };
+      } else if (status === 'REJECTED') {
+        data = { status: 'REJECTED', rejectionReason: rejectionReason || null };
+      } else {
+        data = { status: 'EXPIRED' };
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const result = await tx.advertisement.update({ where: { id: ad.id }, data });
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: `AD_CAMPAIGN_${status}`,
+          resourceType: 'Advertisement',
+          resourceId: ad.id,
+          metadata: { fromStatus: ad.status, toStatus: result.status, rejectionReason: rejectionReason || null },
+        });
+        return result;
+      });
+
+      return res.json({ ad: updated });
+    } catch (error) {
+      req.log?.error({ err: error }, 'AD STATUS UPDATE ERROR');
+      return res.status(500).json({ error: 'Could not update campaign status' });
+    }
+  }
+);
+
+// Cancel a campaign. Advertisers may cancel their own campaign only before
+// anything has been paid; once money has moved, only an admin can cancel,
+// which triggers a full refund through the existing refund workflow
+// (paymentRefundService) so it's tracked like any other refund.
+router.patch(
+  '/:id/cancel',
+  authenticate,
+  [param('id').isUUID(), body('reason').optional({ values: 'falsy' }).isString().trim().isLength({ max: 500 })],
+  validate,
+  async (req, res) => {
+    try {
+      const ad = await prisma.advertisement.findUnique({
+        where: { id: req.params.id },
+        include: { payments: { orderBy: { createdAt: 'desc' } } },
+      });
+      if (!ad) return res.status(404).json({ error: 'Advertisement campaign not found' });
+
+      const admin = isAdmin(req.user);
+      if (ad.advertiserId !== req.user.id && !admin) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const paidPayment = ad.payments.find((p) => p.status === 'PAID');
+
+      if (!admin) {
+        if (ad.status !== 'PENDING_PAYMENT' || paidPayment) {
+          return res.status(409).json({ error: 'Paid or in-review campaigns can only be cancelled by an admin' });
+        }
+      } else if (paidPayment) {
+        if (!['PAID_PENDING_REVIEW', 'APPROVED', 'SCHEDULED'].includes(ad.status)) {
+          return res.status(409).json({ error: `Cannot cancel a ${ad.status.toLowerCase()} campaign` });
+        }
+      } else if (!['PENDING_PAYMENT', 'PAID_PENDING_REVIEW'].includes(ad.status)) {
+        return res.status(409).json({ error: `Cannot cancel a ${ad.status.toLowerCase()} campaign` });
+      }
+
+      const reason = req.body.reason || null;
+
+      const updated = await prisma.$transaction(async (tx) => {
+        if (paidPayment) {
+          const refund = await requestRefund(tx, { paymentId: paidPayment.id, reason, requestedById: req.user.id });
+          await completeRefund(tx, {
+            refundId: refund.id,
+            provider: 'manual',
+            actorId: req.user.id,
+            note: 'Advertising campaign cancelled',
+          });
+        }
+
+        const result = await tx.advertisement.update({ where: { id: ad.id }, data: { status: 'CANCELLED' } });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'AD_CAMPAIGN_CANCELLED',
+          resourceType: 'Advertisement',
+          resourceId: ad.id,
+          metadata: { reason, refunded: Boolean(paidPayment) },
+        });
+
+        return result;
+      });
+
+      return res.json({ ad: updated });
+    } catch (error) {
+      req.log?.error({ err: error }, 'AD CANCEL ERROR');
+      return res.status(error.status || 500).json({ error: error.message || 'Could not cancel campaign' });
+    }
+  }
+);
+
+// Admin records that MarketBridge has posted an approved Telegram campaign
+// to the channel (a manual step distinct from the advertiser's own instant
+// broadcast at POST /growth/telegram-promo).
+router.patch(
+  '/:id/telegram-publication',
+  authenticate,
+  requireRole('ADMIN'),
+  [param('id').isUUID(), body('postReference').optional({ values: 'falsy' }).isString().trim().isLength({ max: 500 })],
+  validate,
+  async (req, res) => {
+    try {
+      const ad = await prisma.advertisement.findUnique({ where: { id: req.params.id } });
+      if (!ad) return res.status(404).json({ error: 'Advertisement campaign not found' });
+      if (ad.type !== 'TELEGRAM_PROMOTION') {
+        return res.status(400).json({ error: 'Only Telegram promotion campaigns can be marked as published' });
+      }
+      if (!['APPROVED', 'SCHEDULED'].includes(ad.status)) {
+        return res.status(409).json({ error: 'Campaign must be approved before recording a Telegram publication' });
+      }
+
+      const now = new Date();
+      const updated = await prisma.$transaction(async (tx) => {
+        const result = await tx.advertisement.update({
+          where: { id: ad.id },
+          data: { status: 'PUBLISHED', publishedAt: now, telegramPostReference: req.body.postReference || null },
+        });
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'AD_TELEGRAM_PUBLICATION_RECORDED',
+          resourceType: 'Advertisement',
+          resourceId: ad.id,
+          metadata: { postReference: req.body.postReference || null },
+        });
+        return result;
+      });
+
+      return res.json({ ad: updated });
+    } catch (error) {
+      req.log?.error({ err: error }, 'AD TELEGRAM PUBLICATION ERROR');
+      return res.status(500).json({ error: 'Could not record Telegram publication' });
+    }
+  }
+);
 
 module.exports = router;
