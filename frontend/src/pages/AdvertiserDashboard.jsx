@@ -10,7 +10,7 @@ const AD_TYPES = [
   { value: 'TOP_OF_CATEGORY', label: 'Top of Category', help: 'Give an active listing the strongest category placement.' },
   { value: 'SPONSORED_SEARCH', label: 'Sponsored Search', help: 'Boost an active listing when buyers search.' },
   { value: 'BANNER', label: 'Banner', help: 'Run a moderated platform-wide image campaign.' },
-  { value: 'TELEGRAM_PROMOTION', label: 'Telegram Promotion', help: 'Pay for a MarketBridge Telegram promotion, then the team publishes it manually.' },
+  { value: 'TELEGRAM_PROMOTION', label: 'Telegram Promotion', help: 'Pay for a MarketBridge Telegram promotion or broadcast instantly.' },
 ];
 
 const BANNER_TEMPLATE_OPTIONS = [
@@ -35,6 +35,8 @@ const STATUS_LABELS = {
   SCHEDULED: 'Scheduled',
   PUBLISHED: 'Published',
   ACTIVE: 'Published',
+  APPROVED_EFFECTIVE: 'Approved & Effective',
+  NEEDS_OPTIMIZATION: 'Needs Optimization',
   REJECTED: 'Rejected',
   EXPIRED: 'Expired',
   CANCELLED: 'Cancelled',
@@ -55,8 +57,8 @@ function campaignDays(startDate, endDate) {
 }
 
 function statusClass(status) {
-  if (['PUBLISHED', 'ACTIVE', 'APPROVED', 'SCHEDULED'].includes(status)) return 'sd-badge sd-good';
-  if (['REJECTED', 'EXPIRED', 'CANCELLED'].includes(status)) return 'sd-badge sd-red';
+  if (['PUBLISHED', 'ACTIVE', 'APPROVED', 'SCHEDULED', 'APPROVED_EFFECTIVE'].includes(status)) return 'sd-badge sd-good';
+  if (['REJECTED', 'EXPIRED', 'CANCELLED', 'NEEDS_OPTIMIZATION'].includes(status)) return 'sd-badge sd-red';
   return 'sd-badge sd-warn';
 }
 
@@ -71,6 +73,7 @@ export default function AdvertiserDashboard() {
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [payingId, setPayingId] = useState(null);
+  const [broadcastingId, setBroadcastingId] = useState(null);
   const [uploadingCreative, setUploadingCreative] = useState(false);
   const [analytics, setAnalytics] = useState({});
 
@@ -112,7 +115,7 @@ export default function AdvertiserDashboard() {
   useEffect(() => {
     let cancelled = false;
     async function loadAnalytics() {
-      const candidates = ads.filter((ad) => ['PUBLISHED', 'ACTIVE', 'SCHEDULED'].includes(ad.status)).slice(0, 20);
+      const candidates = ads.filter((ad) => ['PUBLISHED', 'ACTIVE', 'SCHEDULED', 'APPROVED'].includes(ad.status)).slice(0, 20);
       const pairs = await Promise.all(candidates.map(async (ad) => {
         try {
           const { data } = await api.get(`/ads/${ad.id}/analytics`);
@@ -195,6 +198,30 @@ export default function AdvertiserDashboard() {
     }
   }
 
+  async function handleTelegramBroadcast(ad) {
+    clearMessages();
+    setBroadcastingId(ad.id);
+    try {
+      const { data } = await api.post('/growth/telegram-promo', {
+        title: ad.headline || 'MarketBridge Special Offer',
+        description: `Check out our latest featured listing! ${ad.listing?.title || ''}`,
+        promoUrl: ad.linkUrl || `${window.location.origin}/listings/${ad.listing?.id || ''}`,
+        imageUrl: ad.creativeImageUrl || undefined,
+        campaignId: ad.campaignReference || ad.id,
+      });
+
+      if (data.success) {
+        setSuccess('Successfully dispatched promo broadcast to MarketBridge Telegram channel!');
+      } else {
+        setError(data.message || 'Failed to dispatch Telegram broadcast.');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.response?.data?.error || 'Could not send Telegram broadcast.');
+    } finally {
+      setBroadcastingId(null);
+    }
+  }
+
   async function payForAd(ad) {
     clearMessages();
     setPayingId(ad.id);
@@ -232,7 +259,7 @@ export default function AdvertiserDashboard() {
     }
   }
 
-  const liveCount = useMemo(() => ads.filter((a) => ['PUBLISHED', 'ACTIVE'].includes(a.status)).length, [ads]);
+  const liveCount = useMemo(() => ads.filter((a) => ['PUBLISHED', 'ACTIVE', 'APPROVED_EFFECTIVE'].includes(a.status)).length, [ads]);
 
   if (loading && ads.length === 0) {
     return <main className="section"><div className="container-wide loading">Loading advertising center…</div></main>;
@@ -360,7 +387,7 @@ export default function AdvertiserDashboard() {
                   {ad.creativeImageUrl && <img src={ad.creativeImageUrl} alt={ad.headline || 'Campaign creative'} loading="lazy" decoding="async" style={{ width: '100%', borderRadius: 10, marginBottom: 10, maxHeight: 180, objectFit: 'cover' }} />}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <h3>{AD_TYPES.find((t) => t.value === ad.type)?.label || ad.type}</h3>
-                    <span className={statusClass(ad.status)}>{STATUS_LABELS[ad.status] || ad.status}</span>
+                    <span className={statusClass(ad.approval_status || ad.status)}>{STATUS_LABELS[ad.approval_status || ad.status] || ad.approval_status || ad.status}</span>
                   </div>
                   <p className="muted"><strong>Reference:</strong> {ad.campaignReference || ad.id}</p>
                   {ad.headline && <p className="muted">{ad.headline}</p>}
@@ -368,7 +395,22 @@ export default function AdvertiserDashboard() {
                   <p className="muted">{ad.listing ? `Listing: ${ad.listing.title || ad.listing.cropType}` : 'Platform-wide placement'}</p>
                   <p className="muted">{new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}</p>
                   <p className="muted"><strong>Quoted:</strong> {amountDue.toLocaleString()} {ad.currency || 'ETB'} · <strong>Paid:</strong> {paid ? Number(ad.amountPaid || paid.amount || 0).toLocaleString() : '0'} {ad.currency || 'ETB'}</p>
-                  {stats && <p className="muted"><strong>Performance:</strong> {stats.impressions} impressions · {stats.clicks} clicks · {stats.ctr}% CTR</p>}
+
+                  {/* Enhanced Ad Performance Analytics */}
+                  {stats ? (
+                    <div style={{ marginTop: 10, padding: 10, backgroundColor: 'var(--bg-subtle, #f8f9fa)', borderRadius: 8 }}>
+                      <p style={{ margin: 0, fontWeight: 600 }}>Performance Analytics:</p>
+                      <p className="muted" style={{ margin: '4px 0' }}>
+                        👁️ {stats.impressions || 0} impressions · 👆 {stats.clicks || 0} clicks · 🎯 {stats.conversions || 0} orders
+                      </p>
+                      <p className="muted" style={{ margin: 0 }}>
+                        <strong>CTR:</strong> {stats.ctr || ad.ctr || 0}% · <strong>CVR:</strong> {stats.cvr || ad.cvr || 0}% · <strong>ROAS:</strong> {stats.roas || ad.roas || 0}x
+                      </p>
+                    </div>
+                  ) : ad.ctr !== undefined ? (
+                    <p className="muted"><strong>Performance:</strong> {ad.ctr}% CTR · {ad.cvr}% CVR · {ad.roas}x ROAS</p>
+                  ) : null}
+
                   {ad.rejectionReason && <p className="alert error">Rejected: {ad.rejectionReason}</p>}
 
                   {!paid && pending && (
@@ -387,7 +429,19 @@ export default function AdvertiserDashboard() {
                     </div>
                   )}
                   {ad.status === 'PAID_PENDING_REVIEW' && <p className="muted" style={{ marginTop: 10 }}><strong>Paid.</strong> Waiting for MarketBridge content review.</p>}
-                  {ad.type === 'TELEGRAM_PROMOTION' && ['APPROVED', 'SCHEDULED', 'PUBLISHED'].includes(ad.status) && <p className="muted">Telegram publication is handled manually by MarketBridge.</p>}
+                  
+                  {ad.type === 'TELEGRAM_PROMOTION' && ['APPROVED', 'SCHEDULED', 'PUBLISHED', 'ACTIVE'].includes(ad.status) && (
+                    <div style={{ marginTop: 12 }}>
+                      <button 
+                        type="button" 
+                        className="sd-btn sd-btn-primary" 
+                        disabled={broadcastingId === ad.id} 
+                        onClick={() => handleTelegramBroadcast(ad)}
+                      >
+                        {broadcastingId === ad.id ? 'Broadcasting...' : 'Broadcast to Telegram Channel'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
