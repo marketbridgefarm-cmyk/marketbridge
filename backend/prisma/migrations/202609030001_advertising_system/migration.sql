@@ -1,6 +1,6 @@
--- Advertising Production Hardening Migration
+-- Step 2: Apply Hardened Schema Changes & Indexes
 
--- 1. Create Event Type Enum including CONVERSION
+-- 1. Create AdvertisementEventType Enum including CONVERSION
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -10,7 +10,7 @@ BEGIN
   END IF;
 END $$;
 
--- 2. Add Missing Columns to Advertisement Table
+-- 2. Expand Advertisement Table Structure
 ALTER TABLE "Advertisement"
   ADD COLUMN IF NOT EXISTS "priceQuoted" DOUBLE PRECISION,
   ADD COLUMN IF NOT EXISTS "currency" TEXT NOT NULL DEFAULT 'ETB',
@@ -23,23 +23,22 @@ ALTER TABLE "Advertisement"
   ADD COLUMN IF NOT EXISTS "publishedAt" TIMESTAMP(3),
   ADD COLUMN IF NOT EXISTS "telegramPostReference" TEXT;
 
--- 3. Backfill Legacy Data & Enforce Constraints
+-- 3. Backfill Legacy Records
 UPDATE "Advertisement"
 SET "priceQuoted" = COALESCE("priceQuoted", "amountPaid", 0)
 WHERE "priceQuoted" IS NULL;
-
-ALTER TABLE "Advertisement"
-  ALTER COLUMN "priceQuoted" SET NOT NULL,
-  ALTER COLUMN "status" SET DEFAULT 'PENDING_PAYMENT';
 
 UPDATE "Advertisement"
 SET "campaignReference" = 'MB-AD-LEGACY-' || "id"
 WHERE "campaignReference" IS NULL;
 
+-- 4. Apply Schema Constraints and Default Enums
 ALTER TABLE "Advertisement"
-  ALTER COLUMN "campaignReference" SET NOT NULL;
+  ALTER COLUMN "priceQuoted" SET NOT NULL,
+  ALTER COLUMN "campaignReference" SET NOT NULL,
+  ALTER COLUMN "status" SET DEFAULT 'PENDING_PAYMENT'::"AdStatus";
 
--- 4. Unique & Performance Indexes
+-- 5. Performance and Lookup Indexes
 CREATE UNIQUE INDEX IF NOT EXISTS "Advertisement_campaignReference_key"
   ON "Advertisement"("campaignReference");
 
@@ -49,7 +48,7 @@ CREATE INDEX IF NOT EXISTS "Advertisement_type_status_startDate_endDate_idx"
 CREATE INDEX IF NOT EXISTS "Advertisement_createdAt_idx"
   ON "Advertisement"("createdAt");
 
--- 5. AdvertisementEvent Table Setup
+-- 6. Event Analytics Table Setup
 CREATE TABLE IF NOT EXISTS "AdvertisementEvent" (
   "id" TEXT NOT NULL,
   "advertisementId" TEXT NOT NULL,
