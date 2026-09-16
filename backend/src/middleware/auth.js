@@ -22,6 +22,7 @@
 
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/db');
+const sentry = require('../utils/sentry');
 
 const MIN_SECRET_LENGTH = 32;
 
@@ -121,6 +122,10 @@ async function authenticate(req, res, next) {
     req.authSessionId = result.sessionId;
     req.authSessionFamilyId = result.familyId;
 
+    // id/role only — enough to triage an error report against a specific
+    // account without sending email/name to Sentry as a matter of course.
+    sentry.setUser({ id: result.user.id, role: result.user.role });
+
     return next();
   } catch (error) {
     if (error.status === 500) {
@@ -153,6 +158,8 @@ async function optionalAuthenticate(req, res, next) {
     req.user = result.user;
     req.authSessionId = result.sessionId;
     req.authSessionFamilyId = result.familyId;
+
+    sentry.setUser({ id: result.user.id, role: result.user.role });
 
     return next();
   } catch (error) {
