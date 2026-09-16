@@ -208,7 +208,6 @@ router.post(
     body('truckType').isString().trim().notEmpty(),
     body('capacity').isFloat({ gt: 0 }),
     body('operatingArea').optional().isString().trim(),
-    body('operatingLocationId').optional().isUUID(),
   ],
   validate,
   async (req, res) => {
@@ -218,7 +217,6 @@ router.post(
         truckType,
         capacity,
         operatingArea,
-        operatingLocationId,
       } = req.body;
 
       const truck = await prisma.truck.create({
@@ -228,7 +226,6 @@ router.post(
           truckType: truckType.trim(),
           capacity: Number(capacity),
           operatingArea: operatingArea?.trim() || '',
-          ...(operatingLocationId ? { operatingLocationId } : {}),
         },
       });
 
@@ -545,7 +542,7 @@ router.get(
 router.get('/match', authenticate, async (req, res) => {
   try {
     const trucks = await matchTrucks({
-      pickupLocationId: req.query.pickupLocationId,
+      area: req.query.area,
       requiredCapacity: req.query.minCapacity,
       limit: req.query.limit,
     });
