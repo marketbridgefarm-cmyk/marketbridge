@@ -300,7 +300,10 @@ router.get('/mine', authenticate, async (req, res) => {
 router.post(
   '/:id/events',
   adEventLimiter,
-  [param('id').isUUID(), body('eventType').isIn(['IMPRESSION', 'CLICK', 'CONVERSION'])],
+  // Only IMPRESSION and CLICK exist on the AdvertisementEventType enum in
+  // prisma/schema.prisma — CONVERSION is derived downstream from actual
+  // orders (see GET /:id/analytics), not recorded as its own event.
+  [param('id').isUUID(), body('eventType').isIn(['IMPRESSION', 'CLICK'])],
   validate,
   async (req, res) => {
     try {
