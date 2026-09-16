@@ -24,6 +24,7 @@ const {
   findMatchingBackupCodeIndex,
 } = require('../services/mfaService');
 const { createResetToken, consumeResetToken } = require('../services/passwordResetService');
+const { sendMail } = require('../utils/mailer');
 const { normalizeEthiopianPhone } = require('../services/smsService');
 const { SUPPORTED_SMS_LANGUAGES } = require('../services/notificationCopy');
 
@@ -613,11 +614,13 @@ router.post(
 
 // Always responds with the same generic message regardless of whether the
 // email is registered, so this endpoint can't be used to enumerate
-// accounts. NOTE: this platform has no email/SMS provider wired up yet
-// (see the Top-10 roadmap item on Amharic/Afaan Oromo + SMS notifications)
-// — until one exists, the raw reset link is logged server-side so Alex can
-// retrieve it manually, and is only ever included in the API response
-// itself outside production, for local/manual testing.
+// accounts. The reset link is emailed via the shared SMTP mailer
+// (utils/mailer.js); a send failure is logged and swallowed rather than
+// surfaced to the caller — letting it bubble up as a distinct error would
+// itself leak account existence during a provider outage (nonexistent
+// emails short-circuit above before ever reaching sendMail, so only real
+// accounts would see the failure). Outside production the link is also
+// echoed in the response for local/manual testing without real SMTP.
 router.post(
   '/forgot-password',
   authLimiter,
@@ -639,11 +642,16 @@ router.post(
       const rawToken = await createResetToken(prisma, { userId: user.id, requestedIp: requestIp(req) });
       const resetUrl = `${(process.env.APP_BASE_URL || '').replace(/\/$/, '')}/reset-password?token=${rawToken}`;
 
-      // TODO(priority-9): replace this console.log with a real email/SMS
-      // send once a provider is wired up. Until then this is the only way
-      // the token reaches anyone, so it's logged at a level Alex can find
-      // in Render's logs.
-      console.log(`[password-reset] ${user.email} -> ${resetUrl}`);
+      try {
+        await sendMail({
+          to: user.email,
+          subject: 'Reset your MarketBridge password',
+          text: `We received a request to reset your MarketBridge password. This link expires in 30 minutes:\n\n${resetUrl}\n\nIf you didn't request this, you can ignore this email.`,
+          html: `<p>We received a request to reset your MarketBridge password. This link expires in 30 minutes:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>If you didn't request this, you can ignore this email.</p>`,
+        });
+      } catch (mailError) {
+        req.log.error({ err: mailError, userId: user.id }, 'Password-reset email failed to send');
+      }
 
       return res.json({
         ...genericResponse,
