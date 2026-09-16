@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import en from './locales/en.json';
-import am from './locales/am.json';
-import om from './locales/om.json';
+import en from '../locales/en.json';
+import am from '../locales/am.json';
+import om from '../locales/om.json';
 
 // Deliberately not a heavier library (react-i18next etc.) — this app only
 // needs flat-key lookup + fallback, and keeping it dependency-free makes
