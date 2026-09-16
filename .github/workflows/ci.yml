@@ -53,8 +53,16 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
+      # STOPGAP: backend/package-lock.json predates several dependencies in
+      # package.json (otplib, qrcode, nodemailer, sharp, ioredis,
+      # express-rate-limit, the AWS SDK packages, pino/pino-http/pino-pretty),
+      # so `npm ci` fails on the lock/manifest mismatch. Regenerate the lock
+      # file from a networked machine (`npm install` in backend/, commit the
+      # result) and switch this back to `npm ci` once it's current — `npm
+      # install` here does not guarantee the exact reproducible tree `npm ci`
+      # does.
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Prisma generate
         run: npx prisma generate
@@ -103,8 +111,12 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      # STOPGAP: frontend/package-lock.json is missing entirely, and `npm ci`
+      # refuses to run without one. Generate it from a networked machine
+      # (`npm install` in frontend/, commit the resulting package-lock.json)
+      # and switch this back to `npm ci` once it exists.
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build
         # A placeholder API URL is enough to prove the production build
