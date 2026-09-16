@@ -339,6 +339,29 @@ app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/growth', growthRoutes);
 
 // ============================================================================
+// API DOCS
+// ============================================================================
+//
+// Served from a generated spec (openapi/openapi.json) — see
+// scripts/generate-openapi.js and openapi/README.md. Not behind auth: this
+// describes the API's shape, not any user's data, and integrators need it
+// before they have a token. Mounted before the 404 handler and the API rate
+// limiter's usual targets so it stays reachable in every environment.
+try {
+  const swaggerUi = require('swagger-ui-express');
+  const openapiSpec = require('../openapi/openapi.json');
+  app.get('/api/openapi.json', (req, res) => res.json(openapiSpec));
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec, {
+    customSiteTitle: 'MarketBridge API Docs',
+  }));
+} catch (error) {
+  // openapi.json hasn't been generated yet (run `npm run docs:generate`),
+  // or swagger-ui-express isn't installed — don't take the whole API down
+  // over missing docs.
+  logger.warn({ err: error }, 'API docs not mounted (run `npm run docs:generate`?)');
+}
+
+// ============================================================================
 // API 404
 // ============================================================================
 
