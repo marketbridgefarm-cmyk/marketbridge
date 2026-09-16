@@ -65,6 +65,58 @@ router.post('/referrals/mine', authenticate, async (req, res) => {
   return res.status(201).json({ referral });
 });
 
+router.post('/telegram-promo', authenticate, [
+  body('title').isString().trim().notEmpty(),
+  body('description').optional().isString().trim(),
+  body('promoUrl').optional().isString().trim(),
+  body('imageUrl').optional().isString().trim(),
+  body('campaignId').optional().isString().trim()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { title, description, promoUrl, imageUrl, campaignId } = req.body;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHANNEL_ID;
+
+    if (!botToken || !chatId) {
+      return res.status(503).json({ success: false, message: 'Telegram integration is not configured on the server.' });
+    }
+
+    const messageText = `🚀 *${title}*\n\n${description || ''}\n\n🔗 ${promoUrl || ''}`.trim();
+    const telegramUrl = `https://api.telegram.org/bot${botToken}/${imageUrl ? 'sendPhoto' : 'sendMessage'}`;
+
+    const payload = imageUrl
+      ? { chat_id: chatId, photo: imageUrl, caption: messageText, parse_mode: 'Markdown' }
+      : { chat_id: chatId, text: messageText, parse_mode: 'Markdown' };
+
+    const telegramRes = await fetch(telegramUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await telegramRes.json();
+    if (!data.ok) {
+      req.log.error({ telegramError: data }, 'TELEGRAM PROMO DISPATCH FAILED');
+      return res.status(400).json({ success: false, message: data.description || 'Telegram API rejected broadcast.' });
+    }
+
+    if (campaignId) {
+      await prisma.advertisement.updateMany({
+        where: { OR: [{ id: campaignId }, { campaignReference: campaignId }] },
+        data: { status: 'PUBLISHED' }
+      }).catch(() => {});
+    }
+
+    return res.json({ success: true, messageId: data.result?.message_id });
+  } catch (error) {
+    req.log.error({ err: error }, 'TELEGRAM PROMO ERROR:');
+    return res.status(500).json({ error: 'Could not send Telegram broadcast' });
+  }
+});
+
 router.post('/promotions/admin', authenticate, requireRole('ADMIN'), [body('code').isString().trim().isLength({ min: 3, max: 32 }), body('discountType').isIn(['PERCENTAGE','FIXED']), body('discountValue').isFloat({ min: 0.01 }), body('startsAt').isISO8601(), body('endsAt').isISO8601(), body('minimumSubtotal').optional().isFloat({ min: 0 }), body('maxDiscount').optional().isFloat({ min: 0 })], async (req, res) => {
   const errors = validationResult(req); if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   try {
