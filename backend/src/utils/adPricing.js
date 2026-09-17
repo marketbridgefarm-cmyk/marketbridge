@@ -35,6 +35,18 @@ const DEFAULT_BANNER_TEMPLATE_MULTIPLIERS = {
 
 const BANNER_TEMPLATES = Object.keys(DEFAULT_BANNER_TEMPLATE_MULTIPLIERS);
 
+// TELEGRAM_PROMOTION message/tone templates. Purely cosmetic copy presets
+// (staff still write and publish the actual post) — every template costs
+// the same, unlike BANNER templates, so there is no multiplier map here.
+const TELEGRAM_TEMPLATES = [
+  'CLASSIC',
+  'HOT_DEAL',
+  'FRESH_HARVEST',
+  'FARM_TO_TABLE',
+  'FLASH_SALE',
+  'TRUSTED_SELLER',
+];
+
 function rateFromEnv(type) {
   const raw = process.env[`AD_RATE_${type}`];
   if (raw == null || raw === '') return DEFAULT_DAILY_RATES_ETB[type];
@@ -83,6 +95,7 @@ module.exports = {
   DEFAULT_DAILY_RATES_ETB,
   BANNER_TEMPLATES,
   DEFAULT_BANNER_TEMPLATE_MULTIPLIERS,
+  TELEGRAM_TEMPLATES,
   dailyRatesEtb,
   bannerTemplateMultipliers,
   campaignDays,
