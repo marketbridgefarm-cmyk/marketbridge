@@ -112,6 +112,11 @@ enum QuoteCounterParty {
   PROVIDER
 }
 
+enum BuyerDecision {
+  BUY
+  CANCEL
+}
+
 enum OrderStatus {
   PENDING_PAYMENT
   CONFIRMED
@@ -670,6 +675,8 @@ model Offer {
   parentOffer   Offer?  @relation("OfferChain", fields: [parentOfferId], references: [id])
   childOffers   Offer[] @relation("OfferChain")
 
+  agreedOrder Order? @relation("AgreedOffer")
+
   expiresAt DateTime?
 
   status OfferStatus @default(PENDING)
@@ -701,6 +708,11 @@ model Offer {
 model InspectionRequest {
   id String @id @default(uuid())
 
+  // Every inspection in the agricultural workflow belongs to the specific
+  // agreed order. listingId is retained as the source produce/listing reference.
+  order   Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String?
+
   listing   Listing @relation(fields: [listingId], references: [id])
   listingId String
 
@@ -729,6 +741,7 @@ model InspectionRequest {
 
   quotes InspectionQuote[]
 
+  @@index([orderId])
   @@index([listingId])
   @@index([requestedById])
   @@index([inspectorId])
@@ -860,6 +873,18 @@ model Order {
   quantity   Float
 
   status OrderStatus @default(PENDING_PAYMENT)
+
+  // Immutable link to the exact accepted negotiation that created this order.
+  agreedOffer   Offer? @relation("AgreedOffer", fields: [agreedOfferId], references: [id])
+  agreedOfferId String? @unique
+  agreedAt DateTime?
+
+  // Agricultural orders require an explicit buyer decision after the inspection
+  // report (BUY or CANCEL) before the commercial purchase can proceed.
+  buyerDecision BuyerDecision?
+  buyerDecisionAt DateTime?
+
+  inspectionRequests InspectionRequest[]
 
   arrangingParty ArrangingParty?
 
