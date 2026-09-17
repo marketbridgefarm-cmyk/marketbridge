@@ -1019,6 +1019,27 @@ router.patch(
                 );
               }
 
+              // The seller may accept a buyer counter-offer when it reaches
+              // the seller's configured minimum acceptable price. This is a
+              // seller-side floor, not a requirement that the buyer accept
+              // the seller's previous counter.
+              if (
+                freshOffer.status === 'COUNTERED' &&
+                freshOffer.counteredBy === 'BUYER' &&
+                freshOffer.listing.minAcceptablePrice != null
+              ) {
+                const minimumPrice = Number(freshOffer.listing.minAcceptablePrice);
+                if (
+                  Number.isFinite(minimumPrice) &&
+                  finalPrice < minimumPrice
+                ) {
+                  throw offerError(
+                    `Buyer counter-offer is below the seller's minimum acceptable price of ${minimumPrice.toFixed(2)} ETB`,
+                    409
+                  );
+                }
+              }
+
               return acceptOfferAndCreateOrder(
                 tx,
                 freshOffer,
