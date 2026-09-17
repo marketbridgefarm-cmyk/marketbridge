@@ -13,7 +13,16 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { AD_TYPES, DEFAULT_DAILY_RATES_ETB, dailyRatesEtb, campaignDays, quotePrice } = require('../src/utils/adPricing');
+const {
+  AD_TYPES,
+  DEFAULT_DAILY_RATES_ETB,
+  BANNER_TEMPLATES,
+  DEFAULT_BANNER_TEMPLATE_MULTIPLIERS,
+  dailyRatesEtb,
+  bannerTemplateMultipliers,
+  campaignDays,
+  quotePrice,
+} = require('../src/utils/adPricing');
 
 test('campaignDays rounds a partial day up to a full day', () => {
   const start = new Date('2026-01-01T00:00:00Z');
@@ -85,6 +94,63 @@ test('quotePrice honors a valid env rate override', () => {
     const start = new Date('2026-02-01T00:00:00Z');
     const end = new Date('2026-02-03T00:00:00Z'); // 2 days
     assert.equal(quotePrice('BANNER', start, end), 2000);
+  } finally {
+    if (original === undefined) delete process.env[key];
+    else process.env[key] = original;
+  }
+});
+
+test('every declared BANNER_TEMPLATES entry has a positive default multiplier', () => {
+  for (const template of BANNER_TEMPLATES) {
+    assert.ok(DEFAULT_BANNER_TEMPLATE_MULTIPLIERS[template] > 0, `${template} is missing a positive default multiplier`);
+  }
+});
+
+test('quotePrice defaults an unspecified BANNER template to CLASSIC (no surcharge)', () => {
+  const start = new Date('2026-01-01T00:00:00Z');
+  const end = new Date('2026-01-02T00:00:00Z'); // 1 day
+  assert.equal(quotePrice('BANNER', start, end), quotePrice('BANNER', start, end, 'CLASSIC'));
+});
+
+test('quotePrice applies a premium banner template multiplier on top of the daily rate', () => {
+  const start = new Date('2026-01-01T00:00:00Z');
+  const end = new Date('2026-01-04T00:00:00Z'); // 3 days
+  const base = 3 * DEFAULT_DAILY_RATES_ETB.BANNER;
+  assert.equal(quotePrice('BANNER', start, end, 'DARK_LUXE'), base * DEFAULT_BANNER_TEMPLATE_MULTIPLIERS.DARK_LUXE);
+  assert.equal(quotePrice('BANNER', start, end, 'EDITORIAL'), base * DEFAULT_BANNER_TEMPLATE_MULTIPLIERS.EDITORIAL);
+  assert.ok(quotePrice('BANNER', start, end, 'DARK_LUXE') > quotePrice('BANNER', start, end, 'MINIMAL'), 'premium template should cost more than a standard one');
+});
+
+test('quotePrice ignores bannerTemplate entirely for non-BANNER types', () => {
+  const start = new Date('2026-01-01T00:00:00Z');
+  const end = new Date('2026-01-04T00:00:00Z');
+  assert.equal(
+    quotePrice('FEATURED_LISTING', start, end, 'DARK_LUXE'),
+    quotePrice('FEATURED_LISTING', start, end)
+  );
+});
+
+test('quotePrice rejects an unsupported banner template', () => {
+  const start = new Date('2026-01-01T00:00:00Z');
+  const end = new Date('2026-01-02T00:00:00Z');
+  assert.throws(() => quotePrice('BANNER', start, end, 'NOT_A_REAL_TEMPLATE'), /Unsupported banner template/);
+});
+
+test('bannerTemplateMultipliers falls back to defaults for missing/invalid env overrides', () => {
+  const key = 'AD_TEMPLATE_MULTIPLIER_DARK_LUXE';
+  const original = process.env[key];
+  try {
+    delete process.env[key];
+    assert.equal(bannerTemplateMultipliers().DARK_LUXE, DEFAULT_BANNER_TEMPLATE_MULTIPLIERS.DARK_LUXE);
+
+    process.env[key] = '-2';
+    assert.equal(bannerTemplateMultipliers().DARK_LUXE, DEFAULT_BANNER_TEMPLATE_MULTIPLIERS.DARK_LUXE);
+
+    process.env[key] = 'not-a-number';
+    assert.equal(bannerTemplateMultipliers().DARK_LUXE, DEFAULT_BANNER_TEMPLATE_MULTIPLIERS.DARK_LUXE);
+
+    process.env[key] = '2';
+    assert.equal(bannerTemplateMultipliers().DARK_LUXE, 2);
   } finally {
     if (original === undefined) delete process.env[key];
     else process.env[key] = original;

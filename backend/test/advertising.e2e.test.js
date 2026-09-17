@@ -359,4 +359,89 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
     const afterApproval = await api(`/api/ads/${ad.id}/events`, { method: 'POST', body: { eventType: 'IMPRESSION' } });
     assert.equal(afterApproval.status, 204, JSON.stringify(afterApproval.body));
   });
+
+  test('BANNER pricing varies by banner template, not just type/duration, and is server-owned', async () => {
+    const { token: advertiserToken } = await register({
+      name: 'Ad E2E Template Pricing Advertiser',
+      email: `ad-e2e-template-${Date.now()}@marketbridge.test`,
+    });
+
+    const startDate = new Date(Date.now() + 86400000);
+    const endDate = new Date(Date.now() + 4 * 86400000); // 3-day campaign
+    // 1x1 PNG, minimal valid signature — the route validates real image bytes.
+    const pngBytes = Buffer.from(
+      '89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415478da6360000002000155a2d1440000000049454e44ae426082',
+      'hex'
+    );
+    const uploadCreative = async () => {
+      const form = new FormData();
+      form.append('file', new Blob([pngBytes], { type: 'image/png' }), 'banner.png');
+      const response = await fetch(`${baseUrl}/api/ads/creative`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${advertiserToken}` },
+        body: form,
+      });
+      const json = await response.json();
+      assert.equal(response.status, 201, JSON.stringify(json));
+      return json.key;
+    };
+
+    const classicKey = await uploadCreative();
+    const classicResult = await api('/api/ads', {
+      method: 'POST',
+      token: advertiserToken,
+      body: {
+        type: 'BANNER',
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        headline: 'Standard style banner',
+        creativeImageKey: classicKey,
+        bannerTemplate: 'CLASSIC',
+      },
+    });
+    assert.equal(classicResult.status, 201, JSON.stringify(classicResult.body));
+    created.advertisementIds.push(classicResult.body.ad.id);
+
+    const luxeKey = await uploadCreative();
+    const luxeResult = await api('/api/ads', {
+      method: 'POST',
+      token: advertiserToken,
+      body: {
+        type: 'BANNER',
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        headline: 'Premium style banner',
+        creativeImageKey: luxeKey,
+        bannerTemplate: 'DARK_LUXE',
+      },
+    });
+    assert.equal(luxeResult.status, 201, JSON.stringify(luxeResult.body));
+    created.advertisementIds.push(luxeResult.body.ad.id);
+
+    const classicPrice = Number(classicResult.body.ad.priceQuoted);
+    const luxePrice = Number(luxeResult.body.ad.priceQuoted);
+    assert.equal(classicPrice, quotePrice('BANNER', startDate, endDate, 'CLASSIC'));
+    assert.equal(luxePrice, quotePrice('BANNER', startDate, endDate, 'DARK_LUXE'));
+    assert.ok(luxePrice > classicPrice, 'the marketed "premium"/"high-end" template should actually cost more than the standard one');
+
+    // A client cannot buy the premium look at the standard price: the
+    // server recomputes priceQuoted from the submitted bannerTemplate, it
+    // never trusts a client-supplied amount.
+    const spoofed = await api('/api/ads', {
+      method: 'POST',
+      token: advertiserToken,
+      body: {
+        type: 'BANNER',
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        headline: 'Attempted underpriced premium banner',
+        creativeImageKey: await uploadCreative(),
+        bannerTemplate: 'DARK_LUXE',
+        priceQuoted: classicPrice,
+      },
+    });
+    assert.equal(spoofed.status, 201, JSON.stringify(spoofed.body));
+    created.advertisementIds.push(spoofed.body.ad.id);
+    assert.equal(Number(spoofed.body.ad.priceQuoted), luxePrice, 'server must ignore any client-supplied priceQuoted and recompute from type+duration+template');
+  });
 }
