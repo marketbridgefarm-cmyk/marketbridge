@@ -5483,3 +5483,255 @@ tr:last-child td { border-bottom: 0; }
 
   a { text-decoration: underline; }
 }
+
+/* ==========================================================================
+   GLOBAL DASHBOARD STAT CARD COMPACTION
+   Applies to .sd-stat-grid + .sd-stat everywhere (Inspector, Truck Owner,
+   Seller, Buyer, Advertiser, Admin). Fixes the oversized vertically-stacked
+   stat cards on mobile by forcing a tight 2-column grid with compact type.
+   ========================================================================== */
+
+/* Remove the decorative radial circle — it inflates perceived height. */
+.sd-stat::after {
+  display: none !important;
+}
+
+/* Base: keep desktop multi-column but with sane min-width so grids don't
+   collapse to 1 column on medium screens. */
+.sd-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 14px;
+}
+
+/* Tablet — 2 columns, compact */
+@media (max-width: 900px) {
+  .sd-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+    margin-top: 18px !important;
+  }
+
+  .sd-stat {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: flex-start !important;
+    padding: 14px 16px !important;
+    min-height: 0 !important;
+    height: auto !important;
+    border-radius: 12px !important;
+    border-left-width: 3px !important;
+    background: linear-gradient(135deg, #ffffff 0%, #f4faf5 100%) !important;
+  }
+
+  .sd-stat span,
+  .sd-stat .sd-eyebrow {
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+    letter-spacing: 0.06em !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    color: var(--text-tertiary) !important;
+    margin: 0 !important;
+  }
+
+  .sd-stat b {
+    display: block !important;
+    font-size: 24px !important;
+    line-height: 1.1 !important;
+    margin-top: 4px !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.03em !important;
+    background: linear-gradient(135deg, var(--green-600) 0%, var(--green-500) 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+  }
+}
+
+/* Phone — 2 columns, tighter */
+@media (max-width: 620px) {
+  .sd-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-top: 14px !important;
+  }
+
+  .sd-stat {
+    padding: 11px 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .sd-stat span {
+    font-size: 9px !important;
+    letter-spacing: 0.05em !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .sd-stat b {
+    font-size: 20px !important;
+    margin-top: 3px !important;
+  }
+}
+
+/* Wide phone (landscape) — 4 across fits cleanly */
+@media (min-width: 480px) and (max-width: 620px) {
+  .sd-stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .sd-stat {
+    padding: 11px 10px !important;
+  }
+
+  .sd-stat span { font-size: 8.5px !important; }
+  .sd-stat b { font-size: 19px !important; }
+}
+
+/* Small phone — keep 2 columns, ultra compact */
+@media (max-width: 420px) {
+  .sd-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .sd-stat {
+    padding: 9px 10px !important;
+  }
+
+  .sd-stat span { font-size: 8.5px !important; }
+  .sd-stat b { font-size: 18px !important; }
+}
+
+/* Very small phone */
+@media (max-width: 360px) {
+  .sd-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .sd-stat {
+    padding: 8px 9px !important;
+    border-left-width: 2px !important;
+  }
+
+  .sd-stat span { font-size: 8px !important; }
+  .sd-stat b { font-size: 17px !important; }
+}
+
+/* --------------------------------------------------------------------------
+   Also fix the generic .stat-card + .dashboard-grid used on Seller/Buyer
+   dashboards — same problem, different class names.
+   -------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .stat-card {
+    padding: 14px 16px !important;
+    border-radius: 12px !important;
+  }
+
+  .stat-card strong {
+    font-size: 22px !important;
+    line-height: 1.1 !important;
+  }
+
+  .stat-card span {
+    font-size: 11px !important;
+    line-height: 1.25 !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-bottom: 22px !important;
+  }
+
+  .stat-card {
+    padding: 11px 12px !important;
+  }
+
+  .stat-card strong { font-size: 20px !important; }
+  .stat-card span { font-size: 10px !important; }
+}
+
+@media (max-width: 420px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .stat-card { padding: 9px 10px !important; }
+  .stat-card strong { font-size: 18px !important; }
+  .stat-card span { font-size: 9px !important; }
+}
+
+@media (max-width: 360px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .stat-card { padding: 8px 9px !important; }
+  .stat-card strong { font-size: 17px !important; }
+  .stat-card span { font-size: 8.5px !important; }
+}
+
+/* --------------------------------------------------------------------------
+   The tab bar ("Available Jobs (26)" / "My Jobs (5)") also stretched too
+   wide on mobile in your screenshot. Make it a proper horizontally
+   scrollable tab strip so buttons never wrap or shrink awkwardly.
+   -------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .sd-tabs-nav {
+    margin: 18px 0 14px !important;
+  }
+
+  .sd-tabs-current {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    width: 100% !important;
+    min-height: 46px !important;
+    padding: 12px 16px !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    border-radius: 12px !important;
+  }
+
+  .sd-tabs-list {
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 35;
+    margin: 0;
+    padding: 6px;
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 18px 40px rgba(20, 45, 28, 0.16);
+  }
+
+  .sd-tabs-open .sd-tabs-list { display: flex !important; }
+
+  .sd-tabs-list .sd-tab {
+    width: 100% !important;
+    text-align: left !important;
+    padding: 12px 14px !important;
+    min-height: 44px !important;
+    border-radius: 9px !important;
+    font-size: 14px !important;
+  }
+}
