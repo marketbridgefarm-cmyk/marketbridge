@@ -341,7 +341,16 @@ router.post('/:id/events', adEventLimiter, [param('id').isUUID(), body('eventTyp
   try {
     const ad = await prisma.advertisement.findUnique({ where: { id: req.params.id }, select: { id: true, status: true, startDate: true, endDate: true } });
     const now = new Date();
-    if (!ad || !['ACTIVE', 'PUBLISHED'].includes(ad.status) || ad.startDate > now || ad.endDate < now) return res.status(404).json({ error: 'Active campaign not found' });
+    // A campaign is "live" the moment its window opens, even if the row is
+    // still sitting at SCHEDULED because the activation job hasn't ticked
+    // yet (see maintenanceService.activateScheduledAdvertisements). This
+    // must match GET /ads/active's activeStatusWhere() exactly: that's the
+    // query that decides what the frontend actually shows and fires
+    // impression/click events for, so if this check is stricter than that
+    // one, every scheduled campaign silently loses its analytics the
+    // instant it goes live and stays that way until an admin happens to
+    // touch its status.
+    if (!ad || !['ACTIVE', 'PUBLISHED', 'SCHEDULED'].includes(ad.status) || ad.startDate > now || ad.endDate < now) return res.status(404).json({ error: 'Active campaign not found' });
     await prisma.advertisementEvent.create({ data: { advertisementId: ad.id, eventType: req.body.eventType } });
     return res.status(204).end();
   } catch (error) {
