@@ -65,6 +65,7 @@ export default function AdvertiserDashboard() {
   const [ads, setAds] = useState([]);
   const [myListings, setMyListings] = useState([]);
   const [dailyRates, setDailyRates] = useState({});
+  const [templateMultipliers, setTemplateMultipliers] = useState({});
   const [maxCampaignDays, setMaxCampaignDays] = useState(90);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -99,6 +100,7 @@ export default function AdvertiserDashboard() {
       setAds(adsRes.data?.ads || []);
       setMyListings((listingsRes.data?.listings || []).filter((l) => l.status === 'ACTIVE'));
       setDailyRates(pricingRes.data?.dailyRatesEtb || {});
+      setTemplateMultipliers(pricingRes.data?.bannerTemplateMultipliers || {});
       setMaxCampaignDays(Number(pricingRes.data?.maxCampaignDays || 90));
     } catch (err) {
       setError(err.response?.data?.error || 'Could not load your advertising campaigns');
@@ -131,7 +133,8 @@ export default function AdvertiserDashboard() {
   const needsCreative = form.type === 'BANNER';
   const needsHeadline = form.type === 'BANNER' || form.type === 'TELEGRAM_PROMOTION';
   const days = campaignDays(form.startDate, form.endDate);
-  const estimatedPrice = days > 0 && dailyRates[form.type] ? days * dailyRates[form.type] : null;
+  const templateMultiplier = form.type === 'BANNER' ? (templateMultipliers[form.bannerTemplate] || 1) : 1;
+  const estimatedPrice = days > 0 && dailyRates[form.type] ? days * dailyRates[form.type] * templateMultiplier : null;
 
   const activityItems = ads.map((ad) => ({
     id: `ad-${ad.id}`,
@@ -292,18 +295,22 @@ export default function AdvertiserDashboard() {
 
                   <label>Banner style</label>
                   <div className="ad-template-picker">
-                    {BANNER_TEMPLATE_OPTIONS.map((tpl) => (
-                      <button
-                        type="button"
-                        key={tpl.value}
-                        className={`ad-template-option${form.bannerTemplate === tpl.value ? ' ad-template-option--active' : ''}`}
-                        onClick={() => setForm((f) => ({ ...f, bannerTemplate: tpl.value }))}
-                      >
-                        <span className={`ad-template-swatch ad-template-swatch--${tpl.value.toLowerCase()}`} aria-hidden="true" />
-                        <strong>{tpl.label}</strong>
-                        <span className="muted" style={{ fontSize: 12 }}>{tpl.help}</span>
-                      </button>
-                    ))}
+                    {BANNER_TEMPLATE_OPTIONS.map((tpl) => {
+                      const multiplier = templateMultipliers[tpl.value] || 1;
+                      return (
+                        <button
+                          type="button"
+                          key={tpl.value}
+                          className={`ad-template-option${form.bannerTemplate === tpl.value ? ' ad-template-option--active' : ''}`}
+                          onClick={() => setForm((f) => ({ ...f, bannerTemplate: tpl.value }))}
+                        >
+                          <span className={`ad-template-swatch ad-template-swatch--${tpl.value.toLowerCase()}`} aria-hidden="true" />
+                          <strong>{tpl.label}</strong>
+                          <span className="muted" style={{ fontSize: 12 }}>{tpl.help}</span>
+                          <span className="muted" style={{ fontSize: 12 }}>{multiplier > 1 ? `+${Math.round((multiplier - 1) * 100)}% rate` : 'Standard rate'}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </>
               )}
@@ -320,7 +327,9 @@ export default function AdvertiserDashboard() {
               <div className="sd-panel" style={{ marginTop: 14 }}>
                 <strong>Server pricing</strong>
                 <p className="muted" style={{ marginBottom: 0 }}>
-                  {estimatedPrice != null ? `${estimatedPrice.toLocaleString()} ETB estimated for ${days} day${days === 1 ? '' : 's'} at ${Number(dailyRates[form.type] || 0).toLocaleString()} ETB/day.` : 'Choose dates to see the current rate.'}
+                  {estimatedPrice != null
+                    ? `${estimatedPrice.toLocaleString()} ETB estimated for ${days} day${days === 1 ? '' : 's'} at ${Number(dailyRates[form.type] || 0).toLocaleString()} ETB/day${templateMultiplier > 1 ? ` (${BANNER_TEMPLATE_OPTIONS.find((t) => t.value === form.bannerTemplate)?.label} style: +${Math.round((templateMultiplier - 1) * 100)}%)` : ''}.`
+                    : 'Choose dates to see the current rate.'}
                 </p>
                 <small className="muted">Final amount is recalculated and fixed by the backend when you submit.</small>
               </div>
