@@ -1,6 +1,7 @@
 'use strict';
 
 const prisma = require('../config/db');
+const logger = require('../utils/logger');
 const { recordAuditEvent } = require('../utils/audit');
 const { syncOrderPaymentObligations, findPaymentObligation } = require('./paymentObligationService');
 const { recordOrderEvent } = require('./orderEventService');
@@ -600,18 +601,36 @@ async function settlePayment({
     }
 
     if (updated.orderId) {
-      await recordOrderEvent(tx, {
-        orderId: updated.orderId,
-        type: 'PAYMENT_STATUS_CHANGED',
-        metadata: {
-          paymentId: updated.id,
-          paymentType: updated.type,
-          fromStatus: payment.status,
-          toStatus: status,
-          obligationId: updated.obligationId || null,
-          amount: String(updated.amount),
-        },
-      });
+      // Notifications + SMS-outbox rows are a side effect of this status
+      // change, not part of what makes the payment settlement itself
+      // correct. They must never be able to void a payment we've already
+      // confirmed with the provider: a transient failure in this call
+      // (see the queueSmsForRecipients chain in notificationService.js)
+      // would otherwise throw inside this $transaction and roll back the
+      // payment/ledger writes above it too, leaving real, received money
+      // stuck as unsettled over what is ultimately just a missed inbox
+      // notification. Swallow and log instead of letting it abort
+      // settlement; the order event row (and therefore the notification)
+      // can be backfilled, a lost payment confirmation cannot.
+      try {
+        await recordOrderEvent(tx, {
+          orderId: updated.orderId,
+          type: 'PAYMENT_STATUS_CHANGED',
+          metadata: {
+            paymentId: updated.id,
+            paymentType: updated.type,
+            fromStatus: payment.status,
+            toStatus: status,
+            obligationId: updated.obligationId || null,
+            amount: String(updated.amount),
+          },
+        });
+      } catch (error) {
+        logger.error(
+          { err: error, paymentId: updated.id, orderId: updated.orderId },
+          'settlePayment: recordOrderEvent/notification side effect failed; continuing with payment settlement'
+        );
+      }
     }
 
     await recordAuditEvent(tx, {
