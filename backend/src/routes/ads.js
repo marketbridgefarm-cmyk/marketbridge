@@ -12,12 +12,8 @@ const { isAdmin } = require('../utils/authorization');
 const { recordAuditEvent } = require('../utils/audit');
 const { requestRefund } = require('../services/paymentRefundService');
 const { uploadPrivateObject, signedMediaUrl, deletePrivateObject } = require('../utils/objectStorage');
-const { AD_TYPES, dailyRatesEtb, campaignDays, quotePrice } = require('../utils/adPricing');
+const { AD_TYPES, BANNER_TEMPLATES, dailyRatesEtb, bannerTemplateMultipliers, campaignDays, quotePrice } = require('../utils/adPricing');
 const { optimizeUpload } = require('../utils/imageProcessor');
-
-// Visual layout template applied when rendering a BANNER creative. Ignored
-// entirely for every other campaign type.
-const BANNER_TEMPLATES = ['CLASSIC', 'BOLD', 'MINIMAL', 'CARD', 'SPLIT', 'EDITORIAL', 'FRESH', 'DARK_LUXE', 'MARKET', 'GRADIENT'];
 
 const router = express.Router();
 
@@ -147,7 +143,13 @@ function paymentStatus(ad) {
 // Pricing is deliberately server-owned. The frontend may display these values,
 // but it can never choose the amount charged for a campaign.
 router.get('/pricing', authenticate, (req, res) => {
-  return res.json({ currency: 'ETB', dailyRatesEtb: dailyRatesEtb(), maxCampaignDays: Number(process.env.AD_MAX_CAMPAIGN_DAYS || 90), bannerTemplates: BANNER_TEMPLATES });
+  return res.json({
+    currency: 'ETB',
+    dailyRatesEtb: dailyRatesEtb(),
+    maxCampaignDays: Number(process.env.AD_MAX_CAMPAIGN_DAYS || 90),
+    bannerTemplates: BANNER_TEMPLATES,
+    bannerTemplateMultipliers: bannerTemplateMultipliers(),
+  });
 });
 
 // Upload banner creative to private object storage. The database only stores
@@ -239,7 +241,8 @@ router.post(
       }
       if (type === 'BANNER' && !req.body.creativeImageKey) return res.status(400).json({ error: 'Banner campaigns require an uploaded image' });
 
-      const priceQuoted = quotePrice(type, startDate, endDate);
+      const bannerTemplate = type === 'BANNER' ? (req.body.bannerTemplate || 'CLASSIC') : 'CLASSIC';
+      const priceQuoted = quotePrice(type, startDate, endDate, bannerTemplate);
       const campaignReference = `MB-AD-${new Date().getUTCFullYear()}-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
 
       const ad = await prisma.$transaction(async (tx) => {
@@ -257,7 +260,7 @@ router.post(
             headline,
             destinationUrl: linkUrl,
             creativeImageKey: type === 'BANNER' ? req.body.creativeImageKey : null,
-            bannerTemplate: type === 'BANNER' ? (req.body.bannerTemplate || 'CLASSIC') : 'CLASSIC',
+            bannerTemplate,
           },
         });
         await recordAuditEvent(tx, {
@@ -265,7 +268,7 @@ router.post(
           action: 'AD_CAMPAIGN_CREATED',
           resourceType: 'Advertisement',
           resourceId: created.id,
-          metadata: { type, listingId: listingId || null, priceQuoted, currency: 'ETB', campaignReference },
+          metadata: { type, listingId: listingId || null, bannerTemplate, priceQuoted, currency: 'ETB', campaignReference },
         });
         return created;
       });
