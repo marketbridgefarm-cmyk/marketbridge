@@ -65,6 +65,27 @@ async function expireAdvertisements(now = new Date()) {
 }
 
 /**
+ * A campaign that was paid before its start date is left at SCHEDULED by
+ * paymentService.settlePayment (see the ADVERTISING branch there) so that
+ * nothing shows it as live before its window opens. Nothing else ever
+ * flips it to PUBLISHED once that window arrives — GET /ads/active,
+ * POST /ads/:id/events, and the admin overview count all independently
+ * treat "SCHEDULED with startDate <= now <= endDate" as live, but the
+ * stored row itself would otherwise sit at SCHEDULED for its entire run,
+ * which is misleading for direct DB/reporting consumers and relies on
+ * every future codepath re-deriving the same "is it actually live" rule.
+ * This makes the persisted status converge with reality on the same
+ * maintenance cadence as expireAdvertisements.
+ */
+async function activateScheduledAdvertisements(now = new Date()) {
+  const result = await prisma.advertisement.updateMany({
+    where: { status: 'SCHEDULED', startDate: { lte: now }, endDate: { gt: now } },
+    data: { status: 'PUBLISHED', publishedAt: now },
+  });
+  return { activated: result.count };
+}
+
+/**
  * Automatic inventory release for abandoned orders. An order sits in
  * PENDING_PAYMENT the moment it's created — via buy-now or offer
  * acceptance — with the sold quantity already deducted from the listing
@@ -207,10 +228,10 @@ async function runMaintenanceCycle() {
   return withJobLock(async () => {
     const startedAt = Date.now();
     const now = new Date();
-    const [offers, listings, ads, reminders, unpaidOrders, sms] = await Promise.all([
-      expireOffers(now), expireListings(now), expireAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), sendPendingSms(now),
+    const [offers, listings, ads, adsActivated, reminders, unpaidOrders, sms] = await Promise.all([
+      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), sendPendingSms(now),
     ]);
-    return { durationMs: Date.now() - startedAt, offers, listings, ads, reminders, unpaidOrders, sms };
+    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, unpaidOrders, sms };
   });
 }
 
@@ -229,4 +250,4 @@ function startMaintenanceScheduler() {
   return setInterval(tick, intervalMs);
 }
 
-module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, createPickupReminders, sendPendingSms };
+module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, sendPendingSms };
