@@ -4,7 +4,7 @@ const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
-const { transitionOrder, DISPUTABLE_STATUSES } = require('../services/orderStateMachine');
+const { transitionOrderStatus, DISPUTABLE_STATUSES } = require('../services/orderStateMachine');
 
 const router = express.Router();
 
@@ -62,10 +62,10 @@ router.post(
           },
         });
 
-        // Atomic claim: fails with ORDER_TRANSITION_CONFLICT if another
+        // Atomic claim: fails with ORDER_STATE_CONFLICT if another
         // dispute (or any other status change) landed on this order
         // between the pre-check above and this transaction.
-        await transitionOrder(tx, orderId, { from: order.status, to: 'DISPUTED' });
+        await transitionOrderStatus(tx, orderId, order.status, 'DISPUTED');
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
@@ -86,7 +86,7 @@ router.post(
       return res.status(201).json({ dispute: result });
     } catch (error) {
       req.log.error({ err: error }, 'CREATE DISPUTE ERROR:');
-      if (error.code === 'ORDER_TRANSITION_CONFLICT') {
+      if (error.code === 'ORDER_STATE_CONFLICT') {
         return res.status(409).json({ error: 'This order changed status just now; please refresh and try again.' });
       }
       return res.status(500).json({ error: 'Could not create dispute' });
@@ -131,12 +131,9 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
         data: { resolution, status: finalStatus },
       });
 
-      // Atomic claim: fails with ORDER_TRANSITION_CONFLICT if the order
+      // Atomic claim: fails with ORDER_STATE_CONFLICT if the order
       // somehow left DISPUTED before this resolution landed.
-      await transitionOrder(tx, updated.orderId, {
-        from: 'DISPUTED',
-        to: updated.previousOrderStatus || 'CONFIRMED',
-      });
+      await transitionOrderStatus(tx, updated.orderId, 'DISPUTED', updated.previousOrderStatus || 'CONFIRMED');
 
       await recordAuditEvent(tx, {
         actorId: req.user.id,
@@ -156,7 +153,7 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
     return res.json({ dispute: result });
   } catch (error) {
     req.log.error({ err: error }, 'RESOLVE DISPUTE ERROR:');
-    if (error.code === 'ORDER_TRANSITION_CONFLICT' || error.code === 'INVALID_ORDER_TRANSITION') {
+    if (error.code === 'ORDER_STATE_CONFLICT' || error.code === 'INVALID_ORDER_TRANSITION') {
       return res.status(error.status || 409).json({ error: error.message });
     }
     return res.status(500).json({ error: 'Could not resolve dispute' });
