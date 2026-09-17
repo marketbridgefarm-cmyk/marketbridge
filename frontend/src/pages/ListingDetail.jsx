@@ -30,6 +30,10 @@ export default function ListingDetail() {
   const [buyerCounter, setBuyerCounter] = useState('');
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
 
+  const activeInspectionRequest = (listing?.inspectionRequests || [])
+    .filter((request) => request.status !== 'CANCELLED')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null;
+
   async function load() {
     try {
       const response = await api.get(`/listings/${id}`);
@@ -468,16 +472,9 @@ export default function ListingDetail() {
                       <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Optional message to the farmer" />
                       <button className="btn btn-primary full">Submit offer</button>
                     </form>
-                    {isAgricultural && (
-                      <>
-                        <hr />
-                        <h3>Quality check</h3>
-                        <p className="small muted">Request an independent inspection.</p>
-                        {inspector && <input type="number" min="1" step="0.01" placeholder="Agreed fee (ETB)" value={feeForInspector} onChange={(e) => setFeeForInspector(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />}
-                        <button className="btn btn-light full" onClick={() => requestInspection('BUYER_REQUESTED')}>Request inspection</button>
-                        <button className="btn btn-light full" style={{ marginTop: 8 }} onClick={chooseInspector}>Find an inspector</button>
-                      </>
-                    )}
+                    <hr />
+                    <h3>Quality check</h3>
+                    <p className="small muted">Inspection is available only after an agricultural offer is accepted and an order is created. Open the order to request or manage the inspection.</p>
                   </>
                 ) : (
                   <>
@@ -502,11 +499,7 @@ export default function ListingDetail() {
                 <h2>Seller controls</h2>
                 <p className="small muted">Only the seller can change price or listing status.</p>
                 {isAgricultural && (
-                  <>
-                    {inspector && <input type="number" min="1" step="0.01" placeholder="Agreed fee (ETB)" value={feeForInspector} onChange={(e) => setFeeForInspector(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />}
-                    <button className="btn btn-light full" onClick={() => requestInspection('SELLER_REQUESTED')}>Request inspection</button>
-                    <button className="btn btn-light full" style={{ marginTop: 8 }} onClick={chooseInspector}>Find an inspector</button>
-                  </>
+                  <p className="small muted">Inspection is managed from the agreed order after an offer is accepted. The listing page does not create transaction-specific inspections.</p>
                 )}
                 <h3 className="mt">Offers received</h3>
                 {(() => {

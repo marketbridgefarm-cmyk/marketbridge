@@ -204,11 +204,16 @@ export default function OrderDetail() {
 
   const inspectionRequests = useMemo(
     () =>
-      (order?.listing?.inspectionRequests || []).filter(
-        (request) => request.status !== 'CANCELLED'
-      ),
-    [order?.listing?.inspectionRequests]
+      (order?.inspectionRequests || [])
+        .filter((request) => request.status !== 'CANCELLED')
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [order?.inspectionRequests]
   );
+
+  // The order has one canonical inspection workflow: the newest active
+  // request. Older requests are retained for audit/history but must not
+  // create a second payment gate or another set of request buttons.
+  const currentInspectionRequest = inspectionRequests[0] || null;
 
   const assignedInspection = useMemo(
     () =>
@@ -226,12 +231,12 @@ export default function OrderDetail() {
 
   const inspectionPaymentRows = useMemo(
     () =>
-      inspectionRequests.filter(
-        (request) =>
-          request.fee != null &&
-          Number(request.fee) > 0
-      ),
-    [inspectionRequests]
+      currentInspectionRequest &&
+      currentInspectionRequest.fee != null &&
+      Number(currentInspectionRequest.fee) > 0
+        ? [currentInspectionRequest]
+        : [],
+    [currentInspectionRequest]
   );
 
   const inspectionPaymentsComplete = inspectionPaymentRows.every(
@@ -253,7 +258,7 @@ export default function OrderDetail() {
   );
 
   const inspectionPaid = Boolean(
-    order?.listing?.inspectionRequests?.some(
+    order?.inspectionRequests?.some(
       (request) =>
         request.payments?.some(
           (payment) =>
@@ -357,7 +362,13 @@ export default function OrderDetail() {
     Boolean(order) &&
     !transportJob &&
     order.status !== 'CANCELLED' &&
-    isParticipant;
+    isParticipant &&
+    (!isAgricultural || (
+      order.status === 'CONFIRMED' &&
+      order.buyerDecision === 'BUY' &&
+      marketplacePaid &&
+      inspectionPaymentsComplete
+    ));
 
   /*
    * Only the arranging buyer/seller can select a quote.
@@ -417,23 +428,38 @@ export default function OrderDetail() {
    * Required payments are separately tracked and the transport state machine
    * prevents PICKUP until all required payments are PAID.
    */
-  // Agricultural purchase payment is intentionally independent from transport
-  // and inspection payment. The hard sequencing rule is enforced when the
-  // transporter attempts PICKUP, not by hiding the buyer's payment button.
-  const agriculturalGateMet = true;
+  // Agricultural goods payment becomes available after the current
+  // inspection report is complete. The backend is authoritative and applies
+  // the same gate, so a stale UI can never bypass it.
+  const agriculturalInspectionReady =
+    !isAgricultural ||
+    !currentInspectionRequest ||
+    (currentInspectionRequest.status === 'COMPLETED' && Boolean(currentInspectionRequest.report));
+
+  // The inspection report is evidence, not the commercial purchase decision.
+  // The buyer must explicitly choose BUY before seller payment is unlocked.
+  const agriculturalGateMet =
+    agriculturalInspectionReady &&
+    (!isAgricultural || order?.buyerDecision === 'BUY');
 
   const canPayMarketplace =
     Boolean(order) &&
     order.status !== 'COMPLETED' &&
     order.status !== 'CANCELLED' &&
     isBuyer &&
+    agriculturalGateMet &&
     !marketplacePayments.some(
       (payment) =>
         payment.status === 'PENDING' ||
         payment.status === 'PAID'
     );
 
-  const marketplaceBlockedReason = null;
+  const marketplaceBlockedReason =
+    isAgricultural && !agriculturalInspectionReady
+      ? 'Complete the current agricultural inspection and make sure its report is published before paying for the goods.'
+      : (isAgricultural && order?.buyerDecision !== 'BUY'
+        ? 'Review the inspection report and choose BUY in the Next Step section before paying the seller.'
+        : null);
 
   /*
    * Resume an already-created pending marketplace payment.
@@ -654,7 +680,7 @@ export default function OrderDetail() {
     setRequestingInspection(true);
 
     try {
-      const body = { listingId: order.listing.id, mode };
+      const body = { orderId: order.id, listingId: order.listing.id, mode };
 
       if (inspectorId) {
         body.inspectorId = inspectorId;
@@ -1074,7 +1100,7 @@ export default function OrderDetail() {
               <h2 style={{ marginBottom: 6 }}>Inspector action</h2>
               {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
               {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
-              {assignedInspection.status === 'COMPLETED' && <p>Inspection report is published. The buyer can now complete any required inspection payment and continue the order.</p>}
+              {assignedInspection.status === 'COMPLETED' && <p>Inspection report is published. The buyer must now choose BUY or CANCEL to continue.</p>}
               <div className="next-action-buttons">
                 <Link className="btn btn-primary" to="/dashboard/inspector">Open inspection dashboard</Link>
               </div>
@@ -1194,39 +1220,56 @@ export default function OrderDetail() {
         {/* from here for as long as the order isn't finished. */}
 
         {isAgricultural && isParticipant && order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
-          <div className="card">
-            <h2>Request inspection</h2>
-            <p className="muted">Request an independent quality check for this order.</p>
-            {inspectorId && (
-              <input
-                type="number"
-                min="1"
-                step="0.01"
-                placeholder="Agreed fee (ETB)"
-                value={inspectionFee}
-                onChange={(event) => setInspectionFee(event.target.value)}
-                style={{ marginBottom: 8, width: '100%' }}
-              />
-            )}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="btn btn-light"
-                disabled={requestingInspection}
-                onClick={() => requestInspection(isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}
-              >
-                {requestingInspection ? 'Requesting…' : 'Request inspection'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-light"
-                disabled={findingInspector}
-                onClick={findInspector}
-              >
-                {findingInspector ? 'Searching…' : 'Find an inspector'}
-              </button>
+          currentInspectionRequest ? (
+            <div className="card">
+              <h2>Inspection</h2>
+              <p className="muted">An inspection already exists for this order. Continue with this inspection; a second request is not needed.</p>
+              <div className="detail-facts">
+                <div><span>Status</span><strong>{currentInspectionRequest.status}</strong></div>
+                {currentInspectionRequest.inspector?.name && <div><span>Inspector</span><strong>{currentInspectionRequest.inspector.name}</strong></div>}
+                {currentInspectionRequest.fee != null && <div><span>Fee</span><strong>{money(currentInspectionRequest.fee)} ETB</strong></div>}
+              </div>
+              {currentInspectionRequest.status === 'COMPLETED' && currentInspectionRequest.report && (
+                <p className="muted" style={{ marginTop: 10 }}>
+                  Inspection report is available. The buyer must now choose <strong>BUY</strong> or <strong>CANCEL</strong> in the Next Step section before the transaction can proceed.
+                </p>
+              )}
             </div>
-          </div>
+          ) : (
+            <div className="card">
+              <h2>Request inspection</h2>
+              <p className="muted">Request an independent quality check for this order.</p>
+              {inspectorId && (
+                <input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  placeholder="Agreed fee (ETB)"
+                  value={inspectionFee}
+                  onChange={(event) => setInspectionFee(event.target.value)}
+                  style={{ marginBottom: 8, width: '100%' }}
+                />
+              )}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-light"
+                  disabled={requestingInspection}
+                  onClick={() => requestInspection(isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}
+                >
+                  {requestingInspection ? 'Requesting…' : 'Request inspection'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-light"
+                  disabled={findingInspector}
+                  onClick={findInspector}
+                >
+                  {findingInspector ? 'Searching…' : 'Find an inspector'}
+                </button>
+              </div>
+            </div>
+          )
         )}
 
         {/* ================================================================== */}
@@ -1266,8 +1309,7 @@ export default function OrderDetail() {
                 order.status ===
                   'PENDING_PAYMENT' && (
                   <p className="muted">
-                    You may arrange transport while
-                    the order is awaiting payment.
+                    Transport becomes available after the buyer chooses BUY and the seller/required inspection payments are completed.
                   </p>
                 )}
             </div>
@@ -1815,6 +1857,12 @@ export default function OrderDetail() {
                 Payments are separate. The buyer can pay the seller, any required
                 inspector, and a hired transporter from this order page.
               </p>
+              {isAgricultural && (
+                <p className="muted" style={{ marginBottom: 0 }}>
+                  Buyer decision: <strong>{order.buyerDecision || 'NOT DECIDED'}</strong>
+                  {order.buyerDecision === 'BUY' ? ' — seller payment is unlocked.' : ' — seller payment remains locked until BUY is selected.'}
+                </p>
+              )}
             </div>
           </div>
 
