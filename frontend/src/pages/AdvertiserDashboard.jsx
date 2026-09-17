@@ -26,6 +26,61 @@ const BANNER_TEMPLATE_OPTIONS = [
   { value: 'GRADIENT', label: 'Gradient', help: 'Modern full-bleed image with a polished gradient headline panel.' },
 ];
 
+// TELEGRAM_PROMOTION message/tone templates. Purely a copy starting point —
+// MarketBridge staff still write and publish the actual Telegram post — so
+// picking one just fills the message box with an example the advertiser can
+// edit, and (unlike banner templates) never changes price.
+const TELEGRAM_TEMPLATE_OPTIONS = [
+  {
+    value: 'CLASSIC',
+    label: 'Classic',
+    icon: '📢',
+    anim: 'tg-anim-classic',
+    help: 'Simple, straightforward announcement.',
+    starter: '📢 New on MarketBridge: quality produce available now. Check it out and place your order today.',
+  },
+  {
+    value: 'HOT_DEAL',
+    label: 'Hot Deal',
+    icon: '🔥',
+    anim: 'tg-anim-hotdeal',
+    help: 'Urgency-driven, built to grab attention fast.',
+    starter: '🔥 HOT DEAL on MarketBridge! Limited quantity at a great price — don\u2019t miss out, order now before it\u2019s gone.',
+  },
+  {
+    value: 'FRESH_HARVEST',
+    label: 'Fresh Harvest',
+    icon: '🌱',
+    anim: 'tg-anim-fresh',
+    help: 'Leads with freshness and quality.',
+    starter: '🌱 Fresh off the farm! Just harvested and ready for delivery through MarketBridge — order while it\u2019s at its best.',
+  },
+  {
+    value: 'FARM_TO_TABLE',
+    label: 'Farm to Table',
+    icon: '🚜',
+    anim: 'tg-anim-farm',
+    help: 'Warm, story-driven — from the farm straight to the buyer.',
+    starter: '🚜 From our farm to your table. Trusted quality, fair prices, and reliable delivery — only on MarketBridge.',
+  },
+  {
+    value: 'FLASH_SALE',
+    label: 'Flash Sale',
+    icon: '⏰',
+    anim: 'tg-anim-flash',
+    help: 'Countdown energy for a short promotional window.',
+    starter: '⏰ FLASH SALE — today only on MarketBridge! Grab this offer before the window closes.',
+  },
+  {
+    value: 'TRUSTED_SELLER',
+    label: 'Trusted Seller',
+    icon: '✅',
+    anim: 'tg-anim-trusted',
+    help: 'Credibility-first, for building buyer confidence.',
+    starter: '✅ Verified seller on MarketBridge. Consistent quality and dependable delivery — see why buyers keep coming back.',
+  },
+];
+
 const LISTING_LINKED_TYPES = ['FEATURED_LISTING', 'TOP_OF_CATEGORY', 'SPONSORED_SEARCH'];
 
 const STATUS_LABELS = {
@@ -85,6 +140,7 @@ export default function AdvertiserDashboard() {
     creativeImageKey: '',
     creativePreviewUrl: '',
     bannerTemplate: 'CLASSIC',
+    telegramTemplate: 'CLASSIC',
   });
 
   const loadAll = useCallback(async () => {
@@ -132,6 +188,7 @@ export default function AdvertiserDashboard() {
   const needsListing = LISTING_LINKED_TYPES.includes(form.type);
   const needsCreative = form.type === 'BANNER';
   const needsHeadline = form.type === 'BANNER' || form.type === 'TELEGRAM_PROMOTION';
+  const needsTelegramTemplate = form.type === 'TELEGRAM_PROMOTION';
   const days = campaignDays(form.startDate, form.endDate);
   const templateMultiplier = form.type === 'BANNER' ? (templateMultipliers[form.bannerTemplate] || 1) : 1;
   const estimatedPrice = days > 0 && dailyRates[form.type] ? days * dailyRates[form.type] * templateMultiplier : null;
@@ -187,9 +244,10 @@ export default function AdvertiserDashboard() {
         linkUrl: form.linkUrl || undefined,
         creativeImageKey: needsCreative ? form.creativeImageKey : undefined,
         bannerTemplate: needsCreative ? form.bannerTemplate : undefined,
+        telegramTemplate: needsTelegramTemplate ? form.telegramTemplate : undefined,
       });
       setSuccess(`Campaign ${data.ad.campaignReference} created. The server fixed the price at ${Number(data.ad.priceQuoted).toLocaleString()} ETB.`);
-      setForm((f) => ({ ...f, listingId: '', headline: '', linkUrl: '', creativeImageKey: '', creativePreviewUrl: '', bannerTemplate: 'CLASSIC' }));
+      setForm((f) => ({ ...f, listingId: '', headline: '', linkUrl: '', creativeImageKey: '', creativePreviewUrl: '', bannerTemplate: 'CLASSIC', telegramTemplate: 'CLASSIC' }));
       await loadAll();
     } catch (err) {
       setError(err.response?.data?.error || 'Could not create campaign');
@@ -262,7 +320,7 @@ export default function AdvertiserDashboard() {
             <h2>New campaign</h2>
             <form onSubmit={submitAd}>
               <label>Campaign type</label>
-              <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value, listingId: '', headline: '', creativeImageKey: '', creativePreviewUrl: '', bannerTemplate: 'CLASSIC' }))}>
+              <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value, listingId: '', headline: '', creativeImageKey: '', creativePreviewUrl: '', bannerTemplate: 'CLASSIC', telegramTemplate: 'CLASSIC' }))}>
                 {AD_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
               <p className="muted">{AD_TYPES.find((t) => t.value === form.type)?.help}</p>
@@ -275,6 +333,29 @@ export default function AdvertiserDashboard() {
                     {myListings.map((l) => <option key={l.id} value={l.id}>{l.title || l.cropType || l.id.slice(0, 8)}</option>)}
                   </select>
                   {myListings.length === 0 && <p className="muted">Create an active listing first.</p>}
+                </>
+              )}
+
+              {needsTelegramTemplate && (
+                <>
+                  <label>Promotion style</label>
+                  <p className="muted" style={{ marginTop: -6 }}>Pick a style to load a ready-made message below — edit it however you like afterward.</p>
+                  <div className="tg-template-picker">
+                    {TELEGRAM_TEMPLATE_OPTIONS.map((tpl) => (
+                      <button
+                        type="button"
+                        key={tpl.value}
+                        className={`tg-template-option${form.telegramTemplate === tpl.value ? ' tg-template-option--active' : ''}`}
+                        onClick={() => setForm((f) => ({ ...f, telegramTemplate: tpl.value, headline: tpl.starter }))}
+                      >
+                        <span className={`tg-bubble tg-bubble--${tpl.value.toLowerCase()} ${tpl.anim}`} aria-hidden="true">
+                          <span className="tg-bubble-icon">{tpl.icon}</span>
+                        </span>
+                        <strong>{tpl.label}</strong>
+                        <span className="muted" style={{ fontSize: 12 }}>{tpl.help}</span>
+                      </button>
+                    ))}
+                  </div>
                 </>
               )}
 
@@ -374,6 +455,7 @@ export default function AdvertiserDashboard() {
                   <p className="muted"><strong>Reference:</strong> {ad.campaignReference || ad.id}</p>
                   {ad.headline && <p className="muted">{ad.headline}</p>}
                   {ad.type === 'BANNER' && <p className="muted"><strong>Style:</strong> {BANNER_TEMPLATE_OPTIONS.find((t) => t.value === ad.bannerTemplate)?.label || 'Classic'}</p>}
+                  {ad.type === 'TELEGRAM_PROMOTION' && <p className="muted"><strong>Style:</strong> {TELEGRAM_TEMPLATE_OPTIONS.find((t) => t.value === ad.telegramTemplate)?.label || 'Classic'}</p>}
                   <p className="muted">{ad.listing ? `Listing: ${ad.listing.title || ad.listing.cropType}` : 'Platform-wide placement'}</p>
                   <p className="muted">{new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}</p>
                   <p className="muted"><strong>Quoted:</strong> {amountDue.toLocaleString()} {ad.currency || 'ETB'} · <strong>Paid:</strong> {paid ? Number(ad.amountPaid || paid.amount || 0).toLocaleString() : '0'} {ad.currency || 'ETB'}</p>
