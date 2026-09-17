@@ -19,7 +19,10 @@
     "test:watch": "node --test --watch",
     "docs:generate": "node scripts/generate-openapi.js",
     "predev": "npm run docs:generate",
-    "prestart": "npm run docs:generate"
+    "prestart": "npm run docs:generate",
+    "backup": "bash scripts/backup-postgres.sh",
+    "restore": "bash scripts/restore-postgres.sh",
+    "backup:list": "node scripts/backupStorage.js list"
   },
   "dependencies": {
     "swagger-ui-express": "^5.0.1",
