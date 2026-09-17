@@ -164,6 +164,12 @@ async function createPayment(data) {
     });
 
     return payment;
+  }, {
+    // Same rationale as settlePayment below: give this a wider budget than
+    // Prisma's short default so a slow obligation-sync/lookup doesn't
+    // trip the interactive-transaction timeout mid-write.
+    maxWait: 10000,
+    timeout: 20000,
   });
 }
 
@@ -781,6 +787,23 @@ async function settlePayment({
     }
 
     return updated;
+  }, {
+    // settlePayment walks a long, deliberately-sequential chain of writes
+    // (payment event/status, obligation, order event + notifications + SMS
+    // outbox, audit event, order transition, advertisement activation, and
+    // finally the financial ledger entries) — often 12-16 dependent
+    // round trips in one interactive transaction. Prisma's default
+    // (maxWait 2s / timeout 5s) is tuned for short transactions and was
+    // being exceeded in production under ordinary cross-service DB
+    // latency, which aborts the transaction server-side partway through.
+    // Because paymentLedgerEntry.create() runs last in that chain, the
+    // transaction was consistently dying there with "Transaction API
+    // error: Transaction not found" — the engine had already closed the
+    // (timed-out) transaction by the time this query reached it. Widening
+    // the budget here (rather than trimming the transaction's correctness
+    // guarantees) fixes that without changing the settlement logic.
+    maxWait: 10000,
+    timeout: 20000,
   });
 }
 
