@@ -1675,6 +1675,11 @@ model Dispute {
 
   resolution String?
 
+  // Order.status captured at the moment the dispute was raised, so the
+  // order can be restored to it (instead of a hardcoded default) once the
+  // dispute resolves. See routes/disputes.js.
+  previousOrderStatus String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
