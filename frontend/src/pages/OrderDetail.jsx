@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import api from '../api/client';
@@ -75,6 +75,32 @@ export default function OrderDetail() {
   const [disputeDescription, setDisputeDescription] = useState('');
   const [submittingDispute, setSubmittingDispute] = useState(false);
   const [disputeSubmitted, setDisputeSubmitted] = useState(false);
+
+  const errorToastTimer = useRef(null);
+
+  // Action-triggered errors (e.g. clicking "Pay seller / order now" while
+  // inspection is still pending) surface as a brief popup near the bottom
+  // of the screen rather than a persistent banner pushed into the page,
+  // so they auto-dismiss instead of sticking around after the user has
+  // already read them.
+  useEffect(() => {
+    if (errorToastTimer.current) {
+      window.clearTimeout(errorToastTimer.current);
+      errorToastTimer.current = null;
+    }
+
+    if (error) {
+      errorToastTimer.current = window.setTimeout(() => {
+        setError('');
+      }, 3000);
+    }
+
+    return () => {
+      if (errorToastTimer.current) {
+        window.clearTimeout(errorToastTimer.current);
+      }
+    };
+  }, [error]);
 
   // ==========================================================================
   // LOAD ORDER
@@ -999,12 +1025,6 @@ export default function OrderDetail() {
               : 'Refresh'}
           </button>
         </div>
-
-        {error && (
-          <div className="alert error">
-            {error}
-          </div>
-        )}
 
         <div className="page-header compact-header">
           <div>
@@ -2269,6 +2289,12 @@ export default function OrderDetail() {
           </div>
         )}
       </div>
+
+      {error && (
+        <div className="sd-toast" role="alert">
+          {error}
+        </div>
+      )}
     </main>
   );
 }
