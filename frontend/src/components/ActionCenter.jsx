@@ -3,7 +3,8 @@ import WorkflowActions from './WorkflowActions.jsx';
 
 const STAGE_COPY = {
   PENDING_PAYMENT: 'Waiting for the buyer to pay for the goods.',
-  INSPECTION: 'Agricultural inspection must be completed before the goods payment can proceed.',
+  INSPECTION: 'Agricultural inspection must be completed and the report published before the buyer decides.',
+  BUYER_DECISION: 'Review the agricultural inspection report, then choose whether to BUY or CANCEL.',
   ARRANGING_TRANSPORT: 'Transport still needs to be arranged or a transport quote needs a response.',
   PAYMENT: 'One or more required payments are still outstanding.',
   PICKUP_READY: 'All required payments are complete. The transporter can start pickup.',

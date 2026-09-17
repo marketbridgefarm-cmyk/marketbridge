@@ -11,6 +11,8 @@ import api from '../api/client';
 // ============================================================================
 
 const ACTION_UI = {
+  BUYER_DECISION_BUY: { kind: 'execute', label: 'BUY — continue purchase' },
+  BUYER_DECISION_CANCEL: { kind: 'confirm-execute', label: 'Cancel after inspection' },
   PAY_MARKETPLACE: { kind: 'scroll', target: 'payment-center', label: 'Pay for goods' },
   PAY_INSPECTION: { kind: 'scroll', target: 'payment-center', label: 'Pay inspection fee' },
   PAY_TRANSPORT: { kind: 'scroll', target: 'payment-center', label: 'Pay transport' },
@@ -116,6 +118,24 @@ export default function WorkflowActions({
                 onClick={() => handleLink(action, ui)}
               >
                 {ui.label}
+              </button>
+            );
+          }
+
+          if (ui.kind === 'confirm-execute') {
+            return (
+              <button
+                key={key}
+                type="button"
+                className={btnClass}
+                disabled={isBusy}
+                onClick={() => {
+                  if (window.confirm('Cancel this agricultural transaction after reviewing the inspection report? This cannot be undone.')) {
+                    execute(action);
+                  }
+                }}
+              >
+                {isBusy ? 'Working…' : ui.label}
               </button>
             );
           }
