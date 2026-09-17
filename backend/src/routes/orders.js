@@ -322,6 +322,11 @@ router.patch(
       const order = await prisma.order.findUnique({
         where: { id: req.params.id },
         include: {
+          // The buyer-decision gate must know the listing category. This
+          // endpoint previously omitted `listing`, so `order.listing?.category`
+          // was always undefined and a valid agricultural BUY could be
+          // rejected as a non-agricultural order.
+          listing: { select: { id: true, category: true } },
           inspectionRequests: {
             where: { status: { not: 'CANCELLED' } },
             orderBy: { createdAt: 'desc' },
