@@ -244,6 +244,18 @@ enum BannerTemplate {
   GRADIENT
 }
 
+// Selectable message templates for TELEGRAM_PROMOTION campaigns. Purely a
+// copy/tone preset (MarketBridge staff still write and publish the actual
+// post) — unlike BannerTemplate this never changes price.
+enum TelegramTemplate {
+  CLASSIC
+  HOT_DEAL
+  FRESH_HARVEST
+  FARM_TO_TABLE
+  FLASH_SALE
+  TRUSTED_SELLER
+}
+
 enum DisputeStatus {
   OPEN
   UNDER_REVIEW
@@ -1597,6 +1609,9 @@ model Advertisement {
 
   // Banner layout template.
   bannerTemplate BannerTemplate @default(CLASSIC)
+
+  // Telegram post tone/copy template (cosmetic preset only, no price impact).
+  telegramTemplate TelegramTemplate @default(CLASSIC)
 
   // Moderation/publication audit trail.
   rejectionReason       String?
