@@ -1,0 +1,10 @@
+# Add to backend/.gitignore (create the file if backend/ doesn't already have
+# one, or merge these lines into whatever root/.gitignore already governs
+# the backend directory in the real repo — this archive didn't include an
+# existing .gitignore to merge into, so these are delivered standalone).
+
+# Local backup output of scripts/backup-postgres.sh. These are raw Postgres
+# dumps of the production database (every user's name/email/phone, every
+# Payment row, addresses, etc.) — never commit one.
+backups/
+*.dump
