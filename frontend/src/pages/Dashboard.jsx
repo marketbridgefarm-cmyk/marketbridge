@@ -426,7 +426,18 @@ export default function Dashboard() {
                                 type="button"
                                 className="btn btn-sm btn-primary"
                                 disabled={offerBusy === o.id}
-                                onClick={() => respondToOffer(o.id, o.status === 'COUNTERED' ? 'ACCEPT_COUNTER' : 'ACCEPT')}
+                                onClick={() => {
+                                  // A counter-offer belongs to the party that
+                                  // made the latest counter. The responding
+                                  // party accepts it with the normal ACCEPT
+                                  // action. ACCEPT_COUNTER is specifically for
+                                  // a buyer accepting a seller counter.
+                                  const acceptAction =
+                                    o.status === 'COUNTERED' && o.counteredBy === 'SELLER'
+                                      ? 'ACCEPT_COUNTER'
+                                      : 'ACCEPT';
+                                  respondToOffer(o.id, acceptAction);
+                                }}
                               >
                                 Accept
                               </button>
