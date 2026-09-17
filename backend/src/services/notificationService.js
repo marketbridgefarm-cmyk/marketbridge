@@ -28,6 +28,12 @@ const EVENT_COPY = {
     body: 'The inspection report is now available for review.',
     action: 'order',
   },
+  BUYER_DECISION_MADE: {
+    type: 'ORDER',
+    title: 'Buyer decision recorded',
+    body: 'The buyer has made the agricultural purchase decision. Review the order for the next step.',
+    action: 'order',
+  },
   PAYMENT_STATUS_CHANGED: {
     type: 'PAYMENT',
     title: 'Payment status updated',
@@ -123,13 +129,9 @@ async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) 
       buyerId: true,
       sellerId: true,
       transportJob: { select: { truckOwnerId: true } },
-      listing: {
-        select: {
-          inspectionRequests: {
-            where: { status: { not: 'CANCELLED' } },
-            select: { requestedById: true, inspectorId: true },
-          },
-        },
+      inspectionRequests: {
+        where: { status: { not: 'CANCELLED' } },
+        select: { requestedById: true, inspectorId: true },
       },
     },
   });
@@ -138,7 +140,7 @@ async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) 
 
   const buyerSeller = [order.buyerId, order.sellerId];
   const transportUsers = [order.transportJob?.truckOwnerId];
-  const inspectionUsers = (order.listing?.inspectionRequests || []).flatMap((request) => [
+  const inspectionUsers = (order.inspectionRequests || []).flatMap((request) => [
     request.requestedById,
     request.inspectorId,
   ]);
@@ -159,6 +161,9 @@ async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) 
     case 'INSPECTION_STARTED':
     case 'INSPECTION_COMPLETED':
       recipients = [...buyerSeller, ...inspectionUsers];
+      break;
+    case 'BUYER_DECISION_MADE':
+      recipients = [...buyerSeller];
       break;
     case 'TRANSPORT_STATUS_CHANGED':
       recipients = [...buyerSeller, ...transportUsers];

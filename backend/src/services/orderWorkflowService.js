@@ -61,11 +61,17 @@ function buildPaymentSnapshot(order) {
     obligationId: marketplaceObligation?.id || null,
   };
 
-  const inspectionRequests = (order.listing?.inspectionRequests || []).filter(
-    (r) => r.status !== 'CANCELLED'
-  );
+  const inspectionRequests = (order.inspectionRequests || [])
+    .filter((r) => r.status !== 'CANCELLED')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  const inspections = inspectionRequests
+  // One active inspection workflow is the business rule. Keep the newest
+  // request as the canonical request in the read model so legacy duplicate
+  // requests cannot make a completed inspection appear incomplete.
+  const currentInspectionRequest = inspectionRequests[0] || null;
+  const currentInspectionRequests = currentInspectionRequest ? [currentInspectionRequest] : [];
+
+  const inspections = currentInspectionRequests
     .filter((r) => r.fee != null && Number(r.fee) > 0)
     .map((r) => {
       const o = findObligation('INSPECTOR', r.id);
@@ -112,16 +118,16 @@ function buildPaymentSnapshot(order) {
 
   const allInspectionsPaid = inspections.every((o) => o.paid);
   const allInspectionsCompleted =
-    inspectionRequests.length === 0 ||
-    inspectionRequests.every((r) => r.status === 'COMPLETED');
+    currentInspectionRequest == null ||
+    (currentInspectionRequest.status === 'COMPLETED' && Boolean(currentInspectionRequest.report));
   const transportPaid = !transport || transport.paid;
 
   return {
     marketplace,
     inspections,
     transport,
-    inspectionRequestsExist: inspectionRequests.length > 0,
-    inspectionRequests: inspectionRequests.map((r) => ({
+    inspectionRequestsExist: currentInspectionRequests.length > 0,
+    inspectionRequests: currentInspectionRequests.map((r) => ({
       id: r.id,
       status: r.status,
       inspectorId: r.inspectorId,
@@ -157,79 +163,43 @@ function buildPaymentSnapshot(order) {
 function buildTimeline(order, payments) {
   const job = order.transportJob || null;
   const steps = [];
+  const agricultural = order.listing?.category === 'AGRICULTURAL';
+  const inspection = payments.inspectionRequests[0] || null;
 
-  steps.push({
-    code: 'ORDER_CREATED',
-    label: 'Order created',
-    completed: true,
-    at: order.createdAt,
-  });
-
-  if (payments.inspectionRequestsExist) {
-    steps.push({
-      code: 'INSPECTION_COMPLETED',
-      label: 'Inspection completed',
-      completed: payments.allInspectionsCompleted,
-      at: null,
-    });
-  }
-
-  steps.push({
-    code: 'GOODS_PAID',
-    label: 'Goods payment received',
-    completed: payments.marketplace.paid,
-    at: null,
-  });
-
-  if (job) {
-    steps.push({
-      code: 'TRANSPORT_ACCEPTED',
-      label: 'Transport accepted',
-      completed: !['REQUESTED', 'QUOTED', 'CANCELLED'].includes(job.status),
-      at: null,
-    });
-
-    if (payments.transport?.required) {
-      steps.push({
-        code: 'TRANSPORT_PAID',
-        label: 'Transport payment received',
-        completed: payments.transport.paid,
-        at: null,
-      });
+  if (agricultural) {
+    steps.push({ code: 'AGREEMENT_REACHED', label: 'Agreed price / order created', completed: Boolean(order.agreedOfferId), at: order.agreedAt || order.createdAt });
+    steps.push({ code: 'INSPECTION_REQUESTED', label: 'Inspection requested', completed: Boolean(inspection), at: inspection ? null : null });
+    if (inspection) {
+      steps.push({ code: 'INSPECTION_NEGOTIATION', label: 'Inspector quote accepted', completed: inspection.status !== 'REQUESTED', at: null });
+      const inspectionPaid = payments.inspections.every((o) => o.paid);
+      steps.push({ code: 'INSPECTION_PAYMENT', label: 'Inspection payment', completed: inspectionPaid, at: null });
+      steps.push({ code: 'INSPECTION', label: 'Inspection completed', completed: payments.allInspectionsCompleted, at: null });
+      steps.push({ code: 'INSPECTION_REPORT', label: 'Inspection report', completed: payments.allInspectionsCompleted, at: null });
     }
-
-    steps.push({
-      code: 'PICKUP',
-      label: 'Pickup',
-      completed: ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status),
-      at: job.pickupConfirmedAt,
-    });
-
-    steps.push({
-      code: 'IN_TRANSIT',
-      label: 'In transit',
-      completed: ['IN_TRANSIT', 'DELIVERED'].includes(job.status),
-      at: null,
-    });
-
-    steps.push({
-      code: 'DELIVERED',
-      label: 'Delivered',
-      completed: job.status === 'DELIVERED',
-      at: job.deliveredConfirmedAt,
-    });
+    steps.push({ code: 'BUYER_DECISION', label: 'Buyer decision', completed: order.buyerDecision != null, at: order.buyerDecisionAt || null, decision: order.buyerDecision || null });
+    steps.push({ code: 'GOODS_PAID', label: 'Seller / goods payment', completed: payments.marketplace.paid, at: null });
+    steps.push({ code: 'TRANSPORT_ARRANGEMENT', label: 'Arrange transport', completed: Boolean(job), at: null });
+    if (job) {
+      steps.push({ code: 'TRANSPORT_NEGOTIATION', label: 'Transport negotiation', completed: !['REQUESTED', 'QUOTED', 'CANCELLED'].includes(job.status), at: null });
+      steps.push({ code: 'TRANSPORT_PAYMENT', label: 'Transport payment', completed: !payments.transport?.required || payments.transport.paid, at: null });
+      steps.push({ code: 'PICKUP', label: 'Pickup', completed: ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status), at: job.pickupConfirmedAt });
+      steps.push({ code: 'IN_TRANSIT', label: 'In transit', completed: ['IN_TRANSIT', 'DELIVERED'].includes(job.status), at: null });
+      steps.push({ code: 'DELIVERED', label: 'Delivered', completed: job.status === 'DELIVERED', at: job.deliveredConfirmedAt });
+    }
+    steps.push({ code: 'COMPLETED', label: 'Final completion', completed: order.status === 'COMPLETED', at: null });
+  } else {
+    steps.push({ code: 'ORDER_CREATED', label: 'Order created', completed: true, at: order.createdAt });
+    steps.push({ code: 'GOODS_PAID', label: 'Goods payment received', completed: payments.marketplace.paid, at: null });
+    if (job) {
+      steps.push({ code: 'TRANSPORT_ACCEPTED', label: 'Transport accepted', completed: !['REQUESTED', 'QUOTED', 'CANCELLED'].includes(job.status), at: null });
+      if (payments.transport?.required) steps.push({ code: 'TRANSPORT_PAID', label: 'Transport payment received', completed: payments.transport.paid, at: null });
+      steps.push({ code: 'PICKUP', label: 'Pickup', completed: ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status), at: job.pickupConfirmedAt });
+      steps.push({ code: 'IN_TRANSIT', label: 'In transit', completed: ['IN_TRANSIT', 'DELIVERED'].includes(job.status), at: null });
+      steps.push({ code: 'DELIVERED', label: 'Delivered', completed: job.status === 'DELIVERED', at: job.deliveredConfirmedAt });
+    }
+    steps.push({ code: 'COMPLETED', label: 'Receipt confirmed / order completed', completed: order.status === 'COMPLETED', at: null });
   }
 
-  steps.push({
-    code: 'COMPLETED',
-    label: 'Receipt confirmed / order completed',
-    completed: order.status === 'COMPLETED',
-    at: null,
-  });
-
-  // Durable events are appended to the canonical milestone steps. The
-  // frontend can show both progress milestones and the actual recorded
-  // business mutations.
   const events = (order.events || []).map((event) => ({
     id: event.id,
     type: event.type,
@@ -255,20 +225,29 @@ function computeStage(order, payments) {
   const job = order.transportJob || null;
   const agricultural = order.listing?.category === 'AGRICULTURAL';
 
-  // For agricultural orders, an accepted/in-progress inspection is a hard
-  // commercial gate: the buyer must see the inspection result before paying
-  // for the produce. A still-unassigned request remains a negotiation stage.
-  if (agricultural && payments.inspectionRequestsExist) {
-    if (!payments.allInspectionsCompleted) {
-      const requests = payments.inspectionRequests || [];
-      if (requests.some((r) => ['REQUESTED'].includes(r.status))) return 'INSPECTION';
-      return 'INSPECTION';
-    }
+  if (agricultural) {
+    if (!payments.inspectionRequestsExist) return 'INSPECTION_REQUEST';
+
+    const inspection = payments.inspectionRequests[0] || null;
+    if (inspection && inspection.status === 'REQUESTED') return 'INSPECTION_NEGOTIATION';
+    if (inspection && inspection.status === 'ACCEPTED' && !payments.allInspectionsPaid) return 'INSPECTION_PAYMENT';
+    if (inspection && !payments.allInspectionsCompleted) return 'INSPECTION';
+    if (order.buyerDecision == null) return 'BUYER_DECISION';
+    if (order.buyerDecision === 'CANCEL') return 'CANCELLED';
+    if (!payments.marketplace.paid) return 'GOODS_PAYMENT';
+    if (!job) return 'ARRANGING_TRANSPORT';
+    if (['REQUESTED', 'QUOTED'].includes(job.status)) return 'TRANSPORT_NEGOTIATION';
+    if (job.status === 'ACCEPTED' && payments.transport?.required && !payments.transport.paid) return 'TRANSPORT_PAYMENT';
+    if (job.status === 'ACCEPTED') return 'PICKUP_READY';
+    if (job.status === 'PICKUP') return 'PICKED_UP';
+    if (job.status === 'IN_TRANSIT') return 'IN_TRANSIT';
+    if (job.status === 'DELIVERED') return 'AWAITING_RECEIPT';
+    if (job.status === 'CANCELLED') return 'ARRANGING_TRANSPORT';
+    return 'PICKUP_READY';
   }
 
   if (!payments.marketplace.paid && !job) return 'PENDING_PAYMENT';
   if (!job) return payments.marketplace.paid ? 'ARRANGING_TRANSPORT' : 'PENDING_PAYMENT';
-
   if (['REQUESTED', 'QUOTED'].includes(job.status)) return 'ARRANGING_TRANSPORT';
   if (!payments.allPaid) return 'PAYMENT';
   if (job.status === 'ACCEPTED') return 'PICKUP_READY';
@@ -276,7 +255,6 @@ function computeStage(order, payments) {
   if (job.status === 'IN_TRANSIT') return 'IN_TRANSIT';
   if (job.status === 'DELIVERED') return 'AWAITING_RECEIPT';
   if (job.status === 'CANCELLED') return payments.marketplace.paid ? 'ARRANGING_TRANSPORT' : 'PENDING_PAYMENT';
-
   return 'PAYMENT';
 }
 
@@ -317,11 +295,12 @@ function buildActions(order, payments, viewer) {
   // 1. Agricultural inspection workflow. Inspection actions are executable
   // from the order Action Center so an assigned inspector is never stranded
   // on a generic dashboard link.
-  const inspectionRequests = (order.listing?.inspectionRequests || []).filter(
-    (r) => r.status !== 'CANCELLED'
-  );
+  const inspectionRequests = (order.inspectionRequests || [])
+    .filter((r) => r.status !== 'CANCELLED')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const currentInspectionRequest = inspectionRequests[0] || null;
 
-  for (const request of inspectionRequests) {
+  for (const request of currentInspectionRequest ? [currentInspectionRequest] : []) {
     const assignedToViewer = request.inspectorId === viewer.userId;
     const requesterCanManage = request.requestedById === viewer.userId || isBuyer || isSeller || isAdmin;
 
@@ -367,6 +346,51 @@ function buildActions(order, payments, viewer) {
     }
   }
 
+  // 2. Create the inspection request only after an agreement/order exists.
+  if (order.listing?.category === 'AGRICULTURAL' && !currentInspectionRequest && !terminal) {
+    push({
+      code: 'REQUEST_INSPECTION',
+      label: 'Request inspection',
+      actorRole: 'BUYER_OR_SELLER',
+      viewerCanPerform: isBuyer || isSeller || isAdmin,
+      ready: true,
+      route: { method: 'POST', path: '/inspections', body: { orderId: order.id, listingId: order.listingId, mode: isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED' } },
+    });
+  }
+
+  // 2. Explicit agricultural buyer decision. The decision is available only
+  // after the current inspection report (if any) is complete. It is a hard
+  // server-side gate for goods payment and transport arrangement.
+  if (order.listing?.category === 'AGRICULTURAL' && order.buyerDecision == null) {
+    const inspectionReady = payments.inspectionRequestsExist && payments.allInspectionsCompleted;
+    push({
+      code: 'BUYER_DECISION_BUY',
+      label: 'BUY — continue purchase',
+      actorRole: 'BUYER',
+      viewerCanPerform: isBuyer,
+      ready: !terminal && inspectionReady,
+      reason: inspectionReady ? null : 'Wait for the agricultural inspection report',
+      route: {
+        method: 'PATCH',
+        path: `/orders/${order.id}/buyer-decision`,
+        body: { decision: 'BUY' },
+      },
+    });
+    push({
+      code: 'BUYER_DECISION_CANCEL',
+      label: 'Cancel after inspection',
+      actorRole: 'BUYER',
+      viewerCanPerform: isBuyer,
+      ready: !terminal && inspectionReady,
+      reason: inspectionReady ? null : 'Wait for the agricultural inspection report',
+      route: {
+        method: 'PATCH',
+        path: `/orders/${order.id}/buyer-decision`,
+        body: { decision: 'CANCEL', reason: 'Buyer declined the agricultural transaction after inspection' },
+      },
+    });
+  }
+
   // 2. Pay for the goods. For agricultural orders with an active inspection
   // request, payment is intentionally unavailable until every inspection is
   // completed. The same rule is enforced server-side in /payments.
@@ -376,12 +400,18 @@ function buildActions(order, payments, viewer) {
       label: 'Pay for goods',
       actorRole: 'BUYER',
       viewerCanPerform: isBuyer,
-      ready: !terminal && (!order.listing || order.listing.category !== 'AGRICULTURAL' || !payments.inspectionRequestsExist || payments.allInspectionsCompleted),
+      ready: !terminal && (
+        !order.listing ||
+        order.listing.category !== 'AGRICULTURAL' ||
+        (payments.allInspectionsCompleted && order.buyerDecision === 'BUY')
+      ),
       reason: terminal
         ? 'Order is no longer active'
-        : (order.listing?.category === 'AGRICULTURAL' && payments.inspectionRequestsExist && !payments.allInspectionsCompleted
-          ? 'Complete the agricultural inspection before paying for the goods'
-          : null),
+        : (order.listing?.category === 'AGRICULTURAL' && !payments.allInspectionsCompleted
+          ? 'Complete the agricultural inspection before the buyer decides to buy'
+          : (order.listing?.category === 'AGRICULTURAL' && order.buyerDecision !== 'BUY'
+            ? 'Buyer must explicitly choose BUY after reviewing the inspection report'
+            : null)),
       route: {
         method: 'POST',
         path: '/payments',
@@ -412,7 +442,13 @@ function buildActions(order, payments, viewer) {
 
   // 3. Arrange transport if nothing has been set up yet.
   if (!job) {
-    const ready = !terminal && ['CONFIRMED', 'PENDING_PAYMENT'].includes(order.status);
+    const agricultural = order.listing?.category === 'AGRICULTURAL';
+    const agriculturalReady = !agricultural || (
+      order.buyerDecision === 'BUY' &&
+      payments.marketplace.paid &&
+      payments.allInspectionsPaid
+    );
+    const ready = !terminal && (agricultural ? order.status === 'CONFIRMED' : ['CONFIRMED', 'PENDING_PAYMENT'].includes(order.status)) && agriculturalReady;
     push({
       code: 'ARRANGE_TRANSPORT',
       label: 'Arrange transport',
@@ -478,7 +514,7 @@ function buildActions(order, payments, viewer) {
         actorRole: 'TRUCK_OWNER',
         viewerCanPerform: isTruckOwner,
         ready: movementReady.START_PICKUP,
-        reason: movementReady.START_PICKUP ? null : 'All required payments must be completed before pickup',
+        reason: movementReady.START_PICKUP ? null : 'Transport must be accepted and all required payments must be completed before pickup',
         route: { method: 'PATCH', path: `/transport/${job.id}/status`, body: { status: 'PICKUP' } },
       });
     }
@@ -568,7 +604,7 @@ function computeOrderWorkflow(order, viewerUserId, viewerRoles = []) {
   const isSeller = order.sellerId === viewerUserId;
   const isTruckOwner = order.transportJob?.truckOwnerId === viewerUserId;
   const isInspector = Boolean(
-    order.listing?.inspectionRequests?.some((request) => request.inspectorId === viewerUserId)
+    order.inspectionRequests?.some((request) => request.inspectorId === viewerUserId)
   );
   const isAdmin = (viewerRoles || []).includes('ADMIN');
 
@@ -584,6 +620,11 @@ function computeOrderWorkflow(order, viewerUserId, viewerRoles = []) {
   return {
     orderId: order.id,
     orderStatus: order.status,
+    agreedOfferId: order.agreedOfferId || null,
+    agreedAt: order.agreedAt || null,
+    agreedPrice: order.finalPrice,
+    buyerDecision: order.buyerDecision || null,
+    buyerDecisionAt: order.buyerDecisionAt || null,
     currentStage,
     nextActor: nextReadyAction?.actorRole || null,
     viewerRole: isAdmin

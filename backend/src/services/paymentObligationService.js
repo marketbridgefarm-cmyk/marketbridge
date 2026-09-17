@@ -9,13 +9,9 @@ async function syncOrderPaymentObligations(tx, orderId) {
     where: { id: orderId },
     include: {
       payments: true,
-      listing: {
-        include: {
-          inspectionRequests: {
-            where: { status: { not: 'CANCELLED' } },
-            include: { payments: true },
-          },
-        },
+      inspectionRequests: {
+        where: { status: { not: 'CANCELLED' } },
+        include: { payments: true },
       },
       transportJob: true,
     },
@@ -32,7 +28,7 @@ async function syncOrderPaymentObligations(tx, orderId) {
     transportJobId: null,
   }];
 
-  for (const r of order.listing?.inspectionRequests || []) {
+  for (const r of order.inspectionRequests || []) {
     if (r.fee == null || Number(r.fee) <= 0) continue;
     desired.push({
       obligationKey: `ORDER:${order.id}:INSPECTOR:${r.id}`,
@@ -69,7 +65,7 @@ async function syncOrderPaymentObligations(tx, orderId) {
     });
 
     const matchingPayment = item.type === 'INSPECTOR'
-      ? (order.listing?.inspectionRequests || [])
+      ? (order.inspectionRequests || [])
           .find(r => r.id === item.inspectionRequestId)
           ?.payments?.find(p => p.type === 'INSPECTOR' && ['PENDING','PAID'].includes(p.status))
       : order.payments.find(p =>
