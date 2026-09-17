@@ -1,53 +1,43 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BACKUP_FILE="${1:-}"
+: "${DATABASE_URL:?DATABASE_URL must be set}"
 
-if [[ -z "${BACKUP_FILE}" ]]; then
-  echo "Usage: $0 <path_to_backup_file.dump>"
-  exit 1
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+INPUT="${1:?Usage: ./scripts/restore-postgres.sh path/to/backup.dump   (or s3:<key> to pull from off-site storage first, e.g. s3:marketbridge-20260916T000000Z.dump)}"
+
+BACKUP_FILE="$INPUT"
+TMP_DOWNLOAD=""
+# Registered before the download runs below (not after) — if the download
+# itself fails partway, the trap still needs to be armed to clean up
+# whatever mktemp already created.
+#
+# Must always itself exit 0, or bash silently replaces the script's real
+# exit status (2 for "confirmation required", 0 for success, etc.) with
+# whatever this trap's last command returned — e.g. `rm -f` on an
+# empty/unset path returning non-zero would turn a successful restore
+# into a reported failure.
+cleanup() { rm -f -- "${TMP_DOWNLOAD}" 2>/dev/null || true; }
+trap cleanup EXIT
+
+if [[ "$INPUT" == s3:* ]]; then
+  KEY="${INPUT#s3:}"
+  TMP_DOWNLOAD="$(mktemp --suffix=.dump -t marketbridge-restore-XXXXXX)"
+  node scripts/backupStorage.js download "$KEY" "$TMP_DOWNLOAD"
+  BACKUP_FILE="$TMP_DOWNLOAD"
 fi
 
-if [[ ! -f "${BACKUP_FILE}" ]]; then
-  echo "Error: Backup file '${BACKUP_FILE}' not found."
-  exit 1
+[[ -f "$BACKUP_FILE" ]] || { echo "Backup not found: $BACKUP_FILE"; exit 1; }
+
+if [[ "${CONFIRM_RESTORE:-}" != "YES" ]]; then
+  echo 'Restore is destructive to the target database.'
+  echo 'Set CONFIRM_RESTORE=YES and run again after verifying DATABASE_URL points to the intended restore target.'
+  exit 2
 fi
 
-DB_HOST="${POSTGRES_HOST:-localhost}"
-DB_PORT="${POSTGRES_PORT:-5432}"
-DB_USER="${POSTGRES_USER:-postgres}"
-DB_NAME="${POSTGRES_DB:-marketbridge}"
-MAINTENANCE_DB="${POSTGRES_MAINTENANCE_DB:-postgres}"
-
-export PGPASSWORD="${POSTGRES_PASSWORD:-}"
-
-echo "WARNING: Restoring will overwrite existing data in '${DB_NAME}'."
-echo "Target Host: ${DB_HOST}:${DB_PORT}"
-
-# --- Step 1: Terminate active connections to target DB ---
-echo "Terminating active connections to '${DB_NAME}'..."
-psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${MAINTENANCE_DB}" -c \
-  "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DB_NAME}' AND pid <> pg_backend_pid();" || true
-
-# --- Step 2: Drop and Recreate Clean Database ---
-echo "Recreating database '${DB_NAME}'..."
-psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${MAINTENANCE_DB}" -c "DROP DATABASE IF EXISTS ${DB_NAME};"
-psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${MAINTENANCE_DB}" -c "CREATE DATABASE ${DB_NAME};"
-
-# --- Step 3: Restore Database using pg_restore ---
-echo "Restoring database from '${BACKUP_FILE}'..."
-pg_restore \
-  -h "${DB_HOST}" \
-  -p "${DB_PORT}" \
-  -U "${DB_USER}" \
-  -d "${DB_NAME}" \
-  --clean \
-  --if-exists \
-  --no-owner \
-  --no-acl \
-  -v \
-  "${BACKUP_FILE}" || {
-    echo "Notice: pg_restore finished with minor warnings."
-  }
-
-echo "Database restoration completed successfully."
+pg_restore --list "$BACKUP_FILE" >/dev/null
+pg_restore --clean --if-exists --no-owner --no-privileges --dbname="$DATABASE_URL" "$BACKUP_FILE"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'SELECT 1;' >/dev/null
+printf 'Restore completed and database connectivity verified.\n'
