@@ -67,6 +67,22 @@ const orderInclude = {
       },
     },
   },
+  // Canonical inspection workflow belongs to the order, not merely the listing.
+  inspectionRequests: {
+    where: { status: { not: 'CANCELLED' } },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      report: true,
+      inspector: { select: { id: true, name: true, phone: true } },
+      payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
+      quotes: {
+        where: { status: { in: ['PENDING', 'COUNTERED'] } },
+        select: { id: true, inspectorId: true, amount: true, status: true, parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+  },
+  agreedOffer: true,
   buyer: { select: userSelect },
   seller: { select: userSelect },
   transportJob: { include: transportInclude },
@@ -221,7 +237,7 @@ router.get('/:id', authenticate, async (req, res) => {
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
     const assignedInspector = Boolean(
-      order.listing?.inspectionRequests?.some(
+      order.inspectionRequests?.some(
         (request) => request.inspectorId === req.user.id
       )
     );
@@ -261,7 +277,7 @@ router.get('/:id/workflow', authenticate, async (req, res) => {
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
     const assignedInspector = Boolean(
-      order.listing?.inspectionRequests?.some(
+      order.inspectionRequests?.some(
         (request) => request.inspectorId === req.user.id
       )
     );
@@ -282,6 +298,156 @@ router.get('/:id/workflow', authenticate, async (req, res) => {
     return res.status(500).json({ error: 'Failed to compute order workflow' });
   }
 });
+
+
+// ============================================================================
+// AGRICULTURAL BUYER DECISION
+// After the inspection report is available, the buyer must explicitly decide
+// whether to BUY or CANCEL. BUY unlocks the seller payment and transport
+// arrangement. CANCEL uses the normal cancellation/refund workflow.
+// ============================================================================
+router.patch(
+  '/:id/buyer-decision',
+  authenticate,
+  idempotency('orders.buyer-decision'),
+  [
+    param('id').isUUID(),
+    body('decision').isIn(['BUY', 'CANCEL']),
+    body('reason').optional({ nullable: true }).isString().trim().isLength({ max: 500 }),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const decision = req.body.decision;
+      const order = await prisma.order.findUnique({
+        where: { id: req.params.id },
+        include: {
+          inspectionRequests: {
+            where: { status: { not: 'CANCELLED' } },
+            orderBy: { createdAt: 'desc' },
+            include: { report: true },
+          },
+          transportJob: true,
+          payments: true,
+        },
+      });
+
+      if (!order) return res.status(404).json({ error: 'Order not found' });
+      if (order.buyerId !== req.user.id) {
+        return res.status(403).json({ error: 'Only the buyer can make the purchase decision' });
+      }
+      if (order.listing?.category !== 'AGRICULTURAL') {
+        return res.status(400).json({ error: 'Buyer decision is only required for agricultural orders' });
+      }
+      if (order.status === 'CANCELLED' || order.status === 'COMPLETED') {
+        return res.status(409).json({ error: `Order is already ${order.status.toLowerCase()}` });
+      }
+      if (order.buyerDecision) {
+        return res.status(409).json({
+          error: `Buyer decision has already been recorded as ${order.buyerDecision}`,
+          buyerDecision: order.buyerDecision,
+        });
+      }
+
+      const currentInspection = order.inspectionRequests[0] || null;
+      if (!currentInspection) {
+        return res.status(409).json({
+          code: 'INSPECTION_REQUIRED_FOR_BUYER_DECISION',
+          error: 'Request and complete the agricultural inspection before the buyer can decide to buy or cancel.',
+        });
+      }
+      if (currentInspection.status !== 'COMPLETED' || !currentInspection.report) {
+        return res.status(409).json({
+          code: 'INSPECTION_REPORT_REQUIRED_FOR_BUYER_DECISION',
+          error: 'The agricultural inspection report must be completed and published before the buyer can decide.',
+          inspectionRequestId: currentInspection.id,
+          inspectionStatus: currentInspection.status,
+        });
+      }
+
+      if (decision === 'CANCEL') {
+        const reason = req.body.reason || 'Buyer declined the agricultural transaction after inspection';
+        const updated = await prisma.$transaction(async (tx) => {
+          const current = await tx.order.findUnique({
+            where: { id: order.id },
+            include: { transportJob: true, payments: true },
+          });
+          if (!current || current.buyerId !== req.user.id) {
+            throw Object.assign(new Error('Only the buyer can make the purchase decision'), { status: 403 });
+          }
+          if (current.buyerDecision) {
+            throw Object.assign(new Error(`Buyer decision has already been recorded as ${current.buyerDecision}`), { status: 409 });
+          }
+
+          await tx.order.update({
+            where: { id: current.id },
+            data: { buyerDecision: 'CANCEL', buyerDecisionAt: new Date() },
+          });
+
+          await recordOrderEvent(tx, {
+            orderId: current.id,
+            actorId: req.user.id,
+            type: 'BUYER_DECISION_MADE',
+            metadata: { decision: 'CANCEL', reason },
+          });
+
+          await cancelOrderInTransaction(tx, {
+            order: current,
+            actorId: req.user.id,
+            reason,
+            cancelledByRole: 'BUYER',
+          });
+
+          return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
+        });
+
+        return res.json({
+          message: 'Buyer cancelled the agricultural transaction after inspection.',
+          decision: 'CANCEL',
+          order: updated,
+        });
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const current = await tx.order.findUnique({ where: { id: order.id } });
+        if (!current || current.buyerId !== req.user.id) {
+          throw Object.assign(new Error('Only the buyer can make the purchase decision'), { status: 403 });
+        }
+        if (current.buyerDecision) {
+          throw Object.assign(new Error(`Buyer decision has already been recorded as ${current.buyerDecision}`), { status: 409 });
+        }
+
+        const claimed = await tx.order.updateMany({
+          where: { id: current.id, buyerDecision: null, status: { notIn: ['CANCELLED', 'COMPLETED'] } },
+          data: { buyerDecision: 'BUY', buyerDecisionAt: new Date(), paymentDueAt: computePaymentDueAt() },
+        });
+        if (claimed.count !== 1) {
+          throw Object.assign(new Error('The buyer decision was already recorded or the order changed'), { status: 409 });
+        }
+
+        await recordOrderEvent(tx, {
+          orderId: current.id,
+          actorId: req.user.id,
+          type: 'BUYER_DECISION_MADE',
+          metadata: { decision: 'BUY' },
+        });
+
+        return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
+      });
+
+      return res.json({
+        message: 'Buyer chose to buy. Seller payment and the next transaction steps are now available.',
+        decision: 'BUY',
+        order: updated,
+      });
+    } catch (error) {
+      req.log.error({ err: error }, 'BUYER DECISION ERROR:');
+      return res.status(error.status || 500).json({
+        error: error.status ? error.message : 'Could not record buyer decision',
+      });
+    }
+  }
+);
 
 router.patch('/:id/confirm-receipt', authenticate, idempotency('orders.confirm-receipt'), async (req, res) => {
   try {

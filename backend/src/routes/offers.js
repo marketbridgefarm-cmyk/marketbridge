@@ -496,7 +496,12 @@ async function acceptOfferAndCreateOrder(
         finalPrice,
         quantity: requestedQuantity,
         status: 'PENDING_PAYMENT',
-        paymentDueAt: computePaymentDueAt(),
+        agreedOfferId: updatedOffer.id,
+        agreedAt: new Date(),
+        // Agricultural orders must pass inspection + buyer decision before
+        // goods payment, so do not let the generic unpaid-order expiry race
+        // the inspection workflow. The deadline is started when BUY is chosen.
+        paymentDueAt: null,
       },
     });
 

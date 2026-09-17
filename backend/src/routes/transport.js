@@ -6,6 +6,7 @@ const prisma = require('../config/db');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
+const { transitionOrderStatus } = require('../services/orderStateMachine');
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
@@ -481,19 +482,10 @@ router.get(
             order: {
               include: {
                 payments: { select: { type: true, status: true } },
-                listing: {
-                  select: {
-                    category: true,
-                    inspectionRequests: {
-                      where: { status: { not: 'CANCELLED' } },
-                      select: {
-                        id: true,
-                        status: true,
-                        fee: true,
-                        payments: { select: { type: true, status: true } },
-                      },
-                    },
-                  },
+                listing: { select: { category: true } },
+                inspectionRequests: {
+                  where: { status: { not: 'CANCELLED' } },
+                  select: { id: true, status: true, fee: true, payments: { select: { type: true, status: true } } },
                 },
                 buyer: {
                   select: {
@@ -669,6 +661,31 @@ router.post(
       const isAgricultural =
         order.listing?.category ===
         'AGRICULTURAL';
+
+      // Agricultural transport begins only after the buyer has explicitly
+      // chosen BUY following the inspection report. Arrangement itself does
+      // not create a transport payment; payment is created only after a
+      // transporter quote is accepted.
+      if (isAgricultural && order.buyerDecision !== 'BUY') {
+        return res.status(409).json({
+          code: 'BUYER_DECISION_REQUIRED',
+          error: 'The buyer must choose BUY after reviewing the agricultural inspection report before transport can be arranged.',
+          buyerDecision: order.buyerDecision || null,
+        });
+      }
+
+      if (isAgricultural) {
+        const goodsPaid = order.payments?.some((p) => p.type === 'MARKETPLACE' && p.status === 'PAID');
+        if (!goodsPaid) {
+          return res.status(409).json({ code: 'GOODS_PAYMENT_REQUIRED', error: 'Pay the seller for the agreed produce before arranging transport.' });
+        }
+        const inspections = order.inspectionRequests || [];
+        const inspectionPaid = inspections.filter(r => r.fee != null && Number(r.fee) > 0)
+          .every(r => r.payments?.some(p => p.type === 'INSPECTOR' && p.status === 'PAID'));
+        if (!inspectionPaid) {
+          return res.status(409).json({ code: 'INSPECTION_PAYMENT_REQUIRED', error: 'All required inspection payments must be completed before arranging transport.' });
+        }
+      }
 
       if (isAgricultural && order.listing.pickupWindowEnd) {
         const pickupDeadline = new Date(order.listing.pickupWindowEnd).getTime();
@@ -1360,16 +1377,11 @@ async function getTransportPaymentGate(client, jobId) {
       order: {
         include: {
           payments: { select: { id: true, type: true, status: true, amount: true } },
-          listing: {
-            include: {
-              inspectionRequests: {
-                where: { status: { not: 'CANCELLED' } },
-                include: {
-                  payments: { select: { id: true, type: true, status: true, amount: true } },
-                },
-              },
-            },
+          inspectionRequests: {
+            where: { status: { not: 'CANCELLED' } },
+            include: { payments: { select: { id: true, type: true, status: true, amount: true } } },
           },
+          listing: { select: { category: true, pickupWindowEnd: true } },
         },
       },
       payments: { select: { id: true, type: true, status: true, amount: true } },
@@ -1382,7 +1394,7 @@ async function getTransportPaymentGate(client, jobId) {
     (p) => p.type === 'MARKETPLACE' && p.status === 'PAID'
   );
 
-  const inspectionRequests = job.order.listing?.inspectionRequests || [];
+  const inspectionRequests = job.order.inspectionRequests || [];
   const inspectionMissing = inspectionRequests
     .filter((r) => r.fee != null && Number(r.fee) > 0)
     .filter((r) => !r.payments.some((p) => p.type === 'INSPECTOR' && p.status === 'PAID'))
@@ -1640,15 +1652,20 @@ router.patch(
               },
             });
 
+            if (next === 'IN_TRANSIT') {
+              const freshOrder = await tx.order.findUnique({ where: { id: job.orderId }, select: { status: true } });
+              if (freshOrder?.status === 'TRANSPORT_ARRANGED') {
+                await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'IN_TRANSIT');
+              }
+            }
+
             if (next === 'DELIVERED') {
-              await tx.order.update({
-                where: {
-                  id: job.orderId,
-                },
-                data: {
-                  status: 'DELIVERED',
-                },
-              });
+              const freshOrder = await tx.order.findUnique({ where: { id: job.orderId }, select: { status: true } });
+              if (freshOrder?.status === 'TRANSPORT_ARRANGED') {
+                await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'DELIVERED');
+              } else if (freshOrder?.status === 'IN_TRANSIT') {
+                await transitionOrderStatus(tx, job.orderId, 'IN_TRANSIT', 'DELIVERED');
+              }
 
               await releaseTruck(
                 tx,

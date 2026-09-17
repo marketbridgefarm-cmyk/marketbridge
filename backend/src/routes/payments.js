@@ -299,10 +299,20 @@ router.post(
 
             include: {
               transportJob: true,
+              inspectionRequests: {
+                where: { status: { not: 'CANCELLED' } },
+                orderBy: { createdAt: 'desc' },
+                include: { report: true, payments: true },
+              },
               listing: {
                 include: {
                   inspectionRequests: {
-                    include: { payments: true },
+                    where: { status: { not: 'CANCELLED' } },
+                    orderBy: { createdAt: 'desc' },
+                    include: {
+                      report: true,
+                      payments: true,
+                    },
                   },
                 },
               },
@@ -373,37 +383,52 @@ router.post(
           }
 
           // HARD AGRICULTURAL PAYMENT SEQUENCE:
-          // If an inspection was requested before the goods payment is
-          // created, the buyer must wait for the independent inspection to
-          // reach COMPLETED. This prevents paying for bulk produce before the
-          // agreed quality verification is available. Existing orders that
-          // were already paid remain valid; this gate only controls creation
-          // of a new marketplace payment.
+          // An agricultural order may have only one active inspection workflow.
+          // For legacy orders that contain more than one non-cancelled request,
+          // the newest request is the canonical workflow. Goods payment is
+          // allowed only after that inspection has a completed report. This
+          // prevents a stale/duplicate historical request from incorrectly
+          // blocking an otherwise completed inspection.
           if (order.listing?.category === 'AGRICULTURAL') {
-            const inspectionRequests = (order.listing.inspectionRequests || []).filter(
-              (request) => request.status !== 'CANCELLED'
-            );
-            const incompleteInspection = inspectionRequests.find(
-              (request) => request.status !== 'COMPLETED'
-            );
-            if (incompleteInspection) {
+            const inspectionRequests = (order.inspectionRequests || [])
+              .filter((request) => request.status !== 'CANCELLED')
+              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            const currentInspection = inspectionRequests[0] || null;
+
+            if (!currentInspection) {
               return res.status(409).json({
-                code: 'INSPECTION_REQUIRED_BEFORE_GOODS_PAYMENT',
-                error: 'Complete the agricultural inspection before paying for the goods.',
-                inspectionRequestId: incompleteInspection.id,
-                inspectionStatus: incompleteInspection.status,
+                code: 'INSPECTION_REQUIRED_BEFORE_BUYER_DECISION',
+                error: 'An agricultural inspection must be requested and completed before the buyer can pay for the goods.',
+              });
+            }
+
+            if (currentInspection.status !== 'COMPLETED' || !currentInspection.report) {
+              return res.status(409).json({
+                code: 'INSPECTION_REQUIRED_BEFORE_BUYER_DECISION',
+                error: 'Complete the current agricultural inspection and publish its report before the buyer can decide to buy.',
+                inspectionRequestId: currentInspection.id,
+                inspectionStatus: currentInspection.status,
+                inspectionReportId: currentInspection.report?.id || null,
+              });
+            }
+
+            // The inspection report is not the final commercial decision. The
+            // buyer must explicitly choose BUY after reviewing the report.
+            // This is a server-side gate so a stale/malicious client cannot
+            // bypass the agricultural purchase decision.
+            if (order.buyerDecision !== 'BUY') {
+              return res.status(409).json({
+                code: 'BUYER_DECISION_REQUIRED',
+                error: 'The buyer must explicitly choose BUY after reviewing the agricultural inspection report before paying for the goods.',
+                buyerDecision: order.buyerDecision || null,
               });
             }
           }
 
-          // Agricultural purchase payment is intentionally gated by inspection
-          // when an inspection request exists. Transport remains independently
-          // arranged, quoted and paid, and PICKUP is separately gated below.
-          // The buyer may pay for the produce before or after arranging
-          // transport. PICKUP is separately gated on the backend until
-          // all required payments are PAID, so the truck cannot collect
-          // the goods before the seller, transport, and inspection
-          // payments are settled.
+          // Agricultural purchase payment is therefore unlocked only after the
+          // inspection report and explicit BUY decision. Transport remains a
+          // separate negotiated workflow, but its creation is also gated by
+          // the same BUY decision below.
         }
 
         // --------------------------------------------------------------------

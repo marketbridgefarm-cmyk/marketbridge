@@ -65,7 +65,8 @@ router.post(
   authenticate,
   requireRole('SELLER', 'BUYER'),
   [
-    body('listingId').notEmpty(),
+    body('orderId').isUUID().withMessage('orderId is required'),
+    body('listingId').optional().isUUID(),
     body('mode')
       .isIn(['SELLER_REQUESTED', 'BUYER_REQUESTED', 'JOINT'])
       .withMessage('Invalid inspection mode'),
@@ -83,27 +84,34 @@ router.post(
       }
 
       const {
+        orderId,
         listingId,
         mode,
         inspectorId,
         fee,
       } = req.body;
 
-      const listing = await prisma.listing.findUnique({
-        where: { id: listingId },
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { listing: true },
       });
 
-      if (!listing) {
-        return res.status(404).json({
-          error: 'Listing not found',
-        });
+      if (!order) return res.status(404).json({ error: 'Order not found' });
+      if (order.buyerId !== req.user.id && order.sellerId !== req.user.id && !req.user.roles.includes('ADMIN')) {
+        return res.status(403).json({ error: 'Only the buyer or seller of the order can request inspection' });
       }
 
-      if (listing.category !== 'AGRICULTURAL') {
+      if (order.status === 'CANCELLED' || order.status === 'COMPLETED') {
+        return res.status(409).json({ error: `Inspection cannot be requested for an order that is ${order.status.toLowerCase()}` });
+      }
+
+      if (order.listing.category !== 'AGRICULTURAL') {
         return res.status(400).json({
           error: 'Inspections are only available for agricultural listings',
         });
       }
+
+      const resolvedListingId = order.listingId;
 
       if (inspectorId) {
         const inspector = await prisma.user.findUnique({
@@ -127,13 +135,35 @@ router.post(
       }
 
       const request = await prisma.$transaction(async (tx) => {
+        // An order may have only one active inspection workflow. The old UI
+        // exposed both "Request inspection" and "Find an inspector" even
+        // after an inspection already existed, which allowed duplicate
+        // requests on the same listing. A later pending request then blocked
+        // the agricultural goods payment even when an earlier inspection had
+        // already been completed. Reject a second active request at the
+        // database transaction boundary. Cancelled requests are historical
+        // records and do not block a new workflow.
+        const existingActive = await tx.inspectionRequest.findFirst({
+          where: { orderId: order.id, status: { not: 'CANCELLED' } },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, status: true, inspectorId: true, fee: true, createdAt: true },
+        });
+
+        if (existingActive) {
+          const error = new Error('An inspection already exists for this order. Continue with the existing inspection.');
+          error.statusCode = 409;
+          error.existingInspection = existingActive;
+          throw error;
+        }
+
         const created = await tx.inspectionRequest.create({
           data: {
-            listingId,
+            orderId: order.id,
+            listingId: resolvedListingId,
             requestedById: req.user.id,
             mode,
             // Preserve the location at the time the inspection was requested.
-            location: listing.location || null,
+            location: order.listing.location || null,
             inspectorId: inspectorId || null,
             status: inspectorId ? 'ACCEPTED' : 'REQUESTED',
             fee: inspectorId ? Number(fee) : null,
@@ -156,7 +186,7 @@ router.post(
           action: 'INSPECTION_REQUEST_CREATED',
           resourceType: 'InspectionRequest',
           resourceId: created.id,
-          metadata: { listingId, mode, inspectorId: inspectorId || null },
+          metadata: { orderId: order.id, listingId: resolvedListingId, mode, inspectorId: inspectorId || null },
         });
 
         return created;
@@ -164,6 +194,14 @@ router.post(
 
       return res.status(201).json({ request });
     } catch (error) {
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({
+          error: error.message,
+          code: 'ACTIVE_INSPECTION_EXISTS',
+          existingInspection: error.existingInspection || null,
+        });
+      }
+
       req.log.error({ err: error }, 'CREATE INSPECTION REQUEST ERROR:');
 
       return res.status(500).json({
@@ -640,7 +678,7 @@ router.patch(
         });
 
         const relatedOrders = await tx.order.findMany({
-          where: { listingId: request.listingId, status: { not: 'CANCELLED' } },
+          where: { id: request.orderId },
           select: { id: true, status: true },
         });
         for (const relatedOrder of relatedOrders) {
@@ -1008,6 +1046,19 @@ router.post(
         });
       }
 
+      if (request.fee != null && Number(request.fee) > 0) {
+        const paid = await prisma.payment.findFirst({
+          where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: 'PAID' },
+          select: { id: true },
+        });
+        if (!paid) {
+          return res.status(409).json({
+            code: 'INSPECTION_PAYMENT_REQUIRED',
+            error: 'The inspection fee must be paid before the inspector can start the inspection.',
+          });
+        }
+      }
+
       const result = await prisma.$transaction(async (tx) => {
         const updatedCount = await tx.inspectionRequest.updateMany({
           where: {
@@ -1023,7 +1074,7 @@ router.post(
         }
 
         const relatedOrders = await tx.order.findMany({
-          where: { listingId: request.listingId, status: { not: 'CANCELLED' } },
+          where: { id: request.orderId },
           select: { id: true },
         });
         for (const relatedOrder of relatedOrders) {
@@ -1465,7 +1516,7 @@ router.post(
         }
 
         const relatedOrders = await tx.order.findMany({
-          where: { listingId: request.listingId, status: { not: 'CANCELLED' } },
+          where: { id: request.orderId },
           select: { id: true },
         });
         for (const relatedOrder of relatedOrders) {
