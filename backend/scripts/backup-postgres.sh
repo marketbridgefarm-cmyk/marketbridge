@@ -1,37 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# --- Configuration & Defaults ---
-DB_HOST="${POSTGRES_HOST:-localhost}"
-DB_PORT="${POSTGRES_PORT:-5432}"
-DB_USER="${POSTGRES_USER:-postgres}"
-DB_NAME="${POSTGRES_DB:-marketbridge}"
+: "${DATABASE_URL:?DATABASE_URL must be set}"
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
-RETENTION_DAYS="${RETENTION_DAYS:-7}"
+RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
+mkdir -p "$BACKUP_DIR"
+TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+OUTPUT="${BACKUP_DIR}/marketbridge-${TIMESTAMP}.dump"
 
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKUP_FILE="${BACKUP_DIR}/${DB_NAME}_${TIMESTAMP}.dump"
+pg_dump "$DATABASE_URL" --format=custom --no-owner --no-privileges --file="$OUTPUT"
+pg_restore --list "$OUTPUT" >/dev/null
+printf 'Backup created and verified: %s\n' "$OUTPUT"
 
-# Ensure backup directory exists
-mkdir -p "${BACKUP_DIR}"
+# Off-site copy: on Render (and most PaaS hosts) the local filesystem is
+# ephemeral and does not survive a redeploy or restart, so a dump that only
+# ever lands here can silently disappear before anyone needs it. This is
+# best-effort: an unconfigured or failed upload does not fail the backup
+# itself, since the verified local dump above already satisfies this
+# script's core job.
+if [[ -f "scripts/backupStorage.js" ]]; then
+  node scripts/backupStorage.js upload "$OUTPUT" || echo 'Off-site upload failed; local backup above is still valid.'
+fi
 
-echo "Starting PostgreSQL backup for database: ${DB_NAME}..."
-
-# --- Execute pg_dump (Custom Format for flexibility) ---
-PGPASSWORD="${POSTGRES_PASSWORD:-}" pg_dump \
-  -h "${DB_HOST}" \
-  -p "${DB_PORT}" \
-  -U "${DB_USER}" \
-  -d "${DB_NAME}" \
-  -F c \
-  -b \
-  -v \
-  -f "${BACKUP_FILE}"
-
-echo "Backup successfully created at: ${BACKUP_FILE}"
-
-# --- Retention Cleanup ---
-echo "Cleaning up backups older than ${RETENTION_DAYS} days..."
-find "${BACKUP_DIR}" -type f -name "${DB_NAME}_*.dump" -mtime +"${RETENTION_DAYS}" -delete
-
-echo "Backup pipeline completed successfully."
+# Retention: without this, backups accumulate on disk (and off-site)
+# forever. Prune anything older than RETENTION_DAYS, locally and remotely.
+find "$BACKUP_DIR" -maxdepth 1 -name 'marketbridge-*.dump' -mtime "+${RETENTION_DAYS}" -print -delete 2>/dev/null || true
+if [[ -f "scripts/backupStorage.js" ]]; then
+  node scripts/backupStorage.js prune "$RETENTION_DAYS" || true
+fi
