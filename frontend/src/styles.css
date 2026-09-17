@@ -3369,6 +3369,89 @@ a.recent-activity-link:hover {
 .ad-template-swatch--minimal { background: var(--paper); border: 1px solid var(--line); }
 .ad-template-swatch--card { background: linear-gradient(135deg, var(--soft) 0%, var(--paper) 60%); border: 1px solid var(--line); }
 
+/* Advertiser dashboard: Telegram promotion style/template picker. Same
+   card layout as the banner picker above, but the swatch is a small
+   animated "chat bubble" badge instead of a flat rectangle, since a
+   Telegram post has no image to preview — the animation is what signals
+   "this one has energy" at a glance. Kept subtle/looping, never flashing
+   fast enough to be distracting. */
+.tg-template-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 6px 0 14px;
+}
+.tg-template-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.tg-template-option:hover { border-color: var(--green-light); transform: translateY(-1px); }
+.tg-template-option--active {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(23,107,58,.15);
+}
+.tg-bubble {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.tg-bubble-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.tg-bubble--classic { background: linear-gradient(135deg, var(--soft), var(--green-light)); }
+.tg-bubble--hot_deal { background: linear-gradient(135deg, #ff7a45, #c62828); }
+.tg-bubble--fresh_harvest { background: linear-gradient(135deg, var(--green-light), var(--green-dark)); }
+.tg-bubble--farm_to_table { background: linear-gradient(135deg, #d9a441, #8a5a20); }
+.tg-bubble--flash_sale { background: linear-gradient(135deg, var(--gold), #b8860b); }
+.tg-bubble--trusted_seller { background: linear-gradient(135deg, #3f7bd6, #1c3f7a); }
+
+@keyframes tg-pulse-scale {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+@keyframes tg-sway {
+  0%, 100% { transform: rotate(-6deg); }
+  50% { transform: rotate(6deg); }
+}
+@keyframes tg-drive {
+  0%, 100% { transform: translateX(-2px); }
+  50% { transform: translateX(2px); }
+}
+@keyframes tg-blink-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(212,175,55,.55); }
+  50% { box-shadow: 0 0 0 6px rgba(212,175,55,0); }
+}
+@keyframes tg-trust-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(63,123,214,.45); }
+  50% { box-shadow: 0 0 0 5px rgba(63,123,214,0); }
+}
+
+.tg-anim-classic { animation: tg-pulse-scale 3.2s ease-in-out infinite; }
+.tg-anim-hotdeal { animation: tg-pulse-scale 1.1s ease-in-out infinite; }
+.tg-anim-fresh { animation: tg-sway 2.4s ease-in-out infinite; }
+.tg-anim-farm { animation: tg-drive 1.8s ease-in-out infinite; }
+.tg-anim-flash { animation: tg-blink-glow 1.2s ease-in-out infinite; }
+.tg-anim-trusted { animation: tg-trust-glow 2.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tg-bubble { animation: none !important; }
+}
+
 /* Create-listing popup. Desktop keeps the normal full-page layout; below the
    tablet breakpoint the page presents as a popup over whatever the user was
    looking at — a bottom sheet on phones, a centered dialog on tablets. */
