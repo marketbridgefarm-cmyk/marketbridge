@@ -27,6 +27,14 @@ function canTransitionOrder(from, to) {
   return Boolean(ORDER_TRANSITIONS[from]?.has(to));
 }
 
+// Order statuses from which a dispute may be opened — derived directly from
+// ORDER_TRANSITIONS (every status that can move into DISPUTED) so this list
+// can never silently drift out of sync with what the state machine itself
+// actually allows.
+const DISPUTABLE_STATUSES = Object.keys(ORDER_TRANSITIONS).filter((status) =>
+  ORDER_TRANSITIONS[status].has('DISPUTED')
+);
+
 function assertOrderTransition(from, to) {
   if (!canTransitionOrder(from, to)) {
     const error = new Error(`Invalid order status transition: ${from} -> ${to}`);
@@ -63,6 +71,7 @@ async function transitionOrderStatus(tx, orderId, from, to, extraData = {}) {
 
 module.exports = {
   ORDER_TRANSITIONS,
+  DISPUTABLE_STATUSES,
   canTransitionOrder,
   assertOrderTransition,
   transitionOrderStatus,
