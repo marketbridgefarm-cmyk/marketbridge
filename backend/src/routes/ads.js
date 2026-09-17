@@ -12,7 +12,7 @@ const { isAdmin } = require('../utils/authorization');
 const { recordAuditEvent } = require('../utils/audit');
 const { requestRefund } = require('../services/paymentRefundService');
 const { uploadPrivateObject, signedMediaUrl, deletePrivateObject } = require('../utils/objectStorage');
-const { AD_TYPES, BANNER_TEMPLATES, dailyRatesEtb, bannerTemplateMultipliers, campaignDays, quotePrice } = require('../utils/adPricing');
+const { AD_TYPES, BANNER_TEMPLATES, TELEGRAM_TEMPLATES, dailyRatesEtb, bannerTemplateMultipliers, campaignDays, quotePrice } = require('../utils/adPricing');
 const { optimizeUpload } = require('../utils/imageProcessor');
 
 const router = express.Router();
@@ -149,6 +149,7 @@ router.get('/pricing', authenticate, (req, res) => {
     maxCampaignDays: Number(process.env.AD_MAX_CAMPAIGN_DAYS || 90),
     bannerTemplates: BANNER_TEMPLATES,
     bannerTemplateMultipliers: bannerTemplateMultipliers(),
+    telegramTemplates: TELEGRAM_TEMPLATES,
   });
 });
 
@@ -205,6 +206,7 @@ router.post(
     body('linkUrl').optional({ values: 'falsy' }).isString().trim().isLength({ max: MAX_URL }),
     body('creativeImageKey').optional({ values: 'falsy' }).isString().trim().isLength({ max: 500 }),
     body('bannerTemplate').optional({ values: 'falsy' }).isIn(BANNER_TEMPLATES),
+    body('telegramTemplate').optional({ values: 'falsy' }).isIn(TELEGRAM_TEMPLATES),
   ],
   validate,
   async (req, res) => {
@@ -242,6 +244,7 @@ router.post(
       if (type === 'BANNER' && !req.body.creativeImageKey) return res.status(400).json({ error: 'Banner campaigns require an uploaded image' });
 
       const bannerTemplate = type === 'BANNER' ? (req.body.bannerTemplate || 'CLASSIC') : 'CLASSIC';
+      const telegramTemplate = type === 'TELEGRAM_PROMOTION' ? (req.body.telegramTemplate || 'CLASSIC') : 'CLASSIC';
       const priceQuoted = quotePrice(type, startDate, endDate, bannerTemplate);
       const campaignReference = `MB-AD-${new Date().getUTCFullYear()}-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
 
@@ -261,6 +264,7 @@ router.post(
             destinationUrl: linkUrl,
             creativeImageKey: type === 'BANNER' ? req.body.creativeImageKey : null,
             bannerTemplate,
+            telegramTemplate,
           },
         });
         await recordAuditEvent(tx, {
@@ -268,7 +272,7 @@ router.post(
           action: 'AD_CAMPAIGN_CREATED',
           resourceType: 'Advertisement',
           resourceId: created.id,
-          metadata: { type, listingId: listingId || null, bannerTemplate, priceQuoted, currency: 'ETB', campaignReference },
+          metadata: { type, listingId: listingId || null, bannerTemplate, telegramTemplate, priceQuoted, currency: 'ETB', campaignReference },
         });
         return created;
       });
