@@ -61,18 +61,31 @@ export default function WorkflowActions({
 
     setBusyCode(action.code);
     setLocalError('');
+    let actionError = null;
     try {
       const method = action.route.method.toLowerCase();
       const config = action.route.body ? { data: action.route.body } : undefined;
       await api.request({ method, url: action.route.path, ...(config || {}) });
-      await onActionComplete?.(action);
     } catch (error) {
+      actionError = error;
       setLocalError(errorMessage(error, `Could not complete: ${action.label || action.code}`));
-      // A stale workflow is common after another party acts. Refresh it so
-      // the user immediately sees the new server-authoritative next step.
-      await onActionComplete?.(action, { error });
     } finally {
+      // Never keep the button in `Working…` while the follow-up page refresh
+      // is running. A slow/stuck GET must not make a successfully submitted
+      // workflow action look like it is still being submitted.
       setBusyCode('');
+    }
+
+    // Refresh the server-authoritative workflow after the mutation, but do
+    // not make the button depend on the refresh completing. This is also
+    // important when the mutation returns a useful 4xx error: the error must
+    // be visible immediately instead of being hidden behind a hanging refresh.
+    try {
+      await onActionComplete?.(action, actionError ? { error: actionError } : undefined);
+    } catch (refreshError) {
+      if (!actionError) {
+        setLocalError(errorMessage(refreshError, 'The action completed, but the order could not be refreshed. Please refresh the page.'));
+      }
     }
   }
 
