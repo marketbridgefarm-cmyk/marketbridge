@@ -2390,7 +2390,7 @@ router.patch(
           data: {
             truckOwnerId: freshQuote.truckOwnerId,
             truckId: freshQuote.truckId,
-            agreedAmount: finalAmount,
+            agreedAmount: freshFinalAmount,
             status: 'ACCEPTED',
           },
         });
