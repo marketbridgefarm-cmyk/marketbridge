@@ -2206,7 +2206,9 @@ router.patch(
         const counterAmount = Number(req.body.counterAmount);
 
         const counterQuote = await prisma.$transaction(async (tx) => {
-          const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
+          const freshQuote = await tx.transportQuote.findUnique({
+            where: { id: quote.id },
+          });
           if (!freshQuote) throw quoteError('Quote not found', 404);
           if (!['PENDING', 'COUNTERED'].includes(freshQuote.status)) {
             throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
@@ -2225,19 +2227,33 @@ router.patch(
               transportJobId: freshQuote.transportJobId,
               truckOwnerId: freshQuote.truckOwnerId,
               truckId: freshQuote.truckId,
+              // A counter is a new immutable leaf quote. Keep the new amount
+              // in both fields so old/new clients read the same negotiated
+              // value. The previous quote remains only as audit history.
               amount: counterAmount,
               counterAmount,
               counteredBy: effectiveRole,
               status: 'COUNTERED',
               parentQuoteId: freshQuote.id,
               expiresAt: quoteExpiry(12),
-              message: req.body.message || freshQuote.message,
+              message: req.body.message || null,
             },
             include: {
               truckOwner: { select: { id: true, name: true, rating: true } },
               truck: true,
             },
           });
+
+          // Legacy jobs can still be REQUESTED if a quote was created by
+          // an older deployment. Once negotiation has started the job is
+          // definitively QUOTED, so later accept/counter operations are not
+          // blocked by the stale REQUESTED state.
+          if (job.status === 'REQUESTED') {
+            await tx.transportJob.update({
+              where: { id: freshQuote.transportJobId },
+              data: { status: 'QUOTED' },
+            });
+          }
 
           await recordAuditEvent(tx, {
             actorId: req.user.id,
@@ -2254,6 +2270,9 @@ router.patch(
           });
 
           return created;
+        }, {
+          maxWait: 10000,
+          timeout: 20000,
         });
 
         return res.status(201).json({
