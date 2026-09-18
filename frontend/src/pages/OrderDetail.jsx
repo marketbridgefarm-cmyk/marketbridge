@@ -666,7 +666,7 @@ export default function OrderDetail() {
     setRequestingInspection(true);
 
     try {
-      const body = { listingId: order.listing.id, mode };
+      const body = { orderId: order.id, listingId: order.listing.id, mode };
 
       if (inspectorId) {
         body.inspectorId = inspectorId;
