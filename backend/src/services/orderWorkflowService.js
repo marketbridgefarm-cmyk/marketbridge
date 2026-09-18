@@ -61,7 +61,7 @@ function buildPaymentSnapshot(order) {
     obligationId: marketplaceObligation?.id || null,
   };
 
-  const inspectionRequests = (order.listing?.inspectionRequests || [])
+  const inspectionRequests = (order.listing?.inspectionRequests || order.inspectionRequests || [])
     .filter((r) => r.status !== 'CANCELLED')
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -264,17 +264,28 @@ function computeStage(order, payments) {
   // For agricultural orders, an accepted/in-progress inspection is a hard
   // commercial gate: the buyer must see the inspection result before paying
   // for the produce. A still-unassigned request remains a negotiation stage.
-  if (agricultural && payments.inspectionRequestsExist) {
+  if (agricultural) {
+    // No active inspection request: inspection must be requested before the
+    // buyer can make the commercial decision or pay for the produce.
+    if (!payments.inspectionRequestsExist) return 'INSPECTION_REQUEST';
+
     if (!payments.allInspectionsCompleted) {
-      const requests = payments.inspectionRequests || [];
-      if (requests.some((r) => ['REQUESTED'].includes(r.status))) return 'INSPECTION';
+      const current = (payments.inspectionRequests || [])[0];
+      if (current?.status === 'ACCEPTED' && payments.inspections.some((i) => !i.paid)) {
+        return 'INSPECTION_PAYMENT';
+      }
       return 'INSPECTION';
     }
 
-    // Inspection has completed and the buyer must explicitly choose BUY or
-    // CANCEL before the seller payment step is presented. The BUY action is a
-    // UI decision gate; it must not create a second order or payment intent.
-    if (!payments.marketplace.paid && !job) return 'BUYER_DECISION';
+    // The inspection report is complete, but the buyer has not yet made the
+    // explicit BUY/CANCEL decision. This is a real business stage, not a
+    // payment stage.
+    if (!order.buyerDecision) return 'BUYER_DECISION';
+
+    // BUY is the gate that unlocks the seller/goods payment.
+    if (order.buyerDecision === 'BUY' && !payments.marketplace.paid && !job) {
+      return 'GOODS_PAYMENT';
+    }
   }
 
   if (!payments.marketplace.paid && !job) return 'PENDING_PAYMENT';
@@ -328,7 +339,7 @@ function buildActions(order, payments, viewer) {
   // 1. Agricultural inspection workflow. Inspection actions are executable
   // from the order Action Center so an assigned inspector is never stranded
   // on a generic dashboard link.
-  const inspectionRequests = (order.listing?.inspectionRequests || [])
+  const inspectionRequests = (order.listing?.inspectionRequests || order.inspectionRequests || [])
     .filter((r) => r.status !== 'CANCELLED')
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const currentInspectionRequest = inspectionRequests[0] || null;
@@ -379,21 +390,80 @@ function buildActions(order, payments, viewer) {
     }
   }
 
-  // 2. Pay for the goods. For agricultural orders with an active inspection
-  // request, payment is intentionally unavailable until every inspection is
-  // completed. The same rule is enforced server-side in /payments.
+  // 2. If no inspection exists yet, keep the buyer in the inspection-request
+  // stage. The detailed inspection form lives in OrderDetail, so this action
+  // is a navigation hint rather than a payment mutation.
+  if (order.listing?.category === 'AGRICULTURAL' && !payments.inspectionRequestsExist && !terminal) {
+    push({
+      code: 'REQUEST_INSPECTION',
+      label: 'Request inspection',
+      actorRole: 'BUYER_OR_SELLER',
+      viewerCanPerform: isBuyer || isSeller,
+      ready: true,
+      route: null,
+    });
+  }
+
+  // 3. Agricultural buyer decision. This must be a real server-side
+  // mutation. The old UI only scrolled to the payment center, leaving
+  // buyerDecision=null and causing /payments to reject the seller payment.
+  if (order.listing?.category === 'AGRICULTURAL' && !order.buyerDecision && !terminal) {
+    const decisionReady = payments.inspectionRequestsExist && payments.allInspectionsCompleted;
+    const decisionReason = !payments.inspectionRequestsExist
+      ? 'Complete an agricultural inspection before choosing BUY or CANCEL'
+      : !payments.allInspectionsCompleted
+        ? 'Review the published agricultural inspection report before choosing BUY or CANCEL'
+        : null;
+
+    push({
+      code: 'BUYER_DECISION_BUY',
+      label: 'BUY — continue purchase',
+      actorRole: 'BUYER',
+      viewerCanPerform: isBuyer,
+      ready: decisionReady,
+      reason: decisionReason,
+      route: {
+        method: 'PATCH',
+        path: `/orders/${order.id}/buyer-decision`,
+        body: { decision: 'BUY' },
+      },
+    });
+
+    push({
+      code: 'BUYER_DECISION_CANCEL',
+      label: 'Cancel after inspection',
+      actorRole: 'BUYER',
+      viewerCanPerform: isBuyer,
+      ready: decisionReady,
+      reason: decisionReason,
+      route: {
+        method: 'PATCH',
+        path: `/orders/${order.id}/buyer-decision`,
+        body: { decision: 'CANCEL' },
+      },
+    });
+  }
+
+  // 3. Pay for the goods. For agricultural orders the explicit BUY decision
+  // is required in addition to a completed inspection report. The same rule
+  // is enforced server-side in /payments.
   if (!payments.marketplace.paid) {
+    const agricultural = order.listing?.category === 'AGRICULTURAL';
+    const ready = !terminal && (!agricultural || order.buyerDecision === 'BUY') &&
+      (!agricultural || payments.allInspectionsCompleted);
     push({
       code: 'PAY_MARKETPLACE',
       label: 'Pay for goods',
       actorRole: 'BUYER',
       viewerCanPerform: isBuyer,
-      ready: !terminal && (!order.listing || order.listing.category !== 'AGRICULTURAL' || !payments.inspectionRequestsExist || payments.allInspectionsCompleted),
+      ready,
       reason: terminal
         ? 'Order is no longer active'
-        : (order.listing?.category === 'AGRICULTURAL' && payments.inspectionRequestsExist && !payments.allInspectionsCompleted
+        : agricultural && !payments.allInspectionsCompleted
           ? 'Complete the agricultural inspection before paying for the goods'
-          : null),
+          : agricultural && order.buyerDecision !== 'BUY'
+            ? 'Choose BUY after reviewing the inspection report'
+            : null,
       route: {
         method: 'POST',
         path: '/payments',
@@ -402,7 +472,7 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 2. Pay each fee-bearing inspection.
+  // 4. Pay each fee-bearing inspection.
   for (const obligation of payments.inspections) {
     if (obligation.paid) continue;
     const viewerIsRequester = obligation.requestedById === viewer.userId;
@@ -424,14 +494,15 @@ function buildActions(order, payments, viewer) {
 
   // 3. Arrange transport if nothing has been set up yet.
   if (!job) {
-    const ready = !terminal && ['CONFIRMED', 'PENDING_PAYMENT'].includes(order.status);
+    const agriculturalReady = order.listing?.category !== 'AGRICULTURAL' || order.buyerDecision === 'BUY';
+    const ready = !terminal && agriculturalReady && payments.marketplace.paid && ['CONFIRMED', 'PENDING_PAYMENT'].includes(order.status);
     push({
       code: 'ARRANGE_TRANSPORT',
       label: 'Arrange transport',
       actorRole: 'BUYER_OR_SELLER',
       viewerCanPerform: isBuyer || isSeller,
       ready,
-      reason: ready ? null : `Transport cannot be arranged while order is ${order.status}`,
+      reason: ready ? null : (!agriculturalReady ? 'Choose BUY before arranging transport' : !payments.marketplace.paid ? 'Pay the seller for the agreed produce before arranging transport' : `Transport cannot be arranged while order is ${order.status}`),
       route: { method: 'POST', path: '/transport', body: { orderId: order.id } },
     });
   }
@@ -596,6 +667,8 @@ function computeOrderWorkflow(order, viewerUserId, viewerRoles = []) {
   return {
     orderId: order.id,
     orderStatus: order.status,
+    buyerDecision: order.buyerDecision || null,
+    buyerDecisionAt: order.buyerDecisionAt || null,
     currentStage,
     nextActor: nextReadyAction?.actorRole || null,
     viewerRole: isAdmin
