@@ -619,8 +619,15 @@ router.post(
           });
         }
 
-        if (ad.status === 'REJECTED' || ad.status === 'EXPIRED') {
-          return res.status(400).json({ error: `Cannot pay a ${ad.status.toLowerCase()} campaign` });
+        // Allow-list, not a block-list: a campaign can only be paid while it
+        // is still awaiting its first payment. This also covers CANCELLED
+        // (previously unblocked, letting a cancelled campaign be revived by
+        // payment) and every already-paid status (PAID_PENDING_REVIEW,
+        // APPROVED, SCHEDULED, PUBLISHED), which previously allowed a
+        // duplicate/retried payment request to create a second PAID payment
+        // for the same ad and double the recorded advertising revenue.
+        if (ad.status !== 'PENDING_PAYMENT') {
+          return res.status(400).json({ error: `Cannot pay a campaign that is ${ad.status.toLowerCase().replace(/_/g, ' ')}` });
         }
       }
 
