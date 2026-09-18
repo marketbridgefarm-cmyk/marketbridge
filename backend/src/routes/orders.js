@@ -468,14 +468,17 @@ router.patch(
         }
       }
 
-      // Load the rich response graph only after the short decision transaction
-      // has committed. This prevents order events/notifications/payment graphs
-      // from consuming the interactive transaction timeout.
-      const responseOrder = await prisma.order.findUnique({
-        where: { id: updated.id },
-        include: orderInclude,
-      });
-
+      // NOTE: intentionally not re-loading the full orderInclude graph here.
+      // It was previously fetched into an unused `responseOrder` variable —
+      // the response below has always returned the lean `updated` object,
+      // so that extra query did nothing but add a slow, failure-prone step
+      // AFTER the decision had already committed: any hiccup on that
+      // now-removed query (DB load, pool pressure, timeout) surfaced as a
+      // generic "Could not record buyer decision" error even though the
+      // buyer's BUY/CANCEL decision was already durably saved. The frontend
+      // (ActionCenter's onActionComplete) already re-fetches the full order
+      // via GET /orders/:id right after a successful action, so nothing here
+      // needs the heavy graph.
       return res.json({
         message: decision === 'BUY'
           ? 'Buyer chose to buy. Seller payment and the next transaction steps are now available.'
