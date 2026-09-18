@@ -147,10 +147,6 @@ router.get(
           label: 'Telebirr via Chapa',
         },
         {
-          code: 'CBE',
-          label: 'CBE',
-        },
-        {
           code: 'QR',
           label: 'QR Code',
         },
@@ -1114,48 +1110,43 @@ router.get(
           String(txRef)
         );
 
-      if (
-        status ===
-        'success'
-      ) {
-        const verifiedAmount =
-          raw?.data?.amount;
+      const verifiedAmount = raw?.data?.amount;
+      const verifiedCurrency = raw?.data?.currency;
+      const providerTransactionId =
+        raw?.data?.reference ||
+        raw?.data?.ref_id ||
+        raw?.data?.tx_ref ||
+        payment.providerTransactionId ||
+        payment.id;
 
-        const verifiedCurrency =
-          raw?.data?.currency;
-
+      if (status === 'success') {
         // paymentService performs final amount/currency validation.
         await paymentService.settlePayment({
-          paymentId:
-            payment.id,
-
-          status:
-            'PAID',
-
-          provider:
-            getAdapter(payment.method).provider,
-
-          providerTransactionId:
-            raw?.data?.reference ||
-            raw?.data?.ref_id ||
-            raw?.data?.tx_ref ||
-            payment.id,
-
-          eventId:
-            `chapa-callback-${payment.id}-${Date.now()}`,
-
+          paymentId: payment.id,
+          status: 'PAID',
+          provider: getAdapter(payment.method).provider,
+          providerTransactionId,
+          eventId: `chapa-callback-${payment.id}-${Date.now()}`,
           payload: {
-            amount:
-              verifiedAmount ??
-              payment.amount,
-
-            currency:
-              verifiedCurrency ??
-              payment.currency ??
-              'ETB',
-
-            chapa:
-              raw?.data || raw,
+            amount: verifiedAmount ?? payment.amount,
+            currency: verifiedCurrency ?? payment.currency ?? 'ETB',
+            chapa: raw?.data || raw,
+          },
+        });
+      } else if (status === 'failed') {
+        // A failed/cancelled hosted checkout must close the local payment
+        // intent. Leaving it PROCESSING permanently blocks the Payment Center
+        // from creating a fresh seller-payment attempt.
+        await paymentService.settlePayment({
+          paymentId: payment.id,
+          status: 'FAILED',
+          provider: getAdapter(payment.method).provider,
+          providerTransactionId,
+          eventId: `chapa-callback-failed-${payment.id}-${Date.now()}`,
+          payload: {
+            amount: verifiedAmount ?? payment.amount,
+            currency: verifiedCurrency ?? payment.currency ?? 'ETB',
+            chapa: raw?.data || raw,
           },
         });
       }
@@ -1325,18 +1316,30 @@ router.get(
       // FAILED
       // ----------------------------------------------------------------------
 
-      if (
-        status ===
-        'failed'
-      ) {
+      if (status === 'failed') {
+        const failedPayment = await paymentService.settlePayment({
+          paymentId: payment.id,
+          status: 'FAILED',
+          provider: getAdapter(payment.method).provider,
+          providerTransactionId:
+            raw?.data?.reference ||
+            raw?.data?.ref_id ||
+            raw?.data?.tx_ref ||
+            payment.providerTransactionId ||
+            payment.id,
+          reference: payment.reference,
+          eventId: `chapa-verify-failed-${payment.id}-${Date.now()}`,
+          payload: {
+            amount: raw?.data?.amount ?? payment.amount,
+            currency: raw?.data?.currency ?? payment.currency ?? 'ETB',
+            chapa: raw?.data || raw,
+          },
+        });
+
         return res.json({
-          status:
-            'FAILED',
-
-          payment,
-
-          chapaStatus:
-            status,
+          status: 'FAILED',
+          payment: failedPayment,
+          chapaStatus: status,
         });
       }
 
