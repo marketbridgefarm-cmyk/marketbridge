@@ -65,7 +65,18 @@ export default function WorkflowActions({
     try {
       const method = action.route.method.toLowerCase();
       const config = action.route.body ? { data: action.route.body } : undefined;
-      await api.request({ method, url: action.route.path, ...(config || {}) });
+      // Buyer BUY/CANCEL is an immutable decision. Reuse one deterministic key
+      // for that order/decision so a lost response can be safely retried and
+      // replay the original 200 response instead of turning the retry into a
+      // misleading 409 "already recorded" message.
+      const deterministicKey = action.code.startsWith('BUYER_DECISION_')
+        ? `order:${orderId}:${action.code}`
+        : null;
+      const randomKey = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `workflow-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const headers = { 'Idempotency-Key': deterministicKey || randomKey };
+      await api.request({ method, url: action.route.path, headers, ...(config || {}) });
     } catch (error) {
       actionError = error;
       setLocalError(errorMessage(error, `Could not complete: ${action.label || action.code}`));
