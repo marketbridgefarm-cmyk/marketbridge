@@ -182,7 +182,7 @@
       "post": {
         "operationId": "post_api_auth_login",
         "summary": "Log in with email and password",
-        "description": "On success without MFA, returns an access token and sets the refresh cookie. If the account has MFA enabled, instead returns `{ mfaRequired: true, challengeToken }` — exchange that at POST /auth/mfa/verify-login for the real session.",
+        "description": "On success without MFA, returns an access token and sets the refresh cookie. If the account has MFA enabled, instead returns `{ mfaRequired: true, challengeToken }` \u2014 exchange that at POST /auth/mfa/verify-login for the real session.",
         "tags": [
           "Auth"
         ],
@@ -399,7 +399,7 @@
     "/api/auth/me/preferences": {
       "patch": {
         "operationId": "patch_api_auth_me_preferences",
-        "summary": "Notification/localization preferences. Deliberately narrow (just these three fields) rather than a general profile-edit endpoint — phone/name/ etc. changes go through whatever profile flow already exists elsewhere.",
+        "summary": "Notification/localization preferences. Deliberately narrow (just these three fields) rather than a general profile-edit endpoint \u2014 phone/name/ etc. changes go through whatever profile flow already exists elsewhere.",
         "description": "Requires a valid access token.",
         "tags": [
           "Auth"
@@ -737,7 +737,7 @@
     "/api/auth/mfa/verify-setup": {
       "post": {
         "operationId": "post_api_auth_mfa_verify_setup",
-        "summary": "Confirm enrollment. Requires the current password in addition to a valid code: this is the step that actually turns MFA on, so it deserves the same bar as any other sensitive account change — a hijacked but still-logged-in session shouldn't be able to silently lock the real owner into an attacker-controlled authenticator.",
+        "summary": "Confirm enrollment. Requires the current password in addition to a valid code: this is the step that actually turns MFA on, so it deserves the same bar as any other sensitive account change \u2014 a hijacked but still-logged-in session shouldn't be able to silently lock the real owner into an attacker-controlled authenticator.",
         "description": "Requires a valid access token.",
         "tags": [
           "Auth"
@@ -829,7 +829,7 @@
     "/api/auth/mfa/disable": {
       "post": {
         "operationId": "post_api_auth_mfa_disable",
-        "summary": "Disable MFA. Requires both the password and a currently-valid code (TOTP or backup) — the same \"don't let a hijacked session quietly weaken account security\" reasoning as verify-setup, doubled, since disabling is the more damaging direction.",
+        "summary": "Disable MFA. Requires both the password and a currently-valid code (TOTP or backup) \u2014 the same \"don't let a hijacked session quietly weaken account security\" reasoning as verify-setup, doubled, since disabling is the more damaging direction.",
         "description": "Requires a valid access token.",
         "tags": [
           "Auth"
@@ -911,7 +911,7 @@
     "/api/auth/forgot-password": {
       "post": {
         "operationId": "post_api_auth_forgot_password",
-        "summary": "Always responds with the same generic message regardless of whether the email is registered, so this endpoint can't be used to enumerate accounts. The reset link is emailed via the shared SMTP mailer (utils/mailer.js); a send failure is logged and swallowed rather than surfaced to the caller — letting it bubble up as a distinct error would itself leak account existence during a provider outage (nonexistent emails short-circuit above before ever reaching sendMail, so only real accounts would see the failure). Outside production the link is also echoed in the response for local/manual testing without real SMTP.",
+        "summary": "Always responds with the same generic message regardless of whether the email is registered, so this endpoint can't be used to enumerate accounts. The reset link is emailed via the shared SMTP mailer (utils/mailer.js); a send failure is logged and swallowed rather than surfaced to the caller \u2014 letting it bubble up as a distinct error would itself leak account existence during a provider outage (nonexistent emails short-circuit above before ever reaching sendMail, so only real accounts would see the failure). Outside production the link is also echoed in the response for local/manual testing without real SMTP.",
         "description": "No authentication required.",
         "tags": [
           "Auth"
@@ -1404,7 +1404,7 @@
     "/api/listings/meta/regions": {
       "get": {
         "operationId": "get_api_listings_meta_regions",
-        "summary": "Region dropdown data for the frontend. Public and static — same list as constants/ethiopianRegions.js and the Region enum in schema.prisma.",
+        "summary": "Region dropdown data for the frontend. Public and static \u2014 same list as constants/ethiopianRegions.js and the Region enum in schema.prisma.",
         "description": "No authentication required.",
         "tags": [
           "Listings"
@@ -1427,7 +1427,7 @@
     "/api/listings/nearby": {
       "get": {
         "operationId": "get_api_listings_nearby",
-        "summary": "\"Nearby produce discovery\": listings within radiusKm of (lat, lng), sorted nearest-first. Kept as its own endpoint rather than folded into the main search above so it doesn't have to interact with that route's sponsored/boosted-ad ranking — distance ordering and paid placement are two different sort orders, and mixing them would need real product decisions about precedence that are out of scope here.",
+        "summary": "\"Nearby produce discovery\": listings within radiusKm of (lat, lng), sorted nearest-first. Kept as its own endpoint rather than folded into the main search above so it doesn't have to interact with that route's sponsored/boosted-ad ranking \u2014 distance ordering and paid placement are two different sort orders, and mixing them would need real product decisions about precedence that are out of scope here.",
         "description": "Works without authentication; behavior may differ for authenticated requests.",
         "tags": [
           "Listings"
@@ -5106,7 +5106,7 @@
       "post": {
         "operationId": "post_api_orders_buy_now",
         "summary": "Buy a listing directly at its asking price",
-        "description": "Requires the BUYER role. Supports the `Idempotency-Key` header (or `idempotencyKey` body field) via the idempotency middleware — retrying with the same key returns the original order rather than creating a duplicate. Creates an Order in PENDING_PAYMENT with a payment deadline.",
+        "description": "Requires the BUYER role. Supports the `Idempotency-Key` header (or `idempotencyKey` body field) via the idempotency middleware \u2014 retrying with the same key returns the original order rather than creating a duplicate. Creates an Order in PENDING_PAYMENT with a payment deadline.",
         "tags": [
           "Orders"
         ],
@@ -5492,7 +5492,7 @@
     "/api/orders/{id}/cancel": {
       "patch": {
         "operationId": "patch_api_orders_id_cancel",
-        "summary": "CANCEL an order. - Buyer: only while PENDING_PAYMENT (backing out before paying). - Seller: while PENDING_PAYMENT or CONFIRMED (killing a stalled order before transport is really underway). - Admin: any order not already COMPLETED/CANCELLED, as an override — including DISPUTED orders, as part of dispute resolution. In every case, goods already PICKUP/IN_TRANSIT/DELIVERED block a plain cancel; use a dispute instead.",
+        "summary": "CANCEL an order. - Buyer: only while PENDING_PAYMENT (backing out before paying). - Seller: while PENDING_PAYMENT or CONFIRMED (killing a stalled order before transport is really underway). - Admin: any order not already COMPLETED/CANCELLED, as an override \u2014 including DISPUTED orders, as part of dispute resolution. In every case, goods already PICKUP/IN_TRANSIT/DELIVERED block a plain cancel; use a dispute instead.",
         "description": "Requires a valid access token.",
         "tags": [
           "Orders"
@@ -5639,14 +5639,14 @@
       "post": {
         "operationId": "post_api_payments",
         "summary": "Create a payment (intent) for an order, transport job, digital product, ad, or inspection",
-        "description": "Supports the `Idempotency-Key` header — replaying the same key for the same caller returns the original payment (200) instead of creating a second one; a different caller reusing the key gets 409.",
+        "description": "Supports the `Idempotency-Key` header \u2014 replaying the same key for the same caller returns the original payment (200) instead of creating a second one; a different caller reusing the key gets 409.",
         "tags": [
           "Payments"
         ],
         "parameters": [],
         "responses": {
           "200": {
-            "description": "Idempotent replay — the original payment for this key.",
+            "description": "Idempotent replay \u2014 the original payment for this key.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7048,7 +7048,7 @@
     "/api/ads/{id}/cancel": {
       "patch": {
         "operationId": "patch_api_ads_id_cancel",
-        "summary": "Cancel a campaign. - Advertiser (owner): only while PENDING_PAYMENT — backing out before any money has moved. Any lingering PENDING payment attempt is failed so it can't be resumed against a cancelled campaign. - Admin: any non-terminal status, including a paid-but-not-yet-live campaign (PAID_PENDING_REVIEW/APPROVED/SCHEDULED) or a live one (PUBLISHED/ACTIVE). Any PAID payment is flagged REFUNDED as a bookkeeping record, same as order cancellation — there is no live payment gateway refund call yet (see README).",
+        "summary": "Cancel a campaign. - Advertiser (owner): only while PENDING_PAYMENT \u2014 backing out before any money has moved. Any lingering PENDING payment attempt is failed so it can't be resumed against a cancelled campaign. - Admin: any non-terminal status, including a paid-but-not-yet-live campaign (PAID_PENDING_REVIEW/APPROVED/SCHEDULED) or a live one (PUBLISHED/ACTIVE). Any PAID payment is flagged REFUNDED as a bookkeeping record, same as order cancellation \u2014 there is no live payment gateway refund call yet (see README).",
         "description": "Requires a valid access token.",
         "tags": [
           "Ads"
@@ -9259,7 +9259,7 @@
     "/api/admin/financial/reconciliation": {
       "get": {
         "operationId": "get_api_admin_financial_reconciliation",
-        "summary": "Reconciliation dashboard — searchable across payment ID, order ID, customer, provider, provider transaction ID, expected/received amount, currency, status and a created-at date range (PDF section \"Reconciliation dashboard\"). `status` still defaults to OPEN so the queue view is unchanged for the common case; pass status=ALL to search across every status instead.",
+        "summary": "Reconciliation dashboard \u2014 searchable across payment ID, order ID, customer, provider, provider transaction ID, expected/received amount, currency, status and a created-at date range (PDF section \"Reconciliation dashboard\"). `status` still defaults to OPEN so the queue view is unchanged for the common case; pass status=ALL to search across every status instead.",
         "description": "No authentication required.",
         "tags": [
           "Admin"
@@ -10226,6 +10226,85 @@
           }
         }
       }
+    },
+    "/api/orders/{id}/buyer-decision": {
+      "patch": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Record agricultural buyer purchase decision",
+        "description": "After the completed agricultural inspection report, the buyer records BUY or CANCEL. BUY unlocks goods payment and transport; CANCEL cancels the order through the normal unwind workflow.",
+        "operationId": "patchOrdersIdBuyerDecision",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "decision"
+                ],
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "BUY",
+                      "CANCEL"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Buyer decision recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid decision or non-agricultural order"
+          },
+          "403": {
+            "description": "Only the buyer may decide"
+          },
+          "404": {
+            "description": "Order not found"
+          },
+          "409": {
+            "description": "Inspection/report/order state does not permit a decision"
+          },
+          "500": {
+            "description": "Unexpected server error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -10243,7 +10322,7 @@
           },
           "errors": {
             "type": "array",
-            "description": "Present on 400 validation failures — one entry per invalid field (express-validator format).",
+            "description": "Present on 400 validation failures \u2014 one entry per invalid field (express-validator format).",
             "items": {
               "type": "object"
             }
@@ -10468,7 +10547,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Signed, short-lived URLs — resolved at response time, not stored."
+            "description": "Signed, short-lived URLs \u2014 resolved at response time, not stored."
           },
           "videos": {
             "type": "array",
