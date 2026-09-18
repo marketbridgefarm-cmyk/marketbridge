@@ -78,7 +78,16 @@ export default function AdvertisementBanner() {
 
   if (!ad?.creativeImageUrl) return null;
 
-  function handleClick() {
+  // Internal paths are handled by <Link>, which already does client-side
+  // navigation on click — forcing window.location.assign on top of that
+  // triggered a full-page reload racing the SPA navigation and threw away
+  // app state. Only the external-link path (plain <a>, which we've
+  // preventDefault()-ed) needs to navigate manually.
+  function handleInternalClick() {
+    void recordEvent(ad.id, 'CLICK');
+  }
+
+  function handleExternalClick() {
     void recordEvent(ad.id, 'CLICK');
     if (!ad.destinationUrl) return;
     window.location.assign(ad.destinationUrl);
@@ -88,9 +97,9 @@ export default function AdvertisementBanner() {
 
   if (ad.destinationUrl) {
     if (ad.destinationUrl.startsWith('/')) {
-      return <Link to={ad.destinationUrl} onClick={handleClick} style={{ textDecoration: 'none' }}>{content}</Link>;
+      return <Link to={ad.destinationUrl} onClick={handleInternalClick} style={{ textDecoration: 'none' }}>{content}</Link>;
     }
-    return <a href={ad.destinationUrl} onClick={(e) => { e.preventDefault(); handleClick(); }} rel="noopener noreferrer">{content}</a>;
+    return <a href={ad.destinationUrl} onClick={(e) => { e.preventDefault(); handleExternalClick(); }} rel="noopener noreferrer">{content}</a>;
   }
 
   return content;
