@@ -101,3 +101,27 @@ test('agricultural order follows inspection request, payment, report, decision, 
   const paidInspection = computeOrderWorkflow(baseOrder({ inspectionRequests: [{ id: 'i', createdAt: new Date(), status: 'IN_PROGRESS', requestedById: 'buyer-1', inspectorId: 'inspector-1', fee: 550, report: null, payments: [{ type: 'INSPECTOR', status: 'PAID' }], quotes: [] }] }), 'buyer-1', ['BUYER']);
   assert.equal(paidInspection.currentStage, 'INSPECTION');
 });
+
+
+test('agricultural BUY action carries the exact server endpoint and never unlocks goods payment early', () => {
+  const workflow = computeOrderWorkflow(baseOrder(), 'buyer-1', ['BUYER']);
+  const buy = workflow.actions.find((a) => a.code === 'BUYER_DECISION_BUY');
+  assert.deepEqual(buy.route, {
+    method: 'PATCH',
+    path: '/orders/order-1/buyer-decision',
+    body: { decision: 'BUY' },
+  });
+  assert.equal(workflow.actions.find((a) => a.code === 'PAY_MARKETPLACE').enabled, false);
+});
+
+
+test('physical PRODUCT orders use the normal payment workflow and never expose the agricultural BUY decision gate', () => {
+  const workflow = computeOrderWorkflow(
+    baseOrder({ listing: { category: 'PRODUCT' } }),
+    'buyer-1',
+    ['BUYER']
+  );
+  assert.equal(workflow.actions.some((a) => a.code === 'BUYER_DECISION_BUY'), false);
+  assert.equal(workflow.actions.some((a) => a.code === 'BUYER_DECISION_CANCEL'), false);
+  assert.equal(workflow.actions.find((a) => a.code === 'PAY_MARKETPLACE').enabled, true);
+});

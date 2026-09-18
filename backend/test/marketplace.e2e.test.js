@@ -320,6 +320,7 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
       token: buyer.token,
       method: 'POST',
       body: {
+        orderId: created.orderId,
         listingId: created.listingId,
         mode: 'BUYER_REQUESTED',
       },
@@ -362,7 +363,33 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
     });
     assert.equal(inspectionReportResponse.status, 201, JSON.stringify(inspectionReportResponse.body));
 
-    // 5. Simulate authoritative payment-provider settlement for marketplace
+    // 5. The server must reject a goods payment before the buyer decision.
+    const prematurePayment = await api('/api/payments', {
+      token: buyer.token,
+      method: 'POST',
+      idempotencyKey: `e2e-premature-marketplace-payment-${suffix}`,
+      body: {
+        type: 'MARKETPLACE',
+        orderId: created.orderId,
+        amount: 45000,
+        method: 'OTHER',
+      },
+    });
+    assert.equal(prematurePayment.status, 409, JSON.stringify(prematurePayment.body));
+    assert.equal(prematurePayment.body.code, 'BUYER_DECISION_REQUIRED');
+
+    // 6. Buyer must explicitly accept the inspected produce before any
+    // marketplace/goods payment is allowed.
+    const buyerDecision = await api(`/api/orders/${created.orderId}/buyer-decision`, {
+      token: buyer.token,
+      method: 'PATCH',
+      idempotencyKey: `e2e-buyer-decision-${suffix}`,
+      body: { decision: 'BUY' },
+    });
+    assert.equal(buyerDecision.status, 200, JSON.stringify(buyerDecision.body));
+    assert.equal(buyerDecision.body.order.buyerDecision, 'BUY');
+
+    // 7. Simulate authoritative payment-provider settlement for marketplace
     // and inspection obligations. This deliberately exercises paymentService
     // rather than pretending a PAID row is enough.
     await syncOrderPaymentObligations(prisma, created.orderId);
@@ -381,7 +408,7 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
     const orderAfterPayment = await prisma.order.findUnique({ where: { id: created.orderId } });
     assert.equal(orderAfterPayment.status, 'CONFIRMED');
 
-    // 6. Buyer arranges hired transport.
+    // 8. Buyer arranges hired transport.
     const transportJobResponse = await api('/api/transport', {
       token: buyer.token,
       method: 'POST',
@@ -434,7 +461,7 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
     });
     assert.equal(transportAcceptResponse.status, 200, JSON.stringify(transportAcceptResponse.body));
 
-    // 7. Simulate transport payment settlement.
+    // 9. Simulate transport payment settlement.
     await syncOrderPaymentObligations(prisma, created.orderId);
     await settleOrderPayment({
       orderId: created.orderId,
@@ -443,7 +470,7 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
       transportJobId: created.transportJobId,
     });
 
-    // 8. Transporter adds pickup evidence and moves the load through the
+    // 10. Transporter adds pickup evidence and moves the load through the
     // physical chain. The payment gate and evidence gate are exercised here.
     const pickupEvidence = await api(`/api/transport/${created.transportJobId}/evidence`, {
       token: transporter.token,
