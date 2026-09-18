@@ -6,6 +6,21 @@ function recordEvent(id, eventType) {
   return api.post(`/ads/${id}/events`, { eventType }).catch(() => undefined);
 }
 
+// A destinationUrl only counts as a safe internal route if it starts with
+// a single "/" and contains no backslashes. Browsers normalize "\" to "/"
+// in URLs, so a value like "/\evil.com" or "//evil.com" would pass a bare
+// startsWith('/') check yet still resolve to an external or
+// protocol-relative origin — the open-redirect bypass patched in
+// GHSA-wrjc-x8rr-h8h6. Advertiser-supplied destinationUrl values are
+// untrusted, so reject anything that isn't unambiguously internal and let
+// it fall through to the external <a> path instead.
+function isSafeInternalPath(url) {
+  if (typeof url !== 'string' || !url) return false;
+  if (url.includes('\\')) return false;
+  if (!url.startsWith('/') || url.startsWith('//')) return false;
+  return true;
+}
+
 // Picks one banner at random per mount from all currently active BANNER
 // campaigns, so paying advertisers rotate fairly across page loads instead
 // of the same first-found campaign always winning the slot.
@@ -96,7 +111,7 @@ export default function AdvertisementBanner() {
   const content = <BannerContent ad={ad} />;
 
   if (ad.destinationUrl) {
-    if (ad.destinationUrl.startsWith('/')) {
+    if (isSafeInternalPath(ad.destinationUrl)) {
       return <Link to={ad.destinationUrl} onClick={handleInternalClick} style={{ textDecoration: 'none' }}>{content}</Link>;
     }
     return <a href={ad.destinationUrl} onClick={(e) => { e.preventDefault(); handleExternalClick(); }} rel="noopener noreferrer">{content}</a>;
