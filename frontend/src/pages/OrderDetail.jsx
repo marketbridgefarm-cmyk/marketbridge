@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import RatingBox from '../components/RatingBox.jsx';
 import MessageThread from '../components/MessageThread.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
+import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import ActionCenter from '../components/ActionCenter.jsx';
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentStatus from '../components/PaymentStatus.jsx';
@@ -58,6 +59,9 @@ export default function OrderDetail() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [transportCounterInputs, setTransportCounterInputs] = useState({});
+  const [transportEvidence, setTransportEvidence] = useState({ photoKeys: [], videoKeys: [] });
+  const [transportEvidenceNotes, setTransportEvidenceNotes] = useState('');
+  const [transportEvidenceBusy, setTransportEvidenceBusy] = useState(false);
 
   const [payMethod, setPayMethod] = useState('TELEBIRR');
 
@@ -534,10 +538,7 @@ export default function OrderDetail() {
     setError('');
 
     try {
-      await api.patch(`/transport/quotes/${quoteId}`, {
-        action: 'COUNTER',
-        counterAmount: amount,
-      });
+      await api.patch(`/transport/quotes/${quoteId}`, { action: 'COUNTER', counterAmount: amount });
       setTransportCounterInputs((q) => ({ ...q, [quoteId]: '' }));
       await load({ silent: true });
     } catch (err) {
@@ -685,6 +686,46 @@ export default function OrderDetail() {
       setError(getError(err, 'Could not request inspection'));
     } finally {
       setRequestingInspection(false);
+    }
+  };
+
+  // ==========================================================================
+  // TRANSPORT EVIDENCE / MOVEMENT
+  // ==========================================================================
+
+  const submitTransportEvidence = async (type, nextStatus) => {
+    if (!transportJob || !isTransporter) return;
+
+    const { photoKeys, videoKeys } = transportEvidence;
+    if (!photoKeys.length && !videoKeys.length && !transportEvidenceNotes.trim()) {
+      setError(`Add at least one ${type.toLowerCase()} photo/video or note before continuing.`);
+      return;
+    }
+
+    setTransportEvidenceBusy(true);
+    setError('');
+
+    try {
+      await api.post(`/transport/${transportJob.id}/evidence`, {
+        type,
+        photos: photoKeys,
+        videos: videoKeys,
+        notes: transportEvidenceNotes.trim() || undefined,
+      });
+
+      if (nextStatus) {
+        await api.patch(`/transport/${transportJob.id}/status`, {
+          status: nextStatus,
+        });
+      }
+
+      setTransportEvidence({ photoKeys: [], videoKeys: [] });
+      setTransportEvidenceNotes('');
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, `Could not submit ${type.toLowerCase()} evidence`));
+    } finally {
+      setTransportEvidenceBusy(false);
     }
   };
 
@@ -1457,6 +1498,90 @@ export default function OrderDetail() {
 
               <div className="notice">
                 <h3>Pickup / delivery evidence</h3>
+                <p className="muted">
+                  Pickup evidence is required before the transporter can move this trip from <strong>PICKUP</strong> to <strong>IN TRANSIT</strong>. Upload a photo or video here, then submit it with the status change.
+                </p>
+
+                {isTransporter && transportJob.status === 'PICKUP' && (
+                  <div className="notice" style={{ marginTop: 10 }}>
+                    <strong>Pickup evidence required</strong>
+                    <EvidenceUploader
+                      uploadUrl={`/transport/${transportJob.id}/evidence/media`}
+                      disabled={transportEvidenceBusy}
+                      onUploaded={({ photoKeys, videoKeys }) =>
+                        setTransportEvidence((prev) => ({
+                          photoKeys: [...prev.photoKeys, ...photoKeys],
+                          videoKeys: [...prev.videoKeys, ...videoKeys],
+                        }))
+                      }
+                    />
+
+                    {(transportEvidence.photoKeys.length > 0 || transportEvidence.videoKeys.length > 0) && (
+                      <p className="muted small">
+                        {transportEvidence.photoKeys.length} photo(s), {transportEvidence.videoKeys.length} video(s) ready.
+                      </p>
+                    )}
+
+                    <textarea
+                      value={transportEvidenceNotes}
+                      onChange={(event) => setTransportEvidenceNotes(event.target.value)}
+                      placeholder="Optional pickup condition / handover notes..."
+                      rows={3}
+                      disabled={transportEvidenceBusy}
+                      style={{ width: '100%', marginTop: 8 }}
+                    />
+
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={transportEvidenceBusy || (!transportEvidence.photoKeys.length && !transportEvidence.videoKeys.length && !transportEvidenceNotes.trim())}
+                      onClick={() => submitTransportEvidence('PICKUP', 'IN_TRANSIT')}
+                      style={{ marginTop: 8 }}
+                    >
+                      {transportEvidenceBusy ? 'Submitting…' : 'Submit pickup evidence & mark in transit'}
+                    </button>
+                  </div>
+                )}
+
+                {isTransporter && transportJob.status === 'IN_TRANSIT' && (
+                  <div className="notice" style={{ marginTop: 10 }}>
+                    <strong>Delivery evidence</strong>
+                    <p className="muted">Upload delivery evidence before marking the trip DELIVERED.</p>
+                    <EvidenceUploader
+                      uploadUrl={`/transport/${transportJob.id}/evidence/media`}
+                      disabled={transportEvidenceBusy}
+                      onUploaded={({ photoKeys, videoKeys }) =>
+                        setTransportEvidence((prev) => ({
+                          photoKeys: [...prev.photoKeys, ...photoKeys],
+                          videoKeys: [...prev.videoKeys, ...videoKeys],
+                        }))
+                      }
+                    />
+                    {(transportEvidence.photoKeys.length > 0 || transportEvidence.videoKeys.length > 0) && (
+                      <p className="muted small">
+                        {transportEvidence.photoKeys.length} photo(s), {transportEvidence.videoKeys.length} video(s) ready.
+                      </p>
+                    )}
+                    <textarea
+                      value={transportEvidenceNotes}
+                      onChange={(event) => setTransportEvidenceNotes(event.target.value)}
+                      placeholder="Optional delivery condition / handover notes..."
+                      rows={3}
+                      disabled={transportEvidenceBusy}
+                      style={{ width: '100%', marginTop: 8 }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={transportEvidenceBusy || (!transportEvidence.photoKeys.length && !transportEvidence.videoKeys.length && !transportEvidenceNotes.trim())}
+                      onClick={() => submitTransportEvidence('DELIVERY', 'DELIVERED')}
+                      style={{ marginTop: 8 }}
+                    >
+                      {transportEvidenceBusy ? 'Submitting…' : 'Submit delivery evidence & mark delivered'}
+                    </button>
+                  </div>
+                )}
+
                 <EvidenceGallery
                   listUrl={`/transport/${transportJob.id}/evidence`}
                   mediaUrl={(evidenceId) => `/transport/${transportJob.id}/evidence/${evidenceId}/media`}
@@ -1681,15 +1806,8 @@ export default function OrderDetail() {
                       leafTransportQuotes(transportJob.quotes).map(
                         (quote) => {
                           const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
-                          const isArrangerTurn =
-                            isTransportArranger &&
-                            (quote.status === 'PENDING' ||
-                              (quote.status === 'COUNTERED' &&
-                                quote.counteredBy === 'PROVIDER'));
-                          const isWaitingOnTransporter =
-                            isTransportArranger &&
-                            quote.status === 'COUNTERED' &&
-                            quote.counteredBy === 'REQUESTER';
+                          const isArrangerTurn = quote.status === 'PENDING' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+                          const isWaitingOnTransporter = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
                           return (
                           <div
                             className="transporter"
