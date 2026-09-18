@@ -1468,6 +1468,12 @@ router.post(
         gpsLocation,
       } = req.body;
 
+      // Report submission performs several related writes (report, evidence,
+      // inspection status, payment obligations, order event, notifications and
+      // optional SMS outbox rows). Prisma's default interactive transaction
+      // timeout is 5 seconds, which can be exceeded on a real/remote database
+      // even though the operation is healthy. Keep the entire submission
+      // atomic, but give this workflow enough time to finish.
       const report = await prisma.$transaction(async (tx) => {
         const createdReport = await tx.inspectionReport.create({
           data: {
@@ -1541,6 +1547,9 @@ router.post(
         });
 
         return createdReport;
+      }, {
+        maxWait: 10000,
+        timeout: 15000,
       });
 
       return res.status(201).json({
