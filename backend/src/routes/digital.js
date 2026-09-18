@@ -7,6 +7,7 @@ const { requireRole } = require('../middleware/roleCheck');
 const { makeDigitalKey, uploadPrivateObject, deletePrivateObject, signedDownloadUrl } = require('../utils/objectStorage');
 const { createPayment } = require('../services/paymentService');
 const { optimizeUpload } = require('../utils/imageProcessor');
+const { idempotency } = require('../middleware/idempotency');
 
 const router = express.Router();
 
