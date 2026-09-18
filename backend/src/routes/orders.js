@@ -372,7 +372,7 @@ router.patch(
 
       if (decision === 'CANCEL') {
         const reason = req.body.reason || 'Buyer declined the agricultural transaction after inspection';
-        await prisma.$transaction(async (tx) => {
+        const updated = await prisma.$transaction(async (tx) => {
           const current = await tx.order.findUnique({
             where: { id: order.id },
             include: { transportJob: true, payments: true },
@@ -403,11 +403,7 @@ router.patch(
             cancelledByRole: 'BUYER',
           });
 
-        }, { maxWait: 10000, timeout: 20000 });
-
-        const updated = await prisma.order.findUnique({
-          where: { id: order.id },
-          include: orderInclude,
+          return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
         });
 
         return res.json({
@@ -417,7 +413,7 @@ router.patch(
         });
       }
 
-      await prisma.$transaction(async (tx) => {
+      const updated = await prisma.$transaction(async (tx) => {
         const current = await tx.order.findUnique({ where: { id: order.id } });
         if (!current || current.buyerId !== req.user.id) {
           throw Object.assign(new Error('Only the buyer can make the purchase decision'), { status: 403 });
@@ -441,11 +437,7 @@ router.patch(
           metadata: { decision: 'BUY' },
         });
 
-      }, { maxWait: 10000, timeout: 20000 });
-
-      const updated = await prisma.order.findUnique({
-        where: { id: order.id },
-        include: orderInclude,
+        return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
       });
 
       return res.json({
@@ -454,14 +446,9 @@ router.patch(
         order: updated,
       });
     } catch (error) {
-      req.log.error({
-        err: error,
-        orderId: req.params.id,
-        decision: req.body?.decision,
-        prismaCode: error?.code,
-      }, 'BUYER DECISION ERROR:');
+      req.log.error({ err: error }, 'BUYER DECISION ERROR:');
       return res.status(error.status || 500).json({
-        error: error.status ? error.message : 'Could not record buyer decision. Please retry.',
+        error: error.status ? error.message : 'Could not record buyer decision',
       });
     }
   }
@@ -498,7 +485,7 @@ router.patch('/:id/confirm-receipt', authenticate, idempotency('orders.confirm-r
     const updated = await prisma.$transaction(async tx => {
       const current = await tx.order.findUnique({
         where: { id: order.id },
-        include: { transportJob: true },
+        include: { transportJob: true, payments: true },
       });
 
       if (!current || current.buyerId !== req.user.id) {
@@ -514,11 +501,6 @@ router.patch('/:id/confirm-receipt', authenticate, idempotency('orders.confirm-r
       }
 
       await transitionOrderStatus(tx, current.id, current.status, 'COMPLETED');
-
-      const updatedOrder = await tx.order.findUnique({
-        where: { id: current.id },
-        include: orderInclude,
-      });
 
       await recordOrderEvent(tx, {
         orderId: current.id,
@@ -539,12 +521,20 @@ router.patch('/:id/confirm-receipt', authenticate, idempotency('orders.confirm-r
         },
       });
 
-      return updatedOrder;
+      return true;
+    }, { maxWait: 10000, timeout: 20000 });
+
+    const updatedOrder = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: orderInclude,
     });
 
-    return res.json({ message: 'Receipt confirmed. Order completed.', order: updated });
+    return res.json({ message: 'Receipt confirmed. Order completed.', order: updatedOrder });
   } catch (error) {
     req.log.error({ err: error }, 'CONFIRM RECEIPT ERROR:');
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message, code: error.code });
+    }
     if (error.message.includes('confirm receipt') || error.message.includes('already been completed') || error.message.includes('UNKNOWN')) {
       return res.status(400).json({ error: error.message });
     }
