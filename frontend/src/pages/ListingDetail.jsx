@@ -472,9 +472,22 @@ export default function ListingDetail() {
                       <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Optional message to the farmer" />
                       <button className="btn btn-primary full">Submit offer</button>
                     </form>
-                    <hr />
-                    <h3>Quality check</h3>
-                    <p className="small muted">Inspection is available only after an agricultural offer is accepted and an order is created. Open the order to request or manage the inspection.</p>
+                    {isAgricultural && (
+                      <>
+                        <hr />
+                        <h3>Quality check</h3>
+                        {activeInspectionRequest ? (
+                          <p className="small muted">Inspection already requested: <strong>{activeInspectionRequest.status.replaceAll('_', ' ')}</strong>. Continue with the existing inspection rather than creating another request.</p>
+                        ) : (
+                          <>
+                            <p className="small muted">Request an independent inspection.</p>
+                            {inspector && <input type="number" min="1" step="0.01" placeholder="Agreed fee (ETB)" value={feeForInspector} onChange={(e) => setFeeForInspector(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />}
+                            <button className="btn btn-light full" onClick={() => requestInspection('BUYER_REQUESTED')}>Request inspection</button>
+                            <button className="btn btn-light full" style={{ marginTop: 8 }} onClick={chooseInspector}>Find an inspector</button>
+                          </>
+                        )}
+                      </>
+                    )}
                   </>
                 ) : (
                   <>
@@ -499,13 +512,47 @@ export default function ListingDetail() {
                 <h2>Seller controls</h2>
                 <p className="small muted">Only the seller can change price or listing status.</p>
                 {isAgricultural && (
-                  <p className="small muted">Inspection is managed from the agreed order after an offer is accepted. The listing page does not create transaction-specific inspections.</p>
+                  <>
+                    {activeInspectionRequest ? (
+                      <p className="small muted">Inspection already requested: <strong>{activeInspectionRequest.status.replaceAll('_', ' ')}</strong>. Continue with the existing inspection.</p>
+                    ) : (
+                      <>
+                        {inspector && <input type="number" min="1" step="0.01" placeholder="Agreed fee (ETB)" value={feeForInspector} onChange={(e) => setFeeForInspector(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />}
+                        <button className="btn btn-light full" onClick={() => requestInspection('SELLER_REQUESTED')}>Request inspection</button>
+                        <button className="btn btn-light full" style={{ marginTop: 8 }} onClick={chooseInspector}>Find an inspector</button>
+                      </>
+                    )}
+                  </>
                 )}
-                <h3 className="mt">Offers received</h3>
+                <h3 className="mt">Negotiations</h3>
                 {(() => {
-                  const parentIds = new Set((listing.offers || []).map((offer) => offer.parentOfferId).filter(Boolean));
-                  const latestOffers = (listing.offers || []).filter((offer) => !parentIds.has(offer.id));
-                  return latestOffers.length ? latestOffers.map((offer) => <OfferRow key={offer.id} offer={offer} onAction={respondToOffer} />) : <p className="muted">No offers yet.</p>;
+                  const offers = Array.isArray(listing.offers) ? listing.offers : [];
+                  const byBuyer = new Map();
+
+                  // Each parentOfferId points to the previous step in the same
+                  // negotiation chain. The leaf is the only actionable offer.
+                  // Group by buyer so separate negotiations do not visually
+                  // stack together as if they were one conversation.
+                  for (const offer of offers) {
+                    const buyerId = offer.buyerId || offer.buyer?.id || offer.id;
+                    const existing = byBuyer.get(buyerId);
+                    if (!existing || new Date(offer.createdAt || 0) > new Date(existing.createdAt || 0)) {
+                      byBuyer.set(buyerId, offer);
+                    }
+                  }
+
+                  const negotiations = Array.from(byBuyer.values())
+                    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+                  return negotiations.length ? (
+                    <div style={{ display: 'grid', gap: 12 }}>
+                      {negotiations.map((offer) => (
+                        <OfferRow key={offer.id} offer={offer} onAction={respondToOffer} />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted">No negotiations yet.</p>
+                  );
                 })()}
               </div>
             )}
@@ -526,27 +573,102 @@ export default function ListingDetail() {
 
 function OfferRow({ offer, onAction }) {
   const [counter, setCounter] = useState('');
+  const [busy, setBusy] = useState('');
+
+  // The seller may respond to an original PENDING offer, or to the buyer's
+  // latest COUNTERED offer. A seller counter means the buyer must respond.
   const sellerCanAct =
     offer.status === 'PENDING' ||
-    (offer.status === 'COUNTERED' && offer.counteredBy === 'BUYER');
+    (offer.status === 'COUNTERED' && String(offer.counteredBy || '').toUpperCase() === 'BUYER');
+
+  const buyerCountered =
+    offer.status === 'COUNTERED' && String(offer.counteredBy || '').toUpperCase() === 'BUYER';
+
+  const amount = Number(offer.counterAmount ?? offer.amount);
+  const minimum = Number(
+    offer.listing?.minimumPrice ??
+    offer.minimumPrice ??
+    offer.listingMinimumPrice ??
+    NaN
+  );
+
+  const submit = async (action, value) => {
+    if (busy) return;
+    setBusy(action);
+    try {
+      await onAction(offer.id, action, value);
+      if (action === 'COUNTER') setCounter('');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const counterValue = Number(counter);
+  const counterValid = Number.isFinite(counterValue) && counterValue > 0;
+  const counterBelowMinimum = Number.isFinite(minimum) && counterValid && counterValue < minimum;
 
   return (
-    <div className="offer-row">
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <strong>{Number(offer.counterAmount ?? offer.amount).toLocaleString()} ETB</strong>
+    <div className="offer-row" style={{ padding: 12, borderRadius: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <strong>{Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB</strong>
         <span className="badge">{offer.status}</span>
       </div>
       <small>{offer.buyer?.name || 'Buyer'}</small>
-      {offer.status === 'COUNTERED' && offer.counteredBy === 'SELLER' && (
+
+      {buyerCountered && (
+        <p className="muted" style={{ marginTop: 8 }}>
+          <strong>Buyer countered.</strong> This is the buyer's latest price. You can accept it, reject the negotiation, or send another counter.
+        </p>
+      )}
+
+      {offer.status === 'COUNTERED' && String(offer.counteredBy || '').toUpperCase() === 'SELLER' && (
         <p className="muted" style={{ marginTop: 8 }}>You made the latest counter. Waiting for the buyer.</p>
       )}
+
       {sellerCanAct && (
-        <div className="row-actions">
-          <button className="btn btn-sm" onClick={() => onAction(offer.id, 'ACCEPT')}>Accept</button>
-          <button className="btn btn-sm btn-light" onClick={() => onAction(offer.id, 'REJECT')}>Reject</button>
-          <input type="number" min="0.01" step="0.01" placeholder="Counter ETB" value={counter} onChange={(e) => setCounter(e.target.value)} />
-          <button className="btn btn-sm btn-light" disabled={!counter} onClick={() => onAction(offer.id, 'COUNTER', counter)}>Counter</button>
+        <div className="row-actions" style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={Boolean(busy)}
+            onClick={() => submit('ACCEPT')}
+          >
+            {busy === 'ACCEPT' ? 'Accepting…' : 'Accept'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm btn-light"
+            disabled={Boolean(busy)}
+            onClick={() => submit('REJECT')}
+          >
+            {busy === 'REJECT' ? 'Rejecting…' : 'Reject'}
+          </button>
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            placeholder={Number.isFinite(minimum) ? `Counter ≥ ${minimum}` : 'Counter ETB'}
+            value={counter}
+            disabled={Boolean(busy)}
+            onChange={(e) => setCounter(e.target.value)}
+          />
+          <button
+            type="button"
+            className="btn btn-sm btn-light"
+            disabled={!counterValid || counterBelowMinimum || Boolean(busy)}
+            onClick={() => submit('COUNTER', counter)}
+          >
+            {busy === 'COUNTER' ? 'Sending…' : 'Counter'}
+          </button>
         </div>
+      )}
+
+      {!sellerCanAct && offer.status === 'COUNTERED' && String(offer.counteredBy || '').toUpperCase() !== 'BUYER' && (
+        <p className="small muted" style={{ marginTop: 8 }}>Waiting for the buyer to respond.</p>
+      )}
+
+      {offer.status === 'ACCEPTED' && (
+        <p className="small muted" style={{ marginTop: 8 }}>Agreed price: <strong>{Number(amount).toLocaleString()} ETB</strong>. The order can now continue to inspection and payment.</p>
       )}
     </div>
   );
