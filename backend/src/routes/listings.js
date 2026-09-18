@@ -796,6 +796,7 @@ router.get('/:id', optionalAuthenticate, async (req, res) => {
             buyerId: true,
             sellerId: true,
             status: true,
+            createdAt: true,
           },
         }),
         prisma.inspectionRequest.findMany({
@@ -821,6 +822,9 @@ router.get('/:id', optionalAuthenticate, async (req, res) => {
             },
             payments: {
               select: { id: true, status: true },
+            },
+            order: {
+              select: { id: true },
             },
           },
           orderBy: { createdAt: 'desc' },

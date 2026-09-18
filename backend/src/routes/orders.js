@@ -319,82 +319,81 @@ router.patch(
   async (req, res) => {
     try {
       const decision = req.body.decision;
-      const order = await prisma.order.findUnique({
-        where: { id: req.params.id },
-        include: {
-          // The buyer-decision gate must know the listing category. This
-          // endpoint previously omitted `listing`, so `order.listing?.category`
-          // was always undefined and a valid agricultural BUY could be
-          // rejected as a non-agricultural order.
-          listing: { select: { id: true, category: true } },
-          inspectionRequests: {
-            where: { status: { not: 'CANCELLED' } },
-            orderBy: { createdAt: 'desc' },
-            include: { report: true },
+
+      const updated = await prisma.$transaction(async (tx) => {
+        // Re-read every gate inside the transaction. The old implementation
+        // validated an order outside the transaction and then re-read only a
+        // few scalar fields. That allowed the inspection/order state to drift
+        // between validation and the actual decision write.
+        const current = await tx.order.findUnique({
+          where: { id: req.params.id },
+          include: {
+            listing: { select: { id: true, category: true } },
+            payments: true,
+            transportJob: true,
+            inspectionRequests: {
+              where: { status: { not: 'CANCELLED' } },
+              orderBy: { createdAt: 'desc' },
+              include: { report: true },
+            },
           },
-          transportJob: true,
-          payments: true,
-        },
-      });
-
-      if (!order) return res.status(404).json({ error: 'Order not found' });
-      if (order.buyerId !== req.user.id) {
-        return res.status(403).json({ error: 'Only the buyer can make the purchase decision' });
-      }
-      if (order.listing?.category !== 'AGRICULTURAL') {
-        return res.status(400).json({ error: 'Buyer decision is only required for agricultural orders' });
-      }
-      if (order.status === 'CANCELLED' || order.status === 'COMPLETED') {
-        return res.status(409).json({ error: `Order is already ${order.status.toLowerCase()}` });
-      }
-      if (order.buyerDecision) {
-        return res.status(409).json({
-          error: `Buyer decision has already been recorded as ${order.buyerDecision}`,
-          buyerDecision: order.buyerDecision,
         });
-      }
 
-      const currentInspection = order.inspectionRequests[0] || null;
-      if (!currentInspection) {
-        return res.status(409).json({
-          code: 'INSPECTION_REQUIRED_FOR_BUYER_DECISION',
-          error: 'Request and complete the agricultural inspection before the buyer can decide to buy or cancel.',
-        });
-      }
-      if (currentInspection.status !== 'COMPLETED' || !currentInspection.report) {
-        return res.status(409).json({
-          code: 'INSPECTION_REPORT_REQUIRED_FOR_BUYER_DECISION',
-          error: 'The agricultural inspection report must be completed and published before the buyer can decide.',
-          inspectionRequestId: currentInspection.id,
-          inspectionStatus: currentInspection.status,
-        });
-      }
+        if (!current) throw Object.assign(new Error('Order not found'), { status: 404 });
+        if (current.buyerId !== req.user.id) {
+          throw Object.assign(new Error('Only the buyer can make the purchase decision'), { status: 403 });
+        }
+        if (current.listing?.category !== 'AGRICULTURAL') {
+          throw Object.assign(new Error('Buyer decision is only required for agricultural orders'), { status: 400 });
+        }
+        if (['CANCELLED', 'COMPLETED'].includes(current.status)) {
+          throw Object.assign(new Error(`Order is already ${current.status.toLowerCase()}`), { status: 409 });
+        }
+        if (current.buyerDecision) {
+          throw Object.assign(
+            new Error(`Buyer decision has already been recorded as ${current.buyerDecision}`),
+            { status: 409, buyerDecision: current.buyerDecision }
+          );
+        }
 
-      if (decision === 'CANCEL') {
-        const reason = req.body.reason || 'Buyer declined the agricultural transaction after inspection';
-        const updated = await prisma.$transaction(async (tx) => {
-          const current = await tx.order.findUnique({
-            where: { id: order.id },
-            include: { transportJob: true, payments: true },
+        const currentInspection = current.inspectionRequests[0] || null;
+        if (!currentInspection) {
+          throw Object.assign(new Error(
+            'Request and complete the agricultural inspection before the buyer can decide to buy or cancel.'
+          ), { status: 409, code: 'INSPECTION_REQUIRED_FOR_BUYER_DECISION' });
+        }
+        if (currentInspection.status !== 'COMPLETED' || !currentInspection.report) {
+          throw Object.assign(new Error(
+            'The agricultural inspection report must be completed and published before the buyer can decide.'
+          ), {
+            status: 409,
+            code: 'INSPECTION_REPORT_REQUIRED_FOR_BUYER_DECISION',
+            inspectionRequestId: currentInspection.id,
+            inspectionStatus: currentInspection.status,
           });
-          if (!current || current.buyerId !== req.user.id) {
-            throw Object.assign(new Error('Only the buyer can make the purchase decision'), { status: 403 });
-          }
-          if (current.buyerDecision) {
-            throw Object.assign(new Error(`Buyer decision has already been recorded as ${current.buyerDecision}`), { status: 409 });
-          }
+        }
+
+        if (decision === 'CANCEL') {
+          const reason = req.body.reason || 'Buyer declined the agricultural transaction after inspection';
 
           await tx.order.update({
             where: { id: current.id },
             data: { buyerDecision: 'CANCEL', buyerDecisionAt: new Date() },
           });
 
-          await recordOrderEvent(tx, {
-            orderId: current.id,
-            actorId: req.user.id,
-            type: 'BUYER_DECISION_MADE',
-            metadata: { decision: 'CANCEL', reason },
-          });
+          // The decision is the primary state mutation. Notifications are
+          // deliberately best-effort so a notification/SMS schema/provider
+          // problem can never roll back a valid buyer decision.
+          try {
+            await recordOrderEvent(tx, {
+              orderId: current.id,
+              actorId: req.user.id,
+              type: 'BUYER_DECISION_MADE',
+              metadata: { decision: 'CANCEL', reason },
+            });
+          } catch (eventError) {
+            req.log.error({ err: eventError, orderId: current.id }, 'BUYER DECISION EVENT SIDE EFFECT FAILED');
+          }
 
           await cancelOrderInTransaction(tx, {
             order: current,
@@ -404,51 +403,59 @@ router.patch(
           });
 
           return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
-        });
-
-        return res.json({
-          message: 'Buyer cancelled the agricultural transaction after inspection.',
-          decision: 'CANCEL',
-          order: updated,
-        });
-      }
-
-      const updated = await prisma.$transaction(async (tx) => {
-        const current = await tx.order.findUnique({ where: { id: order.id } });
-        if (!current || current.buyerId !== req.user.id) {
-          throw Object.assign(new Error('Only the buyer can make the purchase decision'), { status: 403 });
-        }
-        if (current.buyerDecision) {
-          throw Object.assign(new Error(`Buyer decision has already been recorded as ${current.buyerDecision}`), { status: 409 });
         }
 
+        // Conditional update is the final concurrency gate. A double click,
+        // browser retry, or two tabs can never record BUY twice.
         const claimed = await tx.order.updateMany({
-          where: { id: current.id, buyerDecision: null, status: { notIn: ['CANCELLED', 'COMPLETED'] } },
-          data: { buyerDecision: 'BUY', buyerDecisionAt: new Date(), paymentDueAt: computePaymentDueAt() },
+          where: {
+            id: current.id,
+            buyerDecision: null,
+            status: { notIn: ['CANCELLED', 'COMPLETED'] },
+          },
+          data: {
+            buyerDecision: 'BUY',
+            buyerDecisionAt: new Date(),
+            paymentDueAt: computePaymentDueAt(),
+          },
         });
+
         if (claimed.count !== 1) {
-          throw Object.assign(new Error('The buyer decision was already recorded or the order changed'), { status: 409 });
+          throw Object.assign(
+            new Error('The buyer decision was already recorded or the order changed. Refresh the order and try again.'),
+            { status: 409, code: 'BUYER_DECISION_CONFLICT' }
+          );
         }
 
-        await recordOrderEvent(tx, {
-          orderId: current.id,
-          actorId: req.user.id,
-          type: 'BUYER_DECISION_MADE',
-          metadata: { decision: 'BUY' },
-        });
+        try {
+          await recordOrderEvent(tx, {
+            orderId: current.id,
+            actorId: req.user.id,
+            type: 'BUYER_DECISION_MADE',
+            metadata: { decision: 'BUY' },
+          });
+        } catch (eventError) {
+          req.log.error({ err: eventError, orderId: current.id }, 'BUYER DECISION EVENT SIDE EFFECT FAILED');
+        }
 
         return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
       });
 
       return res.json({
-        message: 'Buyer chose to buy. Seller payment and the next transaction steps are now available.',
-        decision: 'BUY',
+        message: decision === 'BUY'
+          ? 'Buyer chose to buy. Seller payment and the next transaction steps are now available.'
+          : 'Buyer cancelled the agricultural transaction after inspection.',
+        decision,
         order: updated,
       });
     } catch (error) {
-      req.log.error({ err: error }, 'BUYER DECISION ERROR:');
+      req.log.error({ err: error }, 'BUYER DECISION ERROR');
       return res.status(error.status || 500).json({
         error: error.status ? error.message : 'Could not record buyer decision',
+        ...(error.code ? { code: error.code } : {}),
+        ...(error.inspectionRequestId ? { inspectionRequestId: error.inspectionRequestId } : {}),
+        ...(error.inspectionStatus ? { inspectionStatus: error.inspectionStatus } : {}),
+        ...(error.buyerDecision ? { buyerDecision: error.buyerDecision } : {}),
       });
     }
   }

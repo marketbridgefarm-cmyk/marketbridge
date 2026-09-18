@@ -233,6 +233,7 @@ router.post(
   '/:id/purchase',
   authenticate,
   requireRole('BUYER'),
+  idempotency('digital.purchase'),
   [
     param('id').isUUID(),
     body('method').isIn(['TELEBIRR', 'CBE', 'QR', 'OTHER']),
@@ -288,6 +289,40 @@ router.post(
         });
       }
 
+      // Recover a payment that was created immediately before a process
+      // interruption prevented the DigitalPurchase row from being inserted.
+      // This prevents a retry from creating a second active payment.
+      const orphanPayment = existing
+        ? null
+        : await prisma.payment.findFirst({
+            where: {
+              createdById: req.user.id,
+              digitalProductId: product.id,
+              type: 'DIGITAL',
+              status: { in: ['PENDING', 'PAID', 'RECONCILIATION_REQUIRED'] },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+
+      if (orphanPayment) {
+        const recovered = await prisma.digitalPurchase.create({
+          data: {
+            productId: product.id,
+            buyerId: req.user.id,
+            paymentId: orphanPayment.id,
+            status: orphanPayment.status === 'PAID' ? 'COMPLETED' : 'PENDING',
+          },
+          include: { payment: true },
+        });
+        return res.status(200).json({
+          message: 'Purchase recovered. Continue the existing payment.',
+          payment: recovered.payment,
+          purchase: recovered,
+          paymentConfirmed: recovered.payment.status === 'PAID',
+          replayed: true,
+        });
+      }
+
       const idempotencyKey = req.get('Idempotency-Key') || req.body.idempotencyKey || null;
       if (idempotencyKey && String(idempotencyKey).length > 200) {
         return res.status(400).json({ error: 'Idempotency-Key must be 200 characters or fewer' });
@@ -303,14 +338,28 @@ router.post(
         idempotencyKey: idempotencyKey ? String(idempotencyKey) : null,
       });
 
-      const purchase = await prisma.digitalPurchase.create({
-        data: {
-          productId: product.id,
-          buyerId: req.user.id,
-          paymentId: payment.id,
-          status: 'PENDING',
-        },
-      });
+      // A failed/refunded/cancelled digital payment must not permanently
+      // consume the unique (product,buyer) purchase row. Rebind that row to
+      // the new payment so "try again" works without violating the unique
+      // constraint.
+      const purchase = existing
+        ? await prisma.digitalPurchase.update({
+            where: { id: existing.id },
+            data: {
+              paymentId: payment.id,
+              status: 'PENDING',
+            },
+            include: { payment: true },
+          })
+        : await prisma.digitalPurchase.create({
+            data: {
+              productId: product.id,
+              buyerId: req.user.id,
+              paymentId: payment.id,
+              status: 'PENDING',
+            },
+            include: { payment: true },
+          });
 
       const result = { payment, purchase };
 
@@ -321,7 +370,10 @@ router.post(
       });
     } catch (error) {
       req.log.error({ err: error }, 'DIGITAL PURCHASE ERROR:');
-      return res.status(500).json({ error: 'Could not create purchase' });
+      return res.status(error.status || 500).json({
+        error: error.status ? error.message : 'Could not create purchase',
+        ...(error.code ? { code: error.code } : {}),
+      });
     }
   }
 );
