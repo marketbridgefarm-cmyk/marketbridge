@@ -31,3 +31,12 @@ Implemented the next agricultural marketplace workflow gate after inspection.
 ## Validation
 
 The new workflow unit tests pass with Node's built-in test runner. Full dependency installation/frontend build was not available in the execution environment.
+
+## Regression corrections
+
+- The buyer-decision mutation now re-validates the order, listing category, active inspection, and published report inside the same database transaction as the final conditional BUY/CANCEL write.
+- Buyer-decision event/notification delivery is best-effort and cannot roll back the actual commercial decision.
+- The frontend now sends an idempotency key for workflow mutations.
+- ListingDetail no longer attempts to create a listing-only agricultural inspection; inspection requests are attached to the exact order.
+- The end-to-end test now verifies that goods payment is rejected before BUY and that BUY occurs before goods settlement.
+- Product Buy Now and Digital Purchase remain separate flows and do not use the agricultural buyer-decision gate.
