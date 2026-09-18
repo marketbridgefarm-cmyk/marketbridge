@@ -434,7 +434,7 @@ export default function ListingDetail() {
                       if (existing?.status === 'PENDING') {
                         return <div style={{ marginTop: 8 }}><p className="muted">Your fee payment hasn't completed yet.</p><button type="button" className="btn btn-primary btn-sm" disabled={payingInspectionId === request.id} onClick={() => resumeInspectionPayment(existing.id, request.id)}>{payingInspectionId === request.id ? 'Redirecting…' : 'Resume payment'}</button></div>;
                       }
-                      return <div style={{ marginTop: 8 }}><p>Fee due: <strong>{Number(request.fee).toLocaleString()} ETB</strong></p><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><select value={inspectionPayMethod} onChange={(e) => setInspectionPayMethod(e.target.value)}><option value="TELEBIRR">Telebirr</option><option value="CBE">CBE</option><option value="QR">QR</option><option value="OTHER">Other</option></select><button type="button" className="btn btn-primary btn-sm" disabled={payingInspectionId === request.id} onClick={() => payInspection(request)}>{payingInspectionId === request.id ? 'Submitting…' : 'Pay inspection fee'}</button></div></div>;
+                      return <div style={{ marginTop: 8 }}><p>Fee due: <strong>{Number(request.fee).toLocaleString()} ETB</strong></p><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><select value={inspectionPayMethod} onChange={(e) => setInspectionPayMethod(e.target.value)}><option value="TELEBIRR">Telebirr</option><option value="QR">QR</option></select><button type="button" className="btn btn-primary btn-sm" disabled={payingInspectionId === request.id} onClick={() => payInspection(request)}>{payingInspectionId === request.id ? 'Submitting…' : 'Pay inspection fee'}</button></div></div>;
                     })()}
                     {request.report ? <p>✓ {request.report.quantity} verified · {request.report.grade || 'Grade not stated'}{request.report.moisture != null ? ` · ${request.report.moisture}% moisture` : ''}</p> : <p className="muted">Report pending.</p>}
                     {request.report && (
@@ -520,9 +520,7 @@ export default function ListingDetail() {
                     <label>Payment method</label>
                     <select value={buyMethod} onChange={(e) => setBuyMethod(e.target.value)} style={{ width: '100%', marginBottom: 10 }}>
                       <option value="TELEBIRR">Telebirr</option>
-                      <option value="CBE">CBE</option>
                       <option value="QR">QR</option>
-                      <option value="OTHER">Other</option>
                     </select>
                     <button type="button" className="btn btn-primary full" disabled={buying} onClick={buyProduct}>
                       {buying ? 'Starting payment…' : `Buy for ${money(listing.askingPrice)} ETB`}
