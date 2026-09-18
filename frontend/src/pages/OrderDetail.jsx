@@ -534,7 +534,10 @@ export default function OrderDetail() {
     setError('');
 
     try {
-      await api.patch(`/transport/quotes/${quoteId}`, { action: 'COUNTER', counterAmount: amount });
+      await api.patch(`/transport/quotes/${quoteId}`, {
+        action: 'COUNTER',
+        counterAmount: amount,
+      });
       setTransportCounterInputs((q) => ({ ...q, [quoteId]: '' }));
       await load({ silent: true });
     } catch (err) {
@@ -1678,8 +1681,15 @@ export default function OrderDetail() {
                       leafTransportQuotes(transportJob.quotes).map(
                         (quote) => {
                           const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
-                          const isArrangerTurn = quote.status === 'PENDING' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
-                          const isWaitingOnTransporter = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
+                          const isArrangerTurn =
+                            isTransportArranger &&
+                            (quote.status === 'PENDING' ||
+                              (quote.status === 'COUNTERED' &&
+                                quote.counteredBy === 'PROVIDER'));
+                          const isWaitingOnTransporter =
+                            isTransportArranger &&
+                            quote.status === 'COUNTERED' &&
+                            quote.counteredBy === 'REQUESTER';
                           return (
                           <div
                             className="transporter"
