@@ -2331,8 +2331,6 @@ router.patch(
         });
       }
 
-      const finalAmount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
-
       const result = await prisma.$transaction(async (tx) => {
         const freshQuote = await tx.transportQuote.findUnique({
           where: { id: quote.id },
@@ -2352,6 +2350,9 @@ router.patch(
         }
 
         const freshJob = freshQuote.transportJob;
+        const freshFinalAmount = freshQuote.status === 'COUNTERED'
+          ? freshQuote.counterAmount ?? freshQuote.amount
+          : freshQuote.amount;
 
         if (freshJob.status !== 'REQUESTED' && freshJob.status !== 'QUOTED') {
           const error = new Error(`This transport job cannot accept a quote while it is ${freshJob.status}`);
@@ -2370,7 +2371,7 @@ router.patch(
           where: { id: freshQuote.id },
           data: {
             status: 'ACCEPTED',
-            amount: finalAmount,
+            amount: freshFinalAmount,
           },
         });
 
@@ -2406,10 +2407,13 @@ router.patch(
           action: 'TRANSPORT_QUOTE_ACCEPTED',
           resourceType: 'TransportQuote',
           resourceId: updatedQuote.id,
-          metadata: { transportJobId: freshJob.id, truckOwnerId: updatedQuote.truckOwnerId, acceptedBy: effectiveRole, amount: finalAmount },
+          metadata: { transportJobId: freshJob.id, truckOwnerId: updatedQuote.truckOwnerId, acceptedBy: effectiveRole, amount: freshFinalAmount },
         });
 
         return updatedQuote;
+      }, {
+        maxWait: 10000,
+        timeout: 20000,
       });
 
       return res.json({
@@ -2436,9 +2440,28 @@ router.patch(
         });
       }
 
+      // Surface known Prisma errors as actionable 409/500 responses instead
+      // of hiding every failure behind the generic quote-action message.
+      if (error?.code === 'P2025') {
+        return res.status(409).json({
+          error: 'The quote or transport job changed before this action completed. Refresh the order and try again.',
+        });
+      }
+
+      if (error?.code === 'P2002') {
+        return res.status(409).json({
+          error: 'This quote action conflicts with an existing transport negotiation. Refresh the order and try again.',
+        });
+      }
+
+      if (error?.code === 'P2028') {
+        return res.status(503).json({
+          error: 'Transport quote processing timed out. Please refresh and try the quote action again.',
+        });
+      }
+
       return res.status(500).json({
-        error:
-          'Could not process quote action',
+        error: 'Could not process quote action',
       });
     }
   }
