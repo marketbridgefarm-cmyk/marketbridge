@@ -3,6 +3,16 @@ import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 import { chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 
+// Only TELEBIRR and QR route to a configured payment adapter (both go
+// through Chapa's hosted checkout — see
+// backend/src/services/paymentProviders/index.js). CBE and OTHER are
+// deliberately left unconfigured there, so they're not offered as choices
+// here; picking either would always fail at chapa/initialize.
+const PAYMENT_METHODS = [
+  { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
+  { value: 'QR', label: 'QR Code' },
+];
+
 export default function DigitalMarketplace() {
   const { user } = useAuth();
   const [products, setProducts] = useState([]);
@@ -12,6 +22,7 @@ export default function DigitalMarketplace() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busyId, setBusyId] = useState('');
+  const [payMethod, setPayMethod] = useState('TELEBIRR');
 
   async function load() {
     try {
@@ -61,7 +72,7 @@ export default function DigitalMarketplace() {
       const key = `digital-purchase:${p.id}`;
       const r = await api.post(
         `/digital-products/${p.id}/purchase`,
-        { method: 'OTHER' },
+        { method: payMethod },
         { headers: { 'Idempotency-Key': key } }
       );
       await chapaInitializeAndRedirect(r.data.payment?.id);
@@ -188,6 +199,18 @@ export default function DigitalMarketplace() {
         )}
 
         {(user?.roles?.includes('BUYER') && myPurchases.length > 0) && <h2 style={{ marginTop: 8 }}>Browse the marketplace</h2>}
+
+        {user?.roles?.includes('BUYER') && (
+          <div className="card" style={{ marginBottom: 16, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label htmlFor="digital-pay-method" style={{ marginBottom: 0 }}>Payment method</label>
+            <select id="digital-pay-method" value={payMethod} onChange={(e) => setPayMethod(e.target.value)} style={{ maxWidth: 220 }}>
+              {PAYMENT_METHODS.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+            <span className="muted small">Applies to purchases below.</span>
+          </div>
+        )}
 
         <div className="listing-grid">
           {products.map(p => {
