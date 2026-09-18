@@ -2,7 +2,10 @@ import React, { useMemo, useState } from 'react';
 import api from '../api/client';
 
 const ACTION_LABELS = {
-  PAY_MARKETPLACE: 'BUY – continue purchase',
+  BUYER_DECISION_BUY: 'BUY – continue purchase',
+  BUYER_DECISION_CANCEL: 'Cancel after inspection',
+  REQUEST_INSPECTION: 'Request inspection',
+  PAY_MARKETPLACE: 'Pay for goods',
   PAY_INSPECTION: 'Pay inspection fee',
   ARRANGE_TRANSPORT: 'Arrange transport',
   REVIEW_INSPECTION_QUOTES: 'Review inspection quotes',
@@ -21,7 +24,7 @@ const ACTION_LABELS = {
 const scrollTarget = (code) => {
   if (code === 'PAY_MARKETPLACE' || code === 'PAY_INSPECTION' || code === 'PAY_TRANSPORT') return 'payment-center';
   if (code === 'ARRANGE_TRANSPORT' || code === 'REVIEW_TRANSPORT_QUOTES' || code === 'START_PICKUP' || code === 'MARK_IN_TRANSIT' || code === 'MARK_DELIVERED') return 'transport-section';
-  if (code === 'REVIEW_INSPECTION_QUOTES' || code === 'START_INSPECTION' || code === 'SUBMIT_INSPECTION_REPORT') return 'inspection-section';
+  if (code === 'REQUEST_INSPECTION' || code === 'REVIEW_INSPECTION_QUOTES' || code === 'START_INSPECTION' || code === 'SUBMIT_INSPECTION_REPORT') return 'inspection-section';
   if (code === 'CONFIRM_RECEIPT') return 'confirm-receipt';
   if (code === 'RAISE_DISPUTE') return 'raise-dispute';
   return 'next-action';
@@ -29,7 +32,6 @@ const scrollTarget = (code) => {
 
 export default function ActionCenter({ workflow, onScroll, onActionComplete }) {
   const [working, setWorking] = useState('');
-  const [continued, setContinued] = useState(false);
   const [error, setError] = useState('');
 
   const actions = Array.isArray(workflow?.actions) ? workflow.actions : [];
@@ -48,15 +50,10 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete }) {
     if (!action || working) return;
     setError('');
 
-    // BUY is a decision gate, not a second payment endpoint. The order already
-    // exists after the seller accepts the offer. Clicking BUY therefore moves
-    // the buyer to the seller-payment controls instead of creating a duplicate
-    // payment intent or leaving the button spinning forever.
-    if (action.code === 'PAY_MARKETPLACE') {
-      setContinued(true);
-      doScroll(action.code);
-      return;
-    }
+    // The agricultural BUY action is a real server-side decision. It must
+    // execute PATCH /orders/:id/buyer-decision before seller payment becomes
+    // available. Do not merely scroll to Payment Center: /payments correctly
+    // rejects a goods payment while buyerDecision is still null.
 
     // Payment controls have their own provider/session handling in OrderDetail.
     if (['PAY_INSPECTION', 'PAY_TRANSPORT'].includes(action.code)) {
@@ -66,7 +63,7 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete }) {
 
     // Review/operational actions are intentionally routed to the relevant
     // section. The dedicated section owns the detailed controls and evidence.
-    if (!action.route || action.code === 'ARRANGE_TRANSPORT' || action.code === 'REVIEW_INSPECTION_QUOTES' || action.code === 'REVIEW_TRANSPORT_QUOTES' || action.code === 'RAISE_DISPUTE') {
+    if (!action.route || action.code === 'REQUEST_INSPECTION' || action.code === 'ARRANGE_TRANSPORT' || action.code === 'REVIEW_INSPECTION_QUOTES' || action.code === 'REVIEW_TRANSPORT_QUOTES' || action.code === 'RAISE_DISPUTE') {
       doScroll(action.code);
       return;
     }
@@ -106,15 +103,13 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete }) {
   };
 
   const nextLabel = ACTION_LABELS[next?.code] || next?.label || 'Continue';
-  const displayedNext = continued && next?.code === 'PAY_MARKETPLACE'
-    ? null
-    : next;
+  const displayedNext = next;
 
   return (
     <div className="card next-action-card" id="next-action">
       <span className="eyebrow">NEXT STEP</span>
       <h2 style={{ marginBottom: 6 }}>
-        {continued && next?.code === 'PAY_MARKETPLACE' ? 'Seller payment' : next ? nextLabel : 'Order workflow'}
+        {next ? nextLabel : 'Order workflow'}
       </h2>
 
       {workflow.currentStage && (
@@ -123,15 +118,15 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete }) {
         </p>
       )}
 
-      {next?.code === 'PAY_MARKETPLACE' && !continued && (
+      {next?.code === 'BUYER_DECISION_BUY' && (
         <p className="muted">
-          Review the completed agricultural inspection, then choose BUY to continue to seller payment. No payment is created by this button.
+          Review the completed agricultural inspection, then choose BUY to unlock the seller payment.
         </p>
       )}
 
-      {continued && next?.code === 'PAY_MARKETPLACE' && (
+      {next?.code === 'PAY_MARKETPLACE' && (
         <p className="muted">
-          BUY selected. The seller payment controls are below. Choose the payment method and start checkout there.
+          BUY has been recorded. Choose the payment method below and start the seller payment checkout.
         </p>
       )}
 
