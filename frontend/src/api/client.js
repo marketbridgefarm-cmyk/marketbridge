@@ -86,6 +86,18 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // Some backend validation failures respond with only an express-validator
+    // `{ errors: [...] }` array and no top-level `error`/`message` string
+    // (most such routes now set one too, but this is a safety net for any
+    // that don't, present or future). Without this, every `.response.data.error`
+    // read across the app comes back undefined and callers fall through to
+    // axios's generic "Request failed with status code 4xx", which tells the
+    // user nothing about what actually went wrong.
+    if (error.response?.data && !error.response.data.error && Array.isArray(error.response.data.errors) && error.response.data.errors.length) {
+      const firstError = error.response.data.errors[0];
+      error.response.data.error = firstError?.msg || firstError?.message || 'Validation failed';
+    }
+
     const serverMessage = error.response?.data?.error;
     const isSuspended = status === 403 && serverMessage === SUSPENDED_MESSAGE;
 
