@@ -41,10 +41,6 @@ const PAYMENT_METHODS = [
     label: 'Telebirr via Chapa',
   },
   {
-    value: 'CBE',
-    label: 'CBE via Chapa',
-  },
-  {
     value: 'QR',
     label: 'QR Code',
   },
@@ -300,14 +296,8 @@ export default function OrderDetail() {
    */
   const marketplacePayment = useMemo(() => {
     return (
-      marketplacePayments.find(
-        (payment) =>
-          payment.status === 'PENDING'
-      ) ||
-      marketplacePayments.find(
-        (payment) =>
-          payment.status === 'PAID'
-      ) ||
+      marketplacePayments.find((payment) => ['PENDING', 'PROCESSING'].includes(payment.status)) ||
+      marketplacePayments.find((payment) => payment.status === 'PAID') ||
       null
     );
   }, [marketplacePayments]);
@@ -333,10 +323,12 @@ export default function OrderDetail() {
     );
 
   const marketplacePending =
-    marketplacePayments.some(
-      (payment) =>
-        payment.status === 'PENDING'
+    marketplacePayments.some((payment) =>
+      ['PENDING', 'PROCESSING'].includes(payment.status)
     );
+
+  const marketplaceProcessing =
+    marketplacePayments.some((payment) => payment.status === 'PROCESSING');
 
   const transportPaid =
     transportPayments.some(
@@ -427,8 +419,10 @@ export default function OrderDetail() {
   // the same gate, so a stale UI can never bypass it.
   const agriculturalGateMet =
     !isAgricultural ||
-    !currentInspectionRequest ||
-    (currentInspectionRequest.status === 'COMPLETED' && Boolean(currentInspectionRequest.report));
+    (currentInspectionRequest &&
+      currentInspectionRequest.status === 'COMPLETED' &&
+      Boolean(currentInspectionRequest.report) &&
+      order?.buyerDecision === 'BUY');
 
   const canPayMarketplace =
     Boolean(order) &&
@@ -436,15 +430,15 @@ export default function OrderDetail() {
     order.status !== 'CANCELLED' &&
     isBuyer &&
     agriculturalGateMet &&
-    !marketplacePayments.some(
-      (payment) =>
-        payment.status === 'PENDING' ||
-        payment.status === 'PAID'
+    !marketplacePayments.some((payment) =>
+      ['PENDING', 'PROCESSING', 'PAID'].includes(payment.status)
     );
 
   const marketplaceBlockedReason =
     isAgricultural && !agriculturalGateMet
-      ? 'Complete the current agricultural inspection and make sure its report is published before paying for the goods.'
+      ? (!currentInspectionRequest || currentInspectionRequest.status !== 'COMPLETED' || !currentInspectionRequest.report
+        ? 'Complete the current agricultural inspection and make sure its report is published before paying for the goods.'
+        : 'Choose BUY after reviewing the inspection report before paying for the goods.')
       : null;
 
   /*
@@ -453,6 +447,11 @@ export default function OrderDetail() {
   const canResumeMarketplacePayment =
     Boolean(marketplacePayment) &&
     marketplacePayment.status === 'PENDING' &&
+    isBuyer;
+
+  const canCheckMarketplacePayment =
+    Boolean(marketplacePayment) &&
+    marketplacePayment.status === 'PROCESSING' &&
     isBuyer;
 
   // ==========================================================================
@@ -747,6 +746,29 @@ export default function OrderDetail() {
           'Could not start transport payment'
         )
       );
+    } finally {
+      setBusy('');
+    }
+  };
+
+  // ==========================================================================
+  // CHECK PROCESSING PAYMENT
+  // ==========================================================================
+
+  const checkMarketplacePayment = async () => {
+    if (!marketplacePayment?.id) return;
+
+    setBusy('check-marketplace');
+    setError('');
+    try {
+      const response = await api.get(`/payments/${marketplacePayment.id}/chapa/verify`);
+      await load({ silent: true });
+      const status = response.data?.status;
+      if (status === 'PENDING') {
+        setError('Chapa has not confirmed the seller payment yet. If you cancelled or the checkout failed, return to the order and retry once the payment shows FAILED.');
+      }
+    } catch (err) {
+      setError(getError(err, 'Could not check seller payment status'));
     } finally {
       setBusy('');
     }
@@ -1886,7 +1908,16 @@ export default function OrderDetail() {
                       ))}
                     </select>
 
-                    {canResumeMarketplacePayment ? (
+                    {canCheckMarketplacePayment ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={busy === 'check-marketplace'}
+                        onClick={checkMarketplacePayment}
+                      >
+                        {busy === 'check-marketplace' ? 'Checking…' : 'Check seller payment'}
+                      </button>
+                    ) : canResumeMarketplacePayment ? (
                       <button
                         type="button"
                         className="btn btn-primary"
@@ -1905,7 +1936,7 @@ export default function OrderDetail() {
                         {busy === 'pay-marketplace' ? 'Submitting…' : 'Pay seller / order now'}
                       </button>
                     ) : marketplacePending ? (
-                      <span className="muted">A payment is pending. Refresh this page after checkout.</span>
+                      <span className="muted">A seller payment is being processed. Check the payment status before starting another checkout.</span>
                     ) : null}
                   </div>
                 )}
