@@ -30,8 +30,17 @@ export default function ListingDetail() {
   const [buyerCounter, setBuyerCounter] = useState('');
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
 
+  const relatedOrders = (listing?.orders || [])
+    .filter((order) => order?.status !== 'CANCELLED')
+    .sort((a, b) => (a?.createdAt ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() : 0));
+  const relatedOrder = relatedOrders[0] || null;
+
+  // Agricultural inspections are order-owned. ListingDetail may still show
+  // the listing, but it must never create a free-floating inspection that
+  // cannot participate in the exact purchase workflow.
   const activeInspectionRequest = (listing?.inspectionRequests || [])
     .filter((request) => request.status !== 'CANCELLED')
+    .filter((request) => !relatedOrder?.id || !request.orderId || request.orderId === relatedOrder.id)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null;
 
   async function load() {
@@ -75,7 +84,11 @@ export default function ListingDetail() {
     setMsg('');
     setBuying(true);
     try {
-      const response = await api.post('/orders/buy-now', { listingId: id });
+      const response = await api.post(
+        '/orders/buy-now',
+        { listingId: id },
+        { headers: { 'Idempotency-Key': (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `buy-now-${Date.now()}-${Math.random().toString(36).slice(2)}`) } }
+      );
       const order = response.data.order;
       await startChapaPayment({
         type: 'MARKETPLACE',
@@ -96,12 +109,20 @@ export default function ListingDetail() {
       return;
     }
     try {
-      const body = { listingId: id, mode };
+      if (!relatedOrder?.id) {
+        setError('Complete the agricultural offer/negotiation first. Inspection is attached to the resulting order.');
+        return;
+      }
+      const body = { orderId: relatedOrder.id, listingId: id, mode };
       if (inspector) {
         body.inspectorId = inspector;
         body.fee = Number(feeForInspector);
       }
-      await api.post('/inspections', body);
+      await api.post(
+        '/inspections',
+        body,
+        { headers: { 'Idempotency-Key': `inspection:${relatedOrder.id}:${mode}` } }
+      );
       setMsg('Inspection request created.');
       setInspector('');
       setFeeForInspector('');
@@ -480,7 +501,11 @@ export default function ListingDetail() {
                           <p className="small muted">Inspection already requested: <strong>{activeInspectionRequest.status.replaceAll('_', ' ')}</strong>. Continue with the existing inspection rather than creating another request.</p>
                         ) : (
                           <>
-                            <p className="small muted">Request an independent inspection.</p>
+                            <p className="small muted">
+                               {relatedOrder
+                                 ? 'Request an independent inspection for this agreed order.'
+                                 : 'Inspection becomes available after an agricultural offer is accepted and an order is created.'}
+                             </p>
                             {inspector && <input type="number" min="1" step="0.01" placeholder="Agreed fee (ETB)" value={feeForInspector} onChange={(e) => setFeeForInspector(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />}
                             <button className="btn btn-light full" onClick={() => requestInspection('BUYER_REQUESTED')}>Request inspection</button>
                             <button className="btn btn-light full" style={{ marginTop: 8 }} onClick={chooseInspector}>Find an inspector</button>

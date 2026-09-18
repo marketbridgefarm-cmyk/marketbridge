@@ -58,7 +58,12 @@ export default function DigitalMarketplace() {
     setMessage('');
     setBusyId(p.id);
     try {
-      const r = await api.post(`/digital-products/${p.id}/purchase`, { method: 'OTHER' });
+      const key = `digital-purchase:${p.id}`;
+      const r = await api.post(
+        `/digital-products/${p.id}/purchase`,
+        { method: 'OTHER' },
+        { headers: { 'Idempotency-Key': key } }
+      );
       await chapaInitializeAndRedirect(r.data.payment?.id);
     } catch (e) {
       setError(e.response?.data?.error || e.message || 'Could not create purchase');
@@ -201,8 +206,10 @@ export default function DigitalMarketplace() {
                 {user?.roles?.includes('BUYER') && paymentStatus === 'PENDING' && (
                   <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => resumePurchase(existingPurchase.payment.id, p.id)}>{busyId === p.id ? 'Redirecting…' : 'Resume payment'}</button>
                 )}
-                {user?.roles?.includes('BUYER') && !paymentStatus && (
-                  <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => purchase(p)}>{busyId === p.id ? 'Starting…' : 'Buy'}</button>
+                {user?.roles?.includes('BUYER') && (!paymentStatus || ['FAILED', 'REFUNDED', 'CANCELLED'].includes(paymentStatus)) && (
+                  <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => purchase(p)}>
+                    {busyId === p.id ? 'Starting…' : (paymentStatus ? 'Try again' : 'Buy')}
+                  </button>
                 )}
               </article>
             );
