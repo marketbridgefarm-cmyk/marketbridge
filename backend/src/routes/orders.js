@@ -372,7 +372,7 @@ router.patch(
 
       if (decision === 'CANCEL') {
         const reason = req.body.reason || 'Buyer declined the agricultural transaction after inspection';
-        const updated = await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx) => {
           const current = await tx.order.findUnique({
             where: { id: order.id },
             include: { transportJob: true, payments: true },
@@ -403,7 +403,11 @@ router.patch(
             cancelledByRole: 'BUYER',
           });
 
-          return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
+        }, { maxWait: 10000, timeout: 20000 });
+
+        const updated = await prisma.order.findUnique({
+          where: { id: order.id },
+          include: orderInclude,
         });
 
         return res.json({
@@ -413,7 +417,7 @@ router.patch(
         });
       }
 
-      const updated = await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx) => {
         const current = await tx.order.findUnique({ where: { id: order.id } });
         if (!current || current.buyerId !== req.user.id) {
           throw Object.assign(new Error('Only the buyer can make the purchase decision'), { status: 403 });
@@ -437,7 +441,11 @@ router.patch(
           metadata: { decision: 'BUY' },
         });
 
-        return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
+      }, { maxWait: 10000, timeout: 20000 });
+
+      const updated = await prisma.order.findUnique({
+        where: { id: order.id },
+        include: orderInclude,
       });
 
       return res.json({
@@ -446,9 +454,14 @@ router.patch(
         order: updated,
       });
     } catch (error) {
-      req.log.error({ err: error }, 'BUYER DECISION ERROR:');
+      req.log.error({
+        err: error,
+        orderId: req.params.id,
+        decision: req.body?.decision,
+        prismaCode: error?.code,
+      }, 'BUYER DECISION ERROR:');
       return res.status(error.status || 500).json({
-        error: error.status ? error.message : 'Could not record buyer decision',
+        error: error.status ? error.message : 'Could not record buyer decision. Please retry.',
       });
     }
   }
