@@ -17,7 +17,7 @@ router.get('/analytics/me', authenticate, async (req, res) => {
 
 router.post('/promotions/validate', authenticate, [body('code').isString().trim().isLength({ min: 3, max: 32 }), body('subtotal').isFloat({ min: 0 })], async (req, res) => {
   try {
-    const errors = validationResult(req); if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const errors = validationResult(req); if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
     const code = req.body.code.toUpperCase(); const subtotal = Number(req.body.subtotal);
     const promo = await prisma.promotionCode.findUnique({ where: { code } });
     if (!promo || !promo.active) return res.status(404).json({ error: 'Promotion code not found or inactive' });
@@ -41,7 +41,7 @@ router.get('/promotions', authenticate, async (req, res) => {
 
 router.post('/referrals/claim', authenticate, [body('code').isString().trim().isLength({ min: 6, max: 32 })], async (req, res) => {
   try {
-    const errors = validationResult(req); if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const errors = validationResult(req); if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
     const code = req.body.code.toUpperCase();
     const referral = await prisma.referralCode.findUnique({ where: { code } });
     if (!referral) return res.status(404).json({ error: 'Referral code not found' });
@@ -74,7 +74,7 @@ router.post('/telegram-promo', authenticate, [
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
 
     const { title, description, promoUrl, imageUrl, campaignId } = req.body;
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -118,7 +118,7 @@ router.post('/telegram-promo', authenticate, [
 });
 
 router.post('/promotions/admin', authenticate, requireRole('ADMIN'), [body('code').isString().trim().isLength({ min: 3, max: 32 }), body('discountType').isIn(['PERCENTAGE','FIXED']), body('discountValue').isFloat({ min: 0.01 }), body('startsAt').isISO8601(), body('endsAt').isISO8601(), body('minimumSubtotal').optional().isFloat({ min: 0 }), body('maxDiscount').optional().isFloat({ min: 0 })], async (req, res) => {
-  const errors = validationResult(req); if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  const errors = validationResult(req); if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
   try {
     const data = { code: req.body.code.toUpperCase(), discountType: req.body.discountType, discountValue: Number(req.body.discountValue), startsAt: new Date(req.body.startsAt), endsAt: new Date(req.body.endsAt), minimumSubtotal: Number(req.body.minimumSubtotal || 0), maxDiscount: req.body.maxDiscount == null ? null : Number(req.body.maxDiscount), maxUses: req.body.maxUses == null ? null : Number(req.body.maxUses) };
     if (data.endsAt <= data.startsAt) return res.status(400).json({ error: 'endsAt must be after startsAt' });

@@ -619,6 +619,13 @@ router.post(
           include: {
             transportJob: true,
             listing: true,
+            // Needed by the agricultural gating checks below (goodsPaid /
+            // inspectionPaid) — without these, order.payments and
+            // order.inspectionRequests are undefined and every agricultural
+            // order is wrongly blocked with GOODS_PAYMENT_REQUIRED even
+            // after the buyer has actually paid.
+            payments: true,
+            inspectionRequests: { include: { payments: true } },
           },
         });
 

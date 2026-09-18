@@ -14,7 +14,7 @@ const router = express.Router();
 function validationError(res) {
   const errors = validationResult(res.req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+    return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
   }
   return null;
 }
@@ -80,7 +80,7 @@ router.post(
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
+        return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
       }
 
       const {
@@ -745,7 +745,7 @@ router.post(
   async (req, res) => {
     try {
       const errors = validationResult(req);
-      if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+      if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
 
       const loaded = await loadQuoteForNegotiation(req, res);
       if (!loaded) return;
@@ -1336,7 +1336,7 @@ router.post('/:id/evidence', authenticate, requireRole('INSPECTOR'), [
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
     const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { report: true } });
     if (!request) return res.status(404).json({ error: 'Inspection request not found' });
     if (request.inspectorId !== req.user.id) return res.status(403).json({ error: 'Only the assigned inspector can add inspection evidence' });
