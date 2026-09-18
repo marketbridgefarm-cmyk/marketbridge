@@ -382,6 +382,7 @@ router.post(
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
+          error: errors.array()[0]?.msg || 'Validation failed',
           errors: errors.array(),
         });
       }
@@ -906,6 +907,7 @@ router.patch(
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
+          error: errors.array()[0]?.msg || 'Validation failed',
           errors: errors.array(),
         });
       }
@@ -1415,6 +1417,7 @@ router.post(
 
       if (!errors.isEmpty()) {
         return res.status(400).json({
+          error: errors.array()[0]?.msg || 'Validation failed',
           errors: errors.array(),
         });
       }
@@ -1553,7 +1556,13 @@ router.post(
       req.log.error({ err: error }, 'CREATE INSPECTION REPORT ERROR:');
 
       return res.status(500).json({
-        error: 'Could not submit inspection report',
+        // Surfacing error.message (like the sibling evidence-media upload
+        // route already does) instead of a fixed string, so a runtime
+        // failure here is diagnosable from the toast alone instead of only
+        // from server logs. req.requestId is also echoed so it can be
+        // correlated with the pino log line above if you have log access.
+        error: error.message || 'Could not submit inspection report',
+        requestId: req.requestId,
       });
     }
   }
