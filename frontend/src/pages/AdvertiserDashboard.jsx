@@ -5,6 +5,15 @@ import { useAuth } from '../context/AuthContext.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import RecentActivity from '../components/RecentActivity.jsx';
 
+// Only TELEBIRR and QR route to a configured payment adapter (both go
+// through Chapa's hosted checkout — see
+// backend/src/services/paymentProviders/index.js). CBE and OTHER are
+// deliberately left unconfigured there, so they're not offered here.
+const PAYMENT_METHODS = [
+  { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
+  { value: 'QR', label: 'QR Code' },
+];
+
 const AD_TYPES = [
   { value: 'FEATURED_LISTING', label: 'Featured Listing', help: 'Promote an active listing across marketplace results.' },
   { value: 'TOP_OF_CATEGORY', label: 'Top of Category', help: 'Give an active listing the strongest category placement.' },
@@ -127,6 +136,7 @@ export default function AdvertiserDashboard() {
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [payingId, setPayingId] = useState(null);
+  const [payMethod, setPayMethod] = useState('TELEBIRR');
   const [uploadingCreative, setUploadingCreative] = useState(false);
   const [analytics, setAnalytics] = useState({});
 
@@ -260,7 +270,7 @@ export default function AdvertiserDashboard() {
     clearMessages();
     setPayingId(ad.id);
     try {
-      await startChapaPayment({ type: 'ADVERTISING', advertisementId: ad.id, amount: Number(ad.priceQuoted || ad.amountDue), method: 'TELEBIRR' });
+      await startChapaPayment({ type: 'ADVERTISING', advertisementId: ad.id, amount: Number(ad.priceQuoted || ad.amountDue), method: payMethod });
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Could not start payment');
       setPayingId(null);
@@ -472,7 +482,12 @@ export default function AdvertiserDashboard() {
                     </div>
                   )}
                   {!paid && !pending && ad.status === 'PENDING_PAYMENT' && (
-                    <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} style={{ maxWidth: 200 }}>
+                        {PAYMENT_METHODS.map((m) => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
                       <button type="button" className="sd-btn sd-btn-primary" disabled={payingId === ad.id} onClick={() => payForAd(ad)}>{payingId === ad.id ? 'Redirecting…' : `Pay ${amountDue.toLocaleString()} ETB`}</button>
                       <button type="button" className="sd-btn sd-btn-outline" disabled={payingId === ad.id} onClick={() => cancelAd(ad)}>Cancel campaign</button>
                     </div>
