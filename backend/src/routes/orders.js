@@ -320,21 +320,37 @@ router.patch(
     try {
       const decision = req.body.decision;
 
+      // IMPORTANT: this endpoint must not hold a 5-second interactive Prisma
+      // transaction open while loading the full order graph. On hosted/shared
+      // PostgreSQL that graph can take >5s, which causes Prisma P2028
+      // ("Transaction already closed") even though the database is healthy.
+      // The decision transaction below therefore reads only the fields needed
+      // for the gate and performs the conditional write. The heavy order graph
+      // is loaded only after the decision has been committed.
       const updated = await prisma.$transaction(async (tx) => {
-        // Re-read every gate inside the transaction. The old implementation
-        // validated an order outside the transaction and then re-read only a
-        // few scalar fields. That allowed the inspection/order state to drift
-        // between validation and the actual decision write.
         const current = await tx.order.findUnique({
           where: { id: req.params.id },
-          include: {
+          select: {
+            id: true,
+            buyerId: true,
+            sellerId: true,
+            listingId: true,
+            status: true,
+            buyerDecision: true,
+            finalPrice: true,
+            quantity: true,
             listing: { select: { id: true, category: true } },
-            payments: true,
-            transportJob: true,
+            payments: { select: { id: true, amount: true, status: true } },
+            transportJob: { select: { id: true, status: true } },
             inspectionRequests: {
               where: { status: { not: 'CANCELLED' } },
               orderBy: { createdAt: 'desc' },
-              include: { report: true },
+              take: 1,
+              select: {
+                id: true,
+                status: true,
+                report: { select: { id: true } },
+              },
             },
           },
         });
@@ -402,7 +418,10 @@ router.patch(
             cancelledByRole: 'BUYER',
           });
 
-          return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
+          return tx.order.findUnique({
+            where: { id: current.id },
+            select: { id: true, buyerDecision: true, buyerDecisionAt: true, paymentDueAt: true, status: true },
+          });
         }
 
         // Conditional update is the final concurrency gate. A double click,
@@ -427,18 +446,34 @@ router.patch(
           );
         }
 
+        // Do not create notifications/SMS while holding the decision transaction.
+        // The buyer decision is already durable at this point; the event is a
+        // best-effort post-commit side effect and must not extend the DB lock.
+        return tx.order.findUnique({
+          where: { id: current.id },
+          select: { id: true, buyerDecision: true, buyerDecisionAt: true, paymentDueAt: true, status: true },
+        });
+      }, { maxWait: 10000, timeout: 15000 });
+
+      if (decision === 'BUY') {
         try {
-          await recordOrderEvent(tx, {
-            orderId: current.id,
+          await recordOrderEvent(prisma, {
+            orderId: updated.id,
             actorId: req.user.id,
             type: 'BUYER_DECISION_MADE',
             metadata: { decision: 'BUY' },
           });
         } catch (eventError) {
-          req.log.error({ err: eventError, orderId: current.id }, 'BUYER DECISION EVENT SIDE EFFECT FAILED');
+          req.log.error({ err: eventError, orderId: updated.id }, 'BUYER DECISION EVENT POST-COMMIT FAILED');
         }
+      }
 
-        return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
+      // Load the rich response graph only after the short decision transaction
+      // has committed. This prevents order events/notifications/payment graphs
+      // from consuming the interactive transaction timeout.
+      const responseOrder = await prisma.order.findUnique({
+        where: { id: updated.id },
+        include: orderInclude,
       });
 
       return res.json({
