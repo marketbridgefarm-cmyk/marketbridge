@@ -1702,7 +1702,10 @@ router.patch(
 
             return updated;
           }
-        );
+        , {
+          maxWait: 10000,
+          timeout: 20000,
+        });
 
       return res.json({
         transportJob: result,
@@ -1717,9 +1720,22 @@ router.patch(
         });
       }
 
+      if (error?.code === 'P2028') {
+        return res.status(503).json({
+          code: 'TRANSPORT_STATUS_TIMEOUT',
+          error: 'Transport status update timed out. Refresh the order and try again.',
+        });
+      }
+
+      if (error?.code === 'P2025') {
+        return res.status(409).json({
+          code: 'TRANSPORT_STATUS_CONFLICT',
+          error: 'The transport status changed before this action completed. Refresh the order and try again.',
+        });
+      }
+
       return res.status(500).json({
-        error:
-          'Could not update transport status',
+        error: error?.message || 'Could not update transport status',
       });
     }
   }
@@ -2206,9 +2222,7 @@ router.patch(
         const counterAmount = Number(req.body.counterAmount);
 
         const counterQuote = await prisma.$transaction(async (tx) => {
-          const freshQuote = await tx.transportQuote.findUnique({
-            where: { id: quote.id },
-          });
+          const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
           if (!freshQuote) throw quoteError('Quote not found', 404);
           if (!['PENDING', 'COUNTERED'].includes(freshQuote.status)) {
             throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
@@ -2227,33 +2241,19 @@ router.patch(
               transportJobId: freshQuote.transportJobId,
               truckOwnerId: freshQuote.truckOwnerId,
               truckId: freshQuote.truckId,
-              // A counter is a new immutable leaf quote. Keep the new amount
-              // in both fields so old/new clients read the same negotiated
-              // value. The previous quote remains only as audit history.
               amount: counterAmount,
               counterAmount,
               counteredBy: effectiveRole,
               status: 'COUNTERED',
               parentQuoteId: freshQuote.id,
               expiresAt: quoteExpiry(12),
-              message: req.body.message || null,
+              message: req.body.message || freshQuote.message,
             },
             include: {
               truckOwner: { select: { id: true, name: true, rating: true } },
               truck: true,
             },
           });
-
-          // Legacy jobs can still be REQUESTED if a quote was created by
-          // an older deployment. Once negotiation has started the job is
-          // definitively QUOTED, so later accept/counter operations are not
-          // blocked by the stale REQUESTED state.
-          if (job.status === 'REQUESTED') {
-            await tx.transportJob.update({
-              where: { id: freshQuote.transportJobId },
-              data: { status: 'QUOTED' },
-            });
-          }
 
           await recordAuditEvent(tx, {
             actorId: req.user.id,
@@ -2270,9 +2270,6 @@ router.patch(
           });
 
           return created;
-        }, {
-          maxWait: 10000,
-          timeout: 20000,
         });
 
         return res.status(201).json({
@@ -2331,6 +2328,8 @@ router.patch(
         });
       }
 
+      const finalAmount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
+
       const result = await prisma.$transaction(async (tx) => {
         const freshQuote = await tx.transportQuote.findUnique({
           where: { id: quote.id },
@@ -2350,9 +2349,6 @@ router.patch(
         }
 
         const freshJob = freshQuote.transportJob;
-        const freshFinalAmount = freshQuote.status === 'COUNTERED'
-          ? freshQuote.counterAmount ?? freshQuote.amount
-          : freshQuote.amount;
 
         if (freshJob.status !== 'REQUESTED' && freshJob.status !== 'QUOTED') {
           const error = new Error(`This transport job cannot accept a quote while it is ${freshJob.status}`);
@@ -2371,7 +2367,7 @@ router.patch(
           where: { id: freshQuote.id },
           data: {
             status: 'ACCEPTED',
-            amount: freshFinalAmount,
+            amount: finalAmount,
           },
         });
 
@@ -2390,7 +2386,7 @@ router.patch(
           data: {
             truckOwnerId: freshQuote.truckOwnerId,
             truckId: freshQuote.truckId,
-            agreedAmount: freshFinalAmount,
+            agreedAmount: finalAmount,
             status: 'ACCEPTED',
           },
         });
@@ -2407,13 +2403,10 @@ router.patch(
           action: 'TRANSPORT_QUOTE_ACCEPTED',
           resourceType: 'TransportQuote',
           resourceId: updatedQuote.id,
-          metadata: { transportJobId: freshJob.id, truckOwnerId: updatedQuote.truckOwnerId, acceptedBy: effectiveRole, amount: freshFinalAmount },
+          metadata: { transportJobId: freshJob.id, truckOwnerId: updatedQuote.truckOwnerId, acceptedBy: effectiveRole, amount: finalAmount },
         });
 
         return updatedQuote;
-      }, {
-        maxWait: 10000,
-        timeout: 20000,
       });
 
       return res.json({
@@ -2440,28 +2433,9 @@ router.patch(
         });
       }
 
-      // Surface known Prisma errors as actionable 409/500 responses instead
-      // of hiding every failure behind the generic quote-action message.
-      if (error?.code === 'P2025') {
-        return res.status(409).json({
-          error: 'The quote or transport job changed before this action completed. Refresh the order and try again.',
-        });
-      }
-
-      if (error?.code === 'P2002') {
-        return res.status(409).json({
-          error: 'This quote action conflicts with an existing transport negotiation. Refresh the order and try again.',
-        });
-      }
-
-      if (error?.code === 'P2028') {
-        return res.status(503).json({
-          error: 'Transport quote processing timed out. Please refresh and try the quote action again.',
-        });
-      }
-
       return res.status(500).json({
-        error: 'Could not process quote action',
+        error:
+          'Could not process quote action',
       });
     }
   }
