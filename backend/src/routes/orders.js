@@ -196,7 +196,7 @@ router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req,
       });
 
       return order;
-    });
+    }, { maxWait: 10000, timeout: 15000 });
 
     return res.status(201).json({
       message: 'Order created. Complete payment to confirm the purchase.',
