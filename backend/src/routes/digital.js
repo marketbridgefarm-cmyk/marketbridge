@@ -8,6 +8,7 @@ const { makeDigitalKey, uploadPrivateObject, deletePrivateObject, signedDownload
 const { createPayment } = require('../services/paymentService');
 const { optimizeUpload } = require('../utils/imageProcessor');
 const { idempotency } = require('../middleware/idempotency');
+const { streamDigitalPurchaseReceiptPdf } = require('../services/receiptService');
 
 const router = express.Router();
 
@@ -460,6 +461,55 @@ router.get(
     } catch (error) {
       req.log.error({ err: error }, 'DIGITAL DOWNLOAD ERROR:');
       return res.status(500).json({ error: 'Could not process download request' });
+    }
+  }
+);
+
+// ============================================================================
+// DIGITAL PURCHASE RECEIPT (PDF)
+// ============================================================================
+// Downloadable receipt for a Digital-marketplace purchase, covering the
+// same ground as the physical-order receipt (payment, method, reference,
+// any refund) so the Digital marketplace isn't left without one. Available
+// as soon as the purchase payment has actually been made — not gated on
+// any later status — for the same reason order receipts aren't gated on
+// COMPLETED: the buyer/seller may need proof of payment right away.
+// ============================================================================
+router.get(
+  '/purchases/:id/receipt',
+  authenticate,
+  [param('id').isUUID()],
+  validate,
+  async (req, res) => {
+    try {
+      const purchase = await prisma.digitalPurchase.findUnique({
+        where: { id: req.params.id },
+        include: {
+          product: { include: { seller: { select: { id: true, name: true, phone: true } } } },
+          buyer: { select: { id: true, name: true, phone: true } },
+          payment: { include: { refunds: true } },
+        },
+      });
+
+      if (!purchase) return res.status(404).json({ error: 'Purchase not found' });
+
+      const allowed = req.user.roles?.includes('ADMIN') ||
+        purchase.buyerId === req.user.id ||
+        purchase.product?.sellerId === req.user.id;
+
+      if (!allowed) return res.status(403).json({ error: 'Not authorized to view this purchase' });
+
+      if (!purchase.payment || purchase.payment.status === 'PENDING') {
+        return res.status(409).json({
+          error: 'A receipt is only available once payment has been made.',
+        });
+      }
+
+      return streamDigitalPurchaseReceiptPdf(purchase, res);
+    } catch (error) {
+      req.log.error({ err: error }, 'DIGITAL RECEIPT ERROR:');
+      if (res.headersSent) return res.end();
+      return res.status(500).json({ error: 'Could not generate receipt' });
     }
   }
 );
