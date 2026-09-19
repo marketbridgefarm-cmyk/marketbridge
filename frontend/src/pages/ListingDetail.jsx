@@ -156,7 +156,10 @@ export default function ListingDetail() {
   async function payInspection(request) {
     setPayingInspectionId(request.id);
     try {
-      await startChapaPayment({ type: 'INSPECTOR', inspectionRequestId: request.id, amount: request.fee, method: inspectionPayMethod });
+      // orderId is required so the backend can authorize a buyer paying for
+      // an inspection the seller originally requested (see OrderDetail.jsx's
+      // equivalent call, which already sends it).
+      await startChapaPayment({ type: 'INSPECTOR', inspectionRequestId: request.id, orderId: relatedOrder?.id, amount: request.fee, method: inspectionPayMethod });
     } catch (e) {
       showToast(e.response?.data?.error || e.message || 'Could not start inspection payment', 'error');
       setPayingInspectionId('');
