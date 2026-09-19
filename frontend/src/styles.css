@@ -1191,7 +1191,7 @@ textarea:focus {
     display: none;
   }.sticky-card {
     position: static;
-  }  }.search-panel {
+  } .search-panel {
     grid-template-columns: 1fr 1fr;
   }.search-panel button {
     width: 100%;
@@ -1206,7 +1206,7 @@ textarea:focus {
     padding: 0 15px;
   }.section {
     padding: 40px 0;
-  }  }.search-panel {
+  } .search-panel {
     grid-template-columns: 1fr;
   }.page-header {
     align-items: start;
