@@ -3556,6 +3556,7 @@ a.recent-activity-link:hover {
 .tg-bubble--farm_to_table { background: linear-gradient(135deg, #d9a441, #8a5a20); }
 .tg-bubble--flash_sale { background: linear-gradient(135deg, var(--gold), #b8860b); }
 .tg-bubble--trusted_seller { background: linear-gradient(135deg, #3f7bd6, #1c3f7a); }
+.tg-bubble--carousel { background: linear-gradient(135deg, #8a63d2, #4b2f8f); }
 
 @keyframes tg-pulse-scale {
   0%, 100% { transform: scale(1); }
@@ -3573,6 +3574,10 @@ a.recent-activity-link:hover {
   0%, 100% { box-shadow: 0 0 0 0 rgba(212,175,55,.55); }
   50% { box-shadow: 0 0 0 6px rgba(212,175,55,0); }
 }
+@keyframes tg-slide {
+  0%, 100% { transform: translateX(-3px); }
+  50% { transform: translateX(3px); }
+}
 @keyframes tg-trust-glow {
   0%, 100% { box-shadow: 0 0 0 0 rgba(63,123,214,.45); }
   50% { box-shadow: 0 0 0 5px rgba(63,123,214,0); }
@@ -3584,9 +3589,174 @@ a.recent-activity-link:hover {
 .tg-anim-farm { animation: tg-drive 1.8s ease-in-out infinite; }
 .tg-anim-flash { animation: tg-blink-glow 1.2s ease-in-out infinite; }
 .tg-anim-trusted { animation: tg-trust-glow 2.6s ease-in-out infinite; }
+.tg-anim-carousel { animation: tg-slide 2s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   .tg-bubble { animation: none !important; }
+}
+
+/* Telegram "Photo Carousel": the advertiser's uploaded-photo strip. Each
+   thumbnail carries its slide number plus move-earlier / move-later /
+   remove controls, since slide order is the order posted to Telegram. */
+.tg-carousel-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  list-style: none;
+  margin: 6px 0 12px;
+  padding: 0;
+}
+.tg-carousel-thumb {
+  position: relative;
+  width: 96px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.tg-carousel-thumb img {
+  display: block;
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  background: #e8efe8;
+}
+.tg-carousel-thumb-index {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .62);
+  color: #fff;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+.tg-carousel-thumb-actions {
+  display: flex;
+  border-top: 1px solid var(--line);
+}
+.tg-carousel-thumb-actions button {
+  flex: 1;
+  min-height: 34px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tg-carousel-thumb-actions button:last-child { border-right: 0; color: var(--danger); }
+.tg-carousel-thumb-actions button:hover:not(:disabled) { background: var(--soft); }
+.tg-carousel-thumb-actions button:disabled { opacity: .35; cursor: default; }
+.tg-carousel-thumb-actions button:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+
+.tg-ledger-photos { margin-top: 8px; }
+.tg-ledger-photos summary { cursor: pointer; font-size: 13px; color: var(--green-dark); }
+.tg-ledger-photos .img-carousel { margin-top: 8px; }
+
+/* Reusable swipeable image carousel (components/ImageCarousel.jsx). */
+.img-carousel {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  margin: 6px 0 12px;
+  border-radius: 12px;
+}
+.img-carousel:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.img-carousel--compact { max-width: 100%; }
+.img-carousel-viewport {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #e8efe8;
+  touch-action: pan-y;
+}
+.img-carousel-track {
+  display: flex;
+  transition: transform .3s var(--ease);
+}
+.img-carousel-slide {
+  flex: 0 0 100%;
+  aspect-ratio: 4 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.img-carousel--compact .img-carousel-slide { aspect-ratio: 16 / 10; }
+.img-carousel-slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.img-carousel-btn {
+  position: absolute;
+  top: 50%;
+  width: 36px;
+  height: 36px;
+  margin-top: -18px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .55);
+  color: #fff;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+.img-carousel-btn:hover { background: rgba(0, 0, 0, .75); }
+.img-carousel-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.img-carousel-btn--prev { left: 8px; }
+.img-carousel-btn--next { right: 8px; }
+.img-carousel-counter {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .6);
+  color: #fff;
+  font-size: 12px;
+}
+.img-carousel-dots {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 4px;
+}
+/* 24px hit area around an 8px dot keeps them tappable on phones. */
+.img-carousel-dot {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.img-carousel-dot::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line);
+  transition: background .15s ease, transform .15s ease;
+}
+.img-carousel-dot--active::after { background: var(--green); transform: scale(1.25); }
+.img-carousel-dot:focus-visible { outline: 2px solid var(--green); border-radius: 50%; }
+.img-carousel-open { display: inline-block; margin-top: 2px; font-size: 13px; color: var(--green-dark); }
+
+@media (prefers-reduced-motion: reduce) {
+  .img-carousel-track { transition: none; }
 }
 
 /* Create-listing popup. Desktop keeps the normal full-page layout; below the
