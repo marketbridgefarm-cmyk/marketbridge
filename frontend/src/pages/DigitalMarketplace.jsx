@@ -65,7 +65,11 @@ export default function DigitalMarketplace() {
   async function purchase(p) {
     setBusyId(p.id);
     try {
-      const key = `digital-purchase:${p.id}`;
+      // Must be scoped per buyer, not just per product: Payment.idempotencyKey
+      // is globally unique, so a key shared across all buyers means the first
+      // person to attempt buying this product permanently "locks" the key —
+      // every other buyer's purchase then collides with it.
+      const key = `digital-purchase:${p.id}:${user?.id || 'anon'}`;
       const r = await api.post(
         `/digital-products/${p.id}/purchase`,
         { method: payMethod },
