@@ -26,9 +26,8 @@ const ROLE_DASHBOARD_LINKS = [
 ];
 
 const MARKET_LINKS = [
-  { to: '/agricultural', labelKey: 'nav.farmProduces', label: 'Farm Produces', match: (p) => p === '/agricultural' || p === '/listings' },
-  { to: '/products', labelKey: 'nav.products', label: 'Products', match: (p) => p.startsWith('/products') },
-  { to: '/digital', labelKey: 'nav.digital', label: 'Digital', match: (p) => p.startsWith('/digital') },
+  { to: '/dashboard/truck-owner', labelKey: 'nav.forTruckOwners', label: 'for trucks owner', match: (p) => p.startsWith('/dashboard/truck-owner') },
+  { to: '/dashboard/inspector', labelKey: 'nav.forInspectors', label: 'for inspectors', match: (p) => p.startsWith('/dashboard/inspector') },
 ];
 
 export default function Navbar() {
@@ -96,7 +95,7 @@ export default function Navbar() {
 
             {/* Marketplace switcher: always visible, right after the brand */}
             <div className="market-switcher">
-              <span className="market-switcher-label">Want to buy/sell:</span>
+              <span className="market-switcher-label">Quote available jobs:</span>
               <div className="market-pills">
                 {MARKET_LINKS.map((l) => (
                   <Link
@@ -173,7 +172,7 @@ export default function Navbar() {
         <>
           <div className="mobile-menu-backdrop" onClick={() => setMobileOpen(false)} aria-hidden="true" />
           <div className="mobile-menu" role="dialog" aria-modal="true">
-            <span className="mobile-menu-label">Want to buy/sell:</span>
+            <span className="mobile-menu-label">Quote available jobs:</span>
             {MARKET_LINKS.map((l) => (
               <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{t(l.labelKey)}</Link>
             ))}
