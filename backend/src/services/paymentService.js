@@ -77,6 +77,28 @@ function commissionAmount(amount, rate) {
 }
 
 // ============================================================================
+// REFUND PENALTY
+// ============================================================================
+// A flat 0.7% of the refunded amount, recorded as platform revenue on
+// every completed refund — dispute-driven or not — in addition to
+// whatever commission the platform already took on the original payment.
+// It's deliberately NOT modeled as money clawed back from the seller/
+// transporter/inspector: this system has no wallet/payout ledger to draw
+// down, and the recipient of a refunded transaction may well have no
+// funds left to take it from. It's simply an extra platform-revenue line
+// against the cost of processing the refund.
+// Advertising payments have no third-party recipient — the platform is
+// already the counterparty on both sides — so a "penalty" there would
+// just be the platform charging itself and is skipped.
+// ============================================================================
+
+const REFUND_PENALTY_RATE = 0.7; // percent
+
+function refundPenaltyAmount(amount) {
+  return commissionAmount(amount, REFUND_PENALTY_RATE);
+}
+
+// ============================================================================
 // CREATE PAYMENT
 // ============================================================================
 
@@ -656,6 +678,29 @@ async function writeLedger(
       description:
         'Payment refund record',
     });
+
+    if (payment.type !== 'ADVERTISING') {
+      const penalty = refundPenaltyAmount(payment.amount);
+
+      if (penalty > 0) {
+        await createLedgerEntryOnce(tx, {
+          paymentId:
+            payment.id,
+
+          type:
+            'PLATFORM_PENALTY',
+
+          amount:
+            penalty,
+
+          currency:
+            payment.currency,
+
+          description:
+            `Refund penalty (${REFUND_PENALTY_RATE}% of refunded amount)`,
+        });
+      }
+    }
   }
 }
 
@@ -1470,6 +1515,9 @@ module.exports = {
   TERMINAL_STATUSES,
   moneyEqual,
   commissionRateFor,
+  REFUND_PENALTY_RATE,
+  refundPenaltyAmount,
   createPayment,
   settlePayment,
+  writeLedger,
 };

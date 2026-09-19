@@ -3,6 +3,7 @@
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('./orderEventService');
 const { assertTransition } = require('./paymentStateMachine');
+const { writeLedger } = require('./paymentService');
 
 async function requestRefund(tx, { paymentId, amount, reason, requestedById }) {
   const payment = await tx.payment.findUnique({ where: { id: paymentId }, select: { id: true, amount: true, currency: true, status: true, orderId: true, type: true } });
@@ -67,6 +68,12 @@ async function completeRefund(tx, { refundId, provider, providerRefundId, actorI
   });
 
   await tx.payment.update({ where: { id: payment.id }, data: { status: 'REFUNDED' } });
+
+  // Same ledger bookkeeping a provider-webhook-driven refund gets via
+  // settlePayment: the REFUND reversal plus the refund penalty. Admin-
+  // completed refunds went through this path without ever writing a
+  // ledger entry before, so this also closes that gap.
+  await writeLedger(tx, payment, 'REFUNDED');
 
   if (payment.orderId) {
     await recordOrderEvent(tx, {
