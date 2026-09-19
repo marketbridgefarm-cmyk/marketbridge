@@ -6,9 +6,6 @@ import { useTranslation } from '../context/I18nContext.jsx';
 import LanguageSwitcher from './LanguageSwitcher.jsx';
 import NotificationCenter from './NotificationCenter.jsx';
 
-// Order of preference when resolving a single "Dashboard" destination for a
-// user with multiple roles. Per-role prompts to switch between capabilities
-// live on the dashboards themselves (see RoleSwitchCTA), not here.
 const DASHBOARD_BY_ROLE = [
   ['ADMIN', '/dashboard/admin'],
   ['INSPECTOR', '/dashboard/inspector'],
@@ -18,199 +15,193 @@ const DASHBOARD_BY_ROLE = [
 ];
 
 function resolveDashboard(user) {
-  return DASHBOARD_BY_ROLE.find(([r]) => user?.roles?.includes(r))?.[1] || '/';
+  return DASHBOARD_BY_ROLE.find(([role]) => user?.roles?.includes(role))?.[1] || '/';
 }
 
 const ROLE_DASHBOARD_LINKS = [
-  ['INSPECTOR', '/dashboard/inspector', '🔍 Inspector'],
-  ['TRUCK_OWNER', '/dashboard/truck-owner', '🚛 Transporter'],
+  ['INSPECTOR', '/dashboard/inspector', 'Inspector'],
+  ['TRUCK_OWNER', '/dashboard/truck-owner', 'Transporter'],
 ];
 
-const MARKET_LINKS = [
-  { to: '/agricultural', labelKey: 'nav.farmProduces', label: 'Farm Produces', match: (p) => p === '/agricultural' || p === '/listings' },
-  { to: '/products', labelKey: 'nav.products', label: 'Products', match: (p) => p.startsWith('/products') },
-  { to: '/digital', labelKey: 'nav.digital', label: 'Digital', match: (p) => p.startsWith('/digital') },
-];
+function Icon({ name, size = 20 }) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    'aria-hidden': 'true',
+  };
+
+  const paths = {
+    menu: <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>,
+    home: <><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-7h6v7"/></>,
+    marketplace: <><path d="M4 9h16l-1-5H5L4 9Z"/><path d="M5 9v11h14V9"/><path d="M9 20v-7h6v7"/><path d="M4 9c0 1.7 1.1 3 2.5 3S9 10.7 9 9c0 1.7 1.1 3 2.5 3S14 10.7 14 9c0 1.7 1.1 3 2.5 3S19 10.7 19 9"/></>,
+    negotiation: <><path d="M4 5h16v11H8l-4 4V5Z"/><path d="M8 9h8M8 12h5"/></>,
+    orders: <><path d="M6 3h12v18H6z"/><path d="M9 7h6M9 11h6M9 15h4"/></>,
+    transport: <><path d="M3 6h11v11H3z"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="7" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></>,
+    inspection: <><path d="m9 11 2 2 4-4"/><path d="M20 12a8 8 0 1 1-4.7-7.3"/><path d="M20 4v5h-5"/></>,
+    advertising: <><path d="m4 10 11-5v14L4 14z"/><path d="M15 9h3a3 3 0 0 1 3 3v2a3 3 0 0 1-3 3h-3"/><path d="M7 15v5"/></>,
+    payments: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M7 15h4"/></>,
+    notification: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></>,
+    messages: <><path d="M21 6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4l3 3 3-3h4a2 2 0 0 0 2-2V6Z"/><path d="M7 9h10M7 13h6"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .3 1.8l.1.1-2.8 2.8-.1-.1a1.65 1.65 0 0 0-1.8-.3 1.65 1.65 0 0 0-1 1.5v.2h-4v-.2a1.65 1.65 0 0 0-1-1.5 1.65 1.65 0 0 0-1.8.3l-.1.1-2.8-2.8.1-.1a1.65 1.65 0 0 0 .3-1.8 1.65 1.65 0 0 0-1.5-1H3v-4h.2a1.65 1.65 0 0 0 1.5-1 1.65 1.65 0 0 0-.3-1.8l-.1-.1 2.8-2.8.1.1a1.65 1.65 0 0 0 1.8.3 1.65 1.65 0 0 0 1-1.5V3h4v.2a1.65 1.65 0 0 0 1 1.5 1.65 1.65 0 0 0 1.8-.3l.1-.1 2.8 2.8-.1.1a1.65 1.65 0 0 0-.3 1.8 1.65 1.65 0 0 0 1.5 1h.2v4h-.2a1.65 1.65 0 0 0-1.5 1Z"/></>,
+    account: <><circle cx="12" cy="8" r="3"/><path d="M5 21a7 7 0 0 1 14 0"/></>,
+  };
+
+  return <svg {...common} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+}
+
+function NavItem({ to, icon, label, active, onClick }) {
+  return (
+    <Link
+      to={to}
+      className={`glass-nav-item${active ? ' active' : ''}`}
+      data-tooltip={label}
+      onClick={onClick}
+    >
+      <span className="glass-nav-icon"><Icon name={icon} /></span>
+      <span className="glass-nav-label">{label}</span>
+    </Link>
+  );
+}
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const accountRef = useRef(null);
+  const [expanded, setExpanded] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+
   const dashboardHref = resolveDashboard(user);
 
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
-  const accountRef = useRef(null);
-
-  // Close both menus whenever the route changes.
   useEffect(() => {
-    setMobileOpen(false);
+    document.body.classList.toggle('sidebar-open', expanded);
+    return () => document.body.classList.remove('sidebar-open');
+  }, [expanded]);
+
+  useEffect(() => {
     setAccountOpen(false);
   }, [location.pathname]);
 
-  // Close the account dropdown on outside click or Escape.
   useEffect(() => {
-    if (!accountOpen) return;
-    function onDocClick(e) {
-      if (accountRef.current && !accountRef.current.contains(e.target)) setAccountOpen(false);
-    }
-    function onKeyDown(e) {
-      if (e.key === 'Escape') setAccountOpen(false);
-    }
-    document.addEventListener('mousedown', onDocClick);
+    if (!accountOpen) return undefined;
+    const onDocumentClick = (event) => {
+      if (accountRef.current && !accountRef.current.contains(event.target)) setAccountOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setAccountOpen(false);
+    };
+    document.addEventListener('mousedown', onDocumentClick);
     document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('mousedown', onDocumentClick);
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [accountOpen]);
 
-  // Close the mobile drawer on outside click (backdrop) or Escape.
-  useEffect(() => {
-    if (!mobileOpen) return;
-    function onKeyDown(e) {
-      if (e.key === 'Escape') setMobileOpen(false);
-    }
-    document.addEventListener('keydown', onKeyDown);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = '';
-    };
-  }, [mobileOpen]);
+  const collapseAfterNavigation = () => {
+    if (expanded) setExpanded(false);
+  };
+
+  const is = (path, exact = false) => exact ? location.pathname === path : location.pathname.startsWith(path);
+  const marketActive = is('/agricultural') || is('/listings') || is('/products') || is('/digital');
+  const advertisingActive = is('/dashboard/advertiser');
+  const notificationsOpen = () => document.querySelector('.notification-trigger')?.click();
 
   function handleLogout() {
     logout();
+    setExpanded(false);
     navigate('/');
   }
 
-  const sidebarContent = (
-    <>
-      <div className="sidebar-brand-row">
-        <Link to="/" className="brand">
-          <span className="brand-mark">MB</span>
-          <span>Market<span>Bridge</span></span>
-        </Link>
-        <button
-          className="sidebar-close"
-          aria-label="Close menu"
-          onClick={() => setMobileOpen(false)}
-        >
-          ✕
+  if (!user) {
+    return (
+      <aside className={`glass-sidebar${expanded ? ' expanded' : ''}`} aria-label="MarketBridge navigation">
+        <button className="glass-toggle" type="button" aria-label="Toggle sidebar" onClick={() => setExpanded((v) => !v)}>
+          <Icon name="menu" />
         </button>
-      </div>
-
-      {user && (
-        <div className="sidebar-notif-row">
-          <NotificationCenter />
-        </div>
-      )}
-
-      <div className="sidebar-section">
-        <span className="sidebar-section-label">Want to buy/sell</span>
-        <div className="sidebar-links">
-          {MARKET_LINKS.map((l) => (
-            <Link
-              key={l.to}
-              className={`sidebar-link${l.match(location.pathname) ? ' active' : ''}`}
-              to={l.to}
-            >
-              {t(l.labelKey)}
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      <div className="sidebar-divider" />
-
-      {user ? (
-        <>
-          <div className="sidebar-section">
-            <span className="sidebar-section-label">Menu</span>
-            <div className="sidebar-links">
-              <Link className={`sidebar-link${location.pathname === dashboardHref ? ' active' : ''}`} to={dashboardHref}>{t('nav.dashboard')}</Link>
-              <Link className={`sidebar-link${location.pathname === '/services' ? ' active' : ''}`} to="/services">🧰 Services</Link>
-              {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
-                <Link key={role} className={`sidebar-link${location.pathname === to ? ' active' : ''}`} to={to}>{label}</Link>
-              ))}
-              <Link className={`sidebar-link${location.pathname === '/dashboard/advertiser' ? ' active' : ''}`} to="/dashboard/advertiser">📣 Advertise</Link>
-            </div>
-          </div>
-
-          <div className="sidebar-spacer" />
-
-          <div className="sidebar-account" ref={accountRef}>
-            <button className="sidebar-user" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((v) => !v)}>
-              <span className="avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
-              <span className="sidebar-user-name">{user.name}</span>
-              <span className="nav-caret">▾</span>
-            </button>
-            {accountOpen && (
-              <div className="sidebar-dropdown" role="menu">
-                <Link role="menuitem" to="/account/security">{t('nav.accountSecurity')}</Link>
-                <button role="menuitem" onClick={handleLogout}>{t('nav.logout')}</button>
-              </div>
-            )}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="sidebar-spacer" />
-          <div className="sidebar-links sidebar-auth-links">
-            <Link className="sidebar-link" to="/login">{t('nav.login')}</Link>
-            <Link className="sidebar-link nav-cta" to="/register">Join MarketBridge</Link>
-          </div>
-        </>
-      )}
-
-      <div className="sidebar-lang-row">
-        <LanguageSwitcher />
-      </div>
-    </>
-  );
+        <NavItem to="/" icon="home" label="Home" active={is('/', true)} onClick={collapseAfterNavigation} />
+        <NavItem to="/agricultural" icon="marketplace" label="Marketplace" active={marketActive} onClick={collapseAfterNavigation} />
+        <div className="glass-divider" />
+        <div className="glass-spacer" />
+        <NavItem to="/login" icon="account" label={t('nav.login')} active={is('/login', true)} onClick={collapseAfterNavigation} />
+        <div className="glass-language"><LanguageSwitcher /></div>
+      </aside>
+    );
+  }
 
   return (
     <>
-      {/* Slim top bar shown only on small screens; the sidebar itself is
-          off-canvas there and opened via this bar's hamburger button. */}
-      <header className="mobile-topbar">
-        <button
-          className={`nav-burger${mobileOpen ? ' nav-burger-open' : ''}`}
-          aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
-          aria-expanded={mobileOpen}
-          onClick={() => setMobileOpen((v) => !v)}
-        >
-          <span />
-          <span />
-          <span />
-        </button>
-        <Link to="/" className="brand mobile-topbar-brand">
-          <span className="brand-mark">MB</span>
-          <span>Market<span>Bridge</span></span>
-        </Link>
-        {user && (
-          <div className="mobile-topbar-notif">
-            <NotificationCenter />
-          </div>
-        )}
-      </header>
+      <aside className={`glass-sidebar${expanded ? ' expanded' : ''}`} aria-label="MarketBridge navigation">
+        <div className="glass-brand-row">
+          <button className="glass-toggle" type="button" aria-label="Toggle sidebar" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+            <Icon name="menu" />
+          </button>
+          <span className="glass-brand-text">MarketBridge</span>
+        </div>
 
-      {/* Desktop sidebar: always present, sticky in the flex layout. */}
-      <aside className="sidebar sidebar-desktop">
-        {sidebarContent}
+        <NavItem to={dashboardHref} icon="home" label="Dashboard" active={is(dashboardHref, true)} onClick={collapseAfterNavigation} />
+        <NavItem to="/agricultural" icon="marketplace" label="Marketplace" active={marketActive} onClick={collapseAfterNavigation} />
+        <NavItem to="/negotiations" icon="negotiation" label="Negotiations" active={is('/negotiations')} onClick={collapseAfterNavigation} />
+        <NavItem to="/orders" icon="orders" label="Orders" active={is('/orders')} onClick={collapseAfterNavigation} />
+        <NavItem to="/services" icon="transport" label="Transport" active={is('/services')} onClick={collapseAfterNavigation} />
+        <NavItem to="/services" icon="inspection" label="Inspections" active={is('/services')} onClick={collapseAfterNavigation} />
+        <NavItem to="/dashboard/advertiser" icon="advertising" label="Advertising" active={advertisingActive} onClick={collapseAfterNavigation} />
+        <NavItem to="/orders" icon="payments" label="Payments" active={is('/payments')} onClick={collapseAfterNavigation} />
+
+        <button type="button" className="glass-nav-item glass-nav-button" data-tooltip="Notifications" onClick={notificationsOpen}>
+          <span className="glass-nav-icon"><Icon name="notification" /></span>
+          <span className="glass-nav-label">Notifications</span>
+        </button>
+
+        <NavItem to="/dashboard" icon="messages" label="Messages" active={false} onClick={collapseAfterNavigation} />
+
+        <div className="glass-divider" />
+
+        <NavItem to="/account/security" icon="settings" label="Settings" active={is('/account/security')} onClick={collapseAfterNavigation} />
+
+        <div className="glass-spacer" />
+
+        <div className="glass-profile-wrap" ref={accountRef}>
+          <button
+            type="button"
+            className="glass-profile"
+            data-tooltip={user.name || 'Account'}
+            aria-haspopup="menu"
+            aria-expanded={accountOpen}
+            onClick={() => setAccountOpen((v) => !v)}
+          >
+            <span className="glass-avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
+            <span className="glass-profile-info">
+              <span className="glass-profile-name">{user.name}</span>
+              <span className="glass-profile-role">{user.roles?.[0] || 'MarketBridge user'}</span>
+            </span>
+          </button>
+
+          {accountOpen && (
+            <div className="glass-account-menu" role="menu">
+              <Link role="menuitem" to="/account/security" onClick={() => setAccountOpen(false)}>{t('nav.accountSecurity')}</Link>
+              {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
+                <Link key={role} role="menuitem" to={to} onClick={() => setAccountOpen(false)}>{label}</Link>
+              ))}
+              <button role="menuitem" type="button" onClick={handleLogout}>{t('nav.logout')}</button>
+            </div>
+          )}
+        </div>
+
+        <div className="glass-language"><LanguageSwitcher /></div>
+
+        <div className="glass-notification-host" aria-hidden="true">
+          <NotificationCenter />
+        </div>
       </aside>
 
-      {/* Mobile sidebar: off-canvas drawer, backdrop rendered outside so its
-          fixed positioning is relative to the viewport. */}
-      {mobileOpen && (
-        <>
-          <div className="mobile-menu-backdrop" onClick={() => setMobileOpen(false)} aria-hidden="true" />
-          <aside className="sidebar sidebar-mobile">
-            {sidebarContent}
-          </aside>
-        </>
-      )}
+      <div className="glass-mobile-trigger">
+        <button type="button" aria-label={expanded ? 'Close sidebar' : 'Open sidebar'} onClick={() => setExpanded((v) => !v)}>
+          <Icon name="menu" />
+        </button>
+      </div>
     </>
   );
 }
