@@ -65,7 +65,10 @@ router.post('/referrals/mine', authenticate, async (req, res) => {
   return res.status(201).json({ referral });
 });
 
-router.post('/telegram-promo', authenticate, [
+// Posts straight to MarketBridge's public Telegram channel using the
+// platform bot token, so it is staff-only. It used to accept any signed-in
+// user, which let anyone broadcast arbitrary text/links to the channel.
+router.post('/telegram-promo', authenticate, requireRole('ADMIN'), [
   body('title').isString().trim().notEmpty(),
   body('description').optional().isString().trim(),
   body('promoUrl').optional().isString().trim(),

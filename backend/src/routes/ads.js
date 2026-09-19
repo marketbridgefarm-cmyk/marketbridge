@@ -11,9 +11,11 @@ const { authenticate } = require('../middleware/auth');
 const { isAdmin } = require('../utils/authorization');
 const { recordAuditEvent } = require('../utils/audit');
 const { requestRefund } = require('../services/paymentRefundService');
-const { uploadPrivateObject, signedMediaUrl, deletePrivateObject } = require('../utils/objectStorage');
-const { AD_TYPES, BANNER_TEMPLATES, TELEGRAM_TEMPLATES, dailyRatesEtb, bannerTemplateMultipliers, campaignDays, quotePrice } = require('../utils/adPricing');
+const { uploadPrivateObject, signedMediaUrl, deletePrivateObject, privateMediaMetadata } = require('../utils/objectStorage');
+const { AD_TYPES, BANNER_TEMPLATES, TELEGRAM_TEMPLATES, telegramCarouselLimits, dailyRatesEtb, bannerTemplateMultipliers, campaignDays, quotePrice } = require('../utils/adPricing');
 const { optimizeUpload } = require('../utils/imageProcessor');
+const { telegramKeyPrefix, parseTelegramImageKeys } = require('../utils/telegramCarousel');
+const { bannerKeyPrefix, isOwnedBannerCreativeKey } = require('../utils/adCreativeKeys');
 
 const router = express.Router();
 
@@ -24,17 +26,32 @@ const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const adEventLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
 
+function imageFileFilter(message) {
+  return (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (!ALLOWED_IMAGE_TYPES.has(file.mimetype) || !ALLOWED_EXTENSIONS.has(ext)) {
+      return cb(new Error(message));
+    }
+    cb(null, true);
+  };
+}
+
 const creativeUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_CREATIVE_BYTES, files: 1 },
-  fileFilter: (req, file, cb) => {
-    const ext = path.extname(file.originalname || '').toLowerCase();
-    if (!ALLOWED_IMAGE_TYPES.has(file.mimetype) || !ALLOWED_EXTENSIONS.has(ext)) {
-      return cb(new Error('Banner must be a JPEG, PNG, or WebP image'));
-    }
-    cb(null, true);
-  },
+  fileFilter: imageFileFilter('Banner must be a JPEG, PNG, or WebP image'),
 });
+
+// Telegram carousel photos: several files per request, same per-file size cap
+// and type allow-list as banners. The per-request file-count cap is enforced
+// again in uploadTelegramImages() via .array('files', maxImages).
+const telegramImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_CREATIVE_BYTES, files: telegramCarouselLimits().maxImages },
+  fileFilter: imageFileFilter('Carousel images must be JPEG, PNG, or WebP'),
+});
+const TELEGRAM_IMAGE_MAX_DIMENSION = Number(process.env.AD_TELEGRAM_IMAGE_MAX_DIMENSION || 1600);
+const TELEGRAM_IMAGE_QUALITY = Number(process.env.AD_TELEGRAM_IMAGE_QUALITY || 85);
 
 function hasValidImageSignature(buffer, mime) {
   if (!buffer || !Buffer.isBuffer(buffer)) return false;
@@ -66,6 +83,21 @@ function safeDestinationUrl(value) {
     return url.toString().slice(0, MAX_URL);
   } catch {
     return null;
+  }
+}
+
+// True if the private object exists, false if storage says it does not.
+// Any other storage failure (misconfiguration, outage, permissions) is
+// rethrown so it surfaces as a server error instead of being misreported to
+// the advertiser as "your image is missing".
+async function storageObjectExists(key) {
+  try {
+    await privateMediaMetadata(key);
+    return true;
+  } catch (error) {
+    const status = error && error.$metadata && error.$metadata.httpStatusCode;
+    if (status === 404 || error?.name === 'NotFound' || error?.name === 'NoSuchKey') return false;
+    throw error;
   }
 }
 
@@ -103,7 +135,10 @@ async function attachListingMedia(listing) {
   };
 }
 
-async function attachCreativeUrl(ad) {
+// Signs the private creative(s) attached to a campaign. Carousel photos are
+// only needed by the advertiser and MarketBridge staff (they are posted to
+// Telegram by hand), so the public GET /ads/active feed opts out of them.
+async function attachCreativeUrl(ad, { includeTelegramImages = true } = {}) {
   if (!ad) return ad;
   const result = { ...ad };
   if (ad.creativeImageKey) {
@@ -116,6 +151,19 @@ async function attachCreativeUrl(ad) {
     result.creativeImageUrl = null;
   }
   delete result.creativeImageKey;
+
+  const imageKeys = Array.isArray(ad.telegramImageKeys) ? ad.telegramImageKeys : [];
+  result.telegramImageCount = imageKeys.length;
+  result.telegramImageUrls = includeTelegramImages
+    ? (await Promise.all(imageKeys.map(async (key) => {
+      try {
+        return await signedMediaUrl({ key, disposition: 'inline' });
+      } catch (error) {
+        return null;
+      }
+    }))).filter(Boolean)
+    : [];
+  delete result.telegramImageKeys;
   return result;
 }
 
@@ -150,6 +198,7 @@ router.get('/pricing', authenticate, (req, res) => {
     bannerTemplates: BANNER_TEMPLATES,
     bannerTemplateMultipliers: bannerTemplateMultipliers(),
     telegramTemplates: TELEGRAM_TEMPLATES,
+    telegramCarousel: telegramCarouselLimits(),
   });
 });
 
@@ -175,7 +224,7 @@ router.post('/creative', authenticate, uploadCreative, async (req, res) => {
       maxHeight: Number(process.env.AD_IMAGE_MAX_HEIGHT || 900),
       quality: Number(process.env.AD_IMAGE_QUALITY || 84),
     });
-    const key = `advertisements/banner/${req.user.id}/${crypto.randomUUID()}.webp`;
+    const key = `${bannerKeyPrefix(req.user.id)}${crypto.randomUUID()}.webp`;
     await uploadPrivateObject({ key, buffer: optimized.buffer, contentType: optimized.contentType });
 
     await recordAuditEvent(prisma, {
@@ -194,6 +243,78 @@ router.post('/creative', authenticate, uploadCreative, async (req, res) => {
   }
 });
 
+function uploadTelegramImages(req, res, next) {
+  const { maxImages, maxFileBytes } = telegramCarouselLimits();
+  telegramImageUpload.array('files', maxImages)(req, res, (error) => {
+    if (!error) return next();
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: `Each image must be ${Math.round((maxFileBytes / (1024 * 1024)) * 10) / 10} MB or smaller` });
+    }
+    if (error.code === 'LIMIT_UNEXPECTED_FILE' || error.code === 'LIMIT_FILE_COUNT') {
+      return res.status(400).json({ error: `You can upload at most ${maxImages} images at a time` });
+    }
+    return res.status(400).json({ error: error.message || 'Invalid carousel image' });
+  });
+}
+
+// Upload one or more Telegram carousel photos to private object storage.
+// Photos are re-encoded as JPEG (EXIF stripped, size capped) because that is
+// what the Telegram Bot API handles most reliably. The response lists the
+// opaque keys the client later submits with the campaign, in slide order.
+router.post('/telegram-images', authenticate, uploadTelegramImages, async (req, res) => {
+  const uploaded = [];
+  try {
+    const files = req.files || [];
+    if (!files.length) return res.status(400).json({ error: 'Select at least one image to upload' });
+
+    // Reject the whole batch up front if any file is not what it claims to
+    // be, before anything is written to storage.
+    for (const file of files) {
+      if (!hasValidImageSignature(file.buffer, file.mimetype)) {
+        return res.status(400).json({ error: `"${safeText(file.originalname, 80) || 'A file'}" is not a valid ${file.mimetype} image` });
+      }
+    }
+
+    const prefix = telegramKeyPrefix(req.user.id);
+    for (const file of files) {
+      const optimized = await optimizeUpload({
+        buffer: file.buffer,
+        mime: file.mimetype,
+        maxWidth: TELEGRAM_IMAGE_MAX_DIMENSION,
+        maxHeight: TELEGRAM_IMAGE_MAX_DIMENSION,
+        quality: TELEGRAM_IMAGE_QUALITY,
+        format: 'jpeg',
+      });
+      const key = `${prefix}${crypto.randomUUID()}.jpg`;
+      await uploadPrivateObject({ key, buffer: optimized.buffer, contentType: optimized.contentType });
+      uploaded.push({
+        key,
+        previewUrl: await signedMediaUrl({ key, disposition: 'inline' }),
+        contentType: optimized.contentType,
+        bytes: optimized.optimizedBytes,
+        originalBytes: optimized.originalBytes,
+        width: optimized.width,
+        height: optimized.height,
+      });
+    }
+
+    await recordAuditEvent(prisma, {
+      actorId: req.user.id,
+      action: 'AD_TELEGRAM_IMAGES_UPLOADED',
+      resourceType: 'AdvertisementCreative',
+      resourceId: uploaded[0].key,
+      metadata: { count: uploaded.length, keys: uploaded.map((u) => u.key), optimizedBytes: uploaded.reduce((sum, u) => sum + u.bytes, 0) },
+    });
+
+    return res.status(201).json({ images: uploaded });
+  } catch (error) {
+    // Don't strand half a batch in storage if a later file fails.
+    await Promise.all(uploaded.map((u) => deletePrivateObject(u.key).catch(() => undefined)));
+    req.log.error({ err: error }, 'AD TELEGRAM IMAGES UPLOAD ERROR:');
+    return res.status(400).json({ error: error.message || 'Could not upload carousel images' });
+  }
+});
+
 router.post(
   '/',
   authenticate,
@@ -207,6 +328,7 @@ router.post(
     body('creativeImageKey').optional({ values: 'falsy' }).isString().trim().isLength({ max: 500 }),
     body('bannerTemplate').optional({ values: 'falsy' }).isIn(BANNER_TEMPLATES),
     body('telegramTemplate').optional({ values: 'falsy' }).isIn(TELEGRAM_TEMPLATES),
+    body('telegramImageKeys').optional().isArray({ max: 10 }),
   ],
   validate,
   async (req, res) => {
@@ -243,8 +365,40 @@ router.post(
       }
       if (type === 'BANNER' && !req.body.creativeImageKey) return res.status(400).json({ error: 'Banner campaigns require an uploaded image' });
 
+      // The key comes back from the client, so only accept one that this
+      // user's own upload produced (never another user's or an arbitrary
+      // bucket object).
+      let creativeImageKey = null;
+      if (type === 'BANNER') {
+        creativeImageKey = String(req.body.creativeImageKey).trim();
+        if (!isOwnedBannerCreativeKey(creativeImageKey, req.user.id)) {
+          return res.status(400).json({ error: 'Banner image is invalid — please upload it again' });
+        }
+      }
+
       const bannerTemplate = type === 'BANNER' ? (req.body.bannerTemplate || 'CLASSIC') : 'CLASSIC';
       const telegramTemplate = type === 'TELEGRAM_PROMOTION' ? (req.body.telegramTemplate || 'CLASSIC') : 'CLASSIC';
+
+      // Only the CAROUSEL template carries photos, and it must carry 2–10 of
+      // them, every one uploaded by this user. Any images sent with another
+      // template/type are ignored rather than stored.
+      let telegramImageKeys = [];
+      if (type === 'TELEGRAM_PROMOTION' && telegramTemplate === 'CAROUSEL') {
+        const parsedKeys = parseTelegramImageKeys(req.body.telegramImageKeys, req.user.id, telegramCarouselLimits());
+        if (parsedKeys.error) return res.status(400).json({ error: parsedKeys.error });
+        telegramImageKeys = parsedKeys.keys;
+      }
+
+      // Well-formed and owned is not enough: confirm every referenced upload
+      // is actually in private storage before taking payment for a campaign
+      // that would have nothing to show.
+      const keysToVerify = [creativeImageKey, ...telegramImageKeys].filter(Boolean);
+      if (keysToVerify.length) {
+        const found = await Promise.all(keysToVerify.map(storageObjectExists));
+        if (found.some((exists) => !exists)) {
+          return res.status(400).json({ error: 'An uploaded image could not be found — please upload it again' });
+        }
+      }
       const priceQuoted = quotePrice(type, startDate, endDate, bannerTemplate);
       const campaignReference = `MB-AD-${new Date().getUTCFullYear()}-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
 
@@ -262,9 +416,10 @@ router.post(
             campaignReference,
             headline,
             destinationUrl: linkUrl,
-            creativeImageKey: type === 'BANNER' ? req.body.creativeImageKey : null,
+            creativeImageKey,
             bannerTemplate,
             telegramTemplate,
+            telegramImageKeys,
           },
         });
         await recordAuditEvent(tx, {
@@ -272,7 +427,7 @@ router.post(
           action: 'AD_CAMPAIGN_CREATED',
           resourceType: 'Advertisement',
           resourceId: created.id,
-          metadata: { type, listingId: listingId || null, bannerTemplate, telegramTemplate, priceQuoted, currency: 'ETB', campaignReference },
+          metadata: { type, listingId: listingId || null, bannerTemplate, telegramTemplate, telegramImageCount: telegramImageKeys.length, priceQuoted, currency: 'ETB', campaignReference },
         });
         return created;
       });
@@ -297,7 +452,7 @@ router.get('/active', async (req, res) => {
       ads.map(async (ad) => attachCreativeUrl({
         ...ad,
         listing: await attachListingMedia(ad.listing),
-      }))
+      }, { includeTelegramImages: false }))
     );
     return res.json({ ads: enriched.map(withComputedStatus) });
   } catch (error) {
@@ -316,7 +471,7 @@ router.get('/mine', authenticate, async (req, res) => {
       },
       orderBy: { createdAt: 'desc' },
     });
-    const enriched = await Promise.all(ads.map(attachCreativeUrl));
+    const enriched = await Promise.all(ads.map((ad) => attachCreativeUrl(ad)));
     return res.json({ ads: enriched.map((ad) => ({ ...withComputedStatus(ad), amountDue: Number(ad.priceQuoted || 0), paymentStatus: paymentStatus(ad) })) });
   } catch (error) {
     req.log.error({ err: error }, 'MY ADS ERROR:');
@@ -336,7 +491,7 @@ router.get('/', authenticate, async (req, res) => {
       },
       orderBy: { createdAt: 'desc' },
     });
-    const enriched = await Promise.all(ads.map(attachCreativeUrl));
+    const enriched = await Promise.all(ads.map((ad) => attachCreativeUrl(ad)));
     return res.json({ ads: enriched.map((ad) => ({ ...withComputedStatus(ad), paymentStatus: paymentStatus(ad) })) });
   } catch (error) {
     req.log.error({ err: error }, 'LIST ADS ERROR:');
