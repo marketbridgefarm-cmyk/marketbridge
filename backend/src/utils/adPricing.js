@@ -38,6 +38,10 @@ const BANNER_TEMPLATES = Object.keys(DEFAULT_BANNER_TEMPLATE_MULTIPLIERS);
 // TELEGRAM_PROMOTION message/tone templates. Purely cosmetic copy presets
 // (staff still write and publish the actual post) — every template costs
 // the same, unlike BANNER templates, so there is no multiplier map here.
+//
+// CAROUSEL is the one template that also carries media: the advertiser
+// uploads several photos that staff post as a single swipeable Telegram
+// album (sendMediaGroup). It is priced like every other template.
 const TELEGRAM_TEMPLATES = [
   'CLASSIC',
   'HOT_DEAL',
@@ -45,7 +49,23 @@ const TELEGRAM_TEMPLATES = [
   'FARM_TO_TABLE',
   'FLASH_SALE',
   'TRUSTED_SELLER',
+  'CAROUSEL',
 ];
+
+// Telegram media groups (albums) hold 2–10 items, so the platform can never
+// allow more than 10 regardless of configuration.
+const TELEGRAM_CAROUSEL_MIN_IMAGES = 2;
+const TELEGRAM_CAROUSEL_HARD_MAX_IMAGES = 10;
+
+function telegramCarouselLimits() {
+  const configured = Math.floor(Number(process.env.AD_TELEGRAM_CAROUSEL_MAX_IMAGES));
+  const maxImages = Number.isFinite(configured) && configured >= TELEGRAM_CAROUSEL_MIN_IMAGES
+    ? Math.min(configured, TELEGRAM_CAROUSEL_HARD_MAX_IMAGES)
+    : TELEGRAM_CAROUSEL_HARD_MAX_IMAGES;
+  const rawBytes = Number(process.env.AD_BANNER_MAX_FILE_BYTES);
+  const maxFileBytes = Number.isFinite(rawBytes) && rawBytes > 0 ? rawBytes : 5 * 1024 * 1024;
+  return { minImages: TELEGRAM_CAROUSEL_MIN_IMAGES, maxImages, maxFileBytes };
+}
 
 function rateFromEnv(type) {
   const raw = process.env[`AD_RATE_${type}`];
@@ -96,6 +116,9 @@ module.exports = {
   BANNER_TEMPLATES,
   DEFAULT_BANNER_TEMPLATE_MULTIPLIERS,
   TELEGRAM_TEMPLATES,
+  TELEGRAM_CAROUSEL_MIN_IMAGES,
+  TELEGRAM_CAROUSEL_HARD_MAX_IMAGES,
+  telegramCarouselLimits,
   dailyRatesEtb,
   bannerTemplateMultipliers,
   campaignDays,

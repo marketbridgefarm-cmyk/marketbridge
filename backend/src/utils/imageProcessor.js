@@ -58,6 +58,9 @@ async function processImage(buffer, options = {}) {
   const maxWidth = Math.max(1, Number(options.maxWidth || LISTING_MAX_WIDTH));
   const maxHeight = Math.max(1, Number(options.maxHeight || LISTING_MAX_HEIGHT));
   const quality = normalizedQuality(options.quality, LISTING_QUALITY);
+  // WebP is the default everywhere. Telegram albums are the exception: the
+  // Bot API is most reliable with JPEG photos, so callers can ask for it.
+  const format = options.format === 'jpeg' ? 'jpeg' : 'webp';
 
   const image = imageSharp(buffer, {
     failOn: 'error',
@@ -69,16 +72,20 @@ async function processImage(buffer, options = {}) {
   if (!metadata.width || !metadata.height) throw new Error('Could not determine image dimensions');
   if (metadata.width * metadata.height > MAX_INPUT_PIXELS) throw new Error('Image dimensions exceed the configured safety limit');
 
-  const output = await image
+  const pipeline = image
     .rotate() // apply EXIF orientation, then discard metadata
-    .resize({ width: maxWidth, height: maxHeight, fit: 'inside', withoutEnlargement: true })
-    .webp({ quality, effort: 4, smartSubsample: true })
-    .toBuffer();
+    .resize({ width: maxWidth, height: maxHeight, fit: 'inside', withoutEnlargement: true });
+
+  const output = format === 'jpeg'
+    // JPEG has no alpha channel: flatten transparent PNG/WebP onto white
+    // instead of letting it turn black.
+    ? await pipeline.flatten({ background: '#ffffff' }).jpeg({ quality, mozjpeg: true }).toBuffer()
+    : await pipeline.webp({ quality, effort: 4, smartSubsample: true }).toBuffer();
 
   return {
     buffer: output,
-    contentType: 'image/webp',
-    extension: '.webp',
+    contentType: format === 'jpeg' ? 'image/jpeg' : 'image/webp',
+    extension: format === 'jpeg' ? '.jpg' : '.webp',
     originalBytes: buffer.length,
     optimizedBytes: output.length,
     width: metadata.width,
@@ -94,10 +101,10 @@ function makeDerivedKey(key, suffix = 'optimized') {
   return `${base}-${suffix}-${crypto.randomUUID()}.webp`;
 }
 
-async function optimizeUpload({ buffer, mime, maxWidth, maxHeight, quality, imageOnly = true }) {
+async function optimizeUpload({ buffer, mime, maxWidth, maxHeight, quality, format, imageOnly = true }) {
   if (!isImageMime(mime)) return { buffer, contentType: mime, extension: path.extname('file') || '', optimized: false };
   if (!hasValidImageSignature(buffer, mime)) throw new Error('Image file contents do not match the declared image type');
-  return { ...(await processImage(buffer, { maxWidth, maxHeight, quality })), optimized: true, imageOnly };
+  return { ...(await processImage(buffer, { maxWidth, maxHeight, quality, format })), optimized: true, imageOnly };
 }
 
 module.exports = {
