@@ -625,6 +625,46 @@ export default function OrderDetail() {
     }
   };
 
+  // The receipt endpoint needs the same Bearer-token auth as every other
+  // API call, so a plain <a href> can't be used (the browser wouldn't send
+  // the header) — fetch it as a blob via the authenticated api client and
+  // hand the browser a temporary object URL to save/open instead.
+  async function downloadReceipt() {
+    setBusy('download-receipt');
+    setError('');
+    try {
+      const response = await api.get(`/orders/${order.id}/receipt`, {
+        responseType: 'blob',
+      });
+      const blobUrl = window.URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `marketbridge-order-${order.id}-receipt.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      let message = getError(err, 'Could not download receipt');
+      // With responseType: 'blob', an error JSON body from the server
+      // arrives as a Blob too (axios doesn't know to parse it), so the
+      // usual err.response.data.error lookup in getError() comes back
+      // empty here — read the blob text ourselves for a real message.
+      if (err?.response?.data instanceof Blob && err.response.data.type?.includes('json')) {
+        try {
+          const text = await err.response.data.text();
+          const parsed = JSON.parse(text);
+          message = parsed?.error || message;
+        } catch {
+          // Fall back to the generic message above.
+        }
+      }
+      setError(message);
+    } finally {
+      setBusy('');
+    }
+  }
+
   // ==========================================================================
   // REQUEST INSPECTION (from the order, once the listing is no longer
   // reachable from the marketplace because it is reserved/sold)
@@ -1169,6 +1209,17 @@ export default function OrderDetail() {
             <div className="card">
               <h2>Order timeline</h2>
               <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
+              {order.status === 'COMPLETED' && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ marginTop: 12 }}
+                  disabled={busy === 'download-receipt'}
+                  onClick={() => downloadReceipt()}
+                >
+                  {busy === 'download-receipt' ? 'Preparing receipt…' : 'Download receipt (PDF)'}
+                </button>
+              )}
             </div>
             <div className="card">
               <h2>Payment status</h2>
