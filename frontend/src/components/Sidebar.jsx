@@ -45,6 +45,7 @@ function Icon({ name, size = 20 }) {
     messages: <><path d="M21 6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4l3 3 3-3h4a2 2 0 0 0 2-2V6Z"/><path d="M7 9h10M7 13h6"/></>,
     settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .3 1.8l.1.1-2.8 2.8-.1-.1a1.65 1.65 0 0 0-1.8-.3 1.65 1.65 0 0 0-1 1.5v.2h-4v-.2a1.65 1.65 0 0 0-1-1.5 1.65 1.65 0 0 0-1.8.3l-.1.1-2.8-2.8.1-.1a1.65 1.65 0 0 0 .3-1.8 1.65 1.65 0 0 0-1.5-1H3v-4h.2a1.65 1.65 0 0 0 1.5-1 1.65 1.65 0 0 0-.3-1.8l-.1-.1 2.8-2.8.1.1a1.65 1.65 0 0 0 1.8.3 1.65 1.65 0 0 0 1-1.5V3h4v.2a1.65 1.65 0 0 0 1 1.5 1.65 1.65 0 0 0 1.8-.3l.1-.1 2.8 2.8-.1.1a1.65 1.65 0 0 0-.3 1.8 1.65 1.65 0 0 0 1.5 1h.2v4h-.2a1.65 1.65 0 0 0-1.5 1Z"/></>,
     account: <><circle cx="12" cy="8" r="3"/><path d="M5 21a7 7 0 0 1 14 0"/></>,
+    chevron: <path d="m7 9 5 5 5-5"/>,
     login: <><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M14 5h5v14h-5"/></>,
     register: <><circle cx="12" cy="8" r="3"/><path d="M5 21a7 7 0 0 1 14 0"/><path d="M19 8v6M16 11h6"/></>,
   };
@@ -63,6 +64,31 @@ function NavItem({ to, icon, label, active, onClick }) {
       <span className="glass-nav-icon"><Icon name={icon} /></span>
       <span className="glass-nav-label">{label}</span>
     </Link>
+  );
+}
+
+function MarketplaceNav({ active, onNavigate }) {
+  return (
+    <div className={`glass-marketplace-group${active ? ' active' : ''}`}>
+      <NavItem
+        to="/agricultural"
+        icon="marketplace"
+        label="Marketplace"
+        active={active}
+        onClick={onNavigate}
+      />
+      <div className="glass-marketplace-links" aria-label="Marketplace categories">
+        <Link to="/agricultural" className="glass-marketplace-link" onClick={onNavigate}>
+          <span>Farm Produce</span>
+        </Link>
+        <Link to="/products" className="glass-marketplace-link" onClick={onNavigate}>
+          <span>Products</span>
+        </Link>
+        <Link to="/digital" className="glass-marketplace-link" onClick={onNavigate}>
+          <span>Digital</span>
+        </Link>
+      </div>
+    </div>
   );
 }
 
@@ -146,29 +172,30 @@ export default function Sidebar() {
           <span className="glass-brand-text">MarketBridge</span>
         </div>
 
-        <NavItem to={dashboardHref} icon="home" label="Dashboard" active={is(dashboardHref, true)} onClick={collapseAfterNavigation} />
-        <NavItem to="/agricultural" icon="marketplace" label="Marketplace" active={marketActive} onClick={collapseAfterNavigation} />
-        <NavItem to="/negotiations" icon="negotiation" label="Negotiations" active={is('/negotiations')} onClick={collapseAfterNavigation} />
-        <NavItem to="/orders" icon="orders" label="Orders" active={is('/orders')} onClick={collapseAfterNavigation} />
-        <NavItem to="/services" icon="transport" label="Transport" active={is('/services')} onClick={collapseAfterNavigation} />
-        <NavItem to="/services" icon="inspection" label="Inspections" active={is('/services')} onClick={collapseAfterNavigation} />
-        <NavItem to="/dashboard/advertiser" icon="advertising" label="Advertising" active={advertisingActive} onClick={collapseAfterNavigation} />
-        <NavItem to="/orders" icon="payments" label="Payments" active={is('/payments')} onClick={collapseAfterNavigation} />
+        <div className="glass-nav-scroll">
+          <NavItem to={dashboardHref} icon="home" label="Dashboard" active={is(dashboardHref, true)} onClick={collapseAfterNavigation} />
+          <MarketplaceNav active={marketActive} onNavigate={collapseAfterNavigation} />
+          <NavItem to="/negotiations" icon="negotiation" label="Negotiations" active={is('/negotiations')} onClick={collapseAfterNavigation} />
+          <NavItem to="/orders" icon="orders" label="Orders" active={is('/orders')} onClick={collapseAfterNavigation} />
+          <NavItem to="/services" icon="transport" label="Transport" active={is('/services')} onClick={collapseAfterNavigation} />
+          <NavItem to="/services" icon="inspection" label="Inspections" active={is('/services')} onClick={collapseAfterNavigation} />
+          <NavItem to="/dashboard/advertiser" icon="advertising" label="Advertising" active={advertisingActive} onClick={collapseAfterNavigation} />
+          <NavItem to="/orders" icon="payments" label="Payments" active={is('/payments')} onClick={collapseAfterNavigation} />
 
-        <button type="button" className="glass-nav-item glass-nav-button" data-tooltip="Notifications" onClick={notificationsOpen}>
-          <span className="glass-nav-icon"><Icon name="notification" /></span>
-          <span className="glass-nav-label">Notifications</span>
-        </button>
+          <button type="button" className="glass-nav-item glass-nav-button" data-tooltip="Notifications" onClick={notificationsOpen}>
+            <span className="glass-nav-icon"><Icon name="notification" /></span>
+            <span className="glass-nav-label">Notifications</span>
+          </button>
 
-        <NavItem to="/dashboard" icon="messages" label="Messages" active={false} onClick={collapseAfterNavigation} />
+          <NavItem to="/dashboard" icon="messages" label="Messages" active={false} onClick={collapseAfterNavigation} />
 
-        <div className="glass-divider" />
+          <div className="glass-divider" />
 
-        <NavItem to="/account/security" icon="settings" label="Settings" active={is('/account/security')} onClick={collapseAfterNavigation} />
+          <NavItem to="/account/security" icon="settings" label="Settings" active={is('/account/security')} onClick={collapseAfterNavigation} />
+        </div>
 
-        <div className="glass-spacer" />
-
-        <div className="glass-profile-wrap" ref={accountRef}>
+        <div className="glass-account-footer">
+          <div className="glass-profile-wrap" ref={accountRef}>
           <button
             type="button"
             className="glass-profile"
@@ -184,23 +211,43 @@ export default function Sidebar() {
             </span>
           </button>
 
-          {accountOpen && (
-            <div className="glass-account-menu" role="menu">
-              <Link role="menuitem" to="/account/security" onClick={() => setAccountOpen(false)}>{t('nav.accountSecurity')}</Link>
-              {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
-                <Link key={role} role="menuitem" to={to} onClick={() => setAccountOpen(false)}>{label}</Link>
-              ))}
-              <button role="menuitem" type="button" onClick={handleLogout}>{t('nav.logout')}</button>
-            </div>
-          )}
-        </div>
+            {accountOpen && (
+              <div className="glass-account-menu" role="menu">
+                <Link role="menuitem" to="/account/security" onClick={() => setAccountOpen(false)}>{t('nav.accountSecurity')}</Link>
+                {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
+                  <Link key={role} role="menuitem" to={to} onClick={() => setAccountOpen(false)}>{label}</Link>
+                ))}
+              </div>
+            )}
+          </div>
 
-        <div className="glass-language"><LanguageSwitcher /></div>
+          <button
+            type="button"
+            className="glass-logout"
+            data-tooltip={t('nav.logout')}
+            aria-label={t('nav.logout')}
+            onClick={handleLogout}
+          >
+            <span className="glass-nav-icon"><Icon name="login" /></span>
+            <span className="glass-nav-label">{t('nav.logout')}</span>
+          </button>
+
+          <div className="glass-language"><LanguageSwitcher /></div>
+        </div>
 
         <div className="glass-notification-host" aria-hidden="true">
           <NotificationCenter />
         </div>
       </aside>
+
+      {expanded && (
+        <button
+          type="button"
+          className="glass-sidebar-backdrop"
+          aria-label="Close sidebar"
+          onClick={() => setExpanded(false)}
+        />
+      )}
 
       <div className="glass-mobile-trigger">
         <button type="button" aria-label={expanded ? 'Close sidebar' : 'Open sidebar'} onClick={() => setExpanded((v) => !v)}>

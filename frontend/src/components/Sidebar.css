@@ -55,6 +55,63 @@
   transition-delay: .12s;
 }
 
+/* Authenticated navigation scrolls independently from the account footer.
+   This keeps Settings and Logout reachable on short/mobile screens. */
+.glass-nav-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  overflow-y: auto;
+  overflow-x: visible;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.22) transparent;
+  padding: 0 0 4px;
+}
+.glass-nav-scroll::-webkit-scrollbar { width: 4px; }
+.glass-nav-scroll::-webkit-scrollbar-track { background: transparent; }
+.glass-nav-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.22); border-radius: 999px; }
+
+.glass-marketplace-group {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.glass-marketplace-links {
+  display: none;
+  width: 100%;
+  padding: 2px 0 4px 36px;
+  flex-direction: column;
+  gap: 2px;
+}
+.glass-sidebar.expanded .glass-marketplace-links { display: flex; }
+.glass-marketplace-link {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-left: 1px solid rgba(255,255,255,.25);
+  border-radius: 0 9px 9px 0;
+  color: rgba(255,255,255,.72);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background .2s ease, color .2s ease, border-color .2s ease;
+}
+.glass-marketplace-link:hover,
+.glass-marketplace-link:focus-visible {
+  color: #fff;
+  background: rgba(255,255,255,.12);
+  border-left-color: rgba(255,255,255,.65);
+  outline: none;
+}
+.glass-marketplace-group.active .glass-marketplace-link { color: rgba(255,255,255,.82); }
+
 .glass-toggle {
   width: 44px;
   height: 44px;
@@ -198,6 +255,62 @@
   background: rgba(255,255,255,.22);
 }
 
+.glass-account-footer {
+  width: 100%;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,.18);
+  background: linear-gradient(to bottom, rgba(24,53,37,.18), rgba(24,53,37,.04));
+}
+.glass-logout {
+  position: relative;
+  width: 44px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  color: rgba(255,210,205,.94);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .2s ease, color .2s ease, width .35s cubic-bezier(.4,0,.2,1), padding .35s cubic-bezier(.4,0,.2,1);
+}
+.glass-sidebar.expanded .glass-logout {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 0 12px;
+}
+.glass-logout:hover { background: rgba(255,120,105,.13); color: #fff; }
+.glass-logout:focus-visible { outline: 2px solid rgba(255,255,255,.85); outline-offset: 2px; }
+.glass-sidebar:not(.expanded) .glass-logout::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 56px;
+  top: 50%;
+  transform: translateY(-50%) translateX(-6px);
+  z-index: 130;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(20,24,22,.94);
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+}
+.glass-sidebar:not(.expanded) .glass-logout:hover::after { opacity: 1; transform: translateY(-50%) translateX(0); }
+
 .glass-profile-wrap { position: relative; width: 100%; }
 .glass-profile {
   position: relative;
@@ -285,7 +398,7 @@
   box-shadow: 0 14px 34px rgba(0,0,0,.22);
   z-index: 130;
 }
-.glass-sidebar.expanded .glass-account-menu { left: 0; bottom: 50px; right: 0; min-width: 0; }
+.glass-sidebar.expanded .glass-account-menu { left: 0; bottom: calc(100% + 6px); right: 0; min-width: 0; }
 .glass-account-menu a,
 .glass-account-menu button {
   display: block;
@@ -386,4 +499,27 @@ body.sidebar-open .app-main { margin-left: 262px; }
   .glass-nav-label,
   .glass-profile-info,
   .glass-brand-text { transition: none; }
+}
+
+.glass-sidebar-backdrop { display: none; }
+
+@media (max-width: 900px) {
+  .glass-sidebar.expanded .glass-nav-scroll {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .glass-sidebar.expanded .glass-account-footer {
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+  }
+  .glass-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+    border: 0;
+    background: rgba(7, 18, 12, .18);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+  .glass-sidebar.expanded + .glass-sidebar-backdrop { display: block; }
 }
