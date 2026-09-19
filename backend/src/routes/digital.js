@@ -59,6 +59,31 @@ const validate = (req, res, next) => {
   next();
 };
 
+// Two near-simultaneous purchase requests for the same buyer+product (a
+// double-tap, a retried request, two open tabs) can both pass the
+// "does a purchase row already exist?" check before either has written
+// one, then both converge on the same underlying Payment via idempotency
+// and race to insert a DigitalPurchase pointing at it. DigitalPurchase.
+// paymentId is unique, so the loser of that race gets a P2002 here rather
+// than a real error — recover by returning whichever row actually landed.
+async function createPurchaseIdempotent({ productId, buyerId, paymentId, status }) {
+  try {
+    return await prisma.digitalPurchase.create({
+      data: { productId, buyerId, paymentId, status },
+      include: { payment: true },
+    });
+  } catch (error) {
+    if (error.code === 'P2002') {
+      const winner = await prisma.digitalPurchase.findFirst({
+        where: { OR: [{ productId, buyerId }, { paymentId }] },
+        include: { payment: true },
+      });
+      if (winner) return winner;
+    }
+    throw error;
+  }
+}
+
 // List active digital products
 router.get('/', async (req, res) => {
   try {
@@ -306,14 +331,11 @@ router.post(
           });
 
       if (orphanPayment) {
-        const recovered = await prisma.digitalPurchase.create({
-          data: {
-            productId: product.id,
-            buyerId: req.user.id,
-            paymentId: orphanPayment.id,
-            status: orphanPayment.status === 'PAID' ? 'COMPLETED' : 'PENDING',
-          },
-          include: { payment: true },
+        const recovered = await createPurchaseIdempotent({
+          productId: product.id,
+          buyerId: req.user.id,
+          paymentId: orphanPayment.id,
+          status: orphanPayment.status === 'PAID' ? 'COMPLETED' : 'PENDING',
         });
         return res.status(200).json({
           message: 'Purchase recovered. Continue the existing payment.',
@@ -352,14 +374,11 @@ router.post(
             },
             include: { payment: true },
           })
-        : await prisma.digitalPurchase.create({
-            data: {
-              productId: product.id,
-              buyerId: req.user.id,
-              paymentId: payment.id,
-              status: 'PENDING',
-            },
-            include: { payment: true },
+        : await createPurchaseIdempotent({
+            productId: product.id,
+            buyerId: req.user.id,
+            paymentId: payment.id,
+            status: 'PENDING',
           });
 
       const result = { payment, purchase };
