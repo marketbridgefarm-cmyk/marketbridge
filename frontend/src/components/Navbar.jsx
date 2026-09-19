@@ -173,54 +173,32 @@ export default function Navbar() {
         <>
           <div className="mobile-menu-backdrop" onClick={() => setMobileOpen(false)} aria-hidden="true" />
           <div className="mobile-menu" role="dialog" aria-modal="true">
-            {user && (
-              <div className="mobile-menu-user">
-                <span className="avatar mobile-menu-avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
-                <div className="mobile-menu-user-info">
-                  <h3>{user.name}</h3>
-                  <p>{(user.roles || []).map((r) => r.charAt(0) + r.slice(1).toLowerCase()).join(' · ') || 'Member'}</p>
-                </div>
-              </div>
-            )}
-
-            <span className="mobile-menu-label">Want to buy/sell</span>
-            <div className="mobile-menu-list">
-              {MARKET_LINKS.map((l) => (
-                <Link key={l.to} className={`mobile-menu-item${l.match(location.pathname) ? ' active' : ''}`} to={l.to}>{t(l.labelKey)}</Link>
-              ))}
-            </div>
-
+            <span className="mobile-menu-label">Want to buy/sell:</span>
+            {MARKET_LINKS.map((l) => (
+              <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{t(l.labelKey)}</Link>
+            ))}
+            <div className="mobile-menu-divider" />
             {user ? (
               <>
-                <span className="mobile-menu-label">Menu</span>
-                <div className="mobile-menu-list">
-                  <div className="mobile-menu-item mobile-notification-link">
-                    <NotificationCenter />
-                  </div>
-                  <Link className="mobile-menu-item" to={dashboardHref}>🏠 {t('nav.dashboard')}</Link>
-                  <Link className={`mobile-menu-item${location.pathname === '/services' ? ' active' : ''}`} to="/services">🧰 Services</Link>
-                  {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
-                    <Link key={role} className="mobile-menu-item" to={to}>{label} Dashboard</Link>
-                  ))}
-                  <Link className="mobile-menu-item" to="/dashboard/advertiser">📣 Advertise Dashboard</Link>
+                <div className="mobile-notification-link">
+                  <NotificationCenter />
                 </div>
-
-                <span className="mobile-menu-label">Account</span>
-                <div className="mobile-menu-list">
-                  <Link className="mobile-menu-item" to="/account/security">🔒 {t('nav.accountSecurity')}</Link>
-                  <button className="mobile-menu-item mobile-logout" onClick={handleLogout}>🚪 {t('nav.logout')}</button>
-                </div>
+                <Link to={dashboardHref}>{t('nav.dashboard')}</Link>
+                <Link className={location.pathname === '/services' ? 'active' : ''} to="/services">🧰 Services</Link>
+                {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
+                  <Link key={role} to={to}>{label} Dashboard</Link>
+                ))}
+                <Link to="/dashboard/advertiser">📣 Advertise Dashboard</Link>
+                <Link to="/account/security">{t('nav.accountSecurity')}</Link>
+                <button className="mobile-logout" onClick={handleLogout}>{t('nav.logout')}</button>
               </>
             ) : (
-              <div className="mobile-menu-list">
-                <Link className="mobile-menu-item" to="/login">{t('nav.login')}</Link>
-                <Link className="mobile-menu-item nav-cta" to="/register">Join MarketBridge</Link>
-              </div>
+              <>
+                <Link to="/login">{t('nav.login')}</Link>
+                <Link className="nav-cta" to="/register">Join MarketBridge</Link>
+              </>
             )}
-
-            <div className="mobile-menu-footer">
-              <LanguageSwitcher className="mobile-lang-switcher" />
-            </div>
+            <LanguageSwitcher className="mobile-lang-switcher" />
           </div>
         </>
       )}
