@@ -8,8 +8,8 @@
   z-index: 100;
   width: 68px;
   padding: 16px 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   overflow: visible;
@@ -59,7 +59,8 @@
    This keeps Settings and Logout reachable on short/mobile screens. */
 .glass-nav-scroll {
   min-height: 0;
-  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -85,7 +86,7 @@
 .glass-marketplace-links {
   display: none;
   width: 100%;
-  padding: 2px 0 4px 36px;
+  padding: 2px 0 6px 36px;
   flex-direction: column;
   gap: 2px;
 }
@@ -256,8 +257,9 @@
 }
 
 .glass-account-footer {
+  grid-row: 3;
   width: 100%;
-  flex: 0 0 auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -466,6 +468,7 @@ body.sidebar-open .app-main { margin-left: 262px; }
   .glass-sidebar.expanded {
     transform: translateX(0);
     width: min(230px, calc(100vw - 24px));
+    grid-template-rows: auto minmax(0, 1fr) auto;
   }
   .glass-mobile-trigger {
     display: flex;
@@ -504,13 +507,22 @@ body.sidebar-open .app-main { margin-left: 262px; }
 .glass-sidebar-backdrop { display: none; }
 
 @media (max-width: 900px) {
+  .glass-sidebar.expanded .glass-account-footer {
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    position: relative;
+    z-index: 3;
+  }
   .glass-sidebar.expanded .glass-nav-scroll {
+    min-height: 0;
+    height: 100%;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
-  .glass-sidebar.expanded .glass-account-footer {
-    padding-bottom: max(4px, env(safe-area-inset-bottom));
+
+  .glass-sidebar.expanded .glass-marketplace-links {
+    display: flex;
   }
+
   .glass-sidebar-backdrop {
     display: block;
     position: fixed;
