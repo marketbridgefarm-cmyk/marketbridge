@@ -181,42 +181,46 @@ export default function Sidebar() {
         </div>
 
         <div className="glass-account-footer">
-          <div className="glass-profile-wrap" ref={accountRef}>
-          <button
-            type="button"
-            className="glass-profile"
-            data-tooltip={user.name || 'Account'}
-            aria-haspopup="menu"
-            aria-expanded={accountOpen}
-            onClick={() => setAccountOpen((v) => !v)}
-          >
-            <span className="glass-avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
-            <span className="glass-profile-info">
-              <span className="glass-profile-name">{user.name}</span>
-              <span className="glass-profile-role">{user.roles?.[0] || 'MarketBridge user'}</span>
-            </span>
-          </button>
+          {user && (
+            <>
+              <div className="glass-profile-wrap" ref={accountRef}>
+                <button
+                  type="button"
+                  className="glass-profile"
+                  data-tooltip={user.name || 'Account'}
+                  aria-haspopup="menu"
+                  aria-expanded={accountOpen}
+                  onClick={() => setAccountOpen((v) => !v)}
+                >
+                  <span className="glass-avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
+                  <span className="glass-profile-info">
+                    <span className="glass-profile-name">{user.name}</span>
+                    <span className="glass-profile-role">{user.roles?.[0] || 'MarketBridge user'}</span>
+                  </span>
+                </button>
 
-            {accountOpen && (
-              <div className="glass-account-menu" role="menu">
-                <Link role="menuitem" to="/account/security" onClick={() => setAccountOpen(false)}>{t('nav.accountSecurity')}</Link>
-                {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
-                  <Link key={role} role="menuitem" to={to} onClick={() => setAccountOpen(false)}>{label}</Link>
-                ))}
+                {accountOpen && (
+                  <div className="glass-account-menu" role="menu">
+                    <Link role="menuitem" to="/account/security" onClick={() => setAccountOpen(false)}>{t('nav.accountSecurity')}</Link>
+                    {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
+                      <Link key={role} role="menuitem" to={to} onClick={() => setAccountOpen(false)}>{label}</Link>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <button
-            type="button"
-            className="glass-logout"
-            data-tooltip={t('nav.logout')}
-            aria-label={t('nav.logout')}
-            onClick={handleLogout}
-          >
-            <span className="glass-nav-icon"><Icon name="login" /></span>
-            <span className="glass-nav-label">{t('nav.logout')}</span>
-          </button>
+              <button
+                type="button"
+                className="glass-logout"
+                data-tooltip={t('nav.logout')}
+                aria-label={t('nav.logout')}
+                onClick={handleLogout}
+              >
+                <span className="glass-nav-icon"><Icon name="login" /></span>
+                <span className="glass-nav-label">{t('nav.logout')}</span>
+              </button>
+            </>
+          )}
 
           <div className="glass-language"><LanguageSwitcher /></div>
         </div>
