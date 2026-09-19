@@ -251,7 +251,9 @@ enum BannerTemplate {
 
 // Selectable message templates for TELEGRAM_PROMOTION campaigns. Purely a
 // copy/tone preset (MarketBridge staff still write and publish the actual
-// post) — unlike BannerTemplate this never changes price.
+// post) — unlike BannerTemplate this never changes price. CAROUSEL also
+// carries 2–10 uploaded photos (Advertisement.telegramImageKeys) that staff
+// post as a single swipeable Telegram album.
 enum TelegramTemplate {
   CLASSIC
   HOT_DEAL
@@ -259,6 +261,7 @@ enum TelegramTemplate {
   FARM_TO_TABLE
   FLASH_SALE
   TRUSTED_SELLER
+  CAROUSEL
 }
 
 enum DisputeStatus {
@@ -1637,6 +1640,10 @@ model Advertisement {
 
   // Telegram post tone/copy template (cosmetic preset only, no price impact).
   telegramTemplate TelegramTemplate @default(CLASSIC)
+
+  // Private object-storage keys of the carousel photos, in slide order.
+  // Only populated for TELEGRAM_PROMOTION + CAROUSEL; empty otherwise.
+  telegramImageKeys String[] @default([])
 
   // Moderation/publication audit trail.
   rejectionReason       String?
