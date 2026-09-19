@@ -26,8 +26,9 @@ const ROLE_DASHBOARD_LINKS = [
 ];
 
 const MARKET_LINKS = [
-  { to: '/dashboard/truck-owner', labelKey: 'nav.forTruckOwners', label: 'for trucks owner', match: (p) => p.startsWith('/dashboard/truck-owner') },
-  { to: '/dashboard/inspector', labelKey: 'nav.forInspectors', label: 'for inspectors', match: (p) => p.startsWith('/dashboard/inspector') },
+  { to: '/agricultural', labelKey: 'nav.farmProduces', label: 'Farm Produces', match: (p) => p === '/agricultural' || p === '/listings' },
+  { to: '/products', labelKey: 'nav.products', label: 'Products', match: (p) => p.startsWith('/products') },
+  { to: '/digital', labelKey: 'nav.digital', label: 'Digital', match: (p) => p.startsWith('/digital') },
 ];
 
 export default function Navbar() {
@@ -95,7 +96,7 @@ export default function Navbar() {
 
             {/* Marketplace switcher: always visible, right after the brand */}
             <div className="market-switcher">
-              <span className="market-switcher-label">Quote available jobs:</span>
+              <span className="market-switcher-label">Want to buy/sell:</span>
               <div className="market-pills">
                 {MARKET_LINKS.map((l) => (
                   <Link
@@ -172,32 +173,54 @@ export default function Navbar() {
         <>
           <div className="mobile-menu-backdrop" onClick={() => setMobileOpen(false)} aria-hidden="true" />
           <div className="mobile-menu" role="dialog" aria-modal="true">
-            <span className="mobile-menu-label">Quote available jobs:</span>
-            {MARKET_LINKS.map((l) => (
-              <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{t(l.labelKey)}</Link>
-            ))}
-            <div className="mobile-menu-divider" />
+            {user && (
+              <div className="mobile-menu-user">
+                <span className="avatar mobile-menu-avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
+                <div className="mobile-menu-user-info">
+                  <h3>{user.name}</h3>
+                  <p>{(user.roles || []).map((r) => r.charAt(0) + r.slice(1).toLowerCase()).join(' · ') || 'Member'}</p>
+                </div>
+              </div>
+            )}
+
+            <span className="mobile-menu-label">Want to buy/sell</span>
+            <div className="mobile-menu-list">
+              {MARKET_LINKS.map((l) => (
+                <Link key={l.to} className={`mobile-menu-item${l.match(location.pathname) ? ' active' : ''}`} to={l.to}>{t(l.labelKey)}</Link>
+              ))}
+            </div>
+
             {user ? (
               <>
-                <div className="mobile-notification-link">
-                  <NotificationCenter />
+                <span className="mobile-menu-label">Menu</span>
+                <div className="mobile-menu-list">
+                  <div className="mobile-menu-item mobile-notification-link">
+                    <NotificationCenter />
+                  </div>
+                  <Link className="mobile-menu-item" to={dashboardHref}>🏠 {t('nav.dashboard')}</Link>
+                  <Link className={`mobile-menu-item${location.pathname === '/services' ? ' active' : ''}`} to="/services">🧰 Services</Link>
+                  {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
+                    <Link key={role} className="mobile-menu-item" to={to}>{label} Dashboard</Link>
+                  ))}
+                  <Link className="mobile-menu-item" to="/dashboard/advertiser">📣 Advertise Dashboard</Link>
                 </div>
-                <Link to={dashboardHref}>{t('nav.dashboard')}</Link>
-                <Link className={location.pathname === '/services' ? 'active' : ''} to="/services">🧰 Services</Link>
-                {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
-                  <Link key={role} to={to}>{label} Dashboard</Link>
-                ))}
-                <Link to="/dashboard/advertiser">📣 Advertise Dashboard</Link>
-                <Link to="/account/security">{t('nav.accountSecurity')}</Link>
-                <button className="mobile-logout" onClick={handleLogout}>{t('nav.logout')}</button>
+
+                <span className="mobile-menu-label">Account</span>
+                <div className="mobile-menu-list">
+                  <Link className="mobile-menu-item" to="/account/security">🔒 {t('nav.accountSecurity')}</Link>
+                  <button className="mobile-menu-item mobile-logout" onClick={handleLogout}>🚪 {t('nav.logout')}</button>
+                </div>
               </>
             ) : (
-              <>
-                <Link to="/login">{t('nav.login')}</Link>
-                <Link className="nav-cta" to="/register">Join MarketBridge</Link>
-              </>
+              <div className="mobile-menu-list">
+                <Link className="mobile-menu-item" to="/login">{t('nav.login')}</Link>
+                <Link className="mobile-menu-item nav-cta" to="/register">Join MarketBridge</Link>
+              </div>
             )}
-            <LanguageSwitcher className="mobile-lang-switcher" />
+
+            <div className="mobile-menu-footer">
+              <LanguageSwitcher className="mobile-lang-switcher" />
+            </div>
           </div>
         </>
       )}
