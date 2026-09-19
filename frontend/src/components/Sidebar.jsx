@@ -45,6 +45,8 @@ function Icon({ name, size = 20 }) {
     messages: <><path d="M21 6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4l3 3 3-3h4a2 2 0 0 0 2-2V6Z"/><path d="M7 9h10M7 13h6"/></>,
     settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .3 1.8l.1.1-2.8 2.8-.1-.1a1.65 1.65 0 0 0-1.8-.3 1.65 1.65 0 0 0-1 1.5v.2h-4v-.2a1.65 1.65 0 0 0-1-1.5 1.65 1.65 0 0 0-1.8.3l-.1.1-2.8-2.8.1-.1a1.65 1.65 0 0 0 .3-1.8 1.65 1.65 0 0 0-1.5-1H3v-4h.2a1.65 1.65 0 0 0 1.5-1 1.65 1.65 0 0 0-.3-1.8l-.1-.1 2.8-2.8.1.1a1.65 1.65 0 0 0 1.8.3 1.65 1.65 0 0 0 1-1.5V3h4v.2a1.65 1.65 0 0 0 1 1.5 1.65 1.65 0 0 0 1.8-.3l.1-.1 2.8 2.8-.1.1a1.65 1.65 0 0 0-.3 1.8 1.65 1.65 0 0 0 1.5 1h.2v4h-.2a1.65 1.65 0 0 0-1.5 1Z"/></>,
     account: <><circle cx="12" cy="8" r="3"/><path d="M5 21a7 7 0 0 1 14 0"/></>,
+    login: <><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M14 5h5v14h-5"/></>,
+    register: <><circle cx="12" cy="8" r="3"/><path d="M5 21a7 7 0 0 1 14 0"/><path d="M19 8v6M16 11h6"/></>,
   };
 
   return <svg {...common} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
@@ -125,7 +127,10 @@ export default function Sidebar() {
         <NavItem to="/agricultural" icon="marketplace" label="Marketplace" active={marketActive} onClick={collapseAfterNavigation} />
         <div className="glass-divider" />
         <div className="glass-spacer" />
-        <NavItem to="/login" icon="account" label={t('nav.login')} active={is('/login', true)} onClick={collapseAfterNavigation} />
+        <div className="glass-auth-actions" aria-label="Account access">
+          <NavItem to="/login" icon="login" label="Login" active={is('/login', true)} onClick={collapseAfterNavigation} />
+          <NavItem to="/register" icon="register" label="Register" active={is('/register', true)} onClick={collapseAfterNavigation} />
+        </div>
         <div className="glass-language"><LanguageSwitcher /></div>
       </aside>
     );
