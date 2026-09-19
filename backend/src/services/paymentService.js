@@ -3,17 +3,30 @@
 const prisma = require('../config/db');
 const logger = require('../utils/logger');
 const { recordAuditEvent } = require('../utils/audit');
-const { syncOrderPaymentObligations, findPaymentObligation } = require('./paymentObligationService');
+const {
+  syncOrderPaymentObligations,
+  findPaymentObligation,
+} = require('./paymentObligationService');
 const { recordOrderEvent } = require('./orderEventService');
-const { createReconciliationIssue } = require('./paymentReconciliationService');
+const {
+  createReconciliationIssue,
+} = require('./paymentReconciliationService');
 const { transitionOrderStatus } = require('./orderStateMachine');
 
 // ============================================================================
 // CONSTANTS
 // ============================================================================
 
-const ACTIVE_STATUSES = ['PENDING', 'PAID', 'RECONCILIATION_REQUIRED'];
-const TERMINAL_STATUSES = ['PAID', 'REFUNDED'];
+const ACTIVE_STATUSES = [
+  'PENDING',
+  'PAID',
+  'RECONCILIATION_REQUIRED',
+];
+
+const TERMINAL_STATUSES = [
+  'PAID',
+  'REFUNDED',
+];
 
 // ============================================================================
 // MONEY HELPERS
@@ -90,88 +103,209 @@ async function createPayment(data) {
     Math.max(0, amount - commission)
   );
 
-  return prisma.$transaction(async (tx) => {
-    let payment;
-    let obligation = null;
+  // --------------------------------------------------------------------------
+  // FAST IDEMPOTENCY LOOKUP
+  // --------------------------------------------------------------------------
 
-    if (data.orderId) {
-      await syncOrderPaymentObligations(tx, data.orderId);
-      obligation = await findPaymentObligation(tx, data);
-      if (obligation) {
-        if (obligation.status === 'PAID') {
-          throw Object.assign(new Error('This payment obligation is already paid'), { status: 409 });
-        }
-        if (!moneyEqual(amount, obligation.amount)) {
-          throw Object.assign(new Error('Payment amount does not match the payment obligation'), { status: 409 });
-        }
-      }
-    }
-
-    try {
-      payment = await tx.payment.create({
-        data: {
-          ...data,
-          obligationId: obligation?.id || null,
-
-          amount,
-
-          currency:
-            data.currency ||
-            'ETB',
-
-          commissionRate:
-            rate,
-
-          commissionAmount:
-            commission,
-
-          netAmount,
-
-          status:
-            'PENDING',
-        },
-      });
-    } catch (error) {
-      // Idempotency-Key race: two requests carrying the same key both got
-      // past the route's pre-check and reached the create call at the same
-      // time. The unique constraint on Payment.idempotencyKey lets exactly
-      // one of them win; the loser returns the winner's row instead of
-      // erroring, so the caller sees one consistent payment either way.
-      if (error.code === 'P2002' && data.idempotencyKey) {
-        const existing = await tx.payment.findUnique({
-          where: { idempotencyKey: data.idempotencyKey },
-        });
-        if (existing) return existing;
-      }
-      throw error;
-    }
-
-    await recordAuditEvent(tx, {
-      actorId: data.createdById || null,
-      action: 'PAYMENT_CREATED',
-      resourceType: 'Payment',
-      resourceId: payment.id,
-      metadata: {
-        type: payment.type,
-        amount: payment.amount,
-        currency: payment.currency,
-        method: payment.method,
-        orderId: payment.orderId,
-        transportJobId: payment.transportJobId,
-        digitalProductId: payment.digitalProductId,
-        advertisementId: payment.advertisementId,
-        inspectionRequestId: payment.inspectionRequestId,
+  if (data.idempotencyKey) {
+    const existing = await prisma.payment.findUnique({
+      where: {
+        idempotencyKey: data.idempotencyKey,
       },
     });
 
-    return payment;
-  }, {
-    // Same rationale as settlePayment below: give this a wider budget than
-    // Prisma's short default so a slow obligation-sync/lookup doesn't
-    // trip the interactive-transaction timeout mid-write.
-    maxWait: 10000,
-    timeout: 20000,
-  });
+    if (existing) {
+      return existing;
+    }
+  }
+
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        let obligation = null;
+
+        // --------------------------------------------------------------------
+        // PAYMENT OBLIGATION
+        // --------------------------------------------------------------------
+
+        if (data.orderId) {
+          await syncOrderPaymentObligations(
+            tx,
+            data.orderId
+          );
+
+          obligation = await findPaymentObligation(
+            tx,
+            data
+          );
+
+          if (obligation) {
+            if (obligation.status === 'PAID') {
+              throw Object.assign(
+                new Error(
+                  'This payment obligation is already paid'
+                ),
+                { status: 409 }
+              );
+            }
+
+            if (
+              !moneyEqual(
+                amount,
+                obligation.amount
+              )
+            ) {
+              throw Object.assign(
+                new Error(
+                  'Payment amount does not match the payment obligation'
+                ),
+                { status: 409 }
+              );
+            }
+          }
+        }
+
+        // --------------------------------------------------------------------
+        // CREATE PAYMENT
+        //
+        // IMPORTANT:
+        // Do NOT catch P2002 inside this transaction.
+        //
+        // PostgreSQL marks the transaction as aborted after a unique
+        // constraint violation. Any query after that produces:
+        //
+        // "current transaction is aborted, commands ignored until end
+        //  of transaction block"
+        //
+        // The P2002 is handled AFTER Prisma rolls the transaction back.
+        // --------------------------------------------------------------------
+
+        const payment = await tx.payment.create({
+          data: {
+            ...data,
+
+            obligationId:
+              obligation?.id || null,
+
+            amount,
+
+            currency:
+              data.currency || 'ETB',
+
+            commissionRate:
+              rate,
+
+            commissionAmount:
+              commission,
+
+            netAmount,
+
+            status:
+              'PENDING',
+          },
+        });
+
+        // --------------------------------------------------------------------
+        // AUDIT
+        // --------------------------------------------------------------------
+
+        await recordAuditEvent(tx, {
+          actorId:
+            data.createdById || null,
+
+          action:
+            'PAYMENT_CREATED',
+
+          resourceType:
+            'Payment',
+
+          resourceId:
+            payment.id,
+
+          metadata: {
+            type:
+              payment.type,
+
+            amount:
+              payment.amount,
+
+            currency:
+              payment.currency,
+
+            method:
+              payment.method,
+
+            orderId:
+              payment.orderId,
+
+            transportJobId:
+              payment.transportJobId,
+
+            digitalProductId:
+              payment.digitalProductId,
+
+            advertisementId:
+              payment.advertisementId,
+
+            inspectionRequestId:
+              payment.inspectionRequestId,
+          },
+        });
+
+        return payment;
+      },
+      {
+        maxWait: 10000,
+        timeout: 20000,
+      }
+    );
+  } catch (error) {
+    // ------------------------------------------------------------------------
+    // IDEMPOTENCY RACE
+    // ------------------------------------------------------------------------
+    //
+    // Two mobile/browser requests can arrive with the same idempotency key.
+    //
+    // Request A:
+    //   creates the payment successfully.
+    //
+    // Request B:
+    //   attempts the same unique key and receives P2002.
+    //
+    // The transaction for B is rolled back first.
+    // ONLY THEN do we query the normal Prisma client.
+    // ------------------------------------------------------------------------
+
+    const target = error?.meta?.target;
+
+    const isIdempotencyConflict =
+      error?.code === 'P2002' &&
+      data.idempotencyKey &&
+      (
+        !target ||
+        (
+          Array.isArray(target) &&
+          target.includes('idempotencyKey')
+        ) ||
+        target === 'idempotencyKey'
+      );
+
+    if (isIdempotencyConflict) {
+      const existing =
+        await prisma.payment.findUnique({
+          where: {
+            idempotencyKey:
+              data.idempotencyKey,
+          },
+        });
+
+      if (existing) {
+        return existing;
+      }
+    }
+
+    throw error;
+  }
 }
 
 // ============================================================================
@@ -189,6 +323,7 @@ async function ledgerEntryExists(
         paymentId,
         type,
       },
+
       select: {
         id: true,
       },
@@ -236,7 +371,9 @@ async function writeLedger(
 
     const commission =
       roundMoney(
-        Number(payment.commissionAmount || 0)
+        Number(
+          payment.commissionAmount || 0
+        )
       );
 
     const net =
@@ -257,11 +394,21 @@ async function writeLedger(
     ) {
       if (net > 0) {
         await createLedgerEntryOnce(tx, {
-          paymentId: payment.id,
-          userId: payment.order.sellerId,
-          type: 'SELLER_EARNING',
-          amount: net,
-          currency: payment.currency,
+          paymentId:
+            payment.id,
+
+          userId:
+            payment.order.sellerId,
+
+          type:
+            'SELLER_EARNING',
+
+          amount:
+            net,
+
+          currency:
+            payment.currency,
+
           description:
             'Seller earning from buyer marketplace payment',
         });
@@ -269,10 +416,18 @@ async function writeLedger(
 
       if (commission > 0) {
         await createLedgerEntryOnce(tx, {
-          paymentId: payment.id,
-          type: 'PLATFORM_COMMISSION',
-          amount: commission,
-          currency: payment.currency,
+          paymentId:
+            payment.id,
+
+          type:
+            'PLATFORM_COMMISSION',
+
+          amount:
+            commission,
+
+          currency:
+            payment.currency,
+
           description:
             'Marketplace seller transaction commission',
         });
@@ -289,7 +444,7 @@ async function writeLedger(
       const job =
         payment.transportJob;
 
-      // OWN_TRUCK has no transporter-hiring commission.
+      // Own truck does not generate transporter-hiring commission.
       if (
         job &&
         job.method === 'OWN_TRUCK'
@@ -304,11 +459,21 @@ async function writeLedger(
       ) {
         if (net > 0) {
           await createLedgerEntryOnce(tx, {
-            paymentId: payment.id,
-            userId: job.truckOwnerId,
-            type: 'TRANSPORTER_EARNING',
-            amount: net,
-            currency: payment.currency,
+            paymentId:
+              payment.id,
+
+            userId:
+              job.truckOwnerId,
+
+            type:
+              'TRANSPORTER_EARNING',
+
+            amount:
+              net,
+
+            currency:
+              payment.currency,
+
             description:
               'Transporter earning from hired transport payment',
           });
@@ -316,10 +481,18 @@ async function writeLedger(
 
         if (commission > 0) {
           await createLedgerEntryOnce(tx, {
-            paymentId: payment.id,
-            type: 'PLATFORM_COMMISSION',
-            amount: commission,
-            currency: payment.currency,
+            paymentId:
+              payment.id,
+
+            type:
+              'PLATFORM_COMMISSION',
+
+            amount:
+              commission,
+
+            currency:
+              payment.currency,
+
             description:
               'Hired transporter marketplace commission',
           });
@@ -340,12 +513,21 @@ async function writeLedger(
     ) {
       if (net > 0) {
         await createLedgerEntryOnce(tx, {
-          paymentId: payment.id,
+          paymentId:
+            payment.id,
+
           userId:
             payment.inspectionRequest.inspectorId,
-          type: 'INSPECTOR_EARNING',
-          amount: net,
-          currency: payment.currency,
+
+          type:
+            'INSPECTOR_EARNING',
+
+          amount:
+            net,
+
+          currency:
+            payment.currency,
+
           description:
             'Inspector service earning',
         });
@@ -353,10 +535,18 @@ async function writeLedger(
 
       if (commission > 0) {
         await createLedgerEntryOnce(tx, {
-          paymentId: payment.id,
-          type: 'PLATFORM_COMMISSION',
-          amount: commission,
-          currency: payment.currency,
+          paymentId:
+            payment.id,
+
+          type:
+            'PLATFORM_COMMISSION',
+
+          amount:
+            commission,
+
+          currency:
+            payment.currency,
+
           description:
             'Inspection marketplace commission',
         });
@@ -373,10 +563,17 @@ async function writeLedger(
       payment.type === 'ADVERTISING'
     ) {
       await createLedgerEntryOnce(tx, {
-        paymentId: payment.id,
-        type: 'PLATFORM_REVENUE',
+        paymentId:
+          payment.id,
+
+        type:
+          'PLATFORM_REVENUE',
+
         amount,
-        currency: payment.currency,
+
+        currency:
+          payment.currency,
+
         description:
           'Advertising revenue',
       });
@@ -397,12 +594,21 @@ async function writeLedger(
         net > 0
       ) {
         await createLedgerEntryOnce(tx, {
-          paymentId: payment.id,
+          paymentId:
+            payment.id,
+
           userId:
             payment.digitalProduct.sellerId,
-          type: 'SELLER_EARNING',
-          amount: net,
-          currency: payment.currency,
+
+          type:
+            'SELLER_EARNING',
+
+          amount:
+            net,
+
+          currency:
+            payment.currency,
+
           description:
             'Digital seller earning',
         });
@@ -410,10 +616,18 @@ async function writeLedger(
 
       if (commission > 0) {
         await createLedgerEntryOnce(tx, {
-          paymentId: payment.id,
-          type: 'PLATFORM_COMMISSION',
-          amount: commission,
-          currency: payment.currency,
+          paymentId:
+            payment.id,
+
+          type:
+            'PLATFORM_COMMISSION',
+
+          amount:
+            commission,
+
+          currency:
+            payment.currency,
+
           description:
             'Digital marketplace commission',
         });
@@ -427,10 +641,18 @@ async function writeLedger(
 
   if (status === 'REFUNDED') {
     await createLedgerEntryOnce(tx, {
-      paymentId: payment.id,
-      type: 'REFUND',
-      amount: -Number(payment.amount),
-      currency: payment.currency,
+      paymentId:
+        payment.id,
+
+      type:
+        'REFUND',
+
+      amount:
+        -Number(payment.amount),
+
+      currency:
+        payment.currency,
+
       description:
         'Payment refund record',
     });
@@ -450,380 +672,793 @@ async function settlePayment({
   eventId,
   payload = {},
 }) {
-  return prisma.$transaction(async (tx) => {
-    const payment =
-      await tx.payment.findUnique({
-        where: {
-          id: paymentId,
-        },
+  return prisma.$transaction(
+    async (tx) => {
+      // ----------------------------------------------------------------------
+      // LOAD PAYMENT
+      // ----------------------------------------------------------------------
 
-        include: {
-          order: true,
-          transportJob: true,
-          inspectionRequest: true,
-          advertisement: true,
-          digitalPurchase: true,
-          digitalProduct: true,
-        },
-      });
+      const payment =
+        await tx.payment.findUnique({
+          where: {
+            id: paymentId,
+          },
 
-    if (!payment) {
-      throw Object.assign(
-        new Error('Payment not found'),
-        { status: 404 }
-      );
-    }
-
-    // ------------------------------------------------------------------------
-    // AMOUNT VALIDATION
-    // ------------------------------------------------------------------------
-
-    if (
-      payload.amount != null &&
-      !moneyEqual(payment.amount, payload.amount)
-    ) {
-      await createReconciliationIssue(tx, {
-        paymentId: payment.id, provider: provider || payment.provider || 'UNKNOWN',
-        observedStatus: status, expectedAmount: payment.amount, observedAmount: payload.amount,
-        expectedCurrency: payment.currency, observedCurrency: payload.currency || null,
-        reason: 'PROVIDER_AMOUNT_MISMATCH', payload,
-      });
-      const flagged = await tx.payment.update({ where: { id: payment.id }, data: { status: 'RECONCILIATION_REQUIRED', provider: provider || payment.provider || null, providerTransactionId: providerTransactionId || payment.providerTransactionId || null, reference: reference || payment.reference || null } });
-      await recordAuditEvent(tx, { actorId: null, action: 'PAYMENT_RECONCILIATION_REQUIRED', resourceType: 'Payment', resourceId: payment.id, metadata: { reason: 'PROVIDER_AMOUNT_MISMATCH', observedAmount: payload.amount, expectedAmount: payment.amount, eventId: eventId || null } });
-      return flagged;
-    }
-
-    // ------------------------------------------------------------------------
-    // CURRENCY VALIDATION
-    // ------------------------------------------------------------------------
-
-    if (payload.currency && String(payload.currency).toUpperCase() !== String(payment.currency).toUpperCase()) {
-      await createReconciliationIssue(tx, {
-        paymentId: payment.id, provider: provider || payment.provider || 'UNKNOWN', observedStatus: status,
-        expectedAmount: payment.amount, observedAmount: payload.amount ?? null, expectedCurrency: payment.currency,
-        observedCurrency: payload.currency, reason: 'PROVIDER_CURRENCY_MISMATCH', payload,
-      });
-      const flagged = await tx.payment.update({ where: { id: payment.id }, data: { status: 'RECONCILIATION_REQUIRED', provider: provider || payment.provider || null, providerTransactionId: providerTransactionId || payment.providerTransactionId || null, reference: reference || payment.reference || null } });
-      await recordAuditEvent(tx, { actorId: null, action: 'PAYMENT_RECONCILIATION_REQUIRED', resourceType: 'Payment', resourceId: payment.id, metadata: { reason: 'PROVIDER_CURRENCY_MISMATCH', observedCurrency: payload.currency, expectedCurrency: payment.currency, eventId: eventId || null } });
-      return flagged;
-    }
-
-    // ------------------------------------------------------------------------
-    // IDEMPOTENT EVENT LOGGING
-    // ------------------------------------------------------------------------
-
-    if (eventId) {
-      try {
-        await tx.paymentEvent.create({
-          data: {
-            paymentId: payment.id,
-            provider:
-              provider ||
-              payment.provider ||
-              'UNKNOWN',
-            eventId,
-            status,
-            payload,
+          include: {
+            order: true,
+            transportJob: true,
+            inspectionRequest: true,
+            advertisement: true,
+            digitalPurchase: true,
+            digitalProduct: true,
           },
         });
-      } catch (error) {
-        if (error.code === 'P2002') {
-          return payment;
-        }
 
-        throw error;
+      if (!payment) {
+        throw Object.assign(
+          new Error('Payment not found'),
+          { status: 404 }
+        );
       }
-    }
 
-    // Never reopen a refunded payment.
-    if (
-      payment.status === 'REFUNDED' &&
-      status !== 'REFUNDED'
-    ) {
-      return payment;
-    }
+      // ----------------------------------------------------------------------
+      // PROVIDER AMOUNT VALIDATION
+      // ----------------------------------------------------------------------
 
-    // Never move PAID backwards to FAILED or reconciliation-required.
-    if (
-      payment.status === 'PAID' &&
-      ['FAILED', 'RECONCILIATION_REQUIRED'].includes(status)
-    ) {
-      return payment;
-    }
-
-    // A reconciliation-required payment may only be resolved by an
-    // authoritative settlement result, never by a client-created payment.
-    if (
-      payment.status === 'RECONCILIATION_REQUIRED' &&
-      !['PAID', 'FAILED', 'REFUNDED', 'RECONCILIATION_REQUIRED'].includes(status)
-    ) {
-      return payment;
-    }
-
-    // ------------------------------------------------------------------------
-    // UPDATE PAYMENT
-    // ------------------------------------------------------------------------
-
-    const updated =
-      await tx.payment.update({
-        where: {
-          id: payment.id,
-        },
-
-        data: {
-          status,
+      if (
+        payload.amount != null &&
+        !moneyEqual(
+          payment.amount,
+          payload.amount
+        )
+      ) {
+        await createReconciliationIssue(tx, {
+          paymentId:
+            payment.id,
 
           provider:
             provider ||
-            payment.provider,
+            payment.provider ||
+            'UNKNOWN',
 
-          providerTransactionId:
-            providerTransactionId ||
-            payment.providerTransactionId,
+          observedStatus:
+            status,
 
-          reference:
-            reference ||
-            payment.reference,
-        },
-      });
+          expectedAmount:
+            payment.amount,
 
-    if (updated.obligationId) {
-      await tx.paymentObligation.update({
-        where: { id: updated.obligationId },
-        data: {
-          status: status === 'PAID'
-            ? 'PAID'
-            : status === 'REFUNDED'
-              ? 'CANCELLED'
-              : undefined,
-        },
-      });
-    }
+          observedAmount:
+            payload.amount,
 
-    if (updated.orderId) {
-      // Notifications + SMS-outbox rows are a side effect of this status
-      // change, not part of what makes the payment settlement itself
-      // correct. They must never be able to void a payment we've already
-      // confirmed with the provider: a transient failure in this call
-      // (see the queueSmsForRecipients chain in notificationService.js)
-      // would otherwise throw inside this $transaction and roll back the
-      // payment/ledger writes above it too, leaving real, received money
-      // stuck as unsettled over what is ultimately just a missed inbox
-      // notification. Swallow and log instead of letting it abort
-      // settlement; the order event row (and therefore the notification)
-      // can be backfilled, a lost payment confirmation cannot.
-      try {
-        await recordOrderEvent(tx, {
-          orderId: updated.orderId,
-          type: 'PAYMENT_STATUS_CHANGED',
-          metadata: {
-            paymentId: updated.id,
-            paymentType: updated.type,
-            fromStatus: payment.status,
-            toStatus: status,
-            obligationId: updated.obligationId || null,
-            amount: String(updated.amount),
-          },
+          expectedCurrency:
+            payment.currency,
+
+          observedCurrency:
+            payload.currency ||
+            null,
+
+          reason:
+            'PROVIDER_AMOUNT_MISMATCH',
+
+          payload,
         });
-      } catch (error) {
-        logger.error(
-          { err: error, paymentId: updated.id, orderId: updated.orderId },
-          'settlePayment: recordOrderEvent/notification side effect failed; continuing with payment settlement'
-        );
-      }
-    }
 
-    await recordAuditEvent(tx, {
-      actorId: null,
-      action: 'PAYMENT_STATUS_CHANGED',
-      resourceType: 'Payment',
-      resourceId: payment.id,
-      metadata: {
-        fromStatus: payment.status,
-        toStatus: status,
-        provider: provider || payment.provider || null,
-        providerTransactionId: providerTransactionId || payment.providerTransactionId || null,
-        reference: reference || payment.reference || null,
-        eventId: eventId || null,
-      },
-    });
+        const flagged =
+          await tx.payment.update({
+            where: {
+              id:
+                payment.id,
+            },
 
-    // ------------------------------------------------------------------------
-    // PAID BUSINESS EFFECTS
-    // ------------------------------------------------------------------------
+            data: {
+              status:
+                'RECONCILIATION_REQUIRED',
 
-    if (status === 'PAID') {
+              provider:
+                provider ||
+                payment.provider ||
+                null,
 
-      // Marketplace order
-      if (
-        payment.type === 'MARKETPLACE' &&
-        payment.orderId
-      ) {
-        let orderClaim = { count: 0 };
-        const currentOrder = await tx.order.findUnique({
-          where: { id: payment.orderId },
-          select: { status: true },
-        });
-        if (currentOrder?.status === 'PENDING_PAYMENT') {
-          await transitionOrderStatus(
-            tx,
-            payment.orderId,
-            'PENDING_PAYMENT',
-            'CONFIRMED'
-          );
-          orderClaim = { count: 1 };
-        }
+              providerTransactionId:
+                providerTransactionId ||
+                payment.providerTransactionId ||
+                null,
 
-        // orderClaim.count === 0 means the order was not in PENDING_PAYMENT
-        // when this payment settled. That's harmless if it's already
-        // CONFIRMED (an idempotent replay of the same PAID event, or a
-        // second webhook for the same payment). It is NOT harmless if the
-        // order is CANCELLED: that means the automatic unpaid-order expiry
-        // (maintenanceService.expireUnpaidOrders) or a manual cancel raced
-        // ahead of this payment and already released the reserved
-        // quantity — possibly to another buyer. Money has now arrived for
-        // an order marketplace considers dead, which is exactly the "money
-        // received but state disagrees" case a strict state machine must
-        // surface rather than silently swallow.
-        if (orderClaim.count === 0) {
-          const currentOrder = await tx.order.findUnique({
-            where: { id: payment.orderId },
-            select: { status: true },
+              reference:
+                reference ||
+                payment.reference ||
+                null,
+            },
           });
 
-          if (currentOrder?.status === 'CANCELLED') {
-            await createReconciliationIssue(tx, {
-              paymentId: payment.id,
-              provider: provider || payment.provider || 'UNKNOWN',
-              observedStatus: status,
-              expectedAmount: payment.amount,
-              observedAmount: payload.amount ?? payment.amount,
-              expectedCurrency: payment.currency,
-              observedCurrency: payload.currency || payment.currency,
-              reason: 'PAYMENT_RECEIVED_FOR_CANCELLED_ORDER',
-              payload,
-            });
-            await recordAuditEvent(tx, {
-              actorId: null,
-              action: 'PAYMENT_RECONCILIATION_REQUIRED',
-              resourceType: 'Payment',
-              resourceId: payment.id,
-              metadata: {
-                reason: 'PAYMENT_RECEIVED_FOR_CANCELLED_ORDER',
-                orderId: payment.orderId,
-                eventId: eventId || null,
+        await recordAuditEvent(tx, {
+          actorId:
+            null,
+
+          action:
+            'PAYMENT_RECONCILIATION_REQUIRED',
+
+          resourceType:
+            'Payment',
+
+          resourceId:
+            payment.id,
+
+          metadata: {
+            reason:
+              'PROVIDER_AMOUNT_MISMATCH',
+
+            observedAmount:
+              payload.amount,
+
+            expectedAmount:
+              payment.amount,
+
+            eventId:
+              eventId ||
+              null,
+          },
+        });
+
+        return flagged;
+      }
+
+      // ----------------------------------------------------------------------
+      // PROVIDER CURRENCY VALIDATION
+      // ----------------------------------------------------------------------
+
+      if (
+        payload.currency &&
+        String(payload.currency).toUpperCase() !==
+          String(payment.currency).toUpperCase()
+      ) {
+        await createReconciliationIssue(tx, {
+          paymentId:
+            payment.id,
+
+          provider:
+            provider ||
+            payment.provider ||
+            'UNKNOWN',
+
+          observedStatus:
+            status,
+
+          expectedAmount:
+            payment.amount,
+
+          observedAmount:
+            payload.amount ??
+            null,
+
+          expectedCurrency:
+            payment.currency,
+
+          observedCurrency:
+            payload.currency,
+
+          reason:
+            'PROVIDER_CURRENCY_MISMATCH',
+
+          payload,
+        });
+
+        const flagged =
+          await tx.payment.update({
+            where: {
+              id:
+                payment.id,
+            },
+
+            data: {
+              status:
+                'RECONCILIATION_REQUIRED',
+
+              provider:
+                provider ||
+                payment.provider ||
+                null,
+
+              providerTransactionId:
+                providerTransactionId ||
+                payment.providerTransactionId ||
+                null,
+
+              reference:
+                reference ||
+                payment.reference ||
+                null,
+            },
+          });
+
+        await recordAuditEvent(tx, {
+          actorId:
+            null,
+
+          action:
+            'PAYMENT_RECONCILIATION_REQUIRED',
+
+          resourceType:
+            'Payment',
+
+          resourceId:
+            payment.id,
+
+          metadata: {
+            reason:
+              'PROVIDER_CURRENCY_MISMATCH',
+
+            observedCurrency:
+              payload.currency,
+
+            expectedCurrency:
+              payment.currency,
+
+            eventId:
+              eventId ||
+              null,
+          },
+        });
+
+        return flagged;
+      }
+
+      // ----------------------------------------------------------------------
+      // IDEMPOTENT PROVIDER EVENT
+      //
+      // IMPORTANT FIX:
+      //
+      // The old implementation did:
+      //
+      //   try {
+      //     await tx.paymentEvent.create(...)
+      //   } catch (P2002) {
+      //     return payment
+      //   }
+      //
+      // That is unsafe because PostgreSQL aborts the transaction immediately
+      // after the P2002. Returning from the callback does NOT repair the
+      // transaction. Prisma then attempts to finish the transaction and later
+      // queries can produce:
+      //
+      //   current transaction is aborted
+      //
+      // We therefore use createMany(..., skipDuplicates: true).
+      //
+      // PostgreSQL handles the duplicate without aborting the transaction.
+      // ----------------------------------------------------------------------
+
+      if (eventId) {
+        const existingEvent =
+          await tx.paymentEvent.findFirst({
+            where: {
+              eventId,
+            },
+
+            select: {
+              id: true,
+              paymentId: true,
+            },
+          });
+
+        if (existingEvent) {
+          // Same provider event already processed for this payment.
+          if (
+            existingEvent.paymentId ===
+            payment.id
+          ) {
+            return payment;
+          }
+
+          // The same provider event must never settle another payment.
+          throw Object.assign(
+            new Error(
+              'Payment provider event is already associated with another payment'
+            ),
+            {
+              status: 409,
+              code: 'PAYMENT_EVENT_CONFLICT',
+            }
+          );
+        }
+
+        const eventInsert =
+          await tx.paymentEvent.createMany({
+            data: [
+              {
+                paymentId:
+                  payment.id,
+
+                provider:
+                  provider ||
+                  payment.provider ||
+                  'UNKNOWN',
+
+                eventId,
+
+                status,
+
+                payload,
+              },
+            ],
+
+            skipDuplicates: true,
+          });
+
+        // A concurrent request may have inserted the event between the
+        // findFirst() and createMany(). skipDuplicates prevents PostgreSQL
+        // from aborting the transaction.
+        if (eventInsert.count === 0) {
+          const concurrentEvent =
+            await tx.paymentEvent.findFirst({
+              where: {
+                eventId,
+              },
+
+              select: {
+                id: true,
+                paymentId: true,
               },
             });
+
+          if (
+            concurrentEvent &&
+            concurrentEvent.paymentId ===
+              payment.id
+          ) {
+            return payment;
+          }
+
+          if (concurrentEvent) {
+            throw Object.assign(
+              new Error(
+                'Payment provider event is already associated with another payment'
+              ),
+              {
+                status: 409,
+                code:
+                  'PAYMENT_EVENT_CONFLICT',
+              }
+            );
           }
         }
       }
 
-      // Digital purchase
+      // ----------------------------------------------------------------------
+      // PAYMENT STATE GUARDS
+      // ----------------------------------------------------------------------
+
+      // Never reopen a refunded payment.
       if (
-        payment.type === 'DIGITAL' &&
-        payment.digitalPurchase
+        payment.status === 'REFUNDED' &&
+        status !== 'REFUNDED'
       ) {
-        await tx.digitalPurchase.update({
+        return payment;
+      }
+
+      // Never move PAID backwards.
+      if (
+        payment.status === 'PAID' &&
+        [
+          'FAILED',
+          'RECONCILIATION_REQUIRED',
+        ].includes(status)
+      ) {
+        return payment;
+      }
+
+      // A reconciliation-required payment may only be resolved by an
+      // authoritative settlement result.
+      if (
+        payment.status ===
+          'RECONCILIATION_REQUIRED' &&
+        ![
+          'PAID',
+          'FAILED',
+          'REFUNDED',
+          'RECONCILIATION_REQUIRED',
+        ].includes(status)
+      ) {
+        return payment;
+      }
+
+      // ----------------------------------------------------------------------
+      // UPDATE PAYMENT
+      // ----------------------------------------------------------------------
+
+      const updated =
+        await tx.payment.update({
           where: {
             id:
-              payment.digitalPurchase.id,
+              payment.id,
           },
 
           data: {
-            status: 'COMPLETED',
+            status,
+
+            provider:
+              provider ||
+              payment.provider,
+
+            providerTransactionId:
+              providerTransactionId ||
+              payment.providerTransactionId,
+
+            reference:
+              reference ||
+              payment.reference,
           },
         });
-      }
 
-      // Advertising
-      if (
-        payment.type === 'ADVERTISING' &&
-        payment.advertisement
-      ) {
-        // BANNER campaigns carry free-form advertiser-uploaded creative
-        // (image + headline) shown unmoderated on the public homepage —
-        // unlike the other ad types, which only boost an already-existing,
-        // already-moderated listing. Payment alone shouldn't be enough to
-        // put arbitrary content on the site, so leave it PENDING for an
-        // admin to actually look at and approve via PATCH /ads/:id/status.
-        // Every other ad type keeps activating immediately on payment.
-        const requiresModeration = ['BANNER', 'TELEGRAM_PROMOTION'].includes(payment.advertisement.type);
-        const startsInFuture = new Date(payment.advertisement.startDate) > new Date();
+      // ----------------------------------------------------------------------
+      // PAYMENT OBLIGATION
+      // ----------------------------------------------------------------------
 
-        // Payment completion is not the same as publication. Listing-linked
-        // placements can publish/schedule automatically after payment; Banner
-        // and Telegram campaigns remain paid-but-unreviewed until an admin
-        // approves them. This prevents paid arbitrary creative from becoming
-        // public without moderation.
-        const nextStatus = requiresModeration
-          ? 'PAID_PENDING_REVIEW'
-          : (startsInFuture ? 'SCHEDULED' : 'PUBLISHED');
-
-        await tx.advertisement.update({
-          where: {
-            id: payment.advertisement.id,
-          },
-
-          data: {
-            amountPaid: payment.amount,
-            status: nextStatus,
-            ...(nextStatus === 'PUBLISHED' ? { publishedAt: new Date() } : {}),
-          },
-        });
-      }
-
-      // Financial allocation
-      await writeLedger(
-        tx,
-        payment,
-        'PAID'
-      );
-    }
-
-    // ------------------------------------------------------------------------
-    // REFUND BUSINESS EFFECTS
-    // ------------------------------------------------------------------------
-
-    if (status === 'REFUNDED') {
-      if (payment.digitalPurchase) {
-        await tx.digitalPurchase.update({
+      if (updated.obligationId) {
+        await tx.paymentObligation.update({
           where: {
             id:
-              payment.digitalPurchase.id,
+              updated.obligationId,
           },
 
           data: {
-            status: 'REFUNDED',
+            status:
+              status === 'PAID'
+                ? 'PAID'
+                : status === 'REFUNDED'
+                  ? 'CANCELLED'
+                  : undefined,
           },
         });
       }
 
-      await writeLedger(
-        tx,
-        payment,
-        'REFUNDED'
-      );
-    }
+      // ----------------------------------------------------------------------
+      // ORDER EVENT
+      // ----------------------------------------------------------------------
 
-    return updated;
-  }, {
-    // settlePayment walks a long, deliberately-sequential chain of writes
-    // (payment event/status, obligation, order event + notifications + SMS
-    // outbox, audit event, order transition, advertisement activation, and
-    // finally the financial ledger entries) — often 12-16 dependent
-    // round trips in one interactive transaction. Prisma's default
-    // (maxWait 2s / timeout 5s) is tuned for short transactions and was
-    // being exceeded in production under ordinary cross-service DB
-    // latency, which aborts the transaction server-side partway through.
-    // Because paymentLedgerEntry.create() runs last in that chain, the
-    // transaction was consistently dying there with "Transaction API
-    // error: Transaction not found" — the engine had already closed the
-    // (timed-out) transaction by the time this query reached it. Widening
-    // the budget here (rather than trimming the transaction's correctness
-    // guarantees) fixes that without changing the settlement logic.
-    maxWait: 10000,
-    timeout: 20000,
-  });
+      if (updated.orderId) {
+        try {
+          await recordOrderEvent(tx, {
+            orderId:
+              updated.orderId,
+
+            type:
+              'PAYMENT_STATUS_CHANGED',
+
+            metadata: {
+              paymentId:
+                updated.id,
+
+              paymentType:
+                updated.type,
+
+              fromStatus:
+                payment.status,
+
+              toStatus:
+                status,
+
+              obligationId:
+                updated.obligationId ||
+                null,
+
+              amount:
+                String(updated.amount),
+            },
+          });
+        } catch (error) {
+          logger.error(
+            {
+              err:
+                error,
+
+              paymentId:
+                updated.id,
+
+              orderId:
+                updated.orderId,
+            },
+            'settlePayment: recordOrderEvent/notification side effect failed; continuing with payment settlement'
+          );
+        }
+      }
+
+      // ----------------------------------------------------------------------
+      // AUDIT
+      // ----------------------------------------------------------------------
+
+      await recordAuditEvent(tx, {
+        actorId:
+          null,
+
+        action:
+          'PAYMENT_STATUS_CHANGED',
+
+        resourceType:
+          'Payment',
+
+        resourceId:
+          payment.id,
+
+        metadata: {
+          fromStatus:
+            payment.status,
+
+          toStatus:
+            status,
+
+          provider:
+            provider ||
+            payment.provider ||
+            null,
+
+          providerTransactionId:
+            providerTransactionId ||
+            payment.providerTransactionId ||
+            null,
+
+          reference:
+            reference ||
+            payment.reference ||
+            null,
+
+          eventId:
+            eventId ||
+            null,
+        },
+      });
+
+      // ----------------------------------------------------------------------
+      // PAID BUSINESS EFFECTS
+      // ----------------------------------------------------------------------
+
+      if (status === 'PAID') {
+        // --------------------------------------------------------------------
+        // MARKETPLACE ORDER
+        // --------------------------------------------------------------------
+
+        if (
+          payment.type === 'MARKETPLACE' &&
+          payment.orderId
+        ) {
+          let orderClaim = {
+            count: 0,
+          };
+
+          const currentOrder =
+            await tx.order.findUnique({
+              where: {
+                id:
+                  payment.orderId,
+              },
+
+              select: {
+                status:
+                  true,
+              },
+            });
+
+          if (
+            currentOrder?.status ===
+            'PENDING_PAYMENT'
+          ) {
+            await transitionOrderStatus(
+              tx,
+              payment.orderId,
+              'PENDING_PAYMENT',
+              'CONFIRMED'
+            );
+
+            orderClaim = {
+              count: 1,
+            };
+          }
+
+          if (orderClaim.count === 0) {
+            const orderAfterAttempt =
+              await tx.order.findUnique({
+                where: {
+                  id:
+                    payment.orderId,
+                },
+
+                select: {
+                  status:
+                    true,
+                },
+              });
+
+            if (
+              orderAfterAttempt?.status ===
+              'CANCELLED'
+            ) {
+              await createReconciliationIssue(
+                tx,
+                {
+                  paymentId:
+                    payment.id,
+
+                  provider:
+                    provider ||
+                    payment.provider ||
+                    'UNKNOWN',
+
+                  observedStatus:
+                    status,
+
+                  expectedAmount:
+                    payment.amount,
+
+                  observedAmount:
+                    payload.amount ??
+                    payment.amount,
+
+                  expectedCurrency:
+                    payment.currency,
+
+                  observedCurrency:
+                    payload.currency ||
+                    payment.currency,
+
+                  reason:
+                    'PAYMENT_RECEIVED_FOR_CANCELLED_ORDER',
+
+                  payload,
+                }
+              );
+
+              await recordAuditEvent(
+                tx,
+                {
+                  actorId:
+                    null,
+
+                  action:
+                    'PAYMENT_RECONCILIATION_REQUIRED',
+
+                  resourceType:
+                    'Payment',
+
+                  resourceId:
+                    payment.id,
+
+                  metadata: {
+                    reason:
+                      'PAYMENT_RECEIVED_FOR_CANCELLED_ORDER',
+
+                    orderId:
+                      payment.orderId,
+
+                    eventId:
+                      eventId ||
+                      null,
+                  },
+                }
+              );
+            }
+          }
+        }
+
+        // --------------------------------------------------------------------
+        // DIGITAL PURCHASE
+        // --------------------------------------------------------------------
+
+        if (
+          payment.type === 'DIGITAL' &&
+          payment.digitalPurchase
+        ) {
+          await tx.digitalPurchase.update({
+            where: {
+              id:
+                payment.digitalPurchase.id,
+            },
+
+            data: {
+              status:
+                'COMPLETED',
+            },
+          });
+        }
+
+        // --------------------------------------------------------------------
+        // ADVERTISING
+        // --------------------------------------------------------------------
+
+        if (
+          payment.type === 'ADVERTISING' &&
+          payment.advertisement
+        ) {
+          const requiresModeration =
+            [
+              'BANNER',
+              'TELEGRAM_PROMOTION',
+            ].includes(
+              payment.advertisement.type
+            );
+
+          const startsInFuture =
+            new Date(
+              payment.advertisement.startDate
+            ) > new Date();
+
+          const nextStatus =
+            requiresModeration
+              ? 'PAID_PENDING_REVIEW'
+              : (
+                  startsInFuture
+                    ? 'SCHEDULED'
+                    : 'PUBLISHED'
+                );
+
+          await tx.advertisement.update({
+            where: {
+              id:
+                payment.advertisement.id,
+            },
+
+            data: {
+              amountPaid:
+                payment.amount,
+
+              status:
+                nextStatus,
+
+              ...(nextStatus === 'PUBLISHED'
+                ? {
+                    publishedAt:
+                      new Date(),
+                  }
+                : {}),
+            },
+          });
+        }
+
+        // --------------------------------------------------------------------
+        // FINANCIAL LEDGER
+        // --------------------------------------------------------------------
+
+        await writeLedger(
+          tx,
+          payment,
+          'PAID'
+        );
+      }
+
+      // ----------------------------------------------------------------------
+      // REFUND BUSINESS EFFECTS
+      // ----------------------------------------------------------------------
+
+      if (status === 'REFUNDED') {
+        if (payment.digitalPurchase) {
+          await tx.digitalPurchase.update({
+            where: {
+              id:
+                payment.digitalPurchase.id,
+            },
+
+            data: {
+              status:
+                'REFUNDED',
+            },
+          });
+        }
+
+        await writeLedger(
+          tx,
+          payment,
+          'REFUNDED'
+        );
+      }
+
+      return updated;
+    },
+    {
+      // Payment settlement intentionally contains several dependent writes.
+      // Give it enough time to complete on the production PostgreSQL service.
+      maxWait: 10000,
+      timeout: 20000,
+    }
+  );
 }
 
 // ============================================================================
