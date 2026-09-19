@@ -320,16 +320,6 @@ p {
   color: #fff;
 }
 
-.mobile-menu-label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, .75);
-  text-shadow: 0 1px 3px rgba(10, 35, 20, .18);
-  padding: 4px 12px 2px;
-}
-
 .nav-cta {
   background: var(--green) !important;
   color: #fff !important;
@@ -2633,35 +2623,81 @@ a.recent-activity-link:hover {
 .mobile-menu-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 26, 18, .38);
+  background: rgba(10, 16, 12, .5);
   backdrop-filter: blur(2px);
   z-index: 45;
   animation: mobileBackdropIn .22s var(--ease);
 }
 
 .mobile-menu {
+  --sidebar-bg: #121a15;
+  --sidebar-card: rgba(255, 255, 255, .06);
+  --sidebar-hover: rgba(255, 255, 255, .09);
+  --sidebar-border: rgba(255, 255, 255, .08);
+  --sidebar-text-muted: rgba(255, 255, 255, .55);
   position: fixed;
   top: 0;
   right: 0;
-  bottom: 18px;
-  width: min(320px, 78vw);
-  max-width: 82vw;
+  bottom: 0;
+  width: min(300px, 82vw);
+  max-width: 86vw;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 84px 18px 24px;
+  padding: 84px 14px 20px;
   overflow-y: auto;
-  border-radius: 0 0 22px 22px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, 0) 40%),
-    linear-gradient(200deg, rgba(70, 168, 197, .4) 0%, rgba(23, 107, 58, .38) 55%, rgba(14, 75, 41, .4) 100%);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, .35);
-  border-top: none;
-  box-shadow: -14px 18px 50px rgba(10, 40, 45, .22), 0 2px 0 rgba(255, 255, 255, .3) inset;
+  border-radius: 20px 0 0 20px;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--sidebar-border);
+  border-right: none;
+  box-shadow: -14px 0 40px rgba(10, 20, 14, .3);
   z-index: 46;
   animation: mobileMenuIn .28s var(--ease);
+}
+
+.mobile-menu-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 10px 18px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+.mobile-menu-avatar {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  background: var(--sidebar-card);
+  color: #fff;
+  font-size: 15px;
+}
+
+.mobile-menu-user-info {
+  min-width: 0;
+}
+
+.mobile-menu-user-info h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-menu-user-info p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--sidebar-text-muted);
+}
+
+.mobile-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 14px;
 }
 
 @keyframes mobileMenuIn {
@@ -2686,67 +2722,95 @@ a.recent-activity-link:hover {
   }
 }
 
-.mobile-menu a,
-.mobile-menu button {
-  display: block;
+.mobile-menu-item {
+  display: flex;
+  align-items: center;
   width: 100%;
   text-align: left;
-  padding: 13px 12px;
+  padding: 11px 12px;
   border-radius: 10px;
-  color: #fff;
-  text-shadow: 0 1px 3px rgba(10, 35, 20, .18);
+  color: rgba(255, 255, 255, .88);
   text-decoration: none;
   font: inherit;
-  font-size: 15px;
+  font-size: 14.5px;
   border: 0;
   background: none;
   cursor: pointer;
-  transition: background .16s var(--ease), color .16s var(--ease), transform .16s var(--ease), padding-left .16s var(--ease);
+  position: relative;
+  transition: background .16s var(--ease), color .16s var(--ease);
 }
 
-.mobile-menu a:hover,
-.mobile-menu button:hover {
-  background: rgba(255, 255, 255, .22);
+.mobile-menu-item:hover {
+  background: var(--sidebar-hover);
   color: #fff;
-  padding-left: 18px;
 }
 
-.mobile-menu a.active {
-  background: rgba(255, 255, 255, .26);
+.mobile-menu-item.active {
+  background: var(--green);
   color: #fff;
   font-weight: 700;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, .3) inset;
 }
 
-.mobile-menu a.nav-cta {
+.mobile-menu-item.active::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--green-light);
+}
+
+.mobile-menu-item.nav-cta {
   background: #fff;
   color: var(--green) !important;
-  text-shadow: none;
   font-weight: 700;
-  text-align: center;
+  justify-content: center;
   margin-top: 6px;
-  box-shadow: 0 6px 18px rgba(10, 40, 25, .2);
+  box-shadow: 0 6px 18px rgba(10, 40, 25, .25);
 }
 
-.mobile-menu a.nav-cta:hover {
+.mobile-menu-item.nav-cta:hover {
   background: #f0faf3;
   color: var(--green-dark) !important;
-  padding-left: 12px;
+}
+
+.mobile-menu-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--sidebar-text-muted);
+  text-shadow: none;
+  padding: 0 10px;
+  margin: 14px 0 8px;
+}
+
+.mobile-menu > .mobile-menu-label:first-child,
+.mobile-menu-user + .mobile-menu-label {
+  margin-top: 0;
 }
 
 .mobile-menu-divider {
   height: 1px;
   margin: 8px 4px;
-  background: rgba(255, 255, 255, .28);
+  background: var(--sidebar-border);
 }
 
-.mobile-logout {
+.mobile-menu-item.mobile-logout {
+  color: #ffb4a8 !important;
+}
+
+.mobile-menu-item.mobile-logout:hover {
+  background: rgba(255, 255, 255, .1) !important;
   color: #ffd9d4 !important;
 }
 
-.mobile-logout:hover {
-  background: rgba(255, 255, 255, .18) !important;
-  color: #fff !important;
+.mobile-menu-footer {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--sidebar-border);
 }
 
 .nav-account {
@@ -4985,428 +5049,9 @@ canvas {
     top: 0;
     right: 0;
     bottom: 0;
-    width: min(360px, 88vw);
+    width: min(320px, 88vw);
     max-width: 88vw;
     min-height: 100dvh;
-    padding: calc(76px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
+    padding: calc(76px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
     border-radius: 20px 0 0 20px;
-    border: 1px solid rgba(255,255,255,.32);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-
-  .mobile-menu a,
-  .mobile-menu button {
-    min-height: 46px;
-    padding: 12px 13px;
-    display: flex;
-    align-items: center;
-  }
-
-  .mobile-menu-label {
-    padding: 0 13px 6px;
-    color: rgba(255,255,255,.76);
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-  }
-
-  /* Welcome hero stacks instead of squeezing the activity control. */
-  .dash-welcome {
-    align-items: flex-start;
-    gap: 14px;
-    padding: 18px;
-    border-radius: 17px;
-  }
-
-  .dash-welcome-body {
-    width: 100%;
-  }
-
-  .dash-welcome-heading {
-    font-size: 22px;
-  }
-
-  .dash-welcome-subtitle {
-    font-size: 13px;
-    line-height: 1.5;
-  }
-
-  .recent-activity {
-    width: 100%;
-    margin-top: 4px;
-    margin-bottom: 0;
-  }
-
-  /* Service cards remain prominent but never force a horizontal layout. */
-  .service-access {
-    margin: 20px 0;
-    padding: 15px;
-    border-radius: 16px;
-  }
-
-  .service-access-header {
-    gap: 12px;
-  }
-
-  .service-access-header .btn {
-    width: 100%;
-  }
-
-  .service-access-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .service-access-card {
-    width: 100%;
-    min-width: 0;
-    padding: 15px;
-  }
-
-  .service-access-copy {
-    min-width: 0;
-  }
-
-  .service-access-copy span {
-    line-height: 1.45;
-  }
-
-  /* Dashboard tabs become one compact selector. */
-  .sd-tabs-nav {
-    margin: 20px 0 16px;
-  }
-
-  .sd-tabs-list {
-    display: none;
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: calc(100% + 6px);
-    z-index: 35;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 2px;
-    padding: 6px;
-    border: 1px solid var(--mb-border, #d9e4da);
-    border-radius: 14px;
-    background: #fff;
-    box-shadow: 0 18px 40px rgba(20,45,28,.16);
-  }
-
-  .sd-tabs-open .sd-tabs-list {
-    display: flex;
-  }
-
-  .sd-tabs-list .sd-tab {
-    width: 100%;
-    min-height: 44px;
-    text-align: left;
-    padding: 11px 13px;
-  }
-
-  /* Dense dashboard tables become cards. */
-  .sd-table--mobile-cards,
-  .sd-table--mobile-cards tbody,
-  .sd-table--mobile-cards tr,
-  .sd-table--mobile-cards td {
-    display: block;
-    width: 100%;
-  }
-
-  .sd-table--mobile-cards thead {
-    display: none;
-  }
-
-  .sd-table--mobile-cards {
-    border-collapse: separate;
-    border-spacing: 0;
-  }
-
-  .sd-table--mobile-cards tr {
-    margin: 0 0 12px;
-    padding: 8px 14px;
-    border: 1px solid var(--mb-border, #d9e4da);
-    border-radius: 14px;
-    background: #fff;
-    box-shadow: 0 5px 18px rgba(20,45,28,.045);
-  }
-
-  .sd-table--mobile-cards tr:last-child {
-    margin-bottom: 0;
-  }
-
-  .sd-table--mobile-cards td {
-    display: grid;
-    grid-template-columns: minmax(78px, 34%) minmax(0, 1fr);
-    gap: 10px;
-    align-items: center;
-    padding: 9px 0;
-    border-bottom: 1px solid #edf0ed;
-    white-space: normal;
-    word-break: break-word;
-  }
-
-  .sd-table--mobile-cards td::before {
-    content: attr(data-label);
-    color: var(--muted, #667067);
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: .07em;
-    text-transform: uppercase;
-  }
-
-  .sd-table--mobile-cards td:last-child {
-    border-bottom: 0;
-    padding-bottom: 7px;
-  }
-
-  .sd-table--mobile-cards td[data-label="Action"] {
-    grid-template-columns: 1fr;
-    padding-top: 11px;
-  }
-
-  .sd-table--mobile-cards td[data-label="Action"]::before {
-    display: none;
-  }
-
-  .sd-table--mobile-cards td[data-label="Action"] .sd-actions {
-    width: 100%;
-  }
-
-  .sd-table--mobile-cards td[data-label="Action"] .sd-actions .btn {
-    flex: 1 1 100%;
-  }
-
-  .sd-mobile-action {
-    width: 100%;
-  }
-
-  /* Offer controls: no horizontal squeeze. */
-  .sd-table--mobile-cards .sd-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .sd-table--mobile-cards .sd-counter-input {
-    width: 100%;
-    min-width: 0;
-  }
-
-  /* Dashboard cards and headers stack cleanly. */
-  .dashboard-page .card {
-    padding: 16px;
-    border-radius: 15px;
-  }
-
-  .dashboard-page .row-between {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .dashboard-page .row-between .btn {
-    width: 100%;
-  }
-
-  .dashboard-page .card-grid.two-col {
-    grid-template-columns: 1fr;
-  }
-
-  .sd-stat-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-  }
-
-  .sd-stat b {
-    font-size: 21px;
-  }
-
-  /* Search/filter panels: one control per row on phones. */
-  .search-panel {
-    grid-template-columns: 1fr;
-    gap: 9px;
-  }
-
-  .search-panel > * {
-    min-width: 0;
-    width: 100%;
-  }
-
-  .search-panel button {
-    width: 100%;
-  }
-
-  /* Product/listing grids: one comfortable card per phone row. */
-  .listing-grid,
-  .product-grid,
-  .card-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  .listing-card,
-  .listing-card * {
-    min-width: 0;
-  }
-
-  .listing-photo {
-    width: 100%;
-    aspect-ratio: 16 / 10;
-  }
-
-  .listing-body {
-    overflow: hidden;
-  }
-
-  /* Common form rows should stack instead of overflowing. */
-  .inline-form,
-  .row-actions,
-  .workflow-actions {
-    min-width: 0;
-  }
-
-  .inline-form > *,
-  .row-actions > * {
-    max-width: 100%;
-  }
-
-  .btn,
-  button,
-  select,
-  input,
-  textarea {
-    max-width: 100%;
-  }
-
-  /* Advertising creatives: use a shorter, phone-friendly presentation. */
-  .ad-banner,
-  .ad-banner--split,
-  .ad-banner--editorial,
-  .ad-banner--fresh,
-  .ad-banner--dark-luxe,
-  .ad-banner--market,
-  .ad-banner--gradient {
-    width: 100%;
-    max-width: 100%;
-    overflow: hidden;
-    border-radius: 14px;
-  }
-
-  .ad-banner--split {
-    grid-template-columns: 1fr;
-  }
-
-  .ad-banner--split .ad-banner-split-image {
-    min-height: 145px;
-    max-height: 190px;
-  }
-
-  .ad-banner--editorial img,
-  .ad-banner--fresh img,
-  .ad-banner--dark-luxe img,
-  .ad-banner--market img,
-  .ad-banner--gradient img {
-    width: 100%;
-    min-height: 185px;
-    max-height: 250px;
-    object-fit: cover;
-  }
-
-  .ad-banner-editorial-copy,
-  .ad-banner-fresh-overlay,
-  .ad-banner-luxe-copy,
-  .ad-banner-market-copy,
-  .ad-banner-gradient-copy {
-    padding: 18px;
-  }
-
-  .ad-banner-editorial-copy strong,
-  .ad-banner-fresh-overlay strong,
-  .ad-banner-luxe-copy strong,
-  .ad-banner-market-copy strong,
-  .ad-banner-gradient-copy strong {
-    font-size: clamp(22px, 7vw, 31px);
-  }
-}
-
-@media (max-width: 420px) {
-  .container-wide,
-  .container-narrow {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-
-  .navbar {
-    gap: 6px;
-  }
-
-  .brand > span:last-child {
-    display: none;
-  }
-
-  .brand-mark {
-    width: 38px;
-    height: 38px;
-  }
-
-  .market-pill {
-    font-size: 11px;
-    padding: 6px 8px;
-  }
-
-  .nav-burger {
-    flex-basis: 42px;
-    width: 42px;
-  }
-
-  .mobile-menu {
-    width: 92vw;
-    max-width: 92vw;
-  }
-
-  .dash-welcome {
-    padding: 15px;
-  }
-
-  .dash-welcome-avatar {
-    width: 46px;
-    height: 46px;
-    font-size: 19px;
-  }
-
-  .dashboard-page .card {
-    padding: 14px;
-  }
-
-  .sd-table--mobile-cards tr {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-
-  .sd-table--mobile-cards td {
-    grid-template-columns: minmax(70px, 31%) minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .service-access-card {
-    align-items: flex-start;
-  }
-
-  .service-access-arrow {
-    padding-top: 8px;
-  }
-}
-
-@media (min-width: 761px) and (max-width: 1024px) {
-  .container-wide {
-    padding-left: 20px;
-    padding-right: 20px;
-  }
-
-  .listing-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .dashboard-page .card-grid.two-col {
-    grid-template-columns: 1fr 1fr;
-  }
-}
+    overf
