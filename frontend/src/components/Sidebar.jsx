@@ -104,9 +104,14 @@ export default function Sidebar() {
   const dashboardHref = resolveDashboard(user);
 
   useEffect(() => {
-    document.body.classList.toggle('sidebar-open', expanded);
-    return () => document.body.classList.remove('sidebar-open');
-  }, [expanded]);
+    document.body.classList.toggle('has-sidebar', Boolean(user));
+    document.body.classList.toggle('sidebar-open', Boolean(user) && expanded);
+
+    return () => {
+      document.body.classList.remove('has-sidebar');
+      document.body.classList.remove('sidebar-open');
+    };
+  }, [user, expanded]);
 
   useEffect(() => {
     setAccountOpen(false);
@@ -141,25 +146,6 @@ export default function Sidebar() {
     logout();
     setExpanded(false);
     navigate('/');
-  }
-
-  if (!user) {
-    return (
-      <aside className={`glass-sidebar${expanded ? ' expanded' : ''}`} aria-label="MarketBridge navigation">
-        <button className="glass-toggle" type="button" aria-label="Toggle sidebar" onClick={() => setExpanded((v) => !v)}>
-          <Icon name="menu" />
-        </button>
-        <NavItem to="/" icon="home" label="Home" active={is('/', true)} onClick={collapseAfterNavigation} />
-        <NavItem to="/agricultural" icon="marketplace" label="Marketplace" active={marketActive} onClick={collapseAfterNavigation} />
-        <div className="glass-divider" />
-        <div className="glass-spacer" />
-        <div className="glass-auth-actions" aria-label="Account access">
-          <NavItem to="/login" icon="login" label="Login" active={is('/login', true)} onClick={collapseAfterNavigation} />
-          <NavItem to="/register" icon="register" label="Register" active={is('/register', true)} onClick={collapseAfterNavigation} />
-        </div>
-        <div className="glass-language"><LanguageSwitcher /></div>
-      </aside>
-    );
   }
 
   return (
