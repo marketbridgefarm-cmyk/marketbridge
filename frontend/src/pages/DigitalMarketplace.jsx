@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext.jsx';
 import api from '../api/client';
 import { chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 
@@ -15,12 +16,11 @@ const PAYMENT_METHODS = [
 
 export default function DigitalMarketplace() {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
   const [myPurchases, setMyPurchases] = useState([]);
   const [form, setForm] = useState({ title: '', productType: 'ebook', price: '', description: '', file: null });
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
   const [busyId, setBusyId] = useState('');
   const [payMethod, setPayMethod] = useState('TELEBIRR');
 
@@ -29,7 +29,7 @@ export default function DigitalMarketplace() {
       const r = await api.get('/digital-products', { params: { search } });
       setProducts(r.data.products || []);
     } catch (e) {
-      setError(e.response?.data?.error || 'Could not load products');
+      showToast(e.response?.data?.error || 'Could not load products', 'error');
     }
   }
 
@@ -45,9 +45,7 @@ export default function DigitalMarketplace() {
 
   async function submit(e) {
     e.preventDefault();
-    setError('');
-    setMessage('');
-    if (!form.file) { setError('Choose a file'); return; }
+    if (!form.file) { showToast('Choose a file', 'error'); return; }
     const fd = new FormData();
     fd.append('title', form.title);
     fd.append('productType', form.productType);
@@ -57,16 +55,14 @@ export default function DigitalMarketplace() {
     try {
       await api.post('/digital-products', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setForm({ title: '', productType: 'ebook', price: '', description: '', file: null });
-      setMessage('Product published securely.');
+      showToast('Product published securely.', 'success');
       load();
     } catch (e) {
-      setError(e.response?.data?.error || 'Could not publish product');
+      showToast(e.response?.data?.error || 'Could not publish product', 'error');
     }
   }
 
   async function purchase(p) {
-    setError('');
-    setMessage('');
     setBusyId(p.id);
     try {
       const key = `digital-purchase:${p.id}`;
@@ -77,30 +73,28 @@ export default function DigitalMarketplace() {
       );
       await chapaInitializeAndRedirect(r.data.payment?.id);
     } catch (e) {
-      setError(e.response?.data?.error || e.message || 'Could not create purchase');
+      showToast(e.response?.data?.error === 'You cannot purchase your own product' ? 'You cannot purchase your own product.' : (e.response?.data?.error || e.message || 'Could not create purchase'), 'error');
       setBusyId('');
     }
   }
 
   async function resumePurchase(paymentId, productId) {
-    setError('');
     setBusyId(productId);
     try {
       await chapaInitializeAndRedirect(paymentId);
     } catch (e) {
-      setError(e.response?.data?.error || e.message || 'Could not resume payment');
+      showToast(e.response?.data?.error || e.message || 'Could not resume payment', 'error');
       setBusyId('');
     }
   }
 
   async function download(purchaseId, productId) {
-    setError('');
     setBusyId(productId);
     try {
       const r = await api.get(`/digital-products/${purchaseId}/download`);
       window.open(r.data.downloadUrl, '_blank', 'noopener');
     } catch (e) {
-      setError(e.response?.data?.error || e.message || 'Could not get download link');
+      showToast(e.response?.data?.error || e.message || 'Could not get download link', 'error');
     } finally {
       setBusyId('');
     }
@@ -133,9 +127,6 @@ export default function DigitalMarketplace() {
           </div>
           <button className="btn btn-primary" onClick={load}>Search</button>
         </div>
-        {error && <div className="alert error">{error}</div>}
-        {message && <div className="alert">{message}</div>}
-
         {user?.roles?.includes('SELLER') && (
           <div className="card form-card">
             <h2>Publish a digital product</h2>

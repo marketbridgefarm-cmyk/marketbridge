@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import api from '../api/client';
 import { startChapaPayment, chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
 
 const money = (n) => Number(n || 0).toLocaleString();
@@ -10,11 +11,10 @@ const money = (n) => Number(n || 0).toLocaleString();
 export default function ListingDetail() {
   const { id } = useParams();
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [listing, setListing] = useState(null);
   const [offerAmount, setOfferAmount] = useState('');
   const [message, setMessage] = useState('');
-  const [msg, setMsg] = useState('');
-  const [error, setError] = useState('');
   const [inspector, setInspector] = useState('');
   const [feeForInspector, setFeeForInspector] = useState('');
   const [inspectionPayMethod, setInspectionPayMethod] = useState('TELEBIRR');
@@ -49,7 +49,7 @@ export default function ListingDetail() {
       setListing(response.data.listing);
       setActiveMediaIndex(0);
     } catch (e) {
-      setError(e.response?.data?.error || 'Listing not found.');
+      showToast(e.response?.data?.error || 'Listing not found.', 'error');
     }
   }
 
@@ -67,21 +67,18 @@ export default function ListingDetail() {
 
   async function submitOffer(e) {
     e.preventDefault();
-    setError('');
     try {
       await api.post('/offers', { listingId: id, amount: Number(offerAmount), message });
-      setMsg('Offer submitted. Other buyers can still see this listing until an offer is accepted.');
+      showToast('Offer submitted. Other buyers can still see this listing until an offer is accepted.', 'success');
       setOfferAmount('');
       setMessage('');
       load();
     } catch (e) {
-      setError(e.response?.data?.error || 'Could not submit offer');
+      showToast(e.response?.data?.error || 'Could not submit offer', 'error');
     }
   }
 
   async function buyProduct() {
-    setError('');
-    setMsg('');
     setBuying(true);
     try {
       const response = await api.post(
@@ -97,20 +94,19 @@ export default function ListingDetail() {
         method: buyMethod,
       });
     } catch (e) {
-      setError(e.response?.data?.error || e.message || 'Could not start purchase');
+      showToast((e.response?.data?.error === 'You cannot purchase your own listing' || e.response?.data?.error === 'You cannot purchase your own product') ? 'You cannot purchase your own product.' : (e.response?.data?.error || e.message || 'Could not start purchase'), 'error');
       setBuying(false);
     }
   }
 
   async function requestInspection(mode) {
-    setError('');
     if (inspector && (!feeForInspector || Number(feeForInspector) <= 0)) {
-      setError('Enter the agreed inspection fee before requesting this inspector.');
+      showToast('Enter the agreed inspection fee before requesting this inspector.', 'error');
       return;
     }
     try {
       if (!relatedOrder?.id) {
-        setError('Complete the agricultural offer/negotiation first. Inspection is attached to the resulting order.');
+        showToast('Complete the agricultural offer/negotiation first. Inspection is attached to the resulting order.', 'error');
         return;
       }
       const body = { orderId: relatedOrder.id, listingId: id, mode };
@@ -123,26 +119,25 @@ export default function ListingDetail() {
         body,
         { headers: { 'Idempotency-Key': `inspection:${relatedOrder.id}:${mode}` } }
       );
-      setMsg('Inspection request created.');
+      showToast('Inspection request created.', 'success');
       setInspector('');
       setFeeForInspector('');
       load();
     } catch (e) {
-      setError(e.response?.data?.error || 'Could not request inspection');
+      showToast(e.response?.data?.error || 'Could not request inspection', 'error');
     }
   }
 
   async function respondToOffer(offerId, action, counterAmount) {
-    setError('');
     try {
       const payload = { action };
       if (counterAmount != null) payload.counterAmount = Number(counterAmount);
       const response = await api.patch(`/offers/${offerId}`, payload);
-      setMsg(response.data?.message || 'Negotiation updated.');
+      showToast(response.data?.message || 'Negotiation updated.', 'success');
       setBuyerCounter('');
       await load();
     } catch (e) {
-      setError(e.response?.data?.error || 'Action failed');
+      showToast(e.response?.data?.error || 'Action failed', 'error');
     }
   }
 
@@ -150,55 +145,51 @@ export default function ListingDetail() {
     try {
       const response = await api.get('/inspections/inspectors', { params: { location: listing.location } });
       const options = response.data.inspectors || [];
-      if (!options.length) { setError('No inspectors were found in this area.'); return; }
+      if (!options.length) { showToast('No inspectors were found in this area.', 'error'); return; }
       setInspector(options[0].id);
-      setMsg(`Inspector selected: ${options[0].name}`);
+      showToast(`Inspector selected: ${options[0].name}`, 'success');
     } catch (e) {
-      setError(e.response?.data?.error || 'Could not load inspectors');
+      showToast(e.response?.data?.error || 'Could not load inspectors', 'error');
     }
   }
 
   async function payInspection(request) {
-    setError('');
     setPayingInspectionId(request.id);
     try {
       await startChapaPayment({ type: 'INSPECTOR', inspectionRequestId: request.id, amount: request.fee, method: inspectionPayMethod });
     } catch (e) {
-      setError(e.response?.data?.error || e.message || 'Could not start inspection payment');
+      showToast(e.response?.data?.error || e.message || 'Could not start inspection payment', 'error');
       setPayingInspectionId('');
     }
   }
 
   async function resumeInspectionPayment(paymentId, requestId) {
-    setError('');
     setPayingInspectionId(requestId);
     try {
       await chapaInitializeAndRedirect(paymentId);
     } catch (e) {
-      setError(e.response?.data?.error || e.message || 'Could not resume payment');
+      showToast(e.response?.data?.error || e.message || 'Could not resume payment', 'error');
       setPayingInspectionId('');
     }
   }
 
   async function loadQuotes(requestId) {
-    setError('');
     setLoadingQuotesId(requestId);
     try {
       const response = await api.get(`/inspections/${requestId}/quotes`);
       setQuotesByRequest((q) => ({ ...q, [requestId]: response.data?.quotes || [] }));
     } catch (e) {
-      setError(e.response?.data?.error || 'Could not load quotes');
+      showToast(e.response?.data?.error || 'Could not load quotes', 'error');
     } finally {
       setLoadingQuotesId('');
     }
   }
 
   async function acceptQuote(requestId, quoteId) {
-    setError('');
     setAcceptingQuoteId(quoteId);
     try {
       await api.patch(`/inspections/${requestId}/quotes/${quoteId}/accept`);
-      setMsg('Quote accepted. The inspector has been assigned.');
+      showToast('Quote accepted. The inspector has been assigned.', 'success');
       setQuotesByRequest((q) => {
         const next = { ...q };
         delete next[requestId];
@@ -206,41 +197,39 @@ export default function ListingDetail() {
       });
       await load();
     } catch (e) {
-      setError(e.response?.data?.error || 'Could not accept this quote — it may no longer be available.');
+      showToast(e.response?.data?.error || 'Could not accept this quote — it may no longer be available.', 'error');
     } finally {
       setAcceptingQuoteId('');
     }
   }
 
   async function counterQuote(requestId, quoteId) {
-    setError('');
     const amount = Number(quoteCounterInputs[quoteId]);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Enter a valid counter amount before sending.');
+      showToast('Enter a valid counter amount before sending.', 'error');
       return;
     }
     setCounteringQuoteId(quoteId);
     try {
       await api.post(`/inspections/${requestId}/quotes/${quoteId}/counter`, { counterAmount: amount });
-      setMsg('Counter-offer sent to the inspector.');
+      showToast('Counter-offer sent to the inspector.', 'success');
       setQuoteCounterInputs((q) => ({ ...q, [quoteId]: '' }));
       await loadQuotes(requestId);
     } catch (e) {
-      setError(e.response?.data?.error || 'Could not send counter-offer.');
+      showToast(e.response?.data?.error || 'Could not send counter-offer.', 'error');
     } finally {
       setCounteringQuoteId('');
     }
   }
 
   async function rejectQuote(requestId, quoteId) {
-    setError('');
     setRejectingQuoteId(quoteId);
     try {
       await api.patch(`/inspections/${requestId}/quotes/${quoteId}/reject`);
-      setMsg('Quote rejected.');
+      showToast('Quote rejected.', 'success');
       await loadQuotes(requestId);
     } catch (e) {
-      setError(e.response?.data?.error || 'Could not reject this quote.');
+      showToast(e.response?.data?.error || 'Could not reject this quote.', 'error');
     } finally {
       setRejectingQuoteId('');
     }
@@ -450,9 +439,6 @@ export default function ListingDetail() {
           </section>
 
           <aside>
-            {msg && <div className="alert success">{msg}</div>}
-            {error && <div className="alert error">{error}</div>}
-
             {isBuyer && myLatestOffer && isAgricultural && (
               <div className="card" id="negotiation">
                 <h2>Your negotiation</h2>
