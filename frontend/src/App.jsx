@@ -24,6 +24,7 @@ import ProductMarketplace from './pages/ProductMarketplace.jsx';
 
 import OrderDetail from './pages/OrderDetail.jsx';
 import Orders from './pages/Orders.jsx';
+import Negotiations from './pages/Negotiations.jsx';
 
 import PaymentReturn from './pages/PaymentReturn.jsx';
 
@@ -77,6 +78,15 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Orders />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/negotiations"
+          element={
+            <ProtectedRoute>
+              <Negotiations />
             </ProtectedRoute>
           }
         />
