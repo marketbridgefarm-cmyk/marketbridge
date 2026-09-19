@@ -1,7 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 
-import Navbar from './components/Navbar.jsx';
+import Sidebar from './components/Sidebar.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 
 import Home from './pages/Home.jsx';
@@ -33,9 +33,10 @@ import AccountSecurity from './pages/AccountSecurity.jsx';
 
 export default function App() {
   return (
-    <>
-      <Navbar />
+    <div className="app-shell">
+      <Sidebar />
 
+      <div className="app-main">
       <Routes>
         {/* Public pages */}
         <Route path="/" element={<Home />} />
@@ -177,6 +178,7 @@ export default function App() {
         {/* Fallback */}
         <Route path="*" element={<Home />} />
       </Routes>
-    </>
+      </div>
+    </div>
   );
 }
