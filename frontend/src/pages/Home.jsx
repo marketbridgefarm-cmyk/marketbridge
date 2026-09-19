@@ -27,6 +27,16 @@ export default function Home() {
               <Link className="btn btn-primary btn-lg" to="/agricultural">Agricultural Marketplace →</Link>
               <Link className="btn btn-light btn-lg" to="/products">Browse Products</Link>
             </div>
+            <div className="hero-account-cta" aria-label="MarketBridge account access">
+              <div className="hero-account-copy">
+                <strong>New to MarketBridge?</strong>
+                <span>Start your marketplace journey — buy, sell, negotiate and grow with us.</span>
+              </div>
+              <div className="hero-account-actions">
+                <Link className="btn btn-primary" to="/register">Join MarketBridge</Link>
+                <Link className="btn btn-light" to="/login">Welcome back · Sign in</Link>
+              </div>
+            </div>
             <div className="trust-row">
               <span>✓ Independent sellers</span>
               <span>✓ Buyer & seller accounts</span>
