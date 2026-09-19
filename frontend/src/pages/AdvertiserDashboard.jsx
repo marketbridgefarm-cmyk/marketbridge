@@ -4,6 +4,7 @@ import { startChapaPayment, chapaInitializeAndRedirect } from '../utils/chapaChe
 import { useAuth } from '../context/AuthContext.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import RecentActivity from '../components/RecentActivity.jsx';
+import ImageCarousel from '../components/ImageCarousel.jsx';
 
 // Only TELEBIRR and QR route to a configured payment adapter (both go
 // through Chapa's hosted checkout — see
@@ -88,7 +89,18 @@ const TELEGRAM_TEMPLATE_OPTIONS = [
     help: 'Credibility-first, for building buyer confidence.',
     starter: '✅ Verified seller on MarketBridge. Consistent quality and dependable delivery — see why buyers keep coming back.',
   },
+  {
+    value: 'CAROUSEL',
+    label: 'Photo Carousel',
+    icon: '🎠',
+    anim: 'tg-anim-carousel',
+    help: 'A swipeable album of your own photos, with your message as the caption.',
+    starter: '🎠 Swipe through the latest from our farm — fresh produce, ready to order on MarketBridge.',
+  },
 ];
+
+// Fallback until GET /ads/pricing reports the server's real carousel limits.
+const DEFAULT_CAROUSEL_LIMITS = { minImages: 2, maxImages: 10, maxFileBytes: 5 * 1024 * 1024 };
 
 const LISTING_LINKED_TYPES = ['FEATURED_LISTING', 'TOP_OF_CATEGORY', 'SPONSORED_SEARCH'];
 
@@ -138,6 +150,8 @@ export default function AdvertiserDashboard() {
   const [payingId, setPayingId] = useState(null);
   const [payMethod, setPayMethod] = useState('TELEBIRR');
   const [uploadingCreative, setUploadingCreative] = useState(false);
+  const [uploadingCarousel, setUploadingCarousel] = useState(false);
+  const [carouselLimits, setCarouselLimits] = useState(DEFAULT_CAROUSEL_LIMITS);
   const [analytics, setAnalytics] = useState({});
 
   const [form, setForm] = useState({
@@ -151,6 +165,8 @@ export default function AdvertiserDashboard() {
     creativePreviewUrl: '',
     bannerTemplate: 'CLASSIC',
     telegramTemplate: 'CLASSIC',
+    // Carousel photos already uploaded to the server: [{ key, previewUrl }] in slide order.
+    telegramImages: [],
   });
 
   const loadAll = useCallback(async () => {
@@ -168,6 +184,7 @@ export default function AdvertiserDashboard() {
       setDailyRates(pricingRes.data?.dailyRatesEtb || {});
       setTemplateMultipliers(pricingRes.data?.bannerTemplateMultipliers || {});
       setMaxCampaignDays(Number(pricingRes.data?.maxCampaignDays || 90));
+      setCarouselLimits({ ...DEFAULT_CAROUSEL_LIMITS, ...(pricingRes.data?.telegramCarousel || {}) });
     } catch (err) {
       setError(err.response?.data?.error || 'Could not load your advertising campaigns');
     } finally {
@@ -199,6 +216,8 @@ export default function AdvertiserDashboard() {
   const needsCreative = form.type === 'BANNER';
   const needsHeadline = form.type === 'BANNER' || form.type === 'TELEGRAM_PROMOTION';
   const needsTelegramTemplate = form.type === 'TELEGRAM_PROMOTION';
+  const needsCarouselImages = needsTelegramTemplate && form.telegramTemplate === 'CAROUSEL';
+  const carouselCount = form.telegramImages.length;
   const days = campaignDays(form.startDate, form.endDate);
   const templateMultiplier = form.type === 'BANNER' ? (templateMultipliers[form.bannerTemplate] || 1) : 1;
   const estimatedPrice = days > 0 && dailyRates[form.type] ? days * dailyRates[form.type] * templateMultiplier : null;
@@ -234,12 +253,60 @@ export default function AdvertiserDashboard() {
     }
   }
 
+  // Upload one or many photos in a single request and append them to the
+  // carousel, in the order the files were selected.
+  async function handleCarouselSelect(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    clearMessages();
+
+    const { maxImages, maxFileBytes } = carouselLimits;
+    const room = maxImages - carouselCount;
+    if (room <= 0) return setError(`A carousel can hold at most ${maxImages} photos. Remove one to add another.`);
+
+    const tooBig = files.find((f) => f.size > maxFileBytes);
+    if (tooBig) return setError(`"${tooBig.name}" is larger than ${Math.round((maxFileBytes / (1024 * 1024)) * 10) / 10} MB.`);
+
+    const accepted = files.slice(0, room);
+    setUploadingCarousel(true);
+    try {
+      const body = new FormData();
+      accepted.forEach((file) => body.append('files', file));
+      const { data } = await api.post('/ads/telegram-images', body);
+      const added = (data?.images || []).map((img) => ({ key: img.key, previewUrl: img.previewUrl }));
+      setForm((f) => ({ ...f, telegramImages: [...f.telegramImages, ...added].slice(0, maxImages) }));
+      if (files.length > accepted.length) {
+        setError(`Only the first ${accepted.length} photo${accepted.length === 1 ? ' was' : 's were'} added — a carousel holds at most ${maxImages}.`);
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not upload carousel photos');
+    } finally {
+      setUploadingCarousel(false);
+    }
+  }
+
+  function removeCarouselImage(index) {
+    setForm((f) => ({ ...f, telegramImages: f.telegramImages.filter((_, i) => i !== index) }));
+  }
+
+  function moveCarouselImage(index, delta) {
+    setForm((f) => {
+      const target = index + delta;
+      if (target < 0 || target >= f.telegramImages.length) return f;
+      const next = [...f.telegramImages];
+      [next[index], next[target]] = [next[target], next[index]];
+      return { ...f, telegramImages: next };
+    });
+  }
+
   async function submitAd(e) {
     e.preventDefault();
     clearMessages();
     if (needsListing && !form.listingId) return setError('Select an active listing for this campaign type.');
     if (needsHeadline && !form.headline.trim()) return setError('Enter the campaign headline/message.');
     if (needsCreative && !form.creativeImageKey) return setError('Upload the banner image first.');
+    if (needsCarouselImages && carouselCount < carouselLimits.minImages) return setError(`Add at least ${carouselLimits.minImages} photos to build a carousel.`);
     if (days <= 0) return setError('Choose a valid campaign date range.');
     if (days > maxCampaignDays) return setError(`Campaigns can run for at most ${maxCampaignDays} days.`);
 
@@ -255,9 +322,10 @@ export default function AdvertiserDashboard() {
         creativeImageKey: needsCreative ? form.creativeImageKey : undefined,
         bannerTemplate: needsCreative ? form.bannerTemplate : undefined,
         telegramTemplate: needsTelegramTemplate ? form.telegramTemplate : undefined,
+        telegramImageKeys: needsCarouselImages ? form.telegramImages.map((img) => img.key) : undefined,
       });
       setSuccess(`Campaign ${data.ad.campaignReference} created. The server fixed the price at ${Number(data.ad.priceQuoted).toLocaleString()} ETB.`);
-      setForm((f) => ({ ...f, listingId: '', headline: '', linkUrl: '', creativeImageKey: '', creativePreviewUrl: '', bannerTemplate: 'CLASSIC', telegramTemplate: 'CLASSIC' }));
+      setForm((f) => ({ ...f, listingId: '', headline: '', linkUrl: '', creativeImageKey: '', creativePreviewUrl: '', bannerTemplate: 'CLASSIC', telegramTemplate: 'CLASSIC', telegramImages: [] }));
       await loadAll();
     } catch (err) {
       setError(err.response?.data?.error || 'Could not create campaign');
@@ -330,7 +398,7 @@ export default function AdvertiserDashboard() {
             <h2>New campaign</h2>
             <form onSubmit={submitAd}>
               <label>Campaign type</label>
-              <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value, listingId: '', headline: '', creativeImageKey: '', creativePreviewUrl: '', bannerTemplate: 'CLASSIC', telegramTemplate: 'CLASSIC' }))}>
+              <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value, listingId: '', headline: '', creativeImageKey: '', creativePreviewUrl: '', bannerTemplate: 'CLASSIC', telegramTemplate: 'CLASSIC', telegramImages: [] }))}>
                 {AD_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
               <p className="muted">{AD_TYPES.find((t) => t.value === form.type)?.help}</p>
@@ -373,6 +441,47 @@ export default function AdvertiserDashboard() {
                 <>
                   <label>{form.type === 'TELEGRAM_PROMOTION' ? 'Promotion message' : 'Banner headline'}</label>
                   <input value={form.headline} onChange={(e) => setForm((f) => ({ ...f, headline: e.target.value }))} maxLength={140} required placeholder={form.type === 'TELEGRAM_PROMOTION' ? 'What should MarketBridge post?' : 'What the banner says'} />
+                </>
+              )}
+
+              {needsCarouselImages && (
+                <>
+                  <label>Carousel photos</label>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    multiple
+                    onChange={handleCarouselSelect}
+                    disabled={uploadingCarousel || carouselCount >= carouselLimits.maxImages}
+                  />
+                  <p className="muted">
+                    Select {carouselLimits.minImages}–{carouselLimits.maxImages} photos at once or add them in batches. JPEG, PNG, or WebP, up to {Math.round((carouselLimits.maxFileBytes / (1024 * 1024)) * 10) / 10} MB each. Photos stay private until the campaign is approved.
+                  </p>
+                  {uploadingCarousel && <p className="muted">Uploading securely…</p>}
+
+                  {carouselCount > 0 && (
+                    <>
+                      <p className="muted" style={{ marginBottom: 6 }}>
+                        <strong>{carouselCount} of {carouselLimits.maxImages} photos</strong>
+                        {carouselCount < carouselLimits.minImages ? ` — add ${carouselLimits.minImages - carouselCount} more to continue.` : ' — swipe order matches the order below.'}
+                      </p>
+                      <ul className="tg-carousel-thumbs">
+                        {form.telegramImages.map((img, i) => (
+                          <li className="tg-carousel-thumb" key={img.key}>
+                            <img src={img.previewUrl} alt={`Carousel photo ${i + 1}`} />
+                            <span className="tg-carousel-thumb-index">{i + 1}</span>
+                            <div className="tg-carousel-thumb-actions">
+                              <button type="button" onClick={() => moveCarouselImage(i, -1)} disabled={i === 0} aria-label={`Move photo ${i + 1} earlier`}>←</button>
+                              <button type="button" onClick={() => moveCarouselImage(i, 1)} disabled={i === carouselCount - 1} aria-label={`Move photo ${i + 1} later`}>→</button>
+                              <button type="button" onClick={() => removeCarouselImage(i)} aria-label={`Remove photo ${i + 1}`}>×</button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      <label>Preview</label>
+                      <ImageCarousel images={form.telegramImages.map((img) => img.previewUrl)} alt="Carousel photo" />
+                    </>
+                  )}
                 </>
               )}
 
@@ -426,7 +535,7 @@ export default function AdvertiserDashboard() {
               </div>
 
               <div className="sd-modal-actions" style={{ marginTop: 20 }}>
-                <button className="btn btn-primary" type="submit" disabled={submitting || uploadingCreative}>{submitting ? 'Creating…' : 'Create campaign'}</button>
+                <button className="btn btn-primary" type="submit" disabled={submitting || uploadingCreative || uploadingCarousel}>{submitting ? 'Creating…' : 'Create campaign'}</button>
               </div>
             </form>
           </div>
@@ -458,6 +567,7 @@ export default function AdvertiserDashboard() {
               return (
                 <div className="sd-panel" key={ad.id}>
                   {ad.creativeImageUrl && <img src={ad.creativeImageUrl} alt={ad.headline || 'Campaign creative'} loading="lazy" decoding="async" style={{ width: '100%', borderRadius: 10, marginBottom: 10, maxHeight: 180, objectFit: 'cover' }} />}
+                  {ad.type === 'TELEGRAM_PROMOTION' && ad.telegramImageUrls?.length > 0 && <ImageCarousel images={ad.telegramImageUrls} alt={ad.headline || 'Carousel photo'} className="img-carousel--compact" />}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <h3>{AD_TYPES.find((t) => t.value === ad.type)?.label || ad.type}</h3>
                     <span className={statusClass(ad.status)}>{STATUS_LABELS[ad.status] || ad.status}</span>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../api/client';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
+import ImageCarousel from '../components/ImageCarousel.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const VERIFICATION_OPTIONS = ['PENDING', 'VERIFIED', 'REJECTED'];
@@ -1175,6 +1176,10 @@ export default function AdminDashboard() {
                       <h3>{ad.type.replace(/_/g, ' ')}</h3>
                       <span className={statusBadgeClass(ad.status)}>{ad.status}</span>
                     </div>
+                    {ad.type === 'TELEGRAM_PROMOTION' && ad.telegramImageUrls?.length > 0 && (
+                      <ImageCarousel images={ad.telegramImageUrls} alt={ad.headline || 'Carousel photo'} openLinks className="img-carousel--compact" />
+                    )}
+                    {ad.type === 'TELEGRAM_PROMOTION' && ad.telegramTemplate && <p className="sd-muted"><strong>Template:</strong> {ad.telegramTemplate.replace(/_/g, ' ')}{ad.telegramImageCount > 0 ? ` · ${ad.telegramImageCount} photos` : ''}</p>}
                     {ad.headline && <p className="sd-muted"><strong>{ad.headline}</strong></p>}
                     <p className="sd-muted">
                       <strong>Ref:</strong> {ad.campaignReference || ad.id.slice(0, 8)} · <strong>Advertiser:</strong> {ad.advertiser?.name} ({ad.advertiser?.email})
@@ -1235,7 +1240,15 @@ export default function AdminDashboard() {
                     const ctr = impressions ? ((clicks / impressions) * 100).toFixed(2) : '0.00';
                     return (
                       <tr key={ad.id}>
-                        <td data-label="Campaign"><strong>{ad.campaignReference || ad.type.replace(/_/g, ' ')}</strong><br /><span className="sd-muted">{ad.type.replace(/_/g, ' ')}</span></td>
+                        <td data-label="Campaign">
+                          <strong>{ad.campaignReference || ad.type.replace(/_/g, ' ')}</strong><br /><span className="sd-muted">{ad.type.replace(/_/g, ' ')}</span>
+                          {ad.type === 'TELEGRAM_PROMOTION' && ad.telegramImageUrls?.length > 0 && (
+                            <details className="tg-ledger-photos">
+                              <summary>🎠 {ad.telegramImageUrls.length} carousel photos</summary>
+                              <ImageCarousel images={ad.telegramImageUrls} alt={ad.headline || 'Carousel photo'} openLinks className="img-carousel--compact" />
+                            </details>
+                          )}
+                        </td>
                         <td data-label="Advertiser" className="sd-muted">{ad.advertiser?.name}</td>
                         <td data-label="Dates" className="sd-muted">{new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}</td>
                         <td data-label="Financials" className="sd-muted">{Number(ad.priceQuoted || 0).toLocaleString()} {ad.currency || 'ETB'} quoted<br />{Number(ad.amountPaid || 0).toLocaleString()} paid</td>
