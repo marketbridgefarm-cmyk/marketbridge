@@ -16,11 +16,21 @@ export default function Register() {
 
   const toggle = (r) => setSelected((x) => (x.includes(r) ? x.filter((a) => a !== r) : [...x, r]));
 
+  function dashboardPathFor(u) {
+    const roles = Array.isArray(u?.roles) ? u.roles : [];
+    if (roles.includes('ADMIN')) return '/dashboard/admin';
+    if (roles.includes('INSPECTOR')) return '/dashboard/inspector';
+    if (roles.includes('TRUCK_OWNER')) return '/dashboard/truck-owner';
+    if (roles.includes('BUYER') || roles.includes('SELLER')) return '/dashboard';
+    return '/dashboard';
+  }
+
   async function submit(e) {
     e.preventDefault();
+    setError('');
     try {
-      await register({ ...form, roles: ['BUYER', 'SELLER', ...selected] });
-      nav('/');
+      const user = await register({ ...form, roles: ['BUYER', 'SELLER', ...selected] });
+      nav(dashboardPathFor(user), { replace: true });
     } catch (e) {
       const data = e.response?.data;
       const msg = data?.error || data?.errors?.[0]?.msg || 'Registration failed';

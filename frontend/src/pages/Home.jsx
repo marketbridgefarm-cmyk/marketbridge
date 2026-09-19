@@ -8,6 +8,191 @@ const pillars = [
   ['03', 'Digital marketplace', 'Discover and sell eBooks, courses, software, documents, templates, graphics, photos and other digital products.'],
 ];
 
+const HOME_PAGE_STYLES = `
+  .home-page .hero {
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid var(--mb-border, var(--line));
+    background: linear-gradient(135deg, #eef6ef 0%, #fbfcfa 58%, #e9f1e9 100%);
+    padding: clamp(40px, 8vw, 84px) 0 clamp(36px, 7vw, 74px);
+  }
+  .home-page .hero::before,
+  .home-page .hero::after {
+    content: '';
+    position: absolute;
+    pointer-events: none;
+    border-radius: 999px;
+    filter: blur(1px);
+  }
+  .home-page .hero::before {
+    width: 340px;
+    height: 340px;
+    right: -130px;
+    top: -160px;
+    background: rgba(47, 145, 89, .08);
+  }
+  .home-page .hero::after {
+    width: 260px;
+    height: 260px;
+    left: -140px;
+    bottom: -180px;
+    background: rgba(183, 123, 27, .045);
+  }
+  .home-page .hero > * {
+    position: relative;
+    z-index: 1;
+  }
+  .home-page .hero-grid {
+    display: grid;
+    grid-template-columns: 1.12fr .88fr;
+    gap: clamp(28px, 6vw, 70px);
+    align-items: center;
+  }
+  .home-page .hero h1 {
+    max-width: 720px;
+    letter-spacing: -1.4px;
+  }
+  .home-page .hero h1 em {
+    color: var(--green);
+    font-style: normal;
+  }
+  .home-page .hero-copy {
+    font-size: 18px;
+    color: #526057;
+    max-width: 680px;
+  }
+  .home-page .hero-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 27px 0 18px;
+  }
+  .home-page .hero-account-cta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 0 0 24px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, .78);
+    border: 1px solid rgba(30, 108, 67, .16);
+    border-radius: 16px;
+    box-shadow: 0 10px 28px rgba(30, 64, 45, .07);
+  }
+  .home-page .hero-account-copy {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+  .home-page .hero-account-copy strong {
+    color: #173b2a;
+    font-size: 14px;
+  }
+  .home-page .hero-account-copy span {
+    color: #5a675f;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .home-page .hero-account-actions {
+    display: flex;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+  .home-page .hero-account-actions .btn {
+    min-height: 42px;
+    padding: 9px 14px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .home-page .trust-row {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    color: #516057;
+    font-size: 12px;
+  }
+  .home-page .hero-card {
+    background: #fff;
+    border: 1px solid var(--mb-border, var(--line));
+    border-radius: 20px;
+    padding: 25px;
+    box-shadow: 0 8px 26px rgba(20, 45, 28, .045);
+  }
+  .home-page .hero-card-top {
+    font-size: 11px;
+    letter-spacing: 1.4px;
+    font-weight: 800;
+    color: #607066;
+    margin-bottom: 15px;
+  }
+  .home-page .live-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    background: #35a45f;
+    border-radius: 50%;
+    margin-right: 7px;
+  }
+  .home-page .flow-step {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 13px 0;
+    border-bottom: 1px solid #edf0ec;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .home-page .flow-step span {
+    font-family: Manrope, system-ui, sans-serif;
+    color: var(--green);
+    font-size: 11px;
+  }
+  @media (max-width: 900px) {
+    .home-page .hero-grid {
+      grid-template-columns: 1fr;
+      gap: 26px;
+    }
+    .home-page .hero-card {
+      padding: 20px;
+    }
+  }
+  @media (max-width: 620px) {
+    .home-page .hero {
+      padding: 44px 0 40px;
+    }
+    .home-page .hero h1 {
+      letter-spacing: -.9px;
+    }
+    .home-page .hero-copy {
+      font-size: 16px;
+    }
+    .home-page .hero-actions .btn {
+      width: 100%;
+    }
+    .home-page .hero-account-cta {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    .home-page .hero-account-actions {
+      width: 100%;
+    }
+    .home-page .hero-account-actions .btn {
+      flex: 1;
+      width: 50%;
+    }
+    .home-page .hero-card {
+      border-radius: 16px;
+    }
+  }
+  @media (max-width: 420px) {
+    .home-page .hero h1 {
+      font-size: 32px;
+    }
+  }
+`;
+
 const marketplaceCards = [
   { number: '01', title: 'Agricultural', description: 'Farm-produced goods such as potatoes, wheat, barley, vegetables, fruits, livestock-related products and other agricultural produce.', features: ['Farmers & producers', 'Bulk agricultural lots', 'Offers & negotiation', 'Inspection & evidence', 'Transport arrangement'], link: '/agricultural', button: 'Enter Agricultural Marketplace →' },
   { number: '02', title: 'Product', description: 'A broader marketplace for physical products sold by independent sellers to buyers through the MarketBridge platform.', features: ['Physical products', 'Independent sellers', 'Buyer discovery', 'Orders & records', 'Delivery options'], link: '/products', button: 'Browse Physical Products →' },
@@ -16,7 +201,8 @@ const marketplaceCards = [
 
 export default function Home() {
   return (
-    <main>
+    <main className="home-page">
+      <style>{HOME_PAGE_STYLES}</style>
       <section className="hero">
         <div className="container-wide hero-grid">
           <div>
