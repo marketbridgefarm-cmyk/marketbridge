@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import './Navbar.css';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useTranslation } from '../context/I18nContext.jsx';
@@ -166,120 +167,39 @@ export default function Navbar() {
         </nav>
       </header>
 
-      {/* Mobile menu: dimmed backdrop + slide-in sidebar-style panel anchored
-          to the right, rendered outside <header> so its fixed positioning is
-          relative to the viewport rather than the header's own (small) box.
-          Laid out like a dashboard sidebar: profile header, section labels,
-          icon nav rows with an active accent bar, and a footer row. */}
+      {/* Mobile menu: dimmed backdrop + slide-in panel anchored to the right,
+          rendered outside <header> so its fixed positioning is relative to
+          the viewport rather than the header's own (small) box. */}
       {mobileOpen && (
         <>
           <div className="mobile-menu-backdrop" onClick={() => setMobileOpen(false)} aria-hidden="true" />
           <div className="mobile-menu" role="dialog" aria-modal="true">
-            <div className="mobile-menu-header">
-              <div className="mobile-menu-profile">
-                <span className="mobile-menu-avatar">
-                  {user ? (user.name?.charAt(0)?.toUpperCase() || 'U') : 'MB'}
-                </span>
-                <div className="mobile-menu-user-info">
-                  <h3>{user ? user.name : 'MarketBridge'}</h3>
-                  <p>{user ? (user.roles?.[0]?.replace('_', ' ') || 'Member') : 'Welcome'}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="mobile-menu-close"
-                aria-label="Close menu"
-                onClick={() => setMobileOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-
-            <span className="mobile-menu-label">Want to buy/sell</span>
-            <div className="mobile-nav-list">
-              {MARKET_LINKS.map((l) => (
-                <Link
-                  key={l.to}
-                  className={`mobile-nav-item${l.match(location.pathname) ? ' active' : ''}`}
-                  to={l.to}
-                >
-                  <span className="mobile-nav-text">{t(l.labelKey)}</span>
-                </Link>
-              ))}
-            </div>
-
+            <span className="mobile-menu-label">Want to buy/sell:</span>
+            {MARKET_LINKS.map((l) => (
+              <Link key={l.to} className={l.match(location.pathname) ? 'active' : ''} to={l.to}>{t(l.labelKey)}</Link>
+            ))}
             <div className="mobile-menu-divider" />
-
             {user ? (
               <>
-                <span className="mobile-menu-label">Menu</span>
-                <div className="mobile-nav-list">
-                  <div className="mobile-nav-item mobile-notification-link">
-                    <NotificationCenter />
-                  </div>
-                  <Link
-                    className={`mobile-nav-item${location.pathname === dashboardHref ? ' active' : ''}`}
-                    to={dashboardHref}
-                  >
-                    <span className="mobile-nav-icon">🏠</span>
-                    <span className="mobile-nav-text">{t('nav.dashboard')}</span>
-                  </Link>
-                  <Link
-                    className={`mobile-nav-item${location.pathname === '/services' ? ' active' : ''}`}
-                    to="/services"
-                  >
-                    <span className="mobile-nav-icon">🧰</span>
-                    <span className="mobile-nav-text">Services</span>
-                  </Link>
-                  {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => {
-                    const [icon, ...rest] = label.split(' ');
-                    return (
-                      <Link
-                        key={role}
-                        className={`mobile-nav-item${location.pathname === to ? ' active' : ''}`}
-                        to={to}
-                      >
-                        <span className="mobile-nav-icon">{icon}</span>
-                        <span className="mobile-nav-text">{rest.join(' ')} Dashboard</span>
-                      </Link>
-                    );
-                  })}
-                  <Link
-                    className={`mobile-nav-item${location.pathname === '/dashboard/advertiser' ? ' active' : ''}`}
-                    to="/dashboard/advertiser"
-                  >
-                    <span className="mobile-nav-icon">📣</span>
-                    <span className="mobile-nav-text">Advertise Dashboard</span>
-                  </Link>
-                  <Link
-                    className={`mobile-nav-item${location.pathname === '/account/security' ? ' active' : ''}`}
-                    to="/account/security"
-                  >
-                    <span className="mobile-nav-icon">🔐</span>
-                    <span className="mobile-nav-text">{t('nav.accountSecurity')}</span>
-                  </Link>
+                <div className="mobile-notification-link">
+                  <NotificationCenter />
                 </div>
-
-                <div className="mobile-menu-footer">
-                  <LanguageSwitcher className="mobile-lang-switcher" />
-                  <button className="mobile-logout" onClick={handleLogout}>{t('nav.logout')}</button>
-                </div>
+                <Link to={dashboardHref}>{t('nav.dashboard')}</Link>
+                <Link className={location.pathname === '/services' ? 'active' : ''} to="/services">🧰 Services</Link>
+                {ROLE_DASHBOARD_LINKS.filter(([role]) => user.roles?.includes(role)).map(([role, to, label]) => (
+                  <Link key={role} to={to}>{label} Dashboard</Link>
+                ))}
+                <Link to="/dashboard/advertiser">📣 Advertise Dashboard</Link>
+                <Link to="/account/security">{t('nav.accountSecurity')}</Link>
+                <button className="mobile-logout" onClick={handleLogout}>{t('nav.logout')}</button>
               </>
             ) : (
               <>
-                <div className="mobile-nav-list">
-                  <Link className="mobile-nav-item" to="/login">
-                    <span className="mobile-nav-text">{t('nav.login')}</span>
-                  </Link>
-                  <Link className="mobile-nav-item mobile-nav-cta" to="/register">
-                    <span className="mobile-nav-text">Join MarketBridge</span>
-                  </Link>
-                </div>
-                <div className="mobile-menu-footer">
-                  <LanguageSwitcher className="mobile-lang-switcher" />
-                </div>
+                <Link to="/login">{t('nav.login')}</Link>
+                <Link className="nav-cta" to="/register">Join MarketBridge</Link>
               </>
             )}
+            <LanguageSwitcher className="mobile-lang-switcher" />
           </div>
         </>
       )}
