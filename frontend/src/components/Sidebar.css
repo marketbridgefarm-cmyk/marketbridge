@@ -173,7 +173,30 @@
   transition: width .35s ease;
 }
 .glass-sidebar.expanded .glass-divider { width: 100%; }
-.glass-spacer { flex: 1 1 auto; min-height: 8px; }
+ .glass-spacer { flex: 1 1 auto; min-height: 8px; }
+
+.glass-auth-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.glass-auth-actions .glass-nav-item {
+  color: rgba(255,255,255,.9);
+}
+
+.glass-auth-actions .glass-nav-item:first-child {
+  background: rgba(255,255,255,.08);
+}
+
+.glass-auth-actions .glass-nav-item:hover {
+  background: rgba(255,255,255,.18);
+}
+
+.glass-sidebar.expanded .glass-auth-actions .glass-nav-item.active {
+  background: rgba(255,255,255,.22);
+}
 
 .glass-profile-wrap { position: relative; width: 100%; }
 .glass-profile {
