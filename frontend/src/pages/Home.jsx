@@ -210,8 +210,7 @@ export default function Home() {
             <h1>One platform for <em>agriculture, products and digital commerce.</em></h1>
             <p className="hero-copy">MarketBridge connects producers, farmers, sellers, buyers, investors and independent service providers through one marketplace platform.</p>
             <div className="hero-actions">
-              <Link className="btn btn-primary btn-lg" to="/agricultural">Agricultural Marketplace →</Link>
-              <Link className="btn btn-light btn-lg" to="/products">Browse Products</Link>
+              <Link className="btn btn-primary btn-lg" to="#marketplaces">Explore Marketplaces →</Link>
             </div>
             <div className="hero-account-cta" aria-label="MarketBridge account access">
               <div className="hero-account-copy">
@@ -244,7 +243,7 @@ export default function Home() {
 
       <AdvertisementBanner />
 
-      <section className="section">
+      <section className="section" id="marketplaces">
         <div className="container-wide">
           <div className="section-heading">
             <div><span className="eyebrow">MARKETPLACE</span><h2>Three marketplaces under one MarketBridge platform.</h2></div>
