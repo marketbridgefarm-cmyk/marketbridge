@@ -156,3 +156,39 @@ test('bannerTemplateMultipliers falls back to defaults for missing/invalid env o
     else process.env[key] = original;
   }
 });
+
+test('Telegram CAROUSEL is a selectable template and never changes the price', () => {
+  const { TELEGRAM_TEMPLATES } = require('../src/utils/adPricing');
+  assert.ok(TELEGRAM_TEMPLATES.includes('CAROUSEL'));
+  const start = new Date('2026-01-01T00:00:00Z');
+  const end = new Date('2026-01-04T00:00:00Z');
+  // quotePrice has no Telegram-template input by design: every template
+  // costs the same flat daily rate.
+  assert.equal(quotePrice('TELEGRAM_PROMOTION', start, end), 3 * DEFAULT_DAILY_RATES_ETB.TELEGRAM_PROMOTION);
+});
+
+test('telegramCarouselLimits enforces Telegram\'s 2–10 album size and honours config', () => {
+  const { telegramCarouselLimits } = require('../src/utils/adPricing');
+  const saved = process.env.AD_TELEGRAM_CAROUSEL_MAX_IMAGES;
+  try {
+    delete process.env.AD_TELEGRAM_CAROUSEL_MAX_IMAGES;
+    assert.equal(telegramCarouselLimits().minImages, 2);
+    assert.equal(telegramCarouselLimits().maxImages, 10);
+
+    process.env.AD_TELEGRAM_CAROUSEL_MAX_IMAGES = '6';
+    assert.equal(telegramCarouselLimits().maxImages, 6);
+
+    // Telegram cannot send more than 10 items in one album, so config can't raise it.
+    process.env.AD_TELEGRAM_CAROUSEL_MAX_IMAGES = '50';
+    assert.equal(telegramCarouselLimits().maxImages, 10);
+
+    // Nonsense or below-minimum values fall back to the safe default.
+    process.env.AD_TELEGRAM_CAROUSEL_MAX_IMAGES = '1';
+    assert.equal(telegramCarouselLimits().maxImages, 10);
+    process.env.AD_TELEGRAM_CAROUSEL_MAX_IMAGES = 'lots';
+    assert.equal(telegramCarouselLimits().maxImages, 10);
+  } finally {
+    if (saved === undefined) delete process.env.AD_TELEGRAM_CAROUSEL_MAX_IMAGES;
+    else process.env.AD_TELEGRAM_CAROUSEL_MAX_IMAGES = saved;
+  }
+});

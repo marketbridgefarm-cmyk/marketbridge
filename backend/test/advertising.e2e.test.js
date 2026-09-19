@@ -444,4 +444,123 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
     created.advertisementIds.push(spoofed.body.ad.id);
     assert.equal(Number(spoofed.body.ad.priceQuoted), luxePrice, 'server must ignore any client-supplied priceQuoted and recompute from type+duration+template');
   });
+
+  test('Telegram CAROUSEL: uploads many images, stores them in order, is priced like any template, and rejects foreign/too-few/too-many keys', async () => {
+    const { user: advertiser, token: advertiserToken } = await register({
+      name: 'Ad E2E Carousel Advertiser',
+      email: `ad-e2e-carousel-${Date.now()}@marketbridge.test`,
+    });
+    const { token: otherToken } = await register({ name: 'Ad E2E Carousel Other', email: `ad-e2e-carousel-other-${Date.now()}@marketbridge.test` });
+
+    const startDate = new Date(Date.now() + 86400000);
+    const endDate = new Date(Date.now() + 4 * 86400000); // 3-day campaign
+    const pngBytes = Buffer.from(
+      '89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415478da6360000002000155a2d1440000000049454e44ae426082',
+      'hex'
+    );
+    const uploadImages = async (token, count) => {
+      const form = new FormData();
+      for (let i = 0; i < count; i += 1) form.append('files', new Blob([pngBytes], { type: 'image/png' }), `slide-${i}.png`);
+      const response = await fetch(`${baseUrl}/api/ads/telegram-images`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+        body: form,
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    const createCarousel = (token, keys, extra = {}) => api('/api/ads', {
+      method: 'POST',
+      token,
+      body: {
+        type: 'TELEGRAM_PROMOTION',
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        headline: 'Fresh harvest carousel',
+        telegramTemplate: 'CAROUSEL',
+        telegramImageKeys: keys,
+        ...extra,
+      },
+    });
+
+    const uploaded = await uploadImages(advertiserToken, 3);
+    assert.equal(uploaded.status, 201, JSON.stringify(uploaded.body));
+    assert.equal(uploaded.body.images.length, 3);
+    assert.ok(uploaded.body.images.every((img) => img.key.includes(`advertisements/telegram/${advertiser.id}/`) && img.previewUrl));
+    // A user can only upload up to the album limit in one request.
+    const tooManyUpload = await uploadImages(advertiserToken, 11);
+    assert.equal(tooManyUpload.status, 400, JSON.stringify(tooManyUpload.body));
+
+    // Slide order is whatever the advertiser submits, not upload order.
+    const keys = uploaded.body.images.map((img) => img.key).reverse();
+    const ok = await createCarousel(advertiserToken, keys);
+    assert.equal(ok.status, 201, JSON.stringify(ok.body));
+    created.advertisementIds.push(ok.body.ad.id);
+    assert.deepEqual(ok.body.ad.telegramImageKeys, keys);
+    assert.equal(Number(ok.body.ad.priceQuoted), quotePrice('TELEGRAM_PROMOTION', startDate, endDate));
+
+    const mine = await api('/api/ads/mine', { token: advertiserToken });
+    const mineAd = mine.body.ads.find((a) => a.id === ok.body.ad.id);
+    assert.equal(mineAd.telegramImageUrls.length, 3);
+    assert.equal(mineAd.telegramImageKeys, undefined, 'raw storage keys must not be exposed on read');
+
+    // Too few, and someone else's uploads, are refused.
+    const tooFew = await createCarousel(advertiserToken, [keys[0]]);
+    assert.equal(tooFew.status, 400, JSON.stringify(tooFew.body));
+    const foreign = await createCarousel(otherToken, keys);
+    assert.equal(foreign.status, 400, JSON.stringify(foreign.body));
+
+    // Images sent with a non-carousel template are ignored, not stored.
+    const classic = await createCarousel(advertiserToken, keys, { telegramTemplate: 'CLASSIC' });
+    assert.equal(classic.status, 201, JSON.stringify(classic.body));
+    created.advertisementIds.push(classic.body.ad.id);
+    assert.deepEqual(classic.body.ad.telegramImageKeys, []);
+  });
+
+  test('BANNER creative keys must be the advertiser\'s own, existing uploads', async () => {
+    const { user: advertiser, token: advertiserToken } = await register({
+      name: 'Ad E2E Banner Key Advertiser',
+      email: `ad-e2e-bannerkey-${Date.now()}@marketbridge.test`,
+    });
+    const { token: otherToken } = await register({
+      name: 'Ad E2E Banner Key Other',
+      email: `ad-e2e-bannerkey-other-${Date.now()}@marketbridge.test`,
+    });
+    const startDate = new Date(Date.now() + 86400000);
+    const endDate = new Date(Date.now() + 4 * 86400000);
+    const pngBytes = Buffer.from(
+      '89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415478da6360000002000155a2d1440000000049454e44ae426082',
+      'hex'
+    );
+    const uploadCreative = async (token) => {
+      const form = new FormData();
+      form.append('file', new Blob([pngBytes], { type: 'image/png' }), 'banner.png');
+      const response = await fetch(`${baseUrl}/api/ads/creative`, { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: form });
+      const json = await response.json();
+      assert.equal(response.status, 201, JSON.stringify(json));
+      return json.key;
+    };
+    const createBanner = (token, creativeImageKey) => api('/api/ads', {
+      method: 'POST',
+      token,
+      body: { type: 'BANNER', startDate: startDate.toISOString(), endDate: endDate.toISOString(), headline: 'Key check banner', creativeImageKey },
+    });
+
+    const ownKey = await uploadCreative(advertiserToken);
+    const ok = await createBanner(advertiserToken, ownKey);
+    assert.equal(ok.status, 201, JSON.stringify(ok.body));
+    created.advertisementIds.push(ok.body.ad.id);
+
+    // Someone else's upload cannot be attached to my campaign.
+    const foreignKey = await uploadCreative(otherToken);
+    const foreign = await createBanner(advertiserToken, foreignKey);
+    assert.equal(foreign.status, 400, JSON.stringify(foreign.body));
+
+    // Arbitrary bucket objects cannot be referenced at all.
+    const arbitrary = await createBanner(advertiserToken, 'digital-products/some-product/secret.pdf');
+    assert.equal(arbitrary.status, 400, JSON.stringify(arbitrary.body));
+
+    // A well-formed key under my own prefix that was never uploaded is refused.
+    const missing = await createBanner(advertiserToken, `advertisements/banner/${advertiser.id}/00000000-0000-4000-8000-000000000000.webp`);
+    assert.equal(missing.status, 400, JSON.stringify(missing.body));
+  });
 }
