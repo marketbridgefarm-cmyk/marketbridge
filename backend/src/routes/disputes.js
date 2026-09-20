@@ -5,7 +5,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { transitionOrderStatus, DISPUTABLE_STATUSES } = require('../services/orderStateMachine');
-const { holdForDispute, resumeAfterDispute, cancelAfterDispute } = require('../services/sellerPayoutService');
+const { holdForDispute, resumeAfterDispute, cancelAfterDispute } = require('../services/payoutService');
 
 const router = express.Router();
 
@@ -142,12 +142,16 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
       // somehow left DISPUTED before this resolution landed.
       await transitionOrderStatus(tx, updated.orderId, 'DISPUTED', updated.previousOrderStatus || 'CONFIRMED');
 
-      const payout = await tx.sellerPayout.findUnique({
-        where: { orderId: updated.orderId },
+      // A dispute freezes every payout on the order together (seller,
+      // transporter, inspector — whichever exist), so any one of them
+      // still ON_HOLD_DISPUTE means this resolution needs a payoutDecision;
+      // resumeAfterDispute/cancelAfterDispute then apply it to all of them.
+      const frozenPayout = await tx.payout.findFirst({
+        where: { orderId: updated.orderId, status: 'ON_HOLD_DISPUTE' },
         select: { id: true, status: true },
       });
 
-      if (payout?.status === 'ON_HOLD_DISPUTE') {
+      if (frozenPayout) {
         if (!payoutDecision) {
           throw Object.assign(
             new Error('This dispute resolution requires payoutDecision RELEASE or CANCEL because the seller payout is frozen'),

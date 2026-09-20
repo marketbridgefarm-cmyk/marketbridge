@@ -15,7 +15,7 @@ const {
 const { revokeAllSessions } = require('../services/refreshSessionService');
 const { completeRefund, failRefund } = require('../services/paymentRefundService');
 const { resolveReconciliation } = require('../services/paymentReconciliationService');
-const { markPaidOut } = require('../services/sellerPayoutService');
+const { markPaidOut } = require('../services/payoutService');
 
 const router = express.Router();
 
@@ -2813,12 +2813,13 @@ router.patch('/financial/reconciliation/:id/resolve', async (req, res) => {
 });
 
 // ============================================================================
-// SELLER PAYOUTS
+// PAYOUTS
 // ============================================================================
-// Held/released/paid-out records tracking money the platform owes sellers
-// after their MARKETPLACE payment settled. See sellerPayoutService.js.
-// This does not move money — it is the worklist an ops person uses to know
-// who is safe to pay (RELEASED) and to record that a transfer happened.
+// Held/released/paid-out records tracking money the platform owes a seller,
+// a hired transporter, or an inspector after their respective payment
+// settled. See payoutService.js. This does not move money — it is the
+// worklist an ops person uses to know who is safe to pay (RELEASED) and to
+// record that a transfer happened.
 
 router.get('/payouts', async (req, res) => {
   try {
@@ -2831,13 +2832,21 @@ router.get('/payouts', async (req, res) => {
       where.status = status;
     }
 
+    const payeeRole = req.query.payeeRole ? String(req.query.payeeRole).toUpperCase() : null;
+    if (payeeRole && payeeRole !== 'ALL') {
+      if (!['SELLER', 'TRANSPORTER', 'INSPECTOR'].includes(payeeRole)) {
+        return res.status(400).json({ error: 'Invalid payeeRole filter' });
+      }
+      where.payeeRole = payeeRole;
+    }
+
     const rawLimit = Number(req.query.limit || 200);
     const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 200, 1), 500);
 
-    const payouts = await prisma.sellerPayout.findMany({
+    const payouts = await prisma.payout.findMany({
       where,
       include: {
-        seller: { select: { id: true, name: true, phone: true, email: true } },
+        payee: { select: { id: true, name: true, phone: true, email: true } },
         order: { select: { id: true, finalPrice: true, status: true, listing: { select: { cropType: true, title: true } } } },
       },
       orderBy: [{ status: 'asc' }, { releaseAt: 'asc' }],
@@ -2847,7 +2856,7 @@ router.get('/payouts', async (req, res) => {
     return res.json({ payouts, count: payouts.length });
   } catch (error) {
     req.log.error({ err: error }, 'ADMIN LIST PAYOUTS ERROR');
-    return res.status(500).json({ error: 'Could not load seller payouts' });
+    return res.status(500).json({ error: 'Could not load payouts' });
   }
 });
 

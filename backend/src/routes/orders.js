@@ -250,15 +250,17 @@ router.get('/:id', authenticate, async (req, res) => {
 
     if (!allowed) return res.status(403).json({ error: 'Not authorized to view this order' });
 
-    // Seller payout is operationally sensitive. All order participants can
-    // see that a seller payout is held/released and when the hold is due, but
-    // only the seller/admin receives the payout amount and payout reference.
-    // This keeps the buyer-facing order page informative without exposing the
-    // seller's net proceeds or internal payout reference.
-    const payout = await prisma.sellerPayout.findUnique({
+    // Payout amounts are operationally sensitive. All order participants can
+    // see that a payout is held/released and when the hold is due, but each
+    // payee's amount and payout reference is only visible to that payee (or
+    // admin). An order can have up to three payouts — seller, hired
+    // transporter, inspector — so this is now a list, not a single record.
+    const payouts = await prisma.payout.findMany({
       where: { orderId: order.id },
       select: {
         id: true,
+        payeeRole: true,
+        payeeId: true,
         status: true,
         releaseAt: true,
         releasedAt: true,
@@ -266,35 +268,34 @@ router.get('/:id', authenticate, async (req, res) => {
         amount: true,
         currency: true,
         payoutReference: true,
-        sellerId: true,
       },
     });
 
-    const canSeePayoutDetails =
-      req.user.roles?.includes('ADMIN') ||
-      order.sellerId === req.user.id;
+    const isAdminUser = req.user.roles?.includes('ADMIN');
 
-    const payoutView = payout
-      ? {
-          id: payout.id,
-          status: payout.status,
-          releaseAt: payout.releaseAt,
-          releasedAt: payout.releasedAt,
-          paidOutAt: payout.paidOutAt,
-          ...(canSeePayoutDetails
-            ? {
-                amount: payout.amount,
-                currency: payout.currency,
-                payoutReference: payout.payoutReference,
-              }
-            : {}),
-        }
-      : null;
+    const payoutViews = payouts.map((payout) => {
+      const canSeeDetails = isAdminUser || payout.payeeId === req.user.id;
+      return {
+        id: payout.id,
+        payeeRole: payout.payeeRole,
+        status: payout.status,
+        releaseAt: payout.releaseAt,
+        releasedAt: payout.releasedAt,
+        paidOutAt: payout.paidOutAt,
+        ...(canSeeDetails
+          ? {
+              amount: payout.amount,
+              currency: payout.currency,
+              payoutReference: payout.payoutReference,
+            }
+          : {}),
+      };
+    });
 
     return res.json({
       order: {
         ...order,
-        sellerPayout: payoutView,
+        payouts: payoutViews,
       },
     });
   } catch (error) {
