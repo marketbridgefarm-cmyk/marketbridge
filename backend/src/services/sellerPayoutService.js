@@ -25,6 +25,8 @@
 //                        (bank transfer, Telebirr, etc.) outside this system.
 //   PAID_OUT         -> an admin has confirmed the out-of-band transfer
 //                        happened and recorded a reference for it.
+//   CANCELLED        -> an admin resolved a dispute against the seller and
+//                        the held payout must never be released.
 //
 // This intentionally does NOT move money. It is a durable, auditable record
 // of "is this seller owed a payout, and is it safe to send it yet" — the
@@ -118,12 +120,43 @@ async function resumeAfterDispute(tx, { orderId, actorId }) {
 
   const updated = await tx.sellerPayout.update({
     where: { id: payout.id },
-    data: { status: 'HELD', releaseAt: daysFromNow(holdDays()) },
+    data: {
+      status: 'HELD',
+      releaseAt: daysFromNow(holdDays()),
+      releasedAt: null,
+      paidOutAt: null,
+      payoutReference: null,
+    },
   });
 
   await recordAuditEvent(tx, {
     actorId: actorId || null,
     action: 'SELLER_PAYOUT_RESUMED_AFTER_DISPUTE',
+    resourceType: 'SellerPayout',
+    resourceId: payout.id,
+    metadata: { orderId, holdDays: holdDays() },
+  });
+
+  return updated;
+}
+
+/**
+ * Cancel a payout when an admin resolves the dispute against the seller.
+ * Keeping a terminal CANCELLED state is safer than silently leaving a
+ * disputed payout frozen forever or accidentally releasing it later.
+ */
+async function cancelAfterDispute(tx, { orderId, actorId }) {
+  const payout = await tx.sellerPayout.findUnique({ where: { orderId } });
+  if (!payout || payout.status !== 'ON_HOLD_DISPUTE') return payout;
+
+  const updated = await tx.sellerPayout.update({
+    where: { id: payout.id },
+    data: { status: 'CANCELLED' },
+  });
+
+  await recordAuditEvent(tx, {
+    actorId: actorId || null,
+    action: 'SELLER_PAYOUT_CANCELLED_AFTER_DISPUTE',
     resourceType: 'SellerPayout',
     resourceId: payout.id,
     metadata: { orderId },
@@ -187,6 +220,7 @@ module.exports = {
   createPayoutHold,
   holdForDispute,
   resumeAfterDispute,
+  cancelAfterDispute,
   releaseDuePayouts,
   markPaidOut,
 };
