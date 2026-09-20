@@ -340,7 +340,12 @@ export default function OrderDetail() {
         payment.status === 'PAID'
     );
 
-  const sellerPayout = order?.sellerPayout || null;
+  // An order can carry up to three payout rows — seller, hired transporter,
+  // inspector — whichever of those roles were actually paid on this order.
+  const payouts = order?.payouts || [];
+  const sellerPayout = payouts.find((p) => p.payeeRole === 'SELLER') || null;
+  const transporterPayout = payouts.find((p) => p.payeeRole === 'TRANSPORTER') || null;
+  const inspectorPayout = payouts.find((p) => p.payeeRole === 'INSPECTOR') || null;
   const payoutStatus = sellerPayout?.status || null;
 
   const formatDateTime = (value) => {
@@ -2112,6 +2117,49 @@ export default function OrderDetail() {
             )}
           </div>
         )}
+
+        {/* ================================================================== */}
+        {/* TRANSPORTER / INSPECTOR PAYOUT (own row only) */}
+        {/* ================================================================== */}
+
+        {(isTransporter && transporterPayout) || (isInspector && inspectorPayout) ? (
+          <div className="card" id="role-payout">
+            <span className="eyebrow">YOUR PAYOUT</span>
+            <h2 style={{ marginBottom: 6 }}>
+              {isTransporter ? 'Transport payout status' : 'Inspection payout status'}
+            </h2>
+            {[isTransporter ? transporterPayout : null, isInspector ? inspectorPayout : null]
+              .filter(Boolean)
+              .map((payout) => (
+                <div key={payout.id} className="detail-facts" style={{ marginTop: 12 }}>
+                  <div>
+                    <span>Status</span>
+                    <strong>
+                      {payout.status === 'ON_HOLD_DISPUTE'
+                        ? 'ON HOLD — DISPUTE'
+                        : payout.status.replace(/_/g, ' ')}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Expected release</span>
+                    <strong>{formatDateTime(payout.releaseAt)}</strong>
+                  </div>
+                  {payout.amount != null && (
+                    <div>
+                      <span>Payout amount</span>
+                      <strong>{money(payout.amount)} {payout.currency || 'ETB'}</strong>
+                    </div>
+                  )}
+                  {payout.payoutReference && (
+                    <div>
+                      <span>Payout reference</span>
+                      <strong>{payout.payoutReference}</strong>
+                    </div>
+                  )}
+                </div>
+              ))}
+          </div>
+        ) : null}
 
         {/* ================================================================== */}
         {/* PAYMENT CENTER */}
