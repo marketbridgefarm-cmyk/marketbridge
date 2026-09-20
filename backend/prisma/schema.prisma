@@ -1779,6 +1779,7 @@ enum SellerPayoutStatus {
   ON_HOLD_DISPUTE
   RELEASED
   PAID_OUT
+  CANCELLED
 }
 
 model SellerPayout {
