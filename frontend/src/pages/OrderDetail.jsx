@@ -340,6 +340,20 @@ export default function OrderDetail() {
         payment.status === 'PAID'
     );
 
+  const sellerPayout = order?.sellerPayout || null;
+  const payoutStatus = sellerPayout?.status || null;
+
+  const formatDateTime = (value) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? '—'
+      : date.toLocaleString(undefined, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        });
+  };
+
   const transportPending =
     transportPayments.some(
       (payment) =>
@@ -1982,6 +1996,124 @@ export default function OrderDetail() {
         </div>
 
         {/* ================================================================== */}
+        {/* SELLER PAYOUT HOLD */}
+        {/* ================================================================== */}
+
+        {order && (
+          <div className="card" id="seller-payout">
+            <div className="row-between" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <div>
+                <span className="eyebrow">SELLER PAYOUT</span>
+                <h2 style={{ marginBottom: 6 }}>Seller payout status</h2>
+                <p className="muted" style={{ marginBottom: 0 }}>
+                  Buyer payment is separate from the seller payout. A standard
+                  <strong> 3-day hold</strong> applies after the marketplace payment settles.
+                </p>
+              </div>
+              <span className={`badge ${['RELEASED', 'PAID_OUT'].includes(payoutStatus) ? 'badge-success' : 'badge-pending'}`}>
+                {payoutStatus === 'ON_HOLD_DISPUTE'
+                  ? 'ON HOLD — DISPUTE'
+                  : payoutStatus === 'PAID_OUT'
+                    ? 'PAID OUT'
+                    : payoutStatus === 'RELEASED'
+                      ? 'RELEASED'
+                      : payoutStatus === 'HELD'
+                        ? 'HELD — 3 DAYS'
+                        : 'STARTS AFTER PAYMENT'}
+              </span>
+            </div>
+
+            <div className="detail-facts" style={{ marginTop: 16 }}>
+              <div>
+                <span>Hold period</span>
+                <strong>3 days</strong>
+              </div>
+              <div>
+                <span>Expected release</span>
+                <strong>{formatDateTime(sellerPayout?.releaseAt)}</strong>
+              </div>
+              {sellerPayout?.releasedAt && (
+                <div>
+                  <span>Released</span>
+                  <strong>{formatDateTime(sellerPayout.releasedAt)}</strong>
+                </div>
+              )}
+              {sellerPayout?.paidOutAt && (
+                <div>
+                  <span>Paid out</span>
+                  <strong>{formatDateTime(sellerPayout.paidOutAt)}</strong>
+                </div>
+              )}
+              {sellerPayout?.amount != null && (
+                <div>
+                  <span>Payout amount</span>
+                  <strong>{money(sellerPayout.amount)} {sellerPayout.currency || 'ETB'}</strong>
+                </div>
+              )}
+              {sellerPayout?.payoutReference && (
+                <div>
+                  <span>Payout reference</span>
+                  <strong>{sellerPayout.payoutReference}</strong>
+                </div>
+              )}
+            </div>
+
+            {!sellerPayout && (
+              <div className="notice" style={{ marginTop: 14 }}>
+                <strong>The seller payout hold starts after the marketplace payment settles.</strong>
+                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                  Once the buyer payment is confirmed, the seller payout enters a 3-day hold before it can be released for payout processing.
+                </p>
+              </div>
+            )}
+
+            {payoutStatus === 'HELD' && (
+              <div className="notice" style={{ marginTop: 14 }}>
+                <strong>{isSeller ? 'Your payout is being held for 3 days.' : 'The seller payout is currently held.'}</strong>
+                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                  {isSeller
+                    ? 'The hold protects the transaction during the post-payment dispute window. No manual payout action is required yet.'
+                    : 'The buyer payment has settled, but the seller payout remains held during the post-payment protection window.'}
+                </p>
+              </div>
+            )}
+
+            {payoutStatus === 'ON_HOLD_DISPUTE' && (
+              <div className="alert" style={{ marginTop: 14 }}>
+                <strong>Seller payout is frozen while this dispute is open.</strong>
+                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                  If the dispute is resolved in the seller's favor, a fresh 3-day hold period starts from the resolution time.
+                </p>
+              </div>
+            )}
+
+            {payoutStatus === 'RELEASED' && (
+              <div className="notice" style={{ marginTop: 14 }}>
+                <strong>Seller payout released for payout processing.</strong>
+                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                  The hold period has ended. The payout still requires the operational payout step before it is marked paid out.
+                </p>
+              </div>
+            )}
+
+            {payoutStatus === 'CANCELLED' && (
+              <div className="alert" style={{ marginTop: 14 }}>
+                <strong>Seller payout was cancelled after dispute resolution.</strong>
+                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                  The payout will not be released from this payout record. Any refund or replacement financial action follows the dispute resolution record.
+                </p>
+              </div>
+            )}
+
+            {payoutStatus === 'PAID_OUT' && (
+              <div className="notice" style={{ marginTop: 14 }}>
+                <strong>Seller payout has been paid out.</strong>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================================================================== */}
         {/* PAYMENT CENTER */}
         {/* ================================================================== */}
 
@@ -2203,11 +2335,6 @@ export default function OrderDetail() {
                 </div>
               )}
 
-              {!marketplacePaid && !canPayMarketplace && !marketplacePending && !isAdmin && (
-                <div className="alert error">
-                  The buyer payment control is unavailable for this session. Refresh the page; if it remains unavailable, sign in again with the buyer account.
-                </div>
-              )}
             </div>
           ) : (
             <div className="notice">
