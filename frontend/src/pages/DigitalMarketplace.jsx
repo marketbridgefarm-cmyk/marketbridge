@@ -34,7 +34,7 @@ export default function DigitalMarketplace() {
   }
 
   async function loadMyPurchases() {
-    if (!user?.roles?.includes('BUYER')) return;
+    if (!user) return;
     try {
       const r = await api.get('/digital-products/purchases/mine');
       setMyPurchases(r.data.purchases || []);
@@ -142,7 +142,7 @@ export default function DigitalMarketplace() {
           </div>
         )}
 
-        {user?.roles?.includes('BUYER') && myPurchases.length > 0 && (
+        {user && myPurchases.length > 0 && (
           <div className="card" style={{ marginBottom: 20 }}>
             <h2>Your purchases</h2>
             <p className="muted">
@@ -189,9 +189,9 @@ export default function DigitalMarketplace() {
           </div>
         )}
 
-        {(user?.roles?.includes('BUYER') && myPurchases.length > 0) && <h2 style={{ marginTop: 8 }}>Browse the marketplace</h2>}
+        {(user && myPurchases.length > 0) && <h2 style={{ marginTop: 8 }}>Browse the marketplace</h2>}
 
-        {user?.roles?.includes('BUYER') && (
+        {user && (
           <div className="card" style={{ marginBottom: 16, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <label htmlFor="digital-pay-method" style={{ marginBottom: 0 }}>Payment method</label>
             <select id="digital-pay-method" value={payMethod} onChange={(e) => setPayMethod(e.target.value)} style={{ maxWidth: 220 }}>
@@ -214,13 +214,13 @@ export default function DigitalMarketplace() {
                 <h3>{p.title}</h3>
                 <p className="muted">{p.description || 'Digital product from an independent seller.'}</p>
                 <div className="row-between"><strong>{Number(p.price).toLocaleString()} ETB</strong><span className="small">By {p.seller?.name || 'Seller'}</span></div>
-                {user?.roles?.includes('BUYER') && paymentStatus === 'PAID' && (
+                {user && paymentStatus === 'PAID' && (
                   <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => download(existingPurchase.id, p.id)}>{busyId === p.id ? 'Getting link…' : 'Download'}</button>
                 )}
-                {user?.roles?.includes('BUYER') && paymentStatus === 'PENDING' && (
+                {user && paymentStatus === 'PENDING' && (
                   <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => resumePurchase(existingPurchase.payment.id, p.id)}>{busyId === p.id ? 'Redirecting…' : 'Resume payment'}</button>
                 )}
-                {user?.roles?.includes('BUYER') && (!paymentStatus || ['FAILED', 'REFUNDED', 'CANCELLED'].includes(paymentStatus)) && (
+                {user && (!paymentStatus || ['FAILED', 'REFUNDED', 'CANCELLED'].includes(paymentStatus)) && (
                   <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => purchase(p)}>
                     {busyId === p.id ? 'Starting…' : (paymentStatus ? 'Try again' : 'Buy')}
                   </button>
