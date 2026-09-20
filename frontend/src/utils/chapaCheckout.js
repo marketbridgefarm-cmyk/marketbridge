@@ -20,17 +20,16 @@ export async function chapaInitializeAndRedirect(paymentId) {
       throw new Error('Could not start Chapa checkout');
     }
 
-    // Redirect to Chapa's hosted payment page.
     window.location.assign(checkoutUrl);
   } catch (error) {
     const message =
       error?.response?.data?.error ||
+      error?.response?.data?.message ||
       error?.message ||
       'Could not start Chapa checkout';
 
     const enhancedError = new Error(message);
 
-    // Preserve useful Axios information for callers/logging.
     enhancedError.response = error?.response;
     enhancedError.status = error?.response?.status;
 
@@ -39,32 +38,25 @@ export async function chapaInitializeAndRedirect(paymentId) {
 }
 
 /**
- * Create a MarketBridge payment intent and then
- * initialize Chapa hosted checkout.
+ * Create a payment intent and start Chapa checkout.
  *
- * Supported payment types include:
- * - MARKETPLACE
- * - TRANSPORT
- * - INSPECTOR
- * - ADVERTISING
- * - DIGITAL
- *
- * The caller is responsible for supplying the appropriate
- * payment payload and authorization context.
+ * IMPORTANT:
+ * If the backend says an active payment already exists,
+ * reuse that payment instead of treating the response as a
+ * fatal error. This prevents duplicate payments and allows
+ * the buyer to continue the existing checkout.
  */
-// PDF recommendation #14 (Idempotency & Concurrency). One key per
-// "create this payment intent" attempt: a page refresh mid-request, a
-// double-tapped pay button, or an axios retry on a flaky connection all
-// resend the exact same request, and the key lets the backend recognize
-// the retry and hand back the original payment instead of creating a
-// second one. crypto.randomUUID() is available in every browser this app
-// already targets (same API level Chapa checkout redirects require); the
-// timestamp+random fallback only matters for very old browsers/webviews.
 function newIdempotencyKey() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
     return crypto.randomUUID();
   }
-  return `idem-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  return `idem-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}`;
 }
 
 export async function startChapaPayment(paymentPayload) {
@@ -76,7 +68,11 @@ export async function startChapaPayment(paymentPayload) {
     const { data } = await api.post(
       '/payments',
       paymentPayload,
-      { headers: { 'Idempotency-Key': newIdempotencyKey() } }
+      {
+        headers: {
+          'Idempotency-Key': newIdempotencyKey(),
+        },
+      }
     );
 
     const paymentId = data?.payment?.id;
@@ -84,21 +80,93 @@ export async function startChapaPayment(paymentPayload) {
     if (!paymentId) {
       throw new Error(
         data?.error ||
-        'Payment intent was not created'
+          data?.message ||
+          'Payment intent was not created'
       );
     }
 
+    /*
+     * Normal path:
+     *
+     * New payment → initialize → Chapa checkout.
+     */
     await chapaInitializeAndRedirect(paymentId);
 
-    // Normally this function never reaches here because
-    // the browser is redirected to Chapa.
     return {
       payment: data.payment,
       checkoutUrl: data.checkoutUrl || null,
     };
   } catch (error) {
+    /*
+     * The backend deliberately returns 409 when an active
+     * payment already exists. That is not a reason to make
+     * the buyer create another payment.
+     *
+     * Reuse the existing payment returned by the backend.
+     */
+    const existingPayment =
+      error?.response?.data?.payment || null;
+
+    if (
+      error?.response?.status === 409 &&
+      existingPayment?.id
+    ) {
+      const status = existingPayment.status;
+
+      /*
+       * PENDING means the payment has not yet been sent
+       * to Chapa. Start its existing checkout.
+       */
+      if (status === 'PENDING') {
+        await chapaInitializeAndRedirect(
+          existingPayment.id
+        );
+
+        return {
+          payment: existingPayment,
+          checkoutUrl: null,
+          reused: true,
+        };
+      }
+
+      /*
+       * PROCESSING means a Chapa initialization has already
+       * started. Do not create another payment or initialize
+       * it again.
+       *
+       * The order page can use its existing verification flow.
+       */
+      if (status === 'PROCESSING') {
+        const enhancedError = new Error(
+          'This payment is already being processed. Check its payment status before starting another checkout.'
+        );
+
+        enhancedError.response = error?.response;
+        enhancedError.status = error?.response?.status;
+        enhancedError.payment = existingPayment;
+
+        throw enhancedError;
+      }
+
+      /*
+       * PAID means there is nothing else to pay.
+       */
+      if (status === 'PAID') {
+        const enhancedError = new Error(
+          'This payment has already been completed.'
+        );
+
+        enhancedError.response = error?.response;
+        enhancedError.status = error?.response?.status;
+        enhancedError.payment = existingPayment;
+
+        throw enhancedError;
+      }
+    }
+
     const message =
       error?.response?.data?.error ||
+      error?.response?.data?.message ||
       error?.message ||
       'Could not create payment';
 
