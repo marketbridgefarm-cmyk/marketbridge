@@ -139,6 +139,10 @@ export default function Sidebar() {
 
   const is = (path, exact = false) => exact ? location.pathname === path : location.pathname.startsWith(path);
   const marketActive = is('/agricultural') || is('/listings') || is('/products') || is('/digital');
+
+  // The sidebar is an authenticated navigation surface. Never render it for
+  // signed-out visitors, including the mobile trigger/backdrop.
+  if (!user) return null;
   const advertisingActive = is('/dashboard/advertiser');
   const notificationsOpen = () => document.querySelector('.notification-trigger')?.click();
 
