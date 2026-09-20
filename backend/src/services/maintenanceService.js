@@ -5,6 +5,7 @@ const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('./orderEventService');
 const { cancelOrderInTransaction } = require('./orderCancellationService');
 const { sendSms } = require('./smsService');
+const { releaseDuePayouts } = require('./sellerPayoutService');
 const logger = require('../utils/logger');
 
 const LOCK_KEY = 82461327;
@@ -228,10 +229,10 @@ async function runMaintenanceCycle() {
   return withJobLock(async () => {
     const startedAt = Date.now();
     const now = new Date();
-    const [offers, listings, ads, adsActivated, reminders, unpaidOrders, sms] = await Promise.all([
-      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), sendPendingSms(now),
+    const [offers, listings, ads, adsActivated, reminders, unpaidOrders, sms, payouts] = await Promise.all([
+      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), sendPendingSms(now), releaseDuePayouts(prisma, now),
     ]);
-    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, unpaidOrders, sms };
+    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, unpaidOrders, sms, payouts };
   });
 }
 
@@ -250,4 +251,4 @@ function startMaintenanceScheduler() {
   return setInterval(tick, intervalMs);
 }
 
-module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, sendPendingSms };
+module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, sendPendingSms, releaseDuePayouts };

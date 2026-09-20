@@ -12,6 +12,7 @@ const {
   createReconciliationIssue,
 } = require('./paymentReconciliationService');
 const { transitionOrderStatus } = require('./orderStateMachine');
+const sellerPayoutService = require('./sellerPayoutService');
 
 // ============================================================================
 // CONSTANTS
@@ -1252,6 +1253,11 @@ async function settlePayment({
             orderClaim = {
               count: 1,
             };
+
+            await sellerPayoutService.createPayoutHold(tx, {
+              order: payment.order,
+              payment,
+            });
           }
 
           if (orderClaim.count === 0) {
