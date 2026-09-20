@@ -49,16 +49,21 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
+    const token = localStorage.getItem('mb_token');
+
+    // Clear the local session immediately so authenticated UI (including the
+    // sidebar) disappears without waiting for the server request.
+    localStorage.removeItem('mb_token');
+    setUser(null);
+
     try {
-      if (localStorage.getItem('mb_token')) {
+      if (token) {
         await api.post('/auth/logout');
       }
     } catch (error) {
-      // Local cleanup still happens if the network/session is already gone.
-      console.warn('Logout request failed; clearing local session:', error);
-    } finally {
-      localStorage.removeItem('mb_token');
-      setUser(null);
+      // The local session is already cleared; the server may already have
+      // expired the session or the request may simply have failed.
+      console.warn('Logout request failed after local session cleanup:', error);
     }
   };
 
