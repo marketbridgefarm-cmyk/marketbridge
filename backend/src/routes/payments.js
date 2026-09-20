@@ -35,12 +35,6 @@ const {
 const paymentService =
   require('../services/paymentService');
 
-const {
-  streamEarningsStatementPdf,
-  marketplaceLabel,
-  SERVICE_LABELS,
-} = require('../services/receiptService');
-
 const router = express.Router();
 
 // ============================================================================
@@ -1873,24 +1867,6 @@ router.get(
           },
         });
 
-      // Refund penalties are revenue too, but they live on the ledger
-      // (against a REFUNDED payment) rather than on the PAID payment
-      // itself, so they're pulled in separately and added to the total.
-      const penaltyEntries =
-        await prisma.paymentLedgerEntry.findMany({
-          where: {
-            type: 'PLATFORM_PENALTY',
-          },
-          select: {
-            amount: true,
-          },
-        });
-
-      const totalPenaltyRevenue = penaltyEntries.reduce(
-        (sum, entry) => sum + Number(entry.amount || 0),
-        0
-      );
-
       const byType = {};
 
       let totalCommission =
@@ -1950,10 +1926,6 @@ router.get(
         totalVolume,
 
         totalCommission,
-
-        totalPenaltyRevenue,
-
-        totalPlatformRevenue: totalCommission + totalPenaltyRevenue,
 
         byType,
       });
@@ -2235,137 +2207,6 @@ router.get(
         error:
           'Could not load payment',
       });
-    }
-  }
-);
-
-// ============================================================================
-// EARNINGS STATEMENT (PDF)
-// ============================================================================
-// The recipient's-side counterpart to an order/purchase receipt: proof of
-// what a seller, hired transporter, or inspector actually received once
-// the platform's commission was deducted from that payment. Only the
-// recipient (or admin) can pull it, and only once the payment has
-// actually settled — pending payments haven't generated an earning yet.
-// Advertising has no recipient-side earning (the whole fee is platform
-// revenue), so it isn't handled here.
-// ============================================================================
-
-router.get(
-  '/:id/earnings-statement',
-  authenticate,
-  [param('id').isUUID()],
-  validate,
-  async (req, res) => {
-    try {
-      const payment = await prisma.payment.findUnique({
-        where: { id: req.params.id },
-        include: {
-          createdBy: { select: { id: true, name: true, phone: true } },
-          order: {
-            include: {
-              listing: { select: { category: true, title: true, cropType: true, unit: true } },
-              seller: { select: { id: true, name: true, phone: true } },
-            },
-          },
-          transportJob: {
-            include: { truckOwner: { select: { id: true, name: true, phone: true } } },
-          },
-          inspectionRequest: {
-            include: { inspector: { select: { id: true, name: true, phone: true } } },
-          },
-          digitalProduct: {
-            include: { seller: { select: { id: true, name: true, phone: true } } },
-          },
-          digitalPurchase: true,
-          refunds: true,
-        },
-      });
-
-      if (!payment) return res.status(404).json({ error: 'Payment not found' });
-
-      let ctx = null;
-
-      if (payment.type === 'MARKETPLACE' && payment.order?.seller) {
-        ctx = {
-          recipientRoleLabel: 'Seller',
-          recipient: payment.order.seller,
-          badgeLabel: marketplaceLabel(payment.order.listing?.category),
-          itemLabel: `${payment.order.listing?.title || payment.order.listing?.cropType || 'Listing'} \u00b7 Qty ${payment.order.quantity ?? '\u2014'} ${payment.order.listing?.unit || ''}`.trim(),
-          relatedReferenceLabel: 'Order ID',
-          relatedReferenceId: payment.order.id,
-        };
-      } else if (payment.type === 'DIGITAL' && payment.digitalProduct?.seller) {
-        ctx = {
-          recipientRoleLabel: 'Seller',
-          recipient: payment.digitalProduct.seller,
-          badgeLabel: marketplaceLabel('DIGITAL'),
-          itemLabel: payment.digitalProduct.title,
-          relatedReferenceLabel: 'Purchase ID',
-          relatedReferenceId: payment.digitalPurchase?.id || payment.id,
-        };
-      } else if (
-        payment.type === 'TRANSPORT' &&
-        payment.transportJob?.method === 'HIRE_TRANSPORTER' &&
-        payment.transportJob.truckOwner
-      ) {
-        ctx = {
-          recipientRoleLabel: 'Transporter',
-          recipient: payment.transportJob.truckOwner,
-          badgeLabel: SERVICE_LABELS.TRANSPORT,
-          itemLabel: `Hired transport for order ${payment.orderId || '\u2014'}`,
-          relatedReferenceLabel: 'Transport Job ID',
-          relatedReferenceId: payment.transportJob.id,
-        };
-      } else if (payment.type === 'INSPECTOR' && payment.inspectionRequest?.inspector) {
-        ctx = {
-          recipientRoleLabel: 'Inspector',
-          recipient: payment.inspectionRequest.inspector,
-          badgeLabel: SERVICE_LABELS.INSPECTOR,
-          itemLabel: `Inspection service for order ${payment.orderId || '\u2014'}`,
-          relatedReferenceLabel: 'Inspection Request ID',
-          relatedReferenceId: payment.inspectionRequest.id,
-        };
-      }
-
-      if (!ctx) {
-        return res.status(409).json({
-          error: 'An earnings statement is not applicable to this payment (no third-party recipient, e.g. own-truck transport or advertising).',
-        });
-      }
-
-      const allowed = ctx.recipient.id === req.user.id || isAdmin(req.user);
-      if (!allowed) return res.status(403).json({ error: 'Not authorized to view this earnings statement' });
-
-      if (payment.status === 'PENDING' || payment.status === 'FAILED') {
-        return res.status(409).json({
-          error: 'An earnings statement is only available once this payment has settled.',
-        });
-      }
-
-      streamEarningsStatementPdf(
-        {
-          ...ctx,
-          id: payment.id,
-          grossAmount: payment.amount,
-          currency: payment.currency,
-          commissionRate: payment.commissionRate,
-          commissionAmount: payment.commissionAmount,
-          netAmount: payment.netAmount,
-          paymentMethod: payment.method,
-          paymentReference: payment.reference || payment.providerTransactionId,
-          paymentStatus: payment.status,
-          paidAt: payment.updatedAt,
-          counterpartyRoleLabel: 'Buyer',
-          counterparty: payment.createdBy,
-          refunds: payment.refunds || [],
-        },
-        res
-      );
-    } catch (error) {
-      req.log.error({ err: error }, 'EARNINGS STATEMENT ERROR:');
-      if (res.headersSent) return res.end();
-      return res.status(500).json({ error: 'Could not generate earnings statement' });
     }
   }
 );

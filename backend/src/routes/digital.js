@@ -8,7 +8,6 @@ const { makeDigitalKey, uploadPrivateObject, deletePrivateObject, signedDownload
 const { createPayment } = require('../services/paymentService');
 const { optimizeUpload } = require('../utils/imageProcessor');
 const { idempotency } = require('../middleware/idempotency');
-const { streamDigitalPurchaseReceiptPdf } = require('../services/receiptService');
 
 const router = express.Router();
 
@@ -59,31 +58,6 @@ const validate = (req, res, next) => {
   }
   next();
 };
-
-// Two near-simultaneous purchase requests for the same buyer+product (a
-// double-tap, a retried request, two open tabs) can both pass the
-// "does a purchase row already exist?" check before either has written
-// one, then both converge on the same underlying Payment via idempotency
-// and race to insert a DigitalPurchase pointing at it. DigitalPurchase.
-// paymentId is unique, so the loser of that race gets a P2002 here rather
-// than a real error — recover by returning whichever row actually landed.
-async function createPurchaseIdempotent({ productId, buyerId, paymentId, status }) {
-  try {
-    return await prisma.digitalPurchase.create({
-      data: { productId, buyerId, paymentId, status },
-      include: { payment: true },
-    });
-  } catch (error) {
-    if (error.code === 'P2002') {
-      const winner = await prisma.digitalPurchase.findFirst({
-        where: { OR: [{ productId, buyerId }, { paymentId }] },
-        include: { payment: true },
-      });
-      if (winner) return winner;
-    }
-    throw error;
-  }
-}
 
 // List active digital products
 router.get('/', async (req, res) => {
@@ -332,11 +306,14 @@ router.post(
           });
 
       if (orphanPayment) {
-        const recovered = await createPurchaseIdempotent({
-          productId: product.id,
-          buyerId: req.user.id,
-          paymentId: orphanPayment.id,
-          status: orphanPayment.status === 'PAID' ? 'COMPLETED' : 'PENDING',
+        const recovered = await prisma.digitalPurchase.create({
+          data: {
+            productId: product.id,
+            buyerId: req.user.id,
+            paymentId: orphanPayment.id,
+            status: orphanPayment.status === 'PAID' ? 'COMPLETED' : 'PENDING',
+          },
+          include: { payment: true },
         });
         return res.status(200).json({
           message: 'Purchase recovered. Continue the existing payment.',
@@ -375,11 +352,14 @@ router.post(
             },
             include: { payment: true },
           })
-        : await createPurchaseIdempotent({
-            productId: product.id,
-            buyerId: req.user.id,
-            paymentId: payment.id,
-            status: 'PENDING',
+        : await prisma.digitalPurchase.create({
+            data: {
+              productId: product.id,
+              buyerId: req.user.id,
+              paymentId: payment.id,
+              status: 'PENDING',
+            },
+            include: { payment: true },
           });
 
       const result = { payment, purchase };
@@ -461,55 +441,6 @@ router.get(
     } catch (error) {
       req.log.error({ err: error }, 'DIGITAL DOWNLOAD ERROR:');
       return res.status(500).json({ error: 'Could not process download request' });
-    }
-  }
-);
-
-// ============================================================================
-// DIGITAL PURCHASE RECEIPT (PDF)
-// ============================================================================
-// Downloadable receipt for a Digital-marketplace purchase, covering the
-// same ground as the physical-order receipt (payment, method, reference,
-// any refund) so the Digital marketplace isn't left without one. Available
-// as soon as the purchase payment has actually been made — not gated on
-// any later status — for the same reason order receipts aren't gated on
-// COMPLETED: the buyer/seller may need proof of payment right away.
-// ============================================================================
-router.get(
-  '/purchases/:id/receipt',
-  authenticate,
-  [param('id').isUUID()],
-  validate,
-  async (req, res) => {
-    try {
-      const purchase = await prisma.digitalPurchase.findUnique({
-        where: { id: req.params.id },
-        include: {
-          product: { include: { seller: { select: { id: true, name: true, phone: true } } } },
-          buyer: { select: { id: true, name: true, phone: true } },
-          payment: { include: { refunds: true } },
-        },
-      });
-
-      if (!purchase) return res.status(404).json({ error: 'Purchase not found' });
-
-      const allowed = req.user.roles?.includes('ADMIN') ||
-        purchase.buyerId === req.user.id ||
-        purchase.product?.sellerId === req.user.id;
-
-      if (!allowed) return res.status(403).json({ error: 'Not authorized to view this purchase' });
-
-      if (!purchase.payment || purchase.payment.status === 'PENDING') {
-        return res.status(409).json({
-          error: 'A receipt is only available once payment has been made.',
-        });
-      }
-
-      return streamDigitalPurchaseReceiptPdf(purchase, res);
-    } catch (error) {
-      req.log.error({ err: error }, 'DIGITAL RECEIPT ERROR:');
-      if (res.headersSent) return res.end();
-      return res.status(500).json({ error: 'Could not generate receipt' });
     }
   }
 );
