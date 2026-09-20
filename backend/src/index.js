@@ -41,6 +41,7 @@ const adminRoutes = require('./routes/admin');
 const notificationRoutes = require('./routes/notifications');
 const maintenanceRoutes = require('./routes/maintenance');
 const growthRoutes = require('./routes/growth');
+const smsRoutes = require('./routes/sms');
 const { startMaintenanceScheduler } = require('./services/maintenanceService');
 
 const prisma = require('./config/db');
@@ -337,6 +338,7 @@ app.use('/api/notifications', notificationRoutes);
 
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/growth', growthRoutes);
+app.use('/api/sms', smsRoutes);
 
 // ============================================================================
 // API DOCS
