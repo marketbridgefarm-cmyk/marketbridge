@@ -233,7 +233,8 @@ router.post(
 router.post(
   '/:id/purchase',
   authenticate,
-  requireRole('BUYER'),
+  // Any authenticated user may buy digital products. MarketBridge users can
+  // act as both buyers and sellers; BUYER is not an exclusive identity.
   idempotency('digital.purchase'),
   [
     param('id').isUUID(),
@@ -343,24 +344,54 @@ router.post(
       // consume the unique (product,buyer) purchase row. Rebind that row to
       // the new payment so "try again" works without violating the unique
       // constraint.
-      const purchase = existing
-        ? await prisma.digitalPurchase.update({
-            where: { id: existing.id },
-            data: {
-              paymentId: payment.id,
-              status: 'PENDING',
-            },
-            include: { payment: true },
-          })
-        : await prisma.digitalPurchase.create({
-            data: {
-              productId: product.id,
-              buyerId: req.user.id,
-              paymentId: payment.id,
-              status: 'PENDING',
+      let purchase;
+
+      try {
+        purchase = existing
+          ? await prisma.digitalPurchase.update({
+              where: { id: existing.id },
+              data: {
+                paymentId: payment.id,
+                status: 'PENDING',
+              },
+              include: { payment: true },
+            })
+          : await prisma.digitalPurchase.create({
+              data: {
+                productId: product.id,
+                buyerId: req.user.id,
+                paymentId: payment.id,
+                status: 'PENDING',
+              },
+              include: { payment: true },
+            });
+      } catch (purchaseError) {
+        // Two rapid mobile taps/requests can race after payment creation.
+        // The business key (productId + buyerId) is unique, so recover the
+        // already-created purchase instead of returning a misleading 500.
+        if (purchaseError?.code === 'P2002') {
+          const raced = await prisma.digitalPurchase.findUnique({
+            where: {
+              productId_buyerId: {
+                productId: product.id,
+                buyerId: req.user.id,
+              },
             },
             include: { payment: true },
           });
+
+          if (raced?.payment) {
+            return res.status(200).json({
+              message: 'Purchase already exists. Continue the existing payment.',
+              payment: raced.payment,
+              purchase: raced,
+              paymentConfirmed: raced.payment.status === 'PAID',
+              replayed: true,
+            });
+          }
+        }
+        throw purchaseError;
+      }
 
       const result = { payment, purchase };
 
@@ -370,9 +401,18 @@ router.post(
         paymentConfirmed: false,
       });
     } catch (error) {
-      req.log.error({ err: error }, 'DIGITAL PURCHASE ERROR:');
-      return res.status(error.status || 500).json({
-        error: error.status ? error.message : 'Could not create purchase',
+      req.log.error({ err: error, code: error?.code, meta: error?.meta }, 'DIGITAL PURCHASE ERROR:');
+
+      const knownMessages = {
+        P2002: 'This digital product purchase is already being processed. Please retry.',
+        P2003: 'The digital purchase could not be linked to its payment/product. Please retry.',
+        P2022: 'The payment database is missing a required field. Please deploy the latest database migrations.',
+        P2025: 'The digital product or purchase record no longer exists. Refresh and try again.',
+      };
+
+      const status = error.status || (error.code === 'P2002' ? 409 : error.code === 'P2022' ? 503 : 500);
+      return res.status(status).json({
+        error: error.status ? error.message : (knownMessages[error.code] || 'Could not create purchase'),
         ...(error.code ? { code: error.code } : {}),
       });
     }
@@ -446,7 +486,7 @@ router.get(
 );
 
 // Get my purchases
-router.get('/purchases/mine', authenticate, requireRole('BUYER'), async (req, res) => {
+router.get('/purchases/mine', authenticate, async (req, res) => {
   try {
     const purchases = await prisma.digitalPurchase.findMany({
       where: { buyerId: req.user.id },
