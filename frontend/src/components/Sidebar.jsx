@@ -148,12 +148,6 @@ export default function Sidebar() {
     navigate('/');
   }
 
-  // The nav rail (and its mobile toggle) only makes sense once someone is
-  // logged in — an anonymous visitor has no dashboard, orders, payments,
-  // etc. to navigate to. Hooks above still run unconditionally so their
-  // order never changes across renders; only the output is skipped.
-  if (!user) return null;
-
   return (
     <>
       <aside className={`glass-sidebar${expanded ? ' expanded' : ''}`} aria-label="MarketBridge navigation">
