@@ -431,6 +431,10 @@ model User {
   // Financial ledger
   ledgerEntries PaymentLedgerEntry[]
 
+  // Seller payouts (post-sale hold/release, see SellerPayout below)
+  sellerPayouts  SellerPayout[] @relation("SellerPayoutSeller")
+  payoutsHandled SellerPayout[] @relation("SellerPayoutHandler")
+
   @@index([email])
   @@index([accountStatus])
   @@index([verificationStatus])
@@ -905,6 +909,10 @@ model Order {
   transportJob TransportJob?
 
   payments Payment[]
+
+  // Held/released payout to the seller once the MARKETPLACE payment
+  // settles. See SellerPayout below.
+  payout SellerPayout?
 
   // Durable payment obligations for the order.
   paymentObligations PaymentObligation[]
@@ -1426,6 +1434,10 @@ model Payment {
   refunds PaymentRefund[]
   reconciliations PaymentReconciliation[]
 
+  // Held/released payout to the seller, created once this payment (when it
+  // is the order's MARKETPLACE payment) settles PAID. See SellerPayout.
+  payout SellerPayout?
+
   @@index([orderId])
   @@index([createdById])
   @@index([digitalProductId])
@@ -1750,6 +1762,58 @@ model Rating {
   @@index([toUserId])
 
   @@unique([orderId, fromUserId, toUserId, role])
+}
+
+// ============================================================================
+// SELLER PAYOUT
+// ============================================================================
+//
+// See services/sellerPayoutService.js for the full lifecycle explanation.
+// One row per order's MARKETPLACE payment (never per transport/inspection
+// payment — those are collected on the platform's behalf but aren't a
+// "sale proceeds to a farmer" payout in the same sense).
+// ============================================================================
+
+enum SellerPayoutStatus {
+  HELD
+  ON_HOLD_DISPUTE
+  RELEASED
+  PAID_OUT
+}
+
+model SellerPayout {
+  id String @id @default(uuid())
+
+  order   Order  @relation(fields: [orderId], references: [id])
+  orderId String @unique
+
+  seller   User   @relation("SellerPayoutSeller", fields: [sellerId], references: [id])
+  sellerId String
+
+  payment   Payment @relation(fields: [paymentId], references: [id])
+  paymentId String  @unique
+
+  amount   Decimal @db.Decimal(18, 2)
+  currency String  @default("ETB")
+
+  status SellerPayoutStatus @default(HELD)
+
+  releaseAt   DateTime
+  releasedAt  DateTime?
+  paidOutAt   DateTime?
+
+  paidOutBy   User?   @relation("SellerPayoutHandler", fields: [paidOutById], references: [id])
+  paidOutById String?
+
+  // Free-text reference to the actual out-of-band transfer (bank txn id,
+  // Telebirr confirmation code, etc.), recorded by whoever marks this paid.
+  payoutReference String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sellerId, status])
+  @@index([status, releaseAt])
 }
 
 // ============================================================================
