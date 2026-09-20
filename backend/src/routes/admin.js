@@ -2825,7 +2825,7 @@ router.get('/payouts', async (req, res) => {
     const status = req.query.status ? String(req.query.status).toUpperCase() : null;
     const where = {};
     if (status && status !== 'ALL') {
-      if (!['HELD', 'ON_HOLD_DISPUTE', 'RELEASED', 'PAID_OUT'].includes(status)) {
+      if (!['HELD', 'ON_HOLD_DISPUTE', 'RELEASED', 'PAID_OUT', 'CANCELLED'].includes(status)) {
         return res.status(400).json({ error: 'Invalid payout status filter' });
       }
       where.status = status;

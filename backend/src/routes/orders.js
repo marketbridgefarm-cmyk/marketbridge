@@ -250,7 +250,53 @@ router.get('/:id', authenticate, async (req, res) => {
 
     if (!allowed) return res.status(403).json({ error: 'Not authorized to view this order' });
 
-    return res.json({ order });
+    // Seller payout is operationally sensitive. All order participants can
+    // see that a seller payout is held/released and when the hold is due, but
+    // only the seller/admin receives the payout amount and payout reference.
+    // This keeps the buyer-facing order page informative without exposing the
+    // seller's net proceeds or internal payout reference.
+    const payout = await prisma.sellerPayout.findUnique({
+      where: { orderId: order.id },
+      select: {
+        id: true,
+        status: true,
+        releaseAt: true,
+        releasedAt: true,
+        paidOutAt: true,
+        amount: true,
+        currency: true,
+        payoutReference: true,
+        sellerId: true,
+      },
+    });
+
+    const canSeePayoutDetails =
+      req.user.roles?.includes('ADMIN') ||
+      order.sellerId === req.user.id;
+
+    const payoutView = payout
+      ? {
+          id: payout.id,
+          status: payout.status,
+          releaseAt: payout.releaseAt,
+          releasedAt: payout.releasedAt,
+          paidOutAt: payout.paidOutAt,
+          ...(canSeePayoutDetails
+            ? {
+                amount: payout.amount,
+                currency: payout.currency,
+                payoutReference: payout.payoutReference,
+              }
+            : {}),
+        }
+      : null;
+
+    return res.json({
+      order: {
+        ...order,
+        sellerPayout: payoutView,
+      },
+    });
   } catch (error) {
     req.log.error({ err: error }, 'GET ORDER ERROR:');
     return res.status(500).json({ error: 'Failed to load order' });

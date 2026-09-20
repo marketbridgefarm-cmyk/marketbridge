@@ -11,6 +11,7 @@ const { searchListings } = require('../services/searchService');
 const { getRecommendations } = require('../services/recommendationService');
 const { REGIONS, REGION_VALUES } = require('../utils/ethiopianRegions');
 const { haversineSql } = require('../utils/geo');
+const logger = require('../utils/logger');
 
 const router = express.Router();
 
@@ -30,7 +31,7 @@ async function resolveMediaUrl(value) {
   try {
     return await signedMediaUrl({ key: value, disposition: 'inline' });
   } catch (error) {
-    req.log.error({ err: error }, 'LISTING MEDIA SIGN ERROR:');
+    logger.error({ err: error, key: value }, 'LISTING MEDIA SIGN ERROR:');
     return null;
   }
 }

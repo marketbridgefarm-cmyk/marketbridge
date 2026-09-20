@@ -722,6 +722,7 @@ router.post(
             status: {
               in: [
                 'PENDING',
+                'PROCESSING',
                 'PAID',
               ],
             },

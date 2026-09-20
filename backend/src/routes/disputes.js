@@ -5,7 +5,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { transitionOrderStatus, DISPUTABLE_STATUSES } = require('../services/orderStateMachine');
-const { holdForDispute, resumeAfterDispute } = require('../services/sellerPayoutService');
+const { holdForDispute, resumeAfterDispute, cancelAfterDispute } = require('../services/sellerPayoutService');
 
 const router = express.Router();
 
@@ -117,7 +117,11 @@ router.get('/', authenticate, requireRole('ADMIN'), requireMfa(), async (req, re
 
 router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
   try {
-    const { resolution, status } = req.body;
+    const { resolution, status, payoutDecision } = req.body;
+
+    if (payoutDecision != null && !['RELEASE', 'CANCEL'].includes(String(payoutDecision).toUpperCase())) {
+      return res.status(400).json({ error: 'payoutDecision must be RELEASE or CANCEL' });
+    }
 
     const dispute = await prisma.dispute.findUnique({ where: { id: req.params.id } });
     if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
@@ -138,7 +142,25 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
       // somehow left DISPUTED before this resolution landed.
       await transitionOrderStatus(tx, updated.orderId, 'DISPUTED', updated.previousOrderStatus || 'CONFIRMED');
 
-      await resumeAfterDispute(tx, { orderId: updated.orderId, actorId: req.user.id });
+      const payout = await tx.sellerPayout.findUnique({
+        where: { orderId: updated.orderId },
+        select: { id: true, status: true },
+      });
+
+      if (payout?.status === 'ON_HOLD_DISPUTE') {
+        if (!payoutDecision) {
+          throw Object.assign(
+            new Error('This dispute resolution requires payoutDecision RELEASE or CANCEL because the seller payout is frozen'),
+            { status: 400, code: 'PAYOUT_DECISION_REQUIRED' }
+          );
+        }
+
+        if (String(payoutDecision).toUpperCase() === 'RELEASE') {
+          await resumeAfterDispute(tx, { orderId: updated.orderId, actorId: req.user.id });
+        } else {
+          await cancelAfterDispute(tx, { orderId: updated.orderId, actorId: req.user.id });
+        }
+      }
 
       await recordAuditEvent(tx, {
         actorId: req.user.id,
@@ -149,6 +171,7 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
           orderId: updated.orderId,
           finalStatus,
           restoredOrderStatus: updated.previousOrderStatus || 'CONFIRMED',
+          payoutDecision: payoutDecision ? String(payoutDecision).toUpperCase() : null,
         },
       });
 
@@ -158,7 +181,7 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
     return res.json({ dispute: result });
   } catch (error) {
     req.log.error({ err: error }, 'RESOLVE DISPUTE ERROR:');
-    if (error.code === 'ORDER_STATE_CONFLICT' || error.code === 'INVALID_ORDER_TRANSITION') {
+    if (error.code === 'ORDER_STATE_CONFLICT' || error.code === 'INVALID_ORDER_TRANSITION' || error.code === 'PAYOUT_DECISION_REQUIRED') {
       return res.status(error.status || 409).json({ error: error.message });
     }
     return res.status(500).json({ error: 'Could not resolve dispute' });
