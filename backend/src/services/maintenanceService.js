@@ -5,7 +5,7 @@ const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('./orderEventService');
 const { cancelOrderInTransaction } = require('./orderCancellationService');
 const { sendSms } = require('./smsService');
-const { releaseDuePayouts } = require('./sellerPayoutService');
+const { releaseDuePayouts } = require('./payoutService');
 const logger = require('../utils/logger');
 
 const LOCK_KEY = 82461327;

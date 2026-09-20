@@ -12,7 +12,7 @@ const {
   createReconciliationIssue,
 } = require('./paymentReconciliationService');
 const { transitionOrderStatus } = require('./orderStateMachine');
-const sellerPayoutService = require('./sellerPayoutService');
+const payoutService = require('./payoutService');
 
 // ============================================================================
 // CONSTANTS
@@ -1254,8 +1254,10 @@ async function settlePayment({
               count: 1,
             };
 
-            await sellerPayoutService.createPayoutHold(tx, {
-              order: payment.order,
+            await payoutService.createPayoutHold(tx, {
+              orderId: payment.order.id,
+              payeeRole: 'SELLER',
+              payeeId: payment.order.sellerId,
               payment,
             });
           }
@@ -1343,6 +1345,51 @@ async function settlePayment({
               );
             }
           }
+        }
+
+        // --------------------------------------------------------------------
+        // HIRED TRANSPORT
+        // --------------------------------------------------------------------
+        //
+        // Own-truck jobs never reach here with a truckOwnerId (see
+        // writeLedger above), so no TRANSPORTER_EARNING is written and no
+        // payout hold is created for them — there is no external payee to
+        // hold money for.
+
+        if (
+          payment.type === 'TRANSPORT' &&
+          payment.transportJob &&
+          payment.transportJob.method === 'HIRE_TRANSPORTER' &&
+          payment.transportJob.truckOwnerId
+        ) {
+          await payoutService.createPayoutHold(tx, {
+            orderId: payment.transportJob.orderId,
+            payeeRole: 'TRANSPORTER',
+            payeeId: payment.transportJob.truckOwnerId,
+            payment,
+          });
+        }
+
+        // --------------------------------------------------------------------
+        // INSPECTION
+        // --------------------------------------------------------------------
+        //
+        // inspectionRequest.orderId can be null for a pre-order inspection;
+        // createPayoutHold treats that as "no order to tie this to yet"
+        // rather than failing, matching how InspectionRequest.orderId is
+        // itself optional.
+
+        if (
+          payment.type === 'INSPECTOR' &&
+          payment.inspectionRequest &&
+          payment.inspectionRequest.inspectorId
+        ) {
+          await payoutService.createPayoutHold(tx, {
+            orderId: payment.inspectionRequest.orderId,
+            payeeRole: 'INSPECTOR',
+            payeeId: payment.inspectionRequest.inspectorId,
+            payment,
+          });
         }
 
         // --------------------------------------------------------------------
