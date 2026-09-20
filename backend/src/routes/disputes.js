@@ -5,6 +5,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { transitionOrderStatus, DISPUTABLE_STATUSES } = require('../services/orderStateMachine');
+const { holdForDispute, resumeAfterDispute } = require('../services/sellerPayoutService');
 
 const router = express.Router();
 
@@ -66,6 +67,8 @@ router.post(
         // dispute (or any other status change) landed on this order
         // between the pre-check above and this transaction.
         await transitionOrderStatus(tx, orderId, order.status, 'DISPUTED');
+
+        await holdForDispute(tx, { orderId, actorId: req.user.id });
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
@@ -134,6 +137,8 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
       // Atomic claim: fails with ORDER_STATE_CONFLICT if the order
       // somehow left DISPUTED before this resolution landed.
       await transitionOrderStatus(tx, updated.orderId, 'DISPUTED', updated.previousOrderStatus || 'CONFIRMED');
+
+      await resumeAfterDispute(tx, { orderId: updated.orderId, actorId: req.user.id });
 
       await recordAuditEvent(tx, {
         actorId: req.user.id,

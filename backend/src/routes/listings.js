@@ -665,6 +665,84 @@ router.get('/meta/regions', (req, res) => {
   res.json({ regions: REGIONS });
 });
 
+// ============================================================================
+// MARKET PRICE TRENDS
+// ============================================================================
+//
+// Aggregates recent completed-sale prices by crop type (and optionally
+// region), so a seller weighing an offer — or setting an asking price in
+// the first place — can see what similar produce has actually sold for
+// recently instead of guessing. Computed on the fly from Order+Listing;
+// no new tables. Deliberately keeps the raw sample size small enough to
+// fetch and reduce in JS rather than adding a groupBy-on-Decimal query,
+// which is fine at MarketBridge's current order volume but is the first
+// thing to revisit (e.g. a materialized nightly rollup) if this endpoint
+// ever shows up in a slow-query report.
+router.get('/market-trends', optionalAuthenticate, async (req, res) => {
+  try {
+    const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 365);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const { cropType, region } = req.query;
+
+    const orders = await prisma.order.findMany({
+      where: {
+        status: { in: ['DELIVERED', 'COMPLETED'] },
+        createdAt: { gte: since },
+        listing: {
+          category: 'AGRICULTURAL',
+          ...(cropType ? { cropType: { equals: String(cropType), mode: 'insensitive' } } : {}),
+          ...(region ? { region: String(region) } : {}),
+        },
+      },
+      select: {
+        finalPrice: true,
+        quantity: true,
+        createdAt: true,
+        listing: { select: { cropType: true, region: true, unit: true } },
+      },
+      take: 5000,
+    });
+
+    const groups = new Map();
+    for (const order of orders) {
+      const crop = (order.listing.cropType || 'UNSPECIFIED').trim();
+      const key = `${crop.toLowerCase()}|${order.listing.region || 'ANY'}|${order.listing.unit || ''}`;
+      const pricePerUnit = order.quantity > 0 ? Number(order.finalPrice) / Number(order.quantity) : null;
+      if (pricePerUnit == null || !Number.isFinite(pricePerUnit)) continue;
+
+      if (!groups.has(key)) {
+        groups.set(key, { cropType: crop, region: order.listing.region || null, unit: order.listing.unit, prices: [], latestSaleAt: order.createdAt });
+      }
+      const group = groups.get(key);
+      group.prices.push(pricePerUnit);
+      if (order.createdAt > group.latestSaleAt) group.latestSaleAt = order.createdAt;
+    }
+
+    const trends = Array.from(groups.values())
+      .map((g) => {
+        const sorted = [...g.prices].sort((a, b) => a - b);
+        const sum = sorted.reduce((a, b) => a + b, 0);
+        return {
+          cropType: g.cropType,
+          region: g.region,
+          unit: g.unit,
+          sampleSize: sorted.length,
+          averagePricePerUnit: Math.round((sum / sorted.length) * 100) / 100,
+          medianPricePerUnit: sorted[Math.floor(sorted.length / 2)],
+          minPricePerUnit: sorted[0],
+          maxPricePerUnit: sorted[sorted.length - 1],
+          latestSaleAt: g.latestSaleAt,
+        };
+      })
+      .sort((a, b) => b.sampleSize - a.sampleSize);
+
+    return res.json({ windowDays: days, trends });
+  } catch (error) {
+    req.log.error({ err: error }, 'MARKET TRENDS ERROR:');
+    return res.status(500).json({ error: 'Could not load market price trends' });
+  }
+});
+
 // "Nearby produce discovery": listings within radiusKm of (lat, lng),
 // sorted nearest-first. Kept as its own endpoint rather than folded into
 // the main search above so it doesn't have to interact with that route's

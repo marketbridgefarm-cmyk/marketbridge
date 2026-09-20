@@ -23,7 +23,10 @@ router.post(
 
       const order = await prisma.order.findUnique({
         where: { id: orderId },
-        include: { transportJob: true },
+        include: {
+          transportJob: true,
+          inspectionRequests: { where: { status: 'COMPLETED' }, select: { inspectorId: true } },
+        },
       });
 
       if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -33,7 +36,8 @@ router.post(
       }
 
       const truckOwnerId = order.transportJob?.truckOwnerId;
-      const isParticipant = [order.buyerId, order.sellerId, truckOwnerId].includes(req.user.id);
+      const completedInspectorIds = order.inspectionRequests.map((r) => r.inspectorId).filter(Boolean);
+      const isParticipant = [order.buyerId, order.sellerId, truckOwnerId, ...completedInspectorIds].includes(req.user.id);
 
       if (!isParticipant) {
         return res.status(403).json({ error: 'You did not participate in this order' });
@@ -46,7 +50,8 @@ router.post(
       const validTarget =
         (role === 'BUYER' && toUserId === order.buyerId) ||
         (role === 'SELLER' && toUserId === order.sellerId) ||
-        (role === 'TRUCK_OWNER' && toUserId === truckOwnerId);
+        (role === 'TRUCK_OWNER' && toUserId === truckOwnerId) ||
+        (role === 'INSPECTOR' && completedInspectorIds.includes(toUserId));
 
       if (!validTarget) {
         return res.status(400).json({ error: 'toUserId does not match a real, verifiable participant for that role on this order' });
@@ -86,6 +91,56 @@ router.post(
     }
   }
 );
+
+// ============================================================================
+// INSPECTOR REPUTATION
+// ============================================================================
+//
+// A dedicated view for the INSPECTOR role specifically, since the generic
+// per-user rating average doesn't distinguish "rated highly as an
+// inspector" from any rating this person happened to receive in another
+// role on other orders. Also surfaces a rough, explicitly-labeled
+// "orders later disputed" signal — informational only, since disputeType
+// is free text and not every dispute is actually about inspection
+// accuracy; this is a prompt for a human reviewer to look closer, not a
+// verdict on the inspector.
+router.get('/inspector/:userId/reputation', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const [ratingAgg, ratingCount, completedInspections, disputedOrders] = await Promise.all([
+      prisma.rating.aggregate({ where: { toUserId: userId, role: 'INSPECTOR' }, _avg: { score: true } }),
+      prisma.rating.count({ where: { toUserId: userId, role: 'INSPECTOR' } }),
+      prisma.inspectionRequest.findMany({
+        where: { inspectorId: userId, status: 'COMPLETED' },
+        select: { orderId: true },
+      }),
+      prisma.dispute.count({
+        where: {
+          order: {
+            inspectionRequests: { some: { inspectorId: userId, status: 'COMPLETED' } },
+          },
+        },
+      }),
+    ]);
+
+    const completedCount = completedInspections.length;
+
+    return res.json({
+      inspectorId: userId,
+      averageInspectorRating: ratingAgg._avg.score || null,
+      inspectorRatingCount: ratingCount,
+      completedInspections: completedCount,
+      ordersWithDisputeAfterInspection: disputedOrders,
+      // Informational only — see comment above. Null when there is no
+      // completed-inspection history to compute a rate from.
+      disputeRateAfterInspection: completedCount > 0 ? Math.round((disputedOrders / completedCount) * 1000) / 1000 : null,
+    });
+  } catch (error) {
+    req.log.error({ err: error }, 'INSPECTOR REPUTATION ERROR:');
+    return res.status(500).json({ error: 'Could not load inspector reputation' });
+  }
+});
 
 router.get('/user/:userId', async (req, res) => {
   try {
