@@ -11,7 +11,6 @@ const { idempotency } = require('../middleware/idempotency');
 const { computePaymentDueAt } = require('../utils/orderTiming');
 const { cancelOrderInTransaction } = require('../services/orderCancellationService');
 const { transitionOrderStatus } = require('../services/orderStateMachine');
-const { streamOrderReceiptPdf } = require('../services/receiptService');
 
 const router = express.Router();
 
@@ -38,16 +37,6 @@ const userSelect = { id: true, name: true, phone: true, location: true, rating: 
 const transportInclude = {
   truckOwner: { select: { id: true, name: true, phone: true, rating: true, verificationStatus: true } },
   truck: { select: { id: true, registration: true, truckType: true, capacity: true, operatingArea: true, availability: true, verificationStatus: true, rating: true } },
-  // Needed so the transport fee (and any refund against it) actually shows
-  // up on the order receipt — without this, order.transportJob.payments is
-  // undefined and transport fees silently never appear on the PDF.
-  payments: {
-    select: {
-      id: true, type: true, status: true, amount: true, currency: true, method: true,
-      reference: true, providerTransactionId: true, commissionAmount: true, netAmount: true, createdAt: true,
-    },
-    include: { refunds: true },
-  },
   quotes: {
     include: {
       truckOwner: { select: { id: true, name: true, phone: true, rating: true, verificationStatus: true } },
@@ -65,13 +54,7 @@ const orderInclude = {
         include: {
           report: true,
           inspector: { select: { id: true, name: true, phone: true } },
-          payments: {
-            select: {
-              id: true, type: true, status: true, amount: true, currency: true, method: true,
-              reference: true, providerTransactionId: true, commissionAmount: true, netAmount: true, createdAt: true,
-            },
-            include: { refunds: true },
-          },
+          payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
           quotes: {
             where: { status: { in: ['PENDING', 'COUNTERED'] } },
             select: {
@@ -91,13 +74,7 @@ const orderInclude = {
     include: {
       report: true,
       inspector: { select: { id: true, name: true, phone: true } },
-      payments: {
-        select: {
-          id: true, type: true, status: true, amount: true, currency: true, method: true,
-          reference: true, providerTransactionId: true, commissionAmount: true, netAmount: true, createdAt: true,
-        },
-        include: { refunds: true },
-      },
+      payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
       quotes: {
         where: { status: { in: ['PENDING', 'COUNTERED'] } },
         select: { id: true, inspectorId: true, amount: true, status: true, parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true },
@@ -112,7 +89,6 @@ const orderInclude = {
   payments: {
     include: {
       ledgerEntries: true,
-      refunds: true,
     },
   },
   paymentObligations: {
@@ -280,74 +256,6 @@ router.get('/:id', authenticate, async (req, res) => {
     return res.status(500).json({ error: 'Failed to load order' });
   }
 });
-
-// ============================================================================
-// ORDER RECEIPT (PDF)
-// ============================================================================
-// One downloadable receipt per order — the goods payment plus any
-// inspection/transport fees and any refunds tied to it — for the buyer/
-// seller/transporter's own records or for reporting (e.g. a government
-// quarterly filing). Available as soon as the order's goods payment has
-// actually been made (order past PENDING_PAYMENT); it does not wait for
-// COMPLETED, because a truck in transit needs proof of payment on hand
-// for legal transit checks well before the order is finally confirmed
-// delivered by the buyer. The PDF itself only lists payments that have
-// actually settled, so an in-progress order's receipt simply reflects
-// what has been paid so far.
-// ============================================================================
-
-router.get(
-  '/:id/receipt',
-  authenticate,
-  [param('id').isUUID()],
-  validate,
-  async (req, res) => {
-    try {
-      const order = await prisma.order.findUnique({
-        where: { id: req.params.id },
-        include: orderInclude,
-      });
-
-      if (!order) return res.status(404).json({ error: 'Order not found' });
-
-      const assignedInspector = Boolean(
-        order.inspectionRequests?.some(
-          (request) => request.inspectorId === req.user.id
-        )
-      );
-
-      const allowed = req.user.roles?.includes('ADMIN') ||
-        order.buyerId === req.user.id ||
-        order.sellerId === req.user.id ||
-        order.transportJob?.truckOwnerId === req.user.id ||
-        assignedInspector;
-
-      if (!allowed) return res.status(403).json({ error: 'Not authorized to view this order' });
-
-      if (order.status === 'PENDING_PAYMENT') {
-        return res.status(409).json({
-          error: 'A receipt is only available once the goods payment has been made.',
-        });
-      }
-
-      await recordAuditEvent(prisma, {
-        actorId: req.user.id,
-        action: 'ORDER_RECEIPT_DOWNLOADED',
-        resourceType: 'Order',
-        resourceId: order.id,
-        metadata: { role: req.user.roles?.includes('ADMIN') ? 'ADMIN' : (order.buyerId === req.user.id ? 'BUYER' : 'SELLER') },
-      }).catch((error) => {
-        req.log.error({ err: error }, 'ORDER RECEIPT AUDIT ERROR (non-fatal):');
-      });
-
-      return streamOrderReceiptPdf(order, res);
-    } catch (error) {
-      req.log.error({ err: error }, 'ORDER RECEIPT ERROR:');
-      if (res.headersSent) return res.end();
-      return res.status(500).json({ error: 'Could not generate receipt' });
-    }
-  }
-);
 
 // ============================================================================
 // GET ORDER WORKFLOW
