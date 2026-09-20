@@ -264,18 +264,6 @@ async function createPayment(data) {
     // ------------------------------------------------------------------------
     // IDEMPOTENCY RACE
     // ------------------------------------------------------------------------
-    //
-    // Two mobile/browser requests can arrive with the same idempotency key.
-    //
-    // Request A:
-    //   creates the payment successfully.
-    //
-    // Request B:
-    //   attempts the same unique key and receives P2002.
-    //
-    // The transaction for B is rolled back first.
-    // ONLY THEN do we query the normal Prisma client.
-    // ------------------------------------------------------------------------
 
     const target = error?.meta?.target;
 
@@ -299,6 +287,61 @@ async function createPayment(data) {
               data.idempotencyKey,
           },
         });
+
+      if (existing) {
+        return existing;
+      }
+    }
+
+    // ------------------------------------------------------------------------
+    // PAYMENT OBLIGATION RACE
+    // ------------------------------------------------------------------------
+    //
+    // Payment.obligationId is UNIQUE because one payment obligation may be
+    // satisfied by only one Payment.
+    //
+    // Two checkout requests can both resolve the same obligation and then
+    // race to create the Payment. PostgreSQL rejects the loser with P2002.
+    //
+    // The transaction has already rolled back at this point. It is therefore
+    // safe to query using the normal Prisma client and return the Payment
+    // created by the request that won the race.
+    // ------------------------------------------------------------------------
+
+    const isObligationConflict =
+      error?.code === 'P2002' &&
+      data.orderId &&
+      (
+        !target ||
+        (
+          Array.isArray(target) &&
+          target.includes('obligationId')
+        ) ||
+        target === 'obligationId'
+      );
+
+    if (isObligationConflict) {
+      let existing = null;
+
+      try {
+        const obligation =
+          await findPaymentObligation(
+            prisma,
+            data
+          );
+
+        if (obligation) {
+          existing =
+            await prisma.payment.findUnique({
+              where: {
+                obligationId: obligation.id,
+              },
+            });
+        }
+      } catch (lookupError) {
+        // Preserve the original P2002 if the race winner cannot be resolved.
+        existing = null;
+      }
 
       if (existing) {
         return existing;
@@ -445,7 +488,6 @@ async function writeLedger(
       const job =
         payment.transportJob;
 
-      // Own truck does not generate transporter-hiring commission.
       if (
         job &&
         job.method === 'OWN_TRUCK'
@@ -907,26 +949,9 @@ async function settlePayment({
       // ----------------------------------------------------------------------
       // IDEMPOTENT PROVIDER EVENT
       //
-      // IMPORTANT FIX:
-      //
-      // The old implementation did:
-      //
-      //   try {
-      //     await tx.paymentEvent.create(...)
-      //   } catch (P2002) {
-      //     return payment
-      //   }
-      //
-      // That is unsafe because PostgreSQL aborts the transaction immediately
-      // after the P2002. Returning from the callback does NOT repair the
-      // transaction. Prisma then attempts to finish the transaction and later
-      // queries can produce:
-      //
-      //   current transaction is aborted
-      //
-      // We therefore use createMany(..., skipDuplicates: true).
-      //
-      // PostgreSQL handles the duplicate without aborting the transaction.
+      // IMPORTANT:
+      // Use createMany(..., skipDuplicates: true) rather than catching P2002
+      // inside the transaction.
       // ----------------------------------------------------------------------
 
       if (eventId) {
@@ -943,7 +968,6 @@ async function settlePayment({
           });
 
         if (existingEvent) {
-          // Same provider event already processed for this payment.
           if (
             existingEvent.paymentId ===
             payment.id
@@ -951,7 +975,6 @@ async function settlePayment({
             return payment;
           }
 
-          // The same provider event must never settle another payment.
           throw Object.assign(
             new Error(
               'Payment provider event is already associated with another payment'
@@ -986,9 +1009,6 @@ async function settlePayment({
             skipDuplicates: true,
           });
 
-        // A concurrent request may have inserted the event between the
-        // findFirst() and createMany(). skipDuplicates prevents PostgreSQL
-        // from aborting the transaction.
         if (eventInsert.count === 0) {
           const concurrentEvent =
             await tx.paymentEvent.findFirst({
@@ -1029,7 +1049,6 @@ async function settlePayment({
       // PAYMENT STATE GUARDS
       // ----------------------------------------------------------------------
 
-      // Never reopen a refunded payment.
       if (
         payment.status === 'REFUNDED' &&
         status !== 'REFUNDED'
@@ -1037,7 +1056,6 @@ async function settlePayment({
         return payment;
       }
 
-      // Never move PAID backwards.
       if (
         payment.status === 'PAID' &&
         [
@@ -1048,8 +1066,6 @@ async function settlePayment({
         return payment;
       }
 
-      // A reconciliation-required payment may only be resolved by an
-      // authoritative settlement result.
       if (
         payment.status ===
           'RECONCILIATION_REQUIRED' &&
@@ -1459,8 +1475,6 @@ async function settlePayment({
       return updated;
     },
     {
-      // Payment settlement intentionally contains several dependent writes.
-      // Give it enough time to complete on the production PostgreSQL service.
       maxWait: 10000,
       timeout: 20000,
     }
