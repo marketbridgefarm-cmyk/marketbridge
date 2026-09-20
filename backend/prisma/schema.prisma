@@ -309,7 +309,6 @@ enum PaymentLedgerEntryType {
   PLATFORM_COMMISSION
   PLATFORM_REVENUE
   REFUND
-  PLATFORM_PENALTY
 }
 
 // ============================================================================
