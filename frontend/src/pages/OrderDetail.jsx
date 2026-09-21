@@ -16,6 +16,7 @@ import ActionCenter from '../components/ActionCenter.jsx';
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
 import Collapsible from '../components/Collapsible.jsx';
+import PayoutTrustNote from '../components/PayoutTrustNote.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
 
 const shortId = (id) => id?.slice(0, 8) || '—';
@@ -414,6 +415,24 @@ export default function OrderDetail() {
           dateStyle: 'medium',
           timeStyle: 'short',
         });
+  };
+
+  // Turns a releaseAt timestamp into something a payee can actually act on
+  // ("about 2 days from now") instead of making them do the date math
+  // themselves against a bare timestamp — that gap is a lot of where the
+  // "is my money actually coming?" uncertainty comes from.
+  const timeRemaining = (value) => {
+    if (!value) return null;
+    const target = new Date(value).getTime();
+    if (Number.isNaN(target)) return null;
+    const diffMs = target - Date.now();
+    if (diffMs <= 0) return 'due for release any moment now';
+    const hours = Math.round(diffMs / (60 * 60 * 1000));
+    if (hours < 1) return 'less than an hour from now';
+    if (hours < 24) return `about ${hours} hour${hours === 1 ? '' : 's'} from now`;
+    const days = Math.floor(hours / 24);
+    const remHours = hours % 24;
+    return `about ${days} day${days === 1 ? '' : 's'}${remHours ? ` ${remHours}h` : ''} from now`;
   };
 
   const transportPending =
@@ -2171,6 +2190,11 @@ export default function OrderDetail() {
               <div>
                 <span>Expected release</span>
                 <strong>{formatDateTime(sellerPayout?.releaseAt)}</strong>
+                {payoutStatus === 'HELD' && timeRemaining(sellerPayout?.releaseAt) && (
+                  <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                    {timeRemaining(sellerPayout.releaseAt)}
+                  </div>
+                )}
               </div>
               {sellerPayout?.releasedAt && (
                 <div>
@@ -2198,58 +2222,13 @@ export default function OrderDetail() {
               )}
             </div>
 
-            {!sellerPayout && (
-              <div className="notice" style={{ marginTop: 14 }}>
-                <strong>The seller payout hold starts after the marketplace payment settles.</strong>
-                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
-                  Once the buyer payment is confirmed, the seller payout enters a 3-day hold before it can be released for payout processing.
-                </p>
-              </div>
-            )}
-
-            {payoutStatus === 'HELD' && (
-              <div className="notice" style={{ marginTop: 14 }}>
-                <strong>{isSeller ? 'Your payout is being held for 3 days.' : 'The seller payout is currently held.'}</strong>
-                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
-                  {isSeller
-                    ? 'The hold protects the transaction during the post-payment dispute window. No manual payout action is required yet.'
-                    : 'The buyer payment has settled, but the seller payout remains held during the post-payment protection window.'}
-                </p>
-              </div>
-            )}
-
-            {payoutStatus === 'ON_HOLD_DISPUTE' && (
-              <div className="alert" style={{ marginTop: 14 }}>
-                <strong>Seller payout is frozen while this dispute is open.</strong>
-                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
-                  If the dispute is resolved in the seller's favor, a fresh 3-day hold period starts from the resolution time.
-                </p>
-              </div>
-            )}
-
-            {payoutStatus === 'RELEASED' && (
-              <div className="notice" style={{ marginTop: 14 }}>
-                <strong>Seller payout released for payout processing.</strong>
-                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
-                  The hold period has ended. The payout still requires the operational payout step before it is marked paid out.
-                </p>
-              </div>
-            )}
-
-            {payoutStatus === 'CANCELLED' && (
-              <div className="alert" style={{ marginTop: 14 }}>
-                <strong>Seller payout was cancelled after dispute resolution.</strong>
-                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
-                  The payout will not be released from this payout record. Any refund or replacement financial action follows the dispute resolution record.
-                </p>
-              </div>
-            )}
-
-            {payoutStatus === 'PAID_OUT' && (
-              <div className="notice" style={{ marginTop: 14 }}>
-                <strong>Seller payout has been paid out.</strong>
-              </div>
-            )}
+            <PayoutTrustNote
+              role="SELLER"
+              isPayee={isSeller}
+              status={payoutStatus}
+              timeRemainingText={timeRemaining(sellerPayout?.releaseAt)}
+              releaseDateText={formatDateTime(sellerPayout?.releaseAt)}
+            />
           </Collapsible>
         )}
 
@@ -2267,22 +2246,20 @@ export default function OrderDetail() {
             payout: transporterPayout,
             eyebrow: 'TRANSPORT PAYOUT',
             title: isTransporter ? 'Your transport payout status' : 'Transport payout status',
-            heldCopy: isTransporter
-              ? 'Your payout is being held for 3 days.'
-              : 'The transporter payout is currently held.',
+            role: 'TRANSPORTER',
+            isPayee: isTransporter,
           },
           inspectorPayout && {
             key: 'inspector',
             payout: inspectorPayout,
             eyebrow: 'INSPECTION PAYOUT',
             title: isInspector ? 'Your inspection payout status' : 'Inspection payout status',
-            heldCopy: isInspector
-              ? 'Your payout is being held for 3 days.'
-              : 'The inspector payout is currently held.',
+            role: 'INSPECTOR',
+            isPayee: isInspector,
           },
         ]
           .filter(Boolean)
-          .map(({ key, payout, eyebrow, title, heldCopy }) => (
+          .map(({ key, payout, eyebrow, title, role, isPayee }) => (
             <Collapsible
               key={key}
               id={`${key}-payout`}
@@ -2316,6 +2293,11 @@ export default function OrderDetail() {
                 <div>
                   <span>Expected release</span>
                   <strong>{formatDateTime(payout.releaseAt)}</strong>
+                  {payout.status === 'HELD' && timeRemaining(payout.releaseAt) && (
+                    <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                      {timeRemaining(payout.releaseAt)}
+                    </div>
+                  )}
                 </div>
                 {payout.releasedAt && (
                   <div>
@@ -2343,47 +2325,13 @@ export default function OrderDetail() {
                 )}
               </div>
 
-              {payout.status === 'HELD' && (
-                <div className="notice" style={{ marginTop: 14 }}>
-                  <strong>{heldCopy}</strong>
-                  <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
-                    The hold protects the transaction during the post-payment dispute window. No manual payout action is required yet.
-                  </p>
-                </div>
-              )}
-
-              {payout.status === 'ON_HOLD_DISPUTE' && (
-                <div className="alert" style={{ marginTop: 14 }}>
-                  <strong>This payout is frozen while the dispute is open.</strong>
-                  <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
-                    If the dispute is resolved in the payee's favor, a fresh 3-day hold period starts from the resolution time.
-                  </p>
-                </div>
-              )}
-
-              {payout.status === 'RELEASED' && (
-                <div className="notice" style={{ marginTop: 14 }}>
-                  <strong>Payout released for payout processing.</strong>
-                  <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
-                    The hold period has ended. The payout still requires the operational payout step before it is marked paid out.
-                  </p>
-                </div>
-              )}
-
-              {payout.status === 'CANCELLED' && (
-                <div className="alert" style={{ marginTop: 14 }}>
-                  <strong>Payout was cancelled after dispute resolution.</strong>
-                  <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
-                    The payout will not be released from this payout record. Any refund or replacement financial action follows the dispute resolution record.
-                  </p>
-                </div>
-              )}
-
-              {payout.status === 'PAID_OUT' && (
-                <div className="notice" style={{ marginTop: 14 }}>
-                  <strong>Payout has been paid out.</strong>
-                </div>
-              )}
+              <PayoutTrustNote
+                role={role}
+                isPayee={isPayee}
+                status={payout.status}
+                timeRemainingText={timeRemaining(payout.releaseAt)}
+                releaseDateText={formatDateTime(payout.releaseAt)}
+              />
             </Collapsible>
           ))}
 
