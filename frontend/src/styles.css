@@ -506,40 +506,6 @@ h4 {
   border-radius: 15px;
   padding: var(--space-md);
   box-shadow: 0 5px 20px rgba(20, 45, 28, .025);
-}.collapsible-card {
-  padding: 0;
-  overflow: hidden;
-}.collapsible-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  width: 100%;
-  padding: var(--space-md);
-  background: transparent;
-  border: none;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-}.collapsible-header-text {
-  min-width: 0;
-}.collapsible-header-side {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}.collapsible-chevron {
-  display: inline-block;
-  font-size: 14px;
-  line-height: 1;
-  color: var(--muted, #6b7a70);
-  transition: transform .15s ease;
-  transform: rotate(-90deg);
-}.collapsible-card.is-open .collapsible-chevron {
-  transform: rotate(0deg);
-}.collapsible-body {
-  padding: 0 var(--space-md) var(--space-md);
 }.detail-content {
   margin-bottom: 18px;
 }.detail-content h1 {
@@ -3219,4 +3185,435 @@ textarea {
   }.dashboard-page .card-grid.two-col {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+/* ============================================================================
+   ORDER DETAIL PAGE — restyle
+   Scoped under .order-detail-page so it only affects the shared order
+   detail view (used by buyer, seller, inspector and admin) and doesn't
+   change card styling elsewhere in the app.
+   ============================================================================ */
+
+.order-detail-page .card {
+  border-radius: 18px;
+  margin-bottom: var(--space-md);
+  transition: box-shadow .18s var(--ease), transform .18s var(--ease);
+}
+
+.order-detail-page .card:last-child {
+  margin-bottom: 0;
+}
+
+.order-detail-page .card > h2:first-child,
+.order-detail-page .card > .row-between:first-child h2 {
+  font-family: var(--serif);
+  font-size: 19px;
+  letter-spacing: -.2px;
+  margin: 0 0 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.order-detail-page .card > h2:first-child::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--green-light);
+  flex: 0 0 auto;
+}
+
+.order-detail-page .card > h2:first-child + p.muted {
+  margin-top: 10px;
+}
+
+.order-detail-page .card > .detail-facts:first-child,
+.order-detail-page .card > h2:first-child + .detail-facts {
+  margin-top: 16px;
+}
+
+/* ---- Hero header ---------------------------------------------------- */
+
+.order-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+  background: linear-gradient(155deg, var(--green-dark) 0%, var(--green) 62%, var(--green-light) 130%);
+  border-radius: 22px;
+  padding: clamp(20px, 3.4vw, 34px);
+  margin-bottom: var(--space-md);
+  box-shadow: var(--shadow-lift);
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+
+.order-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(140% 100% at 100% 0%, rgba(255,255,255,.14), transparent 55%),
+    radial-gradient(90% 90% at 0% 100%, rgba(0,0,0,.14), transparent 60%);
+  pointer-events: none;
+}
+
+.order-hero-main,
+.order-hero-side {
+  position: relative;
+  z-index: 1;
+}
+
+.order-hero-eyebrow {
+  color: rgba(255,255,255,.75);
+  letter-spacing: 2px;
+}
+
+.order-hero-title {
+  font-family: var(--serif);
+  color: #fff;
+  margin: 6px 0 14px;
+  font-size: clamp(24px, 3.4vw, 36px);
+  line-height: 1.1;
+}
+
+.order-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.order-hero-chip {
+  background: rgba(255,255,255,.14);
+  border: 1px solid rgba(255,255,255,.22);
+  color: #fff;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.order-hero-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  text-align: right;
+}
+
+.order-hero-price-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: rgba(255,255,255,.7);
+}
+
+.order-hero-price {
+  font-family: var(--serif);
+  font-size: clamp(26px, 3.6vw, 38px);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.order-hero-price small {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: .8;
+  margin-left: 3px;
+}
+
+.order-hero .btn-outline {
+  border-color: rgba(255,255,255,.55);
+  color: #fff;
+  background: rgba(255,255,255,.06);
+}
+
+.order-hero .btn-outline:hover {
+  background: rgba(255,255,255,.16);
+  border-color: #fff;
+}
+
+@media (max-width: 620px) {
+  .order-hero {
+    flex-direction: column;
+  }
+  .order-hero-side {
+    align-items: flex-start;
+    text-align: left;
+    width: 100%;
+  }
+}
+
+/* ---- Status pill ------------------------------------------------------ */
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 5px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  background: rgba(255,255,255,.16);
+  border: 1px solid rgba(255,255,255,.28);
+  color: #fff;
+}
+
+.status-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.status-pill.tone-good { background: rgba(255,255,255,.92); color: var(--green-dark); border-color: transparent; }
+.status-pill.tone-wait { background: #fff3da; color: #8a5a10; border-color: transparent; }
+.status-pill.tone-bad { background: #ffe3e0; color: var(--danger); border-color: transparent; }
+.status-pill.tone-neutral { background: rgba(255,255,255,.85); color: var(--ink); border-color: transparent; }
+
+/* Standalone (non-hero) status pill, e.g. reused on light backgrounds */
+.order-detail-page .card .status-pill.tone-good { background: #e7f6ea; color: #146b38; }
+.order-detail-page .card .status-pill.tone-wait { background: #fff5df; color: #875b12; }
+.order-detail-page .card .status-pill.tone-bad { background: #fdeceb; color: var(--danger); }
+.order-detail-page .card .status-pill.tone-neutral { background: #eef1ee; color: var(--muted); }
+
+/* ---- Order details / Parties grid -------------------------------------- */
+
+.order-summary-grid {
+  margin-bottom: var(--space-md);
+}
+
+.order-summary-grid .card {
+  margin-bottom: 0;
+}
+
+.party-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.party-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfdfb;
+}
+
+.party-avatar {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+  background: linear-gradient(145deg, var(--green-light), var(--green-dark));
+}
+
+.party-avatar-seller {
+  background: linear-gradient(145deg, var(--gold), #8a5a10);
+}
+
+.party-role {
+  display: block;
+  font-size: 11px;
+  color: #77827a;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+
+.party-name {
+  display: block;
+  font-size: 14.5px;
+  margin-top: 2px;
+}
+
+.party-you {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--green);
+  background: var(--soft);
+  padding: 3px 8px;
+  border-radius: 999px;
+  letter-spacing: .3px;
+}
+
+/* ---- Timeline polish ---------------------------------------------------- */
+
+.order-detail-page .order-timeline {
+  margin-top: 14px;
+}
+
+.order-detail-page .order-timeline-dot {
+  width: 18px;
+  height: 18px;
+}
+
+.order-detail-page .order-timeline-step.is-current .order-timeline-label {
+  color: var(--green-dark);
+}
+
+/* ---- Next action card ---------------------------------------------------- */
+
+.order-detail-page .next-action-card {
+  border-radius: 18px;
+  box-shadow: 0 12px 30px rgba(20,45,28,.08);
+}
+
+@media (max-width: 620px) {
+  .order-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Dispute warning card ------------------------------------------------ */
+
+.order-detail-page .card-warning {
+  border-color: #f3c9c3;
+  background: linear-gradient(180deg, #fff8f7, #fff);
+}
+
+.order-detail-page .card-warning > h2:first-child::before {
+  background: var(--danger);
+}
+
+/* ---- Messages ------------------------------------------------------------ */
+
+.order-detail-page .message-thread {
+  background: #fbfdfb;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.order-detail-page .message-bubble {
+  border-radius: 16px;
+  box-shadow: var(--shadow-tight);
+}
+
+.order-detail-page .message-mine {
+  border-bottom-right-radius: 4px;
+}
+
+.order-detail-page .message-theirs {
+  border-bottom-left-radius: 4px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+
+.order-detail-page .message-composer {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 8px;
+}
+
+.order-detail-page .message-composer textarea {
+  border: none;
+  background: transparent;
+  padding: 6px 8px;
+}
+
+.order-detail-page .message-composer textarea:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ---- Ratings --------------------------------------------------------------- */
+
+.order-detail-page .rating-form {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  margin-top: 12px;
+  background: #fbfdfb;
+}
+
+.order-detail-page .rating-list {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.order-detail-page .rating-list h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.order-detail-page .rating-list-row {
+  padding: 10px 0;
+  border-top: 1px solid #edf0ec;
+}
+
+.order-detail-page .rating-list-row:first-of-type {
+  border-top: 0;
+}
+
+/* ---- Evidence gallery ------------------------------------------------------ */
+
+.order-detail-page .evidence-item {
+  border-radius: 14px;
+  background: #fbfdfb;
+}
+
+.order-detail-page .evidence-thumb {
+  width: 92px;
+  height: 92px;
+  border-radius: 10px;
+  transition: transform .15s var(--ease);
+}
+
+.order-detail-page .evidence-thumb:hover {
+  transform: scale(1.04);
+}
+
+/* ---- Payment center rows ---------------------------------------------------- */
+
+.order-detail-page .payment-center-row {
+  border-radius: 14px;
+  border-left: 3px solid var(--line);
+  background: #fbfdfb;
+}
+
+.order-detail-page .payment-center-row:has(.badge-success) {
+  border-left-color: var(--green);
+}
+
+.order-detail-page .payment-center-row:has(.badge-pending) {
+  border-left-color: var(--gold);
+}
+
+/* ---- Notices & inspector choice cards --------------------------------------- */
+
+.order-detail-page .notice {
+  border-radius: 12px;
+}
+
+.order-detail-page .choice {
+  border-radius: 14px;
+}
+
+.order-detail-page .choice:hover {
+  border-color: var(--green-light);
+  box-shadow: var(--shadow-tight);
+  transform: translateY(-2px);
 }
