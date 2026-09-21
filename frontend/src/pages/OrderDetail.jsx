@@ -16,6 +16,7 @@ import ActionCenter from '../components/ActionCenter.jsx';
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
+import RefundStatusCard from '../components/RefundStatusCard.jsx';
 
 const shortId = (id) => id?.slice(0, 8) || '—';
 
@@ -638,6 +639,7 @@ export default function OrderDetail() {
   const transporterPayout = payouts.find((p) => p.payeeRole === 'TRANSPORTER') || null;
   const inspectorPayout = payouts.find((p) => p.payeeRole === 'INSPECTOR') || null;
   const payoutStatus = sellerPayout?.status || null;
+  const refunds = order?.refunds || [];
 
   const formatDateTime = (value) => {
     if (!value) return '—';
@@ -1216,6 +1218,56 @@ export default function OrderDetail() {
           'Could not resume payment'
         )
       );
+    } finally {
+      setBusy('');
+    }
+  };
+
+  // ==========================================================================
+  // ADMIN: SETTLE A REFUND
+  // ==========================================================================
+  // Refunds are durable requests; only an admin can confirm the money went
+  // back (or record that the provider refused). Both call the existing admin
+  // refund endpoints — the Refund card shows the buttons to admins only.
+
+  const completeRefundAsAdmin = async (refund) => {
+    const reference = window.prompt(
+      'Provider reference for this refund (optional):',
+      ''
+    );
+    if (reference === null) return;
+
+    setBusy(`refund-${refund.id}`);
+    setError('');
+    try {
+      await api.patch(`/admin/financial/refunds/${refund.id}/complete`, {
+        providerRefundId: reference.trim() || undefined,
+      });
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not mark the refund as completed'));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const failRefundAsAdmin = async (refund) => {
+    const reason = window.prompt('Why did this refund fail?', '');
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError('Enter a reason before marking a refund as failed.');
+      return;
+    }
+
+    setBusy(`refund-${refund.id}`);
+    setError('');
+    try {
+      await api.patch(`/admin/financial/refunds/${refund.id}/fail`, {
+        failureReason: reason.trim(),
+      });
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not mark the refund as failed'));
     } finally {
       setBusy('');
     }
@@ -2416,6 +2468,33 @@ export default function OrderDetail() {
             isInspector={isInspector}
             isTransporter={isTransporter}
             formatDateTime={formatDateTime}
+          />
+        )}
+
+        {/* ================================================================== */}
+        {/* REFUND STATUS                                                     */}
+        {/* Only renders when a refund exists or a payout is frozen by a      */}
+        {/* dispute — the "what happens to a held payout" follow-up card.     */}
+        {/* ================================================================== */}
+
+        {order && (
+          <RefundStatusCard
+            refunds={refunds}
+            payouts={payouts}
+            people={{
+              SELLER: { name: order.seller?.name || null, you: isSeller },
+              INSPECTOR: {
+                name:
+                  (order.inspectionRequests || inspectionRequests).find((r) => r?.inspector?.name)
+                    ?.inspector?.name || null,
+                you: isInspector,
+              },
+              TRANSPORTER: { name: transportJob?.truckOwner?.name || null, you: isTransporter },
+            }}
+            isAdmin={isAdmin}
+            busy={busy}
+            onComplete={completeRefundAsAdmin}
+            onFail={failRefundAsAdmin}
           />
         )}
 
