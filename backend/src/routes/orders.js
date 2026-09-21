@@ -250,11 +250,12 @@ router.get('/:id', authenticate, async (req, res) => {
 
     if (!allowed) return res.status(403).json({ error: 'Not authorized to view this order' });
 
-    // Payout amounts are operationally sensitive. All order participants can
-    // see that a payout is held/released and when the hold is due, but each
-    // payee's amount and payout reference is only visible to that payee (or
-    // admin). An order can have up to three payouts — seller, hired
-    // transporter, inspector — so this is now a list, not a single record.
+    // Payout amount, currency and payout reference are visible to every
+    // participant already allowed to view this order (buyer, seller, hired
+    // transporter, assigned inspector, admin — see `allowed` above), not
+    // just the payee that amount belongs to. An order can have up to three
+    // payouts — seller, hired transporter, inspector — so this is a list,
+    // not a single record.
     const payouts = await prisma.payout.findMany({
       where: { orderId: order.id },
       select: {
@@ -271,26 +272,17 @@ router.get('/:id', authenticate, async (req, res) => {
       },
     });
 
-    const isAdminUser = req.user.roles?.includes('ADMIN');
-
-    const payoutViews = payouts.map((payout) => {
-      const canSeeDetails = isAdminUser || payout.payeeId === req.user.id;
-      return {
-        id: payout.id,
-        payeeRole: payout.payeeRole,
-        status: payout.status,
-        releaseAt: payout.releaseAt,
-        releasedAt: payout.releasedAt,
-        paidOutAt: payout.paidOutAt,
-        ...(canSeeDetails
-          ? {
-              amount: payout.amount,
-              currency: payout.currency,
-              payoutReference: payout.payoutReference,
-            }
-          : {}),
-      };
-    });
+    const payoutViews = payouts.map((payout) => ({
+      id: payout.id,
+      payeeRole: payout.payeeRole,
+      status: payout.status,
+      releaseAt: payout.releaseAt,
+      releasedAt: payout.releasedAt,
+      paidOutAt: payout.paidOutAt,
+      amount: payout.amount,
+      currency: payout.currency,
+      payoutReference: payout.payoutReference,
+    }));
 
     return res.json({
       order: {
