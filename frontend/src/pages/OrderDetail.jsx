@@ -310,7 +310,7 @@ export default function OrderDetail() {
     return (
       transportPayments.find(
         (payment) =>
-          payment.status === 'PENDING'
+          ['PENDING', 'PROCESSING'].includes(payment.status)
       ) ||
       transportPayments.find(
         (payment) =>
@@ -362,8 +362,11 @@ export default function OrderDetail() {
   const transportPending =
     transportPayments.some(
       (payment) =>
-        payment.status === 'PENDING'
+        ['PENDING', 'PROCESSING'].includes(payment.status)
     );
+
+  const transportProcessing =
+    transportPayments.some((payment) => payment.status === 'PROCESSING');
 
   // ==========================================================================
   // TRANSPORT PERMISSIONS
@@ -414,6 +417,7 @@ export default function OrderDetail() {
     !transportPayments.some(
       (payment) =>
         payment.status === 'PENDING' ||
+        payment.status === 'PROCESSING' ||
         payment.status === 'PAID'
     ) &&
     isBuyer;
@@ -424,6 +428,16 @@ export default function OrderDetail() {
   const canResumeTransportPayment =
     Boolean(transportPayment) &&
     transportPayment.status === 'PENDING' &&
+    isBuyer;
+
+  /*
+   * A transport payment already reached Chapa (PROCESSING) — same shape as
+   * canCheckMarketplacePayment. Don't let the buyer start a second payment;
+   * point them at checking the status of this one instead.
+   */
+  const canCheckTransportPayment =
+    Boolean(transportPayment) &&
+    transportPayment.status === 'PROCESSING' &&
     isBuyer;
 
   // ==========================================================================
@@ -2367,7 +2381,7 @@ export default function OrderDetail() {
                       </p>
                     </div>
                     <span className="badge">
-                      {transportPaid ? 'PAID' : transportPending ? 'PENDING' : 'NOT PAID'}
+                      {transportPaid ? 'PAID' : transportProcessing ? 'PROCESSING' : transportPending ? 'PENDING' : 'NOT PAID'}
                     </span>
                   </div>
 
@@ -2393,7 +2407,16 @@ export default function OrderDetail() {
                         </select>
                       )}
 
-                      {canResumeTransportPayment ? (
+                      {canCheckTransportPayment ? (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={busy === 'check-transport'}
+                          onClick={() => checkPaymentStatus(transportPayment.id, 'check-transport')}
+                        >
+                          {busy === 'check-transport' ? 'Checking…' : 'Check transporter payment'}
+                        </button>
+                      ) : canResumeTransportPayment ? (
                         <button
                           type="button"
                           className="btn btn-primary"
