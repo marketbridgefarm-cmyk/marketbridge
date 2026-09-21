@@ -1725,7 +1725,13 @@ model Dispute {
   // Order.status captured at the moment the dispute was raised, so the
   // order can be restored to it (instead of a hardcoded default) once the
   // dispute resolves. See routes/disputes.js.
-  previousOrderStatus String?
+  //
+  // Typed as the OrderStatus enum (not String) because the column itself
+  // is the Postgres "OrderStatus" enum type — see
+  // 202609040001_add_dispute_previous_order_status/migration.sql. A prior
+  // String? declaration here didn't match the actual column type and made
+  // every dispute.create() fail with Prisma error P2032.
+  previousOrderStatus OrderStatus?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
