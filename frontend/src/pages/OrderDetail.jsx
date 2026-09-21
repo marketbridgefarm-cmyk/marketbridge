@@ -2259,47 +2259,136 @@ export default function OrderDetail() {
         )}
 
         {/* ================================================================== */}
-        {/* TRANSPORTER / INSPECTOR PAYOUT (own row only) */}
+        {/* TRANSPORTER / INSPECTOR PAYOUT                                    */}
+        {/* Visible to every order participant (buyer included), same as the */}
+        {/* seller payout card above — not just to the transporter/inspector */}
+        {/* themselves — since the buyer funded these payouts and should be  */}
+        {/* able to see they're on hold too.                                 */}
         {/* ================================================================== */}
 
-        {(isTransporter && transporterPayout) || (isInspector && inspectorPayout) ? (
-          <div className="card" id="role-payout">
-            <span className="eyebrow">YOUR PAYOUT</span>
-            <h2 style={{ marginBottom: 6 }}>
-              {isTransporter ? 'Transport payout status' : 'Inspection payout status'}
-            </h2>
-            {[isTransporter ? transporterPayout : null, isInspector ? inspectorPayout : null]
-              .filter(Boolean)
-              .map((payout) => (
-                <div key={payout.id} className="detail-facts" style={{ marginTop: 12 }}>
-                  <div>
-                    <span>Status</span>
-                    <strong>
-                      {payout.status === 'ON_HOLD_DISPUTE'
-                        ? 'ON HOLD — DISPUTE'
-                        : payout.status.replace(/_/g, ' ')}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Expected release</span>
-                    <strong>{formatDateTime(payout.releaseAt)}</strong>
-                  </div>
-                  {payout.amount != null && (
-                    <div>
-                      <span>Payout amount</span>
-                      <strong>{money(payout.amount)} {payout.currency || 'ETB'}</strong>
-                    </div>
-                  )}
-                  {payout.payoutReference && (
-                    <div>
-                      <span>Payout reference</span>
-                      <strong>{payout.payoutReference}</strong>
-                    </div>
-                  )}
+        {[
+          transporterPayout && {
+            key: 'transporter',
+            payout: transporterPayout,
+            eyebrow: 'TRANSPORT PAYOUT',
+            title: isTransporter ? 'Your transport payout status' : 'Transport payout status',
+            heldCopy: isTransporter
+              ? 'Your payout is being held for 3 days.'
+              : 'The transporter payout is currently held.',
+          },
+          inspectorPayout && {
+            key: 'inspector',
+            payout: inspectorPayout,
+            eyebrow: 'INSPECTION PAYOUT',
+            title: isInspector ? 'Your inspection payout status' : 'Inspection payout status',
+            heldCopy: isInspector
+              ? 'Your payout is being held for 3 days.'
+              : 'The inspector payout is currently held.',
+          },
+        ]
+          .filter(Boolean)
+          .map(({ key, payout, eyebrow, title, heldCopy }) => (
+            <div className="card" id={`${key}-payout`} key={key}>
+              <div className="row-between" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <div>
+                  <span className="eyebrow">{eyebrow}</span>
+                  <h2 style={{ marginBottom: 6 }}>{title}</h2>
+                  <p className="muted" style={{ marginBottom: 0 }}>
+                    Buyer payment is separate from this payout. A standard
+                    <strong> 3-day hold</strong> applies after the relevant payment settles.
+                  </p>
                 </div>
-              ))}
-          </div>
-        ) : null}
+                <span className={`badge ${['RELEASED', 'PAID_OUT'].includes(payout.status) ? 'badge-success' : 'badge-pending'}`}>
+                  {payout.status === 'ON_HOLD_DISPUTE'
+                    ? 'ON HOLD — DISPUTE'
+                    : payout.status === 'PAID_OUT'
+                      ? 'PAID OUT'
+                      : payout.status === 'RELEASED'
+                        ? 'RELEASED'
+                        : payout.status === 'HELD'
+                          ? 'HELD — 3 DAYS'
+                          : payout.status.replace(/_/g, ' ')}
+                </span>
+              </div>
+
+              <div className="detail-facts" style={{ marginTop: 16 }}>
+                <div>
+                  <span>Hold period</span>
+                  <strong>3 days</strong>
+                </div>
+                <div>
+                  <span>Expected release</span>
+                  <strong>{formatDateTime(payout.releaseAt)}</strong>
+                </div>
+                {payout.releasedAt && (
+                  <div>
+                    <span>Released</span>
+                    <strong>{formatDateTime(payout.releasedAt)}</strong>
+                  </div>
+                )}
+                {payout.paidOutAt && (
+                  <div>
+                    <span>Paid out</span>
+                    <strong>{formatDateTime(payout.paidOutAt)}</strong>
+                  </div>
+                )}
+                {payout.amount != null && (
+                  <div>
+                    <span>Payout amount</span>
+                    <strong>{money(payout.amount)} {payout.currency || 'ETB'}</strong>
+                  </div>
+                )}
+                {payout.payoutReference && (
+                  <div>
+                    <span>Payout reference</span>
+                    <strong>{payout.payoutReference}</strong>
+                  </div>
+                )}
+              </div>
+
+              {payout.status === 'HELD' && (
+                <div className="notice" style={{ marginTop: 14 }}>
+                  <strong>{heldCopy}</strong>
+                  <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                    The hold protects the transaction during the post-payment dispute window. No manual payout action is required yet.
+                  </p>
+                </div>
+              )}
+
+              {payout.status === 'ON_HOLD_DISPUTE' && (
+                <div className="alert" style={{ marginTop: 14 }}>
+                  <strong>This payout is frozen while the dispute is open.</strong>
+                  <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                    If the dispute is resolved in the payee's favor, a fresh 3-day hold period starts from the resolution time.
+                  </p>
+                </div>
+              )}
+
+              {payout.status === 'RELEASED' && (
+                <div className="notice" style={{ marginTop: 14 }}>
+                  <strong>Payout released for payout processing.</strong>
+                  <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                    The hold period has ended. The payout still requires the operational payout step before it is marked paid out.
+                  </p>
+                </div>
+              )}
+
+              {payout.status === 'CANCELLED' && (
+                <div className="alert" style={{ marginTop: 14 }}>
+                  <strong>Payout was cancelled after dispute resolution.</strong>
+                  <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                    The payout will not be released from this payout record. Any refund or replacement financial action follows the dispute resolution record.
+                  </p>
+                </div>
+              )}
+
+              {payout.status === 'PAID_OUT' && (
+                <div className="notice" style={{ marginTop: 14 }}>
+                  <strong>Payout has been paid out.</strong>
+                </div>
+              )}
+            </div>
+          ))}
 
         {/* ================================================================== */}
         {/* PAYMENT CENTER */}
