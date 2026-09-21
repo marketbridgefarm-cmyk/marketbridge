@@ -1439,8 +1439,10 @@ export default function OrderDetail() {
         <div id="inspection-section">
         {isAgricultural && isParticipant && order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
           currentInspectionRequest ? (
-            <div className="card">
-              <h2>Inspection</h2>
+            <Collapsible
+              title="Inspection"
+              summary={<span className="badge">{currentInspectionRequest.status}</span>}
+            >
               <p className="muted">An inspection already exists for this order. Continue with this inspection; a second request is not needed.</p>
               <div className="detail-facts">
                 <div><span>Status</span><strong>{currentInspectionRequest.status}</strong></div>
@@ -1450,10 +1452,9 @@ export default function OrderDetail() {
               {currentInspectionRequest.status === 'COMPLETED' && currentInspectionRequest.report && (
                 <p className="muted" style={{ marginTop: 10 }}>Inspection report is available. The buyer can now proceed to the goods payment.</p>
               )}
-            </div>
+            </Collapsible>
           ) : (
-            <div className="card">
-              <h2>Request inspection</h2>
+            <Collapsible title="Request inspection">
               <p className="muted">Request an independent quality check for this order.</p>
               {inspectorId && (
                 <input
@@ -1484,7 +1485,7 @@ export default function OrderDetail() {
                   {findingInspector ? 'Searching…' : 'Find an inspector'}
                 </button>
               </div>
-            </div>
+            </Collapsible>
           )
         )}
         </div>
@@ -1493,18 +1494,12 @@ export default function OrderDetail() {
         {/* TRANSPORT */}
         {/* ================================================================== */}
 
-        <div className="card" id="transport-section">
-          <div className="row-between">
-            <div>
-              <h2>Transport</h2>
-
-              <p className="muted">
-                The buyer or seller arranges
-                transport. MarketBridge does not
-                automatically assign a transporter.
-              </p>
-            </div>
-          </div>
+        <Collapsible
+          id="transport-section"
+          title="Transport"
+          description="The buyer or seller arranges transport. MarketBridge does not automatically assign a transporter."
+          summary={transportJob?.status && <span className="badge">{transportJob.status}</span>}
+        >
 
           {!transportJob ? (
             canArrangeTransport ? (
@@ -2137,7 +2132,7 @@ export default function OrderDetail() {
               )}
             </>
           )}
-        </div>
+        </Collapsible>
 
         {/* ================================================================== */}
         {/* SELLER PAYOUT HOLD */}
@@ -2555,11 +2550,7 @@ export default function OrderDetail() {
         {/* ================================================================== */}
 
         {order.status === 'COMPLETED' && (
-          <div className="card">
-            <h2>
-              Order completed
-            </h2>
-
+          <Collapsible title="Order completed" defaultOpen={false}>
             <div className="notice">
               <p>
                 <strong>
@@ -2572,7 +2563,7 @@ export default function OrderDetail() {
                 buyer.
               </p>
             </div>
-          </div>
+          </Collapsible>
         )}
 
         {/* Payment records now live inside the Payment Center's expandable */}
