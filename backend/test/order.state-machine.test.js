@@ -66,6 +66,20 @@ test('DISPUTABLE_STATUSES is exported and matches every status that can reach DI
   }
 });
 
+// Regression test: resolving/rejecting a dispute restores the order to
+// dispute.previousOrderStatus (routes/disputes.js). Every status a dispute
+// can be raised from must therefore be a valid transition target *from*
+// DISPUTED, or every resolution attempt fails with "Invalid order status
+// transition: DISPUTED -> <previousOrderStatus>" (as seen in production for
+// disputes raised while the order was still PENDING_PAYMENT).
+test('DISPUTED can transition back into any status a dispute can be raised from', () => {
+  for (const status of DISPUTABLE_STATUSES) {
+    assert.equal(canTransitionOrder('DISPUTED', status), true, `DISPUTED -> ${status} should be allowed`);
+  }
+  assert.equal(canTransitionOrder('DISPUTED', 'COMPLETED'), true);
+  assert.equal(canTransitionOrder('DISPUTED', 'CANCELLED'), true);
+});
+
 test('module does not export a transitionOrder function (routes must use transitionOrderStatus)', () => {
   const mod = require('../src/services/orderStateMachine');
   assert.equal(mod.transitionOrder, undefined);
