@@ -44,9 +44,10 @@ const statusTone = (status) => {
 };
 
 /**
- * Live "time until release" clock for a HELD payout, shown alongside its
- * plain due date. Ticks once a second. Hours are NOT capped at 24 — a
- * 3-day hold can read up to ~72 hours remaining (e.g. 42:24:53).
+ * Common due block for the payout card: one release date and one live
+ * countdown shared by every HELD payout (they all sit in the same 3-day
+ * hold). Ticks once a second. Hours are NOT capped at 24 — a 3-day hold can
+ * read up to ~72 hours remaining (e.g. 63:34:48).
  */
 function PayoutCountdown({ releaseAt }) {
   const target = useMemo(
@@ -77,11 +78,23 @@ function PayoutCountdown({ releaseAt }) {
   });
 
   return (
-    <div className="payout-countdown">
-      <span className="payout-countdown-due">Due {dueDate}</span>
-      <span className="payout-countdown-clock">
-        {remainingMs > 0 ? `${pad(hh)}:${pad(mm)}:${pad(ss)}` : 'Releasing now'}
-      </span>
+    <div className="payout-due" role="group" aria-label="Common due">
+      <div className="payout-due-when">
+        <span className="payout-due-label">Common due</span>
+        <time className="payout-due-date" dateTime={new Date(target).toISOString()}>
+          {dueDate}
+        </time>
+      </div>
+      <div className="payout-due-clock" role="timer" aria-live="off">
+        {remainingMs > 0 ? (
+          <>
+            <span className="payout-due-digits">{`${pad(hh)}:${pad(mm)}:${pad(ss)}`}</span>
+            <span className="payout-due-unit">left</span>
+          </>
+        ) : (
+          <span className="payout-due-digits payout-due-digits-now">Releasing now</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -2241,112 +2254,132 @@ export default function OrderDetail() {
             return { label: status.replace(/_/g, ' '), tone: 'tone-neutral' };
           };
 
+          // Each payee is shown by role AND name — "Seller (Miliki)".
+          const inspectorName =
+            (order.inspectionRequests || inspectionRequests).find((r) => r?.inspector?.name)
+              ?.inspector?.name || null;
+
           const parties = [
-            { key: 'seller', label: 'Seller', you: isSeller, payout: sellerPayout, status: payoutStatus },
-            transporterPayout && {
-              key: 'transporter',
-              label: 'Transporter',
-              you: isTransporter,
-              payout: transporterPayout,
-              status: transporterPayout.status,
+            {
+              key: 'seller',
+              label: 'Seller',
+              name: order.seller?.name || null,
+              you: isSeller,
+              payout: sellerPayout,
+              status: payoutStatus,
             },
             inspectorPayout && {
               key: 'inspector',
               label: 'Inspector',
+              name: inspectorName,
               you: isInspector,
               payout: inspectorPayout,
               status: inspectorPayout.status,
             },
+            transporterPayout && {
+              key: 'transporter',
+              label: 'Transporter',
+              name: transportJob?.truckOwner?.name || null,
+              you: isTransporter,
+              payout: transporterPayout,
+              status: transporterPayout.status,
+            },
           ].filter(Boolean);
 
           const anyDispute = parties.some((p) => p.status === 'ON_HOLD_DISPUTE');
-          const anyHeld = parties.some((p) => p.status === 'HELD');
+
+          // One shared due date for the whole card: the earliest moment a
+          // HELD payout clears the hold.
+          const heldTimes = parties
+            .filter((p) => p.status === 'HELD' && p.payout?.releaseAt)
+            .map((p) => new Date(p.payout.releaseAt).getTime())
+            .filter((t) => !Number.isNaN(t));
+          const commonDue = heldTimes.length ? new Date(Math.min(...heldTimes)).toISOString() : null;
+          const holdNotStarted = parties.every((p) => !p.payout);
+
+          // Keep amounts aligned: show 2 decimals only when any amount needs them.
+          const anyFraction = parties.some(
+            (p) => p.payout?.amount != null && Number(p.payout.amount) % 1 !== 0
+          );
+          const amountText = (value) =>
+            Number(value || 0).toLocaleString(undefined, {
+              minimumFractionDigits: anyFraction ? 2 : 0,
+              maximumFractionDigits: 2,
+            });
 
           return (
             <div className="card payout-summary-card" id="order-payout-status">
-              <span className="eyebrow">ORDER PAYOUTS</span>
-              <h2 style={{ marginBottom: 6 }}>Order Payout Status</h2>
-              <p className="muted" style={{ marginBottom: 0 }}>
-                Buyer payment is separate from each payout below. A standard hold applies after the relevant payment settles.
+              <h2>Order Payout Status</h2>
+
+              <p className="payout-intro">
+                Buyer payment is separate from each payout below. Once the relevant payment
+                settles, a <span className="payout-hold-chip">3-day</span> hold applies to every
+                payout during the post-payment protection window.{' '}
+                {anyDispute
+                  ? 'One or more payouts are frozen while a dispute is open.'
+                  : 'No manual action is required.'}
               </p>
 
-              <div className="payout-hold-banner">
-                <div className="payout-hold-days">
-                  <strong>3</strong>
-                  <span>day hold</span>
+              <table className="payout-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Parties</th>
+                    <th scope="col" className="payout-amount-col">Amount (ETB)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parties.map(({ key, label, name, you, payout, status }) => {
+                    const badge = payoutBadge(status);
+                    const currency = payout?.currency && payout.currency !== 'ETB' ? payout.currency : null;
+                    return (
+                      <tr key={key}>
+                        <th scope="row" className="payout-party">
+                          <div className="payout-party-body">
+                          <span className="payout-party-line">
+                            <span className="payout-party-role">{label}</span>
+                            {name && <span className="payout-party-name">({name})</span>}
+                            {you && <span className="party-you">You</span>}
+                          </span>
+                          {status !== 'HELD' && (
+                            <span className={`status-pill ${badge.tone}`}>{badge.label}</span>
+                          )}
+                          {status === 'RELEASED' && payout?.releasedAt && (
+                            <span className="payout-party-note">Released {formatDateTime(payout.releasedAt)}</span>
+                          )}
+                          {status === 'PAID_OUT' && payout?.paidOutAt && (
+                            <span className="payout-party-note">Paid out {formatDateTime(payout.paidOutAt)}</span>
+                          )}
+                          {payout?.payoutReference && (
+                            <span className="payout-party-note">Ref {payout.payoutReference}</span>
+                          )}
+                          </div>
+                        </th>
+                        <td className="payout-amount">
+                          {payout?.amount != null ? (
+                            <>
+                              {amountText(payout.amount)}
+                              {currency && <span className="payout-currency">{currency}</span>}
+                            </>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {commonDue && <PayoutCountdown releaseAt={commonDue} />}
+
+              {!commonDue && holdNotStarted && (
+                <div className="payout-due payout-due-idle" role="group" aria-label="Common due">
+                  <div className="payout-due-when">
+                    <span className="payout-due-label">Common due</span>
+                    <span className="payout-due-date">Starts after payment settles</span>
+                  </div>
                 </div>
-                <p className="muted" style={{ margin: 0 }}>
-                  {anyDispute
-                    ? 'One or more payouts below are frozen while a dispute is open.'
-                    : anyHeld
-                      ? 'Applies to every payout below while it clears the post-payment protection window. No manual action is required yet.'
-                      : 'Applies to each payout once its related payment settles.'}
-                </p>
-              </div>
-
-              <div className="payout-party-grid">
-                {parties.map(({ key, label, you, payout, status }) => {
-                  const badge = payoutBadge(status);
-                  return (
-                    <div className="payout-party" key={key}>
-                      <div className="payout-party-head">
-                        <span className="payout-party-label">
-                          {label}
-                          {you && <span className="party-you">You</span>}
-                        </span>
-                        <span className={`status-pill ${badge.tone}`}>{badge.label}</span>
-                      </div>
-
-                      <div className="payout-party-amount">
-                        {payout?.amount != null ? (
-                          <>
-                            {money(payout.amount)} <span>{payout.currency || 'ETB'}</span>
-                          </>
-                        ) : (
-                          '—'
-                        )}
-                      </div>
-
-                      {payout && status === 'HELD' && (
-                        <PayoutCountdown releaseAt={payout.releaseAt} />
-                      )}
-
-                      <div className="payout-party-facts">
-                        {!payout && (
-                          <div>
-                            <span>Hold starts</span>
-                            <strong>After payment settles</strong>
-                          </div>
-                        )}
-                        {payout && (
-                          <div>
-                            <span>Expected release</span>
-                            <strong>{formatDateTime(payout.releaseAt)}</strong>
-                          </div>
-                        )}
-                        {payout?.releasedAt && (
-                          <div>
-                            <span>Released</span>
-                            <strong>{formatDateTime(payout.releasedAt)}</strong>
-                          </div>
-                        )}
-                        {payout?.paidOutAt && (
-                          <div>
-                            <span>Paid out</span>
-                            <strong>{formatDateTime(payout.paidOutAt)}</strong>
-                          </div>
-                        )}
-                        {payout?.payoutReference && (
-                          <div>
-                            <span>Reference</span>
-                            <strong>{payout.payoutReference}</strong>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              )}
             </div>
           );
         })()}
