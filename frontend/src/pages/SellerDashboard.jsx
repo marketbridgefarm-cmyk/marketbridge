@@ -366,7 +366,7 @@ export default function SellerDashboard() {
                       <td>{o.finalPrice.toLocaleString()} ETB</td>
                       <td>{o.transportJob ? `${o.transportJob.arrangingParty} — ${o.transportJob.method === 'OWN_TRUCK' ? 'Own Truck' : 'Hire Transport'}` : '—'}</td>
                       <td><span className="sd-badge sd-blue">{o.status}</span></td>
-                      <td><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Link to={`/orders/${o.id}`} className="sd-btn sd-btn-primary">{!o.transportJob ? 'Open order / arrange' : o.transportJob.status === 'REQUESTED' || o.transportJob.status === 'QUOTED' ? 'Review transport' : 'Open order / continue'}</Link>{!o.transportJob && <Link to={`/orders/${o.id}/transport`} className="sd-btn sd-btn-outline">Arrange transport</Link>}{['PENDING_PAYMENT', 'CONFIRMED'].includes(o.status) && !(o.transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(o.transportJob.status)) && <button type="button" className="sd-btn sd-btn-outline" onClick={() => cancelOrder(o)}>Cancel order</button>}</div></td>
+                      <td><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Link to={`/orders/${o.id}`} className="sd-btn sd-btn-primary">{!o.transportJob ? 'Open order / arrange' : o.transportJob.status === 'REQUESTED' || o.transportJob.status === 'QUOTED' ? 'Review transport' : 'Open order / continue'}</Link>{!o.transportJob && <Link to={`/orders/${o.id}#transport-section`} className="sd-btn sd-btn-outline">Arrange transport</Link>}{['PENDING_PAYMENT', 'CONFIRMED'].includes(o.status) && !(o.transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(o.transportJob.status)) && <button type="button" className="sd-btn sd-btn-outline" onClick={() => cancelOrder(o)}>Cancel order</button>}</div></td>
                     </tr>
                   ))}
                   {orders.length === 0 && <tr><td colSpan="7">No orders yet.</td></tr>}
@@ -415,9 +415,9 @@ export default function SellerDashboard() {
             <div className="sd-flow">
               <div className="sd-panel">
                 <h3>🚛 Arrange transport</h3>
-                <p className="sd-muted">Use your own truck, or hire a registered transporter — choose on the next screen.</p>
+                <p className="sd-muted">Use your own truck, or hire a registered transporter — choose on the order page.</p>
                 {orders.filter((o) => !o.transportJob).map((o) => (
-                  <Link key={o.id} className="sd-btn sd-btn-primary" style={{ marginTop: 8, display: 'block' }} to={`/orders/${o.id}/transport`}>{o.listing?.cropType} — {o.id.slice(0, 8)}</Link>
+                  <Link key={o.id} className="sd-btn sd-btn-primary" style={{ marginTop: 8, display: 'block' }} to={`/orders/${o.id}#transport-section`}>{o.listing?.cropType} — {o.id.slice(0, 8)}</Link>
                 ))}
                 {orders.filter((o) => !o.transportJob).length === 0 && <p className="sd-muted">No orders currently need transport arranged.</p>}
               </div>

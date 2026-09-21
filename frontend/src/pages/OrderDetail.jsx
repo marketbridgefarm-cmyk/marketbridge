@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import api from '../api/client';
 import {
@@ -15,6 +15,7 @@ import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import ActionCenter from '../components/ActionCenter.jsx';
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
+import TransportSetup from '../components/TransportSetup.jsx';
 
 const shortId = (id) => id?.slice(0, 8) || '—';
 
@@ -50,6 +51,7 @@ const PAYMENT_METHODS = [
 export default function OrderDetail() {
   const { orderId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
 
   const [order, setOrder] = useState(null);
@@ -157,6 +159,19 @@ export default function OrderDetail() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Cross-page links (e.g. SellerDashboard's "Arrange transport" button) now
+  // point at /orders/:id#transport-section instead of the old dedicated
+  // /orders/:id/transport route. React Router doesn't scroll to a URL hash
+  // on client-side navigation the way a full page load would, and the
+  // target element doesn't exist until `order` has loaded, so this waits
+  // for loading to finish before scrolling.
+  useEffect(() => {
+    if (loading) return;
+    const id = location.hash?.replace('#', '');
+    if (!id) return;
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [loading, location.hash]);
 
   // ==========================================================================
   // DERIVED DATA
@@ -1490,33 +1505,26 @@ export default function OrderDetail() {
                 automatically assign a transporter.
               </p>
             </div>
-
-            {canArrangeTransport && (
-              <Link
-                className="btn btn-primary"
-                to={`/orders/${order.id}/transport`}
-              >
-                Arrange transport
-              </Link>
-            )}
           </div>
 
           {!transportJob ? (
-            <div className="notice">
-              <p>
-                No transport arrangement recorded
-                yet.
-              </p>
-
-              {isParticipant &&
-                order.status ===
-                  'PENDING_PAYMENT' && (
-                  <p className="muted">
-                    You may arrange transport while
-                    the order is awaiting payment.
-                  </p>
-                )}
-            </div>
+            canArrangeTransport ? (
+              <TransportSetup
+                orderId={order.id}
+                pickupDefault={order.listing?.location}
+                destinationDefault={order.buyer?.location}
+                canBuyer={isBuyer}
+                canSeller={isSeller}
+                onCreated={() => load({ silent: true })}
+              />
+            ) : (
+              <div className="notice">
+                <p>
+                  No transport arrangement recorded
+                  yet.
+                </p>
+              </div>
+            )
           ) : (
             <>
               {/* ------------------------------------------------------------ */}
