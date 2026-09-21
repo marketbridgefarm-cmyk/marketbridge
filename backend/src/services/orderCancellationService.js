@@ -4,6 +4,7 @@ const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('./orderEventService');
 const { releaseListingQuantity } = require('./inventoryService');
 const { requestRefund } = require('./paymentRefundService');
+const { cancelPayoutsForOrder } = require('./payoutService');
 const { transitionOrderStatus } = require('./orderStateMachine');
 
 const NON_CANCELLABLE_STATUSES = ['COMPLETED', 'CANCELLED'];
@@ -68,6 +69,14 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
     });
   }
 
+  // The buyer is about to be refunded, so nobody may still be paid from this
+  // order: cancel every payout that has not actually been paid out.
+  const cancelledPayouts = await cancelPayoutsForOrder(tx, {
+    orderId: order.id,
+    actorId,
+    reason: reason || 'Order cancellation',
+  });
+
   // Create durable refund requests for paid funds. A refund is only marked
   // REFUNDED after the payment provider (or an authorized admin settlement
   // flow) confirms completion.
@@ -98,6 +107,7 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
       cancelledByRole,
       reason,
       refundedPaymentIds: toRefund.map((p) => p.id),
+      cancelledPayoutIds: cancelledPayouts.map((p) => p.id),
     },
   });
 

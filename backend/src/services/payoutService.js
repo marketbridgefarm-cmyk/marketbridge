@@ -214,6 +214,50 @@ async function cancelAfterDispute(tx, { orderId, actorId }) {
 }
 
 /**
+ * Called when an order is cancelled. Cancelling an order refunds the buyer,
+ * so every payout on it that has not actually been paid out must be
+ * cancelled too — otherwise releaseDuePayouts would later flip the still
+ * HELD payout to RELEASED and ops could pay the seller for an order the
+ * buyer was refunded for.
+ *
+ * PAID_OUT payouts are left alone (the money already left the platform;
+ * recovering it is an operational matter this record can't gate), and so
+ * are payouts that are already CANCELLED. Returns the payouts it cancelled.
+ */
+async function cancelPayoutsForOrder(tx, { orderId, actorId, reason }) {
+  const payouts = await tx.payout.findMany({
+    where: {
+      orderId,
+      status: { in: ['HELD', 'RELEASED', 'ON_HOLD_DISPUTE'] },
+    },
+  });
+
+  const cancelled = [];
+  for (const payout of payouts) {
+    const result = await tx.payout.update({
+      where: { id: payout.id },
+      data: { status: 'CANCELLED' },
+    });
+    cancelled.push(result);
+
+    await recordAuditEvent(tx, {
+      actorId: actorId || null,
+      action: 'PAYOUT_CANCELLED_ORDER_CANCELLED',
+      resourceType: 'Payout',
+      resourceId: payout.id,
+      metadata: {
+        orderId,
+        payeeRole: payout.payeeRole,
+        previousStatus: payout.status,
+        reason: reason || null,
+      },
+    });
+  }
+
+  return cancelled;
+}
+
+/**
  * Maintenance-cycle job: flip HELD -> RELEASED for anything past its
  * releaseAt with no open dispute. Does not touch ON_HOLD_DISPUTE or
  * PAID_OUT records. Role-agnostic by design — a seller, transporter, and
@@ -277,6 +321,7 @@ module.exports = {
   holdForDispute,
   resumeAfterDispute,
   cancelAfterDispute,
+  cancelPayoutsForOrder,
   releaseDuePayouts,
   markPaidOut,
 };

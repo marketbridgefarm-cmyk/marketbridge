@@ -113,4 +113,40 @@ async function failRefund(tx, { refundId, failureReason, actorId }) {
   return updated;
 }
 
-module.exports = { requestRefund, completeRefund, failRefund };
+/**
+ * Request the (full) refund for the payment behind each of the given
+ * payouts. Used when payouts are CANCELLED because a dispute was resolved
+ * against the payee — cancelling the payee's payout without also refunding
+ * the buyer would leave the buyer's money with nobody.
+ *
+ * Safe to call with payouts whose payment is no longer PAID (a refund is
+ * already pending/completed, or the payment never settled): those are
+ * skipped rather than throwing, so one already-refunded payment can't block
+ * the rest of the dispute resolution. requestRefund itself stays idempotent
+ * for anything still PAID.
+ */
+async function requestRefundsForPayouts(tx, { payouts, reason, requestedById }) {
+  const refunds = [];
+
+  for (const payout of payouts || []) {
+    if (!payout?.paymentId) continue;
+
+    const payment = await tx.payment.findUnique({
+      where: { id: payout.paymentId },
+      select: { id: true, status: true },
+    });
+    if (!payment || payment.status !== 'PAID') continue;
+
+    refunds.push(
+      await requestRefund(tx, {
+        paymentId: payment.id,
+        reason,
+        requestedById,
+      })
+    );
+  }
+
+  return refunds;
+}
+
+module.exports = { requestRefund, completeRefund, failRefund, requestRefundsForPayouts };
