@@ -3673,6 +3673,7 @@ textarea {
 
 .payout-table thead th.payout-amount-col {
   text-align: right;
+  white-space: nowrap;
 }
 
 .payout-table tbody th,
@@ -3737,6 +3738,20 @@ textarea {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
+}
+
+.payout-table thead th.payout-status-col {
+  padding-left: 16px;
+}
+
+.payout-table tbody td.payout-status {
+  padding-left: 16px;
+  white-space: nowrap;
+}
+
+.payout-table .status-pill {
+  padding: 4px 10px;
+  font-size: 11px;
 }
 
 .payout-currency {
@@ -3804,6 +3819,17 @@ textarea {
 .payout-due-unit {
   font-size: 13px;
   color: #875b12;
+}
+
+/* After the due time: the hold has cleared */
+.payout-due-done {
+  border-color: #cfe6d6;
+  border-left-color: var(--green);
+  background: #f1f9f3;
+}
+
+.payout-due-done .payout-due-label {
+  color: var(--green-dark);
 }
 
 .payout-due-idle {
