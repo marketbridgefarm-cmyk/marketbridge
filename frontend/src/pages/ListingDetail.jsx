@@ -173,6 +173,26 @@ export default function ListingDetail() {
     }
   }
 
+  // A payment that already reached Chapa (PROCESSING) must never be resumed
+  // or re-created — only checked. See OrderDetail.jsx's checkPaymentStatus
+  // for the same pattern; a stuck PROCESSING payment here used to be
+  // invisible to this page (it only looked for PENDING/PAID), which left
+  // the buyer re-submitting into a "payment already exists" dead end.
+  async function checkInspectionPaymentStatus(paymentId, requestId) {
+    setPayingInspectionId(requestId);
+    try {
+      const response = await api.get(`/payments/${paymentId}/chapa/verify`);
+      await load();
+      if (response.data?.status === 'PENDING') {
+        showToast('Chapa has not confirmed this payment yet. Try again shortly, or retry once it shows FAILED.', 'info');
+      }
+    } catch (e) {
+      showToast(e.response?.data?.error || e.message || 'Could not check payment status', 'error');
+    } finally {
+      setPayingInspectionId('');
+    }
+  }
+
   async function loadQuotes(requestId) {
     setLoadingQuotesId(requestId);
     try {
@@ -418,8 +438,11 @@ export default function ListingDetail() {
                     )}
                     {(() => {
                       if (request.requestedById !== user?.id || request.fee == null) return null;
-                      const existing = (request.payments || []).find((p) => ['PENDING', 'PAID'].includes(p.status));
+                      const existing = (request.payments || []).find((p) => ['PENDING', 'PROCESSING', 'PAID'].includes(p.status));
                       if (existing?.status === 'PAID') return <p className="muted" style={{ marginTop: 8 }}>Inspection fee paid.</p>;
+                      if (existing?.status === 'PROCESSING') {
+                        return <div style={{ marginTop: 8 }}><p className="muted">Your fee payment is being processed by Chapa.</p><button type="button" className="btn btn-primary btn-sm" disabled={payingInspectionId === request.id} onClick={() => checkInspectionPaymentStatus(existing.id, request.id)}>{payingInspectionId === request.id ? 'Checking…' : 'Check payment status'}</button></div>;
+                      }
                       if (existing?.status === 'PENDING') {
                         return <div style={{ marginTop: 8 }}><p className="muted">Your fee payment hasn't completed yet.</p><button type="button" className="btn btn-primary btn-sm" disabled={payingInspectionId === request.id} onClick={() => resumeInspectionPayment(existing.id, request.id)}>{payingInspectionId === request.id ? 'Redirecting…' : 'Resume payment'}</button></div>;
                       }
