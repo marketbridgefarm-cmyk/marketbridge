@@ -88,6 +88,26 @@ export default function DigitalMarketplace() {
     }
   }
 
+  // PROCESSING means Chapa checkout already started for this purchase.
+  // Must be checked, never resumed/re-bought — same pattern as
+  // OrderDetail.jsx's checkPaymentStatus. Previously this status had no
+  // rendering branch at all here, so a stuck PROCESSING purchase just
+  // silently showed nothing to do.
+  async function checkPurchaseStatus(paymentId, productId) {
+    setBusyId(productId);
+    try {
+      const r = await api.get(`/payments/${paymentId}/chapa/verify`);
+      await Promise.all([load(), loadMyPurchases()]);
+      if (r.data?.status === 'PENDING') {
+        showToast('Chapa has not confirmed this payment yet. Try again shortly, or retry once it shows FAILED.', 'info');
+      }
+    } catch (e) {
+      showToast(e.response?.data?.error || e.message || 'Could not check payment status', 'error');
+    } finally {
+      setBusyId('');
+    }
+  }
+
   async function download(purchaseId, productId) {
     setBusyId(productId);
     try {
@@ -176,6 +196,11 @@ export default function DigitalMarketplace() {
                         {busyId === productId ? 'Redirecting…' : 'Resume payment'}
                       </button>
                     )}
+                    {paymentStatus === 'PROCESSING' && (
+                      <button className="btn btn-primary" disabled={busyId === productId} onClick={() => checkPurchaseStatus(pu.payment.id, productId)}>
+                        {busyId === productId ? 'Checking…' : 'Check payment status'}
+                      </button>
+                    )}
                     {paymentStatus === 'RECONCILIATION_REQUIRED' && (
                       <p className="small muted">Payment is being reconciled by our team — check back shortly.</p>
                     )}
@@ -219,6 +244,9 @@ export default function DigitalMarketplace() {
                 )}
                 {user && paymentStatus === 'PENDING' && (
                   <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => resumePurchase(existingPurchase.payment.id, p.id)}>{busyId === p.id ? 'Redirecting…' : 'Resume payment'}</button>
+                )}
+                {user && paymentStatus === 'PROCESSING' && (
+                  <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => checkPurchaseStatus(existingPurchase.payment.id, p.id)}>{busyId === p.id ? 'Checking…' : 'Check payment status'}</button>
                 )}
                 {user && (!paymentStatus || ['FAILED', 'REFUNDED', 'CANCELLED'].includes(paymentStatus)) && (
                   <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => purchase(p)}>
