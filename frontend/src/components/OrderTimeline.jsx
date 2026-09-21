@@ -55,16 +55,23 @@ export default function OrderTimeline({ steps, events = [] }) {
         <li className="order-timeline-step is-recorded">
           <span className="order-timeline-dot" aria-hidden="true" />
           <div style={{ width: '100%' }}>
-            <div className="order-timeline-label">Activity history</div>
-            <div style={{ marginTop: 6 }}>
-              {durableEvents.map((event) => (
-                <div key={event.id} className="muted" style={{ fontSize: 12, marginBottom: 5 }}>
-                  <strong>{String(event.type || '').replace(/_/g, ' ')}</strong>
-                  {event.actor?.name ? ` — ${event.actor.name}` : ''}
-                  {formatDate(event.at) ? ` · ${formatDate(event.at)}` : ''}
-                </div>
-              ))}
-            </div>
+            {/* Collapsed by default: this list only grows over an order's
+                life and is rarely what someone opens the timeline to see,
+                so it shouldn't be the reason the page needs a long scroll. */}
+            <details>
+              <summary className="order-timeline-label" style={{ cursor: 'pointer' }}>
+                Activity history ({durableEvents.length})
+              </summary>
+              <div style={{ marginTop: 6 }}>
+                {durableEvents.map((event) => (
+                  <div key={event.id} className="muted" style={{ fontSize: 12, marginBottom: 5 }}>
+                    <strong>{String(event.type || '').replace(/_/g, ' ')}</strong>
+                    {event.actor?.name ? ` — ${event.actor.name}` : ''}
+                    {formatDate(event.at) ? ` · ${formatDate(event.at)}` : ''}
+                  </div>
+                ))}
+              </div>
+            </details>
           </div>
         </li>
       )}
