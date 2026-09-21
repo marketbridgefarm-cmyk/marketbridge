@@ -37,6 +37,10 @@ export default function AdminDashboard() {
   const [operations, setOperations] = useState(null);
   const [orderEvents, setOrderEvents] = useState([]);
   const [auditEvents, setAuditEvents] = useState([]);
+  const [refunds, setRefunds] = useState([]);
+
+  const disputeModalRef = useRef(null);
+  const [disputeDecision, setDisputeDecision] = useState(null);
 
   const [userSearch, setUserSearch] = useState('');
   const [roleSelections, setRoleSelections] = useState({});
@@ -65,6 +69,7 @@ export default function AdminDashboard() {
         operationsRes,
         orderEventsRes,
         auditEventsRes,
+        refundsRes,
       ] = await Promise.all([
         api.get('/admin/overview'),
         api.get('/admin/users'),
@@ -77,6 +82,7 @@ export default function AdminDashboard() {
         api.get('/admin/operations/summary'),
         api.get('/admin/order-events', { params: { limit: 100 } }),
         api.get('/admin/audit-events', { params: { limit: 100 } }),
+        api.get('/admin/financial/refunds'),
       ]);
 
       setOverview(overviewRes.data);
@@ -90,6 +96,7 @@ export default function AdminDashboard() {
       setOperations(operationsRes.data || null);
       setOrderEvents(orderEventsRes.data?.events || []);
       setAuditEvents(auditEventsRes.data?.events || []);
+      setRefunds(refundsRes.data?.refunds || []);
     } catch (err) {
       if (err.response?.data?.code === 'MFA_SETUP_REQUIRED') {
         setMfaRequired(true);
@@ -130,9 +137,9 @@ export default function AdminDashboard() {
   }, [tabMenuOpen]);
 
   function statusBadgeClass(status) {
-    if (['VERIFIED', 'ACTIVE', 'APPROVED', 'PUBLISHED', 'SCHEDULED', 'RESOLVED'].includes(status)) return 'sd-badge sd-good';
-    if (['REJECTED', 'SUSPENDED', 'CANCELLED'].includes(status)) return 'sd-badge sd-red';
-    if (['PENDING', 'PENDING_PAYMENT', 'PAID_PENDING_REVIEW', 'EXPIRED'].includes(status)) return 'sd-badge sd-warn';
+    if (['VERIFIED', 'ACTIVE', 'APPROVED', 'PUBLISHED', 'SCHEDULED', 'RESOLVED', 'COMPLETED'].includes(status)) return 'sd-badge sd-good';
+    if (['REJECTED', 'SUSPENDED', 'CANCELLED', 'FAILED'].includes(status)) return 'sd-badge sd-red';
+    if (['PENDING', 'PENDING_PAYMENT', 'PAID_PENDING_REVIEW', 'EXPIRED', 'REQUESTED', 'PROCESSING'].includes(status)) return 'sd-badge sd-warn';
     if (status === 'RECONCILIATION_REQUIRED') return 'sd-badge sd-red';
     return 'sd-badge';
   }
@@ -142,22 +149,97 @@ export default function AdminDashboard() {
     setSuccess('');
   }
 
-  async function resolveDispute(id, status) {
+  function openDisputeDecision(dispute, status) {
+    clearMessages();
+    setDisputeDecision({
+      id: dispute.id,
+      status,
+      resolution: `Marked ${status} by admin`,
+      payoutDecision: '',
+    });
+    disputeModalRef.current?.showModal();
+  }
+
+  function closeDisputeDecision() {
+    disputeModalRef.current?.close();
+    setDisputeDecision(null);
+  }
+
+  async function submitDisputeDecision() {
+    if (!disputeDecision) return;
+    const { id, status, resolution, payoutDecision } = disputeDecision;
+
     clearMessages();
     setActionLoading(`dispute-${id}`);
 
     try {
       await api.patch(`/disputes/${id}/resolve`, {
         status,
-        resolution: `Marked ${status} by admin`,
+        resolution,
+        // Only relevant when a payout on the order is frozen; the backend
+        // ignores it otherwise, so it's safe to always send the admin's
+        // choice here.
+        payoutDecision: payoutDecision || undefined,
       });
 
       setSuccess(`Dispute ${status.toLowerCase()} successfully.`);
+      closeDisputeDecision();
       await loadAll();
     } catch (err) {
       setError(
         err.response?.data?.error ||
         'Could not resolve dispute'
+      );
+    } finally {
+      setActionLoading('');
+    }
+  }
+
+  async function markRefundComplete(refund) {
+    clearMessages();
+
+    const confirmed = window.confirm(
+      `Mark the ${Number(refund.amount).toLocaleString()} ${refund.currency || 'ETB'} refund for payment ${refund.paymentId.slice(0, 8)} as completed? Only do this once the money has actually been sent back.`
+    );
+    if (!confirmed) return;
+
+    const providerRefundId = window.prompt('Provider refund reference (optional):') || undefined;
+
+    setActionLoading(`refund-${refund.id}`);
+    try {
+      await api.patch(`/admin/financial/refunds/${refund.id}/complete`, {
+        provider: refund.payment?.provider || undefined,
+        providerRefundId,
+      });
+      setSuccess('Refund marked as completed.');
+      await loadAll();
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+        'Could not complete refund'
+      );
+    } finally {
+      setActionLoading('');
+    }
+  }
+
+  async function markRefundFailed(refund) {
+    clearMessages();
+
+    const failureReason = window.prompt('Reason the refund failed:');
+    if (!failureReason) return;
+
+    setActionLoading(`refund-${refund.id}`);
+    try {
+      await api.patch(`/admin/financial/refunds/${refund.id}/fail`, {
+        failureReason,
+      });
+      setSuccess('Refund marked as failed.');
+      await loadAll();
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+        'Could not update refund'
       );
     } finally {
       setActionLoading('');
@@ -492,6 +574,14 @@ export default function AdminDashboard() {
     (a) => !pendingAds.some((pending) => pending.id === a.id)
   );
 
+  const pendingRefunds = refunds.filter(
+    (r) => ['REQUESTED', 'PROCESSING'].includes(r.status)
+  );
+
+  const refundHistory = refunds.filter(
+    (r) => !['REQUESTED', 'PROCESSING'].includes(r.status)
+  );
+
   const tabItems = [
     { key: 'overview', label: 'Overview', count: 0 },
     { key: 'users', label: 'Users & Control', count: 0 },
@@ -500,6 +590,7 @@ export default function AdminDashboard() {
     { key: 'advertising', label: 'Advertising', count: pendingAds.length },
     { key: 'orders', label: 'Orders', count: orders.length },
     { key: 'payments', label: 'Payments', count: payments.length },
+    { key: 'refunds', label: 'Refunds', count: pendingRefunds.length },
     {
       key: 'operations',
       label: 'Operations & Audit',
@@ -567,6 +658,100 @@ export default function AdminDashboard() {
               </div>
             ))}
           </div>
+        </div>
+      </dialog>
+
+      <dialog ref={disputeModalRef} className="sd-dialog" onClose={() => setDisputeDecision(null)}>
+        <div className="sd-modal">
+          <button
+            className="sd-close"
+            onClick={closeDisputeDecision}
+          >
+            ×
+          </button>
+          <span className="sd-eyebrow">MODERATION</span>
+          <h2>{disputeDecision?.status === 'REJECTED' ? 'Reject dispute' : 'Resolve dispute'}</h2>
+
+          {disputeDecision && (
+            <>
+              <p className="sd-muted" style={{ marginTop: 8 }}>
+                This order has a payout on hold. Choose what happens to it — the
+                backend requires this decision before the dispute can close.
+              </p>
+
+              <div className="sd-form-grid" style={{ marginTop: 12 }}>
+                <div className="sd-full">
+                  <label>Resolution notes</label>
+                  <textarea
+                    rows={3}
+                    value={disputeDecision.resolution}
+                    onChange={(e) =>
+                      setDisputeDecision((d) => ({ ...d, resolution: e.target.value }))
+                    }
+                  />
+                </div>
+
+                <div className="sd-full">
+                  <label>Payout decision</label>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontWeight: 400, marginTop: 6 }}>
+                    <input
+                      type="radio"
+                      name="payoutDecision"
+                      value="RELEASE"
+                      checked={disputeDecision.payoutDecision === 'RELEASE'}
+                      onChange={() =>
+                        setDisputeDecision((d) => ({ ...d, payoutDecision: 'RELEASE' }))
+                      }
+                    />
+                    <span>
+                      <strong>Release payout</strong> — resumes its normal hold timer, no refund.
+                      Use when the dispute is found in the seller/inspector's favor.
+                    </span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontWeight: 400, marginTop: 8 }}>
+                    <input
+                      type="radio"
+                      name="payoutDecision"
+                      value="CANCEL"
+                      checked={disputeDecision.payoutDecision === 'CANCEL'}
+                      onChange={() =>
+                        setDisputeDecision((d) => ({ ...d, payoutDecision: 'CANCEL' }))
+                      }
+                    />
+                    <span>
+                      <strong>Cancel payout</strong> — cancels the payout and automatically
+                      creates a refund request for the buyer. Use when the dispute is found
+                      in the buyer's favor.
+                    </span>
+                  </label>
+                  <p className="sd-muted" style={{ marginTop: 6 }}>
+                    If this order actually has no payout on hold, this choice is ignored.
+                  </p>
+                </div>
+              </div>
+
+              <div className="sd-modal-actions" style={{ marginTop: 16 }}>
+                <button
+                  type="button"
+                  className="sd-btn sd-btn-primary"
+                  disabled={
+                    !disputeDecision.payoutDecision ||
+                    actionLoading === `dispute-${disputeDecision.id}`
+                  }
+                  onClick={submitDisputeDecision}
+                >
+                  {actionLoading === `dispute-${disputeDecision.id}` ? 'Working…' : 'Confirm'}
+                </button>
+                <button
+                  type="button"
+                  className="sd-btn sd-btn-outline"
+                  onClick={closeDisputeDecision}
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </dialog>
 
@@ -1029,8 +1214,8 @@ export default function AdminDashboard() {
                         `dispute-${item.id}`
                       }
                       onClick={() =>
-                        resolveDispute(
-                          item.id,
+                        openDisputeDecision(
+                          item,
                           'RESOLVED'
                         )
                       }
@@ -1048,8 +1233,8 @@ export default function AdminDashboard() {
                         `dispute-${item.id}`
                       }
                       onClick={() =>
-                        resolveDispute(
-                          item.id,
+                        openDisputeDecision(
+                          item,
                           'REJECTED'
                         )
                       }
@@ -1535,6 +1720,112 @@ export default function AdminDashboard() {
                   <p className="sd-muted">No payments awaiting reconciliation right now.</p>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {tab === 'refunds' && (
+          <div>
+            <div className="sd-toolbar">
+              <div>
+                <span className="sd-eyebrow">FINANCIAL</span>
+                <h2>Pending refunds</h2>
+                <p className="sd-muted">
+                  Created automatically when a dispute is resolved against a payee
+                  (or a cancelled order flags a completed payment). Mark one
+                  complete only once the money has actually been sent back to the
+                  buyer; mark it failed if the provider rejected the refund.
+                </p>
+              </div>
+            </div>
+
+            <div className="sd-cards">
+              {pendingRefunds.map((r) => (
+                <div className="sd-card" key={r.id}>
+                  <h3>
+                    {Number(r.amount).toLocaleString()} {r.currency || 'ETB'}{' '}
+                    <span className={statusBadgeClass(r.status)}>{r.status?.replace(/_/g, ' ')}</span>
+                  </h3>
+
+                  <p className="sd-muted">
+                    Payment {r.paymentId.slice(0, 8)}
+                    {r.payment?.type && <> · {r.payment.type.replace(/_/g, ' ')}</>}
+                    {r.payment?.provider && <> · {r.payment.provider}</>}
+                    {r.payment?.orderId && <> · Order {r.payment.orderId.slice(0, 8)}</>}
+                  </p>
+
+                  {r.reason && <p className="sd-muted">Reason: {r.reason}</p>}
+
+                  <p className="sd-muted">
+                    Requested by {r.requestedBy?.name || r.requestedBy?.email || 'System'}
+                    {' · '}
+                    {new Date(r.createdAt).toLocaleString()}
+                  </p>
+
+                  <div className="sd-modal-actions" style={{ marginTop: 12 }}>
+                    <button
+                      className="sd-btn sd-btn-primary"
+                      disabled={actionLoading === `refund-${r.id}`}
+                      onClick={() => markRefundComplete(r)}
+                    >
+                      {actionLoading === `refund-${r.id}` ? 'Working…' : 'Mark completed'}
+                    </button>
+                    <button
+                      className="sd-btn sd-btn-outline"
+                      disabled={actionLoading === `refund-${r.id}`}
+                      onClick={() => markRefundFailed(r)}
+                    >
+                      Mark failed
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {pendingRefunds.length === 0 && (
+                <div className="sd-panel">
+                  <p className="sd-muted">No refunds waiting right now.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="sd-toolbar" style={{ marginTop: 28 }}>
+              <div>
+                <span className="sd-eyebrow">HISTORY</span>
+                <h2>Recent refund history</h2>
+              </div>
+            </div>
+
+            <div className="sd-panel sd-table-wrap">
+              <table className="sd-table sd-table--stack">
+                <thead>
+                  <tr>
+                    <th>Amount</th>
+                    <th>Payment</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {refundHistory.slice(0, 10).map((r) => (
+                    <tr key={r.id}>
+                      <td data-label="Amount">{Number(r.amount).toLocaleString()} {r.currency || 'ETB'}</td>
+                      <td data-label="Payment" className="sd-muted">{r.paymentId.slice(0, 8)}</td>
+                      <td data-label="Status">
+                        <span className={statusBadgeClass(r.status)}>{r.status?.replace(/_/g, ' ')}</span>
+                      </td>
+                      <td data-label="Updated" className="sd-muted">
+                        {new Date(r.completedAt || r.updatedAt || r.createdAt).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+
+                  {refundHistory.length === 0 && (
+                    <tr>
+                      <td colSpan="4" className="sd-muted">No refund history yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
