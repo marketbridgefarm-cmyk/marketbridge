@@ -15,6 +15,7 @@ import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import ActionCenter from '../components/ActionCenter.jsx';
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
+import Collapsible from '../components/Collapsible.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
 
 const shortId = (id) => id?.slice(0, 8) || '—';
@@ -1350,19 +1351,19 @@ export default function OrderDetail() {
         {/* flat ledger near the bottom, three places for the same numbers. */}
 
         {workflow && (
-          <div className="card">
-            <h2>Order timeline</h2>
+          <Collapsible title="Order timeline">
             <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
-          </div>
+          </Collapsible>
         )}
 
         {/* ================================================================== */}
         {/* ORDER DETAILS */}
         {/* ================================================================== */}
 
-        <div className="card">
-          <h2>Order details</h2>
-
+        <Collapsible
+          title="Order details"
+          summary={<span className="muted" style={{ fontSize: 13 }}>{money(order.finalPrice)} ETB</span>}
+        >
           <div className="detail-facts">
             <div>
               <span>Order</span>
@@ -1403,15 +1404,13 @@ export default function OrderDetail() {
               </div>
             )}
           </div>
-        </div>
+        </Collapsible>
 
         {/* ================================================================== */}
         {/* PARTIES */}
         {/* ================================================================== */}
 
-        <div className="card">
-          <h2>Parties</h2>
-
+        <Collapsible title="Parties" defaultOpen={false}>
           <div className="detail-facts">
             <div>
               <span>Buyer</span>
@@ -1427,7 +1426,7 @@ export default function OrderDetail() {
               </strong>
             </div>
           </div>
-        </div>
+        </Collapsible>
 
         {/* ================================================================== */}
         {/* REQUEST INSPECTION */}
@@ -2145,16 +2144,17 @@ export default function OrderDetail() {
         {/* ================================================================== */}
 
         {order && (
-          <div className="card" id="seller-payout">
-            <div className="row-between" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-              <div>
-                <span className="eyebrow">SELLER PAYOUT</span>
-                <h2 style={{ marginBottom: 6 }}>Seller payout status</h2>
-                <p className="muted" style={{ marginBottom: 0 }}>
-                  Buyer payment is separate from the seller payout. A standard
-                  <strong> 3-day hold</strong> applies after the marketplace payment settles.
-                </p>
-              </div>
+          <Collapsible
+            id="seller-payout"
+            eyebrow="SELLER PAYOUT"
+            title="Seller payout status"
+            description={
+              <>
+                Buyer payment is separate from the seller payout. A standard
+                <strong> 3-day hold</strong> applies after the marketplace payment settles.
+              </>
+            }
+            summary={
               <span className={`badge ${['RELEASED', 'PAID_OUT'].includes(payoutStatus) ? 'badge-success' : 'badge-pending'}`}>
                 {payoutStatus === 'ON_HOLD_DISPUTE'
                   ? 'ON HOLD — DISPUTE'
@@ -2166,8 +2166,8 @@ export default function OrderDetail() {
                         ? 'HELD — 3 DAYS'
                         : 'STARTS AFTER PAYMENT'}
               </span>
-            </div>
-
+            }
+          >
             <div className="detail-facts" style={{ marginTop: 16 }}>
               <div>
                 <span>Hold period</span>
@@ -2255,7 +2255,7 @@ export default function OrderDetail() {
                 <strong>Seller payout has been paid out.</strong>
               </div>
             )}
-          </div>
+          </Collapsible>
         )}
 
         {/* ================================================================== */}
@@ -2288,16 +2288,18 @@ export default function OrderDetail() {
         ]
           .filter(Boolean)
           .map(({ key, payout, eyebrow, title, heldCopy }) => (
-            <div className="card" id={`${key}-payout`} key={key}>
-              <div className="row-between" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                <div>
-                  <span className="eyebrow">{eyebrow}</span>
-                  <h2 style={{ marginBottom: 6 }}>{title}</h2>
-                  <p className="muted" style={{ marginBottom: 0 }}>
-                    Buyer payment is separate from this payout. A standard
-                    <strong> 3-day hold</strong> applies after the relevant payment settles.
-                  </p>
-                </div>
+            <Collapsible
+              key={key}
+              id={`${key}-payout`}
+              eyebrow={eyebrow}
+              title={title}
+              description={
+                <>
+                  Buyer payment is separate from this payout. A standard
+                  <strong> 3-day hold</strong> applies after the relevant payment settles.
+                </>
+              }
+              summary={
                 <span className={`badge ${['RELEASED', 'PAID_OUT'].includes(payout.status) ? 'badge-success' : 'badge-pending'}`}>
                   {payout.status === 'ON_HOLD_DISPUTE'
                     ? 'ON HOLD — DISPUTE'
@@ -2309,8 +2311,8 @@ export default function OrderDetail() {
                           ? 'HELD — 3 DAYS'
                           : payout.status.replace(/_/g, ' ')}
                 </span>
-              </div>
-
+              }
+            >
               <div className="detail-facts" style={{ marginTop: 16 }}>
                 <div>
                   <span>Hold period</span>
@@ -2387,7 +2389,7 @@ export default function OrderDetail() {
                   <strong>Payout has been paid out.</strong>
                 </div>
               )}
-            </div>
+            </Collapsible>
           ))}
 
         {/* ================================================================== */}
