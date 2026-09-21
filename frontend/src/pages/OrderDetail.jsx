@@ -15,8 +15,6 @@ import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import ActionCenter from '../components/ActionCenter.jsx';
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
-import Collapsible from '../components/Collapsible.jsx';
-import PayoutTrustNote from '../components/PayoutTrustNote.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
 
 const shortId = (id) => id?.slice(0, 8) || '—';
@@ -32,6 +30,27 @@ const getError = (error, fallback) =>
   error?.response?.data?.message ||
   error?.message ||
   fallback;
+
+// Maps a raw order status string to a small set of visual "tones" so the
+// status pill reads at a glance (green = good/moving, gold = waiting on
+// someone, red = problem, grey = closed) without hard-coding every status
+// string the backend might ever send.
+const statusTone = (status) => {
+  const value = String(status || '').toUpperCase();
+  if (['COMPLETED', 'DELIVERED', 'PAID', 'ACCEPTED', 'CONFIRMED'].includes(value)) return 'good';
+  if (['CANCELLED', 'REJECTED', 'FAILED', 'DISPUTED'].includes(value)) return 'bad';
+  if (['PENDING', 'AWAITING_PAYMENT', 'IN_PROGRESS', 'PROCESSING'].includes(value)) return 'wait';
+  return 'neutral';
+};
+
+const initials = (name) =>
+  String(name || '?')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || '?';
 
 /*
  * These are frontend payment-method labels only.
@@ -415,24 +434,6 @@ export default function OrderDetail() {
           dateStyle: 'medium',
           timeStyle: 'short',
         });
-  };
-
-  // Turns a releaseAt timestamp into something a payee can actually act on
-  // ("about 2 days from now") instead of making them do the date math
-  // themselves against a bare timestamp — that gap is a lot of where the
-  // "is my money actually coming?" uncertainty comes from.
-  const timeRemaining = (value) => {
-    if (!value) return null;
-    const target = new Date(value).getTime();
-    if (Number.isNaN(target)) return null;
-    const diffMs = target - Date.now();
-    if (diffMs <= 0) return 'due for release any moment now';
-    const hours = Math.round(diffMs / (60 * 60 * 1000));
-    if (hours < 1) return 'less than an hour from now';
-    if (hours < 24) return `about ${hours} hour${hours === 1 ? '' : 's'} from now`;
-    const days = Math.floor(hours / 24);
-    const remHours = hours % 24;
-    return `about ${days} day${days === 1 ? '' : 's'}${remHours ? ` ${remHours}h` : ''} from now`;
   };
 
   const transportPending =
@@ -1234,7 +1235,7 @@ export default function OrderDetail() {
 
   if (loading) {
     return (
-      <main className="section">
+      <main className="section order-detail-page">
         <div className="container-narrow">
           <div className="card loading">
             <p>Loading order…</p>
@@ -1250,7 +1251,7 @@ export default function OrderDetail() {
 
   if (!order) {
     return (
-      <main className="section">
+      <main className="section order-detail-page">
         <div className="container-narrow">
           <button
             type="button"
@@ -1273,7 +1274,7 @@ export default function OrderDetail() {
   // ==========================================================================
 
   return (
-    <main className="section">
+    <main className="section order-detail-page">
       <div className="container-narrow">
 
         {/* ================================================================== */}
@@ -1306,33 +1307,45 @@ export default function OrderDetail() {
           </button>
         </div>
 
-        <div className="page-header compact-header">
-          <div>
-            <span className="eyebrow">
+        <div className="order-hero">
+          <div className="order-hero-main">
+            <span className="eyebrow order-hero-eyebrow">
               ORDER {shortId(order.id)}
             </span>
 
-            <h1>{title}</h1>
+            <h1 className="order-hero-title">{title}</h1>
 
-            <p>
-              <span className="badge">
-                {order.status}
+            <div className="order-hero-meta">
+              <span className={`status-pill tone-${statusTone(order.status)}`}>
+                <span className="status-pill-dot" aria-hidden="true" />
+                {String(order.status || '').replace(/_/g, ' ')}
               </span>
-              {' · '}
-              {money(order.finalPrice)} ETB
-            </p>
+
+              {order.listing?.cropType && (
+                <span className="order-hero-chip">{order.listing.cropType}</span>
+              )}
+
+              {order.listing?.quantity != null && (
+                <span className="order-hero-chip">{order.listing.quantity} units</span>
+              )}
+            </div>
           </div>
 
-          {canCancelOrder && (
-            <button
-              type="button"
-              className="btn btn-outline"
-              disabled={busy === 'cancel'}
-              onClick={cancelOrder}
-            >
-              {busy === 'cancel' ? 'Cancelling…' : 'Cancel order'}
-            </button>
-          )}
+          <div className="order-hero-side">
+            <span className="order-hero-price-label">Order total</span>
+            <span className="order-hero-price">{money(order.finalPrice)} <small>ETB</small></span>
+
+            {canCancelOrder && (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={busy === 'cancel'}
+                onClick={cancelOrder}
+              >
+                {busy === 'cancel' ? 'Cancelling…' : 'Cancel order'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ================================================================== */}
@@ -1370,82 +1383,90 @@ export default function OrderDetail() {
         {/* flat ledger near the bottom, three places for the same numbers. */}
 
         {workflow && (
-          <Collapsible title="Order timeline">
+          <div className="card">
+            <h2>Order timeline</h2>
             <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
-          </Collapsible>
+          </div>
         )}
 
         {/* ================================================================== */}
         {/* ORDER DETAILS */}
         {/* ================================================================== */}
 
-        <Collapsible
-          title="Order details"
-          summary={<span className="muted" style={{ fontSize: 13 }}>{money(order.finalPrice)} ETB</span>}
-        >
-          <div className="detail-facts">
-            <div>
-              <span>Order</span>
-              <strong>
-                {shortId(order.id)}
-              </strong>
-            </div>
+        <div className="card-grid two-col order-summary-grid">
+          <div className="card">
+            <h2>Order details</h2>
 
-            <div>
-              <span>Status</span>
-              <strong>
-                {order.status}
-              </strong>
-            </div>
-
-            <div>
-              <span>Amount</span>
-              <strong>
-                {money(order.finalPrice)} ETB
-              </strong>
-            </div>
-
-            {order.listing?.cropType && (
+            <div className="detail-facts">
               <div>
-                <span>Product</span>
+                <span>Order</span>
                 <strong>
-                  {order.listing.cropType}
+                  {shortId(order.id)}
                 </strong>
               </div>
-            )}
 
-            {order.listing?.quantity != null && (
               <div>
-                <span>Quantity</span>
+                <span>Status</span>
                 <strong>
-                  {order.listing.quantity}
+                  {order.status}
                 </strong>
               </div>
-            )}
-          </div>
-        </Collapsible>
 
-        {/* ================================================================== */}
-        {/* PARTIES */}
-        {/* ================================================================== */}
+              <div>
+                <span>Amount</span>
+                <strong>
+                  {money(order.finalPrice)} ETB
+                </strong>
+              </div>
 
-        <Collapsible title="Parties" defaultOpen={false}>
-          <div className="detail-facts">
-            <div>
-              <span>Buyer</span>
-              <strong>
-                {order.buyer?.name || '—'}
-              </strong>
+              {order.listing?.cropType && (
+                <div>
+                  <span>Product</span>
+                  <strong>
+                    {order.listing.cropType}
+                  </strong>
+                </div>
+              )}
+
+              {order.listing?.quantity != null && (
+                <div>
+                  <span>Quantity</span>
+                  <strong>
+                    {order.listing.quantity}
+                  </strong>
+                </div>
+              )}
             </div>
+          </div>
 
-            <div>
-              <span>Seller</span>
-              <strong>
-                {order.seller?.name || '—'}
-              </strong>
+          {/* ================================================================ */}
+          {/* PARTIES */}
+          {/* ================================================================ */}
+
+          <div className="card">
+            <h2>Parties</h2>
+
+            <div className="party-list">
+              <div className="party-row">
+                <span className="party-avatar" aria-hidden="true">{initials(order.buyer?.name)}</span>
+                <div>
+                  <span className="party-role">Buyer</span>
+                  <strong className="party-name">{order.buyer?.name || '—'}</strong>
+                </div>
+                {isBuyer && <span className="party-you">You</span>}
+              </div>
+
+              <div className="party-row">
+                <span className="party-avatar party-avatar-seller" aria-hidden="true">{initials(order.seller?.name)}</span>
+                <div>
+                  <span className="party-role">Seller</span>
+                  <strong className="party-name">{order.seller?.name || '—'}</strong>
+                </div>
+                {isSeller && <span className="party-you">You</span>}
+              </div>
             </div>
           </div>
-        </Collapsible>
+        </div>
 
         {/* ================================================================== */}
         {/* REQUEST INSPECTION */}
@@ -1458,10 +1479,8 @@ export default function OrderDetail() {
         <div id="inspection-section">
         {isAgricultural && isParticipant && order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
           currentInspectionRequest ? (
-            <Collapsible
-              title="Inspection"
-              summary={<span className="badge">{currentInspectionRequest.status}</span>}
-            >
+            <div className="card">
+              <h2>Inspection</h2>
               <p className="muted">An inspection already exists for this order. Continue with this inspection; a second request is not needed.</p>
               <div className="detail-facts">
                 <div><span>Status</span><strong>{currentInspectionRequest.status}</strong></div>
@@ -1471,9 +1490,10 @@ export default function OrderDetail() {
               {currentInspectionRequest.status === 'COMPLETED' && currentInspectionRequest.report && (
                 <p className="muted" style={{ marginTop: 10 }}>Inspection report is available. The buyer can now proceed to the goods payment.</p>
               )}
-            </Collapsible>
+            </div>
           ) : (
-            <Collapsible title="Request inspection">
+            <div className="card">
+              <h2>Request inspection</h2>
               <p className="muted">Request an independent quality check for this order.</p>
               {inspectorId && (
                 <input
@@ -1504,7 +1524,7 @@ export default function OrderDetail() {
                   {findingInspector ? 'Searching…' : 'Find an inspector'}
                 </button>
               </div>
-            </Collapsible>
+            </div>
           )
         )}
         </div>
@@ -1513,12 +1533,18 @@ export default function OrderDetail() {
         {/* TRANSPORT */}
         {/* ================================================================== */}
 
-        <Collapsible
-          id="transport-section"
-          title="Transport"
-          description="The buyer or seller arranges transport. MarketBridge does not automatically assign a transporter."
-          summary={transportJob?.status && <span className="badge">{transportJob.status}</span>}
-        >
+        <div className="card" id="transport-section">
+          <div className="row-between">
+            <div>
+              <h2>Transport</h2>
+
+              <p className="muted">
+                The buyer or seller arranges
+                transport. MarketBridge does not
+                automatically assign a transporter.
+              </p>
+            </div>
+          </div>
 
           {!transportJob ? (
             canArrangeTransport ? (
@@ -2151,24 +2177,23 @@ export default function OrderDetail() {
               )}
             </>
           )}
-        </Collapsible>
+        </div>
 
         {/* ================================================================== */}
         {/* SELLER PAYOUT HOLD */}
         {/* ================================================================== */}
 
         {order && (
-          <Collapsible
-            id="seller-payout"
-            eyebrow="SELLER PAYOUT"
-            title="Seller payout status"
-            description={
-              <>
-                Buyer payment is separate from the seller payout. A standard
-                <strong> 3-day hold</strong> applies after the marketplace payment settles.
-              </>
-            }
-            summary={
+          <div className="card" id="seller-payout">
+            <div className="row-between" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <div>
+                <span className="eyebrow">SELLER PAYOUT</span>
+                <h2 style={{ marginBottom: 6 }}>Seller payout status</h2>
+                <p className="muted" style={{ marginBottom: 0 }}>
+                  Buyer payment is separate from the seller payout. A standard
+                  <strong> 3-day hold</strong> applies after the marketplace payment settles.
+                </p>
+              </div>
               <span className={`badge ${['RELEASED', 'PAID_OUT'].includes(payoutStatus) ? 'badge-success' : 'badge-pending'}`}>
                 {payoutStatus === 'ON_HOLD_DISPUTE'
                   ? 'ON HOLD — DISPUTE'
@@ -2180,8 +2205,8 @@ export default function OrderDetail() {
                         ? 'HELD — 3 DAYS'
                         : 'STARTS AFTER PAYMENT'}
               </span>
-            }
-          >
+            </div>
+
             <div className="detail-facts" style={{ marginTop: 16 }}>
               <div>
                 <span>Hold period</span>
@@ -2190,11 +2215,6 @@ export default function OrderDetail() {
               <div>
                 <span>Expected release</span>
                 <strong>{formatDateTime(sellerPayout?.releaseAt)}</strong>
-                {payoutStatus === 'HELD' && timeRemaining(sellerPayout?.releaseAt) && (
-                  <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                    {timeRemaining(sellerPayout.releaseAt)}
-                  </div>
-                )}
               </div>
               {sellerPayout?.releasedAt && (
                 <div>
@@ -2222,14 +2242,59 @@ export default function OrderDetail() {
               )}
             </div>
 
-            <PayoutTrustNote
-              role="SELLER"
-              isPayee={isSeller}
-              status={payoutStatus}
-              timeRemainingText={timeRemaining(sellerPayout?.releaseAt)}
-              releaseDateText={formatDateTime(sellerPayout?.releaseAt)}
-            />
-          </Collapsible>
+            {!sellerPayout && (
+              <div className="notice" style={{ marginTop: 14 }}>
+                <strong>The seller payout hold starts after the marketplace payment settles.</strong>
+                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                  Once the buyer payment is confirmed, the seller payout enters a 3-day hold before it can be released for payout processing.
+                </p>
+              </div>
+            )}
+
+            {payoutStatus === 'HELD' && (
+              <div className="notice" style={{ marginTop: 14 }}>
+                <strong>{isSeller ? 'Your payout is being held for 3 days.' : 'The seller payout is currently held.'}</strong>
+                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                  {isSeller
+                    ? 'The hold protects the transaction during the post-payment dispute window. No manual payout action is required yet.'
+                    : 'The buyer payment has settled, but the seller payout remains held during the post-payment protection window.'}
+                </p>
+              </div>
+            )}
+
+            {payoutStatus === 'ON_HOLD_DISPUTE' && (
+              <div className="alert" style={{ marginTop: 14 }}>
+                <strong>Seller payout is frozen while this dispute is open.</strong>
+                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                  If the dispute is resolved in the seller's favor, a fresh 3-day hold period starts from the resolution time.
+                </p>
+              </div>
+            )}
+
+            {payoutStatus === 'RELEASED' && (
+              <div className="notice" style={{ marginTop: 14 }}>
+                <strong>Seller payout released for payout processing.</strong>
+                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                  The hold period has ended. The payout still requires the operational payout step before it is marked paid out.
+                </p>
+              </div>
+            )}
+
+            {payoutStatus === 'CANCELLED' && (
+              <div className="alert" style={{ marginTop: 14 }}>
+                <strong>Seller payout was cancelled after dispute resolution.</strong>
+                <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                  The payout will not be released from this payout record. Any refund or replacement financial action follows the dispute resolution record.
+                </p>
+              </div>
+            )}
+
+            {payoutStatus === 'PAID_OUT' && (
+              <div className="notice" style={{ marginTop: 14 }}>
+                <strong>Seller payout has been paid out.</strong>
+              </div>
+            )}
+          </div>
         )}
 
         {/* ================================================================== */}
@@ -2246,32 +2311,32 @@ export default function OrderDetail() {
             payout: transporterPayout,
             eyebrow: 'TRANSPORT PAYOUT',
             title: isTransporter ? 'Your transport payout status' : 'Transport payout status',
-            role: 'TRANSPORTER',
-            isPayee: isTransporter,
+            heldCopy: isTransporter
+              ? 'Your payout is being held for 3 days.'
+              : 'The transporter payout is currently held.',
           },
           inspectorPayout && {
             key: 'inspector',
             payout: inspectorPayout,
             eyebrow: 'INSPECTION PAYOUT',
             title: isInspector ? 'Your inspection payout status' : 'Inspection payout status',
-            role: 'INSPECTOR',
-            isPayee: isInspector,
+            heldCopy: isInspector
+              ? 'Your payout is being held for 3 days.'
+              : 'The inspector payout is currently held.',
           },
         ]
           .filter(Boolean)
-          .map(({ key, payout, eyebrow, title, role, isPayee }) => (
-            <Collapsible
-              key={key}
-              id={`${key}-payout`}
-              eyebrow={eyebrow}
-              title={title}
-              description={
-                <>
-                  Buyer payment is separate from this payout. A standard
-                  <strong> 3-day hold</strong> applies after the relevant payment settles.
-                </>
-              }
-              summary={
+          .map(({ key, payout, eyebrow, title, heldCopy }) => (
+            <div className="card" id={`${key}-payout`} key={key}>
+              <div className="row-between" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <div>
+                  <span className="eyebrow">{eyebrow}</span>
+                  <h2 style={{ marginBottom: 6 }}>{title}</h2>
+                  <p className="muted" style={{ marginBottom: 0 }}>
+                    Buyer payment is separate from this payout. A standard
+                    <strong> 3-day hold</strong> applies after the relevant payment settles.
+                  </p>
+                </div>
                 <span className={`badge ${['RELEASED', 'PAID_OUT'].includes(payout.status) ? 'badge-success' : 'badge-pending'}`}>
                   {payout.status === 'ON_HOLD_DISPUTE'
                     ? 'ON HOLD — DISPUTE'
@@ -2283,8 +2348,8 @@ export default function OrderDetail() {
                           ? 'HELD — 3 DAYS'
                           : payout.status.replace(/_/g, ' ')}
                 </span>
-              }
-            >
+              </div>
+
               <div className="detail-facts" style={{ marginTop: 16 }}>
                 <div>
                   <span>Hold period</span>
@@ -2293,11 +2358,6 @@ export default function OrderDetail() {
                 <div>
                   <span>Expected release</span>
                   <strong>{formatDateTime(payout.releaseAt)}</strong>
-                  {payout.status === 'HELD' && timeRemaining(payout.releaseAt) && (
-                    <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                      {timeRemaining(payout.releaseAt)}
-                    </div>
-                  )}
                 </div>
                 {payout.releasedAt && (
                   <div>
@@ -2325,14 +2385,48 @@ export default function OrderDetail() {
                 )}
               </div>
 
-              <PayoutTrustNote
-                role={role}
-                isPayee={isPayee}
-                status={payout.status}
-                timeRemainingText={timeRemaining(payout.releaseAt)}
-                releaseDateText={formatDateTime(payout.releaseAt)}
-              />
-            </Collapsible>
+              {payout.status === 'HELD' && (
+                <div className="notice" style={{ marginTop: 14 }}>
+                  <strong>{heldCopy}</strong>
+                  <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                    The hold protects the transaction during the post-payment dispute window. No manual payout action is required yet.
+                  </p>
+                </div>
+              )}
+
+              {payout.status === 'ON_HOLD_DISPUTE' && (
+                <div className="alert" style={{ marginTop: 14 }}>
+                  <strong>This payout is frozen while the dispute is open.</strong>
+                  <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                    If the dispute is resolved in the payee's favor, a fresh 3-day hold period starts from the resolution time.
+                  </p>
+                </div>
+              )}
+
+              {payout.status === 'RELEASED' && (
+                <div className="notice" style={{ marginTop: 14 }}>
+                  <strong>Payout released for payout processing.</strong>
+                  <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                    The hold period has ended. The payout still requires the operational payout step before it is marked paid out.
+                  </p>
+                </div>
+              )}
+
+              {payout.status === 'CANCELLED' && (
+                <div className="alert" style={{ marginTop: 14 }}>
+                  <strong>Payout was cancelled after dispute resolution.</strong>
+                  <p className="muted" style={{ marginBottom: 0, marginTop: 4 }}>
+                    The payout will not be released from this payout record. Any refund or replacement financial action follows the dispute resolution record.
+                  </p>
+                </div>
+              )}
+
+              {payout.status === 'PAID_OUT' && (
+                <div className="notice" style={{ marginTop: 14 }}>
+                  <strong>Payout has been paid out.</strong>
+                </div>
+              )}
+            </div>
           ))}
 
         {/* ================================================================== */}
@@ -2414,7 +2508,7 @@ export default function OrderDetail() {
         {/* ================================================================== */}
 
         {order.status === 'DISPUTED' ? (
-          <div className="card" id="raise-dispute">
+          <div className="card card-warning" id="raise-dispute">
             <h2>Dispute open</h2>
             <p className="muted" style={{ marginBottom: 0 }}>
               An admin is reviewing this order. It will resume its previous
@@ -2498,7 +2592,11 @@ export default function OrderDetail() {
         {/* ================================================================== */}
 
         {order.status === 'COMPLETED' && (
-          <Collapsible title="Order completed" defaultOpen={false}>
+          <div className="card">
+            <h2>
+              Order completed
+            </h2>
+
             <div className="notice">
               <p>
                 <strong>
@@ -2511,7 +2609,7 @@ export default function OrderDetail() {
                 buyer.
               </p>
             </div>
-          </Collapsible>
+          </div>
         )}
 
         {/* Payment records now live inside the Payment Center's expandable */}
