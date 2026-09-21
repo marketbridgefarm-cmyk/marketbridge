@@ -18,7 +18,12 @@ const ORDER_TRANSITIONS = Object.freeze({
   IN_TRANSIT: new Set(['DELIVERED', 'DISPUTED']),
   DELIVERED: new Set(['COMPLETED', 'DISPUTED']),
   COMPLETED: new Set(),
-  DISPUTED: new Set(['COMPLETED', 'CANCELLED']),
+  // A dispute must be able to resolve back into whichever state the order
+  // was in when it was raised (dispute.previousOrderStatus), not just into
+  // a terminal state — otherwise every dispute resolution/rejection whose
+  // previousOrderStatus was PENDING_PAYMENT/CONFIRMED/TRANSPORT_ARRANGED/
+  // IN_TRANSIT/DELIVERED fails with "Invalid order status transition".
+  DISPUTED: new Set(['PENDING_PAYMENT', 'CONFIRMED', 'TRANSPORT_ARRANGED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED', 'CANCELLED']),
   CANCELLED: new Set(),
 });
 
