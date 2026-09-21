@@ -16,7 +16,7 @@ const ACTION_UI = {
   PAY_MARKETPLACE: { kind: 'scroll', target: 'payment-center', label: 'Pay for goods' },
   PAY_INSPECTION: { kind: 'scroll', target: 'payment-center', label: 'Pay inspection fee' },
   PAY_TRANSPORT: { kind: 'scroll', target: 'payment-center', label: 'Pay transport' },
-  ARRANGE_TRANSPORT: { kind: 'link', label: 'Arrange transport' },
+  ARRANGE_TRANSPORT: { kind: 'scroll', target: 'transport-section', label: 'Arrange transport' },
   REVIEW_TRANSPORT_QUOTES: { kind: 'scroll', target: 'transport-section', label: 'Review transport quotes' },
   REVIEW_INSPECTION_QUOTES: { kind: 'scroll', target: 'inspection-section', label: 'Review inspection quotes' },
   START_INSPECTION: { kind: 'execute', label: 'Start inspection' },
@@ -108,9 +108,13 @@ export default function WorkflowActions({
         return;
       }
       navigate(ui.to);
-      return;
     }
-    navigate(`/orders/${orderId}/transport`);
+    // Every remaining ACTION_UI entry with kind 'link' sets `to`. There is
+    // intentionally no other fallback here any more — ARRANGE_TRANSPORT
+    // used to fall through to a dedicated /orders/:id/transport route; that
+    // route no longer exists now that transport setup is inline on the
+    // order page, so ARRANGE_TRANSPORT is a 'scroll' action instead (see
+    // ACTION_UI above).
   }
 
   return (
