@@ -371,6 +371,27 @@ export default function AdvertiserDashboard() {
     }
   }
 
+  // A payment that already reached Chapa (PROCESSING) must be checked, not
+  // resumed or re-paid — see OrderDetail.jsx's checkPaymentStatus for the
+  // same pattern. Without this, a stuck PROCESSING ad payment was invisible
+  // to this page and the advertiser would keep re-submitting into a
+  // "payment already exists" dead end.
+  async function checkAdPaymentStatus(paymentId, adId) {
+    clearMessages();
+    setPayingId(adId);
+    try {
+      const response = await api.get(`/payments/${paymentId}/chapa/verify`);
+      await loadAll();
+      if (response.data?.status === 'PENDING') {
+        setError('Chapa has not confirmed this payment yet. Try again shortly, or retry once it shows FAILED.');
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Could not check payment status');
+    } finally {
+      setPayingId(null);
+    }
+  }
+
   const liveCount = useMemo(() => ads.filter((a) => ['PUBLISHED', 'ACTIVE'].includes(a.status)).length, [ads]);
 
   if (loading && ads.length === 0) {
@@ -561,6 +582,7 @@ export default function AdvertiserDashboard() {
           <div className="sd-flow">
             {ads.map((ad) => {
               const pending = (ad.payments || []).find((p) => p.status === 'PENDING');
+              const processing = (ad.payments || []).find((p) => p.status === 'PROCESSING');
               const paid = (ad.payments || []).find((p) => p.status === 'PAID');
               const stats = analytics[ad.id];
               const amountDue = Number(ad.priceQuoted || ad.amountDue || 0);
@@ -591,7 +613,15 @@ export default function AdvertiserDashboard() {
                       <button type="button" className="sd-btn sd-btn-outline" disabled={payingId === ad.id} onClick={() => cancelAd(ad)}>Cancel campaign</button>
                     </div>
                   )}
-                  {!paid && !pending && ad.status === 'PENDING_PAYMENT' && (
+                  {!paid && !pending && processing && (
+                    <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ flex: '1 1 auto' }}>
+                        <p className="muted" style={{ marginBottom: 6 }}>Payment is being processed by Chapa.</p>
+                        <button type="button" className="sd-btn sd-btn-primary" disabled={payingId === ad.id} onClick={() => checkAdPaymentStatus(processing.id, ad.id)}>{payingId === ad.id ? 'Checking…' : 'Check payment status'}</button>
+                      </div>
+                    </div>
+                  )}
+                  {!paid && !pending && !processing && ad.status === 'PENDING_PAYMENT' && (
                     <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                       <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} style={{ maxWidth: 200 }}>
                         {PAYMENT_METHODS.map((m) => (
