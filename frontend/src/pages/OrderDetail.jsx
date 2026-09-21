@@ -837,6 +837,29 @@ export default function OrderDetail() {
     }
   };
 
+  // Same PROCESSING-status check as checkMarketplacePayment above, but for
+  // any payment id (inspection or transport). marketplacePayment used its
+  // own dedicated handler because it's looked up once via useMemo; this one
+  // takes the id directly since inspection payments are found per-row.
+  const checkPaymentStatus = async (paymentId, busyKey) => {
+    if (!paymentId) return;
+
+    setBusy(busyKey);
+    setError('');
+    try {
+      const response = await api.get(`/payments/${paymentId}/chapa/verify`);
+      await load({ silent: true });
+      const status = response.data?.status;
+      if (status === 'PENDING') {
+        setError('Chapa has not confirmed this payment yet. If you cancelled or the checkout failed, return to the order and retry once the payment shows FAILED.');
+      }
+    } catch (err) {
+      setError(getError(err, 'Could not check payment status'));
+    } finally {
+      setBusy('');
+    }
+  };
+
   // ==========================================================================
   // RESUME PAYMENT
   // ==========================================================================
@@ -2257,7 +2280,8 @@ export default function OrderDetail() {
                   {inspectionPaymentRows.map((request) => {
                     const requestPayment =
                       (request.payments || []).find((payment) =>
-                        payment.type === 'INSPECTOR' && payment.status === 'PENDING'
+                        payment.type === 'INSPECTOR' &&
+                        ['PENDING', 'PROCESSING'].includes(payment.status)
                       ) || null;
                     const paid = (request.payments || []).some((payment) =>
                       payment.type === 'INSPECTOR' && payment.status === 'PAID'
@@ -2269,11 +2293,23 @@ export default function OrderDetail() {
                           <span>
                             {request.inspector?.name || 'Inspector'} — {money(request.fee)} ETB
                           </span>
-                          <span className="badge">{paid ? 'PAID' : requestPayment ? 'PENDING' : 'NOT PAID'}</span>
+                          <span className="badge">
+                            {paid ? 'PAID' : requestPayment ? requestPayment.status : 'NOT PAID'}
+                          </span>
                         </div>
 
                         {!paid && (
-                          requestPayment ? (
+                          requestPayment?.status === 'PROCESSING' ? (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              style={{ marginTop: 8 }}
+                              disabled={busy === `check-inspection-${request.id}`}
+                              onClick={() => checkPaymentStatus(requestPayment.id, `check-inspection-${request.id}`)}
+                            >
+                              {busy === `check-inspection-${request.id}` ? 'Checking…' : 'Check inspector payment'}
+                            </button>
+                          ) : requestPayment ? (
                             <button
                               type="button"
                               className="btn btn-primary btn-sm"
