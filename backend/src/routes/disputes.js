@@ -6,6 +6,7 @@ const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { transitionOrderStatus, DISPUTABLE_STATUSES } = require('../services/orderStateMachine');
 const { holdForDispute, resumeAfterDispute, cancelAfterDispute } = require('../services/payoutService');
+const { requestRefundsForPayouts } = require('../services/paymentRefundService');
 
 const router = express.Router();
 
@@ -151,6 +152,8 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
         select: { id: true, status: true },
       });
 
+      let refundIds = [];
+
       if (frozenPayout) {
         if (!payoutDecision) {
           throw Object.assign(
@@ -162,7 +165,18 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
         if (String(payoutDecision).toUpperCase() === 'RELEASE') {
           await resumeAfterDispute(tx, { orderId: updated.orderId, actorId: req.user.id });
         } else {
-          await cancelAfterDispute(tx, { orderId: updated.orderId, actorId: req.user.id });
+          const cancelledPayouts = await cancelAfterDispute(tx, { orderId: updated.orderId, actorId: req.user.id });
+
+          // Cancelling the payouts means the buyer's money must go back:
+          // request a refund for each payment behind a cancelled payout.
+          // Anything already refunded/refund-pending is skipped.
+          refundIds = (
+            await requestRefundsForPayouts(tx, {
+              payouts: cancelledPayouts,
+              reason: 'Dispute resolved: payout cancelled',
+              requestedById: req.user.id,
+            })
+          ).map((refund) => refund.id);
         }
       }
 
@@ -176,6 +190,7 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
           finalStatus,
           restoredOrderStatus: updated.previousOrderStatus || 'CONFIRMED',
           payoutDecision: payoutDecision ? String(payoutDecision).toUpperCase() : null,
+          refundIds,
         },
       });
 

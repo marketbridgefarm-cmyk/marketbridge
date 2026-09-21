@@ -262,6 +262,7 @@ router.get('/:id', authenticate, async (req, res) => {
         id: true,
         payeeRole: true,
         payeeId: true,
+        paymentId: true,
         status: true,
         releaseAt: true,
         releasedAt: true,
@@ -284,10 +285,56 @@ router.get('/:id', authenticate, async (req, res) => {
       payoutReference: payout.payoutReference,
     }));
 
+    // Refunds for the payments behind this order (goods, hired transport,
+    // inspection). Amounts/status are visible to every participant, like
+    // payouts; the free-text reason only to the buyer and admins, and the
+    // provider failure text only to admins.
+    const viewerIsAdmin = Boolean(req.user.roles?.includes('ADMIN'));
+    const viewerIsBuyer = order.buyerId === req.user.id;
+    const payoutPaymentIds = payouts.map((payout) => payout.paymentId).filter(Boolean);
+    const refundPaymentFilters = [
+      { orderId: order.id },
+      ...(order.transportJob?.id ? [{ transportJobId: order.transportJob.id }] : []),
+      ...(payoutPaymentIds.length ? [{ id: { in: payoutPaymentIds } }] : []),
+    ];
+
+    const refundRows = await prisma.paymentRefund.findMany({
+      where: { payment: { OR: refundPaymentFilters } },
+      select: {
+        id: true,
+        paymentId: true,
+        amount: true,
+        currency: true,
+        status: true,
+        reason: true,
+        failureReason: true,
+        createdAt: true,
+        completedAt: true,
+        payment: { select: { type: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const roleByPaymentId = new Map(payouts.map((payout) => [payout.paymentId, payout.payeeRole]));
+    const roleByPaymentType = { MARKETPLACE: 'SELLER', TRANSPORT: 'TRANSPORTER', INSPECTOR: 'INSPECTOR' };
+
+    const refundViews = refundRows.map((refund) => ({
+      id: refund.id,
+      payeeRole: roleByPaymentId.get(refund.paymentId) || roleByPaymentType[refund.payment?.type] || null,
+      status: refund.status,
+      amount: refund.amount,
+      currency: refund.currency,
+      requestedAt: refund.createdAt,
+      completedAt: refund.completedAt,
+      reason: viewerIsAdmin || viewerIsBuyer ? refund.reason : null,
+      failureReason: viewerIsAdmin ? refund.failureReason : null,
+    }));
+
     return res.json({
       order: {
         ...order,
         payouts: payoutViews,
+        refunds: refundViews,
       },
     });
   } catch (error) {
