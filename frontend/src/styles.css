@@ -3854,3 +3854,147 @@ textarea {
     align-items: flex-start;
   }
 }
+
+
+/* ---- Refund status card ---------------------------------------------------
+   Follows the payout card and reuses its intro + Parties table styles.
+   Adds a four-step tracker: Payout held > Refund requested > Processing >
+   Refunded. Amber = waiting, green = done, red = failed.
+   ------------------------------------------------------------------------ */
+
+.refund-track {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0 0 22px;
+  padding: 0;
+}
+
+.refund-track-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+  text-align: center;
+}
+
+/* Connector from the previous dot's centre to this dot's centre */
+.refund-track-step::before {
+  content: '';
+  position: absolute;
+  top: 9px;
+  left: -50%;
+  right: 50%;
+  height: 2px;
+  background: var(--line);
+}
+
+.refund-track-step:first-child::before {
+  display: none;
+}
+
+.refund-track-step.is-complete::before,
+.refund-track-step.is-current::before,
+.refund-track-step.is-failed::before {
+  background: var(--green);
+}
+
+.refund-track-dot {
+  position: relative;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+  background: #fff;
+}
+
+.refund-track-step.is-complete .refund-track-dot {
+  border-color: var(--green);
+  background: var(--green);
+}
+
+.refund-track-step.is-current .refund-track-dot {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px rgba(183, 123, 27, .18);
+}
+
+.refund-track-step.is-failed .refund-track-dot {
+  border-color: var(--danger);
+  background: var(--danger);
+  box-shadow: 0 0 0 4px rgba(180, 35, 24, .14);
+}
+
+.refund-track-label {
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.refund-track-step.is-pending .refund-track-label {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.refund-track-step.is-failed .refund-track-label {
+  color: var(--danger);
+}
+
+.refund-track-note {
+  font-size: 11.5px;
+  line-height: 1.2;
+  color: var(--muted);
+}
+
+/* Total row */
+.payout-table.refund-table tfoot th,
+.payout-table.refund-table tfoot td {
+  padding: 14px 0 0;
+  border-top: 1.5px solid var(--ink);
+  border-bottom: 0;
+}
+
+.payout-table.refund-table tfoot th.refund-total-label {
+  text-align: left;
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.payout-table.refund-table tfoot td.refund-total-amount {
+  font-size: 18px;
+}
+
+/* Admin actions + notes */
+.refund-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.refund-actions .btn {
+  padding-inline: 11px;
+  box-shadow: none;
+  white-space: nowrap;
+}
+
+.payout-party-note.refund-failure {
+  color: var(--danger);
+}
+
+.refund-reason {
+  margin: 16px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+@media (max-width: 380px) {
+  .refund-track-label {
+    font-size: 12px;
+  }
+}
