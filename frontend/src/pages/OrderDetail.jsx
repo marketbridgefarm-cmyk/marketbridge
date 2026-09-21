@@ -14,7 +14,7 @@ import EvidenceGallery from '../components/EvidenceGallery.jsx';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import ActionCenter from '../components/ActionCenter.jsx';
 import OrderTimeline from '../components/OrderTimeline.jsx';
-import PaymentStatus from '../components/PaymentStatus.jsx';
+import PaymentCenter from '../components/PaymentCenter.jsx';
 
 const shortId = (id) => id?.slice(0, 8) || '—';
 
@@ -246,6 +246,47 @@ export default function OrderDetail() {
           payment.type === 'INSPECTOR' &&
           payment.status === 'PAID'
       )
+  );
+
+  // Row-shaped view of each fee-bearing inspection request for the
+  // PaymentCenter component — same paid/pending lookups the inline JSX used
+  // to do itself, just computed once here instead of per-render inside JSX.
+  const inspectionPaymentGroups = useMemo(
+    () =>
+      isAgricultural
+        ? inspectionPaymentRows.map((request) => {
+            const requestPayment =
+              (request.payments || []).find(
+                (payment) =>
+                  payment.type === 'INSPECTOR' &&
+                  ['PENDING', 'PROCESSING'].includes(payment.status)
+              ) || null;
+            const paid = (request.payments || []).some(
+              (payment) => payment.type === 'INSPECTOR' && payment.status === 'PAID'
+            );
+            const busyKey = `${requestPayment?.status === 'PROCESSING' ? 'check' : requestPayment ? 'resume' : 'pay'}-inspection-${request.id}`;
+
+            return {
+              id: request.id,
+              label: `${request.inspector?.name || 'Inspector'} — inspection fee`,
+              amount: request.fee,
+              paid,
+              pending: Boolean(requestPayment),
+              processing: requestPayment?.status === 'PROCESSING',
+              note:
+                request.status !== 'COMPLETED'
+                  ? `Inspection status: ${request.status}`
+                  : null,
+              busyKey,
+              canCheck: requestPayment?.status === 'PROCESSING',
+              canResume: Boolean(requestPayment) && requestPayment.status !== 'PROCESSING',
+              onCheck: () => checkPaymentStatus(requestPayment?.id, busyKey),
+              onResume: () => resumePayment(requestPayment?.id, busyKey),
+              onPay: () => payInspection(request),
+            };
+          })
+        : [],
+    [isAgricultural, inspectionPaymentRows]
   );
 
   const isTransportArranger = Boolean(
@@ -828,6 +869,31 @@ export default function OrderDetail() {
     }
   };
 
+  // Pay a fee-bearing inspection request. Extracted from an inline onClick
+  // (previously duplicated the same startChapaPayment shape as
+  // payMarketplace/payTransport) so PaymentCenter can call it directly per
+  // row instead of re-declaring it in JSX.
+  const payInspection = async (request) => {
+    if (!request?.id || !request.fee) return;
+
+    setBusy(`pay-inspection-${request.id}`);
+    setError('');
+    try {
+      await startChapaPayment({
+        type: 'INSPECTOR',
+        inspectionRequestId: request.id,
+        orderId: order.id,
+        amount: Number(request.fee),
+        method: payMethod,
+      });
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not start inspector payment'));
+    } finally {
+      setBusy('');
+    }
+  };
+
   // ==========================================================================
   // CHECK PROCESSING PAYMENT
   // ==========================================================================
@@ -1083,6 +1149,51 @@ export default function OrderDetail() {
   };
 
   // ==========================================================================
+  // PAYMENT CENTER PROPS
+  // ==========================================================================
+  // Package the already-computed gating flags/handlers above into the shape
+  // PaymentCenter expects, one object per obligation. No new gating logic —
+  // this is purely so the render below passes one prop instead of wiring
+  // ~15 individual flags/handlers by hand in JSX.
+
+  const marketplaceObligation = {
+    amount: order?.finalPrice,
+    paid: marketplacePaid,
+    pending: marketplacePending,
+    processing: marketplaceProcessing,
+    canPay: canPayMarketplace,
+    canResume: canResumeMarketplacePayment,
+    canCheck: canCheckMarketplacePayment,
+    onPay: payMarketplace,
+    onResume: () => resumePayment(marketplacePayment?.id, 'resume-marketplace'),
+    onCheck: checkMarketplacePayment,
+  };
+
+  const transportObligation = transportJob
+    ? {
+        required: transportJob.method === 'HIRE_TRANSPORTER',
+        readyToPay: transportJob.status === 'ACCEPTED' && transportJob.agreedAmount != null,
+        amount: transportJob.agreedAmount,
+        paid: transportPaid,
+        pending: transportPending,
+        processing: transportProcessing,
+        note:
+          transportJob.method === 'HIRE_TRANSPORTER' &&
+          transportJob.status !== 'ACCEPTED' &&
+          !transportPaid &&
+          !transportPending
+            ? 'Transporter payment becomes available after the transporter quote is accepted.'
+            : null,
+        canStart: canStartTransportPayment,
+        canResume: canResumeTransportPayment,
+        canCheck: canCheckTransportPayment,
+        onStart: payTransport,
+        onResume: () => resumePayment(transportPayment?.id, 'resume-transport'),
+        onCheck: () => checkPaymentStatus(transportPayment?.id, 'check-transport'),
+      }
+    : null;
+
+  // ==========================================================================
   // LOADING
   // ==========================================================================
 
@@ -1217,19 +1328,16 @@ export default function OrderDetail() {
         )}
 
         {/* ================================================================== */}
-        {/* TIMELINE + PAYMENT STATUS */}
+        {/* TIMELINE */}
         {/* ================================================================== */}
+        {/* Payment status now lives only in the Payment Center card below — */}
+        {/* it used to also render here (via <PaymentStatus>) and again as a */}
+        {/* flat ledger near the bottom, three places for the same numbers. */}
 
         {workflow && (
-          <div className="card-grid two-col">
-            <div className="card">
-              <h2>Order timeline</h2>
-              <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
-            </div>
-            <div className="card">
-              <h2>Payment status</h2>
-              <PaymentStatus payments={workflow.payments} />
-            </div>
+          <div className="card">
+            <h2>Order timeline</h2>
+            <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
           </div>
         )}
 
@@ -1305,19 +1413,6 @@ export default function OrderDetail() {
             </div>
           </div>
         </div>
-
-        {/* ================================================================== */}
-        {/* MARKETPLACE PAYMENT BLOCKED (agricultural gate) */}
-        {/* ================================================================== */}
-
-        {marketplaceBlockedReason && (
-          <div className="card">
-            <h2>Payment</h2>
-            <p className="muted">
-              {marketplaceBlockedReason}
-            </p>
-          </div>
-        )}
 
         {/* ================================================================== */}
         {/* REQUEST INSPECTION */}
@@ -2202,255 +2297,20 @@ export default function OrderDetail() {
         {/* PAYMENT CENTER */}
         {/* ================================================================== */}
 
-        <div className="card payment-action-center" id="payment-center">
-          <div className="row-between">
-            <div>
-              <span className="eyebrow">PAYMENT CENTER</span>
-              <h2>Complete required payments</h2>
-              <p className="muted">
-                Payments are separate. The buyer can pay the seller, any required
-                inspector, and a hired transporter from this order page.
-              </p>
-            </div>
-          </div>
-
-          {buyerIdentityMismatch && (
-            <div className="alert error">
-              This order belongs to a different buyer account. Sign in with the
-              buyer account to make payments.
-            </div>
-          )}
-
-          {isBuyer ? (
-            <div style={{ display: 'grid', gap: 12 }}>
-              {/* Seller / marketplace payment */}
-              <div className="notice">
-                <div className="row-between" style={{ gap: 12, flexWrap: 'wrap' }}>
-                  <div>
-                    <strong>Seller / order payment</strong>
-                    <p className="muted" style={{ marginBottom: 0 }}>
-                      {marketplacePaid
-                        ? 'Payment confirmed.'
-                        : `Amount due: ${money(order.finalPrice)} ETB`}
-                    </p>
-                  </div>
-                  <span className="badge">
-                    {marketplacePaid ? 'PAID' : marketplacePending ? 'PENDING' : 'NOT PAID'}
-                  </span>
-                </div>
-
-                {!marketplacePaid && (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
-                    <select
-                      value={payMethod}
-                      onChange={(event) => setPayMethod(event.target.value)}
-                      disabled={busy === 'pay-marketplace' || busy === 'resume-marketplace'}
-                    >
-                      {PAYMENT_METHODS.map((method) => (
-                        <option key={method.value} value={method.value}>
-                          {method.label}
-                        </option>
-                      ))}
-                    </select>
-
-                    {canCheckMarketplacePayment ? (
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={busy === 'check-marketplace'}
-                        onClick={checkMarketplacePayment}
-                      >
-                        {busy === 'check-marketplace' ? 'Checking…' : 'Check seller payment'}
-                      </button>
-                    ) : canResumeMarketplacePayment ? (
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={busy === 'resume-marketplace'}
-                        onClick={() => resumePayment(marketplacePayment.id, 'resume-marketplace')}
-                      >
-                        {busy === 'resume-marketplace' ? 'Redirecting…' : 'Resume seller payment'}
-                      </button>
-                    ) : canPayMarketplace ? (
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={busy === 'pay-marketplace'}
-                        onClick={payMarketplace}
-                      >
-                        {busy === 'pay-marketplace' ? 'Submitting…' : 'Pay seller / order now'}
-                      </button>
-                    ) : marketplacePending ? (
-                      <span className="muted">A seller payment is being processed. Check the payment status before starting another checkout.</span>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-
-              {/* Inspector payments */}
-              {isAgricultural && inspectionPaymentRows.length > 0 && (
-                <div className="notice">
-                  <strong>Inspection payment(s)</strong>
-                  {inspectionPaymentRows.map((request) => {
-                    const requestPayment =
-                      (request.payments || []).find((payment) =>
-                        payment.type === 'INSPECTOR' &&
-                        ['PENDING', 'PROCESSING'].includes(payment.status)
-                      ) || null;
-                    const paid = (request.payments || []).some((payment) =>
-                      payment.type === 'INSPECTOR' && payment.status === 'PAID'
-                    );
-
-                    return (
-                      <div key={request.id} style={{ marginTop: 10 }}>
-                        <div className="row-between" style={{ gap: 12, flexWrap: 'wrap' }}>
-                          <span>
-                            {request.inspector?.name || 'Inspector'} — {money(request.fee)} ETB
-                          </span>
-                          <span className="badge">
-                            {paid ? 'PAID' : requestPayment ? requestPayment.status : 'NOT PAID'}
-                          </span>
-                        </div>
-
-                        {!paid && (
-                          requestPayment?.status === 'PROCESSING' ? (
-                            <button
-                              type="button"
-                              className="btn btn-primary btn-sm"
-                              style={{ marginTop: 8 }}
-                              disabled={busy === `check-inspection-${request.id}`}
-                              onClick={() => checkPaymentStatus(requestPayment.id, `check-inspection-${request.id}`)}
-                            >
-                              {busy === `check-inspection-${request.id}` ? 'Checking…' : 'Check inspector payment'}
-                            </button>
-                          ) : requestPayment ? (
-                            <button
-                              type="button"
-                              className="btn btn-primary btn-sm"
-                              style={{ marginTop: 8 }}
-                              disabled={busy === `resume-inspection-${request.id}`}
-                              onClick={() => resumePayment(requestPayment.id, `resume-inspection-${request.id}`)}
-                            >
-                              {busy === `resume-inspection-${request.id}` ? 'Redirecting…' : 'Resume inspector payment'}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="btn btn-primary btn-sm"
-                              style={{ marginTop: 8 }}
-                              disabled={busy === `pay-inspection-${request.id}`}
-                              onClick={async () => {
-                                setBusy(`pay-inspection-${request.id}`);
-                                setError('');
-                                try {
-                                  await startChapaPayment({
-                                    type: 'INSPECTOR',
-                                    inspectionRequestId: request.id,
-                                    orderId: order.id,
-                                    amount: Number(request.fee),
-                                    method: payMethod,
-                                  });
-                                  await load({ silent: true });
-                                } catch (err) {
-                                  setError(getError(err, 'Could not start inspector payment'));
-                                } finally {
-                                  setBusy('');
-                                }
-                              }}
-                            >
-                              {busy === `pay-inspection-${request.id}` ? 'Submitting…' : 'Pay inspector now'}
-                            </button>
-                          )
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Hired transporter payment */}
-              {transportJob?.method === 'HIRE_TRANSPORTER' && (
-                <div className="notice">
-                  <div className="row-between" style={{ gap: 12, flexWrap: 'wrap' }}>
-                    <div>
-                      <strong>Hired transporter payment</strong>
-                      <p className="muted" style={{ marginBottom: 0 }}>
-                        {transportJob.agreedAmount != null
-                          ? `Transport fee: ${money(transportJob.agreedAmount)} ETB`
-                          : 'Transport fee has not been agreed yet.'}
-                      </p>
-                    </div>
-                    <span className="badge">
-                      {transportPaid ? 'PAID' : transportProcessing ? 'PROCESSING' : transportPending ? 'PENDING' : 'NOT PAID'}
-                    </span>
-                  </div>
-
-                  {transportJob.status !== 'ACCEPTED' && !transportPaid && !transportPending && (
-                    <p className="muted" style={{ marginTop: 8 }}>
-                      Transporter payment becomes available after the transporter quote is accepted.
-                    </p>
-                  )}
-
-                  {transportJob.status === 'ACCEPTED' && !transportPaid && transportJob.agreedAmount != null && (
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
-                      {!transportPending && (
-                        <select
-                          value={payMethod}
-                          onChange={(event) => setPayMethod(event.target.value)}
-                          disabled={busy === 'pay-transport' || busy === 'resume-transport'}
-                        >
-                          {PAYMENT_METHODS.map((method) => (
-                            <option key={method.value} value={method.value}>
-                              {method.label}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-
-                      {canCheckTransportPayment ? (
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          disabled={busy === 'check-transport'}
-                          onClick={() => checkPaymentStatus(transportPayment.id, 'check-transport')}
-                        >
-                          {busy === 'check-transport' ? 'Checking…' : 'Check transporter payment'}
-                        </button>
-                      ) : canResumeTransportPayment ? (
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          disabled={busy === 'resume-transport'}
-                          onClick={() => resumePayment(transportPayment.id, 'resume-transport')}
-                        >
-                          {busy === 'resume-transport' ? 'Redirecting…' : 'Resume transporter payment'}
-                        </button>
-                      ) : canStartTransportPayment ? (
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          disabled={busy === 'pay-transport'}
-                          onClick={payTransport}
-                        >
-                          {busy === 'pay-transport' ? 'Submitting…' : 'Pay transporter now'}
-                        </button>
-                      ) : transportPending ? (
-                        <span className="muted">A transport payment is pending. Refresh this page after checkout.</span>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-              )}
-
-            </div>
-          ) : (
-            <div className="notice">
-              <p className="muted" style={{ marginBottom: 0 }}>
-                Only the buyer can make seller, inspection, and hired-transporter payments. You can monitor payment status below.
-              </p>
-            </div>
-          )}
-        </div>
+        <PaymentCenter
+          workflowPayments={workflow?.payments}
+          rawPayments={payments}
+          isBuyer={isBuyer}
+          buyerIdentityMismatch={buyerIdentityMismatch}
+          marketplaceBlockedReason={marketplaceBlockedReason}
+          payMethod={payMethod}
+          setPayMethod={setPayMethod}
+          paymentMethods={PAYMENT_METHODS}
+          busy={busy}
+          marketplace={marketplaceObligation}
+          inspections={inspectionPaymentGroups}
+          transport={transportObligation}
+        />
 
         {/* ================================================================== */}
         {/* CONFIRM RECEIPT */}
@@ -2616,58 +2476,9 @@ export default function OrderDetail() {
           </div>
         )}
 
-        {/* ================================================================== */}
-        {/* PAYMENT RECORDS */}
-        {/* ================================================================== */}
-
-        <div className="card">
-          <h2>
-            Payment records
-          </h2>
-
-          {payments.length ? (
-            <div>
-              {payments.map((payment) => (
-                <div
-                  className="payment-row"
-                  key={payment.id}
-                >
-                  <span>
-                    <strong>
-                      {payment.type}
-                    </strong>
-                  </span>
-
-                  <strong>
-                    {money(payment.amount)} ETB
-                  </strong>
-
-                  <span>
-                    {payment.method || '—'}
-                  </span>
-
-                  <span className="badge">
-                    {payment.status}
-                  </span>
-
-                  {payment.reference && (
-                    <span className="muted">
-                      Ref:{' '}
-                      {shortId(
-                        payment.reference
-                      )}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="muted">
-              No payment records attached to this
-              order yet.
-            </p>
-          )}
-        </div>
+        {/* Payment records now live inside the Payment Center's expandable */}
+        {/* "Show payment history" toggle above, instead of a separate */}
+        {/* always-visible card repeating the same rows. */}
 
         {/* ================================================================== */}
         {/* RATING */}
