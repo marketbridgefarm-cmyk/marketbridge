@@ -101,7 +101,7 @@ router.post(
         return res.status(403).json({ error: 'Only the buyer or seller of the order can request inspection' });
       }
 
-      if (order.status === 'CANCELLED' || order.status === 'COMPLETED') {
+      if (['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(order.status)) {
         return res.status(409).json({ error: `Inspection cannot be requested for an order that is ${order.status.toLowerCase()}` });
       }
 
@@ -937,6 +937,16 @@ router.patch(
         });
       }
 
+      const orderForAccept = await prisma.order.findUnique({
+        where: { id: request.orderId },
+        select: { status: true },
+      });
+      if (orderForAccept && ['DISPUTED', 'CANCELLED'].includes(orderForAccept.status)) {
+        return res.status(409).json({
+          error: `This order is ${orderForAccept.status.toLowerCase()}, so this request cannot be accepted.`,
+        });
+      }
+
       const claim = await prisma.inspectionRequest.updateMany({
         where: {
           id: req.params.id,
@@ -1045,6 +1055,16 @@ router.post(
       if (request.status !== 'ACCEPTED') {
         return res.status(400).json({
           error: `Only an accepted inspection can be started. Current status: ${request.status}`,
+        });
+      }
+
+      const orderForStart = await prisma.order.findUnique({
+        where: { id: request.orderId },
+        select: { status: true },
+      });
+      if (orderForStart && ['DISPUTED', 'CANCELLED'].includes(orderForStart.status)) {
+        return res.status(409).json({
+          error: `This order is ${orderForStart.status.toLowerCase()}, so the inspection cannot be started until that is resolved.`,
         });
       }
 
@@ -1453,6 +1473,16 @@ router.post(
       if (request.report) {
         return res.status(409).json({
           error: 'An inspection report has already been submitted',
+        });
+      }
+
+      const orderForReport = await prisma.order.findUnique({
+        where: { id: request.orderId },
+        select: { status: true },
+      });
+      if (orderForReport && ['DISPUTED', 'CANCELLED'].includes(orderForReport.status)) {
+        return res.status(409).json({
+          error: `This order is ${orderForReport.status.toLowerCase()}, so a report cannot be submitted until that is resolved.`,
         });
       }
 
