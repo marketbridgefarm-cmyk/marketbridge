@@ -18,7 +18,6 @@ import TruckOwnerDashboard from './pages/TruckOwnerDashboard.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import AdvertiserDashboard from './pages/AdvertiserDashboard.jsx';
 
-import ArrangeTransport from './pages/ArrangeTransport.jsx';
 import Services from './pages/Services.jsx';
 import ProductMarketplace from './pages/ProductMarketplace.jsx';
 
@@ -96,15 +95,6 @@ export default function App() {
           element={
             <ProtectedRoute>
               <OrderDetail />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/orders/:orderId/transport"
-          element={
-            <ProtectedRoute>
-              <ArrangeTransport />
             </ProtectedRoute>
           }
         />
