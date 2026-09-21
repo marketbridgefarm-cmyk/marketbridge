@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import api from '../api/client';
 import RatingStars from './RatingStars.jsx';
+import Collapsible from './Collapsible.jsx';
 
 // One "who can I rate" target: { toUserId, name, role }
 function buildTargets(order, userId) {
@@ -73,9 +74,13 @@ export default function RatingBox({ order, userId, onRated }) {
 
   const targets = canRateAtAll ? buildTargets(order, userId).filter((t) => !alreadyRated(t.toUserId, t.role)) : [];
 
+  // Collapsed by default once there's nothing left to actually rate — the
+  // remaining content is just a read-only list of past ratings, not
+  // something that needs to occupy space on every visit to the order.
+  const hasPendingAction = targets.length > 0;
+
   return (
-    <div className="card">
-      <h2>Ratings</h2>
+    <Collapsible title="Ratings" defaultOpen={hasPendingAction}>
       {!canRateAtAll && <p className="muted">Ratings open up once this order has been delivered.</p>}
 
       {canRateAtAll && targets.length === 0 && existing.filter((r) => r.fromUserId === userId).length > 0 && (
@@ -101,6 +106,6 @@ export default function RatingBox({ order, userId, onRated }) {
           ))}
         </div>
       )}
-    </div>
+    </Collapsible>
   );
 }

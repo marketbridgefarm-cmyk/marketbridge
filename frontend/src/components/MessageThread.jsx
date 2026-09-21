@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import api from '../api/client';
+import Collapsible from './Collapsible.jsx';
 
 export default function MessageThread({ orderId, messages, counterpartId, counterpartName, currentUserId, onSent }) {
   const [content, setContent] = useState('');
@@ -31,9 +32,13 @@ export default function MessageThread({ orderId, messages, counterpartId, counte
 
   if (!counterpartId) return null;
 
+  const count = messages?.length || 0;
+
   return (
-    <div className="card">
-      <h2>Messages with {counterpartName || 'the other party'}</h2>
+    <Collapsible
+      title={`Messages with ${counterpartName || 'the other party'}`}
+      summary={count > 0 && <span className="muted" style={{ fontSize: 13 }}>{count} message{count === 1 ? '' : 's'}</span>}
+    >
       <div className="message-thread">
         {(!messages || messages.length === 0) && <p className="muted">No messages yet — say hello.</p>}
         {(messages || []).map((m) => (
@@ -56,6 +61,6 @@ export default function MessageThread({ orderId, messages, counterpartId, counte
           {busy ? 'Sending…' : 'Send'}
         </button>
       </div>
-    </div>
+    </Collapsible>
   );
 }
