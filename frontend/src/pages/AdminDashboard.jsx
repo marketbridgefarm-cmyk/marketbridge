@@ -557,12 +557,16 @@ export default function AdminDashboard() {
       ]
     : [];
 
+  // Matches what the backend will actually let an admin resolve
+  // (disputes.js: dispute.status must be OPEN or UNDER_REVIEW) — a
+  // dispute sitting at UNDER_REVIEW shouldn't silently disappear from
+  // this queue.
   const openDisputes = disputes.filter(
-    (d) => d.status === 'OPEN'
+    (d) => d.status === 'OPEN' || d.status === 'UNDER_REVIEW'
   );
 
   const resolvedDisputes = disputes.filter(
-    (d) => d.status !== 'OPEN'
+    (d) => d.status !== 'OPEN' && d.status !== 'UNDER_REVIEW'
   );
 
   const pendingAds = ads.filter(
