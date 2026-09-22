@@ -4,9 +4,9 @@ import React from 'react';
 // REFUND STATUS CARD
 // ============================================================================
 // Follows the payout card. A payout that is HELD gets frozen when a dispute
-// is raised (ON_HOLD_DISPUTE); if the dispute is resolved against the payee
-// the payout is cancelled and the buyer's payment is refunded. This card
-// shows that journey:
+// is raised (ON_HOLD_DISPUTE). If the admin chooses CANCEL, the entire order
+// is cancelled, all unpaid payouts are cancelled, and already-paid buyer
+// payments enter the real refund workflow. This card shows that journey:
 //
 //   Payout held -> Refund requested -> Processing -> Refunded
 //
@@ -61,8 +61,7 @@ export default function RefundStatusCard({
   people,
   isAdmin,
   busy,
-  onProcess,
-  onVerify,
+  onComplete,
   onFail,
 }) {
   const rows = (Array.isArray(refunds) ? refunds : [])
@@ -130,7 +129,7 @@ export default function RefundStatusCard({
   let intro;
   if (rows.length === 0) {
     intro =
-      'A dispute is open, so every payout is frozen. If it is resolved in the buyer’s favour, the payout is cancelled and the buyer’s payment is refunded.';
+      'A dispute is open, so the order is frozen: payments, transport, inspection and payouts cannot proceed until an admin resolves it.';
   } else if (allDone) {
     intro = 'The buyer’s payment has been refunded in full.';
   } else if (anyFailed) {
@@ -140,7 +139,7 @@ export default function RefundStatusCard({
       'The buyer’s payment is being refunded in full. A payout that was already sent to a payee cannot be reversed here and needs follow-up by MarketBridge support.';
   } else {
     intro =
-      'The payout was cancelled and the buyer’s payment is being refunded in full. The refund is complete once it has been processed.';
+      'The disputed order was cancelled. Already-paid buyer payments are being refunded; the refund is complete once Chapa confirms each refund.';
   }
 
   // ---- Table numbers ------------------------------------------------------
@@ -189,7 +188,7 @@ export default function RefundStatusCard({
               const person = people?.[refund.payeeRole] || {};
               const badge = statusBadge(refund.status);
               const currency = refund.currency && refund.currency !== 'ETB' ? refund.currency : null;
-              const open = refund.status === 'REQUESTED' || refund.status === 'PROCESSING';
+              const open = ['REQUESTED', 'PROCESSING', 'FAILED'].includes(refund.status);
               const working = busy === `refund-${refund.id}`;
 
               return (
@@ -222,33 +221,24 @@ export default function RefundStatusCard({
 
                       {isAdmin && open && (
                         <span className="refund-actions">
-                          {refund.status === 'REQUESTED' ? (
-                            <button
-                              type="button"
-                              className="btn btn-primary btn-sm"
-                              disabled={Boolean(busy)}
-                              onClick={() => onProcess(refund)}
-                            >
-                              {working ? 'Submitting…' : 'Process with Chapa'}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="btn btn-primary btn-sm"
-                              disabled={Boolean(busy)}
-                              onClick={() => onVerify(refund)}
-                            >
-                              {working ? 'Checking…' : 'Check Chapa status'}
-                            </button>
-                          )}
                           <button
                             type="button"
-                            className="btn btn-light btn-sm"
+                            className="btn btn-primary btn-sm"
                             disabled={Boolean(busy)}
-                            onClick={() => onFail(refund)}
+                            onClick={() => onComplete(refund)}
                           >
-                            Mark failed
+                            {working ? 'Working…' : refund.status === 'PROCESSING' ? 'Check Chapa status' : refund.status === 'FAILED' ? 'Retry with Chapa' : 'Process with Chapa'}
                           </button>
+                          {refund.status !== 'PROCESSING' && (
+                            <button
+                              type="button"
+                              className="btn btn-light btn-sm"
+                              disabled={Boolean(busy)}
+                              onClick={() => onFail(refund)}
+                            >
+                              Mark failed
+                            </button>
+                          )}
                         </span>
                       )}
                     </div>
