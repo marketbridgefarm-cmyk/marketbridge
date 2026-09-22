@@ -85,7 +85,7 @@ router.post(
         });
 
         return dispute;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       return res.status(201).json({ dispute: result });
     } catch (error) {
@@ -195,7 +195,7 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
       });
 
       return updated;
-    });
+    }, { maxWait: 10000, timeout: 15000 });
 
     return res.json({ dispute: result });
   } catch (error) {
