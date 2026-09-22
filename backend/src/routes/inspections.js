@@ -11,6 +11,29 @@ const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload
 
 const router = express.Router();
 
+// Guards accept/start/report against a narrow race where a dispute or
+// cancellation lands on the order in the moment between an inspector's
+// pre-check and their actual write. A plain SELECT there doesn't help:
+// Postgres only serializes against a concurrent writer for statements that
+// take a lock on the row, so this takes one explicitly (mirroring the
+// implicit lock orderStateMachine's transitionOrderStatus already takes via
+// its own UPDATE) and re-reads status under that lock, inside the same
+// transaction as the inspector's write. Whichever transaction — this one or
+// the dispute/cancel one — asks for the lock first wins; the other blocks
+// until it commits, then sees the real, current status instead of a stale
+// pre-check result.
+async function lockOrderAndAssertNotClosed(tx, orderId, actionLabel) {
+  if (!orderId) return; // pre-order inspections have no order to race against
+  const rows = await tx.$queryRaw`SELECT status FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
+  const status = rows?.[0]?.status;
+  if (status && ['DISPUTED', 'CANCELLED'].includes(status)) {
+    throw Object.assign(
+      new Error(`This order is ${status.toLowerCase()}, so ${actionLabel}.`),
+      { status: 409, code: 'ORDER_NOT_ACTIONABLE' }
+    );
+  }
+}
+
 function validationError(res) {
   const errors = validationResult(res.req);
   if (!errors.isEmpty()) {
@@ -937,6 +960,9 @@ router.patch(
         });
       }
 
+      // Fast, friendly pre-check outside the transaction — not itself the
+      // guard against the race (see lockOrderAndAssertNotClosed below), just
+      // avoids starting a transaction for the common, non-racy case.
       const orderForAccept = await prisma.order.findUnique({
         where: { id: request.orderId },
         select: { status: true },
@@ -947,18 +973,34 @@ router.patch(
         });
       }
 
-      const claim = await prisma.inspectionRequest.updateMany({
-        where: {
-          id: req.params.id,
-          status: 'REQUESTED',
-          inspectorId: null,
-        },
+      const claim = await prisma.$transaction(async (tx) => {
+        await lockOrderAndAssertNotClosed(tx, request.orderId, 'this request cannot be accepted');
 
-        data: {
-          inspectorId: req.user.id,
-          status: 'ACCEPTED',
-          fee: Number(req.body.fee),
-        },
+        const result = await tx.inspectionRequest.updateMany({
+          where: {
+            id: req.params.id,
+            status: 'REQUESTED',
+            inspectorId: null,
+          },
+
+          data: {
+            inspectorId: req.user.id,
+            status: 'ACCEPTED',
+            fee: Number(req.body.fee),
+          },
+        });
+
+        if (result.count === 1) {
+          await recordAuditEvent(tx, {
+            actorId: req.user.id,
+            action: 'INSPECTION_ASSIGNED',
+            resourceType: 'InspectionRequest',
+            resourceId: req.params.id,
+            metadata: { fee: Number(req.body.fee), inspectorId: req.user.id },
+          });
+        }
+
+        return result;
       });
 
       if (claim.count === 0) {
@@ -966,14 +1008,6 @@ router.patch(
           error: 'This request was just claimed by another inspector',
         });
       }
-
-      await recordAuditEvent(prisma, {
-        actorId: req.user.id,
-        action: 'INSPECTION_ASSIGNED',
-        resourceType: 'InspectionRequest',
-        resourceId: req.params.id,
-        metadata: { fee: Number(req.body.fee), inspectorId: req.user.id },
-      });
 
       const updated = await prisma.inspectionRequest.findUnique({
         where: {
@@ -1015,6 +1049,10 @@ router.patch(
       });
     } catch (error) {
       req.log.error({ err: error }, 'ACCEPT INSPECTION ERROR:');
+
+      if (error.code === 'ORDER_NOT_ACTIONABLE') {
+        return res.status(error.status || 409).json({ error: error.message });
+      }
 
       return res.status(500).json({
         error: 'Could not accept inspection request',
@@ -1058,6 +1096,9 @@ router.post(
         });
       }
 
+      // Fast, friendly pre-check outside the transaction — not itself the
+      // guard against the race (see lockOrderAndAssertNotClosed below), just
+      // avoids starting a transaction for the common, non-racy case.
       const orderForStart = await prisma.order.findUnique({
         where: { id: request.orderId },
         select: { status: true },
@@ -1082,6 +1123,8 @@ router.post(
       }
 
       const result = await prisma.$transaction(async (tx) => {
+        await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection cannot be started until that is resolved');
+
         const updatedCount = await tx.inspectionRequest.updateMany({
           where: {
             id: request.id,
@@ -1168,6 +1211,10 @@ router.post(
       });
     } catch (error) {
       req.log.error({ err: error }, 'START INSPECTION ERROR:');
+
+      if (error.code === 'ORDER_NOT_ACTIONABLE') {
+        return res.status(error.status || 409).json({ error: error.message });
+      }
 
       return res.status(500).json({
         error: 'Could not start inspection',
@@ -1476,6 +1523,9 @@ router.post(
         });
       }
 
+      // Fast, friendly pre-check outside the transaction — not itself the
+      // guard against the race (see lockOrderAndAssertNotClosed below), just
+      // avoids starting a transaction for the common, non-racy case.
       const orderForReport = await prisma.order.findUnique({
         where: { id: request.orderId },
         select: { status: true },
@@ -1505,6 +1555,11 @@ router.post(
       // even though the operation is healthy. Keep the entire submission
       // atomic, but give this workflow enough time to finish.
       const report = await prisma.$transaction(async (tx) => {
+        // Real guard against the dispute/cancellation race — takes a row
+        // lock on the order, so it can't land between this check and the
+        // report actually committing below.
+        await lockOrderAndAssertNotClosed(tx, request.orderId, 'a report cannot be submitted until that is resolved');
+
         const createdReport = await tx.inspectionReport.create({
           data: {
             requestId: request.id,
@@ -1592,6 +1647,10 @@ router.post(
         });
       }
 
+      if (error.code === 'ORDER_NOT_ACTIONABLE') {
+        return res.status(error.status || 409).json({ error: error.message });
+      }
+
       req.log.error({ err: error }, 'CREATE INSPECTION REPORT ERROR:');
 
       return res.status(500).json({
@@ -1608,9 +1667,3 @@ router.post(
 );
 
 module.exports = router;
-
-
-
-
-
-
