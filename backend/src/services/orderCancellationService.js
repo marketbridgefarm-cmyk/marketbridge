@@ -61,13 +61,32 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
     });
   }
 
-  // Cascade-cancel a transport job that hasn't moved yet.
+  // Freeze/cancel every operational sub-resource with the order. This is
+  // especially important when cancellation is the outcome of a dispute: an
+  // inspector must not be able to continue an inspection, a truck owner must
+  // not continue transport proceedings, and a quote must not be accepted
+  // after the buyer's transaction has been unwound.
   if (order.transportJob && !['DELIVERED', 'CANCELLED'].includes(order.transportJob.status)) {
     await tx.transportJob.update({
       where: { id: order.transportJob.id },
       data: { status: 'CANCELLED' },
     });
   }
+
+  await tx.inspectionRequest.updateMany({
+    where: { orderId: order.id, status: { not: 'CANCELLED' } },
+    data: { status: 'CANCELLED' },
+  });
+
+  // Close any open inspection negotiations so they cannot be accepted after
+  // the order has been cancelled.
+  await tx.inspectionQuote.updateMany({
+    where: {
+      inspectionRequest: { orderId: order.id },
+      status: { in: ['PENDING', 'COUNTERED'] },
+    },
+    data: { status: 'REJECTED' },
+  });
 
   // The buyer is about to be refunded, so nobody may still be paid from this
   // order: cancel every payout that has not actually been paid out.

@@ -607,15 +607,16 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 10. Raise a dispute — available to any participant on an active order
-  // (mirrors POST /disputes, which accepts buyer, seller, or the assigned
-  // truck owner as a participant).
+  // 10. Raise a dispute — available to every participant on an active order,
+  // including the assigned inspector. The dispute endpoint uses the same
+  // participant model, so the inspector cannot be stranded outside the
+  // dispute workflow.
   if (!terminal) {
     push({
       code: 'RAISE_DISPUTE',
       label: 'Raise a dispute',
       actorRole: 'BUYER_OR_SELLER',
-      viewerCanPerform: isBuyer || isSeller || isTruckOwner,
+      viewerCanPerform: isBuyer || isSeller || isTruckOwner || isInspector,
       ready: true,
       route: { method: 'POST', path: '/disputes', body: { orderId: order.id } },
     });

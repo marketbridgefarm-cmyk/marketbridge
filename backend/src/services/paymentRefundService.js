@@ -3,191 +3,36 @@
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('./orderEventService');
 const { assertTransition } = require('./paymentStateMachine');
-const { getAdapter } = require('./paymentProviders');
+const chapa = require('../config/chapa');
 
+function providerForPayment(payment) {
+  const provider = String(payment?.provider || '').toUpperCase();
+  if (provider === 'CHAPA' || provider === 'CHAPA_TELEBIRR') return provider;
 
-function isProviderDefinitiveFailure(error) {
-  const status = Number(error?.status || 0);
-  return status >= 400 && status < 500 && status !== 408 && status !== 409 && status !== 429;
+  const method = String(payment?.method || '').toUpperCase();
+  if (method === 'QR') return 'CHAPA';
+  if (method === 'TELEBIRR') return 'CHAPA_TELEBIRR';
+  return null;
 }
 
-/**
- * Submit a requested refund to the configured provider.
- *
- * This deliberately does NOT hold a Prisma transaction open while waiting for
- * Chapa. The refund row is atomically claimed first, then the provider call is
- * made. Unknown/network/5xx outcomes remain PROCESSING because Chapa may have
- * accepted the refund even though our HTTP request timed out.
- */
-async function processRefund({ refundId, actorId }) {
-  const prisma = require('../config/db');
-  const refund = await prisma.paymentRefund.findUnique({
-    where: { id: refundId },
-    include: { payment: true },
-  });
-
-  if (!refund) throw Object.assign(new Error('Refund request not found'), { status: 404 });
-  if (refund.status === 'COMPLETED') return refund;
-  if (!['REQUESTED', 'PROCESSING'].includes(refund.status)) {
-    throw Object.assign(new Error('Refund request is not processable'), { status: 409 });
-  }
-
-  if (!refund.payment?.chapaTxRef) {
-    throw Object.assign(
-      new Error('This payment has no stored Chapa transaction reference. It cannot be safely refunded automatically.'),
-      { status: 409, code: 'CHAPA_TX_REF_MISSING' }
-    );
-  }
-
-  const adapter = getAdapter(refund.payment.method);
-  if (typeof adapter.refund !== 'function') {
-    throw Object.assign(new Error(`Refunds are not configured for payment method ${refund.payment.method}`), { status: 503, code: 'REFUND_PROVIDER_NOT_CONFIGURED' });
-  }
-
-  // If a provider refund id already exists, never submit a second refund.
-  if (refund.providerRefundId) {
-    return syncRefundStatus({ refundId, actorId });
-  }
-
-  const claimed = await prisma.paymentRefund.updateMany({
-    where: { id: refundId, status: 'REQUESTED', providerRefundId: null },
-    data: { status: 'PROCESSING', failureReason: null },
-  });
-
-  if (claimed.count !== 1) {
-    const fresh = await prisma.paymentRefund.findUnique({ where: { id: refundId } });
-    if (!fresh) throw Object.assign(new Error('Refund request not found'), { status: 404 });
-    if (fresh.status === 'COMPLETED') return fresh;
-    if (fresh.providerRefundId) return syncRefundStatus({ refundId, actorId });
-    if (fresh.status !== 'PROCESSING') throw Object.assign(new Error('Refund is already being handled'), { status: 409 });
-    return fresh;
-  }
-
-  const reference = `MB-REFUND-${refund.id}`;
-  let result;
-  try {
-    result = await adapter.refund({
-      txRef: refund.payment.chapaTxRef,
-      amount: refund.amount,
-      reason: refund.reason || 'MarketBridge refund',
-      reference,
-      meta: {
-        marketbridge_refund_id: refund.id,
-        marketbridge_payment_id: refund.paymentId,
-      },
-    });
-  } catch (error) {
-    if (isProviderDefinitiveFailure(error)) {
-      return failRefund(prisma, {
-        refundId,
-        failureReason: error.message || 'Chapa rejected the refund request',
-        actorId,
-      });
-    }
-
-    // Unknown outcome: do not claim failure. The provider may have processed it.
-    return prisma.paymentRefund.findUnique({ where: { id: refundId } });
-  }
-
-  const providerRefundId = result.refId;
-  const providerStatus = result.status;
-
-  if (providerStatus === 'refunded') {
-    return completeRefund(prisma, {
-      refundId,
-      provider: adapter.provider,
-      providerRefundId,
-      actorId,
-      note: 'Chapa confirmed the refund during submission.',
-    });
-  }
-
-  if (providerStatus === 'reversed') {
-    return failRefund(prisma, {
-      refundId,
-      failureReason: 'Chapa reported the refund as reversed.',
-      actorId,
-    });
-  }
-
-  const updated = await prisma.paymentRefund.updateMany({
-    where: { id: refundId, status: 'PROCESSING' },
-    data: {
-      status: 'PROCESSING',
-      provider: adapter.provider,
-      providerRefundId,
-      failureReason: null,
-    },
-  });
-
-  await recordAuditEvent(prisma, {
-    actorId: actorId || null,
-    action: 'PAYMENT_REFUND_SUBMITTED',
-    resourceType: 'PaymentRefund',
-    resourceId: refundId,
-    metadata: {
-      paymentId: refund.paymentId,
-      provider: adapter.provider,
-      providerRefundId,
-      providerStatus,
-      reference,
-      changed: updated.count === 1,
-    },
-  });
-
-  return prisma.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
-}
-
-/** Verify an asynchronous provider refund and synchronize the local ledger. */
-async function syncRefundStatus({ refundId, actorId }) {
-  const prisma = require('../config/db');
-  const refund = await prisma.paymentRefund.findUnique({
-    where: { id: refundId },
-    include: { payment: true },
-  });
-  if (!refund) throw Object.assign(new Error('Refund request not found'), { status: 404 });
-  if (refund.status === 'COMPLETED') return refund;
-  if (!refund.providerRefundId) {
-    throw Object.assign(new Error('No Chapa refund reference is stored yet'), { status: 409, code: 'CHAPA_REFUND_ID_MISSING' });
-  }
-
-  const adapter = getAdapter(refund.payment.method);
-  if (typeof adapter.verifyRefund !== 'function') {
-    throw Object.assign(new Error(`Refund verification is not configured for payment method ${refund.payment.method}`), { status: 503, code: 'REFUND_VERIFICATION_NOT_CONFIGURED' });
-  }
-
-  const result = await adapter.verifyRefund(refund.providerRefundId);
-
-  if (result.status === 'refunded') {
-    return completeRefund(prisma, {
-      refundId,
-      provider: adapter.provider,
-      providerRefundId: refund.providerRefundId,
-      actorId,
-      note: 'Chapa verification confirmed the refund.',
-    });
-  }
-
-  if (result.status === 'reversed') {
-    return failRefund(prisma, {
-      refundId,
-      failureReason: 'Chapa reported the refund as reversed.',
-      actorId,
-    });
-  }
-
-  await prisma.paymentRefund.updateMany({
-    where: { id: refundId, status: { in: ['REQUESTED', 'PROCESSING'] } },
-    data: { status: 'PROCESSING', provider: adapter.provider },
-  });
-
-  return prisma.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
+function refundReference(refundId) {
+  // Chapa requires this reference to be unique within the merchant account.
+  // Keeping it deterministic makes retries safe to reason about.
+  return `MB-REFUND-${refundId}`;
 }
 
 async function requestRefund(tx, { paymentId, amount, reason, requestedById }) {
-  const payment = await tx.payment.findUnique({ where: { id: paymentId }, select: { id: true, amount: true, currency: true, status: true, orderId: true, type: true } });
+  const payment = await tx.payment.findUnique({
+    where: { id: paymentId },
+    select: {
+      id: true, amount: true, currency: true, status: true,
+      orderId: true, type: true,
+    },
+  });
   if (!payment) throw Object.assign(new Error('Payment not found'), { status: 404 });
-  if (!['PAID', 'REFUND_PENDING'].includes(payment.status)) throw Object.assign(new Error('Only PAID or retryable REFUND_PENDING payments can be refunded'), { status: 409 });
+  if (!['PAID', 'REFUND_PENDING'].includes(payment.status)) {
+    throw Object.assign(new Error('Only PAID or retryable REFUND_PENDING payments can be refunded'), { status: 409 });
+  }
 
   const refundAmount = Number(amount ?? payment.amount);
   if (!Number.isFinite(refundAmount) || refundAmount <= 0 || Math.abs(refundAmount - Number(payment.amount)) >= 0.01) {
@@ -200,9 +45,6 @@ async function requestRefund(tx, { paymentId, amount, reason, requestedById }) {
   });
   if (existing) return existing;
 
-  // A failed provider attempt leaves the payment in REFUND_PENDING. Allow
-  // a retry only when the latest refund record is FAILED; reset the payment
-  // to PAID atomically so concurrent retries cannot create two claims.
   if (payment.status === 'REFUND_PENDING') {
     const failed = await tx.paymentRefund.findFirst({
       where: { paymentId, status: 'FAILED' },
@@ -219,12 +61,6 @@ async function requestRefund(tx, { paymentId, amount, reason, requestedById }) {
 
   assertTransition(payment.status, 'REFUND_PENDING');
 
-  // Atomic claim: the findFirst above is a plain SELECT, so two concurrent
-  // callers (e.g. a dispute resolution and an order cancellation landing on
-  // the same payment at the same moment) could both see "no existing
-  // refund" before either commits. Only one updateMany can actually match
-  // status: 'PAID' and win; the loser falls through to the re-check below
-  // instead of creating a second PaymentRefund row for the same payment.
   const claimed = await tx.payment.updateMany({
     where: { id: payment.id, status: 'PAID' },
     data: { status: 'REFUND_PENDING' },
@@ -239,7 +75,13 @@ async function requestRefund(tx, { paymentId, amount, reason, requestedById }) {
   }
 
   const refund = await tx.paymentRefund.create({
-    data: { paymentId, amount: refundAmount, currency: payment.currency, reason: reason || null, requestedById: requestedById || null },
+    data: {
+      paymentId,
+      amount: refundAmount,
+      currency: payment.currency,
+      reason: reason || null,
+      requestedById: requestedById || null,
+    },
   });
 
   if (payment.orderId) {
@@ -262,139 +104,274 @@ async function requestRefund(tx, { paymentId, amount, reason, requestedById }) {
   return refund;
 }
 
-async function completeRefund(tx, { refundId, provider, providerRefundId, actorId, note }) {
-  const refund = await tx.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
-  if (!refund) throw Object.assign(new Error('Refund request not found'), { status: 404 });
-  if (refund.status === 'COMPLETED') return refund;
-  if (!['REQUESTED', 'PROCESSING'].includes(refund.status)) throw Object.assign(new Error('Refund request is not completable'), { status: 409 });
-
-  const payment = refund.payment;
-  if (Math.abs(Number(refund.amount) - Number(payment.amount)) >= 0.01) {
-    throw Object.assign(new Error('Refund amount must equal payment amount'), { status: 409 });
-  }
-
-  assertTransition(payment.status, 'REFUNDED');
-
-  // Atomic claim, same reasoning as requestRefund above: the checks so far
-  // are plain SELECTs. This updateMany is what actually decides which of
-  // two concurrent completeRefund calls (double-click, two admins, a retry
-  // racing the original) gets to complete it and fire the one-time side
-  // effects below. The loser returns the already-completed row instead of
-  // re-running them.
-  const claimed = await tx.paymentRefund.updateMany({
-    where: { id: refund.id, status: { in: ['REQUESTED', 'PROCESSING'] } },
-    data: { status: 'COMPLETED', provider: provider || refund.provider || null, providerRefundId: providerRefundId || refund.providerRefundId || null, completedAt: new Date(), failureReason: null },
-  });
-  if (claimed.count !== 1) {
-    return tx.paymentRefund.findUnique({ where: { id: refund.id }, include: { payment: true } });
-  }
-
-  await tx.payment.update({ where: { id: payment.id }, data: { status: 'REFUNDED' } });
-
-  if (payment.orderId) {
-    await recordOrderEvent(tx, {
-      orderId: payment.orderId,
-      actorId: actorId || null,
-      type: 'PAYMENT_REFUNDED',
-      metadata: { paymentId: payment.id, paymentType: payment.type, amount: String(refund.amount), refundId: refund.id },
+/**
+ * Submit a requested refund to Chapa. The external API call intentionally
+ * happens outside a Prisma transaction. The database first claims the row as
+ * PROCESSING, then Chapa is called, then the provider reference is persisted.
+ */
+async function processRefund({ refundId, actorId, note }) {
+  const claimed = await require('../config/db').$transaction(async (tx) => {
+    const refund = await tx.paymentRefund.findUnique({
+      where: { id: refundId },
+      include: { payment: true },
     });
-  }
+    if (!refund) throw Object.assign(new Error('Refund request not found'), { status: 404 });
+    if (refund.status === 'COMPLETED') return { refund, alreadyCompleted: true };
+    if (refund.status === 'PROCESSING') return { refund, alreadyProcessing: true };
+    if (refund.status !== 'REQUESTED') {
+      throw Object.assign(new Error('Only REQUESTED refunds can be submitted to Chapa'), { status: 409 });
+    }
 
-  await recordAuditEvent(tx, {
-    actorId: actorId || null,
-    action: 'PAYMENT_REFUND_COMPLETED',
-    resourceType: 'PaymentRefund',
-    resourceId: refund.id,
-    metadata: { paymentId: payment.id, amount: refund.amount, provider: provider || null, providerRefundId: providerRefundId || null, note: note || null },
+    const provider = providerForPayment(refund.payment);
+    if (!provider) {
+      throw Object.assign(new Error(`No live refund adapter is configured for payment provider ${refund.payment.provider || refund.payment.method}`), { status: 503, code: 'REFUND_PROVIDER_NOT_CONFIGURED' });
+    }
+    if (!refund.payment.chapaTxRef) {
+      throw Object.assign(new Error('Original Chapa transaction reference is missing; this payment cannot be safely refunded automatically.'), { status: 409, code: 'CHAPA_TX_REF_MISSING' });
+    }
+
+    // Order-linked refunds are only allowed after the order itself has been
+    // cancelled. An open DISPUTED/active order must never be refunded while
+    // its workflow can still resume; otherwise a refund could race with a
+    // payout release or a new payment. Dispute resolution therefore first
+    // transitions the order to CANCELLED and only then processes its refund.
+    if (refund.payment.orderId) {
+      const order = await tx.order.findUnique({
+        where: { id: refund.payment.orderId },
+        select: { status: true },
+      });
+      if (order && order.status !== 'CANCELLED') {
+        throw Object.assign(
+          new Error(`Order is ${order.status}; refund processing is blocked until the order is cancelled`),
+          { status: 409, code: 'REFUND_BLOCKED_ORDER_ACTIVE' }
+        );
+      }
+    }
+
+    const result = await tx.paymentRefund.updateMany({
+      where: { id: refund.id, status: 'REQUESTED' },
+      data: { status: 'PROCESSING', provider, failureReason: null },
+    });
+    if (result.count !== 1) {
+      return { refund: await tx.paymentRefund.findUnique({ where: { id: refund.id }, include: { payment: true } }), alreadyProcessing: true };
+    }
+
+    return {
+      refund: { ...refund, status: 'PROCESSING', provider },
+      provider,
+      txRef: refund.payment.chapaTxRef,
+    };
   });
 
-  return tx.paymentRefund.findUnique({ where: { id: refund.id }, include: { payment: true } });
+  if (claimed.alreadyCompleted || claimed.alreadyProcessing) return claimed.refund;
+
+  try {
+    const result = await chapa.refundTransaction({
+      txRef: claimed.txRef,
+      amount: claimed.refund.amount,
+      reason: claimed.refund.reason || 'MarketBridge refund',
+      reference: refundReference(claimed.refund.id),
+      meta: {
+        marketbridge_refund_id: claimed.refund.id,
+        marketbridge_payment_id: claimed.refund.paymentId,
+      },
+    });
+
+    const prisma = require('../config/db');
+    const updated = await prisma.paymentRefund.updateMany({
+      where: { id: claimed.refund.id, status: 'PROCESSING' },
+      data: {
+        provider: claimed.provider,
+        providerRefundId: result.refId,
+        failureReason: null,
+      },
+    });
+
+    if (updated.count !== 1) {
+      return prisma.paymentRefund.findUnique({ where: { id: claimed.refund.id }, include: { payment: true } });
+    }
+
+    await recordAuditEvent(prisma, {
+      actorId: actorId || null,
+      action: 'PAYMENT_REFUND_SUBMITTED',
+      resourceType: 'PaymentRefund',
+      resourceId: claimed.refund.id,
+      metadata: { paymentId: claimed.refund.paymentId, provider: claimed.provider, providerRefundId: result.refId, providerStatus: result.status, note: note || null },
+    });
+
+    return prisma.paymentRefund.findUnique({ where: { id: claimed.refund.id }, include: { payment: true } });
+  } catch (error) {
+    const prisma = require('../config/db');
+    // A timeout/5xx is ambiguous: Chapa may have accepted the refund even if
+    // MarketBridge did not receive the response. Never turn an uncertain
+    // provider result into FAILED; keep PROCESSING and require verification.
+    if (Number(error.status) >= 400 && Number(error.status) < 500) {
+      await failRefund({ refundId: claimed.refund.id, failureReason: error.message, actorId, allowProcessing: true });
+    } else {
+      await prisma.paymentRefund.updateMany({
+        where: { id: claimed.refund.id, status: 'PROCESSING' },
+        data: { failureReason: `Provider response uncertain: ${error.message}` },
+      });
+    }
+    throw error;
+  }
 }
 
-async function failRefund(tx, { refundId, failureReason, actorId }) {
-  const refund = await tx.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
+async function finalizeRefund({ refundId, actorId, note, providerStatus }) {
+  const prisma = require('../config/db');
+  const refund = await prisma.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
+  if (!refund) throw Object.assign(new Error('Refund request not found'), { status: 404 });
+  if (refund.status === 'COMPLETED') return refund;
+  if (providerStatus !== 'refunded') {
+    throw Object.assign(new Error(`Refund is not complete at Chapa (status: ${providerStatus || 'unknown'})`), { status: 409 });
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const fresh = await tx.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
+    if (!fresh) throw Object.assign(new Error('Refund request not found'), { status: 404 });
+    if (fresh.status === 'COMPLETED') return fresh;
+    if (!['REQUESTED', 'PROCESSING'].includes(fresh.status)) {
+      throw Object.assign(new Error(`Refund is ${fresh.status} and cannot be completed`), { status: 409 });
+    }
+
+    if (fresh.payment.orderId) {
+      const order = await tx.order.findUnique({
+        where: { id: fresh.payment.orderId },
+        select: { status: true },
+      });
+      if (order && order.status !== 'CANCELLED') {
+        throw Object.assign(
+          new Error(`Order is ${order.status}; refund completion is blocked until the order is cancelled`),
+          { status: 409, code: 'REFUND_BLOCKED_ORDER_ACTIVE' }
+        );
+      }
+    }
+
+    assertTransition(fresh.payment.status, 'REFUNDED');
+    const claimed = await tx.paymentRefund.updateMany({
+      where: { id: refundId, status: { in: ['REQUESTED', 'PROCESSING'] } },
+      data: { status: 'COMPLETED', completedAt: new Date(), failureReason: null },
+    });
+    if (claimed.count !== 1) return tx.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
+
+    await tx.payment.update({ where: { id: fresh.payment.id }, data: { status: 'REFUNDED' } });
+
+    if (fresh.payment.orderId) {
+      await recordOrderEvent(tx, {
+        orderId: fresh.payment.orderId,
+        actorId: actorId || null,
+        type: 'PAYMENT_REFUNDED',
+        metadata: { paymentId: fresh.payment.id, paymentType: fresh.payment.type, amount: String(fresh.amount), refundId: fresh.id, provider: fresh.provider, providerRefundId: fresh.providerRefundId },
+      });
+    }
+
+    await recordAuditEvent(tx, {
+      actorId: actorId || null,
+      action: 'PAYMENT_REFUND_COMPLETED',
+      resourceType: 'PaymentRefund',
+      resourceId: refundId,
+      metadata: { paymentId: fresh.payment.id, amount: String(fresh.amount), provider: fresh.provider, providerRefundId: fresh.providerRefundId, note: note || null },
+    });
+
+    return tx.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
+  });
+}
+
+async function verifyAndFinalizeRefund({ refundId, actorId, note }) {
+  const prisma = require('../config/db');
+  const refund = await prisma.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
+  if (!refund) throw Object.assign(new Error('Refund request not found'), { status: 404 });
+  if (refund.status === 'COMPLETED') return { refund, providerStatus: 'refunded' };
+  if (!refund.providerRefundId) {
+    throw Object.assign(new Error('Chapa refund reference is not available yet. The refund request may still be awaiting a provider response.'), { status: 409, code: 'CHAPA_REFUND_REFERENCE_MISSING' });
+  }
+
+  const result = await chapa.verifyRefund(refund.providerRefundId);
+  if (result.status === 'refunded') {
+    return { refund: await finalizeRefund({ refundId, actorId, note, providerStatus: 'refunded' }), providerStatus: result.status, raw: result.raw };
+  }
+
+  if (result.status === 'reversed') {
+    const failed = await failRefund({ refundId, failureReason: 'Chapa reversed the refund after processing.', actorId, allowProcessing: true });
+    return { refund: failed, providerStatus: result.status, raw: result.raw };
+  }
+
+  await prisma.paymentRefund.updateMany({
+    where: { id: refundId, status: { in: ['REQUESTED', 'PROCESSING'] } },
+    data: { status: 'PROCESSING', failureReason: null },
+  });
+  return {
+    refund: await prisma.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } }),
+    providerStatus: result.status,
+    raw: result.raw,
+  };
+}
+
+async function failRefund({ refundId, failureReason, actorId, allowProcessing = false }) {
+  const prisma = require('../config/db');
+  const refund = await prisma.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
   if (!refund) throw Object.assign(new Error('Refund request not found'), { status: 404 });
   if (refund.status === 'COMPLETED') throw Object.assign(new Error('Completed refund cannot be failed'), { status: 409 });
+  if (refund.status === 'PROCESSING' && !allowProcessing) {
+    throw Object.assign(new Error('A refund submitted to Chapa cannot be manually failed. Verify the provider status instead.'), { status: 409, code: 'REFUND_PROCESSING_PROVIDER_CONTROLLED' });
+  }
 
-  // Note: failing a refund does NOT move Payment.status anywhere — it stays
-  // wherever it was (typically REFUND_PENDING), which is what allows a
-  // retry via another requestRefund/completeRefund attempt after a
-  // provider-side failure. There is deliberately no assertTransition call
-  // here: this function only ever writes PaymentRefund.status, never
-  // Payment.status, so there's no payment transition to validate.
-
-  // Atomic claim: guards against racing a concurrent completeRefund (or
-  // another failRefund) the same way requestRefund/completeRefund do above
-  // — only the winner fires the audit/order-event side effects below.
-  const claimed = await tx.paymentRefund.updateMany({
+  const claimed = await prisma.paymentRefund.updateMany({
     where: { id: refundId, status: { not: 'COMPLETED' } },
     data: { status: 'FAILED', failureReason: failureReason || 'Provider refund failed' },
   });
-  if (claimed.count !== 1) {
-    const fresh = await tx.paymentRefund.findUnique({ where: { id: refundId } });
-    if (fresh?.status === 'COMPLETED') {
-      throw Object.assign(new Error('Completed refund cannot be failed'), { status: 409 });
-    }
-    return fresh;
-  }
+  if (claimed.count !== 1) return prisma.paymentRefund.findUnique({ where: { id: refundId } });
 
-  // Return the payment to PAID only if it is still awaiting this refund.
-  // This makes a provider failure retryable without reopening a completed or
-  // otherwise reconciled payment.
   if (refund.payment?.status === 'REFUND_PENDING') {
-    await tx.payment.updateMany({
-      where: { id: refund.payment.id, status: 'REFUND_PENDING' },
-      data: { status: 'PAID' },
-    });
+    await prisma.payment.updateMany({ where: { id: refund.payment.id, status: 'REFUND_PENDING' }, data: { status: 'PAID' } });
   }
 
-  const updated = await tx.paymentRefund.findUnique({ where: { id: refundId } });
+  const updated = await prisma.paymentRefund.findUnique({ where: { id: refundId } });
   if (refund.payment?.orderId) {
-    await recordOrderEvent(tx, {
+    await recordOrderEvent(prisma, {
       orderId: refund.payment.orderId,
       actorId: actorId || null,
       type: 'PAYMENT_REFUND_FAILED',
       metadata: { paymentId: refund.payment.id, paymentType: refund.payment.type, refundId: refund.id, failureReason: failureReason || null },
     });
   }
-  await recordAuditEvent(tx, { actorId: actorId || null, action: 'PAYMENT_REFUND_FAILED', resourceType: 'PaymentRefund', resourceId: refundId, metadata: { failureReason: failureReason || null } });
+  await recordAuditEvent(prisma, { actorId: actorId || null, action: 'PAYMENT_REFUND_FAILED', resourceType: 'PaymentRefund', resourceId: refundId, metadata: { failureReason: failureReason || null } });
   return updated;
 }
 
-/**
- * Request the (full) refund for the payment behind each of the given
- * payouts. Used when payouts are CANCELLED because a dispute was resolved
- * against the payee — cancelling the payee's payout without also refunding
- * the buyer would leave the buyer's money with nobody.
- *
- * Safe to call with payouts whose payment is no longer PAID (a refund is
- * already pending/completed, or the payment never settled): those are
- * skipped rather than throwing, so one already-refunded payment can't block
- * the rest of the dispute resolution. requestRefund itself stays idempotent
- * for anything still PAID.
- */
+async function retryRefund({ refundId, actorId, note }) {
+  const prisma = require('../config/db');
+  const previous = await prisma.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
+  if (!previous) throw Object.assign(new Error('Refund request not found'), { status: 404 });
+  if (previous.status !== 'FAILED') throw Object.assign(new Error('Only FAILED refunds can be retried'), { status: 409 });
+
+  const refund = await prisma.$transaction((tx) => requestRefund(tx, {
+    paymentId: previous.paymentId,
+    amount: previous.amount,
+    reason: note || previous.reason || 'Retry after failed Chapa refund',
+    requestedById: actorId,
+  }));
+
+  return processRefund({ refundId: refund.id, actorId, note: note || 'Retry after failed Chapa refund' });
+}
+
 async function requestRefundsForPayouts(tx, { payouts, reason, requestedById }) {
   const refunds = [];
-
   for (const payout of payouts || []) {
     if (!payout?.paymentId) continue;
-
-    const payment = await tx.payment.findUnique({
-      where: { id: payout.paymentId },
-      select: { id: true, status: true },
-    });
+    const payment = await tx.payment.findUnique({ where: { id: payout.paymentId }, select: { id: true, status: true } });
     if (!payment || payment.status !== 'PAID') continue;
-
-    refunds.push(
-      await requestRefund(tx, {
-        paymentId: payment.id,
-        reason,
-        requestedById,
-      })
-    );
+    refunds.push(await requestRefund(tx, { paymentId: payment.id, reason, requestedById }));
   }
-
   return refunds;
 }
 
-module.exports = { requestRefund, processRefund, syncRefundStatus, completeRefund, failRefund, requestRefundsForPayouts };
+module.exports = {
+  requestRefund,
+  processRefund,
+  verifyAndFinalizeRefund,
+  finalizeRefund,
+  retryRefund,
+  failRefund,
+  requestRefundsForPayouts,
+};
