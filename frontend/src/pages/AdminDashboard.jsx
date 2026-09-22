@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
@@ -26,490 +20,294 @@ const ROLE_OPTIONS = [
 const ACCOUNT_STATUS_OPTIONS = ['ACTIVE', 'SUSPENDED'];
 
 const ADMIN_STYLES = `
-  .admin-redesign {
-    --admin-bg: #f5f7fb;
-    --admin-surface: rgba(255,255,255,.94);
-    --admin-surface-strong: #ffffff;
-    --admin-border: rgba(15,23,42,.09);
-    --admin-text: #172033;
-    --admin-muted: #687386;
-    --admin-primary: #176b4d;
-    --admin-primary-dark: #0e513a;
-    --admin-primary-soft: rgba(23,107,77,.10);
-    --admin-blue: #3567c8;
-    --admin-blue-soft: rgba(53,103,200,.10);
-    --admin-warning: #a86d08;
-    --admin-warning-soft: rgba(168,109,8,.11);
-    --admin-danger: #bd3c3c;
-    --admin-danger-soft: rgba(189,60,60,.10);
-    --admin-shadow: 0 16px 45px rgba(15,23,42,.07);
-    --admin-shadow-soft: 0 7px 24px rgba(15,23,42,.055);
-    --admin-radius: 20px;
-    --admin-radius-sm: 13px;
-
-    width: 100%;
-    min-height: 100vh;
-    padding: 28px;
-    box-sizing: border-box;
-    background:
-      radial-gradient(circle at 8% 0%, rgba(23,107,77,.07), transparent 28rem),
-      radial-gradient(circle at 100% 5%, rgba(53,103,200,.06), transparent 25rem),
-      var(--admin-bg);
-    color: var(--admin-text);
+  .admin-control-center {
+    --ac-bg: #f5f7fb;
+    --ac-surface: rgba(255,255,255,.94);
+    --ac-surface-soft: #f8fafc;
+    --ac-border: rgba(15,23,42,.09);
+    --ac-border-strong: rgba(15,23,42,.14);
+    --ac-text: #0f172a;
+    --ac-muted: #64748b;
+    --ac-primary: #166534;
+    --ac-primary-2: #15803d;
+    --ac-primary-soft: #ecfdf3;
+    --ac-warning: #b45309;
+    --ac-warning-soft: #fff7ed;
+    --ac-danger: #b91c1c;
+    --ac-danger-soft: #fef2f2;
+    --ac-info: #1d4ed8;
+    --ac-info-soft: #eff6ff;
+    color: var(--ac-text);
   }
 
-  .admin-redesign *,
-  .admin-redesign *::before,
-  .admin-redesign *::after {
+  .admin-control-center *,
+  .admin-control-center *::before,
+  .admin-control-center *::after {
     box-sizing: border-box;
   }
 
-  .admin-shell {
-    width: min(1500px, 100%);
-    margin: 0 auto;
-  }
-
-  .admin-hero {
+  .ac-hero {
     position: relative;
     overflow: hidden;
     border: 1px solid rgba(255,255,255,.7);
     border-radius: 28px;
     padding: 28px;
+    margin-bottom: 22px;
     background:
-      linear-gradient(135deg, rgba(255,255,255,.97), rgba(245,250,247,.92));
-    box-shadow: var(--admin-shadow);
+      radial-gradient(circle at 92% 10%, rgba(34,197,94,.20), transparent 30%),
+      radial-gradient(circle at 8% 100%, rgba(59,130,246,.11), transparent 30%),
+      linear-gradient(135deg, #ffffff 0%, #f4f9f5 55%, #eef8f1 100%);
+    box-shadow: 0 22px 60px rgba(15,23,42,.08);
   }
 
-  .admin-hero::after {
+  .ac-hero::after {
     content: "";
     position: absolute;
-    width: 260px;
-    height: 260px;
-    right: -90px;
-    top: -120px;
-    border-radius: 50%;
-    background: rgba(23,107,77,.08);
+    width: 180px;
+    height: 180px;
+    right: -70px;
+    bottom: -90px;
+    border-radius: 999px;
+    background: rgba(34,197,94,.08);
     pointer-events: none;
   }
 
-  .admin-hero-content {
+  .ac-hero-content {
     position: relative;
     z-index: 1;
   }
 
-  .admin-hero-top {
+  .ac-brand-row {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: 24px;
+    gap: 18px;
+    flex-wrap: wrap;
   }
 
-  .admin-kicker {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    margin-bottom: 10px;
+  .ac-title-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .ac-shield {
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    display: grid;
+    place-items: center;
+    border-radius: 15px;
+    color: #fff;
+    background: linear-gradient(145deg, #166534, #22c55e);
+    box-shadow: 0 10px 25px rgba(22,101,52,.24);
+  }
+
+  .ac-shield svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .ac-kicker {
+    display: block;
+    margin-bottom: 5px;
+    color: #15803d;
     font-size: 11px;
     font-weight: 800;
-    letter-spacing: .13em;
+    letter-spacing: .14em;
     text-transform: uppercase;
-    color: var(--admin-primary);
   }
 
-  .admin-kicker::before {
-    content: "";
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--admin-primary);
-    box-shadow: 0 0 0 5px rgba(23,107,77,.10);
-  }
-
-  .admin-title {
+  .ac-hero h1 {
     margin: 0;
-    font-size: clamp(28px, 4vw, 44px);
-    line-height: 1.04;
+    font-size: clamp(25px, 4vw, 38px);
+    line-height: 1.05;
     letter-spacing: -.035em;
-    font-weight: 850;
   }
 
-  .admin-subtitle {
-    max-width: 720px;
-    margin: 12px 0 0;
-    color: var(--admin-muted);
-    font-size: 15px;
+  .ac-subtitle {
+    max-width: 760px;
+    margin: 10px 0 0;
+    color: var(--ac-muted);
+    font-size: 14px;
     line-height: 1.65;
   }
 
-  .admin-cc-badge-new {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 18px;
-    padding: 9px 13px;
-    border-radius: 999px;
-    background: rgba(23,107,77,.08);
-    color: var(--admin-primary-dark);
-    border: 1px solid rgba(23,107,77,.13);
-    font-size: 12px;
-    font-weight: 750;
-  }
-
-  .admin-cc-badge-new::before {
-    content: "●";
-    font-size: 8px;
-  }
-
-  .admin-hero-actions {
+  .ac-hero-actions {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 10px;
-    flex-shrink: 0;
-  }
-
-  .admin-btn {
-    min-height: 42px;
-    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    gap: 8px;
-    border: 1px solid var(--admin-border);
-    border-radius: 12px;
-    padding: 10px 15px;
-    background: rgba(255,255,255,.9);
-    color: var(--admin-text);
-    text-decoration: none;
-    font: inherit;
-    font-size: 13px;
-    font-weight: 750;
-    cursor: pointer;
-    transition:
-      transform .18s ease,
-      box-shadow .18s ease,
-      background .18s ease,
-      border-color .18s ease;
-  }
-
-  .admin-btn:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 20px rgba(15,23,42,.08);
-    border-color: rgba(15,23,42,.15);
-  }
-
-  .admin-btn:disabled {
-    opacity: .55;
-    cursor: not-allowed;
-  }
-
-  .admin-btn-primary {
-    color: white;
-    background: linear-gradient(135deg, var(--admin-primary), #20815c);
-    border-color: transparent;
-    box-shadow: 0 8px 18px rgba(23,107,77,.18);
-  }
-
-  .admin-btn-primary:hover:not(:disabled) {
-    background: linear-gradient(135deg, var(--admin-primary-dark), var(--admin-primary));
-  }
-
-  .admin-btn-danger {
-    color: var(--admin-danger);
-    background: var(--admin-danger-soft);
-    border-color: rgba(189,60,60,.13);
-  }
-
-  .admin-main {
+    gap: 10px;
+    flex-wrap: wrap;
     margin-top: 22px;
   }
 
-  .admin-alert {
-    display: flex;
-    align-items: flex-start;
-    gap: 11px;
-    margin-bottom: 16px;
-    padding: 14px 16px;
-    border-radius: 15px;
-    border: 1px solid var(--admin-border);
-    background: var(--admin-surface-strong);
-    box-shadow: var(--admin-shadow-soft);
-    font-size: 14px;
-    line-height: 1.5;
+  .ac-cc-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid rgba(22,101,52,.14);
+    border-radius: 999px;
+    background: rgba(255,255,255,.72);
+    color: #166534;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .03em;
+    backdrop-filter: blur(12px);
   }
 
-  .admin-alert::before {
-    content: "";
-    width: 8px;
-    height: 8px;
-    margin-top: 6px;
+  .ac-cc-dot {
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    flex: 0 0 auto;
+    background: #22c55e;
+    box-shadow: 0 0 0 4px rgba(34,197,94,.13);
   }
 
-  .admin-alert-error {
-    color: #8f2929;
-    border-color: rgba(189,60,60,.16);
-    background: #fff9f9;
+  .ac-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin: 18px 0 24px;
   }
 
-  .admin-alert-error::before {
-    background: var(--admin-danger);
+  .ac-metric {
+    min-width: 0;
+    padding: 17px;
+    border: 1px solid var(--ac-border);
+    border-radius: 18px;
+    background: var(--ac-surface);
+    box-shadow: 0 10px 30px rgba(15,23,42,.045);
   }
 
-  .admin-alert-success {
-    color: #155b42;
-    border-color: rgba(23,107,77,.16);
-    background: #f5fbf8;
-  }
-
-  .admin-alert-success::before {
-    background: var(--admin-primary);
-  }
-
-  .admin-tabs {
-    position: sticky;
-    top: 12px;
-    z-index: 20;
-    margin-bottom: 20px;
-    padding: 6px;
-    border: 1px solid rgba(255,255,255,.8);
-    border-radius: 17px;
-    background: rgba(255,255,255,.82);
-    backdrop-filter: blur(18px);
-    box-shadow: 0 10px 30px rgba(15,23,42,.07);
-  }
-
-  .admin-tabs-current {
-    display: none;
-    width: 100%;
+  .ac-metric-label {
+    display: flex;
     align-items: center;
     justify-content: space-between;
-    border: 0;
-    border-radius: 12px;
-    padding: 12px 14px;
-    background: transparent;
-    color: var(--admin-text);
-    font: inherit;
+    gap: 8px;
+    color: var(--ac-muted);
+    font-size: 10px;
     font-weight: 800;
-    cursor: pointer;
+    letter-spacing: .09em;
+    text-transform: uppercase;
   }
 
-  .admin-tabs-list {
+  .ac-metric-value {
+    display: block;
+    margin-top: 8px;
+    font-size: 25px;
+    line-height: 1.1;
+    letter-spacing: -.025em;
+  }
+
+  .ac-metric-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+  }
+
+  .ac-metric.warn .ac-metric-dot {
+    background: #f59e0b;
+  }
+
+  .ac-metric.danger .ac-metric-dot {
+    background: #ef4444;
+  }
+
+  .ac-tabs-shell {
+    position: sticky;
+    top: 10px;
+    z-index: 20;
+    margin-bottom: 22px;
+  }
+
+  .ac-tabs {
     display: flex;
-    gap: 4px;
+    gap: 5px;
     overflow-x: auto;
+    padding: 6px;
+    border: 1px solid rgba(15,23,42,.08);
+    border-radius: 18px;
+    background: rgba(255,255,255,.90);
+    box-shadow: 0 12px 35px rgba(15,23,42,.08);
+    backdrop-filter: blur(18px);
     scrollbar-width: none;
   }
 
-  .admin-tabs-list::-webkit-scrollbar {
+  .ac-tabs::-webkit-scrollbar {
     display: none;
   }
 
-  .admin-tab {
-    position: relative;
+  .ac-tab {
+    flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 7px;
     min-height: 40px;
-    flex: 0 0 auto;
-    border: 0;
-    border-radius: 11px;
     padding: 9px 13px;
+    border: 0;
+    border-radius: 12px;
     background: transparent;
-    color: #697487;
-    font: inherit;
+    color: #64748b;
     font-size: 12px;
     font-weight: 750;
     cursor: pointer;
-    transition: all .18s ease;
+    transition: .18s ease;
     white-space: nowrap;
   }
 
-  .admin-tab:hover {
-    background: rgba(15,23,42,.045);
-    color: var(--admin-text);
+  .ac-tab:hover {
+    background: #f1f5f9;
+    color: #0f172a;
   }
 
-  .admin-tab.active {
-    background: var(--admin-primary);
-    color: white;
-    box-shadow: 0 6px 16px rgba(23,107,77,.18);
+  .ac-tab.active {
+    color: #fff;
+    background: linear-gradient(135deg, #166534, #15803d);
+    box-shadow: 0 7px 18px rgba(22,101,52,.20);
   }
 
-  .admin-count {
-    display: inline-flex;
+  .ac-tab-count {
     min-width: 19px;
     height: 19px;
-    align-items: center;
-    justify-content: center;
+    display: inline-grid;
+    place-items: center;
     padding: 0 5px;
     border-radius: 999px;
-    background: rgba(255,255,255,.18);
+    background: rgba(15,23,42,.07);
+    color: inherit;
     font-size: 10px;
-    font-weight: 850;
-  }
-
-  .admin-tab:not(.active) .admin-count {
-    background: rgba(23,107,77,.09);
-    color: var(--admin-primary);
-  }
-
-  .admin-section {
-    margin-bottom: 20px;
-  }
-
-  .admin-section-heading {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 20px;
-    margin-bottom: 16px;
-  }
-
-  .admin-section-heading h2,
-  .admin-panel h2,
-  .admin-card h3 {
-    margin: 0;
-    letter-spacing: -.02em;
-  }
-
-  .admin-section-heading h2 {
-    font-size: 21px;
-  }
-
-  .admin-section-heading p,
-  .admin-panel p,
-  .admin-card p {
-    line-height: 1.55;
-  }
-
-  .admin-muted {
-    color: var(--admin-muted);
-  }
-
-  .admin-panel {
-    border: 1px solid var(--admin-border);
-    border-radius: var(--admin-radius);
-    padding: 22px;
-    background: var(--admin-surface);
-    box-shadow: var(--admin-shadow-soft);
-  }
-
-  .admin-panel + .admin-panel {
-    margin-top: 18px;
-  }
-
-  .admin-panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 18px;
-    margin-bottom: 18px;
-  }
-
-  .admin-panel-title {
-    font-size: 20px;
-    font-weight: 820;
-  }
-
-  .admin-panel-description {
-    margin: 6px 0 0;
-    color: var(--admin-muted);
-    font-size: 13px;
-  }
-
-  .admin-stat-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .admin-stat {
-    min-width: 0;
-    position: relative;
-    overflow: hidden;
-    border: 1px solid var(--admin-border);
-    border-radius: 16px;
-    padding: 17px;
-    background: linear-gradient(145deg, #fff, #f9fbfa);
-  }
-
-  .admin-stat::after {
-    content: "";
-    position: absolute;
-    width: 70px;
-    height: 70px;
-    right: -35px;
-    bottom: -35px;
-    border-radius: 50%;
-    background: rgba(23,107,77,.055);
-  }
-
-  .admin-stat-label {
-    display: block;
-    color: var(--admin-muted);
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: .075em;
-    text-transform: uppercase;
-  }
-
-  .admin-stat-value {
-    display: block;
-    margin-top: 8px;
-    color: var(--admin-text);
-    font-size: 22px;
-    font-weight: 850;
-    letter-spacing: -.025em;
-    word-break: break-word;
-  }
-
-  .admin-module-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 17px;
-  }
-
-  .admin-module {
-    display: flex;
-    align-items: center;
-    gap: 11px;
-    min-height: 55px;
-    padding: 12px 14px;
-    border: 1px solid var(--admin-border);
-    border-radius: 14px;
-    background: #fff;
-    font-size: 13px;
-  }
-
-  .admin-module-icon {
-    display: inline-flex;
-    width: 27px;
-    height: 27px;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    border-radius: 9px;
-    background: var(--admin-primary-soft);
-    color: var(--admin-primary);
     font-weight: 900;
   }
 
-  .admin-module.pending .admin-module-icon {
-    background: #f4f5f7;
-    color: #89919e;
+  .ac-tab.active .ac-tab-count {
+    background: rgba(255,255,255,.20);
   }
 
-  .admin-module-note {
-    display: block;
-    margin-top: 2px;
-    color: var(--admin-muted);
-    font-size: 11px;
+  .ac-mobile-tab {
+    display: none;
   }
 
-  .admin-toolbar {
+  .ac-section {
+    margin-bottom: 22px;
+  }
+
+  .ac-panel {
+    padding: 22px;
+    border: 1px solid var(--ac-border);
+    border-radius: 22px;
+    background: var(--ac-surface);
+    box-shadow: 0 12px 35px rgba(15,23,42,.05);
+  }
+
+  .ac-panel + .ac-panel {
+    margin-top: 18px;
+  }
+
+  .ac-panel-header,
+  .ac-toolbar {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -517,671 +315,515 @@ const ADMIN_STYLES = `
     margin-bottom: 18px;
   }
 
-  .admin-search {
-    position: relative;
-    margin-bottom: 12px;
+  .ac-panel-header h2,
+  .ac-toolbar h2 {
+    margin: 0;
+    font-size: 21px;
+    letter-spacing: -.025em;
   }
 
-  .admin-search input {
-    width: 100%;
-    min-height: 46px;
-    padding: 0 15px;
-    border: 1px solid var(--admin-border);
-    border-radius: 13px;
-    outline: none;
-    background: #fff;
-    color: var(--admin-text);
-    font: inherit;
+  .ac-panel-header p,
+  .ac-toolbar p {
+    max-width: 780px;
+    margin: 7px 0 0;
+    color: var(--ac-muted);
     font-size: 13px;
-    transition: border-color .18s ease, box-shadow .18s ease;
+    line-height: 1.6;
   }
 
-  .admin-search input:focus,
-  .admin-select:focus {
-    border-color: rgba(23,107,77,.4);
-    box-shadow: 0 0 0 4px rgba(23,107,77,.08);
-  }
-
-  .admin-table-wrap {
-    overflow-x: auto;
-    border: 1px solid var(--admin-border);
-    border-radius: 16px;
-    background: #fff;
-  }
-
-  .admin-table {
-    width: 100%;
-    min-width: 920px;
-    border-collapse: collapse;
-  }
-
-  .admin-table th {
-    padding: 12px 14px;
-    border-bottom: 1px solid var(--admin-border);
-    background: #f8faf9;
-    color: #77808e;
+  .ac-section-label {
+    display: block;
+    margin-bottom: 5px;
+    color: #15803d;
     font-size: 10px;
     font-weight: 850;
-    letter-spacing: .07em;
-    text-align: left;
+    letter-spacing: .13em;
     text-transform: uppercase;
-    white-space: nowrap;
   }
 
-  .admin-table td {
-    padding: 14px;
-    border-bottom: 1px solid rgba(15,23,42,.055);
-    color: var(--admin-text);
-    font-size: 12px;
-    vertical-align: top;
-  }
-
-  .admin-table tbody tr:last-child td {
-    border-bottom: 0;
-  }
-
-  .admin-table tbody tr:hover {
-    background: rgba(23,107,77,.018);
-  }
-
-  .admin-select {
-    min-height: 38px;
-    max-width: 190px;
-    padding: 7px 10px;
-    border: 1px solid var(--admin-border);
-    border-radius: 10px;
-    outline: none;
-    background: #fff;
-    color: var(--admin-text);
-    font: inherit;
-    font-size: 12px;
-  }
-
-  .admin-user-name {
-    font-weight: 800;
-  }
-
-  .admin-user-meta {
-    margin-top: 3px;
-    color: var(--admin-muted);
-    font-size: 11px;
-  }
-
-  .admin-chip-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-  }
-
-  .admin-chip {
-    display: inline-flex;
-    align-items: center;
-    min-height: 24px;
-    padding: 4px 8px;
-    border-radius: 999px;
-    background: #f1f4f3;
-    color: #53605c;
-    font-size: 10px;
-    font-weight: 800;
-  }
-
-  .admin-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    min-height: 25px;
-    padding: 4px 9px;
-    border-radius: 999px;
-    background: #f0f2f4;
-    color: #59636e;
-    font-size: 10px;
-    font-weight: 850;
-    white-space: nowrap;
-  }
-
-  .admin-status::before {
-    content: "";
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: currentColor;
-  }
-
-  .admin-status.good {
-    color: #14724f;
-    background: #eaf7f1;
-  }
-
-  .admin-status.warn {
-    color: #9b690e;
-    background: #fff5dc;
-  }
-
-  .admin-status.bad {
-    color: #ad3939;
-    background: #fff0f0;
-  }
-
-  .admin-action-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-  }
-
-  .admin-mini-btn {
-    min-height: 34px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--admin-border);
-    border-radius: 9px;
-    padding: 7px 10px;
-    background: #fff;
-    color: var(--admin-text);
-    font: inherit;
-    font-size: 11px;
-    font-weight: 750;
-    cursor: pointer;
-  }
-
-  .admin-mini-btn:hover:not(:disabled) {
-    border-color: rgba(23,107,77,.25);
-    background: #f7fbf9;
-  }
-
-  .admin-mini-btn.primary {
-    color: #fff;
-    border-color: transparent;
-    background: var(--admin-primary);
-  }
-
-  .admin-mini-btn.danger {
-    color: var(--admin-danger);
-    background: var(--admin-danger-soft);
-    border-color: transparent;
-  }
-
-  .admin-mini-btn:disabled {
-    opacity: .55;
-    cursor: not-allowed;
-  }
-
-  .admin-role-control {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-width: 180px;
-  }
-
-  .admin-card-grid {
+  .ac-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 14px;
+    gap: 15px;
   }
 
-  .admin-card {
+  .ac-card {
     min-width: 0;
-    border: 1px solid var(--admin-border);
-    border-radius: 18px;
-    padding: 18px;
-    background: var(--admin-surface-strong);
-    box-shadow: var(--admin-shadow-soft);
+    padding: 19px;
+    border: 1px solid var(--ac-border);
+    border-radius: 19px;
+    background: linear-gradient(180deg, #fff, #fbfcfd);
+    box-shadow: 0 8px 26px rgba(15,23,42,.045);
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
   }
 
-  .admin-card h3 {
+  .ac-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(22,101,52,.16);
+    box-shadow: 0 14px 34px rgba(15,23,42,.08);
+  }
+
+  .ac-card h3 {
+    margin: 0;
     font-size: 16px;
+    letter-spacing: -.015em;
   }
 
-  .admin-card p {
-    margin: 8px 0;
-    color: var(--admin-muted);
-    font-size: 12px;
+  .ac-card p {
+    margin: 8px 0 0;
+    color: var(--ac-muted);
+    font-size: 13px;
+    line-height: 1.55;
   }
 
-  .admin-card-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 15px;
-  }
-
-  .admin-card-media {
-    width: 100%;
-    max-height: 175px;
-    object-fit: cover;
-    border-radius: 13px;
-    margin-bottom: 12px;
-    border: 1px solid var(--admin-border);
-  }
-
-  .admin-card-top {
+  .ac-status-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
   }
 
-  .admin-empty {
-    padding: 30px 20px;
-    text-align: center;
-    color: var(--admin-muted);
-    border: 1px dashed rgba(15,23,42,.13);
-    border-radius: 16px;
-    background: rgba(255,255,255,.6);
-  }
-
-  .admin-empty-icon {
+  .ac-actions {
     display: flex;
-    width: 42px;
-    height: 42px;
-    margin: 0 auto 10px;
     align-items: center;
-    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 15px;
+  }
+
+  .ac-actions .sd-btn {
+    margin: 0;
+  }
+
+  .ac-search {
+    position: relative;
+    margin: 15px 0;
+  }
+
+  .ac-search input {
+    width: 100%;
+    min-height: 46px;
+    padding: 0 15px 0 43px;
+    border: 1px solid var(--ac-border-strong);
+    border-radius: 14px;
+    outline: none;
+    background: #fff;
+    color: var(--ac-text);
+    transition: .18s ease;
+  }
+
+  .ac-search input:focus {
+    border-color: rgba(22,101,52,.42);
+    box-shadow: 0 0 0 4px rgba(34,197,94,.09);
+  }
+
+  .ac-search::before {
+    content: "⌕";
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-52%);
+    color: #94a3b8;
+    font-size: 20px;
+    pointer-events: none;
+  }
+
+  .ac-empty {
+    padding: 34px 20px;
+    border: 1px dashed var(--ac-border-strong);
+    border-radius: 17px;
+    background: var(--ac-surface-soft);
+    text-align: center;
+    color: var(--ac-muted);
+  }
+
+  .ac-empty strong {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--ac-text);
+  }
+
+  .ac-module-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .ac-module {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 11px 13px;
+    border: 1px solid var(--ac-border);
     border-radius: 13px;
-    background: var(--admin-primary-soft);
-    color: var(--admin-primary);
-    font-size: 18px;
+    background: #fff;
+    color: #334155;
+    font-size: 13px;
   }
 
-  .admin-code {
-    padding: 3px 6px;
-    border-radius: 6px;
-    background: #f2f4f5;
-    color: #58636e;
-    font-size: 10px;
+  .ac-module-icon {
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    background: var(--ac-primary-soft);
+    color: #15803d;
+    font-weight: 900;
   }
 
-  .admin-dialog {
-    width: min(900px, calc(100% - 28px));
-    max-width: 900px;
-    border: 0;
+  .ac-module.off .ac-module-icon {
+    background: #f1f5f9;
+    color: #94a3b8;
+  }
+
+  .ac-module small {
+    color: #94a3b8;
+  }
+
+  .ac-stat-strip {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 11px;
+  }
+
+  .ac-small-stat {
+    padding: 14px;
+    border: 1px solid var(--ac-border);
+    border-radius: 15px;
+    background: #fff;
+  }
+
+  .ac-small-stat span {
+    display: block;
+    color: var(--ac-muted);
+    font-size: 9px;
+    font-weight: 850;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .ac-small-stat b {
+    display: block;
+    margin-top: 7px;
+    font-size: 20px;
+  }
+
+  .ac-table-shell {
+    overflow-x: auto;
+    border: 1px solid var(--ac-border);
+    border-radius: 16px;
+    background: #fff;
+  }
+
+  .ac-table-shell .sd-table {
+    min-width: 860px;
+  }
+
+  .ac-image {
+    width: 100%;
+    max-height: 175px;
+    margin-bottom: 11px;
+    border-radius: 13px;
+    object-fit: cover;
+    border: 1px solid var(--ac-border);
+  }
+
+  .ac-media-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .ac-financial {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 13px;
+  }
+
+  .ac-financial-item {
+    padding: 10px;
+    border-radius: 12px;
+    background: #f8fafc;
+  }
+
+  .ac-financial-item span {
+    display: block;
+    color: #94a3b8;
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .ac-financial-item b {
+    display: block;
+    margin-top: 3px;
+    font-size: 13px;
+  }
+
+  .ac-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+    border-radius: 15px;
+    border: 1px solid;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .ac-alert.error {
+    color: #991b1b;
+    background: var(--ac-danger-soft);
+    border-color: #fecaca;
+  }
+
+  .ac-alert.success {
+    color: #166534;
+    background: var(--ac-primary-soft);
+    border-color: #bbf7d0;
+  }
+
+  .ac-alert-icon {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: rgba(255,255,255,.65);
+    font-weight: 900;
+  }
+
+  .ac-dialog {
+    width: min(680px, calc(100vw - 28px));
+    max-width: 680px;
     padding: 0;
+    border: 0;
     border-radius: 24px;
     background: transparent;
+    box-shadow: 0 30px 100px rgba(15,23,42,.28);
   }
 
-  .admin-dialog::backdrop {
-    background: rgba(10,17,24,.52);
+  .ac-dialog::backdrop {
+    background: rgba(15,23,42,.48);
     backdrop-filter: blur(5px);
   }
 
-  .admin-modal {
+  .ac-modal {
     position: relative;
     padding: 26px;
-    border: 1px solid rgba(255,255,255,.65);
+    border: 1px solid rgba(255,255,255,.5);
     border-radius: 24px;
     background: #fff;
-    box-shadow: 0 30px 80px rgba(0,0,0,.2);
   }
 
-  .admin-modal-close {
+  .ac-modal h2 {
+    margin: 5px 0 0;
+    font-size: 23px;
+    letter-spacing: -.025em;
+  }
+
+  .ac-close {
     position: absolute;
-    top: 13px;
-    right: 13px;
+    top: 14px;
+    right: 14px;
     width: 36px;
     height: 36px;
     border: 0;
     border-radius: 11px;
-    background: #f2f4f5;
-    color: #59636d;
-    font-size: 22px;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 23px;
     cursor: pointer;
   }
 
-  .admin-loading {
-    min-height: 70vh;
-    display: grid;
-    place-items: center;
-    padding: 28px;
+  .ac-close:hover {
+    background: #e2e8f0;
   }
 
-  .admin-loading-card {
-    width: min(520px, 100%);
-    padding: 30px;
-    border: 1px solid var(--admin-border);
-    border-radius: 24px;
-    background: rgba(255,255,255,.9);
-    box-shadow: var(--admin-shadow);
-    text-align: center;
-  }
-
-  .admin-spinner {
-    width: 42px;
-    height: 42px;
-    margin: 0 auto 17px;
-    border: 3px solid rgba(23,107,77,.12);
-    border-top-color: var(--admin-primary);
-    border-radius: 50%;
-    animation: admin-spin .8s linear infinite;
-  }
-
-  @keyframes admin-spin {
-    to { transform: rotate(360deg); }
-  }
-
-  .admin-workspace > .admin-section-heading {
-    margin-bottom: 18px;
-  }
-
-  .admin-financial-grid {
-    margin-bottom: 20px;
-  }
-
-  .admin-financial-grid .admin-stat-value {
-    font-size: 20px;
-  }
-
-  .admin-divider-label {
-    display: inline-flex;
-    margin-bottom: 8px;
-    color: var(--admin-primary);
-    font-size: 10px;
-    font-weight: 850;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-  }
-
-  .admin-details {
+  .ac-radio-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
     margin-top: 8px;
-  }
-
-  .admin-details summary {
-    cursor: pointer;
-    color: var(--admin-primary);
-    font-size: 11px;
-    font-weight: 750;
-  }
-
-  .admin-warning-note {
-    padding: 11px 13px;
-    margin-top: 12px;
-    border-radius: 11px;
-    background: var(--admin-warning-soft);
-    color: #80570c;
-    font-size: 11px;
+    border: 1px solid var(--ac-border);
+    border-radius: 13px;
+    background: #f8fafc;
+    font-size: 13px;
     line-height: 1.5;
   }
 
-  .admin-ad-destination {
-    word-break: break-word;
-    overflow-wrap: anywhere;
+  .ac-radio-option input {
+    margin-top: 3px;
   }
 
-  .admin-mobile-summary {
-    display: none;
+  .ac-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 18px;
   }
 
-  @media (max-width: 1100px) {
-    .admin-redesign {
-      padding: 20px;
-    }
+  .ac-mfa {
+    max-width: 620px;
+    margin: 40px auto;
+    padding: 34px;
+    text-align: center;
+    border: 1px solid var(--ac-border);
+    border-radius: 25px;
+    background: #fff;
+    box-shadow: 0 20px 60px rgba(15,23,42,.08);
+  }
 
-    .admin-stat-grid {
+  .ac-mfa-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 17px;
+    display: grid;
+    place-items: center;
+    border-radius: 20px;
+    background: var(--ac-primary-soft);
+    color: #15803d;
+    font-size: 28px;
+  }
+
+  .ac-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+  }
+
+  .ac-role-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ac-role-actions .sd-chip-row {
+    margin-top: 2px;
+  }
+
+  @media (max-width: 1050px) {
+    .ac-metrics {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    .admin-card-grid {
+    .ac-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .ac-stat-strip {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
 
-  @media (max-width: 800px) {
-    .admin-redesign {
-      padding: 14px;
-    }
-
-    .admin-hero {
+  @media (max-width: 760px) {
+    .ac-hero {
       padding: 21px;
-      border-radius: 22px;
+      border-radius: 21px;
     }
 
-    .admin-hero-top {
-      flex-direction: column;
-    }
-
-    .admin-hero-actions {
-      justify-content: flex-start;
-      width: 100%;
-    }
-
-    .admin-tabs {
-      padding: 5px;
-    }
-
-    .admin-tabs-current {
-      display: flex;
-    }
-
-    .admin-tabs-list {
-      display: none;
-      flex-direction: column;
-      padding: 5px;
-      border-top: 1px solid var(--admin-border);
-    }
-
-    .admin-tabs-open .admin-tabs-list {
-      display: flex;
-    }
-
-    .admin-tab {
-      justify-content: space-between;
-      width: 100%;
-    }
-
-    .admin-stat-grid {
+    .ac-metrics {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .admin-module-grid {
+    .ac-grid,
+    .ac-module-list {
       grid-template-columns: 1fr;
     }
 
-    .admin-card-grid {
-      grid-template-columns: 1fr;
+    .ac-panel {
+      padding: 17px;
+      border-radius: 18px;
     }
 
-    .admin-toolbar,
-    .admin-panel-header,
-    .admin-section-heading {
+    .ac-toolbar,
+    .ac-panel-header {
       flex-direction: column;
       align-items: stretch;
     }
 
-    .admin-panel {
-      padding: 17px;
-      border-radius: 18px;
+    .ac-tabs-shell {
+      position: static;
+    }
+
+    .ac-tabs {
+      border-radius: 14px;
+    }
+
+    .ac-stat-strip,
+    .ac-financial {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .ac-dialog {
+      width: calc(100vw - 18px);
+    }
+
+    .ac-modal {
+      padding: 21px;
     }
   }
 
-  @media (max-width: 560px) {
-    .admin-redesign {
-      padding: 9px;
+  @media (max-width: 480px) {
+    .ac-title-row {
+      gap: 11px;
     }
 
-    .admin-title {
-      font-size: 28px;
+    .ac-shield {
+      width: 41px;
+      height: 41px;
+      flex-basis: 41px;
+      border-radius: 13px;
     }
 
-    .admin-subtitle {
-      font-size: 13px;
+    .ac-hero h1 {
+      font-size: 27px;
     }
 
-    .admin-hero-actions {
-      display: grid;
-      grid-template-columns: 1fr;
-    }
-
-    .admin-btn {
-      width: 100%;
-    }
-
-    .admin-stat-grid {
+    .ac-metrics {
       grid-template-columns: 1fr 1fr;
       gap: 8px;
     }
 
-    .admin-stat {
+    .ac-metric {
       padding: 13px;
-      border-radius: 13px;
+      border-radius: 14px;
     }
 
-    .admin-stat-value {
-      font-size: 18px;
+    .ac-metric-value {
+      font-size: 19px;
     }
 
-    .admin-stat-label {
-      font-size: 9px;
+    .ac-small-stat {
+      padding: 11px;
     }
 
-    .admin-panel {
-      padding: 14px;
+    .ac-stat-strip {
+      grid-template-columns: 1fr 1fr;
     }
 
-    .admin-table-wrap {
-      overflow: visible;
-      border: 0;
-      background: transparent;
+    .ac-hero-actions,
+    .ac-actions {
+      align-items: stretch;
     }
 
-    .admin-table {
-      min-width: 0;
-      display: block;
-    }
-
-    .admin-table thead {
-      display: none;
-    }
-
-    .admin-table tbody,
-    .admin-table tr,
-    .admin-table td {
-      display: block;
-      width: 100%;
-    }
-
-    .admin-table tr {
-      margin-bottom: 12px;
-      padding: 10px;
-      border: 1px solid var(--admin-border);
-      border-radius: 15px;
-      background: #fff;
-      box-shadow: 0 5px 18px rgba(15,23,42,.04);
-    }
-
-    .admin-table td {
-      display: grid;
-      grid-template-columns: 105px minmax(0, 1fr);
-      gap: 10px;
-      padding: 9px 7px;
-      border-bottom: 1px solid rgba(15,23,42,.055);
-      font-size: 12px;
-    }
-
-    .admin-table td:last-child {
-      border-bottom: 0;
-    }
-
-    .admin-table td::before {
-      content: attr(data-label);
-      color: #7b8491;
-      font-size: 9px;
-      font-weight: 850;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-    }
-
-    .admin-table td[data-label=""]::before {
-      content: "";
-    }
-
-    .admin-table .admin-action-row,
-    .admin-table .admin-role-control,
-    .admin-table .admin-chip-row {
-      min-width: 0;
-    }
-
-    .admin-select {
-      max-width: none;
-      width: 100%;
-    }
-
-    .admin-mini-btn {
-      width: 100%;
-    }
-
-    .admin-role-control {
-      width: 100%;
-    }
-
-    .admin-mobile-summary {
-      display: block;
-      margin-top: 4px;
-      color: var(--admin-muted);
-      font-size: 11px;
-    }
-
-    .admin-card {
-      padding: 15px;
-    }
-
-    .admin-modal {
-      padding: 20px;
-      border-radius: 19px;
+    .ac-hero-actions .sd-btn,
+    .ac-actions .sd-btn {
+      flex: 1 1 auto;
     }
   }
 `;
-
-function StatusBadge({ status }) {
-  const normalized = String(status || '').toUpperCase();
-
-  let type = 'default';
-
-  if (
-    [
-      'VERIFIED',
-      'ACTIVE',
-      'APPROVED',
-      'PUBLISHED',
-      'SCHEDULED',
-      'RESOLVED',
-    ].includes(normalized)
-  ) {
-    type = 'good';
-  }
-
-  if (
-    ['REJECTED', 'SUSPENDED', 'CANCELLED'].includes(normalized) ||
-    normalized === 'RECONCILIATION_REQUIRED'
-  ) {
-    type = 'bad';
-  }
-
-  if (
-    [
-      'PENDING',
-      'PENDING_PAYMENT',
-      'PAID_PENDING_REVIEW',
-      'EXPIRED',
-    ].includes(normalized)
-  ) {
-    type = 'warn';
-  }
-
-  return (
-    <span className={`admin-status ${type}`}>
-      {String(status || 'UNKNOWN').replace(/_/g, ' ')}
-    </span>
-  );
-}
-
-function EmptyState({ children }) {
-  return (
-    <div className="admin-empty">
-      <div className="admin-empty-icon">✓</div>
-      {children}
-    </div>
-  );
-}
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -1190,6 +832,7 @@ export default function AdminDashboard() {
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
 
   const performanceModalRef = useRef(null);
+  const disputeModalRef = useRef(null);
   const tabsNavRef = useRef(null);
 
   const [overview, setOverview] = useState(null);
@@ -1203,7 +846,9 @@ export default function AdminDashboard() {
   const [operations, setOperations] = useState(null);
   const [orderEvents, setOrderEvents] = useState([]);
   const [auditEvents, setAuditEvents] = useState([]);
+  const [refunds, setRefunds] = useState([]);
 
+  const [disputeDecision, setDisputeDecision] = useState(null);
   const [userSearch, setUserSearch] = useState('');
   const [roleSelections, setRoleSelections] = useState({});
 
@@ -1231,6 +876,7 @@ export default function AdminDashboard() {
         operationsRes,
         orderEventsRes,
         auditEventsRes,
+        refundsRes,
       ] = await Promise.all([
         api.get('/admin/overview'),
         api.get('/admin/users'),
@@ -1247,6 +893,7 @@ export default function AdminDashboard() {
         api.get('/admin/operations/summary'),
         api.get('/admin/order-events', { params: { limit: 100 } }),
         api.get('/admin/audit-events', { params: { limit: 100 } }),
+        api.get('/admin/financial/refunds'),
       ]);
 
       setOverview(overviewRes.data);
@@ -1260,13 +907,14 @@ export default function AdminDashboard() {
       setOperations(operationsRes.data || null);
       setOrderEvents(orderEventsRes.data?.events || []);
       setAuditEvents(auditEventsRes.data?.events || []);
+      setRefunds(refundsRes.data?.refunds || []);
     } catch (err) {
       if (err.response?.data?.code === 'MFA_SETUP_REQUIRED') {
         setMfaRequired(true);
       } else {
         setError(
           err.response?.data?.error ||
-            'Could not load admin data'
+          'Could not load admin data'
         );
       }
     } finally {
@@ -1299,27 +947,172 @@ export default function AdminDashboard() {
     };
   }, [tabMenuOpen]);
 
+  function statusBadgeClass(status) {
+    if (
+      [
+        'VERIFIED',
+        'ACTIVE',
+        'APPROVED',
+        'PUBLISHED',
+        'SCHEDULED',
+        'RESOLVED',
+        'COMPLETED',
+      ].includes(status)
+    ) {
+      return 'sd-badge sd-good';
+    }
+
+    if (
+      [
+        'REJECTED',
+        'SUSPENDED',
+        'CANCELLED',
+        'FAILED',
+      ].includes(status)
+    ) {
+      return 'sd-badge sd-red';
+    }
+
+    if (
+      [
+        'PENDING',
+        'PENDING_PAYMENT',
+        'PAID_PENDING_REVIEW',
+        'EXPIRED',
+        'REQUESTED',
+        'PROCESSING',
+      ].includes(status)
+    ) {
+      return 'sd-badge sd-warn';
+    }
+
+    if (status === 'RECONCILIATION_REQUIRED') {
+      return 'sd-badge sd-red';
+    }
+
+    return 'sd-badge';
+  }
+
   function clearMessages() {
     setError('');
     setSuccess('');
   }
 
-  async function resolveDispute(id, status) {
+  function openDisputeDecision(dispute, status) {
+    clearMessages();
+
+    setDisputeDecision({
+      id: dispute.id,
+      status,
+      resolution: `Marked ${status} by admin`,
+      payoutDecision: '',
+    });
+
+    disputeModalRef.current?.showModal();
+  }
+
+  function closeDisputeDecision() {
+    disputeModalRef.current?.close();
+    setDisputeDecision(null);
+  }
+
+  async function submitDisputeDecision() {
+    if (!disputeDecision) return;
+
+    const {
+      id,
+      status,
+      resolution,
+      payoutDecision,
+    } = disputeDecision;
+
     clearMessages();
     setActionLoading(`dispute-${id}`);
 
     try {
       await api.patch(`/disputes/${id}/resolve`, {
         status,
-        resolution: `Marked ${status} by admin`,
+        resolution,
+        payoutDecision: payoutDecision || undefined,
       });
 
       setSuccess(`Dispute ${status.toLowerCase()} successfully.`);
+      closeDisputeDecision();
       await loadAll();
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Could not resolve dispute'
+        'Could not resolve dispute'
+      );
+    } finally {
+      setActionLoading('');
+    }
+  }
+
+  async function markRefundComplete(refund) {
+    clearMessages();
+
+    const confirmed = window.confirm(
+      `Mark the ${Number(refund.amount).toLocaleString()} ${
+        refund.currency || 'ETB'
+      } refund for payment ${refund.paymentId.slice(
+        0,
+        8
+      )} as completed? Only do this once the money has actually been sent back.`
+    );
+
+    if (!confirmed) return;
+
+    const providerRefundId =
+      window.prompt(
+        'Provider refund reference (optional):'
+      ) || undefined;
+
+    setActionLoading(`refund-${refund.id}`);
+
+    try {
+      await api.patch(
+        `/admin/financial/refunds/${refund.id}/complete`,
+        {
+          provider: refund.payment?.provider || undefined,
+          providerRefundId,
+        }
+      );
+
+      setSuccess('Refund marked as completed.');
+      await loadAll();
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+        'Could not complete refund'
+      );
+    } finally {
+      setActionLoading('');
+    }
+  }
+
+  async function markRefundFailed(refund) {
+    clearMessages();
+
+    const failureReason =
+      window.prompt('Reason the refund failed:');
+
+    if (!failureReason) return;
+
+    setActionLoading(`refund-${refund.id}`);
+
+    try {
+      await api.patch(
+        `/admin/financial/refunds/${refund.id}/fail`,
+        { failureReason }
+      );
+
+      setSuccess('Refund marked as failed.');
+      await loadAll();
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+        'Could not update refund'
       );
     } finally {
       setActionLoading('');
@@ -1348,9 +1141,14 @@ export default function AdminDashboard() {
       setSuccess('Order cancelled.');
       await loadAll();
     } catch (err) {
-      setError(
+      const message =
         err.response?.data?.error ||
-          'Could not cancel order'
+        'Could not cancel order';
+
+      setError(
+        message === 'Failed to cancel order'
+          ? `${message} This can happen right after the server has been idle — wait a few seconds and try again.`
+          : message
       );
     } finally {
       setActionLoading('');
@@ -1370,11 +1168,12 @@ export default function AdminDashboard() {
       setSuccess(
         'Verification status updated successfully.'
       );
+
       await loadAll();
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Could not update verification status'
+        'Could not update verification status'
       );
     } finally {
       setActionLoading('');
@@ -1384,11 +1183,11 @@ export default function AdminDashboard() {
   async function setAccountStatus(userId, accountStatus) {
     clearMessages();
 
-    const selectedUser = users.find(
+    const targetUser = users.find(
       (item) => item.id === userId
     );
 
-    if (!selectedUser) return;
+    if (!targetUser) return;
 
     const action =
       accountStatus === 'SUSPENDED'
@@ -1397,7 +1196,7 @@ export default function AdminDashboard() {
 
     const confirmed = window.confirm(
       `Are you sure you want to ${action} ${
-        selectedUser.name || selectedUser.email
+        targetUser.name || targetUser.email
       }?`
     );
 
@@ -1421,7 +1220,7 @@ export default function AdminDashboard() {
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Could not update account status'
+        'Could not update account status'
       );
     } finally {
       setActionLoading('');
@@ -1457,7 +1256,7 @@ export default function AdminDashboard() {
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Could not add role'
+        'Could not add role'
       );
     } finally {
       setActionLoading('');
@@ -1467,15 +1266,15 @@ export default function AdminDashboard() {
   async function removeRole(userId, role) {
     clearMessages();
 
-    const selectedUser = users.find(
+    const targetUser = users.find(
       (item) => item.id === userId
     );
 
-    if (!selectedUser) return;
+    if (!targetUser) return;
 
     const confirmed = window.confirm(
       `Remove ${role} role from ${
-        selectedUser.name || selectedUser.email
+        targetUser.name || targetUser.email
       }?`
     );
 
@@ -1496,7 +1295,7 @@ export default function AdminDashboard() {
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Could not remove role'
+        'Could not remove role'
       );
     } finally {
       setActionLoading('');
@@ -1524,7 +1323,7 @@ export default function AdminDashboard() {
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Could not record Telegram publication'
+        'Could not record Telegram publication'
       );
     } finally {
       setActionLoading('');
@@ -1559,7 +1358,7 @@ export default function AdminDashboard() {
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Could not cancel campaign'
+        'Could not cancel campaign'
       );
     } finally {
       setActionLoading('');
@@ -1593,7 +1392,7 @@ export default function AdminDashboard() {
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Could not update campaign status'
+        'Could not update campaign status'
       );
     } finally {
       setActionLoading('');
@@ -1617,7 +1416,7 @@ export default function AdminDashboard() {
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Could not confirm payment'
+        'Could not confirm payment'
       );
     } finally {
       setActionLoading('');
@@ -1649,7 +1448,7 @@ export default function AdminDashboard() {
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Could not check payment with the gateway'
+        'Could not check payment with the gateway'
       );
     } finally {
       setActionLoading('');
@@ -1679,30 +1478,6 @@ export default function AdminDashboard() {
     });
   }, [users, userSearch]);
 
-  if (loading && !overview) {
-    return (
-      <div className="admin-redesign">
-        <style>{ADMIN_STYLES}</style>
-
-        <div className="admin-shell admin-loading">
-          <div className="admin-loading-card">
-            <div className="admin-spinner" />
-            <div className="admin-kicker">
-              MARKETBRIDGE ADMIN
-            </div>
-            <h1 className="admin-title">
-              Loading control center
-            </h1>
-            <p className="admin-subtitle">
-              {error ||
-                'Preparing your marketplace administration workspace…'}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const cards = overview
     ? [
         ['Users', overview.users],
@@ -1710,10 +1485,7 @@ export default function AdminDashboard() {
         ['Orders', overview.orders],
         ['Open disputes', overview.openDisputes],
         ['Active ads', overview.activeAds],
-        [
-          'Suspended users',
-          overview.suspendedUsers || 0,
-        ],
+        ['Suspended users', overview.suspendedUsers || 0],
         [
           'Paid volume',
           `${Number(
@@ -1724,27 +1496,46 @@ export default function AdminDashboard() {
     : [];
 
   const openDisputes = disputes.filter(
-    (d) => d.status === 'OPEN'
+    (d) =>
+      d.status === 'OPEN' ||
+      d.status === 'UNDER_REVIEW'
   );
 
   const resolvedDisputes = disputes.filter(
-    (d) => d.status !== 'OPEN'
+    (d) =>
+      d.status !== 'OPEN' &&
+      d.status !== 'UNDER_REVIEW'
   );
 
   const pendingAds = ads.filter(
     (a) =>
       a.status === 'PAID_PENDING_REVIEW' ||
-      (a.status === 'PENDING' &&
-        [
-          'BANNER',
-          'TELEGRAM_PROMOTION',
-        ].includes(a.type))
+      (
+        a.status === 'PENDING' &&
+        ['BANNER', 'TELEGRAM_PROMOTION'].includes(
+          a.type
+        )
+      )
   );
 
   const reviewedAds = ads.filter(
     (a) =>
       !pendingAds.some(
         (pending) => pending.id === a.id
+      )
+  );
+
+  const pendingRefunds = refunds.filter(
+    (r) =>
+      ['REQUESTED', 'PROCESSING'].includes(
+        r.status
+      )
+  );
+
+  const refundHistory = refunds.filter(
+    (r) =>
+      !['REQUESTED', 'PROCESSING'].includes(
+        r.status
       )
   );
 
@@ -1785,133 +1576,239 @@ export default function AdminDashboard() {
       count: payments.length,
     },
     {
+      key: 'refunds',
+      label: 'Refunds',
+      count: pendingRefunds.length,
+    },
+    {
       key: 'operations',
       label: 'Operations & Audit',
       count:
-        (operations?.queues
-          ?.reconciliationPayments || 0) +
+        (operations?.queues?.reconciliationPayments ||
+          0) +
         (operations?.queues?.openDisputes || 0),
     },
   ];
 
   const activeTabItem =
-    tabItems.find((item) => item.key === tab) ||
-    tabItems[0];
+    tabItems.find(
+      (item) => item.key === tab
+    ) || tabItems[0];
+
+  if (loading && !overview) {
+    return (
+      <>
+        <style>{ADMIN_STYLES}</style>
+
+        <div className="sd-dashboard admin-control-center">
+          <div className="ac-mfa">
+            <div className="ac-mfa-icon">⌛</div>
+            <span className="ac-kicker">
+              ADMINISTRATION
+            </span>
+            <h1>Loading control center</h1>
+            <p className="sd-muted">
+              {error ||
+                'Loading admin dashboard…'}
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   if (mfaRequired) {
     return (
-      <div className="admin-redesign">
+      <>
         <style>{ADMIN_STYLES}</style>
 
-        <div className="admin-shell">
-          <section className="admin-hero">
-            <div className="admin-hero-content">
-              <DashboardWelcome
-                user={user}
-                subtitle="Manage users, verification, account access, roles, disputes, and fraud monitoring."
-              />
+        <div className="sd-dashboard admin-control-center">
+          <div className="ac-hero">
+            <div className="ac-hero-content">
+              <div className="ac-title-row">
+                <div className="ac-shield">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6l7-3z" />
+                    <path d="M9.5 12l1.7 1.7 3.5-3.7" />
+                  </svg>
+                </div>
 
-              <div className="admin-cc-badge-new">
-                Protected administration workspace
+                <div>
+                  <span className="ac-kicker">
+                    ADMINISTRATION
+                  </span>
+                  <h1>Secure your control center</h1>
+                  <p className="ac-subtitle">
+                    Multi-factor authentication is
+                    required before administrative
+                    actions can continue.
+                  </p>
+                </div>
               </div>
             </div>
-          </section>
+          </div>
 
-          <section
-            className="admin-panel"
-            style={{ marginTop: 20, maxWidth: 650 }}
-          >
-            <div className="admin-kicker">
-              SECURITY REQUIRED
+          <div className="ac-mfa">
+            <div className="ac-mfa-icon">
+              🔐
             </div>
 
-            <h2 className="admin-panel-title">
-              Set up MFA to continue
-            </h2>
+            <h2>Set up MFA to continue</h2>
 
-            <p className="admin-panel-description">
-              Admin actions on MarketBridge now require
-              multi-factor authentication. This takes
-              about a minute with an authenticator app
-              such as Google Authenticator or Authy.
+            <p className="sd-muted">
+              Admin actions on MarketBridge now
+              require multi-factor authentication.
+              This takes about a minute with an
+              authenticator app such as Google
+              Authenticator or Authy.
             </p>
 
-            <div style={{ marginTop: 18 }}>
+            <div className="ac-actions" style={{ justifyContent: 'center' }}>
               <Link
                 to="/account/security"
-                className="admin-btn admin-btn-primary"
+                className="sd-btn sd-btn-primary"
               >
                 Set up MFA
               </Link>
             </div>
-          </section>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="admin-redesign">
+    <>
       <style>{ADMIN_STYLES}</style>
 
-      <div className="admin-shell">
-        <section className="admin-hero">
-          <div className="admin-hero-content">
-            <div className="admin-hero-top">
-              <div>
-                <div className="admin-kicker">
-                  MARKETBRIDGE CONTROL CENTER
+      <div className="sd-dashboard admin-control-center">
+
+        <section className="ac-section">
+          <div className="ac-hero">
+            <div className="ac-hero-content">
+
+              <div className="ac-brand-row">
+                <div className="ac-title-row">
+                  <div className="ac-shield">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                    >
+                      <path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6l7-3z" />
+                      <path d="M9.5 12l1.7 1.7 3.5-3.7" />
+                    </svg>
+                  </div>
+
+                  <div>
+                    <span className="ac-kicker">
+                      MARKETBRIDGE ADMINISTRATION
+                    </span>
+
+                    <h1>Control Center</h1>
+
+                    <p className="ac-subtitle">
+                      Manage marketplace users,
+                      verification, disputes, payments,
+                      advertising, refunds, orders,
+                      fraud signals, and operational
+                      workflows from one place.
+                    </p>
+                  </div>
                 </div>
 
-                <h1 className="admin-title">
-                  Administration, simplified.
-                </h1>
-
-                <p className="admin-subtitle">
-                  Manage marketplace users, verification,
-                  disputes, fraud signals, advertising,
-                  orders, payments, and operational events
-                  from one secure workspace.
-                </p>
-
-                <div className="admin-cc-badge-new">
-                  Control Center · Admin access
+                <div className="ac-cc-pill">
+                  <span className="ac-cc-dot" />
+                  ADMIN ACCESS
                 </div>
               </div>
 
-              <div className="admin-hero-actions">
+              <div className="ac-hero-actions">
                 <RoleSwitchCTA current="ADMIN" />
 
                 <button
                   type="button"
-                  className="admin-btn admin-btn-primary"
+                  className="sd-btn sd-btn-primary"
                   onClick={() =>
                     performanceModalRef.current?.showModal()
                   }
                 >
-                  Performance
+                  Performance snapshot
                 </button>
 
                 <Link
                   to="/account/security"
-                  className="admin-btn"
+                  className="sd-btn"
                 >
                   Account security
                 </Link>
               </div>
+
             </div>
+          </div>
+
+          <div className="ac-metrics">
+            {cards.slice(0, 4).map(
+              ([label, value]) => (
+                <div
+                  className={`ac-metric ${
+                    label === 'Open disputes'
+                      ? 'warn'
+                      : ''
+                  }`}
+                  key={label}
+                >
+                  <div className="ac-metric-label">
+                    <span>{label}</span>
+                    <span className="ac-metric-dot" />
+                  </div>
+
+                  <strong className="ac-metric-value">
+                    {value}
+                  </strong>
+                </div>
+              )
+            )}
+
+            {cards.slice(4).map(
+              ([label, value]) => (
+                <div
+                  className={`ac-metric ${
+                    label === 'Suspended users'
+                      ? 'danger'
+                      : ''
+                  }`}
+                  key={label}
+                >
+                  <div className="ac-metric-label">
+                    <span>{label}</span>
+                    <span className="ac-metric-dot" />
+                  </div>
+
+                  <strong className="ac-metric-value">
+                    {value}
+                  </strong>
+                </div>
+              )
+            )}
           </div>
         </section>
 
         <dialog
           ref={performanceModalRef}
-          className="admin-dialog"
+          className="ac-dialog"
         >
-          <div className="admin-modal">
+          <div className="ac-modal">
             <button
               type="button"
-              className="admin-modal-close"
-              aria-label="Close performance dialog"
+              className="ac-close"
+              aria-label="Close"
               onClick={() =>
                 performanceModalRef.current?.close()
               }
@@ -1919,93 +1816,249 @@ export default function AdminDashboard() {
               ×
             </button>
 
-            <div className="admin-kicker">
+            <span className="ac-section-label">
               MARKETPLACE SNAPSHOT
-            </div>
+            </span>
 
-            <h2 className="admin-panel-title">
-              Marketplace performance
-            </h2>
-
-            <p className="admin-panel-description">
-              Current platform-level figures from the
-              administration overview.
-            </p>
+            <h2>Marketplace performance</h2>
 
             <div
-              className="admin-stat-grid"
+              className="ac-metrics"
               style={{ marginTop: 18 }}
             >
-              {cards.map(([label, value]) => (
-                <div
-                  className="admin-stat"
-                  key={label}
-                >
-                  <span className="admin-stat-label">
-                    {label}
-                  </span>
-                  <b className="admin-stat-value">
-                    {value}
-                  </b>
-                </div>
-              ))}
+              {cards.map(
+                ([label, value]) => (
+                  <div
+                    className="ac-metric"
+                    key={label}
+                  >
+                    <div className="ac-metric-label">
+                      <span>{label}</span>
+                      <span className="ac-metric-dot" />
+                    </div>
+
+                    <strong className="ac-metric-value">
+                      {value}
+                    </strong>
+                  </div>
+                )
+              )}
             </div>
           </div>
         </dialog>
 
-        <main className="admin-main">
-          {error && (
-            <div className="admin-alert admin-alert-error">
-              {error}
-            </div>
-          )}
-
-          {success && (
-            <div className="admin-alert admin-alert-success">
-              {success}
-            </div>
-          )}
-
-          <nav
-            className={`admin-tabs ${
-              tabMenuOpen ? 'admin-tabs-open' : ''
-            }`}
-            ref={tabsNavRef}
-            aria-label="Admin dashboard sections"
-          >
+        <dialog
+          ref={disputeModalRef}
+          className="ac-dialog"
+          onClose={() =>
+            setDisputeDecision(null)
+          }
+        >
+          <div className="ac-modal">
             <button
               type="button"
-              className="admin-tabs-current"
-              aria-expanded={tabMenuOpen}
-              onClick={() =>
-                setTabMenuOpen((open) => !open)
-              }
+              className="ac-close"
+              onClick={closeDisputeDecision}
+              aria-label="Close"
             >
-              <span>
-                {activeTabItem.label}
-
-                {activeTabItem.count > 0 && (
-                  <span
-                    className="admin-count"
-                    style={{ marginLeft: 7 }}
-                  >
-                    {activeTabItem.count}
-                  </span>
-                )}
-              </span>
-
-              <span>
-                {tabMenuOpen ? '⌃' : '⌄'}
-              </span>
+              ×
             </button>
 
-            <div className="admin-tabs-list">
+            <span className="ac-section-label">
+              MODERATION
+            </span>
+
+            <h2>
+              {disputeDecision?.status ===
+              'REJECTED'
+                ? 'Reject dispute'
+                : 'Resolve dispute'}
+            </h2>
+
+            {disputeDecision && (
+              <>
+                <p className="sd-muted">
+                  This order has a payout on hold.
+                  Choose what happens to it — the
+                  backend requires this decision before
+                  the dispute can close.
+                </p>
+
+                <div
+                  className="sd-form-grid"
+                  style={{ marginTop: 15 }}
+                >
+                  <div className="sd-full">
+                    <label>
+                      Resolution notes
+                    </label>
+
+                    <textarea
+                      rows={3}
+                      value={
+                        disputeDecision.resolution
+                      }
+                      onChange={(e) =>
+                        setDisputeDecision(
+                          (d) => ({
+                            ...d,
+                            resolution:
+                              e.target.value,
+                          })
+                        )
+                      }
+                    />
+                  </div>
+
+                  <div className="sd-full">
+                    <label>
+                      Payout decision
+                    </label>
+
+                    <label className="ac-radio-option">
+                      <input
+                        type="radio"
+                        name="payoutDecision"
+                        value="RELEASE"
+                        checked={
+                          disputeDecision.payoutDecision ===
+                          'RELEASE'
+                        }
+                        onChange={() =>
+                          setDisputeDecision(
+                            (d) => ({
+                              ...d,
+                              payoutDecision:
+                                'RELEASE',
+                            })
+                          )
+                        }
+                      />
+
+                      <span>
+                        <strong>
+                          Release payout
+                        </strong>{' '}
+                        — resumes its normal hold
+                        timer, no refund. Use when
+                        the dispute is found in the
+                        seller/inspector's favor.
+                      </span>
+                    </label>
+
+                    <label className="ac-radio-option">
+                      <input
+                        type="radio"
+                        name="payoutDecision"
+                        value="CANCEL"
+                        checked={
+                          disputeDecision.payoutDecision ===
+                          'CANCEL'
+                        }
+                        onChange={() =>
+                          setDisputeDecision(
+                            (d) => ({
+                              ...d,
+                              payoutDecision:
+                                'CANCEL',
+                            })
+                          )
+                        }
+                      />
+
+                      <span>
+                        <strong>
+                          Cancel payout
+                        </strong>{' '}
+                        — cancels the payout and
+                        automatically creates a refund
+                        request for the buyer. Use when
+                        the dispute is found in the
+                        buyer's favor.
+                      </span>
+                    </label>
+
+                    <p
+                      className="sd-muted"
+                      style={{ marginTop: 8 }}
+                    >
+                      If this order actually has no
+                      payout on hold, this choice is
+                      ignored.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="ac-modal-actions">
+                  <button
+                    type="button"
+                    className="sd-btn sd-btn-primary"
+                    disabled={
+                      !disputeDecision.payoutDecision ||
+                      actionLoading ===
+                        `dispute-${disputeDecision.id}`
+                    }
+                    onClick={
+                      submitDisputeDecision
+                    }
+                  >
+                    {actionLoading ===
+                    `dispute-${disputeDecision.id}`
+                      ? 'Working…'
+                      : 'Confirm'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="sd-btn sd-btn-outline"
+                    onClick={
+                      closeDisputeDecision
+                    }
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </dialog>
+
+        {error && (
+          <section className="ac-section">
+            <div className="ac-alert error">
+              <span className="ac-alert-icon">
+                !
+              </span>
+              <span>{error}</span>
+            </div>
+          </section>
+        )}
+
+        {success && (
+          <section className="ac-section">
+            <div className="ac-alert success">
+              <span className="ac-alert-icon">
+                ✓
+              </span>
+              <span>{success}</span>
+            </div>
+          </section>
+        )}
+
+        <section className="ac-section">
+          <div
+            className="ac-tabs-shell"
+            ref={tabsNavRef}
+          >
+            <div className="ac-tabs">
               {tabItems.map((item) => (
                 <button
                   key={item.key}
                   type="button"
-                  className={`admin-tab ${
-                    tab === item.key ? 'active' : ''
+                  className={`ac-tab ${
+                    tab === item.key
+                      ? 'active'
+                      : ''
                   }`}
                   onClick={() => {
                     clearMessages();
@@ -2016,535 +2069,495 @@ export default function AdminDashboard() {
                   {item.label}
 
                   {item.count > 0 && (
-                    <span className="admin-count">
+                    <span className="ac-tab-count">
                       {item.count}
                     </span>
                   )}
                 </button>
               ))}
             </div>
-          </nav>
+          </div>
 
           {tab === 'overview' && (
-            <section className="admin-section">
-              <div className="admin-section-heading">
+            <div className="ac-panel">
+              <div className="ac-panel-header">
                 <div>
-                  <div className="admin-kicker">
-                    PLATFORM HEALTH
+                  <span className="ac-section-label">
+                    SYSTEM OVERVIEW
+                  </span>
+
+                  <h2>Marketplace modules</h2>
+
+                  <p>
+                    Current administrative capabilities
+                    and implementation status across
+                    the MarketBridge platform.
+                  </p>
+                </div>
+              </div>
+
+              <div className="ac-module-list">
+                {[
+                  [
+                    'Users & role management',
+                    true,
+                  ],
+                  [
+                    'Verification management',
+                    true,
+                  ],
+                  [
+                    'Account suspension / activation',
+                    true,
+                  ],
+                  [
+                    'Sellers / buyers / inspectors / truck owners',
+                    true,
+                  ],
+                  [
+                    'Disputes & reports',
+                    true,
+                  ],
+                  [
+                    'Fraud flags (heuristic)',
+                    true,
+                  ],
+                  [
+                    'Listings & categories moderation',
+                    false,
+                  ],
+                  [
+                    'Orders & payments oversight',
+                    true,
+                  ],
+                  [
+                    'Transport jobs oversight',
+                    false,
+                  ],
+                  [
+                    'Advertising & sponsored listings approval',
+                    true,
+                  ],
+                  [
+                    'Commissions & revenue records',
+                    true,
+                  ],
+                ].map(([label, built]) => (
+                  <div
+                    className={`ac-module ${
+                      built ? '' : 'off'
+                    }`}
+                    key={label}
+                  >
+                    <span className="ac-module-icon">
+                      {built ? '✓' : '○'}
+                    </span>
+
+                    <span>
+                      {label}{' '}
+                      {!built && (
+                        <small>
+                          (backend not built yet)
+                        </small>
+                      )}
+                    </span>
                   </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-                  <h2>Marketplace overview</h2>
+          {tab === 'users' && (
+            <div className="ac-panel">
+              <div className="ac-toolbar">
+                <div>
+                  <span className="ac-section-label">
+                    ACCESS MANAGEMENT
+                  </span>
 
-                  <p className="admin-muted">
-                    A quick view of the systems currently
-                    available to administration.
+                  <h2>
+                    Users & account control
+                  </h2>
+
+                  <p>
+                    Search users, manage verification,
+                    activate or suspend accounts, and
+                    manage marketplace roles.
                   </p>
                 </div>
 
                 <button
                   type="button"
-                  className="admin-btn"
+                  className="sd-btn sd-btn-outline"
                   onClick={loadAll}
                   disabled={loading}
                 >
                   {loading
                     ? 'Refreshing…'
-                    : 'Refresh data'}
+                    : 'Refresh'}
                 </button>
               </div>
 
-              <div className="admin-stat-grid">
-                {cards.map(([label, value]) => (
-                  <div
-                    className="admin-stat"
-                    key={label}
-                  >
-                    <span className="admin-stat-label">
-                      {label}
-                    </span>
-
-                    <b className="admin-stat-value">
-                      {value}
-                    </b>
-                  </div>
-                ))}
+              <div className="ac-search">
+                <input
+                  type="search"
+                  value={userSearch}
+                  onChange={(e) =>
+                    setUserSearch(e.target.value)
+                  }
+                  placeholder="Search by name, email, phone, role, status..."
+                />
               </div>
 
-              <div
-                className="admin-panel"
-                style={{ marginTop: 18 }}
-              >
-                <div className="admin-panel-header">
-                  <div>
-                    <h2 className="admin-panel-title">
-                      Modules status
-                    </h2>
+              <p className="sd-muted">
+                Showing{' '}
+                <strong>
+                  {filteredUsers.length}
+                </strong>{' '}
+                of {users.length} users.
+              </p>
 
-                    <p className="admin-panel-description">
-                      Current administration capabilities
-                      and implementation visibility.
-                    </p>
-                  </div>
-                </div>
+              <div className="ac-table-shell">
+                <table className="sd-table sd-table--stack">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Roles</th>
+                      <th>Rating</th>
+                      <th>Verification</th>
+                      <th>Account</th>
+                      <th>Role control</th>
+                    </tr>
+                  </thead>
 
-                <div className="admin-module-grid">
-                  {[
-                    [
-                      'Users & role management',
-                      true,
-                    ],
-                    [
-                      'Verification management',
-                      true,
-                    ],
-                    [
-                      'Account suspension / activation',
-                      true,
-                    ],
-                    [
-                      'Sellers / buyers / inspectors / truck owners',
-                      true,
-                    ],
-                    ['Disputes & reports', true],
-                    ['Fraud flags (heuristic)', true],
-                    [
-                      'Listings & categories moderation',
-                      false,
-                    ],
-                    [
-                      'Orders & payments oversight',
-                      true,
-                    ],
-                    [
-                      'Transport jobs oversight',
-                      false,
-                    ],
-                    [
-                      'Advertising & sponsored listings approval',
-                      true,
-                    ],
-                    [
-                      'Commissions & revenue records',
-                      true,
-                    ],
-                  ].map(([label, built]) => (
-                    <div
-                      className={`admin-module ${
-                        built ? '' : 'pending'
-                      }`}
-                      key={label}
-                    >
-                      <span className="admin-module-icon">
-                        {built ? '✓' : '○'}
-                      </span>
+                  <tbody>
+                    {filteredUsers.map(
+                      (item) => {
+                        const isActionLoading =
+                          actionLoading.includes(
+                            item.id
+                          );
 
-                      <div>
-                        <strong>{label}</strong>
+                        return (
+                          <tr key={item.id}>
+                            <td data-label="Name">
+                              <strong>
+                                {item.name}
+                              </strong>
 
-                        {!built && (
-                          <span className="admin-module-note">
-                            Backend not built yet
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </section>
-          )}
-
-          {tab === 'users' && (
-            <section className="admin-section">
-              <div className="admin-panel">
-                <div className="admin-toolbar">
-                  <div>
-                    <div className="admin-kicker">
-                      USER ADMINISTRATION
-                    </div>
-
-                    <h2 className="admin-panel-title">
-                      Users & account control
-                    </h2>
-
-                    <p className="admin-panel-description">
-                      Search users, manage verification,
-                      activate or suspend accounts, and
-                      manage marketplace roles.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="admin-btn"
-                    onClick={loadAll}
-                    disabled={loading}
-                  >
-                    {loading
-                      ? 'Refreshing…'
-                      : 'Refresh'}
-                  </button>
-                </div>
-
-                <div className="admin-search">
-                  <input
-                    type="search"
-                    value={userSearch}
-                    onChange={(event) =>
-                      setUserSearch(event.target.value)
-                    }
-                    placeholder="Search by name, email, phone, role, status..."
-                  />
-                </div>
-
-                <p className="admin-muted">
-                  Showing{' '}
-                  <strong>
-                    {filteredUsers.length}
-                  </strong>{' '}
-                  of{' '}
-                  <strong>{users.length}</strong>{' '}
-                  users.
-                </p>
-
-                <div
-                  className="admin-table-wrap"
-                  style={{ marginTop: 14 }}
-                >
-                  <table className="admin-table">
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Roles</th>
-                        <th>Rating</th>
-                        <th>Verification</th>
-                        <th>Account</th>
-                        <th>Role control</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {filteredUsers.map(
-                        (item) => {
-                          const isActionLoading =
-                            actionLoading.includes(
-                              item.id
-                            );
-
-                          return (
-                            <tr key={item.id}>
-                              <td data-label="Name">
-                                <div className="admin-user-name">
-                                  {item.name ||
-                                    'Unnamed user'}
+                              {item.phone && (
+                                <div className="sd-muted">
+                                  {item.phone}
                                 </div>
+                              )}
 
-                                {item.phone && (
-                                  <div className="admin-user-meta">
-                                    {item.phone}
-                                  </div>
+                              {item.location && (
+                                <div className="sd-muted">
+                                  {item.location}
+                                </div>
+                              )}
+                            </td>
+
+                            <td data-label="Email">
+                              {item.email}
+                            </td>
+
+                            <td data-label="Roles">
+                              <div className="sd-chip-row">
+                                {(
+                                  item.roles || []
+                                ).map(
+                                  (role) => (
+                                    <span
+                                      className="sd-badge"
+                                      key={role}
+                                    >
+                                      {role}
+                                    </span>
+                                  )
                                 )}
+                              </div>
+                            </td>
 
-                                {item.location && (
-                                  <div className="admin-user-meta">
-                                    {item.location}
-                                  </div>
+                            <td data-label="Rating">
+                              {Number(
+                                item.rating || 0
+                              ).toFixed(1)}
+                            </td>
+
+                            <td data-label="Verification">
+                              <select
+                                value={
+                                  item.verificationStatus ||
+                                  'UNVERIFIED'
+                                }
+                                onChange={(e) =>
+                                  setVerification(
+                                    item.id,
+                                    e.target.value
+                                  )
+                                }
+                                disabled={
+                                  isActionLoading
+                                }
+                              >
+                                <option value="UNVERIFIED">
+                                  UNVERIFIED
+                                </option>
+
+                                {VERIFICATION_OPTIONS.map(
+                                  (option) => (
+                                    <option
+                                      key={
+                                        option
+                                      }
+                                      value={
+                                        option
+                                      }
+                                    >
+                                      {option}
+                                    </option>
+                                  )
                                 )}
-                              </td>
+                              </select>
+                            </td>
 
-                              <td data-label="Email">
-                                {item.email}
-                              </td>
-
-                              <td data-label="Roles">
-                                <div className="admin-chip-row">
-                                  {(item.roles || []).map(
-                                    (role) => (
-                                      <span
-                                        className="admin-chip"
-                                        key={role}
-                                      >
-                                        {role}
-                                      </span>
-                                    )
+                            <td data-label="Account">
+                              <div className="sd-account-cell">
+                                <span
+                                  className={statusBadgeClass(
+                                    item.accountStatus ||
+                                      'ACTIVE'
                                   )}
-                                </div>
-                              </td>
+                                >
+                                  {item.accountStatus ||
+                                    'ACTIVE'}
+                                </span>
 
-                              <td data-label="Rating">
-                                <strong>
-                                  {Number(
-                                    item.rating || 0
-                                  ).toFixed(1)}
-                                </strong>
-                              </td>
+                                {item.accountStatus ===
+                                'SUSPENDED' ? (
+                                  <button
+                                    type="button"
+                                    className="sd-btn sd-btn-primary"
+                                    disabled={
+                                      isActionLoading
+                                    }
+                                    onClick={() =>
+                                      setAccountStatus(
+                                        item.id,
+                                        'ACTIVE'
+                                      )
+                                    }
+                                  >
+                                    {isActionLoading
+                                      ? 'Working…'
+                                      : 'Activate'}
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="sd-btn sd-btn-outline"
+                                    disabled={
+                                      isActionLoading
+                                    }
+                                    onClick={() =>
+                                      setAccountStatus(
+                                        item.id,
+                                        'SUSPENDED'
+                                      )
+                                    }
+                                  >
+                                    {isActionLoading
+                                      ? 'Working…'
+                                      : 'Suspend'}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
 
-                              <td data-label="Verification">
+                            <td data-label="Role control">
+                              <div className="ac-role-actions">
                                 <select
-                                  className="admin-select"
                                   value={
-                                    item.verificationStatus ||
-                                    'UNVERIFIED'
+                                    roleSelections[
+                                      item.id
+                                    ] || ''
                                   }
-                                  onChange={(event) =>
-                                    setVerification(
-                                      item.id,
-                                      event.target.value
+                                  onChange={(e) =>
+                                    setRoleSelections(
+                                      (current) => ({
+                                        ...current,
+                                        [item.id]:
+                                          e.target
+                                            .value,
+                                      })
                                     )
                                   }
                                   disabled={
                                     isActionLoading
                                   }
                                 >
-                                  <option value="UNVERIFIED">
-                                    UNVERIFIED
+                                  <option value="">
+                                    Select role...
                                   </option>
 
-                                  {VERIFICATION_OPTIONS.map(
-                                    (option) => (
+                                  {ROLE_OPTIONS.map(
+                                    (role) => (
                                       <option
-                                        key={option}
-                                        value={option}
+                                        key={role}
+                                        value={role}
                                       >
-                                        {option}
+                                        {role}
                                       </option>
                                     )
                                   )}
                                 </select>
-                              </td>
 
-                              <td data-label="Account">
-                                <div className="admin-action-row">
-                                  <StatusBadge
-                                    status={
-                                      item.accountStatus ||
-                                      'ACTIVE'
-                                    }
-                                  />
+                                <button
+                                  type="button"
+                                  className="sd-btn sd-btn-primary"
+                                  disabled={
+                                    isActionLoading ||
+                                    !roleSelections[
+                                      item.id
+                                    ]
+                                  }
+                                  onClick={() =>
+                                    addRole(
+                                      item.id
+                                    )
+                                  }
+                                >
+                                  Add role
+                                </button>
 
-                                  {item.accountStatus ===
-                                  'SUSPENDED' ? (
-                                    <button
-                                      type="button"
-                                      className="admin-mini-btn primary"
-                                      disabled={
-                                        isActionLoading
-                                      }
-                                      onClick={() =>
-                                        setAccountStatus(
-                                          item.id,
-                                          'ACTIVE'
-                                        )
-                                      }
-                                    >
-                                      {isActionLoading
-                                        ? 'Working…'
-                                        : 'Activate'}
-                                    </button>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      className="admin-mini-btn"
-                                      disabled={
-                                        isActionLoading
-                                      }
-                                      onClick={() =>
-                                        setAccountStatus(
-                                          item.id,
-                                          'SUSPENDED'
-                                        )
-                                      }
-                                    >
-                                      {isActionLoading
-                                        ? 'Working…'
-                                        : 'Suspend'}
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-
-                              <td data-label="Role control">
-                                <div className="admin-role-control">
-                                  <select
-                                    className="admin-select"
-                                    value={
-                                      roleSelections[
-                                        item.id
-                                      ] || ''
-                                    }
-                                    onChange={(event) =>
-                                      setRoleSelections(
-                                        (current) => ({
-                                          ...current,
-                                          [item.id]:
-                                            event.target
-                                              .value,
-                                        })
-                                      )
-                                    }
-                                    disabled={
-                                      isActionLoading
-                                    }
-                                  >
-                                    <option value="">
-                                      Select role...
-                                    </option>
-
-                                    {ROLE_OPTIONS.map(
+                                {(
+                                  item.roles || []
+                                ).length > 0 && (
+                                  <div className="sd-chip-row">
+                                    {item.roles.map(
                                       (role) => (
-                                        <option
+                                        <button
+                                          type="button"
                                           key={role}
-                                          value={role}
+                                          className="sd-btn sd-btn-outline"
+                                          disabled={
+                                            isActionLoading
+                                          }
+                                          onClick={() =>
+                                            removeRole(
+                                              item.id,
+                                              role
+                                            )
+                                          }
+                                          title={`Remove ${role}`}
                                         >
+                                          Remove{' '}
                                           {role}
-                                        </option>
+                                        </button>
                                       )
                                     )}
-                                  </select>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }
+                    )}
 
-                                  <button
-                                    type="button"
-                                    className="admin-mini-btn primary"
-                                    disabled={
-                                      isActionLoading ||
-                                      !roleSelections[
-                                        item.id
-                                      ]
-                                    }
-                                    onClick={() =>
-                                      addRole(item.id)
-                                    }
-                                  >
-                                    Add role
-                                  </button>
-
-                                  {(item.roles || [])
-                                    .length > 0 && (
-                                    <div className="admin-chip-row">
-                                      {item.roles.map(
-                                        (role) => (
-                                          <button
-                                            type="button"
-                                            key={role}
-                                            className="admin-mini-btn"
-                                            disabled={
-                                              isActionLoading
-                                            }
-                                            onClick={() =>
-                                              removeRole(
-                                                item.id,
-                                                role
-                                              )
-                                            }
-                                          >
-                                            Remove {role}
-                                          </button>
-                                        )
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        }
-                      )}
-
-                      {filteredUsers.length === 0 && (
-                        <tr>
-                          <td
-                            colSpan="7"
-                            data-label="Users"
-                          >
-                            <EmptyState>
-                              No users found matching
-                              your search.
-                            </EmptyState>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                    {filteredUsers.length ===
+                      0 && (
+                      <tr>
+                        <td colSpan="7">
+                          <div className="ac-empty">
+                            <strong>
+                              No users found
+                            </strong>
+                            Try a different name,
+                            email, role, or status.
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-            </section>
+            </div>
           )}
 
           {tab === 'disputes' && (
-            <section className="admin-section">
-              <div className="admin-section-heading">
+            <div>
+              <div className="ac-toolbar">
                 <div>
-                  <div className="admin-kicker">
+                  <span className="ac-section-label">
                     MODERATION
-                  </div>
+                  </span>
                   <h2>Open disputes</h2>
-                  <p className="admin-muted">
-                    Review active marketplace disputes
-                    and record the administrative
-                    resolution.
+                  <p>
+                    Review unresolved marketplace
+                    disputes and make the required
+                    payout decision.
                   </p>
                 </div>
               </div>
 
-              <div className="admin-card-grid">
+              <div className="ac-grid">
                 {openDisputes.map((item) => (
                   <div
-                    className="admin-card"
+                    className="ac-card"
                     key={item.id}
                   >
-                    <div className="admin-card-top">
+                    <div className="ac-status-row">
                       <h3>
                         {item.disputeType}
                       </h3>
-                      <StatusBadge status="OPEN" />
+
+                      <span
+                        className={statusBadgeClass(
+                          item.status
+                        )}
+                      >
+                        {item.status}
+                      </span>
                     </div>
 
                     <p>
-                      <strong>
-                        {item.raisedBy?.name ||
-                          'Unknown'}
-                      </strong>{' '}
-                      vs{' '}
-                      <strong>
-                        {item.against?.name ||
-                          'Unknown'}
-                      </strong>
+                      {item.raisedBy?.name} vs{' '}
+                      {item.against?.name}
                     </p>
 
-                    <p>{item.description}</p>
+                    <p>
+                      {item.description}
+                    </p>
 
-                    <div className="admin-card-actions">
+                    <div className="ac-actions">
                       <button
-                        type="button"
-                        className="admin-mini-btn primary"
+                        className="sd-btn sd-btn-primary"
                         disabled={
                           actionLoading ===
                           `dispute-${item.id}`
                         }
                         onClick={() =>
-                          resolveDispute(
-                            item.id,
+                          openDisputeDecision(
+                            item,
                             'RESOLVED'
                           )
                         }
                       >
-                        {actionLoading ===
-                        `dispute-${item.id}`
-                          ? 'Working…'
-                          : 'Resolve'}
+                        Resolve
                       </button>
 
                       <button
-                        type="button"
-                        className="admin-mini-btn danger"
+                        className="sd-btn sd-btn-outline"
                         disabled={
                           actionLoading ===
                           `dispute-${item.id}`
                         }
                         onClick={() =>
-                          resolveDispute(
-                            item.id,
+                          openDisputeDecision(
+                            item,
                             'REJECTED'
                           )
                         }
@@ -2555,32 +2568,34 @@ export default function AdminDashboard() {
                   </div>
                 ))}
 
-                {openDisputes.length === 0 && (
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <EmptyState>
-                      No open disputes right now.
-                    </EmptyState>
+                {openDisputes.length ===
+                  0 && (
+                  <div className="ac-empty">
+                    <strong>
+                      No open disputes
+                    </strong>
+                    The moderation queue is clear.
                   </div>
                 )}
               </div>
 
               <div
-                className="admin-panel"
-                style={{ marginTop: 20 }}
+                className="ac-toolbar"
+                style={{ marginTop: 28 }}
               >
-                <div className="admin-panel-header">
-                  <div>
-                    <div className="admin-kicker">
-                      HISTORY
-                    </div>
-                    <h2 className="admin-panel-title">
-                      Recently resolved
-                    </h2>
-                  </div>
+                <div>
+                  <span className="ac-section-label">
+                    HISTORY
+                  </span>
+                  <h2>
+                    Recently resolved
+                  </h2>
                 </div>
+              </div>
 
-                <div className="admin-table-wrap">
-                  <table className="admin-table">
+              <div className="ac-panel">
+                <div className="ac-table-shell">
+                  <table className="sd-table sd-table--stack">
                     <thead>
                       <tr>
                         <th>Type</th>
@@ -2600,34 +2615,42 @@ export default function AdminDashboard() {
                               </strong>
                             </td>
 
-                            <td data-label="Parties">
-                              <span className="admin-muted">
-                                {item.raisedBy?.name ||
-                                  'Unknown'}{' '}
-                                vs{' '}
-                                {item.against?.name ||
-                                  'Unknown'}
-                              </span>
+                            <td
+                              data-label="Parties"
+                              className="sd-muted"
+                            >
+                              {
+                                item.raisedBy
+                                  ?.name
+                              }{' '}
+                              vs{' '}
+                              {
+                                item.against
+                                  ?.name
+                              }
                             </td>
 
                             <td data-label="Status">
-                              <StatusBadge
-                                status={item.status}
-                              />
+                              <span
+                                className={statusBadgeClass(
+                                  item.status
+                                )}
+                              >
+                                {item.status}
+                              </span>
                             </td>
                           </tr>
                         ))}
 
-                      {resolvedDisputes.length === 0 && (
+                      {resolvedDisputes.length ===
+                        0 && (
                         <tr>
                           <td
                             colSpan="3"
-                            data-label="History"
+                            className="sd-muted"
                           >
-                            <EmptyState>
-                              Nothing has been resolved
-                              yet.
-                            </EmptyState>
+                            Nothing resolved
+                            yet.
                           </td>
                         </tr>
                       )}
@@ -2635,149 +2658,155 @@ export default function AdminDashboard() {
                   </table>
                 </div>
               </div>
-            </section>
+            </div>
           )}
 
           {tab === 'fraud' && (
-            <section className="admin-section">
-              <div className="admin-section-heading">
+            <div>
+              <div className="ac-toolbar">
                 <div>
-                  <div className="admin-kicker">
+                  <span className="ac-section-label">
                     RISK MONITORING
-                  </div>
+                  </span>
 
                   <h2>Flagged users</h2>
 
-                  <p className="admin-muted">
+                  <p>
                     Users with multiple open disputes
-                    filed against them. This is a starting
-                    heuristic — not a conclusive fraud
-                    finding.
+                    filed against them. This is a
+                    starting heuristic — not a
+                    conclusive fraud finding.
                   </p>
                 </div>
               </div>
 
-              <div className="admin-card-grid">
-                {suspiciousUsers.map((item) => (
-                  <div
-                    className="admin-card"
-                    key={item.id}
-                  >
-                    <div className="admin-card-top">
-                      <h3>
-                        {item.name ||
-                          'Unnamed user'}
-                      </h3>
+              <div className="ac-grid">
+                {suspiciousUsers.map(
+                  (item) => (
+                    <div
+                      className="ac-card"
+                      key={item.id}
+                    >
+                      <div className="ac-status-row">
+                        <h3>{item.name}</h3>
 
-                      <span className="admin-status warn">
-                        Review
-                      </span>
-                    </div>
+                        <span className="sd-badge sd-warn">
+                          REVIEW
+                        </span>
+                      </div>
 
-                    <p>
-                      {item.email}
-                    </p>
+                      <p>
+                        {item.email} ·{' '}
+                        {(
+                          item.disputesAgainst ||
+                          []
+                        ).length}{' '}
+                        open dispute(s)
+                      </p>
 
-                    <p>
-                      {(item.disputesAgainst || [])
-                        .length}{' '}
-                      open dispute(s) against this
-                      account.
-                    </p>
-
-                    {(item.disputesAgainst || []).map(
-                      (dispute) => (
-                        <p key={dispute.id}>
+                      {(
+                        item.disputesAgainst ||
+                        []
+                      ).map((dispute) => (
+                        <p
+                          key={dispute.id}
+                        >
                           —{' '}
-                          <strong>
-                            {dispute.disputeType}
-                          </strong>
-                          : {dispute.description}
+                          {dispute.disputeType}
+                          :{' '}
+                          {
+                            dispute.description
+                          }
                         </p>
-                      )
-                    )}
-                  </div>
-                ))}
+                      ))}
+                    </div>
+                  )
+                )}
 
-                {suspiciousUsers.length === 0 && (
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <EmptyState>
-                      No flagged users right now.
-                    </EmptyState>
+                {suspiciousUsers.length ===
+                  0 && (
+                  <div className="ac-empty">
+                    <strong>
+                      No flagged users
+                    </strong>
+                    No heuristic fraud signals are
+                    currently in the monitoring queue.
                   </div>
                 )}
               </div>
-            </section>
+            </div>
           )}
 
           {tab === 'advertising' && (
-            <section className="admin-section">
-              <div className="admin-section-heading">
+            <div>
+              <div className="ac-toolbar">
                 <div>
-                  <div className="admin-kicker">
+                  <span className="ac-section-label">
                     ADVERTISING
-                  </div>
+                  </span>
 
                   <h2>Campaign control</h2>
 
-                  <p className="admin-muted">
-                    Review paid creative, publish approved
-                    campaigns, record Telegram publication,
-                    and end campaigns early when necessary.
+                  <p>
+                    Review paid creative, publish
+                    approved campaigns, record
+                    Telegram publication, and end
+                    campaigns early when necessary.
                   </p>
                 </div>
               </div>
 
-              <div className="admin-card-grid">
+              <div className="ac-grid">
                 {pendingAds.map((ad) => {
-                  const adPaid = (
-                    ad.payments || []
-                  ).some(
-                    (payment) =>
-                      payment.status === 'PAID'
-                  );
+                  const adPaid =
+                    (ad.payments || []).some(
+                      (p) =>
+                        p.status === 'PAID'
+                    );
 
-                  const impressions = (
-                    ad.events || []
-                  ).filter(
-                    (event) =>
-                      event.eventType ===
-                      'IMPRESSION'
-                  ).length;
+                  const impressions =
+                    (ad.events || []).filter(
+                      (e) =>
+                        e.eventType ===
+                        'IMPRESSION'
+                    ).length;
 
-                  const clicks = (
-                    ad.events || []
-                  ).filter(
-                    (event) =>
-                      event.eventType === 'CLICK'
-                  ).length;
+                  const clicks =
+                    (ad.events || []).filter(
+                      (e) =>
+                        e.eventType ===
+                        'CLICK'
+                    ).length;
 
                   const ctr = impressions
                     ? (
-                        (clicks / impressions) *
+                        (clicks /
+                          impressions) *
                         100
                       ).toFixed(2)
                     : '0.00';
 
                   return (
                     <div
-                      className="admin-card"
+                      className="ac-card"
                       key={ad.id}
                     >
                       {ad.creativeImageUrl && (
                         <img
-                          src={ad.creativeImageUrl}
+                          src={
+                            ad.creativeImageUrl
+                          }
                           alt={
                             ad.headline ||
                             'Campaign creative'
                           }
                           loading="lazy"
                           decoding="async"
-                          className="admin-card-media"
+                          className="ac-image"
                         />
                       )}
 
-                      <div className="admin-card-top">
+                      <div className="ac-status-row">
                         <h3>
                           {ad.type.replace(
                             /_/g,
@@ -2785,32 +2814,30 @@ export default function AdminDashboard() {
                           )}
                         </h3>
 
-                        <StatusBadge
-                          status={ad.status}
-                        />
+                        <span
+                          className={statusBadgeClass(
+                            ad.status
+                          )}
+                        >
+                          {ad.status}
+                        </span>
                       </div>
 
                       {ad.type ===
                         'TELEGRAM_PROMOTION' &&
                         ad.telegramImageUrls
                           ?.length > 0 && (
-                          <div
-                            style={{
-                              marginTop: 12,
-                            }}
-                          >
-                            <ImageCarousel
-                              images={
-                                ad.telegramImageUrls
-                              }
-                              alt={
-                                ad.headline ||
-                                'Carousel photo'
-                              }
-                              openLinks
-                              className="img-carousel--compact"
-                            />
-                          </div>
+                          <ImageCarousel
+                            images={
+                              ad.telegramImageUrls
+                            }
+                            alt={
+                              ad.headline ||
+                              'Carousel photo'
+                            }
+                            openLinks
+                            className="img-carousel--compact"
+                          />
                         )}
 
                       {ad.type ===
@@ -2825,8 +2852,9 @@ export default function AdminDashboard() {
                               ' '
                             )}
                             {ad.telegramImageCount >
-                              0 &&
-                              ` · ${ad.telegramImageCount} photos`}
+                              0
+                              ? ` · ${ad.telegramImageCount} photos`
+                              : ''}
                           </p>
                         )}
 
@@ -2839,18 +2867,21 @@ export default function AdminDashboard() {
                       )}
 
                       <p>
-                        <strong>Ref:</strong>{' '}
+                        <strong>
+                          Ref:
+                        </strong>{' '}
                         {ad.campaignReference ||
                           ad.id.slice(0, 8)}
                         {' · '}
                         <strong>
                           Advertiser:
                         </strong>{' '}
-                        {ad.advertiser?.name ||
-                          'Unknown'}{' '}
+                        {ad.advertiser?.name}{' '}
                         (
-                        {ad.advertiser?.email ||
-                          '—'}
+                        {
+                          ad.advertiser
+                            ?.email
+                        }
                         )
                       </p>
 
@@ -2861,8 +2892,8 @@ export default function AdminDashboard() {
                             <strong>
                               {ad.listing.title ||
                                 ad.listing.cropType}
-                            </strong>
-                            {' · '}
+                            </strong>{' '}
+                            ·{' '}
                           </>
                         ) : (
                           'Platform-wide · '
@@ -2877,51 +2908,62 @@ export default function AdminDashboard() {
                         ).toLocaleDateString()}
                       </p>
 
-                      <p>
-                        <strong>
-                          Quoted:
-                        </strong>{' '}
-                        {Number(
-                          ad.priceQuoted || 0
-                        ).toLocaleString()}{' '}
-                        {ad.currency || 'ETB'}
-                        {' · '}
-                        <strong>
-                          Paid:
-                        </strong>{' '}
-                        {adPaid
-                          ? Number(
-                              ad.amountPaid || 0
-                            ).toLocaleString()
-                          : '0'}{' '}
-                        {ad.currency || 'ETB'}
-                        {' · '}
-                        <strong>
-                          CTR:
-                        </strong>{' '}
-                        {ctr}%
-                      </p>
+                      <div className="ac-financial">
+                        <div className="ac-financial-item">
+                          <span>
+                            Quoted
+                          </span>
+                          <b>
+                            {Number(
+                              ad.priceQuoted ||
+                                0
+                            ).toLocaleString()}{' '}
+                            {ad.currency ||
+                              'ETB'}
+                          </b>
+                        </div>
+
+                        <div className="ac-financial-item">
+                          <span>
+                            Paid
+                          </span>
+                          <b>
+                            {adPaid
+                              ? Number(
+                                  ad.amountPaid ||
+                                    0
+                                ).toLocaleString()
+                              : '0'}{' '}
+                            {ad.currency ||
+                              'ETB'}
+                          </b>
+                        </div>
+
+                        <div className="ac-financial-item">
+                          <span>
+                            CTR
+                          </span>
+                          <b>
+                            {ctr}%
+                          </b>
+                        </div>
+                      </div>
 
                       {ad.destinationUrl && (
-                        <p className="admin-ad-destination">
-                          <strong>
-                            Destination:
-                          </strong>{' '}
+                        <p
+                          style={{
+                            wordBreak:
+                              'break-word',
+                          }}
+                        >
+                          Destination:{' '}
                           {ad.destinationUrl}
                         </p>
                       )}
 
-                      {!adPaid && (
-                        <div className="admin-warning-note">
-                          Waiting for payment before this
-                          campaign can be approved.
-                        </div>
-                      )}
-
-                      <div className="admin-card-actions">
+                      <div className="ac-actions">
                         <button
-                          type="button"
-                          className="admin-mini-btn primary"
+                          className="sd-btn sd-btn-primary"
                           disabled={
                             actionLoading ===
                               `ad-${ad.id}` ||
@@ -2946,8 +2988,7 @@ export default function AdminDashboard() {
                         </button>
 
                         <button
-                          type="button"
-                          className="admin-mini-btn danger"
+                          className="sd-btn sd-btn-outline"
                           disabled={
                             actionLoading ===
                             `ad-${ad.id}`
@@ -2967,42 +3008,33 @@ export default function AdminDashboard() {
                 })}
 
                 {pendingAds.length === 0 && (
-                  <div
-                    style={{
-                      gridColumn: '1 / -1',
-                    }}
-                  >
-                    <EmptyState>
-                      No campaigns waiting on content
-                      review.
-                    </EmptyState>
+                  <div className="ac-empty">
+                    <strong>
+                      No campaigns waiting
+                    </strong>
+                    There are no campaigns waiting on
+                    content review.
                   </div>
                 )}
               </div>
 
               <div
-                className="admin-panel"
+                className="ac-panel"
                 style={{ marginTop: 20 }}
               >
-                <div className="admin-panel-header">
+                <div className="ac-panel-header">
                   <div>
-                    <div className="admin-kicker">
-                      CAMPAIGN LEDGER
-                    </div>
-
-                    <h2 className="admin-panel-title">
-                      Advertising history
+                    <span className="ac-section-label">
+                      HISTORY
+                    </span>
+                    <h2>
+                      Campaign ledger
                     </h2>
-
-                    <p className="admin-panel-description">
-                      Financial, scheduling and engagement
-                      visibility for reviewed campaigns.
-                    </p>
                   </div>
                 </div>
 
-                <div className="admin-table-wrap">
-                  <table className="admin-table">
+                <div className="ac-table-shell">
+                  <table className="sd-table sd-table--stack">
                     <thead>
                       <tr>
                         <th>Campaign</th>
@@ -3019,32 +3051,39 @@ export default function AdminDashboard() {
                       {reviewedAds
                         .slice(0, 30)
                         .map((ad) => {
-                          const impressions = (
-                            ad.events || []
-                          ).filter(
-                            (event) =>
-                              event.eventType ===
-                              'IMPRESSION'
-                          ).length;
+                          const impressions =
+                            (
+                              ad.events ||
+                              []
+                            ).filter(
+                              (e) =>
+                                e.eventType ===
+                                'IMPRESSION'
+                            ).length;
 
-                          const clicks = (
-                            ad.events || []
-                          ).filter(
-                            (event) =>
-                              event.eventType ===
-                              'CLICK'
-                          ).length;
+                          const clicks =
+                            (
+                              ad.events ||
+                              []
+                            ).filter(
+                              (e) =>
+                                e.eventType ===
+                                'CLICK'
+                            ).length;
 
-                          const ctr = impressions
-                            ? (
-                                (clicks /
-                                  impressions) *
-                                100
-                              ).toFixed(2)
-                            : '0.00';
+                          const ctr =
+                            impressions
+                              ? (
+                                  (clicks /
+                                    impressions) *
+                                  100
+                                ).toFixed(2)
+                              : '0.00';
 
                           return (
-                            <tr key={ad.id}>
+                            <tr
+                              key={ad.id}
+                            >
                               <td data-label="Campaign">
                                 <strong>
                                   {ad.campaignReference ||
@@ -3053,19 +3092,20 @@ export default function AdminDashboard() {
                                       ' '
                                     )}
                                 </strong>
-
-                                <div className="admin-user-meta">
+                                <br />
+                                <span className="sd-muted">
                                   {ad.type.replace(
                                     /_/g,
                                     ' '
                                   )}
-                                </div>
+                                </span>
 
                                 {ad.type ===
                                   'TELEGRAM_PROMOTION' &&
                                   ad.telegramImageUrls
-                                    ?.length > 0 && (
-                                    <details className="admin-details">
+                                    ?.length >
+                                    0 && (
+                                    <details className="tg-ledger-photos">
                                       <summary>
                                         🎠{' '}
                                         {
@@ -3076,33 +3116,36 @@ export default function AdminDashboard() {
                                         carousel photos
                                       </summary>
 
-                                      <div
-                                        style={{
-                                          marginTop: 8,
-                                        }}
-                                      >
-                                        <ImageCarousel
-                                          images={
-                                            ad.telegramImageUrls
-                                          }
-                                          alt={
-                                            ad.headline ||
-                                            'Carousel photo'
-                                          }
-                                          openLinks
-                                          className="img-carousel--compact"
-                                        />
-                                      </div>
+                                      <ImageCarousel
+                                        images={
+                                          ad.telegramImageUrls
+                                        }
+                                        alt={
+                                          ad.headline ||
+                                          'Carousel photo'
+                                        }
+                                        openLinks
+                                        className="img-carousel--compact"
+                                      />
                                     </details>
                                   )}
                               </td>
 
-                              <td data-label="Advertiser">
-                                {ad.advertiser?.name ||
-                                  '—'}
+                              <td
+                                data-label="Advertiser"
+                                className="sd-muted"
+                              >
+                                {
+                                  ad
+                                    .advertiser
+                                    ?.name
+                                }
                               </td>
 
-                              <td data-label="Dates">
+                              <td
+                                data-label="Dates"
+                                className="sd-muted"
+                              >
                                 {new Date(
                                   ad.startDate
                                 ).toLocaleDateString()}{' '}
@@ -3112,34 +3155,47 @@ export default function AdminDashboard() {
                                 ).toLocaleDateString()}
                               </td>
 
-                              <td data-label="Financials">
+                              <td
+                                data-label="Financials"
+                                className="sd-muted"
+                              >
                                 {Number(
-                                  ad.priceQuoted || 0
+                                  ad.priceQuoted ||
+                                    0
                                 ).toLocaleString()}{' '}
                                 {ad.currency ||
                                   'ETB'}{' '}
                                 quoted
                                 <br />
                                 {Number(
-                                  ad.amountPaid || 0
+                                  ad.amountPaid ||
+                                    0
                                 ).toLocaleString()}{' '}
                                 paid
                               </td>
 
-                              <td data-label="Analytics">
-                                {impressions} imp ·{' '}
-                                {clicks} clicks ·{' '}
-                                {ctr}% CTR
+                              <td
+                                data-label="Analytics"
+                                className="sd-muted"
+                              >
+                                {impressions}{' '}
+                                imp · {clicks}{' '}
+                                clicks · {ctr}%
+                                CTR
                               </td>
 
                               <td data-label="Status">
-                                <StatusBadge
-                                  status={ad.status}
-                                />
+                                <span
+                                  className={statusBadgeClass(
+                                    ad.status
+                                  )}
+                                >
+                                  {ad.status}
+                                </span>
                               </td>
 
-                              <td data-label="Actions">
-                                <div className="admin-action-row">
+                              <td data-label="">
+                                <div className="ac-actions">
                                   {[
                                     'PUBLISHED',
                                     'ACTIVE',
@@ -3147,8 +3203,7 @@ export default function AdminDashboard() {
                                     ad.status
                                   ) && (
                                     <button
-                                      type="button"
-                                      className="admin-mini-btn"
+                                      className="sd-btn sd-btn-outline"
                                       disabled={
                                         actionLoading ===
                                         `ad-${ad.id}`
@@ -3175,8 +3230,7 @@ export default function AdminDashboard() {
                                     ad.status
                                   ) && (
                                     <button
-                                      type="button"
-                                      className="admin-mini-btn danger"
+                                      className="sd-btn sd-btn-outline"
                                       disabled={
                                         actionLoading ===
                                         `ad-${ad.id}`
@@ -3203,8 +3257,7 @@ export default function AdminDashboard() {
                                       ad.status
                                     ) && (
                                       <button
-                                        type="button"
-                                        className="admin-mini-btn primary"
+                                        className="sd-btn sd-btn-primary"
                                         disabled={
                                           actionLoading ===
                                           `ad-${ad.id}`
@@ -3225,16 +3278,15 @@ export default function AdminDashboard() {
                           );
                         })}
 
-                      {reviewedAds.length === 0 && (
+                      {reviewedAds.length ===
+                        0 && (
                         <tr>
                           <td
                             colSpan="7"
-                            data-label="Campaigns"
+                            className="sd-muted"
                           >
-                            <EmptyState>
-                              No reviewed campaigns
-                              yet.
-                            </EmptyState>
+                            No reviewed campaigns
+                            yet.
                           </td>
                         </tr>
                       )}
@@ -3242,32 +3294,32 @@ export default function AdminDashboard() {
                   </table>
                 </div>
               </div>
-            </section>
+            </div>
           )}
 
           {tab === 'orders' && (
-            <section className="admin-section">
-              <div className="admin-section-heading">
+            <div>
+              <div className="ac-toolbar">
                 <div>
-                  <div className="admin-kicker">
+                  <span className="ac-section-label">
                     ORDERS
-                  </div>
+                  </span>
 
                   <h2>All orders</h2>
 
-                  <p className="admin-muted">
-                    Cancelling here is an admin override
-                    for stalled orders. It is blocked once
-                    a transport job has started pickup,
-                    since goods already in motion need a
-                    dispute instead.
+                  <p>
+                    Cancelling here is an admin
+                    override for stalled orders. It is
+                    blocked once a transport job has
+                    started pickup, since goods already
+                    in motion need a dispute instead.
                   </p>
                 </div>
               </div>
 
-              <div className="admin-panel">
-                <div className="admin-table-wrap">
-                  <table className="admin-table">
+              <div className="ac-panel">
+                <div className="ac-table-shell">
+                  <table className="sd-table sd-table--stack">
                     <thead>
                       <tr>
                         <th>Order</th>
@@ -3281,16 +3333,16 @@ export default function AdminDashboard() {
                     </thead>
 
                     <tbody>
-                      {orders.map((order) => {
+                      {orders.map((o) => {
                         const transportInMotion =
                           Boolean(
-                            order.transportJob &&
+                            o.transportJob &&
                               [
                                 'PICKUP',
                                 'IN_TRANSIT',
                                 'DELIVERED',
                               ].includes(
-                                order.transportJob
+                                o.transportJob
                                   .status
                               )
                           );
@@ -3300,76 +3352,75 @@ export default function AdminDashboard() {
                             'COMPLETED',
                             'CANCELLED',
                           ].includes(
-                            order.status
+                            o.status
                           ) &&
                           !transportInMotion;
 
                         return (
-                          <tr key={order.id}>
+                          <tr key={o.id}>
                             <td data-label="Order">
-                              <code className="admin-code">
-                                {order.id.slice(0, 8)}
-                              </code>
+                              <span className="ac-code">
+                                {o.id.slice(
+                                  0,
+                                  8
+                                )}
+                              </span>
                             </td>
 
                             <td data-label="Listing">
-                              {order.listing?.title ||
-                                order.listing
+                              {o.listing?.title ||
+                                o.listing
                                   ?.cropType ||
                                 '—'}
                             </td>
 
                             <td data-label="Buyer">
-                              {order.buyer?.name ||
+                              {o.buyer?.name ||
                                 '—'}
                             </td>
 
                             <td data-label="Seller">
-                              {order.seller?.name ||
+                              {o.seller?.name ||
                                 '—'}
                             </td>
 
                             <td data-label="Value">
-                              <strong>
-                                {Number(
-                                  order.finalPrice
-                                ).toLocaleString()}{' '}
-                                ETB
-                              </strong>
+                              {Number(
+                                o.finalPrice
+                              ).toLocaleString()}{' '}
+                              ETB
                             </td>
 
                             <td data-label="Status">
-                              <StatusBadge
-                                status={order.status}
-                              />
+                              <span
+                                className={statusBadgeClass(
+                                  o.status
+                                )}
+                              >
+                                {o.status}
+                              </span>
                             </td>
 
-                            <td data-label="Actions">
-                              {cancellable ? (
+                            <td data-label="">
+                              {cancellable && (
                                 <button
                                   type="button"
-                                  className="admin-mini-btn"
+                                  className="sd-btn sd-btn-outline"
                                   disabled={
                                     actionLoading ===
-                                    `order-${order.id}`
+                                    `order-${o.id}`
                                   }
                                   onClick={() =>
                                     cancelOrder(
-                                      order
+                                      o
                                     )
                                   }
                                 >
                                   {actionLoading ===
-                                  `order-${order.id}`
+                                  `order-${o.id}`
                                     ? 'Cancelling…'
                                     : 'Cancel order'}
                                 </button>
-                              ) : (
-                                <span className="admin-muted">
-                                  {transportInMotion
-                                    ? 'Transport in motion'
-                                    : 'Not cancellable'}
-                                </span>
                               )}
                             </td>
                           </tr>
@@ -3380,11 +3431,9 @@ export default function AdminDashboard() {
                         <tr>
                           <td
                             colSpan="7"
-                            data-label="Orders"
+                            className="sd-muted"
                           >
-                            <EmptyState>
-                              No orders yet.
-                            </EmptyState>
+                            No orders yet.
                           </td>
                         </tr>
                       )}
@@ -3392,32 +3441,33 @@ export default function AdminDashboard() {
                   </table>
                 </div>
               </div>
-            </section>
+            </div>
           )}
 
           {tab === 'operations' && (
-            <section className="admin-section">
-              <div className="admin-panel">
-                <div className="admin-panel-header">
+            <div>
+              <div className="ac-panel">
+                <div className="ac-toolbar">
                   <div>
-                    <div className="admin-kicker">
-                      OPERATIONS
-                    </div>
+                    <span className="ac-section-label">
+                      SYSTEM OPERATIONS
+                    </span>
 
-                    <h2 className="admin-panel-title">
+                    <h2>
                       Operations & audit
                     </h2>
 
-                    <p className="admin-panel-description">
-                      Monitor live workflow queues from
-                      durable OrderEvent records and review
-                      the internal audit trail.
+                    <p>
+                      Monitor live workflow queues
+                      from durable OrderEvent records
+                      and review the internal audit
+                      trail.
                     </p>
                   </div>
 
                   <button
                     type="button"
-                    className="admin-btn"
+                    className="sd-btn sd-btn-outline"
                     onClick={loadAll}
                     disabled={loading}
                   >
@@ -3427,7 +3477,7 @@ export default function AdminDashboard() {
                   </button>
                 </div>
 
-                <div className="admin-stat-grid">
+                <div className="ac-stat-strip">
                   {[
                     [
                       'Pending payments',
@@ -3455,43 +3505,42 @@ export default function AdminDashboard() {
                       operations?.activeTransportJobs ||
                         0,
                     ],
-                  ].map(([label, value]) => (
-                    <div
-                      className="admin-stat"
-                      key={label}
-                    >
-                      <span className="admin-stat-label">
-                        {label}
-                      </span>
-                      <b className="admin-stat-value">
-                        {value}
-                      </b>
-                    </div>
-                  ))}
+                  ].map(
+                    ([label, value]) => (
+                      <div
+                        className="ac-small-stat"
+                        key={label}
+                      >
+                        <span>
+                          {label}
+                        </span>
+                        <b>{value}</b>
+                      </div>
+                    )
+                  )}
                 </div>
               </div>
 
-              <div className="admin-panel">
-                <div className="admin-panel-header">
+              <div
+                className="ac-panel"
+                style={{ marginTop: 18 }}
+              >
+                <div className="ac-panel-header">
                   <div>
-                    <div className="admin-kicker">
-                      WORKFLOW EVENTS
-                    </div>
-
-                    <h2 className="admin-panel-title">
+                    <h2>
                       Recent workflow events
                     </h2>
 
-                    <p className="admin-panel-description">
+                    <p>
                       Customer-facing order lifecycle
-                      events. This is read-only operational
-                      visibility.
+                      events. This is read-only
+                      operational visibility.
                     </p>
                   </div>
                 </div>
 
-                <div className="admin-table-wrap">
-                  <table className="admin-table">
+                <div className="ac-table-shell">
+                  <table className="sd-table sd-table--stack">
                     <thead>
                       <tr>
                         <th>Time</th>
@@ -3503,84 +3552,95 @@ export default function AdminDashboard() {
                     </thead>
 
                     <tbody>
-                      {orderEvents.length === 0 ? (
+                      {orderEvents.length ===
+                      0 ? (
                         <tr>
                           <td
                             colSpan="5"
-                            data-label="Events"
+                            className="sd-muted"
                           >
-                            <EmptyState>
-                              No workflow events
-                              recorded yet.
-                            </EmptyState>
+                            No workflow events
+                            recorded yet.
                           </td>
                         </tr>
                       ) : (
-                        orderEvents.map((event) => (
-                          <tr key={event.id}>
-                            <td data-label="Time">
-                              {new Date(
-                                event.createdAt
-                              ).toLocaleString()}
-                            </td>
+                        orderEvents.map(
+                          (event) => (
+                            <tr
+                              key={event.id}
+                            >
+                              <td data-label="Time">
+                                {new Date(
+                                  event.createdAt
+                                ).toLocaleString()}
+                              </td>
 
-                            <td data-label="Event">
-                              <span className="admin-chip">
-                                {event.type}
-                              </span>
-                            </td>
+                              <td data-label="Event">
+                                <span className="sd-badge">
+                                  {
+                                    event.type
+                                  }
+                                </span>
+                              </td>
 
-                            <td data-label="Order">
-                              <code className="admin-code">
-                                {event.orderId.slice(
-                                  0,
-                                  10
-                                )}
-                              </code>
-                            </td>
+                              <td data-label="Order">
+                                <code className="ac-code">
+                                  {event.orderId.slice(
+                                    0,
+                                    10
+                                  )}
+                                </code>
+                              </td>
 
-                            <td data-label="Transition">
-                              {event.fromStatus ||
-                                '—'}{' '}
-                              →{' '}
-                              {event.toStatus ||
-                                '—'}
-                            </td>
+                              <td data-label="Transition">
+                                {
+                                  event.fromStatus ||
+                                  '—'
+                                }{' '}
+                                →{' '}
+                                {
+                                  event.toStatus ||
+                                  '—'
+                                }
+                              </td>
 
-                            <td data-label="Actor">
-                              {event.actor?.name ||
-                                event.actor?.email ||
-                                'System'}
-                            </td>
-                          </tr>
-                        ))
+                              <td data-label="Actor">
+                                {event.actor
+                                  ?.name ||
+                                  event.actor
+                                    ?.email ||
+                                  'System'}
+                              </td>
+                            </tr>
+                          )
+                        )
                       )}
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              <div className="admin-panel">
-                <div className="admin-panel-header">
+              <div
+                className="ac-panel"
+                style={{ marginTop: 18 }}
+              >
+                <div className="ac-panel-header">
                   <div>
-                    <div className="admin-kicker">
-                      SECURITY TRAIL
-                    </div>
-
-                    <h2 className="admin-panel-title">
+                    <h2>
                       Recent audit events
                     </h2>
 
-                    <p className="admin-panel-description">
-                      Internal administrative/security
-                      trail. Secrets and tokens are not
-                      exposed here.
+                    <p>
+                      Internal
+                      administrative/security
+                      trail. Secrets and tokens are
+                      not exposed here.
                     </p>
                   </div>
                 </div>
 
-                <div className="admin-table-wrap">
-                  <table className="admin-table">
+                <div className="ac-table-shell">
+                  <table className="sd-table sd-table--stack">
                     <thead>
                       <tr>
                         <th>Time</th>
@@ -3591,240 +3651,265 @@ export default function AdminDashboard() {
                     </thead>
 
                     <tbody>
-                      {auditEvents.length === 0 ? (
+                      {auditEvents.length ===
+                      0 ? (
                         <tr>
                           <td
                             colSpan="4"
-                            data-label="Events"
+                            className="sd-muted"
                           >
-                            <EmptyState>
-                              No audit events
-                              recorded yet.
-                            </EmptyState>
+                            No audit events
+                            recorded yet.
                           </td>
                         </tr>
                       ) : (
-                        auditEvents.map((event) => (
-                          <tr key={event.id}>
-                            <td data-label="Time">
-                              {new Date(
-                                event.createdAt
-                              ).toLocaleString()}
-                            </td>
+                        auditEvents.map(
+                          (event) => (
+                            <tr
+                              key={event.id}
+                            >
+                              <td data-label="Time">
+                                {new Date(
+                                  event.createdAt
+                                ).toLocaleString()}
+                              </td>
 
-                            <td data-label="Action">
-                              <span className="admin-chip">
-                                {event.action}
-                              </span>
-                            </td>
+                              <td data-label="Action">
+                                <span className="sd-badge">
+                                  {
+                                    event.action
+                                  }
+                                </span>
+                              </td>
 
-                            <td data-label="Resource">
-                              {event.resourceType}
-                              {event.resourceId
-                                ? ` · ${event.resourceId.slice(
-                                    0,
-                                    10
-                                  )}`
-                                : ''}
-                            </td>
+                              <td data-label="Resource">
+                                {
+                                  event.resourceType
+                                }
+                                {event.resourceId
+                                  ? ` · ${event.resourceId.slice(
+                                      0,
+                                      10
+                                    )}`
+                                  : ''}
+                              </td>
 
-                            <td data-label="Actor">
-                              {event.actor?.name ||
-                                event.actor?.email ||
-                                'System'}
-                            </td>
-                          </tr>
-                        ))
+                              <td data-label="Actor">
+                                {event.actor
+                                  ?.name ||
+                                  event.actor
+                                    ?.email ||
+                                  'System'}
+                              </td>
+                            </tr>
+                          )
+                        )
                       )}
                     </tbody>
                   </table>
                 </div>
               </div>
-            </section>
+            </div>
           )}
 
           {tab === 'payments' && (
-            <section className="admin-section">
-              <div className="admin-kicker">
-                FINANCE
-              </div>
-
-              <div
-                className="admin-stat-grid admin-financial-grid"
-                style={{ marginTop: 8 }}
-              >
-                <div className="admin-stat">
-                  <span className="admin-stat-label">
-                    Total confirmed volume
-                  </span>
-
-                  <b className="admin-stat-value">
-                    {Number(
-                      commissionSummary?.totalVolume ||
-                        0
-                    ).toLocaleString()}{' '}
-                    ETB
-                  </b>
-                </div>
-
-                <div className="admin-stat">
-                  <span className="admin-stat-label">
-                    Platform commission earned
-                  </span>
-
-                  <b className="admin-stat-value">
-                    {Number(
-                      commissionSummary?.totalCommission ||
-                        0
-                    ).toLocaleString()}{' '}
-                    ETB
-                  </b>
-                </div>
-
-                {Object.entries(
-                  commissionSummary?.byType || {}
-                ).map(([type, value]) => (
-                  <div
-                    className="admin-stat"
-                    key={type}
-                  >
-                    <span className="admin-stat-label">
-                      {type} · {value.count} payment
-                      {value.count === 1
-                        ? ''
-                        : 's'}
+            <div>
+              <div className="ac-panel">
+                <div className="ac-panel-header">
+                  <div>
+                    <span className="ac-section-label">
+                      FINANCE
                     </span>
 
-                    <b className="admin-stat-value">
+                    <h2>
+                      Payment overview
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="ac-stat-strip">
+                  <div className="ac-small-stat">
+                    <span>
+                      Total confirmed
+                      volume
+                    </span>
+
+                    <b>
                       {Number(
-                        value.commission
+                        commissionSummary
+                          ?.totalVolume ||
+                          0
                       ).toLocaleString()}{' '}
                       ETB
                     </b>
                   </div>
-                ))}
+
+                  <div className="ac-small-stat">
+                    <span>
+                      Platform commission
+                    </span>
+
+                    <b>
+                      {Number(
+                        commissionSummary
+                          ?.totalCommission ||
+                          0
+                      ).toLocaleString()}{' '}
+                      ETB
+                    </b>
+                  </div>
+
+                  {Object.entries(
+                    commissionSummary?.byType ||
+                      {}
+                  ).map(
+                    ([type, t]) => (
+                      <div
+                        className="ac-small-stat"
+                        key={type}
+                      >
+                        <span>
+                          {type} ({t.count})
+                        </span>
+
+                        <b>
+                          {Number(
+                            t.commission
+                          ).toLocaleString()}{' '}
+                          ETB
+                        </b>
+                      </div>
+                    )
+                  )}
+                </div>
               </div>
 
-              <div className="admin-section-heading">
+              <div
+                className="ac-toolbar"
+                style={{ marginTop: 22 }}
+              >
                 <div>
-                  <div className="admin-kicker">
+                  <span className="ac-section-label">
                     RECONCILIATION
-                  </div>
+                  </span>
 
                   <h2>
                     Payment reconciliation
                   </h2>
 
-                  <p className="admin-muted">
-                    Payment records waiting to be
-                    confirmed, plus records flagged for
-                    reconciliation after a mismatch or
-                    failed automatic verification.
+                  <p>
+                    These payment records are waiting
+                    to be confirmed, plus any flagged
+                    for reconciliation after a mismatch
+                    or failed automatic verification.
+                    Prefer a signed provider webhook
+                    where available — use manual
+                    confirmation only once you've
+                    verified the funds arrived.
                   </p>
                 </div>
               </div>
 
-              <div className="admin-card-grid">
-                {payments.map((payment) => (
+              <div className="ac-grid">
+                {payments.map((p) => (
                   <div
-                    className="admin-card"
-                    key={payment.id}
+                    className="ac-card"
+                    key={p.id}
                   >
-                    <div className="admin-card-top">
+                    <div className="ac-status-row">
                       <h3>
                         {Number(
-                          payment.amount
+                          p.amount
                         ).toLocaleString()}{' '}
                         ETB
                       </h3>
 
-                      <StatusBadge
-                        status={payment.status}
-                      />
+                      <span
+                        className={statusBadgeClass(
+                          p.status
+                        )}
+                      >
+                        {p.status?.replace(
+                          /_/g,
+                          ' '
+                        )}
+                      </span>
                     </div>
 
                     <p>
-                      <strong>
-                        {payment.type}
-                      </strong>{' '}
-                      via{' '}
-                      <strong>
-                        {payment.method}
-                      </strong>
+                      {p.type} via {p.method}
                     </p>
 
                     <p>
-                      {payment.createdBy?.name ||
-                        'Unknown user'}{' '}
+                      {p.createdBy?.name}{' '}
                       (
-                      {payment.createdBy?.email ||
-                        '—'}
+                      {
+                        p.createdBy
+                          ?.email
+                      }
                       )
-                      {payment.reference && (
+                      {p.reference && (
                         <>
-                          {' · '}
-                          Ref:{' '}
-                          {payment.reference}
+                          {' · Ref: '}
+                          {p.reference}
                         </>
                       )}
                     </p>
 
                     <p>
-                      {payment.order &&
-                        `Order ${payment.order.id.slice(
+                      {p.order &&
+                        `Order ${p.order.id.slice(
                           0,
                           8
                         )}`}
-                      {payment.digitalProduct &&
-                        `Digital product: ${payment.digitalProduct.title}`}
-                      {payment.advertisement &&
-                        `Ad campaign: ${payment.advertisement.type.replace(
+                      {p.digitalProduct &&
+                        `Digital product: ${p.digitalProduct.title}`}
+                      {p.advertisement &&
+                        `Ad campaign: ${p.advertisement.type.replace(
                           /_/g,
                           ' '
                         )}`}
                       {' · '}
                       {new Date(
-                        payment.createdAt
+                        p.createdAt
                       ).toLocaleString()}
                     </p>
 
-                    <div className="admin-card-actions">
-                      {payment.provider ? (
+                    <div className="ac-actions">
+                      {p.provider ? (
                         <button
-                          type="button"
-                          className="admin-mini-btn primary"
+                          className="sd-btn sd-btn-primary"
                           disabled={
                             actionLoading ===
-                            `payment-${payment.id}`
+                            `payment-${p.id}`
                           }
                           onClick={() =>
                             checkGatewayPayment(
-                              payment.id,
-                              payment.provider
+                              p.id,
+                              p.provider
                             )
                           }
                         >
                           {actionLoading ===
-                          `payment-${payment.id}`
+                          `payment-${p.id}`
                             ? 'Checking…'
-                            : `Check with ${payment.provider}`}
+                            : `Check with ${p.provider}`}
                         </button>
                       ) : (
                         <button
-                          type="button"
-                          className="admin-mini-btn primary"
+                          className="sd-btn sd-btn-primary"
                           disabled={
                             actionLoading ===
-                            `payment-${payment.id}`
+                            `payment-${p.id}`
                           }
                           onClick={() =>
                             confirmPayment(
-                              payment.id
+                              p.id
                             )
                           }
                         >
                           {actionLoading ===
-                          `payment-${payment.id}`
+                          `payment-${p.id}`
                             ? 'Working…'
                             : 'Confirm payment received'}
                         </button>
@@ -3834,22 +3919,266 @@ export default function AdminDashboard() {
                 ))}
 
                 {payments.length === 0 && (
-                  <div
-                    style={{
-                      gridColumn: '1 / -1',
-                    }}
-                  >
-                    <EmptyState>
-                      No payments awaiting
-                      reconciliation right now.
-                    </EmptyState>
+                  <div className="ac-empty">
+                    <strong>
+                      Reconciliation queue clear
+                    </strong>
+                    No payments are awaiting
+                    reconciliation right now.
                   </div>
                 )}
               </div>
-            </section>
+            </div>
           )}
-        </main>
+
+          {tab === 'refunds' && (
+            <div>
+              <div className="ac-toolbar">
+                <div>
+                  <span className="ac-section-label">
+                    FINANCIAL OPERATIONS
+                  </span>
+
+                  <h2>Pending refunds</h2>
+
+                  <p>
+                    Created automatically when a
+                    dispute is resolved against a
+                    payee or a cancelled order flags a
+                    completed payment. Mark one complete
+                    only once the money has actually been
+                    sent back to the buyer.
+                  </p>
+                </div>
+              </div>
+
+              <div className="ac-grid">
+                {pendingRefunds.map((r) => (
+                  <div
+                    className="ac-card"
+                    key={r.id}
+                  >
+                    <div className="ac-status-row">
+                      <h3>
+                        {Number(
+                          r.amount
+                        ).toLocaleString()}{' '}
+                        {r.currency || 'ETB'}
+                      </h3>
+
+                      <span
+                        className={statusBadgeClass(
+                          r.status
+                        )}
+                      >
+                        {r.status?.replace(
+                          /_/g,
+                          ' '
+                        )}
+                      </span>
+                    </div>
+
+                    <p>
+                      Payment{' '}
+                      {r.paymentId.slice(
+                        0,
+                        8
+                      )}
+                      {r.payment?.type && (
+                        <>
+                          {' · '}
+                          {r.payment.type.replace(
+                            /_/g,
+                            ' '
+                          )}
+                        </>
+                      )}
+                      {r.payment?.provider && (
+                        <>
+                          {' · '}
+                          {
+                            r.payment
+                              .provider
+                          }
+                        </>
+                      )}
+                      {r.payment?.orderId && (
+                        <>
+                          {' · Order '}
+                          {r.payment.orderId.slice(
+                            0,
+                            8
+                          )}
+                        </>
+                      )}
+                    </p>
+
+                    {r.reason && (
+                      <p>
+                        <strong>
+                          Reason:
+                        </strong>{' '}
+                        {r.reason}
+                      </p>
+                    )}
+
+                    <p>
+                      Requested by{' '}
+                      {r.requestedBy?.name ||
+                        r.requestedBy
+                          ?.email ||
+                        'System'}
+                      {' · '}
+                      {new Date(
+                        r.createdAt
+                      ).toLocaleString()}
+                    </p>
+
+                    <div className="ac-actions">
+                      <button
+                        className="sd-btn sd-btn-primary"
+                        disabled={
+                          actionLoading ===
+                          `refund-${r.id}`
+                        }
+                        onClick={() =>
+                          markRefundComplete(
+                            r
+                          )
+                        }
+                      >
+                        {actionLoading ===
+                        `refund-${r.id}`
+                          ? 'Working…'
+                          : 'Mark completed'}
+                      </button>
+
+                      <button
+                        className="sd-btn sd-btn-outline"
+                        disabled={
+                          actionLoading ===
+                          `refund-${r.id}`
+                        }
+                        onClick={() =>
+                          markRefundFailed(r)
+                        }
+                      >
+                        Mark failed
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {pendingRefunds.length ===
+                  0 && (
+                  <div className="ac-empty">
+                    <strong>
+                      No refunds waiting
+                    </strong>
+                    There are no refunds waiting for
+                    administrative action.
+                  </div>
+                )}
+              </div>
+
+              <div
+                className="ac-toolbar"
+                style={{ marginTop: 28 }}
+              >
+                <div>
+                  <span className="ac-section-label">
+                    HISTORY
+                  </span>
+
+                  <h2>
+                    Recent refund history
+                  </h2>
+                </div>
+              </div>
+
+              <div className="ac-panel">
+                <div className="ac-table-shell">
+                  <table className="sd-table sd-table--stack">
+                    <thead>
+                      <tr>
+                        <th>Amount</th>
+                        <th>Payment</th>
+                        <th>Status</th>
+                        <th>Updated</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {refundHistory
+                        .slice(0, 10)
+                        .map((r) => (
+                          <tr key={r.id}>
+                            <td data-label="Amount">
+                              {Number(
+                                r.amount
+                              ).toLocaleString()}{' '}
+                              {r.currency ||
+                                'ETB'}
+                            </td>
+
+                            <td
+                              data-label="Payment"
+                              className="sd-muted"
+                            >
+                              <span className="ac-code">
+                                {r.paymentId.slice(
+                                  0,
+                                  8
+                                )}
+                              </span>
+                            </td>
+
+                            <td data-label="Status">
+                              <span
+                                className={statusBadgeClass(
+                                  r.status
+                                )}
+                              >
+                                {r.status?.replace(
+                                  /_/g,
+                                  ' '
+                                )}
+                              </span>
+                            </td>
+
+                            <td
+                              data-label="Updated"
+                              className="sd-muted"
+                            >
+                              {new Date(
+                                r.completedAt ||
+                                  r.updatedAt ||
+                                  r.createdAt
+                              ).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+
+                      {refundHistory.length ===
+                        0 && (
+                        <tr>
+                          <td
+                            colSpan="4"
+                            className="sd-muted"
+                          >
+                            No refund history
+                            yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
       </div>
-    </div>
+    </>
   );
 }
