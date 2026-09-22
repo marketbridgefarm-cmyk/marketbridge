@@ -8,31 +8,9 @@ const { recordOrderEvent } = require('../services/orderEventService');
 const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
+const { lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
 
 const router = express.Router();
-
-// Guards accept/start/report against a narrow race where a dispute or
-// cancellation lands on the order in the moment between an inspector's
-// pre-check and their actual write. A plain SELECT there doesn't help:
-// Postgres only serializes against a concurrent writer for statements that
-// take a lock on the row, so this takes one explicitly (mirroring the
-// implicit lock orderStateMachine's transitionOrderStatus already takes via
-// its own UPDATE) and re-reads status under that lock, inside the same
-// transaction as the inspector's write. Whichever transaction — this one or
-// the dispute/cancel one — asks for the lock first wins; the other blocks
-// until it commits, then sees the real, current status instead of a stale
-// pre-check result.
-async function lockOrderAndAssertNotClosed(tx, orderId, actionLabel) {
-  if (!orderId) return; // pre-order inspections have no order to race against
-  const rows = await tx.$queryRaw`SELECT status FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
-  const status = rows?.[0]?.status;
-  if (status && ['DISPUTED', 'CANCELLED'].includes(status)) {
-    throw Object.assign(
-      new Error(`This order is ${status.toLowerCase()}, so ${actionLabel}.`),
-      { status: 409, code: 'ORDER_NOT_ACTIONABLE' }
-    );
-  }
-}
 
 function validationError(res) {
   const errors = validationResult(res.req);

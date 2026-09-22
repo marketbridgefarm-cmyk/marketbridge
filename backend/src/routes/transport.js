@@ -6,7 +6,7 @@ const prisma = require('../config/db');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
-const { transitionOrderStatus } = require('../services/orderStateMachine');
+const { transitionOrderStatus, lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
@@ -762,6 +762,8 @@ router.post(
                 throw error;
               }
 
+              await lockOrderAndAssertNotClosed(tx, freshOrder.id, 'transport cannot be arranged until that is resolved');
+
               if (freshOrder.transportJob) {
                 const error = new Error(
                   'A transport job already exists for this order'
@@ -875,6 +877,8 @@ router.post(
               error.statusCode = 404;
               throw error;
             }
+
+            await lockOrderAndAssertNotClosed(tx, freshOrder.id, 'transport cannot be arranged until that is resolved');
 
             if (freshOrder.transportJob) {
               const error = new Error(
@@ -1021,6 +1025,10 @@ router.post(
           error:
             'A transport job already exists for this order',
         });
+      }
+
+      if (error.code === 'ORDER_NOT_ACTIONABLE') {
+        return res.status(error.status || 409).json({ error: error.message });
       }
 
       return res.status(500).json({
@@ -2360,6 +2368,14 @@ router.patch(
           throw error;
         }
 
+        // A dispute doesn't touch the TransportJob itself (holdForDispute
+        // only freezes Payout rows), so without this the job's own status
+        // check above wouldn't catch an order that went DISPUTED while this
+        // quote was being negotiated — a transporter could still accept and
+        // commit a truck to a disputed order. (Cancellation is already safe:
+        // cancelOrderInTransaction cascade-cancels the transport job itself.)
+        await lockOrderAndAssertNotClosed(tx, freshJob.orderId, 'a transport quote cannot be accepted until that is resolved');
+
         // CRITICAL:
         //
         // Claim the selected truck before accepting the quote.
@@ -2435,6 +2451,10 @@ router.patch(
         return res.status(409).json({
           error: error.message,
         });
+      }
+
+      if (error.code === 'ORDER_NOT_ACTIONABLE') {
+        return res.status(error.status || 409).json({ error: error.message });
       }
 
       return res.status(500).json({
