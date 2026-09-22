@@ -448,6 +448,12 @@ router.patch(
         if (current.listing?.category !== 'AGRICULTURAL') {
           throw Object.assign(new Error('Buyer decision is only required for agricultural orders'), { status: 400 });
         }
+        if (current.status === 'DISPUTED') {
+          throw Object.assign(
+            new Error('This order is under dispute. Buyer decisions are paused until the dispute is resolved.'),
+            { status: 409, code: 'ORDER_DISPUTED' }
+          );
+        }
         if (['CANCELLED', 'COMPLETED'].includes(current.status)) {
           throw Object.assign(new Error(`Order is already ${current.status.toLowerCase()}`), { status: 409 });
         }

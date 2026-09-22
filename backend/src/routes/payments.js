@@ -26,7 +26,7 @@ const chapa =
 const { getAdapter } = require('../services/paymentProviders');
 const { inc } = require('../utils/metrics');
 const { assertTransition } = require('../services/paymentStateMachine');
-const { syncRefundStatus } = require('../services/paymentRefundService');
+const { verifyAndFinalizeRefund } = require('../services/paymentRefundService');
 
 const {
   paymentLimiter,
@@ -331,6 +331,19 @@ router.post(
         ) {
           return res.status(403).json({
             error: 'Not authorized',
+          });
+        }
+
+        // An open dispute freezes the whole order, not just its payouts.
+        // Do not allow a buyer, seller, inspector or transporter to create a
+        // new payment while an admin is deciding whether the transaction will
+        // resume or be cancelled/refunded. This prevents a refund/payout
+        // collision where money can be paid into an order after the dispute
+        // has already stopped it.
+        if (order.status === 'DISPUTED') {
+          return res.status(409).json({
+            code: 'ORDER_DISPUTED',
+            error: 'This order is under dispute. Payments are paused until the dispute is resolved.',
           });
         }
 
@@ -669,8 +682,14 @@ router.post(
         if (!inspectionPaymentAllowed && req.body.orderId) {
           const inspectionOrder = await prisma.order.findUnique({
             where: { id: req.body.orderId },
-            select: { id: true, buyerId: true, listingId: true },
+            select: { id: true, buyerId: true, listingId: true, status: true },
           });
+          if (inspectionOrder?.status === 'DISPUTED') {
+            return res.status(409).json({
+              code: 'ORDER_DISPUTED',
+              error: 'This order is under dispute. Inspection payment is paused until the dispute is resolved.',
+            });
+          }
           inspectionPaymentAllowed = Boolean(
             inspectionOrder &&
             inspectionOrder.buyerId === req.user.id &&
@@ -1258,8 +1277,7 @@ router.get(
         raw,
       } =
         await chapa.verifyTransaction(
-          payment.chapaTxRef ||
-            payment.providerTransactionId ||
+          payment.providerTransactionId ||
             payment.id
         );
 
@@ -1470,65 +1488,51 @@ router.post(
         req.log.error({ txRef, paymentId }, 'CHAPA WEBHOOK: payment not found');
 
         inc('marketbridge_payment_webhooks_total', { provider: 'chapa', outcome: 'payment_not_found' });
-        // Acknowledge the webhook without trying to create a payment.
-        return res.json({
-          ok:
-            true,
-
-          ignored:
-            true,
-
-          reason:
-            'Payment not found',
-        });
+        return res.json({ ok: true, ignored: true, reason: 'Payment not found' });
       }
 
       // ----------------------------------------------------------------------
-      // REFUND WEBHOOKS
+      // REFUND WEBHOOK
       // ----------------------------------------------------------------------
-      // Refunds are asynchronous in Chapa. A charge.refunded webhook must be
-      // handled before the normal payment-settlement path because the payment
-      // is intentionally still PAID/REFUND_PENDING while the refund runs.
-      const webhookEvent = String(req.body?.event || '').toLowerCase();
-      const webhookStatus = String(req.body?.status || req.body?.data?.status || '').toLowerCase();
-      const providerRefundId =
-        req.body?.ref_id ||
-        req.body?.data?.ref_id ||
-        req.body?.refund_ref_id ||
-        null;
-      const isRefundWebhook =
-        webhookEvent.includes('refund') ||
-        (['refunded', 'reversed', 'processing', 'initiated'].includes(webhookStatus) && Boolean(providerRefundId));
+      // Chapa documents charge.refunded as a refund event. Treat the signed
+      // webhook as a notification only: when a refund ref_id is present,
+      // re-query Chapa's refund verification endpoint before changing the
+      // MarketBridge payment to REFUNDED.
+      const webhookEvent = String(req.body?.event || req.body?.type || '').toLowerCase();
+      const refundEvent = webhookEvent === 'charge.refunded' ||
+        webhookEvent === 'payment.refunded' ||
+        (String(req.body?.status || '').toLowerCase() === 'refunded' && Boolean(req.body?.ref_id || req.body?.refund_ref_id || req.body?.data?.ref_id));
 
-      if (isRefundWebhook) {
-        let refund = providerRefundId
-          ? await prisma.paymentRefund.findFirst({ where: { providerRefundId } })
-          : null;
+      if (refundEvent) {
+        const refund = await prisma.paymentRefund.findFirst({
+          where: { paymentId: payment.id, status: { in: ['REQUESTED', 'PROCESSING'] } },
+          orderBy: { createdAt: 'desc' },
+        });
 
         if (!refund) {
-          refund = await prisma.paymentRefund.findFirst({
-            where: {
-              paymentId: payment.id,
-              status: { in: ['REQUESTED', 'PROCESSING'] },
-            },
-            orderBy: { createdAt: 'desc' },
-          });
+          return res.json({ ok: true, ignored: true, reason: 'No active MarketBridge refund for payment' });
         }
 
-        if (!refund) {
-          return res.json({ ok: true, ignored: true, reason: 'Refund not found' });
+        const refundRefId = String(
+          req.body?.ref_id ||
+          req.body?.refund_ref_id ||
+          req.body?.data?.ref_id ||
+          refund.providerRefundId ||
+          ''
+        ).trim();
+
+        if (!refundRefId) {
+          req.log.warn({ paymentId: payment.id, refundId: refund.id }, 'CHAPA REFUND WEBHOOK: missing refund ref_id; awaiting verification');
+          return res.json({ ok: true, processing: true, reason: 'Refund reference missing' });
         }
 
-        if (providerRefundId && !refund.providerRefundId) {
-          await prisma.paymentRefund.updateMany({
-            where: { id: refund.id, status: { in: ['REQUESTED', 'PROCESSING'] } },
-            data: { providerRefundId, provider: getAdapter(payment.method).provider, status: 'PROCESSING' },
-          });
-        }
+        await prisma.paymentRefund.updateMany({
+          where: { id: refund.id, status: { in: ['REQUESTED', 'PROCESSING'] } },
+          data: { provider: refund.provider || payment.provider || 'CHAPA', providerRefundId: refundRefId },
+        });
 
-        const synced = await syncRefundStatus({ refundId: refund.id, actorId: null });
-        inc('marketbridge_payment_webhooks_total', { provider: 'chapa', outcome: `refund_${synced.status.toLowerCase()}` });
-        return res.json({ ok: true, refund: synced });
+        const result = await verifyAndFinalizeRefund({ refundId: refund.id, actorId: null, note: 'Finalized from verified Chapa refund webhook.' });
+        return res.json({ ok: true, refund: result.refund, providerStatus: result.providerStatus });
       }
 
       // ----------------------------------------------------------------------

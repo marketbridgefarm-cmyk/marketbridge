@@ -1529,6 +1529,13 @@ router.patch(
       const current = job.status;
       const next = req.body.status;
 
+      if (job.order?.status === 'DISPUTED') {
+        return res.status(409).json({
+          code: 'ORDER_DISPUTED',
+          error: 'This order is under dispute. Transport proceedings are paused until the dispute is resolved.',
+        });
+      }
+
       // Transport movement is controlled by the assigned transporter.
       // Buyer/seller controls the commercial arrangement and payments, but
       // must not be able to falsely mark a truck as picked up, in transit,
@@ -1630,6 +1637,8 @@ router.patch(
       const result =
         await prisma.$transaction(
           async (tx) => {
+            await lockOrderAndAssertNotClosed(tx, job.orderId, 'transport cannot proceed until the order dispute is resolved');
+
             const updated =
               await tx.transportJob.update({
                 where: {

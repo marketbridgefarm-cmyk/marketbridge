@@ -5,8 +5,8 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { transitionOrderStatus, DISPUTABLE_STATUSES } = require('../services/orderStateMachine');
-const { holdForDispute, resumeAfterDispute, cancelAfterDispute } = require('../services/payoutService');
-const { requestRefundsForPayouts } = require('../services/paymentRefundService');
+const { holdForDispute, resumeAfterDispute } = require('../services/payoutService');
+const { cancelOrderInTransaction } = require('../services/orderCancellationService');
 
 const router = express.Router();
 
@@ -110,13 +110,28 @@ router.get('/', authenticate, requireRole('ADMIN'), requireMfa(), async (req, re
     const disputes = await prisma.dispute.findMany({
       include: {
         order: true,
-        raisedBy: { select: { id: true, name: true } },
-        against: { select: { id: true, name: true } },
+        raisedBy: { select: { id: true, name: true, roles: true } },
+        against: { select: { id: true, name: true, roles: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    return res.json({ disputes });
+    const participantRole = (user, order) => {
+      if (!user) return null;
+      if (user.id === order?.buyerId) return 'BUYER';
+      if (user.id === order?.sellerId) return 'SELLER';
+      if (Array.isArray(user.roles) && user.roles.includes('INSPECTOR')) return 'INSPECTOR';
+      if (Array.isArray(user.roles) && user.roles.includes('TRUCK_OWNER')) return 'TRUCK_OWNER';
+      return Array.isArray(user.roles) ? user.roles[0] || null : null;
+    };
+
+    return res.json({
+      disputes: disputes.map((dispute) => ({
+        ...dispute,
+        raisedByRole: participantRole(dispute.raisedBy, dispute.order),
+        againstRole: participantRole(dispute.against, dispute.order),
+      })),
+    });
   } catch (error) {
     req.log.error({ err: error }, 'LIST DISPUTES ERROR:');
     return res.status(500).json({ error: 'Could not load disputes' });
@@ -141,50 +156,72 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
     const finalStatus = status || 'RESOLVED';
 
     const result = await prisma.$transaction(async (tx) => {
-      const updated = await tx.dispute.update({
+      const dispute = await tx.dispute.findUnique({
         where: { id: req.params.id },
+      });
+      if (!dispute) throw Object.assign(new Error('Dispute not found'), { status: 404 });
+
+      const currentOrder = await tx.order.findUnique({
+        where: { id: dispute.orderId },
+        include: {
+          transportJob: true,
+          payments: true,
+        },
+      });
+      if (!currentOrder) throw Object.assign(new Error('Order not found'), { status: 404 });
+      if (currentOrder.status !== 'DISPUTED') {
+        throw Object.assign(new Error(`Order is ${currentOrder.status}; the open dispute can no longer be resolved here`), { status: 409, code: 'ORDER_STATE_CONFLICT' });
+      }
+
+      const frozenPayout = await tx.payout.findFirst({
+        where: { orderId: dispute.orderId, status: 'ON_HOLD_DISPUTE' },
+        select: { id: true },
+      });
+      const decision = payoutDecision ? String(payoutDecision).toUpperCase() : null;
+
+      if (frozenPayout && !decision) {
+        throw Object.assign(
+          new Error('This dispute resolution requires payoutDecision RELEASE or CANCEL because order payouts are frozen'),
+          { status: 400, code: 'PAYOUT_DECISION_REQUIRED' }
+        );
+      }
+
+      const updated = await tx.dispute.update({
+        where: { id: dispute.id },
         data: { resolution, status: finalStatus },
       });
 
-      // Atomic claim: fails with ORDER_STATE_CONFLICT if the order
-      // somehow left DISPUTED before this resolution landed.
-      await transitionOrderStatus(tx, updated.orderId, 'DISPUTED', updated.previousOrderStatus || 'CONFIRMED');
-
-      // A dispute freezes every payout on the order together (seller,
-      // transporter, inspector — whichever exist), so any one of them
-      // still ON_HOLD_DISPUTE means this resolution needs a payoutDecision;
-      // resumeAfterDispute/cancelAfterDispute then apply it to all of them.
-      const frozenPayout = await tx.payout.findFirst({
-        where: { orderId: updated.orderId, status: 'ON_HOLD_DISPUTE' },
-        select: { id: true, status: true },
-      });
-
       let refundIds = [];
+      let restoredOrderStatus = null;
 
-      if (frozenPayout) {
-        if (!payoutDecision) {
-          throw Object.assign(
-            new Error('This dispute resolution requires payoutDecision RELEASE or CANCEL because the seller payout is frozen'),
-            { status: 400, code: 'PAYOUT_DECISION_REQUIRED' }
-          );
+      if (decision === 'CANCEL') {
+        // CANCEL is an order-level economic decision, not merely a payout
+        // decision. Previously we cancelled payouts/refunds but restored the
+        // order to its old status, which allowed transport, inspection and
+        // payment proceedings to continue after the buyer had been refunded.
+        // A dispute resolved by cancellation now performs the same complete
+        // unwind as a normal order cancellation and leaves the order terminal.
+        const cancelled = await cancelOrderInTransaction(tx, {
+          order: currentOrder,
+          actorId: req.user.id,
+          reason: 'Dispute resolved: order cancelled and buyer refund requested',
+          cancelledByRole: 'ADMIN',
+        });
+        const refunds = await tx.paymentRefund.findMany({
+          where: { payment: { orderId: dispute.orderId } },
+          select: { id: true },
+        });
+        refundIds = refunds.map((refund) => refund.id);
+        restoredOrderStatus = cancelled.status;
+      } else {
+        // RELEASE (or a dispute with no payout to freeze) resumes the exact
+        // pre-dispute order state. The order was frozen while the dispute was
+        // open, so no payment/transport/inspection action can sneak through.
+        if (decision === 'RELEASE') {
+          await resumeAfterDispute(tx, { orderId: dispute.orderId, actorId: req.user.id });
         }
-
-        if (String(payoutDecision).toUpperCase() === 'RELEASE') {
-          await resumeAfterDispute(tx, { orderId: updated.orderId, actorId: req.user.id });
-        } else {
-          const cancelledPayouts = await cancelAfterDispute(tx, { orderId: updated.orderId, actorId: req.user.id });
-
-          // Cancelling the payouts means the buyer's money must go back:
-          // request a refund for each payment behind a cancelled payout.
-          // Anything already refunded/refund-pending is skipped.
-          refundIds = (
-            await requestRefundsForPayouts(tx, {
-              payouts: cancelledPayouts,
-              reason: 'Dispute resolved: payout cancelled',
-              requestedById: req.user.id,
-            })
-          ).map((refund) => refund.id);
-        }
+        restoredOrderStatus = dispute.previousOrderStatus || 'CONFIRMED';
+        await transitionOrderStatus(tx, dispute.orderId, 'DISPUTED', restoredOrderStatus);
       }
 
       await recordAuditEvent(tx, {
@@ -195,14 +232,15 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
         metadata: {
           orderId: updated.orderId,
           finalStatus,
-          restoredOrderStatus: updated.previousOrderStatus || 'CONFIRMED',
-          payoutDecision: payoutDecision ? String(payoutDecision).toUpperCase() : null,
+          restoredOrderStatus,
+          payoutDecision: decision,
           refundIds,
+          raisedAgainstId: dispute.againstId,
         },
       });
 
       return updated;
-    }, { maxWait: 10000, timeout: 15000 });
+    }, { maxWait: 10000, timeout: 20000 });
 
     return res.json({ dispute: result });
   } catch (error) {

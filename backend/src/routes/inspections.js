@@ -428,6 +428,8 @@ router.post(
       }
 
       const quote = await prisma.$transaction(async (tx) => {
+        await lockOrderAndAssertNotClosed(tx, request.orderId, 'an inspection quote cannot be submitted until the order dispute is resolved');
+
         const created = await tx.inspectionQuote.create({
           data: {
             inspectionRequestId: request.id,
@@ -562,10 +564,19 @@ router.get(
 async function loadQuoteForNegotiation(req, res) {
   const request = await prisma.inspectionRequest.findUnique({
     where: { id: req.params.id },
+    include: { order: { select: { id: true, status: true } } },
   });
 
   if (!request) {
     res.status(404).json({ error: 'Inspection request not found' });
+    return null;
+  }
+
+  if (['DISPUTED', 'CANCELLED'].includes(request.order?.status)) {
+    res.status(409).json({
+      code: 'ORDER_DISPUTED',
+      error: `This order is ${request.order.status.toLowerCase()}. Inspection quote proceedings are paused until it is resolved.`,
+    });
     return null;
   }
 
@@ -629,6 +640,8 @@ router.patch(
       const finalAmount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
 
       const result = await prisma.$transaction(async (tx) => {
+        await lockOrderAndAssertNotClosed(tx, request.orderId, 'an inspection quote cannot be accepted until the order dispute is resolved');
+
         const claim = await tx.inspectionRequest.updateMany({
           where: {
             id: request.id,
@@ -774,6 +787,8 @@ router.post(
       const counterAmount = Number(req.body.counterAmount);
 
       const counterQuote = await prisma.$transaction(async (tx) => {
+        await lockOrderAndAssertNotClosed(tx, request.orderId, 'an inspection quote cannot be countered until the order dispute is resolved');
+
         const freshQuote = await tx.inspectionQuote.findUnique({ where: { id: quote.id } });
         if (!freshQuote) throw quoteError('Inspection quote not found', 404);
         if (!['PENDING', 'COUNTERED'].includes(freshQuote.status)) {
@@ -865,6 +880,8 @@ router.patch(
       }
 
       const updated = await prisma.$transaction(async (tx) => {
+        await lockOrderAndAssertNotClosed(tx, loaded.request.orderId, 'an inspection quote cannot be rejected until the order dispute is resolved');
+
         const rejected = await tx.inspectionQuote.update({
           where: { id: quote.id },
           data: { status: 'REJECTED' },
