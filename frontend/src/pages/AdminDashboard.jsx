@@ -348,6 +348,8 @@ const ADMIN_STYLES = `
   }
 
   .ac-card {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
     padding: 19px;
     border: 1px solid var(--ac-border);
@@ -365,6 +367,9 @@ const ADMIN_STYLES = `
 
   .ac-card h3 {
     margin: 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 16px;
     letter-spacing: -.015em;
   }
@@ -376,6 +381,11 @@ const ADMIN_STYLES = `
     line-height: 1.55;
   }
 
+  .ac-card p strong {
+    color: var(--ac-text);
+    font-weight: 650;
+  }
+
   .ac-status-row {
     display: flex;
     align-items: center;
@@ -385,16 +395,35 @@ const ADMIN_STYLES = `
     margin-bottom: 12px;
   }
 
+  .ac-status-row h3 {
+    flex: 1 1 auto;
+  }
+
+  /* Pin the action row to the card's bottom edge so every card in a row
+     lines its buttons up, regardless of how much body copy sits above. */
   .ac-actions {
     display: flex;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
     margin-top: 15px;
+    padding-top: 14px;
+    border-top: 1px solid var(--ac-border);
   }
 
+  .ac-card .ac-actions {
+    margin-top: auto;
+  }
+
+  /* Buttons inside a card read as secondary, in-context actions, so they
+     stay a step smaller than page-level buttons in the hero/toolbar. */
   .ac-actions .sd-btn {
     margin: 0;
+    padding: 8px 14px;
+    min-height: 36px;
+    font-size: 12.5px;
+    border-radius: 9px;
+    flex: 0 0 auto;
   }
 
   .ac-search {
@@ -821,6 +850,7 @@ const ADMIN_STYLES = `
     .ac-hero-actions .sd-btn,
     .ac-actions .sd-btn {
       flex: 1 1 auto;
+      min-width: calc(50% - 4px);
     }
   }
 `;
@@ -3511,674 +3541,4 @@ export default function AdminDashboard() {
                         className="ac-small-stat"
                         key={label}
                       >
-                        <span>
-                          {label}
-                        </span>
-                        <b>{value}</b>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-
-              <div
-                className="ac-panel"
-                style={{ marginTop: 18 }}
-              >
-                <div className="ac-panel-header">
-                  <div>
-                    <h2>
-                      Recent workflow events
-                    </h2>
-
-                    <p>
-                      Customer-facing order lifecycle
-                      events. This is read-only
-                      operational visibility.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="ac-table-shell">
-                  <table className="sd-table sd-table--stack">
-                    <thead>
-                      <tr>
-                        <th>Time</th>
-                        <th>Event</th>
-                        <th>Order</th>
-                        <th>Transition</th>
-                        <th>Actor</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {orderEvents.length ===
-                      0 ? (
-                        <tr>
-                          <td
-                            colSpan="5"
-                            className="sd-muted"
-                          >
-                            No workflow events
-                            recorded yet.
-                          </td>
-                        </tr>
-                      ) : (
-                        orderEvents.map(
-                          (event) => (
-                            <tr
-                              key={event.id}
-                            >
-                              <td data-label="Time">
-                                {new Date(
-                                  event.createdAt
-                                ).toLocaleString()}
-                              </td>
-
-                              <td data-label="Event">
-                                <span className="sd-badge">
-                                  {
-                                    event.type
-                                  }
-                                </span>
-                              </td>
-
-                              <td data-label="Order">
-                                <code className="ac-code">
-                                  {event.orderId.slice(
-                                    0,
-                                    10
-                                  )}
-                                </code>
-                              </td>
-
-                              <td data-label="Transition">
-                                {
-                                  event.fromStatus ||
-                                  '—'
-                                }{' '}
-                                →{' '}
-                                {
-                                  event.toStatus ||
-                                  '—'
-                                }
-                              </td>
-
-                              <td data-label="Actor">
-                                {event.actor
-                                  ?.name ||
-                                  event.actor
-                                    ?.email ||
-                                  'System'}
-                              </td>
-                            </tr>
-                          )
-                        )
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div
-                className="ac-panel"
-                style={{ marginTop: 18 }}
-              >
-                <div className="ac-panel-header">
-                  <div>
-                    <h2>
-                      Recent audit events
-                    </h2>
-
-                    <p>
-                      Internal
-                      administrative/security
-                      trail. Secrets and tokens are
-                      not exposed here.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="ac-table-shell">
-                  <table className="sd-table sd-table--stack">
-                    <thead>
-                      <tr>
-                        <th>Time</th>
-                        <th>Action</th>
-                        <th>Resource</th>
-                        <th>Actor</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {auditEvents.length ===
-                      0 ? (
-                        <tr>
-                          <td
-                            colSpan="4"
-                            className="sd-muted"
-                          >
-                            No audit events
-                            recorded yet.
-                          </td>
-                        </tr>
-                      ) : (
-                        auditEvents.map(
-                          (event) => (
-                            <tr
-                              key={event.id}
-                            >
-                              <td data-label="Time">
-                                {new Date(
-                                  event.createdAt
-                                ).toLocaleString()}
-                              </td>
-
-                              <td data-label="Action">
-                                <span className="sd-badge">
-                                  {
-                                    event.action
-                                  }
-                                </span>
-                              </td>
-
-                              <td data-label="Resource">
-                                {
-                                  event.resourceType
-                                }
-                                {event.resourceId
-                                  ? ` · ${event.resourceId.slice(
-                                      0,
-                                      10
-                                    )}`
-                                  : ''}
-                              </td>
-
-                              <td data-label="Actor">
-                                {event.actor
-                                  ?.name ||
-                                  event.actor
-                                    ?.email ||
-                                  'System'}
-                              </td>
-                            </tr>
-                          )
-                        )
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {tab === 'payments' && (
-            <div>
-              <div className="ac-panel">
-                <div className="ac-panel-header">
-                  <div>
-                    <span className="ac-section-label">
-                      FINANCE
-                    </span>
-
-                    <h2>
-                      Payment overview
-                    </h2>
-                  </div>
-                </div>
-
-                <div className="ac-stat-strip">
-                  <div className="ac-small-stat">
-                    <span>
-                      Total confirmed
-                      volume
-                    </span>
-
-                    <b>
-                      {Number(
-                        commissionSummary
-                          ?.totalVolume ||
-                          0
-                      ).toLocaleString()}{' '}
-                      ETB
-                    </b>
-                  </div>
-
-                  <div className="ac-small-stat">
-                    <span>
-                      Platform commission
-                    </span>
-
-                    <b>
-                      {Number(
-                        commissionSummary
-                          ?.totalCommission ||
-                          0
-                      ).toLocaleString()}{' '}
-                      ETB
-                    </b>
-                  </div>
-
-                  {Object.entries(
-                    commissionSummary?.byType ||
-                      {}
-                  ).map(
-                    ([type, t]) => (
-                      <div
-                        className="ac-small-stat"
-                        key={type}
-                      >
-                        <span>
-                          {type} ({t.count})
-                        </span>
-
-                        <b>
-                          {Number(
-                            t.commission
-                          ).toLocaleString()}{' '}
-                          ETB
-                        </b>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-
-              <div
-                className="ac-toolbar"
-                style={{ marginTop: 22 }}
-              >
-                <div>
-                  <span className="ac-section-label">
-                    RECONCILIATION
-                  </span>
-
-                  <h2>
-                    Payment reconciliation
-                  </h2>
-
-                  <p>
-                    These payment records are waiting
-                    to be confirmed, plus any flagged
-                    for reconciliation after a mismatch
-                    or failed automatic verification.
-                    Prefer a signed provider webhook
-                    where available — use manual
-                    confirmation only once you've
-                    verified the funds arrived.
-                  </p>
-                </div>
-              </div>
-
-              <div className="ac-grid">
-                {payments.map((p) => (
-                  <div
-                    className="ac-card"
-                    key={p.id}
-                  >
-                    <div className="ac-status-row">
-                      <h3>
-                        {Number(
-                          p.amount
-                        ).toLocaleString()}{' '}
-                        ETB
-                      </h3>
-
-                      <span
-                        className={statusBadgeClass(
-                          p.status
-                        )}
-                      >
-                        {p.status?.replace(
-                          /_/g,
-                          ' '
-                        )}
-                      </span>
-                    </div>
-
-                    <p>
-                      {p.type} via {p.method}
-                    </p>
-
-                    <p>
-                      {p.createdBy?.name}{' '}
-                      (
-                      {
-                        p.createdBy
-                          ?.email
-                      }
-                      )
-                      {p.reference && (
-                        <>
-                          {' · Ref: '}
-                          {p.reference}
-                        </>
-                      )}
-                    </p>
-
-                    <p>
-                      {p.order &&
-                        `Order ${p.order.id.slice(
-                          0,
-                          8
-                        )}`}
-                      {p.digitalProduct &&
-                        `Digital product: ${p.digitalProduct.title}`}
-                      {p.advertisement &&
-                        `Ad campaign: ${p.advertisement.type.replace(
-                          /_/g,
-                          ' '
-                        )}`}
-                      {' · '}
-                      {new Date(
-                        p.createdAt
-                      ).toLocaleString()}
-                    </p>
-
-                    <div className="ac-actions">
-                      {p.provider ? (
-                        <button
-                          className="sd-btn sd-btn-primary"
-                          disabled={
-                            actionLoading ===
-                            `payment-${p.id}`
-                          }
-                          onClick={() =>
-                            checkGatewayPayment(
-                              p.id,
-                              p.provider
-                            )
-                          }
-                        >
-                          {actionLoading ===
-                          `payment-${p.id}`
-                            ? 'Checking…'
-                            : `Check with ${p.provider}`}
-                        </button>
-                      ) : (
-                        <button
-                          className="sd-btn sd-btn-primary"
-                          disabled={
-                            actionLoading ===
-                            `payment-${p.id}`
-                          }
-                          onClick={() =>
-                            confirmPayment(
-                              p.id
-                            )
-                          }
-                        >
-                          {actionLoading ===
-                          `payment-${p.id}`
-                            ? 'Working…'
-                            : 'Confirm payment received'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-
-                {payments.length === 0 && (
-                  <div className="ac-empty">
-                    <strong>
-                      Reconciliation queue clear
-                    </strong>
-                    No payments are awaiting
-                    reconciliation right now.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {tab === 'refunds' && (
-            <div>
-              <div className="ac-toolbar">
-                <div>
-                  <span className="ac-section-label">
-                    FINANCIAL OPERATIONS
-                  </span>
-
-                  <h2>Pending refunds</h2>
-
-                  <p>
-                    Created automatically when a
-                    dispute is resolved against a
-                    payee or a cancelled order flags a
-                    completed payment. Mark one complete
-                    only once the money has actually been
-                    sent back to the buyer.
-                  </p>
-                </div>
-              </div>
-
-              <div className="ac-grid">
-                {pendingRefunds.map((r) => (
-                  <div
-                    className="ac-card"
-                    key={r.id}
-                  >
-                    <div className="ac-status-row">
-                      <h3>
-                        {Number(
-                          r.amount
-                        ).toLocaleString()}{' '}
-                        {r.currency || 'ETB'}
-                      </h3>
-
-                      <span
-                        className={statusBadgeClass(
-                          r.status
-                        )}
-                      >
-                        {r.status?.replace(
-                          /_/g,
-                          ' '
-                        )}
-                      </span>
-                    </div>
-
-                    <p>
-                      Payment{' '}
-                      {r.paymentId.slice(
-                        0,
-                        8
-                      )}
-                      {r.payment?.type && (
-                        <>
-                          {' · '}
-                          {r.payment.type.replace(
-                            /_/g,
-                            ' '
-                          )}
-                        </>
-                      )}
-                      {r.payment?.provider && (
-                        <>
-                          {' · '}
-                          {
-                            r.payment
-                              .provider
-                          }
-                        </>
-                      )}
-                      {r.payment?.orderId && (
-                        <>
-                          {' · Order '}
-                          {r.payment.orderId.slice(
-                            0,
-                            8
-                          )}
-                        </>
-                      )}
-                    </p>
-
-                    {r.reason && (
-                      <p>
-                        <strong>
-                          Reason:
-                        </strong>{' '}
-                        {r.reason}
-                      </p>
-                    )}
-
-                    <p>
-                      Requested by{' '}
-                      {r.requestedBy?.name ||
-                        r.requestedBy
-                          ?.email ||
-                        'System'}
-                      {' · '}
-                      {new Date(
-                        r.createdAt
-                      ).toLocaleString()}
-                    </p>
-
-                    <div className="ac-actions">
-                      <button
-                        className="sd-btn sd-btn-primary"
-                        disabled={
-                          actionLoading ===
-                          `refund-${r.id}`
-                        }
-                        onClick={() =>
-                          markRefundComplete(
-                            r
-                          )
-                        }
-                      >
-                        {actionLoading ===
-                        `refund-${r.id}`
-                          ? 'Working…'
-                          : 'Mark completed'}
-                      </button>
-
-                      <button
-                        className="sd-btn sd-btn-outline"
-                        disabled={
-                          actionLoading ===
-                          `refund-${r.id}`
-                        }
-                        onClick={() =>
-                          markRefundFailed(r)
-                        }
-                      >
-                        Mark failed
-                      </button>
-                    </div>
-                  </div>
-                ))}
-
-                {pendingRefunds.length ===
-                  0 && (
-                  <div className="ac-empty">
-                    <strong>
-                      No refunds waiting
-                    </strong>
-                    There are no refunds waiting for
-                    administrative action.
-                  </div>
-                )}
-              </div>
-
-              <div
-                className="ac-toolbar"
-                style={{ marginTop: 28 }}
-              >
-                <div>
-                  <span className="ac-section-label">
-                    HISTORY
-                  </span>
-
-                  <h2>
-                    Recent refund history
-                  </h2>
-                </div>
-              </div>
-
-              <div className="ac-panel">
-                <div className="ac-table-shell">
-                  <table className="sd-table sd-table--stack">
-                    <thead>
-                      <tr>
-                        <th>Amount</th>
-                        <th>Payment</th>
-                        <th>Status</th>
-                        <th>Updated</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {refundHistory
-                        .slice(0, 10)
-                        .map((r) => (
-                          <tr key={r.id}>
-                            <td data-label="Amount">
-                              {Number(
-                                r.amount
-                              ).toLocaleString()}{' '}
-                              {r.currency ||
-                                'ETB'}
-                            </td>
-
-                            <td
-                              data-label="Payment"
-                              className="sd-muted"
-                            >
-                              <span className="ac-code">
-                                {r.paymentId.slice(
-                                  0,
-                                  8
-                                )}
-                              </span>
-                            </td>
-
-                            <td data-label="Status">
-                              <span
-                                className={statusBadgeClass(
-                                  r.status
-                                )}
-                              >
-                                {r.status?.replace(
-                                  /_/g,
-                                  ' '
-                                )}
-                              </span>
-                            </td>
-
-                            <td
-                              data-label="Updated"
-                              className="sd-muted"
-                            >
-                              {new Date(
-                                r.completedAt ||
-                                  r.updatedAt ||
-                                  r.createdAt
-                              ).toLocaleString()}
-                            </td>
-                          </tr>
-                        ))}
-
-                      {refundHistory.length ===
-                        0 && (
-                        <tr>
-                          <td
-                            colSpan="4"
-                            className="sd-muted"
-                          >
-                            No refund history
-                            yet.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
-    </>
-  );
-}
+                
