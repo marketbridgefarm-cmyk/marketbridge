@@ -2682,7 +2682,7 @@ router.patch('/financial/refunds/:id/complete', async (req, res) => {
       providerRefundId: req.body.providerRefundId || null,
       actorId: req.user.id,
       note: req.body.note || null,
-    }));
+    }), { maxWait: 10000, timeout: 15000 });
     return res.json({ refund });
   } catch (error) {
     req.log.error({ err: error }, 'ADMIN COMPLETE REFUND ERROR:');
@@ -2696,7 +2696,7 @@ router.patch('/financial/refunds/:id/fail', async (req, res) => {
       refundId: req.params.id,
       failureReason: req.body.failureReason || 'Provider refund failed',
       actorId: req.user.id,
-    }));
+    }), { maxWait: 10000, timeout: 15000 });
     return res.json({ refund });
   } catch (error) {
     req.log.error({ err: error }, 'ADMIN FAIL REFUND ERROR:');
