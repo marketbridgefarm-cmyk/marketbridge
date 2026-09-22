@@ -264,9 +264,17 @@ export default function AdminDashboard() {
       setSuccess('Order cancelled.');
       await loadAll();
     } catch (err) {
+      const message = err.response?.data?.error || 'Could not cancel order';
+
+      // The backend can't safely echo a raw database error, so a generic
+      // failure here is usually transient — most often the free Render
+      // instance/database waking up from idle taking a moment longer than
+      // usual (see the banner at the top of this page). Say so rather than
+      // leaving a bare failure with no next step.
       setError(
-        err.response?.data?.error ||
-        'Could not cancel order'
+        message === 'Failed to cancel order'
+          ? `${message} This can happen right after the server has been idle — wait a few seconds and try again.`
+          : message
       );
     } finally {
       setActionLoading('');
