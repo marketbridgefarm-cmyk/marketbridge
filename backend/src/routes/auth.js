@@ -685,7 +685,7 @@ router.post(
         const passwordHash = await bcrypt.hash(req.body.password, 12);
         const user = await tx.user.update({ where: { id: userId }, data: { passwordHash } });
         return user;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       if (!result) {
         return res.status(400).json({ error: 'This reset link is invalid or has expired. Request a new one.', code: 'INVALID_RESET_TOKEN' });

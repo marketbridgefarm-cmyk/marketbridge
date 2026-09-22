@@ -52,7 +52,7 @@ router.post('/referrals/claim', authenticate, [body('code').isString().trim().is
       const created = await tx.referralClaim.create({ data: { referralCodeId: referral.id, userId: req.user.id } });
       await tx.referralCode.update({ where: { id: referral.id }, data: { claimCount: { increment: 1 } } });
       return created;
-    });
+    }, { maxWait: 10000, timeout: 15000 });
     return res.status(201).json({ claimed: true, claimId: claim.id });
   } catch (error) { req.log.error({ err: error }, 'REFERRAL CLAIM ERROR:'); return res.status(500).json({ error: 'Could not claim referral code' }); }
 });

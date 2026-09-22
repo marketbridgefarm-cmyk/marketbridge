@@ -268,7 +268,8 @@ router.post(
           });
 
           return createdOffer;
-        }
+        },
+        { maxWait: 10000, timeout: 15000 }
       );
 
       return res.status(201).json({
@@ -649,7 +650,7 @@ router.patch(
       if (isOfferExpired(offer)) {
         await prisma.$transaction(async (tx) => {
           await expireOfferIfNeeded(tx, offer, req.user.id);
-        });
+        }, { maxWait: 10000, timeout: 15000 });
         return res.status(409).json({
           error: 'Offer has expired and can no longer be acted on',
         });
@@ -760,7 +761,8 @@ router.patch(
                 freshOffer.listing.sellerId,
                 req.user.id
               );
-            }
+            },
+            { maxWait: 10000, timeout: 15000 }
           );
 
         return res.json({
@@ -906,7 +908,8 @@ router.patch(
               });
 
               return counterOffer;
-            }
+            },
+            { maxWait: 10000, timeout: 15000 }
           );
 
         return res.json({
@@ -1047,7 +1050,8 @@ router.patch(
                 freshOffer.listing.sellerId,
                 req.user.id
               );
-            }
+            },
+            { maxWait: 10000, timeout: 15000 }
           );
 
         return res.json({
@@ -1163,7 +1167,8 @@ router.patch(
               });
 
               return updatedOffer;
-            }
+            },
+            { maxWait: 10000, timeout: 15000 }
           );
 
         return res.json({
@@ -1307,7 +1312,8 @@ router.patch(
               });
 
               return counterOffer;
-            }
+            },
+            { maxWait: 10000, timeout: 15000 }
           );
 
         return res.json({

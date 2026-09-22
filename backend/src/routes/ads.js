@@ -430,7 +430,7 @@ router.post(
           metadata: { type, listingId: listingId || null, bannerTemplate, telegramTemplate, telegramImageCount: telegramImageKeys.length, priceQuoted, currency: 'ETB', campaignReference },
         });
         return created;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       return res.status(201).json({ ad: { ...ad, amountDue: priceQuoted, days, paymentStatus: 'UNPAID' } });
     } catch (error) {
@@ -555,7 +555,7 @@ router.patch(
         const result = await tx.advertisement.update({ where: { id: ad.id }, data: { status, ...(status === 'PUBLISHED' ? { publishedAt: new Date() } : {}), ...(status === 'REJECTED' ? { rejectionReason: safeText(req.body.rejectionReason, 500) } : {}) } });
         await recordAuditEvent(tx, { actorId: req.user.id, action: `AD_STATUS_${status}`, resourceType: 'Advertisement', resourceId: ad.id, metadata: { from: ad.status, to: status, rejectionReason: result.rejectionReason || null } });
         return result;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
       return res.json({ ad: updated });
     } catch (error) {
       req.log.error({ err: error }, 'UPDATE AD STATUS ERROR:');
@@ -623,7 +623,7 @@ router.patch('/:id/cancel', authenticate, [param('id').isUUID(), body('reason').
       });
 
       return result;
-    });
+    }, { maxWait: 10000, timeout: 15000 });
 
     return res.json({ ad: updated });
   } catch (error) {

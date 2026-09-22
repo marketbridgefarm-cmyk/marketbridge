@@ -369,7 +369,8 @@ router.patch(
                 requestedAvailability,
             },
           });
-        }
+        },
+        { maxWait: 10000, timeout: 15000 }
       );
 
       return res.json({
@@ -832,7 +833,8 @@ router.post(
               });
 
               return transportJob;
-            }
+            },
+            { maxWait: 10000, timeout: 15000 }
           );
 
         return res.status(201).json({
@@ -987,7 +989,8 @@ router.post(
             });
 
             return transportJob;
-          }
+          },
+          { maxWait: 10000, timeout: 15000 }
         );
 
       return res.status(201).json({
@@ -1248,7 +1251,7 @@ router.post(
         });
 
         return created;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       return res.status(201).json({ evidence });
     } catch (error) {
@@ -1969,7 +1972,8 @@ router.post(
             }
 
             return createdQuote;
-          }
+          },
+          { maxWait: 10000, timeout: 15000 }
         );
 
       return res.status(201).json({
@@ -2270,7 +2274,7 @@ router.patch(
           });
 
           return created;
-        });
+        }, { maxWait: 10000, timeout: 15000 });
 
         return res.status(201).json({
           message: effectiveRole === 'REQUESTER'
@@ -2407,7 +2411,7 @@ router.patch(
         });
 
         return updatedQuote;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       return res.json({
         message: 'Quote accepted',

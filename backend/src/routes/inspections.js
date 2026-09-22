@@ -213,7 +213,7 @@ router.post(
         });
 
         return created;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       return res.status(201).json({ request });
     } catch (error) {
@@ -481,7 +481,7 @@ router.post(
         });
 
         return created;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       return res.status(201).json({
         quote,
@@ -728,7 +728,7 @@ router.patch(
         });
 
         return acceptedQuote;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       return res.json({
         message: 'Inspection quote accepted',
@@ -842,7 +842,7 @@ router.post(
         });
 
         return created;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       return res.status(201).json({
         message: actorRole === 'REQUESTER'
@@ -901,7 +901,7 @@ router.patch(
         });
 
         return rejected;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       return res.json({ message: 'Quote rejected', quote: updated });
     } catch (error) {
@@ -1001,7 +1001,7 @@ router.patch(
         }
 
         return result;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       if (claim.count === 0) {
         return res.status(409).json({
@@ -1159,7 +1159,7 @@ router.post(
         });
 
         return true;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       if (!result) {
         return res.status(409).json({
@@ -1421,7 +1421,7 @@ router.post('/:id/evidence', authenticate, requireRole('INSPECTOR'), [
       });
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_EVIDENCE_ADDED', resourceType: 'InspectionEvidence', resourceId: created.id, metadata: { inspectionRequestId: request.id, reportId: request.report.id, type: created.type } });
       return created;
-    });
+    }, { maxWait: 10000, timeout: 15000 });
     return res.status(201).json({ evidence });
   } catch (error) {
     req.log.error({ err: error }, 'ADD INSPECTION EVIDENCE ERROR:');
@@ -1667,3 +1667,9 @@ router.post(
 );
 
 module.exports = router;
+
+
+
+
+
+

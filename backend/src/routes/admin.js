@@ -1912,7 +1912,7 @@ router.patch('/provider-role-requests/:id', async (req, res) => {
         metadata: { userId: request.userId, role: request.role, status },
       });
       return updatedRequest;
-    });
+    }, { maxWait: 10000, timeout: 15000 });
 
     return res.json({ request: result });
   } catch (error) {
@@ -1996,7 +1996,7 @@ router.patch(
         });
 
         return updated;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
 
       return res.json({
@@ -2166,7 +2166,7 @@ router.patch(
         });
 
         return updated;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
 
       return res.json({
@@ -2300,7 +2300,7 @@ router.patch(
         });
 
         return updated;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
 
       return res.json({
@@ -2490,7 +2490,7 @@ router.patch(
         });
 
         return updated;
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
 
       return res.json({
@@ -2866,7 +2866,7 @@ router.patch('/payouts/:id/pay-out', async (req, res) => {
 
     const updated = await prisma.$transaction((tx) =>
       markPaidOut(tx, { payoutId: req.params.id, actorId: req.user.id, payoutReference })
-    );
+    , { maxWait: 10000, timeout: 15000 });
 
     return res.json({ payout: updated });
   } catch (error) {
