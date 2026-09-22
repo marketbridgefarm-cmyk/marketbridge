@@ -28,19 +28,37 @@ function getSecretKey() {
 async function chapaRequest(endpoint, options = {}) {
   const secretKey = getSecretKey();
 
-  const response = await fetch(
-    `${CHAPA_BASE_URL}${endpoint}`,
-    {
-      ...options,
+  const timeoutMs = Math.max(1000, Number(process.env.CHAPA_API_TIMEOUT_MS || 15000));
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-      headers: {
+  let response;
+  try {
+    response = await fetch(
+      `${CHAPA_BASE_URL}${endpoint}`,
+      {
+        ...options,
+        signal: options.signal || controller.signal,
+
+        headers: {
         Authorization: `Bearer ${secretKey}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
         ...(options.headers || {}),
-      },
+        },
+      }
+    );
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      const timeoutError = new Error(`Chapa request timed out after ${timeoutMs}ms`);
+      timeoutError.code = 'CHAPA_REQUEST_TIMEOUT';
+      timeoutError.status = 504;
+      throw timeoutError;
     }
-  );
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   let data = {};
 
@@ -226,6 +244,82 @@ async function verifyTransaction(txRef) {
   };
 }
 
+
+// ============================================================================
+// REFUND
+// ============================================================================
+
+/**
+ * Submit a refund against the original Chapa transaction reference.
+ * Chapa v1 expects form-urlencoded data for this endpoint.
+ * The refund is asynchronous; a successful submission is therefore not the
+ * same thing as a completed refund. Call verifyRefund() afterwards/webhook.
+ */
+async function refundTransaction({ txRef, amount, reason, reference, meta }) {
+  if (!txRef) {
+    throw Object.assign(new Error('Original Chapa tx_ref is required for refund'), { status: 400, code: 'CHAPA_REFUND_TX_REF_REQUIRED' });
+  }
+
+  if (amount !== undefined && (!Number.isFinite(Number(amount)) || Number(amount) <= 0)) {
+    throw Object.assign(new Error('Invalid Chapa refund amount'), { status: 400, code: 'CHAPA_REFUND_AMOUNT_INVALID' });
+  }
+
+  const params = new URLSearchParams();
+  if (reason) params.set('reason', String(reason));
+  if (amount !== undefined) params.set('amount', Number(amount).toFixed(2));
+  if (reference) params.set('reference', String(reference));
+
+  if (meta && typeof meta === 'object') {
+    for (const [key, value] of Object.entries(meta)) {
+      if (value !== undefined && value !== null) params.set(`meta[${key}]`, String(value));
+    }
+  }
+
+  const result = await chapaRequest(
+    `/refund/${encodeURIComponent(String(txRef))}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    }
+  );
+
+  const refId = result?.data?.ref_id || result?.data?.reference || result?.ref_id;
+  if (!refId) {
+    const error = new Error('Chapa accepted the refund request without returning a refund reference');
+    error.status = 502;
+    error.code = 'CHAPA_REFUND_REFERENCE_MISSING';
+    error.chapa = result;
+    throw error;
+  }
+
+  return {
+    refId: String(refId),
+    status: String(result?.data?.status || result?.status || 'initiated').toLowerCase(),
+    raw: result,
+  };
+}
+
+/** Verify the asynchronous state of a Chapa refund. */
+async function verifyRefund(refId) {
+  if (!refId) {
+    throw Object.assign(new Error('Chapa refund reference is required'), { status: 400, code: 'CHAPA_REFUND_REFERENCE_REQUIRED' });
+  }
+
+  const result = await chapaRequest(
+    `/refund/${encodeURIComponent(String(refId))}/verify`,
+    { method: 'GET' }
+  );
+
+  const status = String(result?.data?.status || result?.status || '').toLowerCase();
+  let normalizedStatus = 'pending';
+  if (status === 'refunded') normalizedStatus = 'refunded';
+  else if (status === 'reversed' || status === 'failed' || status === 'cancelled' || status === 'canceled') normalizedStatus = 'reversed';
+  else if (status === 'initiated' || status === 'processing') normalizedStatus = 'processing';
+
+  return { status: normalizedStatus, raw: result };
+}
+
 // ============================================================================
 // WEBHOOK SIGNATURE
 // ============================================================================
@@ -290,5 +384,7 @@ function verifyWebhookSignature(
 module.exports = {
   initializeTransaction,
   verifyTransaction,
+  refundTransaction,
+  verifyRefund,
   verifyWebhookSignature,
 };
