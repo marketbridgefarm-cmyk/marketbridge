@@ -61,7 +61,8 @@ export default function RefundStatusCard({
   people,
   isAdmin,
   busy,
-  onComplete,
+  onProcess,
+  onVerify,
   onFail,
 }) {
   const rows = (Array.isArray(refunds) ? refunds : [])
@@ -221,14 +222,25 @@ export default function RefundStatusCard({
 
                       {isAdmin && open && (
                         <span className="refund-actions">
-                          <button
-                            type="button"
-                            className="btn btn-primary btn-sm"
-                            disabled={Boolean(busy)}
-                            onClick={() => onComplete(refund)}
-                          >
-                            {working ? 'Saving…' : 'Mark refunded'}
-                          </button>
+                          {refund.status === 'REQUESTED' ? (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              disabled={Boolean(busy)}
+                              onClick={() => onProcess(refund)}
+                            >
+                              {working ? 'Submitting…' : 'Process with Chapa'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              disabled={Boolean(busy)}
+                              onClick={() => onVerify(refund)}
+                            >
+                              {working ? 'Checking…' : 'Check Chapa status'}
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="btn btn-light btn-sm"
