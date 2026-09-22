@@ -23,14 +23,20 @@ router.post(
 
       const order = await prisma.order.findUnique({
         where: { id: orderId },
-        include: { transportJob: true, inspectionRequests: { select: { inspectorId: true } } },
+        include: {
+          transportJob: true,
+          inspectionRequests: {
+            where: { status: { not: 'CANCELLED' } },
+            select: { inspectorId: true },
+          },
+        },
       });
 
       if (!order) return res.status(404).json({ error: 'Order not found' });
 
       const truckOwnerId = order.transportJob?.truckOwnerId;
-      const inspectorIds = (order.inspectionRequests || []).map((r) => r.inspectorId).filter(Boolean);
-      const participants = [order.buyerId, order.sellerId, truckOwnerId, ...inspectorIds].filter(Boolean);
+      const inspectorIds = (order.inspectionRequests || []).map((request) => request.inspectorId);
+      const participants = [...new Set([order.buyerId, order.sellerId, truckOwnerId, ...inspectorIds].filter(Boolean))];
 
       if (!participants.includes(req.user.id)) {
         return res.status(403).json({ error: 'You are not a participant on this order' });
@@ -132,10 +138,7 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
       return res.status(409).json({ error: `Dispute is already ${dispute.status}` });
     }
 
-    const finalStatus = String(status || 'RESOLVED').toUpperCase();
-    if (!['RESOLVED', 'REJECTED'].includes(finalStatus)) {
-      return res.status(400).json({ error: 'status must be RESOLVED or REJECTED' });
-    }
+    const finalStatus = status || 'RESOLVED';
 
     const result = await prisma.$transaction(async (tx) => {
       const updated = await tx.dispute.update({
