@@ -1079,43 +1079,34 @@ export default function AdminDashboard() {
     }
   }
 
-  async function markRefundComplete(refund) {
+  async function processRefund(refund) {
     clearMessages();
-
     const confirmed = window.confirm(
-      `Mark the ${Number(refund.amount).toLocaleString()} ${
-        refund.currency || 'ETB'
-      } refund for payment ${refund.paymentId.slice(
-        0,
-        8
-      )} as completed? Only do this once the money has actually been sent back.`
+      `Submit a ${Number(refund.amount).toLocaleString()} ${refund.currency || 'ETB'} refund to Chapa for payment ${refund.paymentId.slice(0, 8)}?`
     );
-
     if (!confirmed) return;
 
-    const providerRefundId =
-      window.prompt(
-        'Provider refund reference (optional):'
-      ) || undefined;
-
     setActionLoading(`refund-${refund.id}`);
-
     try {
-      await api.patch(
-        `/admin/financial/refunds/${refund.id}/complete`,
-        {
-          provider: refund.payment?.provider || undefined,
-          providerRefundId,
-        }
-      );
-
-      setSuccess('Refund marked as completed.');
+      await api.post(`/admin/financial/refunds/${refund.id}/process`);
+      setSuccess('Refund submitted to Chapa. The status will remain Processing until Chapa confirms the money was returned.');
       await loadAll();
     } catch (err) {
-      setError(
-        err.response?.data?.error ||
-        'Could not complete refund'
-      );
+      setError(err.response?.data?.error || 'Could not submit refund to Chapa');
+    } finally {
+      setActionLoading('');
+    }
+  }
+
+  async function verifyRefund(refund) {
+    clearMessages();
+    setActionLoading(`refund-${refund.id}`);
+    try {
+      await api.post(`/admin/financial/refunds/${refund.id}/verify`);
+      setSuccess('Refund status synchronized with Chapa.');
+      await loadAll();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not verify refund with Chapa');
     } finally {
       setActionLoading('');
     }
@@ -3324,6 +3315,108 @@ export default function AdminDashboard() {
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+
+          {tab === 'refunds' && (
+            <div>
+              <div className="ac-toolbar">
+                <div>
+                  <span className="ac-section-label">REFUNDS</span>
+                  <h2>Chapa refund queue</h2>
+                  <p className="sd-muted">
+                    Process a refund through Chapa, then verify it until Chapa reports the final refunded state. MarketBridge never treats an admin click as proof that money moved.
+                  </p>
+                </div>
+              </div>
+
+              <div className="ac-panel">
+                <div className="ac-table-shell">
+                  <table className="sd-table sd-table--stack">
+                    <thead>
+                      <tr>
+                        <th>Payment</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Chapa refund</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {refunds.map((refund) => {
+                        const working = actionLoading === `refund-${refund.id}`;
+                        const open = ['REQUESTED', 'PROCESSING'].includes(refund.status);
+                        return (
+                          <tr key={refund.id}>
+                            <td data-label="Payment">
+                              <strong>{refund.paymentId.slice(0, 8)}</strong>
+                              <br />
+                              <span className="sd-muted">{refund.reason || 'Refund request'}</span>
+                            </td>
+                            <td data-label="Amount">
+                              {Number(refund.amount || 0).toLocaleString()} {refund.currency || 'ETB'}
+                            </td>
+                            <td data-label="Status">
+                              <span className={statusBadgeClass(refund.status)}>{refund.status}</span>
+                            </td>
+                            <td data-label="Chapa refund" className="sd-muted">
+                              {refund.providerRefundId || 'Not submitted'}
+                            </td>
+                            <td data-label="Action">
+                              <div className="ac-actions">
+                                {refund.status === 'REQUESTED' && (
+                                  <button className="sd-btn sd-btn-primary" disabled={working} onClick={() => processRefund(refund)}>
+                                    {working ? 'Submitting…' : 'Process with Chapa'}
+                                  </button>
+                                )}
+                                {refund.status === 'PROCESSING' && (
+                                  <button className="sd-btn sd-btn-outline" disabled={working} onClick={() => verifyRefund(refund)}>
+                                    {working ? 'Checking…' : 'Check Chapa status'}
+                                  </button>
+                                )}
+                                {open && (
+                                  <button className="sd-btn sd-btn-outline" disabled={working} onClick={() => markRefundFailed(refund)}>
+                                    Mark failed
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {refunds.length === 0 && (
+                        <tr><td colSpan="5" className="sd-muted">No refunds in the queue.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {refundHistory.length > 0 && (
+                <div className="ac-panel" style={{ marginTop: 20 }}>
+                  <div className="ac-panel-header">
+                    <div>
+                      <span className="ac-section-label">HISTORY</span>
+                      <h2>Refund history</h2>
+                    </div>
+                  </div>
+                  <div className="ac-table-shell">
+                    <table className="sd-table sd-table--stack">
+                      <thead><tr><th>Payment</th><th>Amount</th><th>Status</th><th>Chapa refund</th></tr></thead>
+                      <tbody>
+                        {refundHistory.slice(0, 100).map((refund) => (
+                          <tr key={refund.id}>
+                            <td data-label="Payment">{refund.paymentId.slice(0, 8)}</td>
+                            <td data-label="Amount">{Number(refund.amount || 0).toLocaleString()} {refund.currency || 'ETB'}</td>
+                            <td data-label="Status"><span className={statusBadgeClass(refund.status)}>{refund.status}</span></td>
+                            <td data-label="Chapa refund" className="sd-muted">{refund.providerRefundId || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

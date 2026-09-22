@@ -1224,28 +1224,35 @@ export default function OrderDetail() {
   };
 
   // ==========================================================================
-  // ADMIN: SETTLE A REFUND
+  // ADMIN: PROCESS / VERIFY A REAL CHAPA REFUND
   // ==========================================================================
-  // Refunds are durable requests; only an admin can confirm the money went
-  // back (or record that the provider refused). Both call the existing admin
-  // refund endpoints — the Refund card shows the buttons to admins only.
 
-  const completeRefundAsAdmin = async (refund) => {
-    const reference = window.prompt(
-      'Provider reference for this refund (optional):',
-      ''
+  const processRefundAsAdmin = async (refund) => {
+    const confirmed = window.confirm(
+      `Submit this ${money(refund.amount)} ${refund.currency || 'ETB'} refund to Chapa?`
     );
-    if (reference === null) return;
+    if (!confirmed) return;
 
     setBusy(`refund-${refund.id}`);
     setError('');
     try {
-      await api.patch(`/admin/financial/refunds/${refund.id}/complete`, {
-        providerRefundId: reference.trim() || undefined,
-      });
+      await api.post(`/admin/financial/refunds/${refund.id}/process`);
       await load({ silent: true });
     } catch (err) {
-      setError(getError(err, 'Could not mark the refund as completed'));
+      setError(getError(err, 'Could not submit the refund to Chapa'));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const verifyRefundAsAdmin = async (refund) => {
+    setBusy(`refund-${refund.id}`);
+    setError('');
+    try {
+      await api.post(`/admin/financial/refunds/${refund.id}/verify`);
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not verify the refund with Chapa'));
     } finally {
       setBusy('');
     }
@@ -2516,7 +2523,8 @@ export default function OrderDetail() {
             }}
             isAdmin={isAdmin}
             busy={busy}
-            onComplete={completeRefundAsAdmin}
+            onProcess={processRefundAsAdmin}
+            onVerify={verifyRefundAsAdmin}
             onFail={failRefundAsAdmin}
           />
         )}
