@@ -74,10 +74,39 @@ async function transitionOrderStatus(tx, orderId, from, to, extraData = {}) {
   return tx.order.findUnique({ where: { id: orderId } });
 }
 
+// Guards an action against a narrow race where a dispute or cancellation
+// lands on the order in the moment between a caller's pre-check and their
+// actual write. A plain SELECT there doesn't help: Postgres only serializes
+// against a concurrent writer for statements that take a lock on the row,
+// so this takes one explicitly (mirroring the implicit lock
+// transitionOrderStatus's own UPDATE above already takes) and re-reads
+// status under that lock, inside the same transaction as the caller's
+// write. Whichever transaction — this one or the dispute/cancel one — asks
+// for the lock first wins; the other blocks until it commits, then sees the
+// real, current status instead of a stale pre-check result.
+//
+// Used anywhere a party can still act on a sub-resource (an inspection, a
+// transport quote) that a dispute doesn't itself freeze — holdForDispute
+// only touches Payout rows, so nothing else stops a transport job or
+// inspection from progressing on an order that just became DISPUTED unless
+// the specific route checks for it.
+async function lockOrderAndAssertNotClosed(tx, orderId, actionLabel) {
+  if (!orderId) return; // some flows have no order to race against
+  const rows = await tx.$queryRaw`SELECT status FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
+  const status = rows?.[0]?.status;
+  if (status && ['DISPUTED', 'CANCELLED'].includes(status)) {
+    throw Object.assign(
+      new Error(`This order is ${status.toLowerCase()}, so ${actionLabel}.`),
+      { status: 409, code: 'ORDER_NOT_ACTIONABLE' }
+    );
+  }
+}
+
 module.exports = {
   ORDER_TRANSITIONS,
   DISPUTABLE_STATUSES,
   canTransitionOrder,
   assertOrderTransition,
   transitionOrderStatus,
+  lockOrderAndAssertNotClosed,
 };
