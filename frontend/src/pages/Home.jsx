@@ -3,329 +3,1380 @@ import { Link } from 'react-router-dom';
 import AdvertisementBanner from '../components/AdvertisementBanner.jsx';
 
 const pillars = [
-  ['01', 'Agricultural marketplace', 'Connect farmers, agricultural producers, investors and buyers for farm-produced goods, including bulk and time-sensitive harvests.'],
-  ['02', 'Physical products', 'Buy and sell general physical products through independent sellers and buyers without MarketBridge owning the merchandise.'],
-  ['03', 'Digital marketplace', 'Discover and sell eBooks, courses, software, documents, templates, graphics, photos and other digital products.'],
+  [
+    '01',
+    'Agricultural marketplace',
+    'Connect farmers, agricultural producers, investors and buyers for farm-produced goods, including bulk and time-sensitive harvests.',
+  ],
+  [
+    '02',
+    'Physical products',
+    'Buy and sell general physical products through independent sellers and buyers without MarketBridge owning the merchandise.',
+  ],
+  [
+    '03',
+    'Digital marketplace',
+    'Discover and sell eBooks, courses, software, documents, templates, graphics, photos and other digital products.',
+  ],
+];
+
+const marketplaceCards = [
+  {
+    number: '01',
+    label: 'AGRICULTURE',
+    title: 'Agricultural',
+    description:
+      'A specialized marketplace for farm-produced goods, bulk lots and time-sensitive harvests.',
+    features: [
+      'Farmers & producers',
+      'Bulk agricultural lots',
+      'Offers & negotiation',
+      'Inspection & evidence',
+      'Transport arrangement',
+    ],
+    link: '/agricultural',
+    button: 'Enter Agricultural Marketplace',
+    tone: 'green',
+  },
+  {
+    number: '02',
+    label: 'PHYSICAL COMMERCE',
+    title: 'Products',
+    description:
+      'A broader marketplace connecting independent sellers with buyers looking for physical products.',
+    features: [
+      'Physical products',
+      'Independent sellers',
+      'Buyer discovery',
+      'Orders & records',
+      'Delivery options',
+    ],
+    link: '/products',
+    button: 'Browse Physical Products',
+    tone: 'gold',
+  },
+  {
+    number: '03',
+    label: 'DIGITAL COMMERCE',
+    title: 'Digital',
+    description:
+      'A marketplace for independently supplied digital products and downloadable resources.',
+    features: [
+      'eBooks',
+      'Courses',
+      'Software',
+      'Documents & templates',
+      'Graphics & photos',
+    ],
+    link: '/digital',
+    button: 'Browse Digital Products',
+    tone: 'blue',
+  },
 ];
 
 const HOME_PAGE_STYLES = `
-  .home-page .hero {
-    position: relative;
+  .mb-home {
+    --home-green: #167247;
+    --home-green-dark: #0d4d31;
+    --home-green-soft: #eaf7ef;
+    --home-gold: #b87918;
+    --home-ink: #13261c;
+    --home-muted: #617067;
+    --home-line: rgba(21, 67, 45, .12);
+    --home-card: rgba(255,255,255,.84);
+    --home-shadow: 0 20px 60px rgba(21, 55, 37, .09);
+    color: var(--home-ink);
     overflow: hidden;
-    border-bottom: 1px solid var(--mb-border, var(--line));
-    background: linear-gradient(135deg, #eef6ef 0%, #fbfcfa 58%, #e9f1e9 100%);
-    padding: clamp(40px, 8vw, 84px) 0 clamp(36px, 7vw, 74px);
+    background: #fbfcfa;
   }
-  .home-page .hero::before,
-  .home-page .hero::after {
+
+  .mb-home *,
+  .mb-home *::before,
+  .mb-home *::after {
+    box-sizing: border-box;
+  }
+
+  .mb-home .home-container {
+    width: min(1220px, calc(100% - 40px));
+    margin: 0 auto;
+  }
+
+  .mb-home .home-hero {
+    position: relative;
+    min-height: 680px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 86% 18%, rgba(46, 154, 93, .15), transparent 27%),
+      radial-gradient(circle at 12% 90%, rgba(184, 121, 24, .08), transparent 25%),
+      linear-gradient(135deg, #eef8f0 0%, #f8fbf8 53%, #edf5ef 100%);
+    border-bottom: 1px solid var(--home-line);
+  }
+
+  .mb-home .home-hero::before {
     content: '';
     position: absolute;
-    pointer-events: none;
+    width: 560px;
+    height: 560px;
+    right: -250px;
+    top: -220px;
+    border-radius: 50%;
+    border: 1px solid rgba(22,114,71,.10);
+    box-shadow:
+      0 0 0 55px rgba(22,114,71,.025),
+      0 0 0 110px rgba(22,114,71,.018);
+  }
+
+  .mb-home .home-hero::after {
+    content: '';
+    position: absolute;
+    width: 360px;
+    height: 360px;
+    left: -230px;
+    bottom: -250px;
+    border-radius: 50%;
+    background: rgba(184,121,24,.055);
+  }
+
+  .mb-home .hero-grid {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(340px, .85fr);
+    gap: clamp(40px, 7vw, 90px);
+    align-items: center;
+    padding: 82px 0;
+  }
+
+  .mb-home .hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 20px;
+    padding: 7px 11px;
+    border: 1px solid rgba(22,114,71,.16);
     border-radius: 999px;
-    filter: blur(1px);
+    background: rgba(255,255,255,.62);
+    color: var(--home-green-dark);
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 1.8px;
   }
-  .home-page .hero::before {
-    width: 340px;
-    height: 340px;
-    right: -130px;
-    top: -160px;
-    background: rgba(47, 145, 89, .08);
+
+  .mb-home .hero-eyebrow::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #35a461;
+    box-shadow: 0 0 0 5px rgba(53,164,97,.10);
   }
-  .home-page .hero::after {
-    width: 260px;
-    height: 260px;
-    left: -140px;
-    bottom: -180px;
-    background: rgba(183, 123, 27, .045);
+
+  .mb-home .hero-title {
+    max-width: 800px;
+    margin: 0;
+    color: #10261a;
+    font-size: clamp(42px, 6vw, 76px);
+    line-height: .98;
+    letter-spacing: -3.5px;
+    font-weight: 850;
   }
-  .home-page .hero > * {
+
+  .mb-home .hero-title span {
+    display: block;
+    color: var(--home-green);
+  }
+
+  .mb-home .hero-description {
+    max-width: 690px;
+    margin: 25px 0 0;
+    color: #56655c;
+    font-size: clamp(16px, 2vw, 19px);
+    line-height: 1.7;
+  }
+
+  .mb-home .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 11px;
+    margin-top: 30px;
+  }
+
+  .mb-home .home-btn {
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 19px;
+    border-radius: 13px;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 800;
+    transition:
+      transform .2s ease,
+      box-shadow .2s ease,
+      background .2s ease;
+  }
+
+  .mb-home .home-btn:hover {
+    transform: translateY(-2px);
+  }
+
+  .mb-home .home-btn-primary {
+    color: #fff;
+    background: linear-gradient(135deg, #18794c, #0f603a);
+    box-shadow: 0 12px 25px rgba(16,104,61,.20);
+  }
+
+  .mb-home .home-btn-primary:hover {
+    box-shadow: 0 16px 30px rgba(16,104,61,.27);
+  }
+
+  .mb-home .home-btn-light {
+    color: #173b2a;
+    background: rgba(255,255,255,.78);
+    border: 1px solid rgba(22,114,71,.15);
+  }
+
+  .mb-home .home-btn-light:hover {
+    background: #fff;
+  }
+
+  .mb-home .hero-trust {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px 23px;
+    margin-top: 24px;
+    color: #607068;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .mb-home .hero-trust span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .mb-home .hero-trust b {
+    color: var(--home-green);
+    font-size: 14px;
+  }
+
+  /* Hero visual */
+
+  .mb-home .hero-visual {
+    position: relative;
+  }
+
+  .mb-home .platform-card {
+    position: relative;
+    padding: 25px;
+    border: 1px solid rgba(255,255,255,.9);
+    border-radius: 26px;
+    background:
+      linear-gradient(145deg, rgba(255,255,255,.90), rgba(246,250,247,.72));
+    box-shadow:
+      0 30px 70px rgba(25,65,42,.13),
+      inset 0 1px 0 rgba(255,255,255,.9);
+    backdrop-filter: blur(18px);
+  }
+
+  .mb-home .platform-card::before {
+    content: '';
+    position: absolute;
+    inset: 10px;
+    border: 1px solid rgba(22,114,71,.07);
+    border-radius: 19px;
+    pointer-events: none;
+  }
+
+  .mb-home .platform-header {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .mb-home .platform-label {
+    color: #506057;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 1.7px;
+  }
+
+  .mb-home .platform-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #28734c;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .mb-home .platform-status::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #35a461;
+    box-shadow: 0 0 0 4px rgba(53,164,97,.10);
+  }
+
+  .mb-home .platform-main {
+    position: relative;
+    padding: 21px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #123c29, #176443);
+    color: #fff;
+    overflow: hidden;
+  }
+
+  .mb-home .platform-main::after {
+    content: '';
+    position: absolute;
+    width: 180px;
+    height: 180px;
+    right: -70px;
+    top: -80px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.07);
+  }
+
+  .mb-home .platform-main small {
     position: relative;
     z-index: 1;
+    display: block;
+    margin-bottom: 7px;
+    color: rgba(255,255,255,.64);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.4px;
   }
-  .home-page .hero-grid {
+
+  .mb-home .platform-main strong {
+    position: relative;
+    z-index: 1;
+    display: block;
+    font-size: 24px;
+    line-height: 1.2;
+  }
+
+  .mb-home .platform-main p {
+    position: relative;
+    z-index: 1;
+    margin: 9px 0 0;
+    color: rgba(255,255,255,.72);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .mb-home .platform-flow {
+    margin-top: 17px;
+  }
+
+  .mb-home .platform-step {
     display: grid;
-    grid-template-columns: 1.12fr .88fr;
-    gap: clamp(28px, 6vw, 70px);
+    grid-template-columns: 30px 1fr auto;
     align-items: center;
+    gap: 11px;
+    padding: 13px 0;
+    border-bottom: 1px solid rgba(24,68,45,.09);
   }
-  .home-page .hero h1 {
-    max-width: 720px;
-    letter-spacing: -1.4px;
+
+  .mb-home .platform-step:last-child {
+    border-bottom: 0;
   }
-  .home-page .hero h1 em {
-    color: var(--green);
-    font-style: normal;
+
+  .mb-home .step-number {
+    width: 29px;
+    height: 29px;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    background: #edf7f0;
+    color: var(--home-green);
+    font-size: 10px;
+    font-weight: 900;
   }
-  .home-page .hero-copy {
-    font-size: 18px;
-    color: #526057;
-    max-width: 680px;
+
+  .mb-home .step-copy strong {
+    display: block;
+    font-size: 12px;
+    color: #20392c;
   }
-  .home-page .hero-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin: 27px 0 18px;
+
+  .mb-home .step-copy span {
+    display: block;
+    margin-top: 2px;
+    color: #7a867f;
+    font-size: 10px;
   }
-  .home-page .hero-account-cta {
+
+  .mb-home .step-arrow {
+    color: #9aa59e;
+    font-size: 13px;
+  }
+
+  .mb-home .floating-badge {
+    position: absolute;
+    right: -25px;
+    bottom: -22px;
+    padding: 13px 16px;
+    border: 1px solid rgba(255,255,255,.95);
+    border-radius: 15px;
+    background: rgba(255,255,255,.91);
+    box-shadow: 0 15px 35px rgba(27,62,42,.13);
+    backdrop-filter: blur(14px);
+  }
+
+  .mb-home .floating-badge strong {
+    display: block;
+    color: #183b29;
+    font-size: 12px;
+  }
+
+  .mb-home .floating-badge span {
+    display: block;
+    margin-top: 2px;
+    color: #78847d;
+    font-size: 10px;
+  }
+
+  /* Account CTA */
+
+  .mb-home .account-strip {
+    position: relative;
+    z-index: 3;
+    width: min(1060px, calc(100% - 40px));
+    margin: -30px auto 0;
+    padding: 18px 20px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    margin: 0 0 24px;
-    padding: 14px 16px;
-    background: rgba(255, 255, 255, .78);
-    border: 1px solid rgba(30, 108, 67, .16);
-    border-radius: 16px;
-    box-shadow: 0 10px 28px rgba(30, 64, 45, .07);
+    gap: 18px;
+    border: 1px solid rgba(255,255,255,.9);
+    border-radius: 18px;
+    background: rgba(255,255,255,.92);
+    box-shadow: 0 18px 50px rgba(25,65,42,.10);
+    backdrop-filter: blur(18px);
   }
-  .home-page .hero-account-copy {
-    display: grid;
-    gap: 3px;
+
+  .mb-home .account-copy {
     min-width: 0;
   }
-  .home-page .hero-account-copy strong {
+
+  .mb-home .account-copy strong {
+    display: block;
     color: #173b2a;
     font-size: 14px;
   }
-  .home-page .hero-account-copy span {
-    color: #5a675f;
-    font-size: 12px;
-    line-height: 1.45;
+
+  .mb-home .account-copy span {
+    display: block;
+    margin-top: 4px;
+    color: #68766e;
+    font-size: 11px;
+    line-height: 1.5;
   }
-  .home-page .hero-account-actions {
+
+  .mb-home .account-actions {
     display: flex;
-    gap: 8px;
     flex: 0 0 auto;
+    gap: 8px;
   }
-  .home-page .hero-account-actions .btn {
+
+  .mb-home .account-actions .home-btn {
     min-height: 42px;
     padding: 9px 14px;
-    font-size: 13px;
-    white-space: nowrap;
-  }
-  .home-page .trust-row {
-    display: flex;
-    gap: 18px;
-    flex-wrap: wrap;
-    color: #516057;
-    font-size: 12px;
-  }
-  .home-page .hero-card {
-    background: #fff;
-    border: 1px solid var(--mb-border, var(--line));
-    border-radius: 20px;
-    padding: 25px;
-    box-shadow: 0 8px 26px rgba(20, 45, 28, .045);
-  }
-  .home-page .hero-card-top {
     font-size: 11px;
-    letter-spacing: 1.4px;
-    font-weight: 800;
-    color: #607066;
-    margin-bottom: 15px;
   }
-  .home-page .live-dot {
+
+  /* General sections */
+
+  .mb-home .home-section {
+    padding: clamp(65px, 8vw, 105px) 0;
+  }
+
+  .mb-home .home-section-alt {
+    background:
+      linear-gradient(180deg, #f1f7f2 0%, #f8faf8 100%);
+    border-top: 1px solid rgba(22,114,71,.06);
+    border-bottom: 1px solid rgba(22,114,71,.06);
+  }
+
+  .mb-home .section-heading {
+    max-width: 780px;
+    margin-bottom: 35px;
+  }
+
+  .mb-home .section-heading.center {
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+  }
+
+  .mb-home .eyebrow {
     display: inline-block;
-    width: 7px;
-    height: 7px;
-    background: #35a45f;
-    border-radius: 50%;
-    margin-right: 7px;
+    margin-bottom: 11px;
+    color: var(--home-green);
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 1.7px;
   }
-  .home-page .flow-step {
+
+  .mb-home .section-heading h2,
+  .mb-home .split-content h2 {
+    margin: 0;
+    color: #142a1e;
+    font-size: clamp(29px, 4vw, 46px);
+    line-height: 1.08;
+    letter-spacing: -1.7px;
+  }
+
+  .mb-home .section-heading p {
+    margin: 13px 0 0;
+    color: #65736b;
+    line-height: 1.7;
+  }
+
+  /* Marketplace cards */
+
+  .mb-home .marketplace-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .mb-home .market-card {
+    position: relative;
+    min-width: 0;
+    padding: 27px;
+    overflow: hidden;
+    border: 1px solid var(--home-line);
+    border-radius: 22px;
+    background: rgba(255,255,255,.82);
+    box-shadow: 0 12px 35px rgba(26,57,39,.055);
+    transition:
+      transform .22s ease,
+      box-shadow .22s ease,
+      border-color .22s ease;
+  }
+
+  .mb-home .market-card:hover {
+    transform: translateY(-5px);
+    border-color: rgba(22,114,71,.20);
+    box-shadow: var(--home-shadow);
+  }
+
+  .mb-home .market-card::after {
+    content: '';
+    position: absolute;
+    width: 150px;
+    height: 150px;
+    right: -80px;
+    bottom: -80px;
+    border-radius: 50%;
+    background: rgba(22,114,71,.045);
+    pointer-events: none;
+  }
+
+  .mb-home .market-card.gold::after {
+    background: rgba(184,121,24,.055);
+  }
+
+  .mb-home .market-card.blue::after {
+    background: rgba(52,108,164,.05);
+  }
+
+  .mb-home .market-number {
+    display: inline-grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    margin-bottom: 18px;
+    border-radius: 11px;
+    background: #eaf7ef;
+    color: var(--home-green);
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .mb-home .market-card.gold .market-number {
+    background: #fbf2e4;
+    color: #a46c16;
+  }
+
+  .mb-home .market-card.blue .market-number {
+    background: #edf3f9;
+    color: #356da2;
+  }
+
+  .mb-home .market-label {
+    display: block;
+    margin-bottom: 7px;
+    color: #7a877f;
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+  }
+
+  .mb-home .market-card h3 {
+    margin: 0;
+    color: #183324;
+    font-size: 25px;
+    letter-spacing: -.7px;
+  }
+
+  .mb-home .market-card p {
+    min-height: 78px;
+    margin: 11px 0 17px;
+    color: #68766e;
+    font-size: 13px;
+    line-height: 1.65;
+  }
+
+  .mb-home .market-list {
+    display: grid;
+    gap: 9px;
+    margin: 0 0 22px;
+    padding: 0;
+    list-style: none;
+  }
+
+  .mb-home .market-list li {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 13px 0;
-    border-bottom: 1px solid #edf0ec;
-    font-weight: 600;
-    font-size: 14px;
-  }
-  .home-page .flow-step span {
-    font-family: Manrope, system-ui, sans-serif;
-    color: var(--green);
+    gap: 8px;
+    color: #4e5f55;
     font-size: 11px;
+    font-weight: 650;
   }
-  @media (max-width: 900px) {
-    .home-page .hero-grid {
+
+  .mb-home .market-list li::before {
+    content: '✓';
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    border-radius: 50%;
+    background: #edf7f0;
+    color: var(--home-green);
+    font-size: 9px;
+    font-weight: 900;
+  }
+
+  .mb-home .market-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--home-green);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 850;
+  }
+
+  .mb-home .market-link:hover {
+    text-decoration: underline;
+  }
+
+  /* Split sections */
+
+  .mb-home .split-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(330px, .78fr);
+    gap: clamp(35px, 8vw, 100px);
+    align-items: center;
+  }
+
+  .mb-home .split-grid.reverse {
+    grid-template-columns: minmax(330px, .78fr) minmax(0, 1fr);
+  }
+
+  .mb-home .split-content p {
+    max-width: 690px;
+    margin: 16px 0 0;
+    color: #637169;
+    font-size: 14px;
+    line-height: 1.75;
+  }
+
+  .mb-home .split-link {
+    display: inline-flex;
+    margin-top: 23px;
+    color: var(--home-green);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 850;
+  }
+
+  .mb-home .split-link:hover {
+    text-decoration: underline;
+  }
+
+  .mb-home .info-panel {
+    padding: 24px;
+    border: 1px solid var(--home-line);
+    border-radius: 22px;
+    background: rgba(255,255,255,.82);
+    box-shadow: var(--home-shadow);
+  }
+
+  .mb-home .info-row {
+    display: grid;
+    grid-template-columns: 115px 1fr;
+    gap: 16px;
+    padding: 15px 0;
+    border-bottom: 1px solid rgba(21,67,45,.08);
+  }
+
+  .mb-home .info-row:first-child {
+    padding-top: 2px;
+  }
+
+  .mb-home .info-row:last-child {
+    padding-bottom: 2px;
+    border-bottom: 0;
+  }
+
+  .mb-home .info-row strong {
+    color: #1b3b2b;
+    font-size: 12px;
+  }
+
+  .mb-home .info-row span {
+    color: #6d7972;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .mb-home .info-panel.digital {
+    background: linear-gradient(145deg, rgba(244,248,253,.92), rgba(255,255,255,.86));
+  }
+
+  /* Process */
+
+  .mb-home .process-shell {
+    padding: 28px;
+    border: 1px solid var(--home-line);
+    border-radius: 25px;
+    background: rgba(255,255,255,.82);
+    box-shadow: var(--home-shadow);
+  }
+
+  .mb-home .process-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+  }
+
+  .mb-home .process-item {
+    position: relative;
+    padding: 20px;
+    min-height: 115px;
+    border-right: 1px solid rgba(21,67,45,.09);
+  }
+
+  .mb-home .process-item:nth-child(4n) {
+    border-right: 0;
+  }
+
+  .mb-home .process-item:nth-child(n+5) {
+    border-top: 1px solid rgba(21,67,45,.09);
+  }
+
+  .mb-home .process-number {
+    display: block;
+    margin-bottom: 12px;
+    color: var(--home-green);
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 1px;
+  }
+
+  .mb-home .process-item strong {
+    display: block;
+    color: #1b3829;
+    font-size: 13px;
+  }
+
+  .mb-home .process-item span {
+    display: block;
+    margin-top: 5px;
+    color: #758079;
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
+  /* Final CTA */
+
+  .mb-home .final-cta {
+    position: relative;
+    overflow: hidden;
+    padding: clamp(50px, 7vw, 75px);
+    border-radius: 28px;
+    background:
+      radial-gradient(circle at 88% 15%, rgba(255,255,255,.10), transparent 25%),
+      linear-gradient(135deg, #103c28, #176a43);
+    color: #fff;
+    box-shadow: 0 25px 65px rgba(15,75,44,.18);
+  }
+
+  .mb-home .final-cta::after {
+    content: '';
+    position: absolute;
+    width: 300px;
+    height: 300px;
+    right: -150px;
+    bottom: -190px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.12);
+    box-shadow: 0 0 0 45px rgba(255,255,255,.025);
+  }
+
+  .mb-home .final-cta-content {
+    position: relative;
+    z-index: 1;
+    max-width: 800px;
+  }
+
+  .mb-home .final-cta .eyebrow {
+    color: rgba(255,255,255,.65);
+  }
+
+  .mb-home .final-cta h2 {
+    margin: 0;
+    color: #fff;
+    font-size: clamp(30px, 4vw, 48px);
+    line-height: 1.05;
+    letter-spacing: -1.8px;
+  }
+
+  .mb-home .final-cta p {
+    max-width: 650px;
+    margin: 14px 0 0;
+    color: rgba(255,255,255,.72);
+    line-height: 1.7;
+  }
+
+  .mb-home .final-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    margin-top: 26px;
+  }
+
+  .mb-home .final-actions .home-btn-primary {
+    color: #17462f;
+    background: #fff;
+    box-shadow: none;
+  }
+
+  .mb-home .final-actions .home-btn-light {
+    color: #fff;
+    border-color: rgba(255,255,255,.18);
+    background: rgba(255,255,255,.09);
+  }
+
+  /* Responsive */
+
+  @media (max-width: 1000px) {
+    .mb-home .hero-grid {
       grid-template-columns: 1fr;
-      gap: 26px;
+      padding: 70px 0 85px;
     }
-    .home-page .hero-card {
-      padding: 20px;
+
+    .mb-home .hero-title {
+      max-width: 800px;
+    }
+
+    .mb-home .hero-visual {
+      max-width: 680px;
+    }
+
+    .mb-home .marketplace-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .mb-home .market-card:last-child {
+      grid-column: 1 / -1;
+      max-width: calc(50% - 9px);
+    }
+
+    .mb-home .split-grid,
+    .mb-home .split-grid.reverse {
+      grid-template-columns: 1fr;
+      gap: 35px;
+    }
+
+    .mb-home .split-grid.reverse .info-panel {
+      order: 2;
+    }
+
+    .mb-home .process-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .mb-home .process-item:nth-child(4n) {
+      border-right: 1px solid rgba(21,67,45,.09);
+    }
+
+    .mb-home .process-item:nth-child(2n) {
+      border-right: 0;
+    }
+
+    .mb-home .process-item:nth-child(n+3) {
+      border-top: 1px solid rgba(21,67,45,.09);
     }
   }
-  @media (max-width: 620px) {
-    .home-page .hero {
-      padding: 44px 0 40px;
+
+  @media (max-width: 720px) {
+    .mb-home .home-container {
+      width: min(100% - 28px, 1220px);
     }
-    .home-page .hero h1 {
-      letter-spacing: -.9px;
+
+    .mb-home .home-hero {
+      min-height: auto;
     }
-    .home-page .hero-copy {
+
+    .mb-home .hero-grid {
+      padding: 52px 0 72px;
+      gap: 45px;
+    }
+
+    .mb-home .hero-title {
+      font-size: clamp(39px, 11vw, 58px);
+      letter-spacing: -2.5px;
+    }
+
+    .mb-home .hero-description {
       font-size: 16px;
     }
-    .home-page .hero-actions .btn {
+
+    .mb-home .hero-actions {
+      margin-top: 23px;
+    }
+
+    .mb-home .hero-actions .home-btn {
       width: 100%;
     }
-    .home-page .hero-account-cta {
+
+    .mb-home .account-strip {
+      width: calc(100% - 28px);
+      margin-top: -25px;
       align-items: stretch;
       flex-direction: column;
-      gap: 12px;
-      margin-bottom: 22px;
     }
-    .home-page .hero-account-actions {
+
+    .mb-home .account-actions {
       width: 100%;
     }
-    .home-page .hero-account-actions .btn {
+
+    .mb-home .account-actions .home-btn {
       flex: 1;
-      width: 50%;
     }
-    .home-page .hero-card {
-      border-radius: 16px;
+
+    .mb-home .floating-badge {
+      right: 8px;
+    }
+
+    .mb-home .marketplace-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .mb-home .market-card:last-child {
+      grid-column: auto;
+      max-width: none;
+    }
+
+    .mb-home .market-card p {
+      min-height: 0;
+    }
+
+    .mb-home .home-section {
+      padding: 65px 0;
+    }
+
+    .mb-home .process-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .mb-home .process-item,
+    .mb-home .process-item:nth-child(4n),
+    .mb-home .process-item:nth-child(2n) {
+      border-right: 0;
+      border-bottom: 1px solid rgba(21,67,45,.09);
+    }
+
+    .mb-home .process-item:nth-child(n+3) {
+      border-top: 0;
+    }
+
+    .mb-home .process-item:last-child {
+      border-bottom: 0;
+    }
+
+    .mb-home .final-cta {
+      padding: 38px 24px;
+      border-radius: 22px;
     }
   }
-  @media (max-width: 420px) {
-    .home-page .hero h1 {
-      font-size: 32px;
+
+  @media (max-width: 520px) {
+    .mb-home .hero-visual {
+      width: 100%;
+    }
+
+    .mb-home .platform-card {
+      padding: 18px;
+      border-radius: 21px;
+    }
+
+    .mb-home .platform-main {
+      padding: 18px;
+    }
+
+    .mb-home .floating-badge {
+      position: relative;
+      right: auto;
+      bottom: auto;
+      display: inline-block;
+      margin-top: 12px;
+    }
+
+    .mb-home .hero-trust {
+      display: grid;
+      gap: 9px;
+    }
+
+    .mb-home .account-actions {
+      flex-direction: column;
+    }
+
+    .mb-home .account-actions .home-btn {
+      width: 100%;
+    }
+
+    .mb-home .info-row {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+
+    .mb-home .final-actions {
+      flex-direction: column;
+    }
+
+    .mb-home .final-actions .home-btn {
+      width: 100%;
     }
   }
 `;
 
-const marketplaceCards = [
-  { number: '01', title: 'Agricultural', description: 'Farm-produced goods such as potatoes, wheat, barley, vegetables, fruits, livestock-related products and other agricultural produce.', features: ['Farmers & producers', 'Bulk agricultural lots', 'Offers & negotiation', 'Inspection & evidence', 'Transport arrangement'], link: '/agricultural', button: 'Enter Agricultural Marketplace →' },
-  { number: '02', title: 'Product', description: 'A broader marketplace for physical products sold by independent sellers to buyers through the MarketBridge platform.', features: ['Physical products', 'Independent sellers', 'Buyer discovery', 'Orders & records', 'Delivery options'], link: '/products', button: 'Browse Physical Products →' },
-  { number: '03', title: 'Digital', description: 'A marketplace for independently supplied digital products and downloadable resources.', features: ['eBooks', 'Courses', 'Software', 'Documents & templates', 'Graphics & photos'], link: '/digital', button: 'Browse Digital Products →' },
-];
+function PlatformStep({ number, title, description }) {
+  return (
+    <div className="platform-step">
+      <div className="step-number">{number}</div>
+      <div className="step-copy">
+        <strong>{title}</strong>
+        <span>{description}</span>
+      </div>
+      <span className="step-arrow">→</span>
+    </div>
+  );
+}
+
+function InfoPanel({ rows, className = '' }) {
+  return (
+    <div className={`info-panel ${className}`}>
+      {rows.map(([title, description]) => (
+        <div className="info-row" key={title}>
+          <strong>{title}</strong>
+          <span>{description}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function Home() {
   return (
-    <main className="home-page">
+    <main className="mb-home">
       <style>{HOME_PAGE_STYLES}</style>
-      <section className="hero">
-        <div className="container-wide hero-grid">
+
+      {/* HERO */}
+      <section className="home-hero">
+        <div className="home-container hero-grid">
           <div>
-            <div className="eyebrow">MARKETBRIDGE PLATFORM</div>
-            <h1>One platform for <em>agriculture, products and digital commerce.</em></h1>
-            <p className="hero-copy">MarketBridge connects producers, farmers, sellers, buyers, investors and independent service providers through one marketplace platform.</p>
+            <div className="hero-eyebrow">MARKETBRIDGE PLATFORM</div>
+
+            <h1 className="hero-title">
+              One marketplace.
+              <span>Three ways to trade.</span>
+            </h1>
+
+            <p className="hero-description">
+              MarketBridge connects farmers, producers, sellers, buyers,
+              investors and independent service providers through one
+              marketplace platform for agricultural, physical and digital
+              commerce.
+            </p>
+
             <div className="hero-actions">
-              <Link className="btn btn-primary btn-lg" to="#marketplaces">Explore Marketplaces →</Link>
+              <Link className="home-btn home-btn-primary" to="#marketplaces">
+                Explore Marketplaces <span>→</span>
+              </Link>
+
+              <Link className="home-btn home-btn-light" to="/agricultural">
+                Start with Agriculture
+              </Link>
             </div>
-            <div className="hero-account-cta" aria-label="MarketBridge account access">
-              <div className="hero-account-copy">
-                <strong>New to MarketBridge?</strong>
-                <span>Start your marketplace journey — buy, sell, negotiate and grow with us.</span>
-              </div>
-              <div className="hero-account-actions">
-                <Link className="btn btn-primary" to="/register">Join MarketBridge</Link>
-                <Link className="btn btn-light" to="/login">Welcome back · Sign in</Link>
-              </div>
-            </div>
-            <div className="trust-row">
-              <span>✓ Independent sellers</span>
-              <span>✓ Buyer & seller accounts</span>
-              <span>✓ Marketplace records</span>
+
+            <div className="hero-trust">
+              <span><b>✓</b> Independent sellers</span>
+              <span><b>✓</b> Buyer & seller accounts</span>
+              <span><b>✓</b> Offers & negotiation</span>
+              <span><b>✓</b> Marketplace records</span>
             </div>
           </div>
-          <div className="hero-card">
-            <div className="hero-card-top"><span className="live-dot"></span> MARKETBRIDGE STRUCTURE</div>
-            <div className="flow">
-              <div className="flow-step"><span>01</span> HOME</div>
-              <div className="flow-step"><span>02</span> AGRICULTURAL</div>
-              <div className="flow-step"><span>03</span> PRODUCT</div>
-              <div className="flow-step"><span>04</span> DIGITAL</div>
+
+          <div className="hero-visual">
+            <div className="platform-card">
+              <div className="platform-header">
+                <span className="platform-label">MARKETBRIDGE STRUCTURE</span>
+                <span className="platform-status">Connected</span>
+              </div>
+
+              <div className="platform-main">
+                <small>ONE PLATFORM</small>
+                <strong>A marketplace built around people.</strong>
+                <p>
+                  Independent producers and sellers keep ownership of their
+                  goods while MarketBridge provides marketplace infrastructure.
+                </p>
+              </div>
+
+              <div className="platform-flow">
+                <PlatformStep
+                  number="01"
+                  title="Agricultural"
+                  description="Farm produce, offers, inspection & transport"
+                />
+                <PlatformStep
+                  number="02"
+                  title="Products"
+                  description="Independent physical product sellers"
+                />
+                <PlatformStep
+                  number="03"
+                  title="Digital"
+                  description="eBooks, courses, software & creative products"
+                />
+              </div>
             </div>
-            <p className="small muted">MarketBridge provides the marketplace infrastructure connecting independent producers and sellers with buyers while supporting verification, communication, orders and approved marketplace services.</p>
+
+            <div className="floating-badge">
+              <strong>Discover → Negotiate → Buy</strong>
+              <span>Designed for marketplace transactions</span>
+            </div>
           </div>
         </div>
       </section>
 
+      {/* ACCOUNT CTA */}
+      <div className="account-strip">
+        <div className="account-copy">
+          <strong>New to MarketBridge?</strong>
+          <span>
+            Create an account to buy, sell, negotiate and participate across
+            the marketplace.
+          </span>
+        </div>
+
+        <div className="account-actions">
+          <Link className="home-btn home-btn-primary" to="/register">
+            Join MarketBridge
+          </Link>
+
+          <Link className="home-btn home-btn-light" to="/login">
+            Welcome back · Sign in
+          </Link>
+        </div>
+      </div>
+
       <AdvertisementBanner />
 
-      <section className="section" id="marketplaces">
-        <div className="container-wide">
+      {/* MARKETPLACES */}
+      <section className="home-section" id="marketplaces">
+        <div className="home-container">
           <div className="section-heading">
-            <div><span className="eyebrow">MARKETPLACE</span><h2>Three marketplaces under one MarketBridge platform.</h2></div>
+            <span className="eyebrow">MARKETPLACE NETWORK</span>
+            <h2>Three marketplaces. One MarketBridge platform.</h2>
+            <p>
+              Choose the marketplace that matches what you want to buy or sell,
+              while keeping the same underlying marketplace infrastructure.
+            </p>
           </div>
-          <div className="three-grid">
-            {marketplaceCards.map((m) => (
-              <article className="feature-card" key={m.number}>
-                <span className="feature-no">{m.number}</span>
-                <h3>{m.title}</h3>
-                <p>{m.description}</p>
-                <ul className="marketplace-list">
-                  {m.features.map((f) => <li key={f}>✓ {f}</li>)}
+
+          <div className="marketplace-grid">
+            {marketplaceCards.map((marketplace) => (
+              <article
+                className={`market-card ${marketplace.tone}`}
+                key={marketplace.number}
+              >
+                <span className="market-number">{marketplace.number}</span>
+
+                <span className="market-label">{marketplace.label}</span>
+
+                <h3>{marketplace.title}</h3>
+
+                <p>{marketplace.description}</p>
+
+                <ul className="market-list">
+                  {marketplace.features.map((feature) => (
+                    <li key={feature}>{feature}</li>
+                  ))}
                 </ul>
-                <Link className="text-link" to={m.link}>{m.button}</Link>
+
+                <Link className="market-link" to={marketplace.link}>
+                  {marketplace.button} <span>→</span>
+                </Link>
               </article>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="section section-alt">
-        <div className="container-wide split">
-          <div>
+      {/* AGRICULTURAL */}
+      <section className="home-section home-section-alt">
+        <div className="home-container split-grid">
+          <div className="split-content">
             <span className="eyebrow">AGRICULTURAL MARKETPLACE</span>
+
             <h2>From farm fields to agricultural buyers.</h2>
-            <p>Farmers and agricultural producers can list their produce directly on MarketBridge. Buyers can discover available lots, communicate with sellers, make offers, request inspection and arrange delivery.</p>
-            <p>The farmer or producer remains the owner of the agricultural product. MarketBridge facilitates the transaction rather than purchasing or owning the produce.</p>
-            <Link className="text-link" to="/agricultural">Enter Agricultural Marketplace →</Link>
+
+            <p>
+              Farmers and agricultural producers can list their produce
+              directly on MarketBridge. Buyers can discover available lots,
+              communicate with sellers, make offers, request inspection and
+              arrange delivery.
+            </p>
+
+            <p>
+              The farmer or producer remains the owner of the agricultural
+              product. MarketBridge facilitates the transaction rather than
+              purchasing or owning the produce.
+            </p>
+
+            <Link className="split-link" to="/agricultural">
+              Enter Agricultural Marketplace →
+            </Link>
           </div>
-          <div className="mini-panel">
-            <strong>Farmers</strong><span>List agricultural produce</span><hr />
-            <strong>Buyers</strong><span>Discover and negotiate</span><hr />
-            <strong>Inspectors</strong><span>Independent quality verification</span><hr />
-            <strong>Transporters</strong><span>Own truck or hire through MarketBridge</span>
-          </div>
+
+          <InfoPanel
+            rows={[
+              ['Farmers', 'List agricultural produce'],
+              ['Buyers', 'Discover and negotiate'],
+              ['Inspectors', 'Independent quality verification'],
+              ['Transporters', 'Own truck or hire through MarketBridge'],
+            ]}
+          />
         </div>
       </section>
 
-      <section className="section">
-        <div className="container-wide split reverse-mobile">
-          <div className="mini-panel">
-            <strong>Physical Products</strong><span>Products supplied by independent sellers</span><hr />
-            <strong>Sellers</strong><span>Create listings and manage orders</span><hr />
-            <strong>Buyers</strong><span>Discover products and purchase</span><hr />
-            <strong>Marketplace</strong><span>Communication, records and transaction support</span>
-          </div>
-          <div>
+      {/* PHYSICAL PRODUCTS */}
+      <section className="home-section">
+        <div className="home-container split-grid reverse">
+          <InfoPanel
+            rows={[
+              ['Physical Products', 'Products supplied by independent sellers'],
+              ['Sellers', 'Create listings and manage orders'],
+              ['Buyers', 'Discover products and purchase'],
+              [
+                'Marketplace',
+                'Communication, records and transaction support',
+              ],
+            ]}
+          />
+
+          <div className="split-content">
             <span className="eyebrow">PRODUCT MARKETPLACE</span>
+
             <h2>A marketplace beyond agricultural produce.</h2>
-            <p>MarketBridge can also connect buyers and sellers of general physical products. These products are independently supplied and owned by the sellers.</p>
-            <p>This gives MarketBridge a broader marketplace structure while keeping the Agricultural section specialized for farm and agricultural transactions.</p>
-            <Link className="text-link" to="/products">Explore Physical Products →</Link>
+
+            <p>
+              MarketBridge can also connect buyers and sellers of general
+              physical products. These products are independently supplied and
+              owned by the sellers.
+            </p>
+
+            <p>
+              This gives MarketBridge a broader marketplace structure while
+              keeping the Agricultural section specialized for farm and
+              agricultural transactions.
+            </p>
+
+            <Link className="split-link" to="/products">
+              Explore Physical Products →
+            </Link>
           </div>
         </div>
       </section>
 
-      <section className="section section-alt">
-        <div className="container-wide split">
-          <div>
+      {/* DIGITAL */}
+      <section className="home-section home-section-alt">
+        <div className="home-container split-grid">
+          <div className="split-content">
             <span className="eyebrow">DIGITAL MARKETPLACE</span>
+
             <h2>Digital products from independent creators and sellers.</h2>
-            <p>MarketBridge also supports digital commerce. Sellers can offer useful digital products while retaining ownership and responsibility for their products.</p>
-            <Link className="text-link" to="/digital">Explore Digital Marketplace →</Link>
+
+            <p>
+              MarketBridge also supports digital commerce. Sellers can offer
+              useful digital products while retaining ownership and
+              responsibility for their products.
+            </p>
+
+            <Link className="split-link" to="/digital">
+              Explore Digital Marketplace →
+            </Link>
           </div>
-          <div className="mini-panel digital-panel">
-            <strong>eBooks</strong><span>Books and digital publications</span><hr />
-            <strong>Courses</strong><span>Educational and professional materials</span><hr />
-            <strong>Software</strong><span>Software and digital licenses</span><hr />
-            <strong>Creative Products</strong><span>Graphics, photos, templates and media</span>
-          </div>
+
+          <InfoPanel
+            className="digital"
+            rows={[
+              ['eBooks', 'Books and digital publications'],
+              ['Courses', 'Educational and professional materials'],
+              ['Software', 'Software and digital licenses'],
+              [
+                'Creative Products',
+                'Graphics, photos, templates and media',
+              ],
+            ]}
+          />
         </div>
       </section>
 
-      <section className="section">
-        <div className="container-wide">
+      {/* HOW IT WORKS */}
+      <section className="home-section">
+        <div className="home-container">
           <div className="section-heading">
-            <div><span className="eyebrow">HOW IT WORKS</span><h2>MarketBridge facilitates the marketplace.</h2></div>
+            <span className="eyebrow">HOW IT WORKS</span>
+            <h2>MarketBridge facilitates the marketplace.</h2>
+            <p>
+              The platform brings the participants, communication, records and
+              transaction workflow together while independent sellers and
+              producers retain responsibility for their goods.
+            </p>
           </div>
-          <div className="three-grid">
+
+          <div className="marketplace-grid">
             {pillars.map(([number, title, description]) => (
-              <article className="feature-card" key={number}>
-                <span className="feature-no">{number}</span>
+              <article className="market-card" key={number}>
+                <span className="market-number">{number}</span>
                 <h3>{title}</h3>
                 <p>{description}</p>
               </article>
@@ -334,34 +1385,108 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section section-alt">
-        <div className="container-wide">
-          <span className="eyebrow">MARKETPLACE TRANSACTION</span>
-          <h2>Discover → Verify → Negotiate → Buy → Deliver</h2>
-          <div className="hero-card">
-            <div className="flow">
-              <div className="flow-step"><span>01</span> Seller / Farmer lists</div>
-              <div className="flow-step"><span>02</span> Buyer discovers</div>
-              <div className="flow-step"><span>03</span> Inspection / evidence</div>
-              <div className="flow-step"><span>04</span> Offer / negotiation</div>
-              <div className="flow-step"><span>05</span> Order & payment</div>
-              <div className="flow-step"><span>06</span> Own truck / hire transport</div>
-              <div className="flow-step"><span>07</span> Delivery</div>
-              <div className="flow-step"><span>08</span> Buyer confirms receipt</div>
+      {/* TRANSACTION FLOW */}
+      <section className="home-section home-section-alt">
+        <div className="home-container">
+          <div className="section-heading">
+            <span className="eyebrow">MARKETPLACE TRANSACTION</span>
+            <h2>Discover → Verify → Negotiate → Buy → Deliver</h2>
+            <p>
+              A structured marketplace journey designed to support real
+              transactions from discovery through delivery and confirmation.
+            </p>
+          </div>
+
+          <div className="process-shell">
+            <div className="process-grid">
+              <div className="process-item">
+                <span className="process-number">01</span>
+                <strong>Seller / Farmer lists</strong>
+                <span>Products become available to buyers.</span>
+              </div>
+
+              <div className="process-item">
+                <span className="process-number">02</span>
+                <strong>Buyer discovers</strong>
+                <span>Find available products and agricultural lots.</span>
+              </div>
+
+              <div className="process-item">
+                <span className="process-number">03</span>
+                <strong>Inspection / evidence</strong>
+                <span>Quality information can support the transaction.</span>
+              </div>
+
+              <div className="process-item">
+                <span className="process-number">04</span>
+                <strong>Offer / negotiation</strong>
+                <span>Buyers and sellers can negotiate where supported.</span>
+              </div>
+
+              <div className="process-item">
+                <span className="process-number">05</span>
+                <strong>Order & payment</strong>
+                <span>The transaction moves into the order workflow.</span>
+              </div>
+
+              <div className="process-item">
+                <span className="process-number">06</span>
+                <strong>Own truck / hire transport</strong>
+                <span>Delivery can use available transport options.</span>
+              </div>
+
+              <div className="process-item">
+                <span className="process-number">07</span>
+                <strong>Delivery</strong>
+                <span>The product moves to the buyer.</span>
+              </div>
+
+              <div className="process-item">
+                <span className="process-number">08</span>
+                <strong>Buyer confirms receipt</strong>
+                <span>The marketplace transaction reaches confirmation.</span>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="section">
-        <div className="container-wide">
-          <div className="section-heading">
-            <div><span className="eyebrow">JOIN MARKETBRIDGE</span><h2>Buy, sell, produce and participate in one platform.</h2><p>Choose the marketplace that fits what you want to buy or sell.</p></div>
-          </div>
-          <div className="hero-actions">
-            <Link className="btn btn-primary" to="/agricultural">Agricultural</Link>
-            <Link className="btn btn-light" to="/products">Products</Link>
-            <Link className="btn btn-light" to="/digital">Digital</Link>
+      {/* FINAL CTA */}
+      <section className="home-section">
+        <div className="home-container">
+          <div className="final-cta">
+            <div className="final-cta-content">
+              <span className="eyebrow">JOIN MARKETBRIDGE</span>
+
+              <h2>Buy, sell, produce and participate in one platform.</h2>
+
+              <p>
+                Choose the marketplace that fits what you want to buy or sell,
+                then continue through the marketplace workflow built around
+                independent participants.
+              </p>
+
+              <div className="final-actions">
+                <Link
+                  className="home-btn home-btn-primary"
+                  to="/agricultural"
+                >
+                  Agricultural
+                </Link>
+
+                <Link className="home-btn home-btn-light" to="/products">
+                  Products
+                </Link>
+
+                <Link className="home-btn home-btn-light" to="/digital">
+                  Digital
+                </Link>
+
+                <Link className="home-btn home-btn-light" to="/register">
+                  Create Account
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       </section>
