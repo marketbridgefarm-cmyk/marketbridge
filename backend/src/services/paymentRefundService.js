@@ -21,7 +21,25 @@ async function requestRefund(tx, { paymentId, amount, reason, requestedById }) {
   if (existing) return existing;
 
   assertTransition(payment.status, 'REFUND_PENDING');
-  await tx.payment.update({ where: { id: payment.id }, data: { status: 'REFUND_PENDING' } });
+
+  // Atomic claim: the findFirst above is a plain SELECT, so two concurrent
+  // callers (e.g. a dispute resolution and an order cancellation landing on
+  // the same payment at the same moment) could both see "no existing
+  // refund" before either commits. Only one updateMany can actually match
+  // status: 'PAID' and win; the loser falls through to the re-check below
+  // instead of creating a second PaymentRefund row for the same payment.
+  const claimed = await tx.payment.updateMany({
+    where: { id: payment.id, status: 'PAID' },
+    data: { status: 'REFUND_PENDING' },
+  });
+  if (claimed.count !== 1) {
+    const nowExisting = await tx.paymentRefund.findFirst({
+      where: { paymentId, status: { in: ['REQUESTED', 'PROCESSING', 'COMPLETED'] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (nowExisting) return nowExisting;
+    throw Object.assign(new Error('Payment status changed before the refund could be requested'), { status: 409 });
+  }
 
   const refund = await tx.paymentRefund.create({
     data: { paymentId, amount: refundAmount, currency: payment.currency, reason: reason || null, requestedById: requestedById || null },
@@ -60,11 +78,19 @@ async function completeRefund(tx, { refundId, provider, providerRefundId, actorI
 
   assertTransition(payment.status, 'REFUNDED');
 
-  const updated = await tx.paymentRefund.update({
-    where: { id: refund.id },
+  // Atomic claim, same reasoning as requestRefund above: the checks so far
+  // are plain SELECTs. This updateMany is what actually decides which of
+  // two concurrent completeRefund calls (double-click, two admins, a retry
+  // racing the original) gets to complete it and fire the one-time side
+  // effects below. The loser returns the already-completed row instead of
+  // re-running them.
+  const claimed = await tx.paymentRefund.updateMany({
+    where: { id: refund.id, status: { in: ['REQUESTED', 'PROCESSING'] } },
     data: { status: 'COMPLETED', provider: provider || refund.provider || null, providerRefundId: providerRefundId || refund.providerRefundId || null, completedAt: new Date(), failureReason: null },
-    include: { payment: true },
   });
+  if (claimed.count !== 1) {
+    return tx.paymentRefund.findUnique({ where: { id: refund.id }, include: { payment: true } });
+  }
 
   await tx.payment.update({ where: { id: payment.id }, data: { status: 'REFUNDED' } });
 
@@ -85,7 +111,7 @@ async function completeRefund(tx, { refundId, provider, providerRefundId, actorI
     metadata: { paymentId: payment.id, amount: refund.amount, provider: provider || null, providerRefundId: providerRefundId || null, note: note || null },
   });
 
-  return updated;
+  return tx.paymentRefund.findUnique({ where: { id: refund.id }, include: { payment: true } });
 }
 
 async function failRefund(tx, { refundId, failureReason, actorId }) {
@@ -100,7 +126,22 @@ async function failRefund(tx, { refundId, failureReason, actorId }) {
   // here: this function only ever writes PaymentRefund.status, never
   // Payment.status, so there's no payment transition to validate.
 
-  const updated = await tx.paymentRefund.update({ where: { id: refundId }, data: { status: 'FAILED', failureReason: failureReason || 'Provider refund failed' } });
+  // Atomic claim: guards against racing a concurrent completeRefund (or
+  // another failRefund) the same way requestRefund/completeRefund do above
+  // — only the winner fires the audit/order-event side effects below.
+  const claimed = await tx.paymentRefund.updateMany({
+    where: { id: refundId, status: { not: 'COMPLETED' } },
+    data: { status: 'FAILED', failureReason: failureReason || 'Provider refund failed' },
+  });
+  if (claimed.count !== 1) {
+    const fresh = await tx.paymentRefund.findUnique({ where: { id: refundId } });
+    if (fresh?.status === 'COMPLETED') {
+      throw Object.assign(new Error('Completed refund cannot be failed'), { status: 409 });
+    }
+    return fresh;
+  }
+
+  const updated = await tx.paymentRefund.findUnique({ where: { id: refundId } });
   if (refund.payment?.orderId) {
     await recordOrderEvent(tx, {
       orderId: refund.payment.orderId,
