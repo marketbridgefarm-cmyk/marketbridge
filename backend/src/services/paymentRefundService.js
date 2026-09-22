@@ -7,7 +7,7 @@ const { assertTransition } = require('./paymentStateMachine');
 async function requestRefund(tx, { paymentId, amount, reason, requestedById }) {
   const payment = await tx.payment.findUnique({ where: { id: paymentId }, select: { id: true, amount: true, currency: true, status: true, orderId: true, type: true } });
   if (!payment) throw Object.assign(new Error('Payment not found'), { status: 404 });
-  if (payment.status !== 'PAID') throw Object.assign(new Error('Only PAID payments can be refunded'), { status: 409 });
+  if (!['PAID', 'REFUND_PENDING'].includes(payment.status)) throw Object.assign(new Error('Only PAID or retryable REFUND_PENDING payments can be refunded'), { status: 409 });
 
   const refundAmount = Number(amount ?? payment.amount);
   if (!Number.isFinite(refundAmount) || refundAmount <= 0 || Math.abs(refundAmount - Number(payment.amount)) >= 0.01) {
@@ -19,6 +19,23 @@ async function requestRefund(tx, { paymentId, amount, reason, requestedById }) {
     orderBy: { createdAt: 'desc' },
   });
   if (existing) return existing;
+
+  // A failed provider attempt leaves the payment in REFUND_PENDING. Allow
+  // a retry only when the latest refund record is FAILED; reset the payment
+  // to PAID atomically so concurrent retries cannot create two claims.
+  if (payment.status === 'REFUND_PENDING') {
+    const failed = await tx.paymentRefund.findFirst({
+      where: { paymentId, status: 'FAILED' },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!failed) throw Object.assign(new Error('Refund is already in progress'), { status: 409 });
+    const reset = await tx.payment.updateMany({
+      where: { id: payment.id, status: 'REFUND_PENDING' },
+      data: { status: 'PAID' },
+    });
+    if (reset.count !== 1) throw Object.assign(new Error('Payment status changed before refund retry'), { status: 409 });
+    payment.status = 'PAID';
+  }
 
   assertTransition(payment.status, 'REFUND_PENDING');
 
@@ -139,6 +156,16 @@ async function failRefund(tx, { refundId, failureReason, actorId }) {
       throw Object.assign(new Error('Completed refund cannot be failed'), { status: 409 });
     }
     return fresh;
+  }
+
+  // Return the payment to PAID only if it is still awaiting this refund.
+  // This makes a provider failure retryable without reopening a completed or
+  // otherwise reconciled payment.
+  if (refund.payment?.status === 'REFUND_PENDING') {
+    await tx.payment.updateMany({
+      where: { id: refund.payment.id, status: 'REFUND_PENDING' },
+      data: { status: 'PAID' },
+    });
   }
 
   const updated = await tx.paymentRefund.findUnique({ where: { id: refundId } });
