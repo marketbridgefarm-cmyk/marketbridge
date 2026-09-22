@@ -3,6 +3,186 @@
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('./orderEventService');
 const { assertTransition } = require('./paymentStateMachine');
+const { getAdapter } = require('./paymentProviders');
+
+
+function isProviderDefinitiveFailure(error) {
+  const status = Number(error?.status || 0);
+  return status >= 400 && status < 500 && status !== 408 && status !== 409 && status !== 429;
+}
+
+/**
+ * Submit a requested refund to the configured provider.
+ *
+ * This deliberately does NOT hold a Prisma transaction open while waiting for
+ * Chapa. The refund row is atomically claimed first, then the provider call is
+ * made. Unknown/network/5xx outcomes remain PROCESSING because Chapa may have
+ * accepted the refund even though our HTTP request timed out.
+ */
+async function processRefund({ refundId, actorId }) {
+  const prisma = require('../config/db');
+  const refund = await prisma.paymentRefund.findUnique({
+    where: { id: refundId },
+    include: { payment: true },
+  });
+
+  if (!refund) throw Object.assign(new Error('Refund request not found'), { status: 404 });
+  if (refund.status === 'COMPLETED') return refund;
+  if (!['REQUESTED', 'PROCESSING'].includes(refund.status)) {
+    throw Object.assign(new Error('Refund request is not processable'), { status: 409 });
+  }
+
+  if (!refund.payment?.chapaTxRef) {
+    throw Object.assign(
+      new Error('This payment has no stored Chapa transaction reference. It cannot be safely refunded automatically.'),
+      { status: 409, code: 'CHAPA_TX_REF_MISSING' }
+    );
+  }
+
+  const adapter = getAdapter(refund.payment.method);
+  if (typeof adapter.refund !== 'function') {
+    throw Object.assign(new Error(`Refunds are not configured for payment method ${refund.payment.method}`), { status: 503, code: 'REFUND_PROVIDER_NOT_CONFIGURED' });
+  }
+
+  // If a provider refund id already exists, never submit a second refund.
+  if (refund.providerRefundId) {
+    return syncRefundStatus({ refundId, actorId });
+  }
+
+  const claimed = await prisma.paymentRefund.updateMany({
+    where: { id: refundId, status: 'REQUESTED', providerRefundId: null },
+    data: { status: 'PROCESSING', failureReason: null },
+  });
+
+  if (claimed.count !== 1) {
+    const fresh = await prisma.paymentRefund.findUnique({ where: { id: refundId } });
+    if (!fresh) throw Object.assign(new Error('Refund request not found'), { status: 404 });
+    if (fresh.status === 'COMPLETED') return fresh;
+    if (fresh.providerRefundId) return syncRefundStatus({ refundId, actorId });
+    if (fresh.status !== 'PROCESSING') throw Object.assign(new Error('Refund is already being handled'), { status: 409 });
+    return fresh;
+  }
+
+  const reference = `MB-REFUND-${refund.id}`;
+  let result;
+  try {
+    result = await adapter.refund({
+      txRef: refund.payment.chapaTxRef,
+      amount: refund.amount,
+      reason: refund.reason || 'MarketBridge refund',
+      reference,
+      meta: {
+        marketbridge_refund_id: refund.id,
+        marketbridge_payment_id: refund.paymentId,
+      },
+    });
+  } catch (error) {
+    if (isProviderDefinitiveFailure(error)) {
+      return failRefund(prisma, {
+        refundId,
+        failureReason: error.message || 'Chapa rejected the refund request',
+        actorId,
+      });
+    }
+
+    // Unknown outcome: do not claim failure. The provider may have processed it.
+    return prisma.paymentRefund.findUnique({ where: { id: refundId } });
+  }
+
+  const providerRefundId = result.refId;
+  const providerStatus = result.status;
+
+  if (providerStatus === 'refunded') {
+    return completeRefund(prisma, {
+      refundId,
+      provider: adapter.provider,
+      providerRefundId,
+      actorId,
+      note: 'Chapa confirmed the refund during submission.',
+    });
+  }
+
+  if (providerStatus === 'reversed') {
+    return failRefund(prisma, {
+      refundId,
+      failureReason: 'Chapa reported the refund as reversed.',
+      actorId,
+    });
+  }
+
+  const updated = await prisma.paymentRefund.updateMany({
+    where: { id: refundId, status: 'PROCESSING' },
+    data: {
+      status: 'PROCESSING',
+      provider: adapter.provider,
+      providerRefundId,
+      failureReason: null,
+    },
+  });
+
+  await recordAuditEvent(prisma, {
+    actorId: actorId || null,
+    action: 'PAYMENT_REFUND_SUBMITTED',
+    resourceType: 'PaymentRefund',
+    resourceId: refundId,
+    metadata: {
+      paymentId: refund.paymentId,
+      provider: adapter.provider,
+      providerRefundId,
+      providerStatus,
+      reference,
+      changed: updated.count === 1,
+    },
+  });
+
+  return prisma.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
+}
+
+/** Verify an asynchronous provider refund and synchronize the local ledger. */
+async function syncRefundStatus({ refundId, actorId }) {
+  const prisma = require('../config/db');
+  const refund = await prisma.paymentRefund.findUnique({
+    where: { id: refundId },
+    include: { payment: true },
+  });
+  if (!refund) throw Object.assign(new Error('Refund request not found'), { status: 404 });
+  if (refund.status === 'COMPLETED') return refund;
+  if (!refund.providerRefundId) {
+    throw Object.assign(new Error('No Chapa refund reference is stored yet'), { status: 409, code: 'CHAPA_REFUND_ID_MISSING' });
+  }
+
+  const adapter = getAdapter(refund.payment.method);
+  if (typeof adapter.verifyRefund !== 'function') {
+    throw Object.assign(new Error(`Refund verification is not configured for payment method ${refund.payment.method}`), { status: 503, code: 'REFUND_VERIFICATION_NOT_CONFIGURED' });
+  }
+
+  const result = await adapter.verifyRefund(refund.providerRefundId);
+
+  if (result.status === 'refunded') {
+    return completeRefund(prisma, {
+      refundId,
+      provider: adapter.provider,
+      providerRefundId: refund.providerRefundId,
+      actorId,
+      note: 'Chapa verification confirmed the refund.',
+    });
+  }
+
+  if (result.status === 'reversed') {
+    return failRefund(prisma, {
+      refundId,
+      failureReason: 'Chapa reported the refund as reversed.',
+      actorId,
+    });
+  }
+
+  await prisma.paymentRefund.updateMany({
+    where: { id: refundId, status: { in: ['REQUESTED', 'PROCESSING'] } },
+    data: { status: 'PROCESSING', provider: adapter.provider },
+  });
+
+  return prisma.paymentRefund.findUnique({ where: { id: refundId }, include: { payment: true } });
+}
 
 async function requestRefund(tx, { paymentId, amount, reason, requestedById }) {
   const payment = await tx.payment.findUnique({ where: { id: paymentId }, select: { id: true, amount: true, currency: true, status: true, orderId: true, type: true } });
@@ -217,4 +397,4 @@ async function requestRefundsForPayouts(tx, { payouts, reason, requestedById }) 
   return refunds;
 }
 
-module.exports = { requestRefund, completeRefund, failRefund, requestRefundsForPayouts };
+module.exports = { requestRefund, processRefund, syncRefundStatus, completeRefund, failRefund, requestRefundsForPayouts };

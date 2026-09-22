@@ -27,6 +27,8 @@ function getAdapter(method) {
       provider,
       initialize: chapa.initializeTransaction,
       verify: chapa.verifyTransaction,
+      refund: chapa.refundTransaction,
+      verifyRefund: chapa.verifyRefund,
       verifyWebhookSignature: chapa.verifyWebhookSignature,
     };
   }
