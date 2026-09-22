@@ -1356,15 +1356,22 @@ textarea:focus {
   border-bottom: 1px solid #ddd;
   white-space: nowrap;
 }.sd-badge {
-  display: inline-block;
-  padding: 5px 9px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
   border-radius: 999px;
   background: #e8f4e8;
-  font-size: 12px;
+  color: var(--green-dark);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  white-space: nowrap;
 }.sd-badge.sd-warn {
   background: #fff1cf;
+  color: #8a5a00;
 }.sd-badge.sd-blue {
   background: #e6efff;
+  color: #1d4ed8;
 }.sd-muted {
   color: #666;
   line-height: 1.65;
@@ -1474,22 +1481,45 @@ textarea:focus {
   z-index: 40;
   text-align: center;
 }.sd-btn {
-  border: none;
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   padding: 9px 16px;
+  min-height: 40px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  transition: background .18s var(--ease), transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease);
+}.sd-btn:active {
+  transform: translateY(0);
+}.sd-btn:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}.sd-btn:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
 }.sd-btn-primary {
   background: var(--green);
   color: #fff;
+  box-shadow: 0 6px 16px rgba(23,107,58,.16);
 }.sd-btn-outline {
   background: #fff;
   color: var(--green);
-  border: 1px solid var(--green);
-}.sd-btn-outline:hover {
+  border: 1px solid #bcd0c0;
+}.sd-btn-outline:hover:not(:disabled) {
   background: var(--soft);
-}.sd-btn-primary:hover {
+  border-color: var(--green);
+  transform: translateY(-1px);
+}.sd-btn-primary:hover:not(:disabled) {
   background: var(--green-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(23,107,58,.22);
 }
 
 @media (max-width: 900px) {.sd-stat-grid {
@@ -4223,3 +4253,5 @@ textarea {
     transition: none !important;
   }
 }
+
+
