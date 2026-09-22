@@ -1224,35 +1224,26 @@ export default function OrderDetail() {
   };
 
   // ==========================================================================
-  // ADMIN: PROCESS / VERIFY A REAL CHAPA REFUND
+  // ADMIN: SETTLE A REFUND
   // ==========================================================================
+  // Refunds are durable requests; only an admin can confirm the money went
+  // back (or record that the provider refused). Both call the existing admin
+  // refund endpoints — the Refund card shows the buttons to admins only.
 
-  const processRefundAsAdmin = async (refund) => {
-    const confirmed = window.confirm(
-      `Submit this ${money(refund.amount)} ${refund.currency || 'ETB'} refund to Chapa?`
-    );
-    if (!confirmed) return;
-
+  const completeRefundAsAdmin = async (refund) => {
     setBusy(`refund-${refund.id}`);
     setError('');
     try {
-      await api.post(`/admin/financial/refunds/${refund.id}/process`);
-      await load({ silent: true });
+      if (refund.status === 'PROCESSING') {
+        await api.post(`/admin/financial/refunds/${refund.id}/verify`);
+      } else if (refund.status === 'FAILED') {
+        await api.post(`/admin/financial/refunds/${refund.id}/retry`);
+      } else {
+        await api.post(`/admin/financial/refunds/${refund.id}/process`);
+      }
+      await loadOrder();
     } catch (err) {
-      setError(getError(err, 'Could not submit the refund to Chapa'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const verifyRefundAsAdmin = async (refund) => {
-    setBusy(`refund-${refund.id}`);
-    setError('');
-    try {
-      await api.post(`/admin/financial/refunds/${refund.id}/verify`);
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not verify the refund with Chapa'));
+      setError(getError(err, 'Could not process or verify the refund with Chapa'));
     } finally {
       setBusy('');
     }
@@ -1287,7 +1278,8 @@ export default function OrderDetail() {
   // available action by GET /orders/:id/workflow and POST /disputes already
   // exists on the backend, but there was previously no UI anywhere to raise
   // one. Every other participant on this order (buyer, seller, and the
-  // hired truck owner if one is assigned) is a valid target.
+  // hired truck owner if one is assigned. The assigned inspector is also a
+  // first-class dispute participant and can be the accused or reporting party.
 
   const disputeCounterparties = useMemo(() => {
     if (!order) return [];
@@ -2523,8 +2515,7 @@ export default function OrderDetail() {
             }}
             isAdmin={isAdmin}
             busy={busy}
-            onProcess={processRefundAsAdmin}
-            onVerify={verifyRefundAsAdmin}
+            onComplete={completeRefundAsAdmin}
             onFail={failRefundAsAdmin}
           />
         )}
@@ -2611,8 +2602,9 @@ export default function OrderDetail() {
           <div className="card card-warning" id="raise-dispute">
             <h2>Dispute open</h2>
             <p className="muted" style={{ marginBottom: 0 }}>
-              An admin is reviewing this order. It will resume its previous
-              status once the dispute is resolved.
+              An admin is reviewing this order. <strong>Payments, transport, inspection
+              and payouts are paused</strong> while the dispute is open. The order will
+              either resume its previous state or be cancelled and refunded after review.
             </p>
           </div>
         ) : (
