@@ -26,6 +26,7 @@ const chapa =
 const { getAdapter } = require('../services/paymentProviders');
 const { inc } = require('../utils/metrics');
 const { assertTransition } = require('../services/paymentStateMachine');
+const { syncRefundStatus } = require('../services/paymentRefundService');
 
 const {
   paymentLimiter,
@@ -1002,6 +1003,8 @@ router.post(
           // Tracks the tx_ref actually on file with Chapa for this
           // attempt, so verify/callback/webhook can look it up correctly.
           // Overwritten with Chapa's own confirmed reference at settlement.
+          chapaTxRef,
+
           providerTransactionId:
             chapaTxRef,
         },
@@ -1255,7 +1258,8 @@ router.get(
         raw,
       } =
         await chapa.verifyTransaction(
-          payment.providerTransactionId ||
+          payment.chapaTxRef ||
+            payment.providerTransactionId ||
             payment.id
         );
 
@@ -1477,6 +1481,54 @@ router.post(
           reason:
             'Payment not found',
         });
+      }
+
+      // ----------------------------------------------------------------------
+      // REFUND WEBHOOKS
+      // ----------------------------------------------------------------------
+      // Refunds are asynchronous in Chapa. A charge.refunded webhook must be
+      // handled before the normal payment-settlement path because the payment
+      // is intentionally still PAID/REFUND_PENDING while the refund runs.
+      const webhookEvent = String(req.body?.event || '').toLowerCase();
+      const webhookStatus = String(req.body?.status || req.body?.data?.status || '').toLowerCase();
+      const providerRefundId =
+        req.body?.ref_id ||
+        req.body?.data?.ref_id ||
+        req.body?.refund_ref_id ||
+        null;
+      const isRefundWebhook =
+        webhookEvent.includes('refund') ||
+        (['refunded', 'reversed', 'processing', 'initiated'].includes(webhookStatus) && Boolean(providerRefundId));
+
+      if (isRefundWebhook) {
+        let refund = providerRefundId
+          ? await prisma.paymentRefund.findFirst({ where: { providerRefundId } })
+          : null;
+
+        if (!refund) {
+          refund = await prisma.paymentRefund.findFirst({
+            where: {
+              paymentId: payment.id,
+              status: { in: ['REQUESTED', 'PROCESSING'] },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+        }
+
+        if (!refund) {
+          return res.json({ ok: true, ignored: true, reason: 'Refund not found' });
+        }
+
+        if (providerRefundId && !refund.providerRefundId) {
+          await prisma.paymentRefund.updateMany({
+            where: { id: refund.id, status: { in: ['REQUESTED', 'PROCESSING'] } },
+            data: { providerRefundId, provider: getAdapter(payment.method).provider, status: 'PROCESSING' },
+          });
+        }
+
+        const synced = await syncRefundStatus({ refundId: refund.id, actorId: null });
+        inc('marketbridge_payment_webhooks_total', { provider: 'chapa', outcome: `refund_${synced.status.toLowerCase()}` });
+        return res.json({ ok: true, refund: synced });
       }
 
       // ----------------------------------------------------------------------

@@ -13,7 +13,7 @@ const {
   recordAuditEvent,
 } = require('../utils/audit');
 const { revokeAllSessions } = require('../services/refreshSessionService');
-const { completeRefund, failRefund } = require('../services/paymentRefundService');
+const { processRefund, syncRefundStatus, failRefund } = require('../services/paymentRefundService');
 const { resolveReconciliation } = require('../services/paymentReconciliationService');
 const { markPaidOut } = require('../services/payoutService');
 
@@ -2661,7 +2661,7 @@ router.get('/financial/refunds', async (req, res) => {
     const refunds = await prisma.paymentRefund.findMany({
       where: status ? { status } : {},
       include: {
-        payment: { select: { id: true, type: true, amount: true, currency: true, status: true, orderId: true, provider: true, providerTransactionId: true } },
+        payment: { select: { id: true, type: true, amount: true, currency: true, status: true, orderId: true, provider: true, providerTransactionId: true, chapaTxRef: true } },
         requestedBy: { select: { id: true, name: true, email: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -2674,19 +2674,29 @@ router.get('/financial/refunds', async (req, res) => {
   }
 });
 
-router.patch('/financial/refunds/:id/complete', async (req, res) => {
+router.post('/financial/refunds/:id/process', async (req, res) => {
   try {
-    const refund = await prisma.$transaction((tx) => completeRefund(tx, {
+    const refund = await processRefund({
       refundId: req.params.id,
-      provider: req.body.provider || null,
-      providerRefundId: req.body.providerRefundId || null,
       actorId: req.user.id,
-      note: req.body.note || null,
-    }), { maxWait: 10000, timeout: 15000 });
+    });
     return res.json({ refund });
   } catch (error) {
-    req.log.error({ err: error }, 'ADMIN COMPLETE REFUND ERROR:');
-    return res.status(error.status || 500).json({ error: error.message || 'Could not complete refund' });
+    req.log.error({ err: error }, 'ADMIN PROCESS REFUND ERROR:');
+    return res.status(error.status || 500).json({ error: error.message || 'Could not process refund' });
+  }
+});
+
+router.post('/financial/refunds/:id/verify', async (req, res) => {
+  try {
+    const refund = await syncRefundStatus({
+      refundId: req.params.id,
+      actorId: req.user.id,
+    });
+    return res.json({ refund });
+  } catch (error) {
+    req.log.error({ err: error }, 'ADMIN VERIFY REFUND ERROR:');
+    return res.status(error.status || 500).json({ error: error.message || 'Could not verify refund' });
   }
 });
 
