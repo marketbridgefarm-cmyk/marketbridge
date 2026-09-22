@@ -3998,3 +3998,228 @@ textarea {
     font-size: 12px;
   }
 }
+
+
+/* ==========================================================================
+   MARKETBRIDGE ADMIN-STYLE DESIGN SYSTEM
+   Shared visual layer for dashboards, account pages, marketplace workspaces,
+   and operational pages. Keeps existing semantic classes and behavior intact.
+   ========================================================================== */
+:root {
+  --mb-bg: #f5f7fb;
+  --mb-surface: #ffffff;
+  --mb-surface-soft: #f8fafc;
+  --mb-border: rgba(15, 23, 42, .09);
+  --mb-border-strong: rgba(15, 23, 42, .14);
+  --mb-text: #0f172a;
+  --mb-muted: #64748b;
+  --mb-primary: #166534;
+  --mb-primary-2: #15803d;
+  --mb-primary-soft: #ecfdf3;
+  --mb-warning: #b45309;
+  --mb-warning-soft: #fff7ed;
+  --mb-danger: #b91c1c;
+  --mb-info: #1d4ed8;
+  --mb-radius: 18px;
+  --mb-shadow: 0 12px 35px rgba(15, 23, 42, .055);
+}
+
+.app-main {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(34,197,94,.035), transparent 28rem),
+    var(--mb-bg);
+  min-height: 100vh;
+}
+
+.dashboard-page,
+.admin-control-center,
+.inspector-dashboard,
+.truck-owner-dashboard,
+.advertiser-dashboard,
+.growth-dashboard {
+  color: var(--mb-text);
+  font-family: "DM Sans", system-ui, sans-serif;
+}
+
+.dashboard-page h1,
+.dashboard-page h2,
+.dashboard-page h3,
+.admin-control-center h1,
+.admin-control-center h2,
+.admin-control-center h3,
+.inspector-dashboard h1,
+.inspector-dashboard h2,
+.truck-owner-dashboard h1,
+.truck-owner-dashboard h2,
+.advertiser-dashboard h1,
+.advertiser-dashboard h2 {
+  font-family: Manrope, system-ui, sans-serif;
+  letter-spacing: -.035em;
+}
+
+.dashboard-page .container-wide,
+.admin-control-center .container-wide {
+  max-width: 1440px;
+  padding: 28px clamp(16px, 3vw, 34px) 56px;
+}
+
+.dashboard-page .section {
+  padding: 0;
+}
+
+.dashboard-page .page-header,
+.dashboard-page .dashboard-header {
+  margin-bottom: 22px;
+}
+
+.dashboard-page .page-header h1,
+.dashboard-page h1 {
+  font-size: clamp(25px, 3vw, 38px);
+  font-weight: 800;
+  color: var(--mb-text);
+}
+
+.dashboard-page .card,
+.dashboard-page .mini-panel,
+.dashboard-page .service-access-card,
+.dashboard-page .sd-stat,
+.dashboard-page .sd-table,
+.dashboard-page .section-panel,
+.admin-control-center .card {
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius);
+  background: rgba(255,255,255,.96);
+  box-shadow: var(--mb-shadow);
+}
+
+.dashboard-page .card,
+.dashboard-page .mini-panel {
+  padding: 22px;
+}
+
+.dashboard-page .sd-stat-grid {
+  gap: 14px;
+  margin: 18px 0 24px;
+}
+
+.dashboard-page .sd-stat {
+  padding: 18px;
+  box-shadow: 0 8px 24px rgba(15,23,42,.04);
+}
+
+.dashboard-page .sd-stat strong,
+.dashboard-page .sd-stat .value {
+  color: var(--mb-text);
+  font-family: Manrope, system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -.03em;
+}
+
+.dashboard-page .sd-tabs-list {
+  gap: 5px;
+  padding: 6px;
+  border: 1px solid var(--mb-border);
+  border-radius: 18px;
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 12px 35px rgba(15,23,42,.07);
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+}
+
+.dashboard-page .sd-tabs-list button,
+.dashboard-page .sd-tabs-list a {
+  border-radius: 12px;
+  font-weight: 750;
+  transition: .18s ease;
+}
+
+.dashboard-page .sd-tabs-list button.active,
+.dashboard-page .sd-tabs-list a.active {
+  background: linear-gradient(135deg, var(--mb-primary), var(--mb-primary-2));
+  color: #fff;
+  box-shadow: 0 7px 18px rgba(22,101,52,.2);
+}
+
+.dashboard-page .sd-table {
+  overflow: hidden;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.dashboard-page .sd-table th {
+  background: var(--mb-surface-soft);
+  color: var(--mb-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.dashboard-page .sd-table td,
+.dashboard-page .sd-table th {
+  border-color: var(--mb-border);
+  padding: 14px 16px;
+}
+
+.dashboard-page .btn-primary,
+.dashboard-page .btn:not(.btn-light):not(.btn-outline):not(.btn-danger) {
+  background: linear-gradient(135deg, var(--mb-primary), var(--mb-primary-2));
+  border-color: transparent;
+  box-shadow: 0 7px 16px rgba(22,101,52,.12);
+}
+
+.dashboard-page .btn-primary:hover,
+.dashboard-page .btn:not(.btn-light):not(.btn-outline):not(.btn-danger):hover {
+  background: linear-gradient(135deg, #14532d, var(--mb-primary));
+}
+
+.dashboard-page .btn-outline,
+.dashboard-page .btn-light {
+  background: #fff;
+  border-color: var(--mb-border-strong);
+  color: var(--mb-text);
+}
+
+.dashboard-page .alert,
+.dashboard-page .sd-toast {
+  border-radius: 14px;
+}
+
+.dashboard-page input,
+.dashboard-page select,
+.dashboard-page textarea,
+.admin-control-center input,
+.admin-control-center select,
+.admin-control-center textarea {
+  border: 1px solid var(--mb-border-strong);
+  border-radius: 12px;
+  background: #fff;
+  min-height: 42px;
+}
+
+.dashboard-page input:focus,
+.dashboard-page select:focus,
+.dashboard-page textarea:focus {
+  border-color: rgba(22,101,52,.55);
+  box-shadow: 0 0 0 3px rgba(34,197,94,.12);
+  outline: none;
+}
+
+@media (max-width: 900px) {
+  .dashboard-page .container-wide,
+  .admin-control-center .container-wide {
+    padding: 20px 14px 40px;
+  }
+  .dashboard-page .sd-tabs-list {
+    top: 6px;
+    overflow-x: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-page *,
+  .admin-control-center * {
+    transition: none !important;
+  }
+}
