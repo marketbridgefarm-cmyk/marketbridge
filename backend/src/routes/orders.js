@@ -733,6 +733,14 @@ router.patch(
       const reason = req.body?.reason || null;
       const cancelledByRole = userIsAdmin ? 'ADMIN' : userIsBuyer ? 'BUYER' : 'SELLER';
 
+      // cancelOrderInTransaction does a full unwind (status transition,
+      // payment-obligation closure, listing release, transport cascade,
+      // payout cancellation, and a refund request per already-PAID payment)
+      // — enough sequential round trips that Prisma's default 5s interactive
+      // transaction timeout can be exceeded on a real/hosted Postgres even
+      // when the database itself is healthy (see the identical fix already
+      // applied where this same helper is called from the buyer-decision
+      // route above). Match that timeout here too.
       const updated = await prisma.$transaction(async (tx) => {
         const current = await tx.order.findUnique({
           where: { id: order.id },
@@ -747,7 +755,7 @@ router.patch(
         });
 
         return tx.order.findUnique({ where: { id: current.id }, include: orderInclude });
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       return res.json({ message: 'Order cancelled.', order: updated });
     } catch (error) {
