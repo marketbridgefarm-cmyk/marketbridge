@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
@@ -16,13 +22,1173 @@ const ROLE_OPTIONS = [
   'ADVERTISER',
   'ADMIN',
 ];
-  
+
 const ACCOUNT_STATUS_OPTIONS = ['ACTIVE', 'SUSPENDED'];
+
+const ADMIN_STYLES = `
+  .admin-redesign {
+    --admin-bg: #f5f7fb;
+    --admin-surface: rgba(255,255,255,.94);
+    --admin-surface-strong: #ffffff;
+    --admin-border: rgba(15,23,42,.09);
+    --admin-text: #172033;
+    --admin-muted: #687386;
+    --admin-primary: #176b4d;
+    --admin-primary-dark: #0e513a;
+    --admin-primary-soft: rgba(23,107,77,.10);
+    --admin-blue: #3567c8;
+    --admin-blue-soft: rgba(53,103,200,.10);
+    --admin-warning: #a86d08;
+    --admin-warning-soft: rgba(168,109,8,.11);
+    --admin-danger: #bd3c3c;
+    --admin-danger-soft: rgba(189,60,60,.10);
+    --admin-shadow: 0 16px 45px rgba(15,23,42,.07);
+    --admin-shadow-soft: 0 7px 24px rgba(15,23,42,.055);
+    --admin-radius: 20px;
+    --admin-radius-sm: 13px;
+
+    width: 100%;
+    min-height: 100vh;
+    padding: 28px;
+    box-sizing: border-box;
+    background:
+      radial-gradient(circle at 8% 0%, rgba(23,107,77,.07), transparent 28rem),
+      radial-gradient(circle at 100% 5%, rgba(53,103,200,.06), transparent 25rem),
+      var(--admin-bg);
+    color: var(--admin-text);
+  }
+
+  .admin-redesign *,
+  .admin-redesign *::before,
+  .admin-redesign *::after {
+    box-sizing: border-box;
+  }
+
+  .admin-shell {
+    width: min(1500px, 100%);
+    margin: 0 auto;
+  }
+
+  .admin-hero {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.7);
+    border-radius: 28px;
+    padding: 28px;
+    background:
+      linear-gradient(135deg, rgba(255,255,255,.97), rgba(245,250,247,.92));
+    box-shadow: var(--admin-shadow);
+  }
+
+  .admin-hero::after {
+    content: "";
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    right: -90px;
+    top: -120px;
+    border-radius: 50%;
+    background: rgba(23,107,77,.08);
+    pointer-events: none;
+  }
+
+  .admin-hero-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  .admin-hero-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+  }
+
+  .admin-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--admin-primary);
+  }
+
+  .admin-kicker::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--admin-primary);
+    box-shadow: 0 0 0 5px rgba(23,107,77,.10);
+  }
+
+  .admin-title {
+    margin: 0;
+    font-size: clamp(28px, 4vw, 44px);
+    line-height: 1.04;
+    letter-spacing: -.035em;
+    font-weight: 850;
+  }
+
+  .admin-subtitle {
+    max-width: 720px;
+    margin: 12px 0 0;
+    color: var(--admin-muted);
+    font-size: 15px;
+    line-height: 1.65;
+  }
+
+  .admin-cc-badge-new {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 18px;
+    padding: 9px 13px;
+    border-radius: 999px;
+    background: rgba(23,107,77,.08);
+    color: var(--admin-primary-dark);
+    border: 1px solid rgba(23,107,77,.13);
+    font-size: 12px;
+    font-weight: 750;
+  }
+
+  .admin-cc-badge-new::before {
+    content: "●";
+    font-size: 8px;
+  }
+
+  .admin-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .admin-btn {
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    padding: 10px 15px;
+    background: rgba(255,255,255,.9);
+    color: var(--admin-text);
+    text-decoration: none;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 750;
+    cursor: pointer;
+    transition:
+      transform .18s ease,
+      box-shadow .18s ease,
+      background .18s ease,
+      border-color .18s ease;
+  }
+
+  .admin-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(15,23,42,.08);
+    border-color: rgba(15,23,42,.15);
+  }
+
+  .admin-btn:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+  }
+
+  .admin-btn-primary {
+    color: white;
+    background: linear-gradient(135deg, var(--admin-primary), #20815c);
+    border-color: transparent;
+    box-shadow: 0 8px 18px rgba(23,107,77,.18);
+  }
+
+  .admin-btn-primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--admin-primary-dark), var(--admin-primary));
+  }
+
+  .admin-btn-danger {
+    color: var(--admin-danger);
+    background: var(--admin-danger-soft);
+    border-color: rgba(189,60,60,.13);
+  }
+
+  .admin-main {
+    margin-top: 22px;
+  }
+
+  .admin-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    border-radius: 15px;
+    border: 1px solid var(--admin-border);
+    background: var(--admin-surface-strong);
+    box-shadow: var(--admin-shadow-soft);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .admin-alert::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    margin-top: 6px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+
+  .admin-alert-error {
+    color: #8f2929;
+    border-color: rgba(189,60,60,.16);
+    background: #fff9f9;
+  }
+
+  .admin-alert-error::before {
+    background: var(--admin-danger);
+  }
+
+  .admin-alert-success {
+    color: #155b42;
+    border-color: rgba(23,107,77,.16);
+    background: #f5fbf8;
+  }
+
+  .admin-alert-success::before {
+    background: var(--admin-primary);
+  }
+
+  .admin-tabs {
+    position: sticky;
+    top: 12px;
+    z-index: 20;
+    margin-bottom: 20px;
+    padding: 6px;
+    border: 1px solid rgba(255,255,255,.8);
+    border-radius: 17px;
+    background: rgba(255,255,255,.82);
+    backdrop-filter: blur(18px);
+    box-shadow: 0 10px 30px rgba(15,23,42,.07);
+  }
+
+  .admin-tabs-current {
+    display: none;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    border: 0;
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: transparent;
+    color: var(--admin-text);
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .admin-tabs-list {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .admin-tabs-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .admin-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 40px;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 11px;
+    padding: 9px 13px;
+    background: transparent;
+    color: #697487;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 750;
+    cursor: pointer;
+    transition: all .18s ease;
+    white-space: nowrap;
+  }
+
+  .admin-tab:hover {
+    background: rgba(15,23,42,.045);
+    color: var(--admin-text);
+  }
+
+  .admin-tab.active {
+    background: var(--admin-primary);
+    color: white;
+    box-shadow: 0 6px 16px rgba(23,107,77,.18);
+  }
+
+  .admin-count {
+    display: inline-flex;
+    min-width: 19px;
+    height: 19px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.18);
+    font-size: 10px;
+    font-weight: 850;
+  }
+
+  .admin-tab:not(.active) .admin-count {
+    background: rgba(23,107,77,.09);
+    color: var(--admin-primary);
+  }
+
+  .admin-section {
+    margin-bottom: 20px;
+  }
+
+  .admin-section-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 16px;
+  }
+
+  .admin-section-heading h2,
+  .admin-panel h2,
+  .admin-card h3 {
+    margin: 0;
+    letter-spacing: -.02em;
+  }
+
+  .admin-section-heading h2 {
+    font-size: 21px;
+  }
+
+  .admin-section-heading p,
+  .admin-panel p,
+  .admin-card p {
+    line-height: 1.55;
+  }
+
+  .admin-muted {
+    color: var(--admin-muted);
+  }
+
+  .admin-panel {
+    border: 1px solid var(--admin-border);
+    border-radius: var(--admin-radius);
+    padding: 22px;
+    background: var(--admin-surface);
+    box-shadow: var(--admin-shadow-soft);
+  }
+
+  .admin-panel + .admin-panel {
+    margin-top: 18px;
+  }
+
+  .admin-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+
+  .admin-panel-title {
+    font-size: 20px;
+    font-weight: 820;
+  }
+
+  .admin-panel-description {
+    margin: 6px 0 0;
+    color: var(--admin-muted);
+    font-size: 13px;
+  }
+
+  .admin-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .admin-stat {
+    min-width: 0;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--admin-border);
+    border-radius: 16px;
+    padding: 17px;
+    background: linear-gradient(145deg, #fff, #f9fbfa);
+  }
+
+  .admin-stat::after {
+    content: "";
+    position: absolute;
+    width: 70px;
+    height: 70px;
+    right: -35px;
+    bottom: -35px;
+    border-radius: 50%;
+    background: rgba(23,107,77,.055);
+  }
+
+  .admin-stat-label {
+    display: block;
+    color: var(--admin-muted);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .075em;
+    text-transform: uppercase;
+  }
+
+  .admin-stat-value {
+    display: block;
+    margin-top: 8px;
+    color: var(--admin-text);
+    font-size: 22px;
+    font-weight: 850;
+    letter-spacing: -.025em;
+    word-break: break-word;
+  }
+
+  .admin-module-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 17px;
+  }
+
+  .admin-module {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-height: 55px;
+    padding: 12px 14px;
+    border: 1px solid var(--admin-border);
+    border-radius: 14px;
+    background: #fff;
+    font-size: 13px;
+  }
+
+  .admin-module-icon {
+    display: inline-flex;
+    width: 27px;
+    height: 27px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    background: var(--admin-primary-soft);
+    color: var(--admin-primary);
+    font-weight: 900;
+  }
+
+  .admin-module.pending .admin-module-icon {
+    background: #f4f5f7;
+    color: #89919e;
+  }
+
+  .admin-module-note {
+    display: block;
+    margin-top: 2px;
+    color: var(--admin-muted);
+    font-size: 11px;
+  }
+
+  .admin-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+
+  .admin-search {
+    position: relative;
+    margin-bottom: 12px;
+  }
+
+  .admin-search input {
+    width: 100%;
+    min-height: 46px;
+    padding: 0 15px;
+    border: 1px solid var(--admin-border);
+    border-radius: 13px;
+    outline: none;
+    background: #fff;
+    color: var(--admin-text);
+    font: inherit;
+    font-size: 13px;
+    transition: border-color .18s ease, box-shadow .18s ease;
+  }
+
+  .admin-search input:focus,
+  .admin-select:focus {
+    border-color: rgba(23,107,77,.4);
+    box-shadow: 0 0 0 4px rgba(23,107,77,.08);
+  }
+
+  .admin-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--admin-border);
+    border-radius: 16px;
+    background: #fff;
+  }
+
+  .admin-table {
+    width: 100%;
+    min-width: 920px;
+    border-collapse: collapse;
+  }
+
+  .admin-table th {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--admin-border);
+    background: #f8faf9;
+    color: #77808e;
+    font-size: 10px;
+    font-weight: 850;
+    letter-spacing: .07em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .admin-table td {
+    padding: 14px;
+    border-bottom: 1px solid rgba(15,23,42,.055);
+    color: var(--admin-text);
+    font-size: 12px;
+    vertical-align: top;
+  }
+
+  .admin-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .admin-table tbody tr:hover {
+    background: rgba(23,107,77,.018);
+  }
+
+  .admin-select {
+    min-height: 38px;
+    max-width: 190px;
+    padding: 7px 10px;
+    border: 1px solid var(--admin-border);
+    border-radius: 10px;
+    outline: none;
+    background: #fff;
+    color: var(--admin-text);
+    font: inherit;
+    font-size: 12px;
+  }
+
+  .admin-user-name {
+    font-weight: 800;
+  }
+
+  .admin-user-meta {
+    margin-top: 3px;
+    color: var(--admin-muted);
+    font-size: 11px;
+  }
+
+  .admin-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .admin-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #f1f4f3;
+    color: #53605c;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .admin-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 25px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: #f0f2f4;
+    color: #59636e;
+    font-size: 10px;
+    font-weight: 850;
+    white-space: nowrap;
+  }
+
+  .admin-status::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .admin-status.good {
+    color: #14724f;
+    background: #eaf7f1;
+  }
+
+  .admin-status.warn {
+    color: #9b690e;
+    background: #fff5dc;
+  }
+
+  .admin-status.bad {
+    color: #ad3939;
+    background: #fff0f0;
+  }
+
+  .admin-action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .admin-mini-btn {
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--admin-border);
+    border-radius: 9px;
+    padding: 7px 10px;
+    background: #fff;
+    color: var(--admin-text);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 750;
+    cursor: pointer;
+  }
+
+  .admin-mini-btn:hover:not(:disabled) {
+    border-color: rgba(23,107,77,.25);
+    background: #f7fbf9;
+  }
+
+  .admin-mini-btn.primary {
+    color: #fff;
+    border-color: transparent;
+    background: var(--admin-primary);
+  }
+
+  .admin-mini-btn.danger {
+    color: var(--admin-danger);
+    background: var(--admin-danger-soft);
+    border-color: transparent;
+  }
+
+  .admin-mini-btn:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+  }
+
+  .admin-role-control {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 180px;
+  }
+
+  .admin-card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .admin-card {
+    min-width: 0;
+    border: 1px solid var(--admin-border);
+    border-radius: 18px;
+    padding: 18px;
+    background: var(--admin-surface-strong);
+    box-shadow: var(--admin-shadow-soft);
+  }
+
+  .admin-card h3 {
+    font-size: 16px;
+  }
+
+  .admin-card p {
+    margin: 8px 0;
+    color: var(--admin-muted);
+    font-size: 12px;
+  }
+
+  .admin-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 15px;
+  }
+
+  .admin-card-media {
+    width: 100%;
+    max-height: 175px;
+    object-fit: cover;
+    border-radius: 13px;
+    margin-bottom: 12px;
+    border: 1px solid var(--admin-border);
+  }
+
+  .admin-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .admin-empty {
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--admin-muted);
+    border: 1px dashed rgba(15,23,42,.13);
+    border-radius: 16px;
+    background: rgba(255,255,255,.6);
+  }
+
+  .admin-empty-icon {
+    display: flex;
+    width: 42px;
+    height: 42px;
+    margin: 0 auto 10px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 13px;
+    background: var(--admin-primary-soft);
+    color: var(--admin-primary);
+    font-size: 18px;
+  }
+
+  .admin-code {
+    padding: 3px 6px;
+    border-radius: 6px;
+    background: #f2f4f5;
+    color: #58636e;
+    font-size: 10px;
+  }
+
+  .admin-dialog {
+    width: min(900px, calc(100% - 28px));
+    max-width: 900px;
+    border: 0;
+    padding: 0;
+    border-radius: 24px;
+    background: transparent;
+  }
+
+  .admin-dialog::backdrop {
+    background: rgba(10,17,24,.52);
+    backdrop-filter: blur(5px);
+  }
+
+  .admin-modal {
+    position: relative;
+    padding: 26px;
+    border: 1px solid rgba(255,255,255,.65);
+    border-radius: 24px;
+    background: #fff;
+    box-shadow: 0 30px 80px rgba(0,0,0,.2);
+  }
+
+  .admin-modal-close {
+    position: absolute;
+    top: 13px;
+    right: 13px;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 11px;
+    background: #f2f4f5;
+    color: #59636d;
+    font-size: 22px;
+    cursor: pointer;
+  }
+
+  .admin-loading {
+    min-height: 70vh;
+    display: grid;
+    place-items: center;
+    padding: 28px;
+  }
+
+  .admin-loading-card {
+    width: min(520px, 100%);
+    padding: 30px;
+    border: 1px solid var(--admin-border);
+    border-radius: 24px;
+    background: rgba(255,255,255,.9);
+    box-shadow: var(--admin-shadow);
+    text-align: center;
+  }
+
+  .admin-spinner {
+    width: 42px;
+    height: 42px;
+    margin: 0 auto 17px;
+    border: 3px solid rgba(23,107,77,.12);
+    border-top-color: var(--admin-primary);
+    border-radius: 50%;
+    animation: admin-spin .8s linear infinite;
+  }
+
+  @keyframes admin-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .admin-workspace > .admin-section-heading {
+    margin-bottom: 18px;
+  }
+
+  .admin-financial-grid {
+    margin-bottom: 20px;
+  }
+
+  .admin-financial-grid .admin-stat-value {
+    font-size: 20px;
+  }
+
+  .admin-divider-label {
+    display: inline-flex;
+    margin-bottom: 8px;
+    color: var(--admin-primary);
+    font-size: 10px;
+    font-weight: 850;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+
+  .admin-details {
+    margin-top: 8px;
+  }
+
+  .admin-details summary {
+    cursor: pointer;
+    color: var(--admin-primary);
+    font-size: 11px;
+    font-weight: 750;
+  }
+
+  .admin-warning-note {
+    padding: 11px 13px;
+    margin-top: 12px;
+    border-radius: 11px;
+    background: var(--admin-warning-soft);
+    color: #80570c;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .admin-ad-destination {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-mobile-summary {
+    display: none;
+  }
+
+  @media (max-width: 1100px) {
+    .admin-redesign {
+      padding: 20px;
+    }
+
+    .admin-stat-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .admin-card-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 800px) {
+    .admin-redesign {
+      padding: 14px;
+    }
+
+    .admin-hero {
+      padding: 21px;
+      border-radius: 22px;
+    }
+
+    .admin-hero-top {
+      flex-direction: column;
+    }
+
+    .admin-hero-actions {
+      justify-content: flex-start;
+      width: 100%;
+    }
+
+    .admin-tabs {
+      padding: 5px;
+    }
+
+    .admin-tabs-current {
+      display: flex;
+    }
+
+    .admin-tabs-list {
+      display: none;
+      flex-direction: column;
+      padding: 5px;
+      border-top: 1px solid var(--admin-border);
+    }
+
+    .admin-tabs-open .admin-tabs-list {
+      display: flex;
+    }
+
+    .admin-tab {
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .admin-stat-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-module-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .admin-card-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .admin-toolbar,
+    .admin-panel-header,
+    .admin-section-heading {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .admin-panel {
+      padding: 17px;
+      border-radius: 18px;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .admin-redesign {
+      padding: 9px;
+    }
+
+    .admin-title {
+      font-size: 28px;
+    }
+
+    .admin-subtitle {
+      font-size: 13px;
+    }
+
+    .admin-hero-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .admin-btn {
+      width: 100%;
+    }
+
+    .admin-stat-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .admin-stat {
+      padding: 13px;
+      border-radius: 13px;
+    }
+
+    .admin-stat-value {
+      font-size: 18px;
+    }
+
+    .admin-stat-label {
+      font-size: 9px;
+    }
+
+    .admin-panel {
+      padding: 14px;
+    }
+
+    .admin-table-wrap {
+      overflow: visible;
+      border: 0;
+      background: transparent;
+    }
+
+    .admin-table {
+      min-width: 0;
+      display: block;
+    }
+
+    .admin-table thead {
+      display: none;
+    }
+
+    .admin-table tbody,
+    .admin-table tr,
+    .admin-table td {
+      display: block;
+      width: 100%;
+    }
+
+    .admin-table tr {
+      margin-bottom: 12px;
+      padding: 10px;
+      border: 1px solid var(--admin-border);
+      border-radius: 15px;
+      background: #fff;
+      box-shadow: 0 5px 18px rgba(15,23,42,.04);
+    }
+
+    .admin-table td {
+      display: grid;
+      grid-template-columns: 105px minmax(0, 1fr);
+      gap: 10px;
+      padding: 9px 7px;
+      border-bottom: 1px solid rgba(15,23,42,.055);
+      font-size: 12px;
+    }
+
+    .admin-table td:last-child {
+      border-bottom: 0;
+    }
+
+    .admin-table td::before {
+      content: attr(data-label);
+      color: #7b8491;
+      font-size: 9px;
+      font-weight: 850;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .admin-table td[data-label=""]::before {
+      content: "";
+    }
+
+    .admin-table .admin-action-row,
+    .admin-table .admin-role-control,
+    .admin-table .admin-chip-row {
+      min-width: 0;
+    }
+
+    .admin-select {
+      max-width: none;
+      width: 100%;
+    }
+
+    .admin-mini-btn {
+      width: 100%;
+    }
+
+    .admin-role-control {
+      width: 100%;
+    }
+
+    .admin-mobile-summary {
+      display: block;
+      margin-top: 4px;
+      color: var(--admin-muted);
+      font-size: 11px;
+    }
+
+    .admin-card {
+      padding: 15px;
+    }
+
+    .admin-modal {
+      padding: 20px;
+      border-radius: 19px;
+    }
+  }
+`;
+
+function StatusBadge({ status }) {
+  const normalized = String(status || '').toUpperCase();
+
+  let type = 'default';
+
+  if (
+    [
+      'VERIFIED',
+      'ACTIVE',
+      'APPROVED',
+      'PUBLISHED',
+      'SCHEDULED',
+      'RESOLVED',
+    ].includes(normalized)
+  ) {
+    type = 'good';
+  }
+
+  if (
+    ['REJECTED', 'SUSPENDED', 'CANCELLED'].includes(normalized) ||
+    normalized === 'RECONCILIATION_REQUIRED'
+  ) {
+    type = 'bad';
+  }
+
+  if (
+    [
+      'PENDING',
+      'PENDING_PAYMENT',
+      'PAID_PENDING_REVIEW',
+      'EXPIRED',
+    ].includes(normalized)
+  ) {
+    type = 'warn';
+  }
+
+  return (
+    <span className={`admin-status ${type}`}>
+      {String(status || 'UNKNOWN').replace(/_/g, ' ')}
+    </span>
+  );
+}
+
+function EmptyState({ children }) {
+  return (
+    <div className="admin-empty">
+      <div className="admin-empty-icon">✓</div>
+      {children}
+    </div>
+  );
+}
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+
   const [tab, setTab] = useState('overview');
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
+
   const performanceModalRef = useRef(null);
   const tabsNavRef = useRef(null);
 
@@ -37,10 +1203,6 @@ export default function AdminDashboard() {
   const [operations, setOperations] = useState(null);
   const [orderEvents, setOrderEvents] = useState([]);
   const [auditEvents, setAuditEvents] = useState([]);
-  const [refunds, setRefunds] = useState([]);
-
-  const disputeModalRef = useRef(null);
-  const [disputeDecision, setDisputeDecision] = useState(null);
 
   const [userSearch, setUserSearch] = useState('');
   const [roleSelections, setRoleSelections] = useState({});
@@ -69,20 +1231,22 @@ export default function AdminDashboard() {
         operationsRes,
         orderEventsRes,
         auditEventsRes,
-        refundsRes,
       ] = await Promise.all([
         api.get('/admin/overview'),
         api.get('/admin/users'),
         api.get('/disputes'),
         api.get('/admin/fraud-flags'),
         api.get('/ads'),
-        api.get('/payments', { params: { status: ['PENDING', 'RECONCILIATION_REQUIRED'] } }),
+        api.get('/payments', {
+          params: {
+            status: ['PENDING', 'RECONCILIATION_REQUIRED'],
+          },
+        }),
         api.get('/payments/commissions/summary'),
         api.get('/orders'),
         api.get('/admin/operations/summary'),
         api.get('/admin/order-events', { params: { limit: 100 } }),
         api.get('/admin/audit-events', { params: { limit: 100 } }),
-        api.get('/admin/financial/refunds'),
       ]);
 
       setOverview(overviewRes.data);
@@ -96,14 +1260,13 @@ export default function AdminDashboard() {
       setOperations(operationsRes.data || null);
       setOrderEvents(orderEventsRes.data?.events || []);
       setAuditEvents(auditEventsRes.data?.events || []);
-      setRefunds(refundsRes.data?.refunds || []);
     } catch (err) {
       if (err.response?.data?.code === 'MFA_SETUP_REQUIRED') {
         setMfaRequired(true);
       } else {
         setError(
           err.response?.data?.error ||
-          'Could not load admin data'
+            'Could not load admin data'
         );
       }
     } finally {
@@ -136,110 +1299,27 @@ export default function AdminDashboard() {
     };
   }, [tabMenuOpen]);
 
-  function statusBadgeClass(status) {
-    if (['VERIFIED', 'ACTIVE', 'APPROVED', 'PUBLISHED', 'SCHEDULED', 'RESOLVED', 'COMPLETED'].includes(status)) return 'sd-badge sd-good';
-    if (['REJECTED', 'SUSPENDED', 'CANCELLED', 'FAILED'].includes(status)) return 'sd-badge sd-red';
-    if (['PENDING', 'PENDING_PAYMENT', 'PAID_PENDING_REVIEW', 'EXPIRED', 'REQUESTED', 'PROCESSING'].includes(status)) return 'sd-badge sd-warn';
-    if (status === 'RECONCILIATION_REQUIRED') return 'sd-badge sd-red';
-    return 'sd-badge';
-  }
-
   function clearMessages() {
     setError('');
     setSuccess('');
   }
 
-  function openDisputeDecision(dispute, status) {
-    clearMessages();
-    setDisputeDecision({
-      id: dispute.id,
-      status,
-      resolution: `Marked ${status} by admin`,
-      payoutDecision: '',
-    });
-    disputeModalRef.current?.showModal();
-  }
-
-  function closeDisputeDecision() {
-    disputeModalRef.current?.close();
-    setDisputeDecision(null);
-  }
-
-  async function submitDisputeDecision() {
-    if (!disputeDecision) return;
-    const { id, status, resolution, payoutDecision } = disputeDecision;
-
+  async function resolveDispute(id, status) {
     clearMessages();
     setActionLoading(`dispute-${id}`);
 
     try {
       await api.patch(`/disputes/${id}/resolve`, {
         status,
-        resolution,
-        // Only relevant when a payout on the order is frozen; the backend
-        // ignores it otherwise, so it's safe to always send the admin's
-        // choice here.
-        payoutDecision: payoutDecision || undefined,
+        resolution: `Marked ${status} by admin`,
       });
 
       setSuccess(`Dispute ${status.toLowerCase()} successfully.`);
-      closeDisputeDecision();
       await loadAll();
     } catch (err) {
       setError(
         err.response?.data?.error ||
-        'Could not resolve dispute'
-      );
-    } finally {
-      setActionLoading('');
-    }
-  }
-
-  async function markRefundComplete(refund) {
-    clearMessages();
-
-    const confirmed = window.confirm(
-      `Mark the ${Number(refund.amount).toLocaleString()} ${refund.currency || 'ETB'} refund for payment ${refund.paymentId.slice(0, 8)} as completed? Only do this once the money has actually been sent back.`
-    );
-    if (!confirmed) return;
-
-    const providerRefundId = window.prompt('Provider refund reference (optional):') || undefined;
-
-    setActionLoading(`refund-${refund.id}`);
-    try {
-      await api.patch(`/admin/financial/refunds/${refund.id}/complete`, {
-        provider: refund.payment?.provider || undefined,
-        providerRefundId,
-      });
-      setSuccess('Refund marked as completed.');
-      await loadAll();
-    } catch (err) {
-      setError(
-        err.response?.data?.error ||
-        'Could not complete refund'
-      );
-    } finally {
-      setActionLoading('');
-    }
-  }
-
-  async function markRefundFailed(refund) {
-    clearMessages();
-
-    const failureReason = window.prompt('Reason the refund failed:');
-    if (!failureReason) return;
-
-    setActionLoading(`refund-${refund.id}`);
-    try {
-      await api.patch(`/admin/financial/refunds/${refund.id}/fail`, {
-        failureReason,
-      });
-      setSuccess('Refund marked as failed.');
-      await loadAll();
-    } catch (err) {
-      setError(
-        err.response?.data?.error ||
-        'Could not update refund'
+          'Could not resolve dispute'
       );
     } finally {
       setActionLoading('');
@@ -250,8 +1330,12 @@ export default function AdminDashboard() {
     clearMessages();
 
     const confirmed = window.confirm(
-      `Cancel order ${order.id.slice(0, 8)}? This cannot be undone. The listing becomes available again and any completed payments are flagged for refund.`
+      `Cancel order ${order.id.slice(
+        0,
+        8
+      )}? This cannot be undone. The listing becomes available again and any completed payments are flagged for refund.`
     );
+
     if (!confirmed) return;
 
     setActionLoading(`order-${order.id}`);
@@ -264,17 +1348,9 @@ export default function AdminDashboard() {
       setSuccess('Order cancelled.');
       await loadAll();
     } catch (err) {
-      const message = err.response?.data?.error || 'Could not cancel order';
-
-      // The backend can't safely echo a raw database error, so a generic
-      // failure here is usually transient — most often the free Render
-      // instance/database waking up from idle taking a moment longer than
-      // usual (see the banner at the top of this page). Say so rather than
-      // leaving a bare failure with no next step.
       setError(
-        message === 'Failed to cancel order'
-          ? `${message} This can happen right after the server has been idle — wait a few seconds and try again.`
-          : message
+        err.response?.data?.error ||
+          'Could not cancel order'
       );
     } finally {
       setActionLoading('');
@@ -291,12 +1367,14 @@ export default function AdminDashboard() {
         { verificationStatus }
       );
 
-      setSuccess('Verification status updated successfully.');
+      setSuccess(
+        'Verification status updated successfully.'
+      );
       await loadAll();
     } catch (err) {
       setError(
         err.response?.data?.error ||
-        'Could not update verification status'
+          'Could not update verification status'
       );
     } finally {
       setActionLoading('');
@@ -306,9 +1384,11 @@ export default function AdminDashboard() {
   async function setAccountStatus(userId, accountStatus) {
     clearMessages();
 
-    const user = users.find((item) => item.id === userId);
+    const selectedUser = users.find(
+      (item) => item.id === userId
+    );
 
-    if (!user) return;
+    if (!selectedUser) return;
 
     const action =
       accountStatus === 'SUSPENDED'
@@ -316,7 +1396,9 @@ export default function AdminDashboard() {
         : 'activate';
 
     const confirmed = window.confirm(
-      `Are you sure you want to ${action} ${user.name || user.email}?`
+      `Are you sure you want to ${action} ${
+        selectedUser.name || selectedUser.email
+      }?`
     );
 
     if (!confirmed) return;
@@ -339,7 +1421,7 @@ export default function AdminDashboard() {
     } catch (err) {
       setError(
         err.response?.data?.error ||
-        'Could not update account status'
+          'Could not update account status'
       );
     } finally {
       setActionLoading('');
@@ -375,7 +1457,7 @@ export default function AdminDashboard() {
     } catch (err) {
       setError(
         err.response?.data?.error ||
-        'Could not add role'
+          'Could not add role'
       );
     } finally {
       setActionLoading('');
@@ -385,17 +1467,23 @@ export default function AdminDashboard() {
   async function removeRole(userId, role) {
     clearMessages();
 
-    const user = users.find((item) => item.id === userId);
+    const selectedUser = users.find(
+      (item) => item.id === userId
+    );
 
-    if (!user) return;
+    if (!selectedUser) return;
 
     const confirmed = window.confirm(
-      `Remove ${role} role from ${user.name || user.email}?`
+      `Remove ${role} role from ${
+        selectedUser.name || selectedUser.email
+      }?`
     );
 
     if (!confirmed) return;
 
-    setActionLoading(`remove-role-${userId}-${role}`);
+    setActionLoading(
+      `remove-role-${userId}-${role}`
+    );
 
     try {
       await api.patch(
@@ -408,7 +1496,7 @@ export default function AdminDashboard() {
     } catch (err) {
       setError(
         err.response?.data?.error ||
-        'Could not remove role'
+          'Could not remove role'
       );
     } finally {
       setActionLoading('');
@@ -417,14 +1505,27 @@ export default function AdminDashboard() {
 
   async function markTelegramPublished(adId) {
     clearMessages();
-    const postReference = window.prompt('Telegram post reference/link (optional):') || undefined;
+
+    const postReference =
+      window.prompt(
+        'Telegram post reference/link (optional):'
+      ) || undefined;
+
     setActionLoading(`ad-${adId}`);
+
     try {
-      await api.patch(`/ads/${adId}/telegram-publication`, { postReference });
+      await api.patch(
+        `/ads/${adId}/telegram-publication`,
+        { postReference }
+      );
+
       setSuccess('Telegram publication recorded.');
       await loadAll();
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not record Telegram publication');
+      setError(
+        err.response?.data?.error ||
+          'Could not record Telegram publication'
+      );
     } finally {
       setActionLoading('');
     }
@@ -432,15 +1533,34 @@ export default function AdminDashboard() {
 
   async function cancelAdCampaign(adId) {
     clearMessages();
-    if (!window.confirm('Cancel this campaign? Any paid amount is flagged REFUNDED as a bookkeeping record.')) return;
-    const reason = window.prompt('Reason for cancelling this campaign (optional):') || undefined;
+
+    if (
+      !window.confirm(
+        'Cancel this campaign? Any paid amount is flagged REFUNDED as a bookkeeping record.'
+      )
+    ) {
+      return;
+    }
+
+    const reason =
+      window.prompt(
+        'Reason for cancelling this campaign (optional):'
+      ) || undefined;
+
     setActionLoading(`ad-${adId}`);
+
     try {
-      await api.patch(`/ads/${adId}/cancel`, { reason });
+      await api.patch(`/ads/${adId}/cancel`, {
+        reason,
+      });
+
       setSuccess('Campaign cancelled.');
       await loadAll();
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not cancel campaign');
+      setError(
+        err.response?.data?.error ||
+          'Could not cancel campaign'
+      );
     } finally {
       setActionLoading('');
     }
@@ -452,16 +1572,28 @@ export default function AdminDashboard() {
 
     try {
       let rejectionReason;
+
       if (status === 'REJECTED') {
-        rejectionReason = window.prompt('Reason for rejecting this campaign (optional):') || undefined;
+        rejectionReason =
+          window.prompt(
+            'Reason for rejecting this campaign (optional):'
+          ) || undefined;
       }
-      await api.patch(`/ads/${adId}/status`, { status, rejectionReason });
-      setSuccess(`Campaign ${status.toLowerCase()} successfully.`);
+
+      await api.patch(`/ads/${adId}/status`, {
+        status,
+        rejectionReason,
+      });
+
+      setSuccess(
+        `Campaign ${status.toLowerCase()} successfully.`
+      );
+
       await loadAll();
     } catch (err) {
       setError(
         err.response?.data?.error ||
-        'Could not update campaign status'
+          'Could not update campaign status'
       );
     } finally {
       setActionLoading('');
@@ -473,35 +1605,51 @@ export default function AdminDashboard() {
     setActionLoading(`payment-${paymentId}`);
 
     try {
-      await api.patch(`/payments/${paymentId}/confirm`);
-      setSuccess('Payment confirmed and reconciled.');
+      await api.patch(
+        `/payments/${paymentId}/confirm`
+      );
+
+      setSuccess(
+        'Payment confirmed and reconciled.'
+      );
+
       await loadAll();
     } catch (err) {
       setError(
         err.response?.data?.error ||
-        'Could not confirm payment'
+          'Could not confirm payment'
       );
     } finally {
       setActionLoading('');
     }
   }
 
-  async function checkGatewayPayment(paymentId, provider) {
+  async function checkGatewayPayment(
+    paymentId,
+    provider
+  ) {
     clearMessages();
     setActionLoading(`payment-${paymentId}`);
 
     try {
-      const r = await api.get(`/payments/${paymentId}/${provider}/verify`);
-      setSuccess(
-        r.data?.status === 'PAID'
-          ? 'Payment confirmed by the gateway and reconciled.'
-          : `Gateway reports this payment as ${r.data?.status || 'not yet completed'} — nothing to reconcile yet.`
+      const response = await api.get(
+        `/payments/${paymentId}/${provider}/verify`
       );
+
+      setSuccess(
+        response.data?.status === 'PAID'
+          ? 'Payment confirmed by the gateway and reconciled.'
+          : `Gateway reports this payment as ${
+              response.data?.status ||
+              'not yet completed'
+            } — nothing to reconcile yet.`
+      );
+
       await loadAll();
     } catch (err) {
       setError(
         err.response?.data?.error ||
-        'Could not check payment with the gateway'
+          'Could not check payment with the gateway'
       );
     } finally {
       setActionLoading('');
@@ -511,19 +1659,17 @@ export default function AdminDashboard() {
   const filteredUsers = useMemo(() => {
     const search = userSearch.trim().toLowerCase();
 
-    if (!search) {
-      return users;
-    }
+    if (!search) return users;
 
-    return users.filter((user) => {
+    return users.filter((item) => {
       const searchableText = [
-        user.name,
-        user.email,
-        user.phone,
-        user.location,
-        ...(user.roles || []),
-        user.verificationStatus,
-        user.accountStatus,
+        item.name,
+        item.email,
+        item.phone,
+        item.location,
+        ...(item.roles || []),
+        item.verificationStatus,
+        item.accountStatus,
       ]
         .filter(Boolean)
         .join(' ')
@@ -535,12 +1681,24 @@ export default function AdminDashboard() {
 
   if (loading && !overview) {
     return (
-      <div className="sd-dashboard">
-        <section>
-          <span className="sd-eyebrow">ADMINISTRATION</span>
-          <h1>Loading the control center...</h1>
-          <p className="sd-muted">{error || 'Loading admin dashboard…'}</p>
-        </section>
+      <div className="admin-redesign">
+        <style>{ADMIN_STYLES}</style>
+
+        <div className="admin-shell admin-loading">
+          <div className="admin-loading-card">
+            <div className="admin-spinner" />
+            <div className="admin-kicker">
+              MARKETBRIDGE ADMIN
+            </div>
+            <h1 className="admin-title">
+              Loading control center
+            </h1>
+            <p className="admin-subtitle">
+              {error ||
+                'Preparing your marketplace administration workspace…'}
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -565,1284 +1723,2133 @@ export default function AdminDashboard() {
       ]
     : [];
 
-  // Matches what the backend will actually let an admin resolve
-  // (disputes.js: dispute.status must be OPEN or UNDER_REVIEW) — a
-  // dispute sitting at UNDER_REVIEW shouldn't silently disappear from
-  // this queue.
   const openDisputes = disputes.filter(
-    (d) => d.status === 'OPEN' || d.status === 'UNDER_REVIEW'
+    (d) => d.status === 'OPEN'
   );
 
   const resolvedDisputes = disputes.filter(
-    (d) => d.status !== 'OPEN' && d.status !== 'UNDER_REVIEW'
+    (d) => d.status !== 'OPEN'
   );
 
   const pendingAds = ads.filter(
-    (a) => a.status === 'PAID_PENDING_REVIEW' ||
-      (a.status === 'PENDING' && ['BANNER', 'TELEGRAM_PROMOTION'].includes(a.type))
+    (a) =>
+      a.status === 'PAID_PENDING_REVIEW' ||
+      (a.status === 'PENDING' &&
+        [
+          'BANNER',
+          'TELEGRAM_PROMOTION',
+        ].includes(a.type))
   );
 
   const reviewedAds = ads.filter(
-    (a) => !pendingAds.some((pending) => pending.id === a.id)
-  );
-
-  const pendingRefunds = refunds.filter(
-    (r) => ['REQUESTED', 'PROCESSING'].includes(r.status)
-  );
-
-  const refundHistory = refunds.filter(
-    (r) => !['REQUESTED', 'PROCESSING'].includes(r.status)
+    (a) =>
+      !pendingAds.some(
+        (pending) => pending.id === a.id
+      )
   );
 
   const tabItems = [
-    { key: 'overview', label: 'Overview', count: 0 },
-    { key: 'users', label: 'Users & Control', count: 0 },
-    { key: 'disputes', label: 'Disputes', count: openDisputes.length },
-    { key: 'fraud', label: 'Fraud Monitoring', count: suspiciousUsers.length },
-    { key: 'advertising', label: 'Advertising', count: pendingAds.length },
-    { key: 'orders', label: 'Orders', count: orders.length },
-    { key: 'payments', label: 'Payments', count: payments.length },
-    { key: 'refunds', label: 'Refunds', count: pendingRefunds.length },
+    {
+      key: 'overview',
+      label: 'Overview',
+      count: 0,
+    },
+    {
+      key: 'users',
+      label: 'Users & Control',
+      count: 0,
+    },
+    {
+      key: 'disputes',
+      label: 'Disputes',
+      count: openDisputes.length,
+    },
+    {
+      key: 'fraud',
+      label: 'Fraud Monitoring',
+      count: suspiciousUsers.length,
+    },
+    {
+      key: 'advertising',
+      label: 'Advertising',
+      count: pendingAds.length,
+    },
+    {
+      key: 'orders',
+      label: 'Orders',
+      count: orders.length,
+    },
+    {
+      key: 'payments',
+      label: 'Payments',
+      count: payments.length,
+    },
     {
       key: 'operations',
       label: 'Operations & Audit',
-      count: (operations?.queues?.reconciliationPayments || 0) + (operations?.queues?.openDisputes || 0),
+      count:
+        (operations?.queues
+          ?.reconciliationPayments || 0) +
+        (operations?.queues?.openDisputes || 0),
     },
   ];
 
   const activeTabItem =
-    tabItems.find((item) => item.key === tab) || tabItems[0];
+    tabItems.find((item) => item.key === tab) ||
+    tabItems[0];
 
   if (mfaRequired) {
     return (
-      <div className="sd-dashboard">
-        <section>
-          <DashboardWelcome user={user} subtitle="Manage users, verification, account access, roles, disputes, and fraud monitoring." />
-        </section>
-        <section>
-          <div className="card" style={{ maxWidth: 520 }}>
-            <h2>Set up MFA to continue</h2>
-            <p>Admin actions on MarketBridge now require multi-factor authentication. This takes about a minute with an authenticator app (Google Authenticator, Authy, etc.).</p>
-            <Link to="/account/security" className="btn btn-primary">Set up MFA</Link>
-          </div>
-        </section>
+      <div className="admin-redesign">
+        <style>{ADMIN_STYLES}</style>
+
+        <div className="admin-shell">
+          <section className="admin-hero">
+            <div className="admin-hero-content">
+              <DashboardWelcome
+                user={user}
+                subtitle="Manage users, verification, account access, roles, disputes, and fraud monitoring."
+              />
+
+              <div className="admin-cc-badge-new">
+                Protected administration workspace
+              </div>
+            </div>
+          </section>
+
+          <section
+            className="admin-panel"
+            style={{ marginTop: 20, maxWidth: 650 }}
+          >
+            <div className="admin-kicker">
+              SECURITY REQUIRED
+            </div>
+
+            <h2 className="admin-panel-title">
+              Set up MFA to continue
+            </h2>
+
+            <p className="admin-panel-description">
+              Admin actions on MarketBridge now require
+              multi-factor authentication. This takes
+              about a minute with an authenticator app
+              such as Google Authenticator or Authy.
+            </p>
+
+            <div style={{ marginTop: 18 }}>
+              <Link
+                to="/account/security"
+                className="admin-btn admin-btn-primary"
+              >
+                Set up MFA
+              </Link>
+            </div>
+          </section>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="sd-dashboard">
+    <div className="admin-redesign">
+      <style>{ADMIN_STYLES}</style>
 
-      <section>
-        <DashboardWelcome user={user} subtitle="Manage users, verification, account access, roles, disputes, and fraud monitoring." />
-        <div className="admin-cc-badge">Control Center (C C)</div>
-
-        <RoleSwitchCTA current="ADMIN" />
-
-        <div className="sd-actions" style={{ marginTop: 28 }}>
-          <button
-            type="button"
-            className="sd-btn sd-btn-primary"
-            onClick={() => performanceModalRef.current?.showModal()}
-          >
-            Performance
-          </button>
-          <Link to="/account/security" className="sd-btn">Account security</Link>
-        </div>
-      </section>
-
-      <dialog ref={performanceModalRef} className="sd-dialog">
-        <div className="sd-modal">
-          <button
-            className="sd-close"
-            onClick={() => performanceModalRef.current?.close()}
-          >
-            ×
-          </button>
-          <span className="sd-eyebrow">SNAPSHOT</span>
-          <h2>Marketplace performance</h2>
-
-          <div className="sd-stat-grid" style={{ marginTop: 16 }}>
-            {cards.map(([label, value]) => (
-              <div className="sd-stat" key={label}>
-                <span>{label.toUpperCase()}</span>
-                <b>{value}</b>
-              </div>
-            ))}
-          </div>
-        </div>
-      </dialog>
-
-      <dialog ref={disputeModalRef} className="sd-dialog" onClose={() => setDisputeDecision(null)}>
-        <div className="sd-modal">
-          <button
-            className="sd-close"
-            onClick={closeDisputeDecision}
-          >
-            ×
-          </button>
-          <span className="sd-eyebrow">MODERATION</span>
-          <h2>{disputeDecision?.status === 'REJECTED' ? 'Reject dispute' : 'Resolve dispute'}</h2>
-
-          {disputeDecision && (
-            <>
-              <p className="sd-muted" style={{ marginTop: 8 }}>
-                This order has a payout on hold. Choose what happens to it — the
-                backend requires this decision before the dispute can close.
-              </p>
-
-              <div className="sd-form-grid" style={{ marginTop: 12 }}>
-                <div className="sd-full">
-                  <label>Resolution notes</label>
-                  <textarea
-                    rows={3}
-                    value={disputeDecision.resolution}
-                    onChange={(e) =>
-                      setDisputeDecision((d) => ({ ...d, resolution: e.target.value }))
-                    }
-                  />
+      <div className="admin-shell">
+        <section className="admin-hero">
+          <div className="admin-hero-content">
+            <div className="admin-hero-top">
+              <div>
+                <div className="admin-kicker">
+                  MARKETBRIDGE CONTROL CENTER
                 </div>
 
-                <div className="sd-full">
-                  <label>Payout decision</label>
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontWeight: 400, marginTop: 6 }}>
-                    <input
-                      type="radio"
-                      name="payoutDecision"
-                      value="RELEASE"
-                      checked={disputeDecision.payoutDecision === 'RELEASE'}
-                      onChange={() =>
-                        setDisputeDecision((d) => ({ ...d, payoutDecision: 'RELEASE' }))
-                      }
-                    />
-                    <span>
-                      <strong>Release payout</strong> — resumes its normal hold timer, no refund.
-                      Use when the dispute is found in the seller/inspector's favor.
-                    </span>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontWeight: 400, marginTop: 8 }}>
-                    <input
-                      type="radio"
-                      name="payoutDecision"
-                      value="CANCEL"
-                      checked={disputeDecision.payoutDecision === 'CANCEL'}
-                      onChange={() =>
-                        setDisputeDecision((d) => ({ ...d, payoutDecision: 'CANCEL' }))
-                      }
-                    />
-                    <span>
-                      <strong>Cancel payout</strong> — cancels the payout and automatically
-                      creates a refund request for the buyer. Use when the dispute is found
-                      in the buyer's favor.
-                    </span>
-                  </label>
-                  <p className="sd-muted" style={{ marginTop: 6 }}>
-                    If this order actually has no payout on hold, this choice is ignored.
-                  </p>
+                <h1 className="admin-title">
+                  Administration, simplified.
+                </h1>
+
+                <p className="admin-subtitle">
+                  Manage marketplace users, verification,
+                  disputes, fraud signals, advertising,
+                  orders, payments, and operational events
+                  from one secure workspace.
+                </p>
+
+                <div className="admin-cc-badge-new">
+                  Control Center · Admin access
                 </div>
               </div>
 
-              <div className="sd-modal-actions" style={{ marginTop: 16 }}>
+              <div className="admin-hero-actions">
+                <RoleSwitchCTA current="ADMIN" />
+
                 <button
                   type="button"
-                  className="sd-btn sd-btn-primary"
-                  disabled={
-                    !disputeDecision.payoutDecision ||
-                    actionLoading === `dispute-${disputeDecision.id}`
+                  className="admin-btn admin-btn-primary"
+                  onClick={() =>
+                    performanceModalRef.current?.showModal()
                   }
-                  onClick={submitDisputeDecision}
                 >
-                  {actionLoading === `dispute-${disputeDecision.id}` ? 'Working…' : 'Confirm'}
+                  Performance
                 </button>
-                <button
-                  type="button"
-                  className="sd-btn sd-btn-outline"
-                  onClick={closeDisputeDecision}
+
+                <Link
+                  to="/account/security"
+                  className="admin-btn"
                 >
-                  Cancel
-                </button>
+                  Account security
+                </Link>
               </div>
-            </>
-          )}
-        </div>
-      </dialog>
-
-      {error && (
-        <section>
-          <div className="alert error">{error}</div>
-        </section>
-      )}
-
-      {success && (
-        <section>
-          <div className="alert success">{success}</div>
-        </section>
-      )}
-
-      <section>
-        <div
-          className={`sd-tabs-nav ${tabMenuOpen ? 'sd-tabs-open' : ''}`}
-          ref={tabsNavRef}
-        >
-          <button
-            type="button"
-            className="sd-tabs-current"
-            aria-expanded={tabMenuOpen}
-            onClick={() => setTabMenuOpen((open) => !open)}
-          >
-            <span>
-              {activeTabItem.label}
-              {activeTabItem.count > 0 && (
-                <span className="sd-tab-count">{activeTabItem.count}</span>
-              )}
-            </span>
-            <svg
-              className="sd-tabs-chevron"
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-            >
-              <path
-                d="M4 6l4 4 4-4"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-
-          <div className="sd-tabs-list">
-            {tabItems.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className={`sd-tab ${tab === item.key ? 'sd-active' : ''}`}
-                onClick={() => {
-                  clearMessages();
-                  setTab(item.key);
-                  setTabMenuOpen(false);
-                }}
-              >
-                {item.label}
-                {item.count > 0 && (
-                  <span className="sd-tab-count">{item.count}</span>
-                )}
-              </button>
-            ))}
+            </div>
           </div>
-        </div>
+        </section>
 
-        {tab === 'overview' && (
-          <div>
-            <div className="sd-panel">
-              <h2>Modules status</h2>
+        <dialog
+          ref={performanceModalRef}
+          className="admin-dialog"
+        >
+          <div className="admin-modal">
+            <button
+              type="button"
+              className="admin-modal-close"
+              aria-label="Close performance dialog"
+              onClick={() =>
+                performanceModalRef.current?.close()
+              }
+            >
+              ×
+            </button>
 
-              {[
-                [
-                  'Users & role management',
-                  true,
-                ],
-                [
-                  'Verification management',
-                  true,
-                ],
-                [
-                  'Account suspension / activation',
-                  true,
-                ],
-                [
-                  'Sellers / buyers / inspectors / truck owners',
-                  true,
-                ],
-                [
-                  'Disputes & reports',
-                  true,
-                ],
-                [
-                  'Fraud flags (heuristic)',
-                  true,
-                ],
-                [
-                  'Listings & categories moderation',
-                  false,
-                ],
-                [
-                  'Orders & payments oversight',
-                  true,
-                ],
-                [
-                  'Transport jobs oversight',
-                  false,
-                ],
-                [
-                  'Advertising & sponsored listings approval',
-                  true,
-                ],
-                [
-                  'Commissions & revenue records',
-                  true,
-                ],
-              ].map(([label, built]) => (
+            <div className="admin-kicker">
+              MARKETPLACE SNAPSHOT
+            </div>
+
+            <h2 className="admin-panel-title">
+              Marketplace performance
+            </h2>
+
+            <p className="admin-panel-description">
+              Current platform-level figures from the
+              administration overview.
+            </p>
+
+            <div
+              className="admin-stat-grid"
+              style={{ marginTop: 18 }}
+            >
+              {cards.map(([label, value]) => (
                 <div
-                  className="tool-row"
+                  className="admin-stat"
                   key={label}
                 >
-                  {built ? '✓' : '○'} {label}{' '}
-                  {!built && (
-                    <span className="sd-muted">
-                      (backend not built yet)
-                    </span>
-                  )}
+                  <span className="admin-stat-label">
+                    {label}
+                  </span>
+                  <b className="admin-stat-value">
+                    {value}
+                  </b>
                 </div>
               ))}
             </div>
           </div>
-        )}
+        </dialog>
 
-        {tab === 'users' && (
-          <div className="sd-panel">
+        <main className="admin-main">
+          {error && (
+            <div className="admin-alert admin-alert-error">
+              {error}
+            </div>
+          )}
 
-            <div className="sd-toolbar">
-              <div>
-                <h2>Users & account control</h2>
+          {success && (
+            <div className="admin-alert admin-alert-success">
+              {success}
+            </div>
+          )}
 
-                <p className="sd-muted">
-                  Search users, manage verification,
-                  activate or suspend accounts, and
-                  manage marketplace roles.
-                </p>
+          <nav
+            className={`admin-tabs ${
+              tabMenuOpen ? 'admin-tabs-open' : ''
+            }`}
+            ref={tabsNavRef}
+            aria-label="Admin dashboard sections"
+          >
+            <button
+              type="button"
+              className="admin-tabs-current"
+              aria-expanded={tabMenuOpen}
+              onClick={() =>
+                setTabMenuOpen((open) => !open)
+              }
+            >
+              <span>
+                {activeTabItem.label}
+
+                {activeTabItem.count > 0 && (
+                  <span
+                    className="admin-count"
+                    style={{ marginLeft: 7 }}
+                  >
+                    {activeTabItem.count}
+                  </span>
+                )}
+              </span>
+
+              <span>
+                {tabMenuOpen ? '⌃' : '⌄'}
+              </span>
+            </button>
+
+            <div className="admin-tabs-list">
+              {tabItems.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={`admin-tab ${
+                    tab === item.key ? 'active' : ''
+                  }`}
+                  onClick={() => {
+                    clearMessages();
+                    setTab(item.key);
+                    setTabMenuOpen(false);
+                  }}
+                >
+                  {item.label}
+
+                  {item.count > 0 && (
+                    <span className="admin-count">
+                      {item.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </nav>
+
+          {tab === 'overview' && (
+            <section className="admin-section">
+              <div className="admin-section-heading">
+                <div>
+                  <div className="admin-kicker">
+                    PLATFORM HEALTH
+                  </div>
+
+                  <h2>Marketplace overview</h2>
+
+                  <p className="admin-muted">
+                    A quick view of the systems currently
+                    available to administration.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="admin-btn"
+                  onClick={loadAll}
+                  disabled={loading}
+                >
+                  {loading
+                    ? 'Refreshing…'
+                    : 'Refresh data'}
+                </button>
               </div>
 
-              <button
-                type="button"
-                className="sd-btn sd-btn-outline"
-                onClick={loadAll}
-                disabled={loading}
+              <div className="admin-stat-grid">
+                {cards.map(([label, value]) => (
+                  <div
+                    className="admin-stat"
+                    key={label}
+                  >
+                    <span className="admin-stat-label">
+                      {label}
+                    </span>
+
+                    <b className="admin-stat-value">
+                      {value}
+                    </b>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                className="admin-panel"
+                style={{ marginTop: 18 }}
               >
-                {loading
-                  ? 'Refreshing…'
-                  : 'Refresh'}
-              </button>
-            </div>
+                <div className="admin-panel-header">
+                  <div>
+                    <h2 className="admin-panel-title">
+                      Modules status
+                    </h2>
 
-            <div className="sd-search-wrap">
-              <input
-                type="search"
-                value={userSearch}
-                onChange={(e) =>
-                  setUserSearch(e.target.value)
-                }
-                placeholder="Search by name, email, phone, role, status..."
-              />
-            </div>
+                    <p className="admin-panel-description">
+                      Current administration capabilities
+                      and implementation visibility.
+                    </p>
+                  </div>
+                </div>
 
-            <p className="sd-muted">
-              Showing {filteredUsers.length} of{' '}
-              {users.length} users.
-            </p>
+                <div className="admin-module-grid">
+                  {[
+                    [
+                      'Users & role management',
+                      true,
+                    ],
+                    [
+                      'Verification management',
+                      true,
+                    ],
+                    [
+                      'Account suspension / activation',
+                      true,
+                    ],
+                    [
+                      'Sellers / buyers / inspectors / truck owners',
+                      true,
+                    ],
+                    ['Disputes & reports', true],
+                    ['Fraud flags (heuristic)', true],
+                    [
+                      'Listings & categories moderation',
+                      false,
+                    ],
+                    [
+                      'Orders & payments oversight',
+                      true,
+                    ],
+                    [
+                      'Transport jobs oversight',
+                      false,
+                    ],
+                    [
+                      'Advertising & sponsored listings approval',
+                      true,
+                    ],
+                    [
+                      'Commissions & revenue records',
+                      true,
+                    ],
+                  ].map(([label, built]) => (
+                    <div
+                      className={`admin-module ${
+                        built ? '' : 'pending'
+                      }`}
+                      key={label}
+                    >
+                      <span className="admin-module-icon">
+                        {built ? '✓' : '○'}
+                      </span>
 
-            <div className="sd-table-wrap">
-              <table className="sd-table sd-table--stack">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Roles</th>
-                    <th>Rating</th>
-                    <th>Verification</th>
-                    <th>Account</th>
-                    <th>Role control</th>
-                  </tr>
-                </thead>
+                      <div>
+                        <strong>{label}</strong>
 
-                <tbody>
-                  {filteredUsers.map((user) => {
-                    const isActionLoading =
-                      actionLoading.includes(
-                        user.id
-                      );
+                        {!built && (
+                          <span className="admin-module-note">
+                            Backend not built yet
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
 
-                    return (
-                      <tr key={user.id}>
+          {tab === 'users' && (
+            <section className="admin-section">
+              <div className="admin-panel">
+                <div className="admin-toolbar">
+                  <div>
+                    <div className="admin-kicker">
+                      USER ADMINISTRATION
+                    </div>
 
-                        <td data-label="Name">
-                          <strong>
-                            {user.name}
-                          </strong>
+                    <h2 className="admin-panel-title">
+                      Users & account control
+                    </h2>
 
-                          {user.phone && (
-                            <div className="sd-muted">
-                              {user.phone}
-                            </div>
-                          )}
+                    <p className="admin-panel-description">
+                      Search users, manage verification,
+                      activate or suspend accounts, and
+                      manage marketplace roles.
+                    </p>
+                  </div>
 
-                          {user.location && (
-                            <div className="sd-muted">
-                              {user.location}
-                            </div>
-                          )}
-                        </td>
+                  <button
+                    type="button"
+                    className="admin-btn"
+                    onClick={loadAll}
+                    disabled={loading}
+                  >
+                    {loading
+                      ? 'Refreshing…'
+                      : 'Refresh'}
+                  </button>
+                </div>
 
-                        <td data-label="Email">
-                          {user.email}
-                        </td>
+                <div className="admin-search">
+                  <input
+                    type="search"
+                    value={userSearch}
+                    onChange={(event) =>
+                      setUserSearch(event.target.value)
+                    }
+                    placeholder="Search by name, email, phone, role, status..."
+                  />
+                </div>
 
-                        <td data-label="Roles">
-                          <div className="sd-chip-row">
-                            {(user.roles || []).map(
-                              (role) => (
-                                <span
-                                  className="sd-badge"
-                                  key={role}
+                <p className="admin-muted">
+                  Showing{' '}
+                  <strong>
+                    {filteredUsers.length}
+                  </strong>{' '}
+                  of{' '}
+                  <strong>{users.length}</strong>{' '}
+                  users.
+                </p>
+
+                <div
+                  className="admin-table-wrap"
+                  style={{ marginTop: 14 }}
+                >
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Roles</th>
+                        <th>Rating</th>
+                        <th>Verification</th>
+                        <th>Account</th>
+                        <th>Role control</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {filteredUsers.map(
+                        (item) => {
+                          const isActionLoading =
+                            actionLoading.includes(
+                              item.id
+                            );
+
+                          return (
+                            <tr key={item.id}>
+                              <td data-label="Name">
+                                <div className="admin-user-name">
+                                  {item.name ||
+                                    'Unnamed user'}
+                                </div>
+
+                                {item.phone && (
+                                  <div className="admin-user-meta">
+                                    {item.phone}
+                                  </div>
+                                )}
+
+                                {item.location && (
+                                  <div className="admin-user-meta">
+                                    {item.location}
+                                  </div>
+                                )}
+                              </td>
+
+                              <td data-label="Email">
+                                {item.email}
+                              </td>
+
+                              <td data-label="Roles">
+                                <div className="admin-chip-row">
+                                  {(item.roles || []).map(
+                                    (role) => (
+                                      <span
+                                        className="admin-chip"
+                                        key={role}
+                                      >
+                                        {role}
+                                      </span>
+                                    )
+                                  )}
+                                </div>
+                              </td>
+
+                              <td data-label="Rating">
+                                <strong>
+                                  {Number(
+                                    item.rating || 0
+                                  ).toFixed(1)}
+                                </strong>
+                              </td>
+
+                              <td data-label="Verification">
+                                <select
+                                  className="admin-select"
+                                  value={
+                                    item.verificationStatus ||
+                                    'UNVERIFIED'
+                                  }
+                                  onChange={(event) =>
+                                    setVerification(
+                                      item.id,
+                                      event.target.value
+                                    )
+                                  }
+                                  disabled={
+                                    isActionLoading
+                                  }
                                 >
-                                  {role}
-                                </span>
-                              )
-                            )}
-                          </div>
-                        </td>
-
-                        <td data-label="Rating">
-                          {Number(
-                            user.rating || 0
-                          ).toFixed(1)}
-                        </td>
-
-                        <td data-label="Verification">
-                          <select
-                            value={
-                              user.verificationStatus ||
-                              'UNVERIFIED'
-                            }
-                            onChange={(e) =>
-                              setVerification(
-                                user.id,
-                                e.target.value
-                              )
-                            }
-                            disabled={isActionLoading}
-                          >
-                            <option value="UNVERIFIED">
-                              UNVERIFIED
-                            </option>
-
-                            {VERIFICATION_OPTIONS.map(
-                              (option) => (
-                                <option
-                                  key={option}
-                                  value={option}
-                                >
-                                  {option}
-                                </option>
-                              )
-                            )}
-                          </select>
-                        </td>
-
-                        <td data-label="Account">
-                          <div className="sd-account-cell">
-                            <span
-                              className={statusBadgeClass(
-                                user.accountStatus || 'ACTIVE'
-                              )}
-                            >
-                              {user.accountStatus ||
-                                'ACTIVE'}
-                            </span>
-
-                            {user.accountStatus ===
-                            'SUSPENDED' ? (
-                              <button
-                                type="button"
-                                className="sd-btn sd-btn-primary"
-                                disabled={
-                                  isActionLoading
-                                }
-                                onClick={() =>
-                                  setAccountStatus(
-                                    user.id,
-                                    'ACTIVE'
-                                  )
-                                }
-                              >
-                                {isActionLoading
-                                  ? 'Working…'
-                                  : 'Activate'}
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="sd-btn sd-btn-outline"
-                                disabled={
-                                  isActionLoading
-                                }
-                                onClick={() =>
-                                  setAccountStatus(
-                                    user.id,
-                                    'SUSPENDED'
-                                  )
-                                }
-                              >
-                                {isActionLoading
-                                  ? 'Working…'
-                                  : 'Suspend'}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-
-                        <td data-label="Role control">
-                          <div className="sd-role-cell">
-                            <select
-                              value={
-                                roleSelections[
-                                  user.id
-                                ] || ''
-                              }
-                              onChange={(e) =>
-                                setRoleSelections(
-                                  (current) => ({
-                                    ...current,
-                                    [user.id]:
-                                      e.target.value,
-                                  })
-                                )
-                              }
-                              disabled={
-                                isActionLoading
-                              }
-                            >
-                              <option value="">
-                                Select role...
-                              </option>
-
-                              {ROLE_OPTIONS.map(
-                                (role) => (
-                                  <option
-                                    key={role}
-                                    value={role}
-                                  >
-                                    {role}
+                                  <option value="UNVERIFIED">
+                                    UNVERIFIED
                                   </option>
-                                )
-                              )}
-                            </select>
 
-                            <button
-                              type="button"
-                              className="sd-btn sd-btn-primary"
-                              disabled={
-                                isActionLoading ||
-                                !roleSelections[
-                                  user.id
-                                ]
-                              }
-                              onClick={() =>
-                                addRole(user.id)
-                              }
-                            >
-                              Add role
-                            </button>
+                                  {VERIFICATION_OPTIONS.map(
+                                    (option) => (
+                                      <option
+                                        key={option}
+                                        value={option}
+                                      >
+                                        {option}
+                                      </option>
+                                    )
+                                  )}
+                                </select>
+                              </td>
 
-                            {(user.roles || []).length >
-                              0 && (
-                              <div className="sd-chip-row">
-                                {user.roles.map(
-                                  (role) => (
+                              <td data-label="Account">
+                                <div className="admin-action-row">
+                                  <StatusBadge
+                                    status={
+                                      item.accountStatus ||
+                                      'ACTIVE'
+                                    }
+                                  />
+
+                                  {item.accountStatus ===
+                                  'SUSPENDED' ? (
                                     <button
                                       type="button"
-                                      key={role}
-                                      className="sd-btn sd-btn-outline"
+                                      className="admin-mini-btn primary"
                                       disabled={
                                         isActionLoading
                                       }
                                       onClick={() =>
-                                        removeRole(
-                                          user.id,
-                                          role
+                                        setAccountStatus(
+                                          item.id,
+                                          'ACTIVE'
                                         )
                                       }
-                                      title={`Remove ${role}`}
                                     >
-                                      Remove {role}
+                                      {isActionLoading
+                                        ? 'Working…'
+                                        : 'Activate'}
                                     </button>
-                                  )
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </td>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="admin-mini-btn"
+                                      disabled={
+                                        isActionLoading
+                                      }
+                                      onClick={() =>
+                                        setAccountStatus(
+                                          item.id,
+                                          'SUSPENDED'
+                                        )
+                                      }
+                                    >
+                                      {isActionLoading
+                                        ? 'Working…'
+                                        : 'Suspend'}
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
 
-                      </tr>
-                    );
-                  })}
+                              <td data-label="Role control">
+                                <div className="admin-role-control">
+                                  <select
+                                    className="admin-select"
+                                    value={
+                                      roleSelections[
+                                        item.id
+                                      ] || ''
+                                    }
+                                    onChange={(event) =>
+                                      setRoleSelections(
+                                        (current) => ({
+                                          ...current,
+                                          [item.id]:
+                                            event.target
+                                              .value,
+                                        })
+                                      )
+                                    }
+                                    disabled={
+                                      isActionLoading
+                                    }
+                                  >
+                                    <option value="">
+                                      Select role...
+                                    </option>
 
-                  {filteredUsers.length === 0 && (
-                    <tr>
-                      <td colSpan="7">
-                        No users found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                                    {ROLE_OPTIONS.map(
+                                      (role) => (
+                                        <option
+                                          key={role}
+                                          value={role}
+                                        >
+                                          {role}
+                                        </option>
+                                      )
+                                    )}
+                                  </select>
 
-          </div>
-        )}
+                                  <button
+                                    type="button"
+                                    className="admin-mini-btn primary"
+                                    disabled={
+                                      isActionLoading ||
+                                      !roleSelections[
+                                        item.id
+                                      ]
+                                    }
+                                    onClick={() =>
+                                      addRole(item.id)
+                                    }
+                                  >
+                                    Add role
+                                  </button>
 
-        {tab === 'disputes' && (
-          <div>
+                                  {(item.roles || [])
+                                    .length > 0 && (
+                                    <div className="admin-chip-row">
+                                      {item.roles.map(
+                                        (role) => (
+                                          <button
+                                            type="button"
+                                            key={role}
+                                            className="admin-mini-btn"
+                                            disabled={
+                                              isActionLoading
+                                            }
+                                            onClick={() =>
+                                              removeRole(
+                                                item.id,
+                                                role
+                                              )
+                                            }
+                                          >
+                                            Remove {role}
+                                          </button>
+                                        )
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+                      )}
 
-            <div className="sd-toolbar">
-              <div>
-                <span className="sd-eyebrow">MODERATION</span>
-                <h2>Open disputes</h2>
+                      {filteredUsers.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan="7"
+                            data-label="Users"
+                          >
+                            <EmptyState>
+                              No users found matching
+                              your search.
+                            </EmptyState>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            </section>
+          )}
 
-            <div className="sd-cards">
-              {openDisputes.map((item) => (
-                <div className="sd-card" key={item.id}>
-                  <h3>{item.disputeType}</h3>
-
-                  <p className="sd-muted">
-                    {item.raisedBy?.name} vs{' '}
-                    {item.against?.name}
-                  </p>
-
-                  <p className="sd-muted">
-                    {item.description}
-                  </p>
-
-                  <div className="sd-modal-actions" style={{ marginTop: 12 }}>
-
-                    <button
-                      className="sd-btn sd-btn-primary"
-                      disabled={
-                        actionLoading ===
-                        `dispute-${item.id}`
-                      }
-                      onClick={() =>
-                        openDisputeDecision(
-                          item,
-                          'RESOLVED'
-                        )
-                      }
-                    >
-                      {actionLoading ===
-                      `dispute-${item.id}`
-                        ? 'Working…'
-                        : 'Resolve'}
-                    </button>
-
-                    <button
-                      className="sd-btn sd-btn-outline"
-                      disabled={
-                        actionLoading ===
-                        `dispute-${item.id}`
-                      }
-                      onClick={() =>
-                        openDisputeDecision(
-                          item,
-                          'REJECTED'
-                        )
-                      }
-                    >
-                      Reject
-                    </button>
-
-                  </div>
-                </div>
-              ))}
-
-              {openDisputes.length === 0 && (
-                <div className="sd-panel">
-                  <p className="sd-muted">No open disputes.</p>
-                </div>
-              )}
-            </div>
-
-            <div className="sd-toolbar" style={{ marginTop: 28 }}>
-              <div>
-                <span className="sd-eyebrow">HISTORY</span>
-                <h2>Recently resolved</h2>
-              </div>
-            </div>
-
-            <div className="sd-panel sd-table-wrap">
-              <table className="sd-table sd-table--stack">
-                <thead>
-                  <tr>
-                    <th>Type</th>
-                    <th>Parties</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resolvedDisputes.slice(0, 10).map((item) => (
-                    <tr key={item.id}>
-                      <td data-label="Type"><strong>{item.disputeType}</strong></td>
-                      <td data-label="Parties" className="sd-muted">
-                        {item.raisedBy?.name} vs {item.against?.name}
-                      </td>
-                      <td data-label="Status">
-                        <span className={statusBadgeClass(item.status)}>{item.status}</span>
-                      </td>
-                    </tr>
-                  ))}
-
-                  {resolvedDisputes.length === 0 && (
-                    <tr>
-                      <td colSpan="3" className="sd-muted">Nothing resolved yet.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-          </div>
-        )}
-
-        {tab === 'fraud' && (
-          <div>
-            <div className="sd-toolbar">
-              <div>
-                <span className="sd-eyebrow">RISK</span>
-                <h2>Flagged users</h2>
-                <p className="sd-muted">
-                  Users with multiple open disputes filed against
-                  them. This is a starting heuristic — not a
-                  conclusive fraud finding.
-                </p>
-              </div>
-            </div>
-
-            <div className="sd-cards">
-              {suspiciousUsers.map((user) => (
-                <div className="sd-card" key={user.id}>
-                  <h3>{user.name}</h3>
-
-                  <p className="sd-muted">
-                    {user.email} ·{' '}
-                    {(user.disputesAgainst || []).length}{' '}
-                    open dispute(s) against this account
-                  </p>
-
-                  {(user.disputesAgainst || []).map((dispute) => (
-                    <p key={dispute.id} className="sd-muted">
-                      — {dispute.disputeType}: {dispute.description}
-                    </p>
-                  ))}
-                </div>
-              ))}
-
-              {suspiciousUsers.length === 0 && (
-                <div className="sd-panel">
-                  <p className="sd-muted">No flagged users right now.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {tab === 'advertising' && (
-          <div className="sd-workspace">
-            <div>
-              <span className="sd-eyebrow">ADVERTISING</span>
-              <h2>Campaign control</h2>
-              <p className="sd-muted">
-                Review paid creative, publish approved campaigns, record Telegram publication, and end campaigns early when necessary.
-              </p>
-            </div>
-
-            <div className="sd-cards">
-              {pendingAds.map((ad) => {
-                const adPaid = (ad.payments || []).some((p) => p.status === 'PAID');
-                const impressions = (ad.events || []).filter((e) => e.eventType === 'IMPRESSION').length;
-                const clicks = (ad.events || []).filter((e) => e.eventType === 'CLICK').length;
-                const ctr = impressions ? ((clicks / impressions) * 100).toFixed(2) : '0.00';
-                return (
-                  <div className="sd-card" key={ad.id}>
-                    {ad.creativeImageUrl && (
-                      <img src={ad.creativeImageUrl} alt={ad.headline || 'Campaign creative'} loading="lazy" decoding="async" style={{ width: '100%', borderRadius: 8, marginBottom: 8, maxHeight: 160, objectFit: 'cover' }} />
-                    )}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <h3>{ad.type.replace(/_/g, ' ')}</h3>
-                      <span className={statusBadgeClass(ad.status)}>{ad.status}</span>
-                    </div>
-                    {ad.type === 'TELEGRAM_PROMOTION' && ad.telegramImageUrls?.length > 0 && (
-                      <ImageCarousel images={ad.telegramImageUrls} alt={ad.headline || 'Carousel photo'} openLinks className="img-carousel--compact" />
-                    )}
-                    {ad.type === 'TELEGRAM_PROMOTION' && ad.telegramTemplate && <p className="sd-muted"><strong>Template:</strong> {ad.telegramTemplate.replace(/_/g, ' ')}{ad.telegramImageCount > 0 ? ` · ${ad.telegramImageCount} photos` : ''}</p>}
-                    {ad.headline && <p className="sd-muted"><strong>{ad.headline}</strong></p>}
-                    <p className="sd-muted">
-                      <strong>Ref:</strong> {ad.campaignReference || ad.id.slice(0, 8)} · <strong>Advertiser:</strong> {ad.advertiser?.name} ({ad.advertiser?.email})
-                    </p>
-                    <p className="sd-muted">
-                      {ad.listing ? <>Featuring <strong>{ad.listing.title || ad.listing.cropType}</strong> · </> : 'Platform-wide · '}
-                      {new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}
-                    </p>
-                    <p className="sd-muted">
-                      <strong>Quoted:</strong> {Number(ad.priceQuoted || 0).toLocaleString()} {ad.currency || 'ETB'} · <strong>Paid:</strong> {adPaid ? Number(ad.amountPaid || 0).toLocaleString() : '0'} {ad.currency || 'ETB'} · <strong>CTR:</strong> {ctr}%
-                    </p>
-                    {ad.destinationUrl && <p className="sd-muted" style={{ wordBreak: 'break-word' }}>Destination: {ad.destinationUrl}</p>}
-
-                    <div className="sd-modal-actions">
-                      <button
-                        className="sd-btn sd-btn-primary"
-                        disabled={actionLoading === `ad-${ad.id}` || !adPaid}
-                        title={!adPaid ? 'Waiting for payment' : undefined}
-                        onClick={() => setAdStatus(ad.id, 'APPROVED')}
-                      >
-                        {actionLoading === `ad-${ad.id}` ? 'Working…' : 'Approve'}
-                      </button>
-                      <button
-                        className="sd-btn sd-btn-outline"
-                        disabled={actionLoading === `ad-${ad.id}`}
-                        onClick={() => setAdStatus(ad.id, 'REJECTED')}
-                      >Reject</button>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {pendingAds.length === 0 && (
-                <div className="sd-panel">
-                  <p className="sd-muted">No campaigns waiting on content review.</p>
-                </div>
-              )}
-            </div>
-
-            <div className="sd-panel sd-table-wrap">
-              <h2>Campaign ledger</h2>
-              <table className="sd-table sd-table--stack">
-                <thead>
-                  <tr>
-                    <th>Campaign</th>
-                    <th>Advertiser</th>
-                    <th>Dates</th>
-                    <th>Financials</th>
-                    <th>Analytics</th>
-                    <th>Status</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reviewedAds.slice(0, 30).map((ad) => {
-                    const impressions = (ad.events || []).filter((e) => e.eventType === 'IMPRESSION').length;
-                    const clicks = (ad.events || []).filter((e) => e.eventType === 'CLICK').length;
-                    const ctr = impressions ? ((clicks / impressions) * 100).toFixed(2) : '0.00';
-                    return (
-                      <tr key={ad.id}>
-                        <td data-label="Campaign">
-                          <strong>{ad.campaignReference || ad.type.replace(/_/g, ' ')}</strong><br /><span className="sd-muted">{ad.type.replace(/_/g, ' ')}</span>
-                          {ad.type === 'TELEGRAM_PROMOTION' && ad.telegramImageUrls?.length > 0 && (
-                            <details className="tg-ledger-photos">
-                              <summary>🎠 {ad.telegramImageUrls.length} carousel photos</summary>
-                              <ImageCarousel images={ad.telegramImageUrls} alt={ad.headline || 'Carousel photo'} openLinks className="img-carousel--compact" />
-                            </details>
-                          )}
-                        </td>
-                        <td data-label="Advertiser" className="sd-muted">{ad.advertiser?.name}</td>
-                        <td data-label="Dates" className="sd-muted">{new Date(ad.startDate).toLocaleDateString()} — {new Date(ad.endDate).toLocaleDateString()}</td>
-                        <td data-label="Financials" className="sd-muted">{Number(ad.priceQuoted || 0).toLocaleString()} {ad.currency || 'ETB'} quoted<br />{Number(ad.amountPaid || 0).toLocaleString()} paid</td>
-                        <td data-label="Analytics" className="sd-muted">{impressions} imp · {clicks} clicks · {ctr}% CTR</td>
-                        <td data-label="Status"><span className={statusBadgeClass(ad.status)}>{ad.status}</span></td>
-                        <td data-label="">
-                          {['PUBLISHED', 'ACTIVE'].includes(ad.status) && (
-                            <button className="sd-btn sd-btn-outline" disabled={actionLoading === `ad-${ad.id}`} onClick={() => setAdStatus(ad.id, 'EXPIRED')}>
-                              {actionLoading === `ad-${ad.id}` ? 'Working…' : 'End early'}
-                            </button>
-                          )}
-                          {['PAID_PENDING_REVIEW', 'APPROVED', 'SCHEDULED'].includes(ad.status) && (
-                            <button className="sd-btn sd-btn-outline" disabled={actionLoading === `ad-${ad.id}`} onClick={() => cancelAdCampaign(ad.id)} style={{ marginLeft: 8 }}>
-                              {actionLoading === `ad-${ad.id}` ? 'Working…' : 'Cancel & refund'}
-                            </button>
-                          )}
-                          {ad.type === 'TELEGRAM_PROMOTION' && ['APPROVED', 'SCHEDULED'].includes(ad.status) && (
-                            <button className="sd-btn sd-btn-primary" disabled={actionLoading === `ad-${ad.id}`} onClick={() => markTelegramPublished(ad.id)}>
-                              Mark Telegram published
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {reviewedAds.length === 0 && (
-                    <tr><td colSpan="7" className="sd-muted">No reviewed campaigns yet.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {tab === 'orders' && (
-          <div>
-            <div className="sd-toolbar">
-              <div>
-                <span className="sd-eyebrow">ORDERS</span>
-                <h2>All orders</h2>
-                <p className="sd-muted">
-                  Cancelling here is an admin override for stalled orders —
-                  it's blocked once a transport job has started pickup,
-                  since goods already in motion need a dispute instead.
-                </p>
-              </div>
-            </div>
-
-            <div className="sd-panel sd-table-wrap">
-              <table className="sd-table sd-table--stack">
-                <thead>
-                  <tr>
-                    <th>Order</th>
-                    <th>Listing</th>
-                    <th>Buyer</th>
-                    <th>Seller</th>
-                    <th>Value</th>
-                    <th>Status</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((o) => {
-                    const transportInMotion = Boolean(
-                      o.transportJob &&
-                      ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(o.transportJob.status)
-                    );
-                    const cancellable =
-                      !['COMPLETED', 'CANCELLED'].includes(o.status) &&
-                      !transportInMotion;
-
-                    return (
-                      <tr key={o.id}>
-                        <td data-label="Order">{o.id.slice(0, 8)}</td>
-                        <td data-label="Listing">{o.listing?.title || o.listing?.cropType || '—'}</td>
-                        <td data-label="Buyer">{o.buyer?.name || '—'}</td>
-                        <td data-label="Seller">{o.seller?.name || '—'}</td>
-                        <td data-label="Value">{Number(o.finalPrice).toLocaleString()} ETB</td>
-                        <td data-label="Status"><span className={statusBadgeClass(o.status)}>{o.status}</span></td>
-                        <td data-label="">
-                          {cancellable && (
-                            <button
-                              type="button"
-                              className="sd-btn sd-btn-outline"
-                              disabled={actionLoading === `order-${o.id}`}
-                              onClick={() => cancelOrder(o)}
-                            >
-                              {actionLoading === `order-${o.id}` ? 'Cancelling…' : 'Cancel order'}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-
-                  {orders.length === 0 && (
-                    <tr><td colSpan="7">No orders yet.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {tab === 'operations' && (
-          <div>
-            <div className="sd-panel">
-              <div className="sd-toolbar">
+          {tab === 'disputes' && (
+            <section className="admin-section">
+              <div className="admin-section-heading">
                 <div>
-                  <h2>Operations & audit</h2>
-                  <p className="sd-muted">
-                    Monitor live workflow queues from durable OrderEvent records and review the internal audit trail.
+                  <div className="admin-kicker">
+                    MODERATION
+                  </div>
+                  <h2>Open disputes</h2>
+                  <p className="admin-muted">
+                    Review active marketplace disputes
+                    and record the administrative
+                    resolution.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="sd-btn sd-btn-outline"
-                  onClick={loadAll}
-                  disabled={loading}
-                >
-                  {loading ? 'Refreshing…' : 'Refresh'}
-                </button>
               </div>
 
-              <div className="sd-stat-grid" style={{ marginTop: 16 }}>
-                {[
-                  ['Pending payments', operations?.queues?.pendingPayments || 0],
-                  ['Reconciliation queue', operations?.queues?.reconciliationPayments || 0],
-                  ['Open disputes', operations?.queues?.openDisputes || 0],
-                  ['Active orders', operations?.activeOrders || 0],
-                  ['Active transport', operations?.activeTransportJobs || 0],
-                ].map(([label, value]) => (
-                  <div className="sd-stat" key={label}>
-                    <span>{label.toUpperCase()}</span>
-                    <b>{value}</b>
+              <div className="admin-card-grid">
+                {openDisputes.map((item) => (
+                  <div
+                    className="admin-card"
+                    key={item.id}
+                  >
+                    <div className="admin-card-top">
+                      <h3>
+                        {item.disputeType}
+                      </h3>
+                      <StatusBadge status="OPEN" />
+                    </div>
+
+                    <p>
+                      <strong>
+                        {item.raisedBy?.name ||
+                          'Unknown'}
+                      </strong>{' '}
+                      vs{' '}
+                      <strong>
+                        {item.against?.name ||
+                          'Unknown'}
+                      </strong>
+                    </p>
+
+                    <p>{item.description}</p>
+
+                    <div className="admin-card-actions">
+                      <button
+                        type="button"
+                        className="admin-mini-btn primary"
+                        disabled={
+                          actionLoading ===
+                          `dispute-${item.id}`
+                        }
+                        onClick={() =>
+                          resolveDispute(
+                            item.id,
+                            'RESOLVED'
+                          )
+                        }
+                      >
+                        {actionLoading ===
+                        `dispute-${item.id}`
+                          ? 'Working…'
+                          : 'Resolve'}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="admin-mini-btn danger"
+                        disabled={
+                          actionLoading ===
+                          `dispute-${item.id}`
+                        }
+                        onClick={() =>
+                          resolveDispute(
+                            item.id,
+                            'REJECTED'
+                          )
+                        }
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {openDisputes.length === 0 && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <EmptyState>
+                      No open disputes right now.
+                    </EmptyState>
+                  </div>
+                )}
+              </div>
+
+              <div
+                className="admin-panel"
+                style={{ marginTop: 20 }}
+              >
+                <div className="admin-panel-header">
+                  <div>
+                    <div className="admin-kicker">
+                      HISTORY
+                    </div>
+                    <h2 className="admin-panel-title">
+                      Recently resolved
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="admin-table-wrap">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Type</th>
+                        <th>Parties</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {resolvedDisputes
+                        .slice(0, 10)
+                        .map((item) => (
+                          <tr key={item.id}>
+                            <td data-label="Type">
+                              <strong>
+                                {item.disputeType}
+                              </strong>
+                            </td>
+
+                            <td data-label="Parties">
+                              <span className="admin-muted">
+                                {item.raisedBy?.name ||
+                                  'Unknown'}{' '}
+                                vs{' '}
+                                {item.against?.name ||
+                                  'Unknown'}
+                              </span>
+                            </td>
+
+                            <td data-label="Status">
+                              <StatusBadge
+                                status={item.status}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+
+                      {resolvedDisputes.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan="3"
+                            data-label="History"
+                          >
+                            <EmptyState>
+                              Nothing has been resolved
+                              yet.
+                            </EmptyState>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {tab === 'fraud' && (
+            <section className="admin-section">
+              <div className="admin-section-heading">
+                <div>
+                  <div className="admin-kicker">
+                    RISK MONITORING
+                  </div>
+
+                  <h2>Flagged users</h2>
+
+                  <p className="admin-muted">
+                    Users with multiple open disputes
+                    filed against them. This is a starting
+                    heuristic — not a conclusive fraud
+                    finding.
+                  </p>
+                </div>
+              </div>
+
+              <div className="admin-card-grid">
+                {suspiciousUsers.map((item) => (
+                  <div
+                    className="admin-card"
+                    key={item.id}
+                  >
+                    <div className="admin-card-top">
+                      <h3>
+                        {item.name ||
+                          'Unnamed user'}
+                      </h3>
+
+                      <span className="admin-status warn">
+                        Review
+                      </span>
+                    </div>
+
+                    <p>
+                      {item.email}
+                    </p>
+
+                    <p>
+                      {(item.disputesAgainst || [])
+                        .length}{' '}
+                      open dispute(s) against this
+                      account.
+                    </p>
+
+                    {(item.disputesAgainst || []).map(
+                      (dispute) => (
+                        <p key={dispute.id}>
+                          —{' '}
+                          <strong>
+                            {dispute.disputeType}
+                          </strong>
+                          : {dispute.description}
+                        </p>
+                      )
+                    )}
+                  </div>
+                ))}
+
+                {suspiciousUsers.length === 0 && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <EmptyState>
+                      No flagged users right now.
+                    </EmptyState>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {tab === 'advertising' && (
+            <section className="admin-section">
+              <div className="admin-section-heading">
+                <div>
+                  <div className="admin-kicker">
+                    ADVERTISING
+                  </div>
+
+                  <h2>Campaign control</h2>
+
+                  <p className="admin-muted">
+                    Review paid creative, publish approved
+                    campaigns, record Telegram publication,
+                    and end campaigns early when necessary.
+                  </p>
+                </div>
+              </div>
+
+              <div className="admin-card-grid">
+                {pendingAds.map((ad) => {
+                  const adPaid = (
+                    ad.payments || []
+                  ).some(
+                    (payment) =>
+                      payment.status === 'PAID'
+                  );
+
+                  const impressions = (
+                    ad.events || []
+                  ).filter(
+                    (event) =>
+                      event.eventType ===
+                      'IMPRESSION'
+                  ).length;
+
+                  const clicks = (
+                    ad.events || []
+                  ).filter(
+                    (event) =>
+                      event.eventType === 'CLICK'
+                  ).length;
+
+                  const ctr = impressions
+                    ? (
+                        (clicks / impressions) *
+                        100
+                      ).toFixed(2)
+                    : '0.00';
+
+                  return (
+                    <div
+                      className="admin-card"
+                      key={ad.id}
+                    >
+                      {ad.creativeImageUrl && (
+                        <img
+                          src={ad.creativeImageUrl}
+                          alt={
+                            ad.headline ||
+                            'Campaign creative'
+                          }
+                          loading="lazy"
+                          decoding="async"
+                          className="admin-card-media"
+                        />
+                      )}
+
+                      <div className="admin-card-top">
+                        <h3>
+                          {ad.type.replace(
+                            /_/g,
+                            ' '
+                          )}
+                        </h3>
+
+                        <StatusBadge
+                          status={ad.status}
+                        />
+                      </div>
+
+                      {ad.type ===
+                        'TELEGRAM_PROMOTION' &&
+                        ad.telegramImageUrls
+                          ?.length > 0 && (
+                          <div
+                            style={{
+                              marginTop: 12,
+                            }}
+                          >
+                            <ImageCarousel
+                              images={
+                                ad.telegramImageUrls
+                              }
+                              alt={
+                                ad.headline ||
+                                'Carousel photo'
+                              }
+                              openLinks
+                              className="img-carousel--compact"
+                            />
+                          </div>
+                        )}
+
+                      {ad.type ===
+                        'TELEGRAM_PROMOTION' &&
+                        ad.telegramTemplate && (
+                          <p>
+                            <strong>
+                              Template:
+                            </strong>{' '}
+                            {ad.telegramTemplate.replace(
+                              /_/g,
+                              ' '
+                            )}
+                            {ad.telegramImageCount >
+                              0 &&
+                              ` · ${ad.telegramImageCount} photos`}
+                          </p>
+                        )}
+
+                      {ad.headline && (
+                        <p>
+                          <strong>
+                            {ad.headline}
+                          </strong>
+                        </p>
+                      )}
+
+                      <p>
+                        <strong>Ref:</strong>{' '}
+                        {ad.campaignReference ||
+                          ad.id.slice(0, 8)}
+                        {' · '}
+                        <strong>
+                          Advertiser:
+                        </strong>{' '}
+                        {ad.advertiser?.name ||
+                          'Unknown'}{' '}
+                        (
+                        {ad.advertiser?.email ||
+                          '—'}
+                        )
+                      </p>
+
+                      <p>
+                        {ad.listing ? (
+                          <>
+                            Featuring{' '}
+                            <strong>
+                              {ad.listing.title ||
+                                ad.listing.cropType}
+                            </strong>
+                            {' · '}
+                          </>
+                        ) : (
+                          'Platform-wide · '
+                        )}
+
+                        {new Date(
+                          ad.startDate
+                        ).toLocaleDateString()}{' '}
+                        —{' '}
+                        {new Date(
+                          ad.endDate
+                        ).toLocaleDateString()}
+                      </p>
+
+                      <p>
+                        <strong>
+                          Quoted:
+                        </strong>{' '}
+                        {Number(
+                          ad.priceQuoted || 0
+                        ).toLocaleString()}{' '}
+                        {ad.currency || 'ETB'}
+                        {' · '}
+                        <strong>
+                          Paid:
+                        </strong>{' '}
+                        {adPaid
+                          ? Number(
+                              ad.amountPaid || 0
+                            ).toLocaleString()
+                          : '0'}{' '}
+                        {ad.currency || 'ETB'}
+                        {' · '}
+                        <strong>
+                          CTR:
+                        </strong>{' '}
+                        {ctr}%
+                      </p>
+
+                      {ad.destinationUrl && (
+                        <p className="admin-ad-destination">
+                          <strong>
+                            Destination:
+                          </strong>{' '}
+                          {ad.destinationUrl}
+                        </p>
+                      )}
+
+                      {!adPaid && (
+                        <div className="admin-warning-note">
+                          Waiting for payment before this
+                          campaign can be approved.
+                        </div>
+                      )}
+
+                      <div className="admin-card-actions">
+                        <button
+                          type="button"
+                          className="admin-mini-btn primary"
+                          disabled={
+                            actionLoading ===
+                              `ad-${ad.id}` ||
+                            !adPaid
+                          }
+                          title={
+                            !adPaid
+                              ? 'Waiting for payment'
+                              : undefined
+                          }
+                          onClick={() =>
+                            setAdStatus(
+                              ad.id,
+                              'APPROVED'
+                            )
+                          }
+                        >
+                          {actionLoading ===
+                          `ad-${ad.id}`
+                            ? 'Working…'
+                            : 'Approve'}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="admin-mini-btn danger"
+                          disabled={
+                            actionLoading ===
+                            `ad-${ad.id}`
+                          }
+                          onClick={() =>
+                            setAdStatus(
+                              ad.id,
+                              'REJECTED'
+                            )
+                          }
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {pendingAds.length === 0 && (
+                  <div
+                    style={{
+                      gridColumn: '1 / -1',
+                    }}
+                  >
+                    <EmptyState>
+                      No campaigns waiting on content
+                      review.
+                    </EmptyState>
+                  </div>
+                )}
+              </div>
+
+              <div
+                className="admin-panel"
+                style={{ marginTop: 20 }}
+              >
+                <div className="admin-panel-header">
+                  <div>
+                    <div className="admin-kicker">
+                      CAMPAIGN LEDGER
+                    </div>
+
+                    <h2 className="admin-panel-title">
+                      Advertising history
+                    </h2>
+
+                    <p className="admin-panel-description">
+                      Financial, scheduling and engagement
+                      visibility for reviewed campaigns.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="admin-table-wrap">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Campaign</th>
+                        <th>Advertiser</th>
+                        <th>Dates</th>
+                        <th>Financials</th>
+                        <th>Analytics</th>
+                        <th>Status</th>
+                        <th />
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {reviewedAds
+                        .slice(0, 30)
+                        .map((ad) => {
+                          const impressions = (
+                            ad.events || []
+                          ).filter(
+                            (event) =>
+                              event.eventType ===
+                              'IMPRESSION'
+                          ).length;
+
+                          const clicks = (
+                            ad.events || []
+                          ).filter(
+                            (event) =>
+                              event.eventType ===
+                              'CLICK'
+                          ).length;
+
+                          const ctr = impressions
+                            ? (
+                                (clicks /
+                                  impressions) *
+                                100
+                              ).toFixed(2)
+                            : '0.00';
+
+                          return (
+                            <tr key={ad.id}>
+                              <td data-label="Campaign">
+                                <strong>
+                                  {ad.campaignReference ||
+                                    ad.type.replace(
+                                      /_/g,
+                                      ' '
+                                    )}
+                                </strong>
+
+                                <div className="admin-user-meta">
+                                  {ad.type.replace(
+                                    /_/g,
+                                    ' '
+                                  )}
+                                </div>
+
+                                {ad.type ===
+                                  'TELEGRAM_PROMOTION' &&
+                                  ad.telegramImageUrls
+                                    ?.length > 0 && (
+                                    <details className="admin-details">
+                                      <summary>
+                                        🎠{' '}
+                                        {
+                                          ad
+                                            .telegramImageUrls
+                                            .length
+                                        }{' '}
+                                        carousel photos
+                                      </summary>
+
+                                      <div
+                                        style={{
+                                          marginTop: 8,
+                                        }}
+                                      >
+                                        <ImageCarousel
+                                          images={
+                                            ad.telegramImageUrls
+                                          }
+                                          alt={
+                                            ad.headline ||
+                                            'Carousel photo'
+                                          }
+                                          openLinks
+                                          className="img-carousel--compact"
+                                        />
+                                      </div>
+                                    </details>
+                                  )}
+                              </td>
+
+                              <td data-label="Advertiser">
+                                {ad.advertiser?.name ||
+                                  '—'}
+                              </td>
+
+                              <td data-label="Dates">
+                                {new Date(
+                                  ad.startDate
+                                ).toLocaleDateString()}{' '}
+                                —{' '}
+                                {new Date(
+                                  ad.endDate
+                                ).toLocaleDateString()}
+                              </td>
+
+                              <td data-label="Financials">
+                                {Number(
+                                  ad.priceQuoted || 0
+                                ).toLocaleString()}{' '}
+                                {ad.currency ||
+                                  'ETB'}{' '}
+                                quoted
+                                <br />
+                                {Number(
+                                  ad.amountPaid || 0
+                                ).toLocaleString()}{' '}
+                                paid
+                              </td>
+
+                              <td data-label="Analytics">
+                                {impressions} imp ·{' '}
+                                {clicks} clicks ·{' '}
+                                {ctr}% CTR
+                              </td>
+
+                              <td data-label="Status">
+                                <StatusBadge
+                                  status={ad.status}
+                                />
+                              </td>
+
+                              <td data-label="Actions">
+                                <div className="admin-action-row">
+                                  {[
+                                    'PUBLISHED',
+                                    'ACTIVE',
+                                  ].includes(
+                                    ad.status
+                                  ) && (
+                                    <button
+                                      type="button"
+                                      className="admin-mini-btn"
+                                      disabled={
+                                        actionLoading ===
+                                        `ad-${ad.id}`
+                                      }
+                                      onClick={() =>
+                                        setAdStatus(
+                                          ad.id,
+                                          'EXPIRED'
+                                        )
+                                      }
+                                    >
+                                      {actionLoading ===
+                                      `ad-${ad.id}`
+                                        ? 'Working…'
+                                        : 'End early'}
+                                    </button>
+                                  )}
+
+                                  {[
+                                    'PAID_PENDING_REVIEW',
+                                    'APPROVED',
+                                    'SCHEDULED',
+                                  ].includes(
+                                    ad.status
+                                  ) && (
+                                    <button
+                                      type="button"
+                                      className="admin-mini-btn danger"
+                                      disabled={
+                                        actionLoading ===
+                                        `ad-${ad.id}`
+                                      }
+                                      onClick={() =>
+                                        cancelAdCampaign(
+                                          ad.id
+                                        )
+                                      }
+                                    >
+                                      {actionLoading ===
+                                      `ad-${ad.id}`
+                                        ? 'Working…'
+                                        : 'Cancel & refund'}
+                                    </button>
+                                  )}
+
+                                  {ad.type ===
+                                    'TELEGRAM_PROMOTION' &&
+                                    [
+                                      'APPROVED',
+                                      'SCHEDULED',
+                                    ].includes(
+                                      ad.status
+                                    ) && (
+                                      <button
+                                        type="button"
+                                        className="admin-mini-btn primary"
+                                        disabled={
+                                          actionLoading ===
+                                          `ad-${ad.id}`
+                                        }
+                                        onClick={() =>
+                                          markTelegramPublished(
+                                            ad.id
+                                          )
+                                        }
+                                      >
+                                        Mark Telegram
+                                        published
+                                      </button>
+                                    )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                      {reviewedAds.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan="7"
+                            data-label="Campaigns"
+                          >
+                            <EmptyState>
+                              No reviewed campaigns
+                              yet.
+                            </EmptyState>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {tab === 'orders' && (
+            <section className="admin-section">
+              <div className="admin-section-heading">
+                <div>
+                  <div className="admin-kicker">
+                    ORDERS
+                  </div>
+
+                  <h2>All orders</h2>
+
+                  <p className="admin-muted">
+                    Cancelling here is an admin override
+                    for stalled orders. It is blocked once
+                    a transport job has started pickup,
+                    since goods already in motion need a
+                    dispute instead.
+                  </p>
+                </div>
+              </div>
+
+              <div className="admin-panel">
+                <div className="admin-table-wrap">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Order</th>
+                        <th>Listing</th>
+                        <th>Buyer</th>
+                        <th>Seller</th>
+                        <th>Value</th>
+                        <th>Status</th>
+                        <th />
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {orders.map((order) => {
+                        const transportInMotion =
+                          Boolean(
+                            order.transportJob &&
+                              [
+                                'PICKUP',
+                                'IN_TRANSIT',
+                                'DELIVERED',
+                              ].includes(
+                                order.transportJob
+                                  .status
+                              )
+                          );
+
+                        const cancellable =
+                          ![
+                            'COMPLETED',
+                            'CANCELLED',
+                          ].includes(
+                            order.status
+                          ) &&
+                          !transportInMotion;
+
+                        return (
+                          <tr key={order.id}>
+                            <td data-label="Order">
+                              <code className="admin-code">
+                                {order.id.slice(0, 8)}
+                              </code>
+                            </td>
+
+                            <td data-label="Listing">
+                              {order.listing?.title ||
+                                order.listing
+                                  ?.cropType ||
+                                '—'}
+                            </td>
+
+                            <td data-label="Buyer">
+                              {order.buyer?.name ||
+                                '—'}
+                            </td>
+
+                            <td data-label="Seller">
+                              {order.seller?.name ||
+                                '—'}
+                            </td>
+
+                            <td data-label="Value">
+                              <strong>
+                                {Number(
+                                  order.finalPrice
+                                ).toLocaleString()}{' '}
+                                ETB
+                              </strong>
+                            </td>
+
+                            <td data-label="Status">
+                              <StatusBadge
+                                status={order.status}
+                              />
+                            </td>
+
+                            <td data-label="Actions">
+                              {cancellable ? (
+                                <button
+                                  type="button"
+                                  className="admin-mini-btn"
+                                  disabled={
+                                    actionLoading ===
+                                    `order-${order.id}`
+                                  }
+                                  onClick={() =>
+                                    cancelOrder(
+                                      order
+                                    )
+                                  }
+                                >
+                                  {actionLoading ===
+                                  `order-${order.id}`
+                                    ? 'Cancelling…'
+                                    : 'Cancel order'}
+                                </button>
+                              ) : (
+                                <span className="admin-muted">
+                                  {transportInMotion
+                                    ? 'Transport in motion'
+                                    : 'Not cancellable'}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                      {orders.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan="7"
+                            data-label="Orders"
+                          >
+                            <EmptyState>
+                              No orders yet.
+                            </EmptyState>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {tab === 'operations' && (
+            <section className="admin-section">
+              <div className="admin-panel">
+                <div className="admin-panel-header">
+                  <div>
+                    <div className="admin-kicker">
+                      OPERATIONS
+                    </div>
+
+                    <h2 className="admin-panel-title">
+                      Operations & audit
+                    </h2>
+
+                    <p className="admin-panel-description">
+                      Monitor live workflow queues from
+                      durable OrderEvent records and review
+                      the internal audit trail.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="admin-btn"
+                    onClick={loadAll}
+                    disabled={loading}
+                  >
+                    {loading
+                      ? 'Refreshing…'
+                      : 'Refresh'}
+                  </button>
+                </div>
+
+                <div className="admin-stat-grid">
+                  {[
+                    [
+                      'Pending payments',
+                      operations?.queues
+                        ?.pendingPayments || 0,
+                    ],
+                    [
+                      'Reconciliation queue',
+                      operations?.queues
+                        ?.reconciliationPayments ||
+                        0,
+                    ],
+                    [
+                      'Open disputes',
+                      operations?.queues
+                        ?.openDisputes || 0,
+                    ],
+                    [
+                      'Active orders',
+                      operations?.activeOrders ||
+                        0,
+                    ],
+                    [
+                      'Active transport',
+                      operations?.activeTransportJobs ||
+                        0,
+                    ],
+                  ].map(([label, value]) => (
+                    <div
+                      className="admin-stat"
+                      key={label}
+                    >
+                      <span className="admin-stat-label">
+                        {label}
+                      </span>
+                      <b className="admin-stat-value">
+                        {value}
+                      </b>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="admin-panel">
+                <div className="admin-panel-header">
+                  <div>
+                    <div className="admin-kicker">
+                      WORKFLOW EVENTS
+                    </div>
+
+                    <h2 className="admin-panel-title">
+                      Recent workflow events
+                    </h2>
+
+                    <p className="admin-panel-description">
+                      Customer-facing order lifecycle
+                      events. This is read-only operational
+                      visibility.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="admin-table-wrap">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Event</th>
+                        <th>Order</th>
+                        <th>Transition</th>
+                        <th>Actor</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {orderEvents.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan="5"
+                            data-label="Events"
+                          >
+                            <EmptyState>
+                              No workflow events
+                              recorded yet.
+                            </EmptyState>
+                          </td>
+                        </tr>
+                      ) : (
+                        orderEvents.map((event) => (
+                          <tr key={event.id}>
+                            <td data-label="Time">
+                              {new Date(
+                                event.createdAt
+                              ).toLocaleString()}
+                            </td>
+
+                            <td data-label="Event">
+                              <span className="admin-chip">
+                                {event.type}
+                              </span>
+                            </td>
+
+                            <td data-label="Order">
+                              <code className="admin-code">
+                                {event.orderId.slice(
+                                  0,
+                                  10
+                                )}
+                              </code>
+                            </td>
+
+                            <td data-label="Transition">
+                              {event.fromStatus ||
+                                '—'}{' '}
+                              →{' '}
+                              {event.toStatus ||
+                                '—'}
+                            </td>
+
+                            <td data-label="Actor">
+                              {event.actor?.name ||
+                                event.actor?.email ||
+                                'System'}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="admin-panel">
+                <div className="admin-panel-header">
+                  <div>
+                    <div className="admin-kicker">
+                      SECURITY TRAIL
+                    </div>
+
+                    <h2 className="admin-panel-title">
+                      Recent audit events
+                    </h2>
+
+                    <p className="admin-panel-description">
+                      Internal administrative/security
+                      trail. Secrets and tokens are not
+                      exposed here.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="admin-table-wrap">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Action</th>
+                        <th>Resource</th>
+                        <th>Actor</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {auditEvents.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan="4"
+                            data-label="Events"
+                          >
+                            <EmptyState>
+                              No audit events
+                              recorded yet.
+                            </EmptyState>
+                          </td>
+                        </tr>
+                      ) : (
+                        auditEvents.map((event) => (
+                          <tr key={event.id}>
+                            <td data-label="Time">
+                              {new Date(
+                                event.createdAt
+                              ).toLocaleString()}
+                            </td>
+
+                            <td data-label="Action">
+                              <span className="admin-chip">
+                                {event.action}
+                              </span>
+                            </td>
+
+                            <td data-label="Resource">
+                              {event.resourceType}
+                              {event.resourceId
+                                ? ` · ${event.resourceId.slice(
+                                    0,
+                                    10
+                                  )}`
+                                : ''}
+                            </td>
+
+                            <td data-label="Actor">
+                              {event.actor?.name ||
+                                event.actor?.email ||
+                                'System'}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {tab === 'payments' && (
+            <section className="admin-section">
+              <div className="admin-kicker">
+                FINANCE
+              </div>
+
+              <div
+                className="admin-stat-grid admin-financial-grid"
+                style={{ marginTop: 8 }}
+              >
+                <div className="admin-stat">
+                  <span className="admin-stat-label">
+                    Total confirmed volume
+                  </span>
+
+                  <b className="admin-stat-value">
+                    {Number(
+                      commissionSummary?.totalVolume ||
+                        0
+                    ).toLocaleString()}{' '}
+                    ETB
+                  </b>
+                </div>
+
+                <div className="admin-stat">
+                  <span className="admin-stat-label">
+                    Platform commission earned
+                  </span>
+
+                  <b className="admin-stat-value">
+                    {Number(
+                      commissionSummary?.totalCommission ||
+                        0
+                    ).toLocaleString()}{' '}
+                    ETB
+                  </b>
+                </div>
+
+                {Object.entries(
+                  commissionSummary?.byType || {}
+                ).map(([type, value]) => (
+                  <div
+                    className="admin-stat"
+                    key={type}
+                  >
+                    <span className="admin-stat-label">
+                      {type} · {value.count} payment
+                      {value.count === 1
+                        ? ''
+                        : 's'}
+                    </span>
+
+                    <b className="admin-stat-value">
+                      {Number(
+                        value.commission
+                      ).toLocaleString()}{' '}
+                      ETB
+                    </b>
                   </div>
                 ))}
               </div>
-            </div>
 
-            <div className="sd-panel" style={{ marginTop: 20 }}>
-              <h2>Recent workflow events</h2>
-              <p className="sd-muted">
-                Customer-facing order lifecycle events. This is read-only operational visibility.
-              </p>
-              <div className="sd-table-wrap">
-                <table className="sd-table sd-table--stack">
-                  <thead>
-                    <tr>
-                      <th>Time</th>
-                      <th>Event</th>
-                      <th>Order</th>
-                      <th>Transition</th>
-                      <th>Actor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orderEvents.length === 0 ? (
-                      <tr><td colSpan="5" className="sd-muted">No workflow events recorded yet.</td></tr>
-                    ) : orderEvents.map((event) => (
-                      <tr key={event.id}>
-                        <td data-label="Time">{new Date(event.createdAt).toLocaleString()}</td>
-                        <td data-label="Event"><span className="sd-badge">{event.type}</span></td>
-                        <td data-label="Order"><code>{event.orderId.slice(0, 10)}</code></td>
-                        <td data-label="Transition">{event.fromStatus || '—'} → {event.toStatus || '—'}</td>
-                        <td data-label="Actor">{event.actor?.name || event.actor?.email || 'System'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="sd-panel" style={{ marginTop: 20 }}>
-              <h2>Recent audit events</h2>
-              <p className="sd-muted">
-                Internal administrative/security trail. Secrets and tokens are not exposed here.
-              </p>
-              <div className="sd-table-wrap">
-                <table className="sd-table sd-table--stack">
-                  <thead>
-                    <tr>
-                      <th>Time</th>
-                      <th>Action</th>
-                      <th>Resource</th>
-                      <th>Actor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditEvents.length === 0 ? (
-                      <tr><td colSpan="4" className="sd-muted">No audit events recorded yet.</td></tr>
-                    ) : auditEvents.map((event) => (
-                      <tr key={event.id}>
-                        <td data-label="Time">{new Date(event.createdAt).toLocaleString()}</td>
-                        <td data-label="Action"><span className="sd-badge">{event.action}</span></td>
-                        <td data-label="Resource">{event.resourceType}{event.resourceId ? ` · ${event.resourceId.slice(0, 10)}` : ''}</td>
-                        <td data-label="Actor">{event.actor?.name || event.actor?.email || 'System'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {tab === 'payments' && (
-          <div>
-            <div className="sd-stat-grid" style={{ marginBottom: 20 }}>
-              <div className="sd-stat">
-                <span>TOTAL CONFIRMED VOLUME</span>
-                <b>{Number(commissionSummary?.totalVolume || 0).toLocaleString()} ETB</b>
-              </div>
-              <div className="sd-stat">
-                <span>PLATFORM COMMISSION EARNED</span>
-                <b>{Number(commissionSummary?.totalCommission || 0).toLocaleString()} ETB</b>
-              </div>
-              {Object.entries(commissionSummary?.byType || {}).map(([type, t]) => (
-                <div className="sd-stat" key={type}>
-                  <span>{type} ({t.count} payment{t.count === 1 ? '' : 's'})</span>
-                  <b>{Number(t.commission).toLocaleString()} ETB</b>
-                </div>
-              ))}
-            </div>
-
-            <div className="sd-toolbar">
-              <div>
-                <span className="sd-eyebrow">RECONCILIATION</span>
-                <h2>Payment reconciliation</h2>
-                <p className="sd-muted">
-                  These are payment records waiting to be confirmed, plus any
-                  flagged for reconciliation after a mismatch or failed
-                  automatic verification. Prefer a signed provider webhook
-                  where available — use manual confirm only once you've
-                  verified the funds arrived (e.g. checking a Telebirr/CBE
-                  reference).
-                </p>
-              </div>
-            </div>
-
-            <div className="sd-cards">
-              {payments.map((p) => (
-                <div className="sd-card" key={p.id}>
-                  <h3>
-                    {Number(p.amount).toLocaleString()} ETB — {p.type} via {p.method}{' '}
-                    <span className={statusBadgeClass(p.status)}>{p.status?.replace(/_/g, ' ')}</span>
-                  </h3>
-
-                  <p className="sd-muted">
-                    {p.createdBy?.name} ({p.createdBy?.email})
-                    {p.reference && <> · Ref: {p.reference}</>}
-                  </p>
-
-                  <p className="sd-muted">
-                    {p.order && `Order ${p.order.id.slice(0, 8)}`}
-                    {p.digitalProduct && `Digital product: ${p.digitalProduct.title}`}
-                    {p.advertisement && `Ad campaign: ${p.advertisement.type.replace(/_/g, ' ')}`}
-                    {' · '}
-                    {new Date(p.createdAt).toLocaleString()}
-                  </p>
-
-                  {p.provider ? (
-                    <button
-                      className="sd-btn sd-btn-primary"
-                      disabled={actionLoading === `payment-${p.id}`}
-                      onClick={() => checkGatewayPayment(p.id, p.provider)}
-                    >
-                      {actionLoading === `payment-${p.id}` ? 'Checking…' : `Check with ${p.provider}`}
-                    </button>
-                  ) : (
-                    <button
-                      className="sd-btn sd-btn-primary"
-                      disabled={actionLoading === `payment-${p.id}`}
-                      onClick={() => confirmPayment(p.id)}
-                    >
-                      {actionLoading === `payment-${p.id}` ? 'Working…' : 'Confirm payment received'}
-                    </button>
-                  )}
-                </div>
-              ))}
-
-              {payments.length === 0 && (
-                <div className="sd-panel">
-                  <p className="sd-muted">No payments awaiting reconciliation right now.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {tab === 'refunds' && (
-          <div>
-            <div className="sd-toolbar">
-              <div>
-                <span className="sd-eyebrow">FINANCIAL</span>
-                <h2>Pending refunds</h2>
-                <p className="sd-muted">
-                  Created automatically when a dispute is resolved against a payee
-                  (or a cancelled order flags a completed payment). Mark one
-                  complete only once the money has actually been sent back to the
-                  buyer; mark it failed if the provider rejected the refund.
-                </p>
-              </div>
-            </div>
-
-            <div className="sd-cards">
-              {pendingRefunds.map((r) => (
-                <div className="sd-card" key={r.id}>
-                  <h3>
-                    {Number(r.amount).toLocaleString()} {r.currency || 'ETB'}{' '}
-                    <span className={statusBadgeClass(r.status)}>{r.status?.replace(/_/g, ' ')}</span>
-                  </h3>
-
-                  <p className="sd-muted">
-                    Payment {r.paymentId.slice(0, 8)}
-                    {r.payment?.type && <> · {r.payment.type.replace(/_/g, ' ')}</>}
-                    {r.payment?.provider && <> · {r.payment.provider}</>}
-                    {r.payment?.orderId && <> · Order {r.payment.orderId.slice(0, 8)}</>}
-                  </p>
-
-                  {r.reason && <p className="sd-muted">Reason: {r.reason}</p>}
-
-                  <p className="sd-muted">
-                    Requested by {r.requestedBy?.name || r.requestedBy?.email || 'System'}
-                    {' · '}
-                    {new Date(r.createdAt).toLocaleString()}
-                  </p>
-
-                  <div className="sd-modal-actions" style={{ marginTop: 12 }}>
-                    <button
-                      className="sd-btn sd-btn-primary"
-                      disabled={actionLoading === `refund-${r.id}`}
-                      onClick={() => markRefundComplete(r)}
-                    >
-                      {actionLoading === `refund-${r.id}` ? 'Working…' : 'Mark completed'}
-                    </button>
-                    <button
-                      className="sd-btn sd-btn-outline"
-                      disabled={actionLoading === `refund-${r.id}`}
-                      onClick={() => markRefundFailed(r)}
-                    >
-                      Mark failed
-                    </button>
+              <div className="admin-section-heading">
+                <div>
+                  <div className="admin-kicker">
+                    RECONCILIATION
                   </div>
-                </div>
-              ))}
 
-              {pendingRefunds.length === 0 && (
-                <div className="sd-panel">
-                  <p className="sd-muted">No refunds waiting right now.</p>
-                </div>
-              )}
-            </div>
+                  <h2>
+                    Payment reconciliation
+                  </h2>
 
-            <div className="sd-toolbar" style={{ marginTop: 28 }}>
-              <div>
-                <span className="sd-eyebrow">HISTORY</span>
-                <h2>Recent refund history</h2>
+                  <p className="admin-muted">
+                    Payment records waiting to be
+                    confirmed, plus records flagged for
+                    reconciliation after a mismatch or
+                    failed automatic verification.
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="sd-panel sd-table-wrap">
-              <table className="sd-table sd-table--stack">
-                <thead>
-                  <tr>
-                    <th>Amount</th>
-                    <th>Payment</th>
-                    <th>Status</th>
-                    <th>Updated</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {refundHistory.slice(0, 10).map((r) => (
-                    <tr key={r.id}>
-                      <td data-label="Amount">{Number(r.amount).toLocaleString()} {r.currency || 'ETB'}</td>
-                      <td data-label="Payment" className="sd-muted">{r.paymentId.slice(0, 8)}</td>
-                      <td data-label="Status">
-                        <span className={statusBadgeClass(r.status)}>{r.status?.replace(/_/g, ' ')}</span>
-                      </td>
-                      <td data-label="Updated" className="sd-muted">
-                        {new Date(r.completedAt || r.updatedAt || r.createdAt).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
+              <div className="admin-card-grid">
+                {payments.map((payment) => (
+                  <div
+                    className="admin-card"
+                    key={payment.id}
+                  >
+                    <div className="admin-card-top">
+                      <h3>
+                        {Number(
+                          payment.amount
+                        ).toLocaleString()}{' '}
+                        ETB
+                      </h3>
 
-                  {refundHistory.length === 0 && (
-                    <tr>
-                      <td colSpan="4" className="sd-muted">No refund history yet.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+                      <StatusBadge
+                        status={payment.status}
+                      />
+                    </div>
 
-      </section>
+                    <p>
+                      <strong>
+                        {payment.type}
+                      </strong>{' '}
+                      via{' '}
+                      <strong>
+                        {payment.method}
+                      </strong>
+                    </p>
+
+                    <p>
+                      {payment.createdBy?.name ||
+                        'Unknown user'}{' '}
+                      (
+                      {payment.createdBy?.email ||
+                        '—'}
+                      )
+                      {payment.reference && (
+                        <>
+                          {' · '}
+                          Ref:{' '}
+                          {payment.reference}
+                        </>
+                      )}
+                    </p>
+
+                    <p>
+                      {payment.order &&
+                        `Order ${payment.order.id.slice(
+                          0,
+                          8
+                        )}`}
+                      {payment.digitalProduct &&
+                        `Digital product: ${payment.digitalProduct.title}`}
+                      {payment.advertisement &&
+                        `Ad campaign: ${payment.advertisement.type.replace(
+                          /_/g,
+                          ' '
+                        )}`}
+                      {' · '}
+                      {new Date(
+                        payment.createdAt
+                      ).toLocaleString()}
+                    </p>
+
+                    <div className="admin-card-actions">
+                      {payment.provider ? (
+                        <button
+                          type="button"
+                          className="admin-mini-btn primary"
+                          disabled={
+                            actionLoading ===
+                            `payment-${payment.id}`
+                          }
+                          onClick={() =>
+                            checkGatewayPayment(
+                              payment.id,
+                              payment.provider
+                            )
+                          }
+                        >
+                          {actionLoading ===
+                          `payment-${payment.id}`
+                            ? 'Checking…'
+                            : `Check with ${payment.provider}`}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="admin-mini-btn primary"
+                          disabled={
+                            actionLoading ===
+                            `payment-${payment.id}`
+                          }
+                          onClick={() =>
+                            confirmPayment(
+                              payment.id
+                            )
+                          }
+                        >
+                          {actionLoading ===
+                          `payment-${payment.id}`
+                            ? 'Working…'
+                            : 'Confirm payment received'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {payments.length === 0 && (
+                  <div
+                    style={{
+                      gridColumn: '1 / -1',
+                    }}
+                  >
+                    <EmptyState>
+                      No payments awaiting
+                      reconciliation right now.
+                    </EmptyState>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
