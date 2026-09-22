@@ -1332,7 +1332,23 @@ export default function OrderDetail() {
       setDisputeDescription('');
       await load({ silent: true });
     } catch (err) {
-      setError(getError(err, 'Could not raise dispute'));
+      const message = getError(err, 'Could not raise dispute');
+
+      // The order can legitimately move to CANCELLED (or already be
+      // DISPUTED) between this page loading and the dispute actually being
+      // submitted — most commonly the other party cancelling it first. That
+      // already triggers its own refund of anything paid, so a bare 400
+      // here would look like a dead end rather than the resolved state it
+      // actually is. Refresh the order so the rest of the page reflects
+      // reality, and say so plainly instead of just repeating the raw error.
+      if (/cannot be disputed/i.test(message) || /already has an open dispute/i.test(message)) {
+        setError(
+          `${message} If the order was cancelled, any payments already made (including an inspection fee) are refunded automatically as part of that cancellation — check the Payment Center below for its status instead of disputing.`
+        );
+        await load({ silent: true });
+      } else {
+        setError(message);
+      }
     } finally {
       setSubmittingDispute(false);
     }
