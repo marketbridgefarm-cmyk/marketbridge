@@ -455,7 +455,7 @@ export default function OrderDetail() {
 
   const inspectionRequests = useMemo(
     () =>
-      (order?.listing?.inspectionRequests || [])
+      (order?.inspectionRequests || order?.listing?.inspectionRequests || [])
         .filter((request) => request.status !== 'CANCELLED')
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [order?.listing?.inspectionRequests]
@@ -1287,6 +1287,13 @@ export default function OrderDetail() {
     const parties = [
       order.buyer && { id: order.buyer.id, name: order.buyer.name, role: 'Buyer' },
       order.seller && { id: order.seller.id, name: order.seller.name, role: 'Seller' },
+      ...(inspectionRequests || [])
+        .filter((request) => request.inspector)
+        .map((request) => ({
+          id: request.inspector.id,
+          name: request.inspector.name,
+          role: 'Inspector',
+        })),
       transportJob?.truckOwner && {
         id: transportJob.truckOwner.id,
         name: transportJob.truckOwner.name,
@@ -1294,12 +1301,12 @@ export default function OrderDetail() {
       },
     ].filter(Boolean);
     return parties.filter((p) => p.id !== currentUserId);
-  }, [order, transportJob, currentUserId]);
+  }, [order, transportJob, inspectionRequests, currentUserId]);
 
   const canRaiseDispute = Boolean(
     order &&
     !['COMPLETED', 'CANCELLED', 'DISPUTED'].includes(order.status) &&
-    (isBuyer || isSeller || isTransporter) &&
+    (isBuyer || isSeller || isInspector || isTransporter) &&
     disputeCounterparties.length > 0
   );
 
