@@ -1406,7 +1406,11 @@ model Payment {
   // Payment provider.
   provider String?
 
-  // Provider transaction reference.
+  // Original provider checkout reference. For Chapa this is the exact tx_ref
+  // sent during initialization and is retained permanently for refunds.
+  chapaTxRef String?
+
+  // Provider transaction/reference returned after verification.
   providerTransactionId String?
 
   // --------------------------------------------------------------------------
