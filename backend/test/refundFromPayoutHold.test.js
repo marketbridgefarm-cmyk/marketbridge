@@ -25,6 +25,12 @@ function makeTx({ payments = [], payouts = [] } = {}) {
         Object.assign(payment, data);
         return payment;
       },
+      updateMany: async ({ where, data }) => {
+        const payment = state.payments.find((p) => p.id === where.id && (!where.status || p.status === where.status));
+        if (!payment) return { count: 0 };
+        Object.assign(payment, data);
+        return { count: 1 };
+      },
     },
     paymentRefund: {
       findFirst: async ({ where }) =>
