@@ -104,7 +104,7 @@ async function rotateRefreshSession(prisma, session, refreshToken, nextRefreshTo
     });
 
     return { ok: true };
-  });
+  }, { maxWait: 10000, timeout: 15000 });
 
   return result;
 }

@@ -52,7 +52,7 @@ async function resolveReconciliation({ reconciliationId, status, actorId, note }
     }
     await recordAuditEvent(tx, { actorId, action: 'PAYMENT_RECONCILIATION_RESOLVED', resourceType: 'PaymentReconciliation', resourceId: item.id, metadata: { paymentId: item.paymentId, resolution: status, note: note || null } });
     return updated;
-  });
+  }, { maxWait: 10000, timeout: 15000 });
 }
 
 module.exports = { createReconciliationIssue, resolveReconciliation };

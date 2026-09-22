@@ -35,7 +35,7 @@ async function expireOffers(now = new Date()) {
       if (updated.count !== 1) return false;
       await recordAuditEvent(tx, { actorId: null, action: 'OFFER_EXPIRED_AUTOMATICALLY', resourceType: 'Offer', resourceId: offer.id, metadata: { listingId: offer.listingId, expiresAt: offer.expiresAt } });
       return true;
-    });
+    }, { maxWait: 10000, timeout: 15000 });
     if (changed) expired += 1;
   }
   return { expired };
@@ -145,7 +145,7 @@ async function expireUnpaidOrders(now = new Date()) {
           reason: 'Payment window expired without a completed payment',
           cancelledByRole: 'SYSTEM',
         });
-      });
+      }, { maxWait: 10000, timeout: 15000 });
       expired += 1;
     } catch (error) {
       logger.error({ err: error, orderId: candidate.id }, 'Failed to auto-expire unpaid order');
@@ -171,7 +171,7 @@ async function createPickupReminders(now = new Date()) {
     if (exists) continue;
     await prisma.$transaction(async (tx) => {
       await recordOrderEvent(tx, { orderId: order.id, actorId: null, type: 'PICKUP_WINDOW_REMINDER', metadata: { dateKey, pickupWindowStart: order.listing.pickupWindowStart.toISOString() } });
-    });
+    }, { maxWait: 10000, timeout: 15000 });
     created += 1;
   }
   return { created };
