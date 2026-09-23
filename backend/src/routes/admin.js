@@ -13,7 +13,7 @@ const {
   recordAuditEvent,
 } = require('../utils/audit');
 const { revokeAllSessions } = require('../services/refreshSessionService');
-const { processRefund, syncRefundStatus, failRefund } = require('../services/paymentRefundService');
+const { processRefund, verifyAndFinalizeRefund, retryRefund, failRefund } = require('../services/paymentRefundService');
 const { resolveReconciliation } = require('../services/paymentReconciliationService');
 const { markPaidOut } = require('../services/payoutService');
 
@@ -2687,26 +2687,50 @@ router.post('/financial/refunds/:id/process', async (req, res) => {
   }
 });
 
+// Polls Chapa for the real status of a refund already submitted via
+// /process, and completes/fails it automatically once Chapa confirms
+// either outcome. Returns providerStatus alongside the refund row — the
+// admin UI (AdminDashboard.jsx / OrderDetail.jsx) reads that field to show
+// "confirmed" vs "reversed" vs "still processing" without guessing it from
+// the refund's own status alone.
 router.post('/financial/refunds/:id/verify', async (req, res) => {
   try {
-    const refund = await syncRefundStatus({
+    const result = await verifyAndFinalizeRefund({
       refundId: req.params.id,
       actorId: req.user.id,
     });
-    return res.json({ refund });
+    return res.json({ refund: result.refund, providerStatus: result.providerStatus });
   } catch (error) {
     req.log.error({ err: error }, 'ADMIN VERIFY REFUND ERROR:');
     return res.status(error.status || 500).json({ error: error.message || 'Could not verify refund' });
   }
 });
 
+// A FAILED refund is retried by opening a fresh PaymentRefund request (see
+// retryRefund in paymentRefundService) and immediately resubmitting it to
+// Chapa, rather than resurrecting the dead row. The admin UI already calls
+// this endpoint for FAILED refunds; it previously had no route at all.
+router.post('/financial/refunds/:id/retry', async (req, res) => {
+  try {
+    const refund = await retryRefund({
+      refundId: req.params.id,
+      actorId: req.user.id,
+      note: req.body.note || null,
+    });
+    return res.json({ refund });
+  } catch (error) {
+    req.log.error({ err: error }, 'ADMIN RETRY REFUND ERROR:');
+    return res.status(error.status || 500).json({ error: error.message || 'Could not retry refund' });
+  }
+});
+
 router.patch('/financial/refunds/:id/fail', async (req, res) => {
   try {
-    const refund = await prisma.$transaction((tx) => failRefund(tx, {
+    const refund = await failRefund({
       refundId: req.params.id,
       failureReason: req.body.failureReason || 'Provider refund failed',
       actorId: req.user.id,
-    }), { maxWait: 10000, timeout: 15000 });
+    });
     return res.json({ refund });
   } catch (error) {
     req.log.error({ err: error }, 'ADMIN FAIL REFUND ERROR:');
