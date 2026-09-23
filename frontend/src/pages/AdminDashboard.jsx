@@ -3612,4 +3612,165 @@ export default function AdminDashboard() {
                         className="ac-small-stat"
                         key={label}
                       >
-                
+                        <span>{label}</span>
+                        <strong>{value}</strong>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+
+              <div className="ac-panel">
+                <div className="ac-toolbar">
+                  <div>
+                    <span className="ac-section-label">
+                      ORDER EVENTS
+                    </span>
+                    <h2>Recent order events</h2>
+                    <p className="sd-muted">
+                      Latest durable OrderEvent records emitted by the
+                      workflow engine.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="ac-table-shell">
+                  <table className="sd-table sd-table--stack">
+                    <thead>
+                      <tr>
+                        <th>Event</th>
+                        <th>Order</th>
+                        <th>Status change</th>
+                        <th>Actor</th>
+                        <th>When</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orderEvents.map((event) => (
+                        <tr key={event.id}>
+                          <td data-label="Event">
+                            <span
+                              className={statusBadgeClass(event.type)}
+                            >
+                              {event.type || '—'}
+                            </span>
+                          </td>
+                          <td data-label="Order">
+                            <span className="ac-code">
+                              {event.orderId
+                                ? event.orderId.slice(0, 8)
+                                : '—'}
+                            </span>
+                          </td>
+                          <td data-label="Status change">
+                            {event.fromStatus || event.toStatus
+                              ? `${event.fromStatus || '—'} → ${
+                                  event.toStatus || '—'
+                                }`
+                              : '—'}
+                          </td>
+                          <td data-label="Actor">
+                            {event.actor?.name ||
+                              event.actor?.email ||
+                              'System'}
+                          </td>
+                          <td data-label="When">
+                            {event.createdAt
+                              ? new Date(
+                                  event.createdAt
+                                ).toLocaleString()
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                      {orderEvents.length === 0 && (
+                        <tr>
+                          <td colSpan="5" className="sd-muted">
+                            No order events recorded.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="ac-panel">
+                <div className="ac-toolbar">
+                  <div>
+                    <span className="ac-section-label">
+                      AUDIT TRAIL
+                    </span>
+                    <h2>Admin audit log</h2>
+                    <p className="sd-muted">
+                      Actions taken by admin users, most recent first.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="ac-table-shell">
+                  <table className="sd-table sd-table--stack">
+                    <thead>
+                      <tr>
+                        <th>Action</th>
+                        <th>Resource</th>
+                        <th>Actor</th>
+                        <th>When</th>
+                        <th>Details</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditEvents.map((event) => (
+                        <tr key={event.id}>
+                          <td data-label="Action">
+                            <span
+                              className={statusBadgeClass(event.action)}
+                            >
+                              {event.action || '—'}
+                            </span>
+                          </td>
+                          <td data-label="Resource">
+                            <span className="ac-code">
+                              {event.resourceType || '—'}
+                              {event.resourceId
+                                ? ` · ${event.resourceId.slice(0, 8)}`
+                                : ''}
+                            </span>
+                          </td>
+                          <td data-label="Actor">
+                            {event.actor?.name ||
+                              event.actor?.email ||
+                              'System'}
+                          </td>
+                          <td data-label="When">
+                            {event.createdAt
+                              ? new Date(
+                                  event.createdAt
+                                ).toLocaleString()
+                              : '—'}
+                          </td>
+                          <td data-label="Details">
+                            {event.metadata
+                              ? JSON.stringify(event.metadata)
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                      {auditEvents.length === 0 && (
+                        <tr>
+                          <td colSpan="5" className="sd-muted">
+                            No audit events recorded.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+    </>
+  );
+}
