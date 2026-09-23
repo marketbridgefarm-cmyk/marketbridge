@@ -199,7 +199,24 @@ async function processRefund({ refundId, actorId, note }) {
       metadata: { paymentId: claimed.refund.paymentId, provider: claimed.provider, providerRefundId: result.refId, providerStatus: result.status, note: note || null },
     });
 
-    return prisma.paymentRefund.findUnique({ where: { id: claimed.refund.id }, include: { payment: true } });
+    // Chapa refunds are asynchronous, but many resolve within moments of
+    // submission. Rather than making the admin come back and click a
+    // separate "check status" action, take one immediate best-effort look
+    // right away so a fast refund can land as COMPLETED in the very same
+    // request that submitted it. If Chapa is still processing (or this
+    // check itself fails for any reason), that's fine — the refund stays
+    // PROCESSING and is finalized later by the Chapa webhook or the
+    // dashboard's own background polling, with no admin action required.
+    try {
+      const verified = await verifyAndFinalizeRefund({
+        refundId: claimed.refund.id,
+        actorId,
+        note: 'Auto-verified immediately after submission.',
+      });
+      return verified.refund;
+    } catch {
+      return prisma.paymentRefund.findUnique({ where: { id: claimed.refund.id }, include: { payment: true } });
+    }
   } catch (error) {
     const prisma = require('../config/db');
     // A timeout/5xx is ambiguous: Chapa may have accepted the refund even if
