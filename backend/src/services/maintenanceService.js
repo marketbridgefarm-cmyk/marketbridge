@@ -6,6 +6,7 @@ const { recordOrderEvent } = require('./orderEventService');
 const { cancelOrderInTransaction } = require('./orderCancellationService');
 const { sendSms } = require('./smsService');
 const { releaseDuePayouts } = require('./payoutService');
+const { verifyAndFinalizeRefund } = require('./paymentRefundService');
 const logger = require('../utils/logger');
 
 const LOCK_KEY = 82461327;
@@ -225,14 +226,54 @@ async function sendPendingSms(now = new Date()) {
   return { sent, failed, remaining: pending.length - sent - failed };
 }
 
+/**
+ * Catches up any refund already submitted to Chapa (status PROCESSING,
+ * providerRefundId set) but never confirmed one way or the other. A refund
+ * raised from dispute resolution or an order cancellation is only ever
+ * advanced by an admin's manual "verify" click today — if nobody comes
+ * back to it, it sits in PROCESSING indefinitely even though Chapa has
+ * long since resolved it. This sweep asks Chapa on the same maintenance
+ * cadence as everything else here and lets verifyAndFinalizeRefund
+ * complete or fail it automatically, exactly as the manual endpoint would.
+ *
+ * Per-item errors are caught and logged rather than thrown, matching
+ * expireUnpaidOrders' pattern above: one provider hiccup on one refund
+ * must not block the rest of the batch or fail the whole maintenance
+ * cycle.
+ */
+async function syncProcessingRefunds() {
+  const pending = await prisma.paymentRefund.findMany({
+    where: { status: 'PROCESSING', providerRefundId: { not: null } },
+    select: { id: true },
+    take: 100,
+  });
+
+  let completed = 0;
+  let failed = 0;
+  let stillPending = 0;
+
+  for (const item of pending) {
+    try {
+      const { refund } = await verifyAndFinalizeRefund({ refundId: item.id, actorId: null, note: 'Reconciled by maintenance sweep' });
+      if (refund?.status === 'COMPLETED') completed += 1;
+      else if (refund?.status === 'FAILED') failed += 1;
+      else stillPending += 1;
+    } catch (error) {
+      logger.error({ err: error, refundId: item.id }, 'Failed to sync refund status with provider');
+    }
+  }
+
+  return { checked: pending.length, completed, failed, stillPending };
+}
+
 async function runMaintenanceCycle() {
   return withJobLock(async () => {
     const startedAt = Date.now();
     const now = new Date();
-    const [offers, listings, ads, adsActivated, reminders, unpaidOrders, sms, payouts] = await Promise.all([
-      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), sendPendingSms(now), releaseDuePayouts(prisma, now),
+    const [offers, listings, ads, adsActivated, reminders, unpaidOrders, sms, payouts, refundSync] = await Promise.all([
+      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), sendPendingSms(now), releaseDuePayouts(prisma, now), syncProcessingRefunds(),
     ]);
-    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, unpaidOrders, sms, payouts };
+    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, unpaidOrders, sms, payouts, refundSync };
   });
 }
 
@@ -251,4 +292,4 @@ function startMaintenanceScheduler() {
   return setInterval(tick, intervalMs);
 }
 
-module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, sendPendingSms, releaseDuePayouts };
+module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, sendPendingSms, releaseDuePayouts, syncProcessingRefunds };
