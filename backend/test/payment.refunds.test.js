@@ -4,19 +4,21 @@
 // database (same convention as test/payment.financial.test.js and
 // test/marketplace.e2e.test.js — see test/README.md).
 //
-// These exist specifically as regression coverage for a bug found during
-// a production-readiness review: paymentRefundService.js called
-// `assertTransition` in requestRefund, completeRefund AND failRefund
-// without ever importing it — every refund attempt (auto order-expiry
-// refunds, ad-cancellation refunds, and both admin refund actions) threw
-// `ReferenceError: assertTransition is not defined` at runtime. A second,
-// related bug: prisma/schema.prisma's PaymentStatus enum was missing
-// PROCESSING and REFUND_PENDING even though a migration had already added
-// them to the database, so `requestRefund`'s own
-// `payment.update({ status: 'REFUND_PENDING' })` would have failed
-// Prisma's client-side enum validation even with the import fixed. Both
-// are fixed; this suite exercises the full lifecycle end to end so a
-// regression here fails CI instead of failing silently in production.
+// These exist as regression coverage for the refund lifecycle end to end:
+// requestRefund (DB-only) -> processRefund (submits to Chapa) ->
+// verifyAndFinalizeRefund (polls Chapa and completes/fails) -> retryRefund
+// (reopens a fresh request after a FAILED attempt). Chapa's HTTP endpoint
+// itself is stubbed via global.fetch, the same way test/chapa.refunds.test.js
+// stubs it, so this suite never makes a real network call.
+//
+// This file previously exercised a `completeRefund(tx, {...})` /
+// `failRefund(tx, {...})` API that paymentRefundService.js no longer
+// exports — the service was refactored so the Chapa network call happens
+// outside any DB transaction (processRefund claims PROCESSING, calls
+// Chapa, then persists the result), and failRefund/verifyAndFinalizeRefund
+// now manage their own transactions internally rather than taking one in.
+// This rewrite follows that current shape so a real regression here fails
+// CI instead of the suite silently testing dead code.
 //
 // Run with:
 //   MARKETBRIDGE_E2E=1 E2E_DATABASE_URL='postgresql://...' npx prisma migrate deploy
@@ -34,10 +36,36 @@ test('refund lifecycle suite is explicitly opt-in', { skip: !enabled }, async ()
 if (enabled) {
   process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
 
-  test('refund lifecycle: request -> complete, duplicate requests are idempotent', async (t) => {
+  // Stubs global.fetch for the duration of `fn`, always restoring it
+  // afterwards even if `fn` throws — Chapa's API is the only thing this
+  // suite talks to over HTTP, so intercepting fetch is enough to control
+  // every response processRefund/verifyAndFinalizeRefund will see.
+  // Each entry is either a plain body object (200 OK) or { status, body }
+  // to simulate an HTTP error status, e.g. Chapa rejecting a bad tx_ref.
+  async function withStubbedChapa(responses, fn) {
+    const originalFetch = global.fetch;
+    const originalKey = process.env.CHAPA_SECRET_KEY;
+    process.env.CHAPA_SECRET_KEY = 'CHASECK_TEST-refund-lifecycle';
+    let call = 0;
+    global.fetch = async () => {
+      const entry = responses[Math.min(call, responses.length - 1)];
+      call += 1;
+      const { status = 200, body } = Object.prototype.hasOwnProperty.call(entry, 'body') ? entry : { body: entry };
+      return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    };
+    try {
+      return await fn();
+    } finally {
+      global.fetch = originalFetch;
+      if (originalKey === undefined) delete process.env.CHAPA_SECRET_KEY;
+      else process.env.CHAPA_SECRET_KEY = originalKey;
+    }
+  }
+
+  test('refund lifecycle: request -> process -> verify (Chapa confirms), duplicate requests are idempotent', async (t) => {
     const prisma = require('../src/config/db');
     const bcrypt = require('bcryptjs');
-    const { requestRefund, completeRefund } = require('../src/services/paymentRefundService');
+    const { requestRefund, processRefund, verifyAndFinalizeRefund } = require('../src/services/paymentRefundService');
 
     const buyer = await prisma.user.create({
       data: {
@@ -55,6 +83,7 @@ if (enabled) {
         currency: 'ETB',
         method: 'TELEBIRR',
         status: 'PAID',
+        chapaTxRef: `refund-lifecycle-${Date.now()}`,
         createdById: buyer.id,
       },
     });
@@ -65,9 +94,7 @@ if (enabled) {
       await prisma.user.delete({ where: { id: buyer.id } }).catch(() => {});
     });
 
-    // requestRefund must not throw (regression: was ReferenceError before
-    // the fix) and must actually move Payment.status to REFUND_PENDING —
-    // a value that requires the corrected schema.prisma enum to accept.
+    // requestRefund must actually move Payment.status to REFUND_PENDING.
     const refund = await prisma.$transaction((tx) =>
       requestRefund(tx, { paymentId: payment.id, requestedById: buyer.id, reason: 'Test refund' })
     );
@@ -86,28 +113,36 @@ if (enabled) {
     const refundCount = await prisma.paymentRefund.count({ where: { paymentId: payment.id } });
     assert.equal(refundCount, 1);
 
-    // Completing must not throw and must move both rows to their terminal
-    // state.
-    const completed = await prisma.$transaction((tx) =>
-      completeRefund(tx, { refundId: refund.id, provider: 'CHAPA', providerRefundId: 'test-provider-ref' })
+    // processRefund submits to Chapa; a successful "initiated" response
+    // moves the refund to PROCESSING with a providerRefundId on file.
+    const submitted = await withStubbedChapa(
+      [{ status: 'success', data: { ref_id: 'REF-lifecycle-1', status: 'initiated' } }],
+      () => processRefund({ refundId: refund.id, actorId: buyer.id })
     );
-    assert.equal(completed.status, 'COMPLETED');
+    assert.equal(submitted.status, 'PROCESSING');
+    assert.equal(submitted.providerRefundId, 'REF-lifecycle-1');
+
+    // Chapa confirming "refunded" on verify must complete both rows.
+    const verified = await withStubbedChapa(
+      [{ status: 'success', data: { ref_id: 'REF-lifecycle-1', status: 'refunded' } }],
+      () => verifyAndFinalizeRefund({ refundId: refund.id, actorId: buyer.id })
+    );
+    assert.equal(verified.providerStatus, 'refunded');
+    assert.equal(verified.refund.status, 'COMPLETED');
 
     const afterComplete = await prisma.payment.findUnique({ where: { id: payment.id } });
     assert.equal(afterComplete.status, 'REFUNDED');
 
-    // Completing an already-completed refund is idempotent (returns the
-    // same record, doesn't throw on the state-transition guard).
-    const completedAgain = await prisma.$transaction((tx) =>
-      completeRefund(tx, { refundId: refund.id })
-    );
-    assert.equal(completedAgain.status, 'COMPLETED');
+    // Re-verifying an already-completed refund is idempotent: no second
+    // Chapa call is even needed, and the same COMPLETED record comes back.
+    const verifiedAgain = await verifyAndFinalizeRefund({ refundId: refund.id, actorId: buyer.id });
+    assert.equal(verifiedAgain.refund.status, 'COMPLETED');
   });
 
-  test('refund lifecycle: provider failure allows retry via a fresh request', async (t) => {
+  test('refund lifecycle: provider failure allows retry via retryRefund', async (t) => {
     const prisma = require('../src/config/db');
     const bcrypt = require('bcryptjs');
-    const { requestRefund, failRefund, completeRefund } = require('../src/services/paymentRefundService');
+    const { requestRefund, processRefund, retryRefund } = require('../src/services/paymentRefundService');
 
     const buyer = await prisma.user.create({
       data: {
@@ -125,6 +160,7 @@ if (enabled) {
         currency: 'ETB',
         method: 'TELEBIRR',
         status: 'PAID',
+        chapaTxRef: `refund-retry-${Date.now()}`,
         createdById: buyer.id,
       },
     });
@@ -139,28 +175,34 @@ if (enabled) {
       requestRefund(tx, { paymentId: payment.id, requestedById: buyer.id })
     );
 
-    // failRefund must not throw (regression: previously referenced an
-    // undefined `payment` variable) and must leave Payment.status
-    // untouched so a retry is possible.
-    const failed = await prisma.$transaction((tx) =>
-      failRefund(tx, { refundId: refund.id, failureReason: 'Provider timeout' })
+    // A 4xx from Chapa (e.g. an invalid tx_ref) is treated as a definite
+    // failure: processRefund must catch it, mark the refund FAILED, and
+    // return the payment to PAID rather than leaving it stuck in
+    // REFUND_PENDING with nothing retryable.
+    await assert.rejects(
+      withStubbedChapa(
+        [{ status: 400, body: { message: 'Transaction reference not found' } }],
+        () => processRefund({ refundId: refund.id, actorId: buyer.id })
+      )
     );
-    assert.equal(failed.status, 'FAILED');
+
+    const afterFailedSubmit = await prisma.paymentRefund.findUnique({ where: { id: refund.id } });
+    assert.equal(afterFailedSubmit.status, 'FAILED');
 
     const afterFail = await prisma.payment.findUnique({ where: { id: payment.id } });
-    assert.equal(afterFail.status, 'REFUND_PENDING');
+    assert.equal(afterFail.status, 'PAID');
 
-    // A fresh requestRefund after a FAILED refund creates a new refund
-    // request rather than being blocked by the dead one.
-    const retryRefund = await prisma.$transaction((tx) =>
-      requestRefund(tx, { paymentId: payment.id, requestedById: buyer.id })
+    // retryRefund opens a fresh PaymentRefund (never resurrects the dead
+    // one) and immediately resubmits it to Chapa.
+    const retried = await withStubbedChapa(
+      [{ status: 'success', data: { ref_id: 'REF-lifecycle-2', status: 'initiated' } }],
+      () => retryRefund({ refundId: refund.id, actorId: buyer.id, note: 'Retry after failed Chapa refund' })
     );
-    assert.notEqual(retryRefund.id, refund.id);
+    assert.notEqual(retried.id, refund.id);
+    assert.equal(retried.status, 'PROCESSING');
 
-    const completed = await prisma.$transaction((tx) =>
-      completeRefund(tx, { refundId: retryRefund.id })
-    );
-    assert.equal(completed.status, 'COMPLETED');
+    const refundCount = await prisma.paymentRefund.count({ where: { paymentId: payment.id } });
+    assert.equal(refundCount, 2);
   });
 
   test('refund lifecycle: partial refunds are explicitly rejected (not yet supported)', async (t) => {
