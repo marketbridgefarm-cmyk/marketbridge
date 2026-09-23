@@ -956,6 +956,42 @@ export default function AdminDashboard() {
     loadAll();
   }, [loadAll]);
 
+  // Any refund stuck at PROCESSING is picked up automatically in the
+  // background. Chapa's webhook usually finalizes it first; this polling
+  // loop is the fallback, so no admin ever has to click a "check status"
+  // button. It only re-fetches the refunds queue (not the whole
+  // dashboard) and stops itself once nothing is PROCESSING.
+  useEffect(() => {
+    const pending = refunds.filter((r) => r.status === 'PROCESSING');
+    if (pending.length === 0) return undefined;
+
+    let cancelled = false;
+
+    const poll = async () => {
+      for (const refund of pending) {
+        try {
+          await api.post(`/admin/financial/refunds/${refund.id}/verify`);
+        } catch {
+          // Silent background check — a real problem surfaces next time
+          // an admin looks at the refund row itself.
+        }
+      }
+      if (cancelled) return;
+      try {
+        const res = await api.get('/admin/financial/refunds');
+        if (!cancelled) setRefunds(res.data?.refunds || []);
+      } catch {
+        // Next tick retries.
+      }
+    };
+
+    const interval = setInterval(poll, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [refunds]);
+
   useEffect(() => {
     if (!tabMenuOpen) return undefined;
 
@@ -1083,19 +1119,25 @@ export default function AdminDashboard() {
     clearMessages();
 
     const confirmed = window.confirm(
-      `Submit the ${Number(refund.amount).toLocaleString()} ${refund.currency || 'ETB'} refund for payment ${refund.paymentId.slice(0, 8)} to Chapa now? The refund will only be shown as completed after Chapa confirms the money was returned.`
+      `Submit the ${Number(refund.amount).toLocaleString()} ${refund.currency || 'ETB'} refund for payment ${refund.paymentId.slice(0, 8)} to Chapa now? MarketBridge checks with Chapa automatically until it confirms the money was returned — no further action needed here.`
     );
 
     if (!confirmed) return;
 
     setActionLoading(`refund-${refund.id}`);
     try {
+      let result;
       if (refund.status === 'FAILED') {
-        await api.post(`/admin/financial/refunds/${refund.id}/retry`);
+        result = await api.post(`/admin/financial/refunds/${refund.id}/retry`);
       } else {
-        await api.post(`/admin/financial/refunds/${refund.id}/process`);
+        result = await api.post(`/admin/financial/refunds/${refund.id}/process`);
       }
-      setSuccess(refund.status === 'FAILED' ? 'A new refund attempt was submitted to Chapa.' : 'Refund submitted to Chapa. It remains processing until Chapa confirms it.');
+      const finalStatus = result?.data?.refund?.status;
+      setSuccess(
+        finalStatus === 'COMPLETED'
+          ? 'Chapa confirmed the refund immediately — it’s complete.'
+          : 'Refund submitted to Chapa. It will finalize automatically — no need to check back manually.'
+      );
       await loadAll();
     } catch (err) {
       setError(err.response?.data?.error || 'Could not submit refund to Chapa');
@@ -3464,313 +3506,4 @@ export default function AdminDashboard() {
                   </table>
                 </div>
               </div>
-            </div>
-          )}
-
-          {tab === 'refunds' && (
-            <div>
-              <div className="ac-panel">
-                <div className="ac-toolbar">
-                  <div>
-                    <span className="ac-section-label">FINANCIAL REFUNDS</span>
-                    <h2>Chapa refund queue</h2>
-                    <p>
-                      Refunds are submitted to Chapa automatically. A refund is not marked completed until Chapa reports the final <strong>refunded</strong> state.
-                    </p>
-                  </div>
-                  <button type="button" className="sd-btn sd-btn-outline" onClick={loadAll} disabled={loading}>
-                    {loading ? 'Refreshing…' : 'Refresh'}
-                  </button>
-                </div>
-
-                <div className="ac-stat-strip">
-                  <div className="ac-small-stat"><span>Awaiting submission</span><strong>{refunds.filter((r) => r.status === 'REQUESTED').length}</strong></div>
-                  <div className="ac-small-stat"><span>Processing at Chapa</span><strong>{refunds.filter((r) => r.status === 'PROCESSING').length}</strong></div>
-                  <div className="ac-small-stat"><span>Completed</span><strong>{refunds.filter((r) => r.status === 'COMPLETED').length}</strong></div>
-                  <div className="ac-small-stat"><span>Failed / reversed</span><strong>{refunds.filter((r) => r.status === 'FAILED').length}</strong></div>
-                </div>
-              </div>
-
-              <div className="ac-panel">
-                <div className="ac-table-shell">
-                  <table className="sd-table sd-table--stack">
-                    <thead>
-                      <tr>
-                        <th>Refund</th>
-                        <th>Payment</th>
-                        <th>Amount</th>
-                        <th>Provider</th>
-                        <th>Status</th>
-                        <th>Chapa refund ID</th>
-                        <th />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {refunds.map((refund) => (
-                        <tr key={refund.id}>
-                          <td data-label="Refund"><span className="ac-code">{refund.id.slice(0, 8)}</span></td>
-                          <td data-label="Payment"><span className="ac-code">{refund.paymentId.slice(0, 8)}</span></td>
-                          <td data-label="Amount">{Number(refund.amount).toLocaleString()} {refund.currency || 'ETB'}</td>
-                          <td data-label="Provider">{refund.provider || refund.payment?.provider || '—'}</td>
-                          <td data-label="Status"><span className={statusBadgeClass(refund.status)}>{refund.status}</span></td>
-                          <td data-label="Chapa refund ID"><span className="ac-code">{refund.providerRefundId ? refund.providerRefundId.slice(0, 18) : '—'}</span></td>
-                          <td data-label="Actions">
-                            <div className="refund-actions">
-                              {refund.status === 'REQUESTED' && (
-                                <button type="button" className="sd-btn sd-btn-primary" disabled={actionLoading === `refund-${refund.id}`} onClick={() => processRefund(refund)}>
-                                  {actionLoading === `refund-${refund.id}` ? 'Submitting…' : 'Process with Chapa'}
-                                </button>
-                              )}
-                              {refund.status === 'PROCESSING' && (
-                                <button type="button" className="sd-btn sd-btn-outline" disabled={actionLoading === `refund-${refund.id}`} onClick={() => verifyRefund(refund)}>
-                                  {actionLoading === `refund-${refund.id}` ? 'Checking…' : 'Check Chapa status'}
-                                </button>
-                              )}
-                              {refund.status === 'FAILED' && (
-                                <button type="button" className="sd-btn sd-btn-primary" disabled={actionLoading === `refund-${refund.id}`} onClick={() => processRefund(refund)}>
-                                  {actionLoading === `refund-${refund.id}` ? 'Retrying…' : 'Retry refund'}
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {refunds.length === 0 && (
-                        <tr><td colSpan="7" className="sd-muted">No refunds recorded.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {tab === 'operations' && (
-            <div>
-              <div className="ac-panel">
-                <div className="ac-toolbar">
-                  <div>
-                    <span className="ac-section-label">
-                      SYSTEM OPERATIONS
-                    </span>
-
-                    <h2>
-                      Operations & audit
-                    </h2>
-
-                    <p>
-                      Monitor live workflow queues
-                      from durable OrderEvent records
-                      and review the internal audit
-                      trail.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="sd-btn sd-btn-outline"
-                    onClick={loadAll}
-                    disabled={loading}
-                  >
-                    {loading
-                      ? 'Refreshing…'
-                      : 'Refresh'}
-                  </button>
-                </div>
-
-                <div className="ac-stat-strip">
-                  {[
-                    [
-                      'Pending payments',
-                      operations?.queues
-                        ?.pendingPayments || 0,
-                    ],
-                    [
-                      'Reconciliation queue',
-                      operations?.queues
-                        ?.reconciliationPayments ||
-                        0,
-                    ],
-                    [
-                      'Open disputes',
-                      operations?.queues
-                        ?.openDisputes || 0,
-                    ],
-                    [
-                      'Active orders',
-                      operations?.activeOrders ||
-                        0,
-                    ],
-                    [
-                      'Active transport',
-                      operations?.activeTransportJobs ||
-                        0,
-                    ],
-                  ].map(
-                    ([label, value]) => (
-                      <div
-                        className="ac-small-stat"
-                        key={label}
-                      >
-                        <span>{label}</span>
-                        <strong>{value}</strong>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-
-              <div className="ac-panel">
-                <div className="ac-toolbar">
-                  <div>
-                    <span className="ac-section-label">
-                      ORDER EVENTS
-                    </span>
-                    <h2>Recent order events</h2>
-                    <p className="sd-muted">
-                      Latest durable OrderEvent records emitted by the
-                      workflow engine.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="ac-table-shell">
-                  <table className="sd-table sd-table--stack">
-                    <thead>
-                      <tr>
-                        <th>Event</th>
-                        <th>Order</th>
-                        <th>Status change</th>
-                        <th>Actor</th>
-                        <th>When</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {orderEvents.map((event) => (
-                        <tr key={event.id}>
-                          <td data-label="Event">
-                            <span
-                              className={statusBadgeClass(event.type)}
-                            >
-                              {event.type || '—'}
-                            </span>
-                          </td>
-                          <td data-label="Order">
-                            <span className="ac-code">
-                              {event.orderId
-                                ? event.orderId.slice(0, 8)
-                                : '—'}
-                            </span>
-                          </td>
-                          <td data-label="Status change">
-                            {event.fromStatus || event.toStatus
-                              ? `${event.fromStatus || '—'} → ${
-                                  event.toStatus || '—'
-                                }`
-                              : '—'}
-                          </td>
-                          <td data-label="Actor">
-                            {event.actor?.name ||
-                              event.actor?.email ||
-                              'System'}
-                          </td>
-                          <td data-label="When">
-                            {event.createdAt
-                              ? new Date(
-                                  event.createdAt
-                                ).toLocaleString()
-                              : '—'}
-                          </td>
-                        </tr>
-                      ))}
-                      {orderEvents.length === 0 && (
-                        <tr>
-                          <td colSpan="5" className="sd-muted">
-                            No order events recorded.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="ac-panel">
-                <div className="ac-toolbar">
-                  <div>
-                    <span className="ac-section-label">
-                      AUDIT TRAIL
-                    </span>
-                    <h2>Admin audit log</h2>
-                    <p className="sd-muted">
-                      Actions taken by admin users, most recent first.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="ac-table-shell">
-                  <table className="sd-table sd-table--stack">
-                    <thead>
-                      <tr>
-                        <th>Action</th>
-                        <th>Resource</th>
-                        <th>Actor</th>
-                        <th>When</th>
-                        <th>Details</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {auditEvents.map((event) => (
-                        <tr key={event.id}>
-                          <td data-label="Action">
-                            <span
-                              className={statusBadgeClass(event.action)}
-                            >
-                              {event.action || '—'}
-                            </span>
-                          </td>
-                          <td data-label="Resource">
-                            <span className="ac-code">
-                              {event.resourceType || '—'}
-                              {event.resourceId
-                                ? ` · ${event.resourceId.slice(0, 8)}`
-                                : ''}
-                            </span>
-                          </td>
-                          <td data-label="Actor">
-                            {event.actor?.name ||
-                              event.actor?.email ||
-                              'System'}
-                          </td>
-                          <td data-label="When">
-                            {event.createdAt
-                              ? new Date(
-                                  event.createdAt
-                                ).toLocaleString()
-                              : '—'}
-                          </td>
-                          <td data-label="Details">
-                            {event.metadata
-                              ? JSON.stringify(event.metadata)
-                              : '—'}
-                          </td>
-                        </tr>
-                      ))}
-                      {auditEvents.length === 0 && (
-                        <tr>
-                          <td colSpan="5" className="sd-muted">
-                            No audit events recorded.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
-    </>
-  );
-}
+          
