@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import ImageCarousel from '../components/ImageCarousel.jsx';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext.jsx';
 import api from '../api/client';
@@ -20,7 +22,7 @@ export default function DigitalMarketplace() {
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
   const [myPurchases, setMyPurchases] = useState([]);
-  const [form, setForm] = useState({ title: '', productType: 'ebook', price: '', description: '', file: null });
+  const [form, setForm] = useState({ title: '', productType: 'ebook', price: '', description: '', file: null, previews: [] });
   const [busyId, setBusyId] = useState('');
   const [payMethod, setPayMethod] = useState('TELEBIRR');
 
@@ -52,9 +54,10 @@ export default function DigitalMarketplace() {
     fd.append('price', form.price);
     fd.append('description', form.description);
     fd.append('file', form.file);
+    form.previews.forEach((img) => fd.append('previews', img));
     try {
       await api.post('/digital-products', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setForm({ title: '', productType: 'ebook', price: '', description: '', file: null });
+      setForm({ title: '', productType: 'ebook', price: '', description: '', file: null, previews: [] });
       showToast('Product published securely.', 'success');
       load();
     } catch (e) {
@@ -155,6 +158,7 @@ export default function DigitalMarketplace() {
               <div><label>Type</label><select value={form.productType} onChange={e => setForm({ ...form, productType: e.target.value })}>{['ebook', 'template', 'graphic', 'photo', 'software_license', 'course', 'document'].map(x => <option key={x}>{x}</option>)}</select></div>
               <div><label>Price (ETB)</label><input type="number" min="0.01" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} /></div>
               <div><label>Private file</label><input type="file" onChange={e => setForm({ ...form, file: e.target.files?.[0] || null })} /></div>
+              <div><label>Preview images (up to 5, shown on the product card)</label><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e => setForm({ ...form, previews: Array.from(e.target.files || []).slice(0, 5) })} /></div>
             </div>
             <label>Description</label>
             <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
@@ -234,7 +238,9 @@ export default function DigitalMarketplace() {
             const paymentStatus = existingPurchase?.payment?.status;
             return (
               <article className="digital-card card" key={p.id}>
-                <div className="digital-icon">{p.productType?.slice(0, 1).toUpperCase()}</div>
+                {p.previewImages?.length
+                  ? <ImageCarousel images={p.previewImages} alt={p.title} className="img-carousel--compact" />
+                  : <div className="digital-icon">{p.productType?.slice(0, 1).toUpperCase()}</div>}
                 <span className="tag">{p.productType?.replaceAll('_', ' ')}</span>
                 <h3>{p.title}</h3>
                 <p className="muted">{p.description || 'Digital product from an independent seller.'}</p>
@@ -248,9 +254,12 @@ export default function DigitalMarketplace() {
                 {user && paymentStatus === 'PROCESSING' && (
                   <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => checkPurchaseStatus(existingPurchase.payment.id, p.id)}>{busyId === p.id ? 'Checking…' : 'Check payment status'}</button>
                 )}
+                {!user && (
+                  <Link className="btn btn-primary" to="/login">Sign in to buy · {Number(p.price).toLocaleString()} ETB</Link>
+                )}
                 {user && (!paymentStatus || ['FAILED', 'REFUNDED', 'CANCELLED'].includes(paymentStatus)) && (
                   <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => purchase(p)}>
-                    {busyId === p.id ? 'Starting…' : (paymentStatus ? 'Try again' : 'Buy')}
+                    {busyId === p.id ? 'Starting…' : (paymentStatus ? 'Try again' : `Buy · ${Number(p.price).toLocaleString()} ETB`)}
                   </button>
                 )}
               </article>
