@@ -146,15 +146,13 @@ const HOME_PAGE_STYLES = `
     display: grid;
     grid-template-columns: minmax(0, 1.15fr) minmax(340px, .85fr);
     grid-template-areas:
-      "content visual"
-      "carousel visual";
+      "content visual";
     gap: clamp(40px, 7vw, 90px);
     align-items: center;
     padding: 82px 0;
   }
 
   .mb-home .hero-content { grid-area: content; }
-  .mb-home .hero-grid .trust-carousel { grid-area: carousel; align-self: start; }
   .mb-home .hero-grid .hero-visual { grid-area: visual; }
 
   .mb-home .hero-eyebrow {
@@ -245,11 +243,17 @@ const HOME_PAGE_STYLES = `
     background: #fff;
   }
 
+  /* Full-width trust carousel directly below the hero */
   .mb-home .trust-carousel {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    align-items: center;
     overflow: hidden;
-    width: 100%;
-    padding: 16px 0;
-    margin-top: 10px;
+    width: 100vw;
+    min-height: 50px;
+    margin: 0 0 0 calc(50% - 50vw);
+    padding: 0;
     background: var(--home-green-soft);
     border-top: 1px solid rgba(22,114,71,.10);
     border-bottom: 1px solid rgba(22,114,71,.10);
@@ -640,6 +644,11 @@ const HOME_PAGE_STYLES = `
     padding: clamp(40px, 4.5vw, 60px) 0;
   }
 
+  /* No gap/padding between the full-width carousel and the marketplace section */
+  .mb-home .home-marketplaces-section {
+    padding-top: 0;
+  }
+
   .mb-home .home-section-alt {
     background:
       linear-gradient(180deg, #f1f7f2 0%, #f8faf8 100%);
@@ -1028,7 +1037,6 @@ const HOME_PAGE_STYLES = `
       grid-template-columns: 1fr;
       grid-template-areas:
         "content"
-        "carousel"
         "visual";
       padding: 70px 0 85px;
     }
@@ -1136,6 +1144,10 @@ const HOME_PAGE_STYLES = `
 
     .mb-home .home-section {
       padding: 36px 0;
+    }
+
+    .mb-home .home-marketplaces-section {
+      padding-top: 0;
     }
 
     .mb-home .process-grid {
@@ -1326,20 +1338,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* TRUST CAROUSEL */}
-          <div className="trust-carousel">
-            <div className="trust-carousel-track">
-              <span><b>✓</b> Independent sellers</span>
-              <span><b>✓</b> Buyer & seller accounts</span>
-              <span><b>✓</b> Offers & negotiation</span>
-              <span><b>✓</b> Marketplace records</span>
-              <span><b>✓</b> Independent sellers</span>
-              <span><b>✓</b> Buyer & seller accounts</span>
-              <span><b>✓</b> Offers & negotiation</span>
-              <span><b>✓</b> Marketplace records</span>
-            </div>
-          </div>
-
           <div className="hero-visual">
             <HeroMarketplaceStats stats={marketStats} loading={marketStatsLoading} />
 
@@ -1388,10 +1386,24 @@ export default function Home() {
         </div>
       </section>
 
+      {/* FULL-WIDTH TRUST CAROUSEL — directly under the hero */}
+      <div className="trust-carousel" aria-label="MarketBridge marketplace features">
+        <div className="trust-carousel-track">
+          <span><b>✓</b> Independent sellers</span>
+          <span><b>✓</b> Buyer & seller accounts</span>
+          <span><b>✓</b> Offers & negotiation</span>
+          <span><b>✓</b> Marketplace records</span>
+          <span><b>✓</b> Independent sellers</span>
+          <span><b>✓</b> Buyer & seller accounts</span>
+          <span><b>✓</b> Offers & negotiation</span>
+          <span><b>✓</b> Marketplace records</span>
+        </div>
+      </div>
+
       <AdvertisementBanner />
 
       {/* MARKETPLACES */}
-      <section className="home-section" id="marketplaces">
+      <section className="home-section home-marketplaces-section" id="marketplaces">
         <div className="home-container">
           <div className="section-heading">
             <span className="eyebrow">MARKETPLACE NETWORK</span>
