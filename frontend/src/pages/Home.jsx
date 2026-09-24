@@ -249,7 +249,7 @@ const HOME_PAGE_STYLES = `
     width: 100%;
     padding: 16px 0;
     margin-top: 10px;
-    background: #fff;
+    background: var(--home-green-soft);
     border-top: 1px solid rgba(22,114,71,.10);
     border-bottom: 1px solid rgba(22,114,71,.10);
   }
@@ -407,10 +407,21 @@ const HOME_PAGE_STYLES = `
     gap: 11px;
     padding: 13px 0;
     border-bottom: 1px solid rgba(24,68,45,.09);
+    text-decoration: none;
+    color: inherit;
+    transition: transform .15s ease, opacity .15s ease;
   }
 
   .mb-home .platform-step:last-child {
     border-bottom: 0;
+  }
+
+  .mb-home .platform-step:hover {
+    transform: translateX(2px);
+  }
+
+  .mb-home .platform-step:hover .step-arrow {
+    color: var(--home-green);
   }
 
   .mb-home .step-number {
@@ -441,6 +452,7 @@ const HOME_PAGE_STYLES = `
   .mb-home .step-arrow {
     color: #9aa59e;
     font-size: 13px;
+    transition: color .15s ease;
   }
 
   .mb-home .floating-badge {
@@ -901,6 +913,10 @@ const HOME_PAGE_STYLES = `
       padding: 70px 0 85px;
     }
 
+    .mb-home .hero-visual {
+      margin-top: clamp(-90px, -7vw, -40px);
+    }
+
     .mb-home .hero-title {
       max-width: 800px;
     }
@@ -957,6 +973,10 @@ const HOME_PAGE_STYLES = `
     .mb-home .hero-grid {
       padding: 52px 0 72px;
       gap: 45px;
+    }
+
+    .mb-home .hero-visual {
+      margin-top: -45px;
     }
 
     .mb-home .hero-title {
@@ -1059,16 +1079,16 @@ const HOME_PAGE_STYLES = `
   }
 `;
 
-function PlatformStep({ number, title, description }) {
+function PlatformStep({ number, title, description, link }) {
   return (
-    <div className="platform-step">
+    <Link className="platform-step" to={link}>
       <div className="step-number">{number}</div>
       <div className="step-copy">
         <strong>{title}</strong>
         <span>{description}</span>
       </div>
       <span className="step-arrow">→</span>
-    </div>
+    </Link>
   );
 }
 
@@ -1149,16 +1169,19 @@ export default function Home() {
                   number="01"
                   title="Agricultural"
                   description="Farm produce, offers, inspection & transport"
+                  link="/agricultural"
                 />
                 <PlatformStep
                   number="02"
                   title="Products"
                   description="Independent physical product sellers"
+                  link="/products"
                 />
                 <PlatformStep
                   number="03"
                   title="Digital"
                   description="eBooks, courses, software & creative products"
+                  link="/digital"
                 />
               </div>
             </div>
