@@ -4,13 +4,15 @@ const { body, param, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
-const { makeDigitalKey, uploadPrivateObject, deletePrivateObject, signedDownloadUrl } = require('../utils/objectStorage');
+const { makeDigitalKey, uploadPrivateObject, deletePrivateObject, signedDownloadUrl, signedMediaUrl } = require('../utils/objectStorage');
 const { createPayment } = require('../services/paymentService');
 const { optimizeUpload } = require('../utils/imageProcessor');
 const { idempotency } = require('../middleware/idempotency');
 
 const router = express.Router();
 
+const MAX_PREVIEWS = 5;
+const PREVIEW_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_BYTES = Number(process.env.DIGITAL_MAX_FILE_BYTES || 25 * 1024 * 1024); // 25MB default
 
 // Allowed MIME types
@@ -40,9 +42,13 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: MAX_BYTES,
-    files: 1,
+    files: 1 + MAX_PREVIEWS,
   },
   fileFilter: (req, file, cb) => {
+    if (file.fieldname === 'previews') {
+      if (!PREVIEW_MIME_TYPES.includes(file.mimetype)) return cb(new Error('Preview images must be JPEG, PNG or WebP'));
+      return cb(null, true);
+    }
     // Check MIME type
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       return cb(new Error(`Unsupported file type: ${file.mimetype}`));
@@ -58,6 +64,15 @@ const validate = (req, res, next) => {
   }
   next();
 };
+
+// Preview keys are private storage keys: never return them, only short-lived signed URLs.
+async function withPreviewImages(product) {
+  const { previewKeys = [], ...rest } = product;
+  const previewImages = (await Promise.all(
+    previewKeys.map((key) => signedMediaUrl({ key, disposition: 'inline' }).catch(() => null))
+  )).filter(Boolean);
+  return { ...rest, previewImages };
+}
 
 // List active digital products
 router.get('/', async (req, res) => {
@@ -85,6 +100,7 @@ router.get('/', async (req, res) => {
         createdAt: true,
         updatedAt: true,
         sellerId: true,
+        previewKeys: true,
         seller: {
           select: {
             id: true,
@@ -97,7 +113,7 @@ router.get('/', async (req, res) => {
       take: 100,
     });
 
-    return res.json({ products });
+    return res.json({ products: await Promise.all(products.map(withPreviewImages)) });
   } catch (error) {
     req.log.error({ err: error }, 'LIST DIGITAL PRODUCTS ERROR:');
     return res.status(500).json({ error: 'Could not load digital products' });
@@ -138,7 +154,7 @@ router.post(
   '/',
   authenticate,
   requireRole('SELLER'),
-  upload.single('file'),
+  upload.fields([{ name: 'file', maxCount: 1 }, { name: 'previews', maxCount: MAX_PREVIEWS }]),
   [
     body('title').isString().trim().isLength({ min: 1, max: 200 }),
     body('productType').isString().trim().isLength({ min: 1, max: 100 }),
@@ -148,6 +164,7 @@ router.post(
   validate,
   async (req, res) => {
     try {
+      req.file = req.files?.file?.[0];
       if (!req.file) {
         return res.status(400).json({ error: 'A digital product file is required' });
       }
@@ -176,6 +193,21 @@ router.post(
         imageStats = optimized;
       }
 
+      const previewKeys = [];
+      const cleanupPreviews = () => Promise.all(previewKeys.map((k) => deletePrivateObject(k).catch(() => {})));
+      try {
+        for (const img of (req.files?.previews || []).slice(0, MAX_PREVIEWS)) {
+          const o = await optimizeUpload({ buffer: img.buffer, mime: img.mimetype, maxWidth: 1600, maxHeight: 1600, quality: 82 });
+          const previewKey = makeDigitalKey(id, `preview${o.extension}`);
+          await uploadPrivateObject({ key: previewKey, buffer: o.buffer, contentType: o.contentType });
+          previewKeys.push(previewKey);
+        }
+      } catch (previewError) {
+        await cleanupPreviews();
+        req.log.error({ err: previewError }, 'DIGITAL PREVIEW UPLOAD ERROR:');
+        return res.status(400).json({ error: 'Preview images must be valid JPEG, PNG or WebP files' });
+      }
+
       const key = makeDigitalKey(id, `upload${uploadExtension}`);
 
       try {
@@ -186,6 +218,7 @@ router.post(
         });
       } catch (uploadError) {
         req.log.error({ err: uploadError }, 'S3 UPLOAD ERROR:');
+        await cleanupPreviews();
         return res.status(502).json({ error: 'Could not store digital product file' });
       }
 
@@ -198,6 +231,7 @@ router.post(
             productType: req.body.productType,
             price: Number(req.body.price),
             fileKey: key,
+            previewKeys,
             fileName: req.file.originalname.slice(0, 255),
             mimeType: uploadContentType.slice(0, 150),
             fileSizeBytes: uploadBuffer.length,
@@ -219,6 +253,7 @@ router.post(
       } catch (dbError) {
         // Rollback: delete the uploaded file if DB insert fails
         await deletePrivateObject(key).catch(() => {});
+        await cleanupPreviews();
         req.log.error({ err: dbError }, 'DIGITAL PRODUCT CREATE ERROR:');
         return res.status(500).json({ error: 'Could not create digital product' });
       }
