@@ -1072,19 +1072,6 @@ function PlatformStep({ number, title, description }) {
   );
 }
 
-function InfoPanel({ rows, className = '' }) {
-  return (
-    <div className={`info-panel ${className}`}>
-      {rows.map(([title, description]) => (
-        <div className="info-row" key={title}>
-          <strong>{title}</strong>
-          <span>{description}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function Home() {
   return (
     <main className="mb-home">
@@ -1224,116 +1211,6 @@ export default function Home() {
               </article>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* AGRICULTURAL */}
-      <section className="home-section home-section-alt">
-        <div className="home-container split-grid">
-          <div className="split-content">
-            <span className="eyebrow">AGRICULTURAL MARKETPLACE</span>
-
-            <h2>From farm fields to agricultural buyers.</h2>
-
-            <p>
-              Farmers and agricultural producers can list their produce
-              directly on MarketBridge. Buyers can discover available lots,
-              communicate with sellers, make offers, request inspection and
-              arrange delivery.
-            </p>
-
-            <p>
-              The farmer or producer remains the owner of the agricultural
-              product. MarketBridge facilitates the transaction rather than
-              purchasing or owning the produce.
-            </p>
-
-            <Link className="split-link" to="/agricultural">
-              Enter Agricultural Marketplace →
-            </Link>
-          </div>
-
-          <InfoPanel
-            rows={[
-              ['Farmers', 'List agricultural produce'],
-              ['Buyers', 'Discover and negotiate'],
-              ['Inspectors', 'Independent quality verification'],
-              ['Transporters', 'Own truck or hire through MarketBridge'],
-            ]}
-          />
-        </div>
-      </section>
-
-      {/* PHYSICAL PRODUCTS */}
-      <section className="home-section">
-        <div className="home-container split-grid reverse">
-          <InfoPanel
-            rows={[
-              ['Physical Products', 'Products supplied by independent sellers'],
-              ['Sellers', 'Create listings and manage orders'],
-              ['Buyers', 'Discover products and purchase'],
-              [
-                'Marketplace',
-                'Communication, records and transaction support',
-              ],
-            ]}
-          />
-
-          <div className="split-content">
-            <span className="eyebrow">PRODUCT MARKETPLACE</span>
-
-            <h2>A marketplace beyond agricultural produce.</h2>
-
-            <p>
-              MarketBridge can also connect buyers and sellers of general
-              physical products. These products are independently supplied and
-              owned by the sellers.
-            </p>
-
-            <p>
-              This gives MarketBridge a broader marketplace structure while
-              keeping the Agricultural section specialized for farm and
-              agricultural transactions.
-            </p>
-
-            <Link className="split-link" to="/products">
-              Explore Physical Products →
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* DIGITAL */}
-      <section className="home-section home-section-alt">
-        <div className="home-container split-grid">
-          <div className="split-content">
-            <span className="eyebrow">DIGITAL MARKETPLACE</span>
-
-            <h2>Digital products from independent creators and sellers.</h2>
-
-            <p>
-              MarketBridge also supports digital commerce. Sellers can offer
-              useful digital products while retaining ownership and
-              responsibility for their products.
-            </p>
-
-            <Link className="split-link" to="/digital">
-              Explore Digital Marketplace →
-            </Link>
-          </div>
-
-          <InfoPanel
-            className="digital"
-            rows={[
-              ['eBooks', 'Books and digital publications'],
-              ['Courses', 'Educational and professional materials'],
-              ['Software', 'Software and digital licenses'],
-              [
-                'Creative Products',
-                'Graphics, photos, templates and media',
-              ],
-            ]}
-          />
         </div>
       </section>
 
