@@ -57,6 +57,25 @@ const trustItems = [
   ['Buyer & seller accounts', 'Built for both sides of trade', <><path d="M16 11a4 4 0 1 0-8 0"/><path d="M4 21a8 8 0 0 1 16 0"/><path d="M18 8a3 3 0 1 0-2.5-4.5"/><path d="M20 21a6 6 0 0 0-3.5-5.5"/></>],
 ];
 
+const showcaseTabs = [
+  ['agricultural', 'Agricultural', '/agricultural', 'green'],
+  ['products', 'Products', '/products', 'gold'],
+  ['digital', 'Digital', '/digital', 'blue'],
+];
+
+// Normalises each marketplace response into one card shape.
+const showcaseSources = {
+  agricultural: ['/listings', { category: 'AGRICULTURAL' }, (d) => (d?.listings || []).map((l) => ({
+    id: l.id, title: l.title || l.cropType || 'Listing', meta: l.location, price: l.askingPrice, image: l.photos?.[0], to: `/listings/${l.id}`,
+  }))],
+  products: ['/listings', { category: 'PRODUCT' }, (d) => (d?.listings || []).map((l) => ({
+    id: l.id, title: l.title || 'Product', meta: l.location, price: l.askingPrice, image: l.photos?.[0], to: `/listings/${l.id}`,
+  }))],
+  digital: ['/digital-products', {}, (d) => (d?.products || []).map((p) => ({
+    id: p.id, title: p.title, meta: (p.productType || '').replaceAll('_', ' '), price: p.price, image: p.previewImageUrl || null, to: '/digital',
+  }))],
+};
+
 const HOME_PAGE_STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap');
 
@@ -187,7 +206,7 @@ const HOME_PAGE_STYLES = `
 
   /* Trust marquee */
   .mb-home .trust-carousel { background: var(--wheat); color: var(--ink); overflow: hidden; }
-  .mb-home .trust-carousel-track { display: flex; width: max-content; animation: mb-marquee 42s linear infinite; }
+  .mb-home .trust-carousel-track { display: flex; width: max-content; animation: mb-marquee 30s linear infinite; }
   .mb-home .trust-carousel:hover .trust-carousel-track { animation-play-state: paused; }
   @keyframes mb-marquee { to { transform: translateX(-50%); } }
   .mb-home .trust-item { display: flex; align-items: center; gap: 12px; padding: 16px 40px; white-space: nowrap; }
@@ -235,6 +254,35 @@ const HOME_PAGE_STYLES = `
   .mb-home .process-item strong { display: block; font-family: var(--display); font-size: 20px; line-height: 1.2; }
   .mb-home .process-item p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; font-size: 15px; }
 
+  /* Ad slots: AdvertisementBanner renders nothing until a campaign is live, so the slot collapses */
+  .mb-home .ad-slot { padding-top: 28px; }
+  .mb-home .ad-slot:empty { display: none; }
+  .mb-home .ad-slot-cta { display: block; margin-top: 10px; text-align: right; font-size: 13px; color: var(--muted); text-underline-offset: 4px; }
+  .mb-home .ad-slot-cta:hover { color: var(--ink); }
+
+  /* Showcase: produce, product and digital imagery */
+  .mb-home .showcase-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 10px; background: #e2eae0; margin-bottom: 24px; }
+  .mb-home .showcase-tabs button { font: 700 14px var(--body); padding: 10px 18px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
+  .mb-home .showcase-tabs button.is-active { background: var(--ink); color: #fff; }
+  .mb-home .showcase-tabs button:focus-visible { outline: 3px solid var(--wheat); outline-offset: 2px; }
+  .mb-home .showcase-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .mb-home .showcase-tile { display: block; color: inherit; text-decoration: none; border-radius: 14px; overflow: hidden; background: #fff; border: 1px solid var(--line); }
+  .mb-home .showcase-tile:first-child { grid-row: span 2; }
+  .mb-home .showcase-media { aspect-ratio: 4 / 3; display: grid; place-items: center; overflow: hidden; background: var(--field); }
+  .mb-home .showcase-tile:first-child .showcase-media { aspect-ratio: auto; height: calc(100% - 78px); min-height: 280px; }
+  .mb-home .showcase-tile.gold .showcase-media { background: var(--wheat); }
+  .mb-home .showcase-tile.blue .showcase-media { background: var(--sky); }
+  .mb-home .showcase-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .mb-home .showcase-media span { font-family: var(--display); font-weight: 800; font-size: clamp(40px, 6vw, 72px); color: rgba(255,255,255,.85); text-transform: capitalize; }
+  .mb-home .showcase-tile.gold .showcase-media span { color: var(--ink); }
+  .mb-home .showcase-caption { padding: 14px 16px 16px; }
+  .mb-home .showcase-caption strong { display: block; font-family: var(--display); font-size: 17px; }
+  .mb-home .showcase-caption span { display: block; margin-top: 3px; font-size: 14px; color: var(--muted); }
+  .mb-home .showcase-tile.is-empty { border-style: dashed; background: transparent; }
+  .mb-home .showcase-tile.is-empty .showcase-media { background: #dfe8dd; }
+  .mb-home .showcase-tile.is-empty .showcase-media span { color: rgba(11,34,23,.35); }
+  .mb-home .showcase-more { display: inline-block; margin-top: 22px; font-weight: 700; color: var(--ink); text-underline-offset: 5px; text-decoration-thickness: 2px; }
+
   /* Closing */
   .mb-home .final-cta { padding: clamp(40px, 7vw, 80px); border-radius: 20px; color: #f2f8f3; background: repeating-linear-gradient(100deg, transparent 0 54px, rgba(134,217,165,.06) 54px 55px), var(--ink); }
   .mb-home .final-cta h2 { max-width: 16ch; font-size: clamp(36px, 5.4vw, 72px); line-height: .98; letter-spacing: -.035em; font-weight: 800; }
@@ -246,6 +294,9 @@ const HOME_PAGE_STYLES = `
     .mb-home .hero-grid { padding: 64px 0; }
     .mb-home .process-grid { grid-template-columns: repeat(2, 1fr); }
     .mb-home .pillar-grid { grid-template-columns: 1fr; gap: 28px; }
+    .mb-home .showcase-grid { grid-template-columns: 1fr 1fr; }
+    .mb-home .showcase-tile:first-child { grid-row: auto; grid-column: span 2; }
+    .mb-home .showcase-tile:first-child .showcase-media { height: auto; min-height: 0; aspect-ratio: 16 / 9; }
     .mb-home .pillar, .mb-home .pillar + .pillar { padding: 0; border: 0; }
     .mb-home .market-card h3 { margin-top: 28px; }
   }
@@ -295,6 +346,74 @@ function HeroMarketplaceStats({ stats, loading }) {
         <span className="hero-stat-refresh">Refreshes every 60s</span>
       </div>
     </aside>
+  );
+}
+
+function ShowcaseTile({ item, tone, fallbackLabel, to }) {
+  const content = (
+    <>
+      <div className="showcase-media">
+        {item?.image ? <img src={item.image} alt={item.title} loading="lazy" decoding="async" /> : <span aria-hidden="true">{(item?.title || fallbackLabel).slice(0, 2)}</span>}
+      </div>
+      <div className="showcase-caption">
+        <strong>{item ? item.title : 'Your listing here'}</strong>
+        <span>
+          {item
+            ? `${item.meta ? item.meta + ' · ' : ''}${Number(item.price || 0).toLocaleString()} ETB`
+            : 'List it and buyers can find it'}
+        </span>
+      </div>
+    </>
+  );
+  return <Link className={`showcase-tile ${tone}${item ? '' : ' is-empty'}`} to={item?.to || to}>{content}</Link>;
+}
+
+function Showcase() {
+  const [active, setActive] = useState('agricultural');
+  const [items, setItems] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    Object.entries(showcaseSources).forEach(async ([key, [url, params, normalise]]) => {
+      try {
+        const { data } = await api.get(url, { params });
+        if (!cancelled) setItems((prev) => ({ ...prev, [key]: normalise(data).slice(0, 6) }));
+      } catch {
+        if (!cancelled) setItems((prev) => ({ ...prev, [key]: [] }));
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const [, label, route, tone] = showcaseTabs.find(([key]) => key === active);
+  const current = items[active] || [];
+  const tiles = Array.from({ length: 6 }, (_, i) => current[i] || null);
+
+  return (
+    <div className="showcase">
+      <div className="showcase-tabs" role="tablist" aria-label="Marketplace showcase">
+        {showcaseTabs.map(([key, name]) => (
+          <button key={key} type="button" role="tab" aria-selected={active === key} className={active === key ? 'is-active' : ''} onClick={() => setActive(key)}>
+            {name}
+          </button>
+        ))}
+      </div>
+      <div className="showcase-grid" role="tabpanel">
+        {tiles.map((item, i) => (
+          <ShowcaseTile key={item?.id || `empty-${i}`} item={item} tone={tone} fallbackLabel={label} to={route} />
+        ))}
+      </div>
+      <Link className="showcase-more" to={route}>See all {label.toLowerCase()}</Link>
+    </div>
+  );
+}
+
+function AdSlot({ children, cta }) {
+  return (
+    <div className="home-container ad-slot">
+      {children}
+      {cta && <Link className="ad-slot-cta" to="/dashboard/advertiser">Advertise on MarketBridge</Link>}
+    </div>
   );
 }
 
@@ -422,7 +541,9 @@ export default function Home() {
         </div>
       </div>
 
-      <AdvertisementBanner />
+      <AdSlot>
+        <AdvertisementBanner />
+      </AdSlot>
 
       <section className="home-section" id="marketplaces">
         <div className="home-container">
@@ -453,6 +574,20 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <section className="home-section" style={{ paddingBottom: 0 }}>
+        <div className="home-container">
+          <div className="section-heading">
+            <h2>Fresh from the marketplace.</h2>
+            <p>A look at what independent farmers, sellers and creators have listed right now.</p>
+          </div>
+          <Showcase />
+        </div>
+      </section>
+
+      <AdSlot cta>
+        <AdvertisementBanner />
+      </AdSlot>
 
       <section className="home-section home-section-alt">
         <div className="home-container">
