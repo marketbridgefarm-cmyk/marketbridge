@@ -3,6 +3,7 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import { REGIONS as FALLBACK_REGIONS } from '../utils/ethiopianRegions';
+import PageHeader from '../components/PageHeader.jsx';
 
 export default function CreateListing() {
   const { user } = useAuth();
@@ -163,7 +164,7 @@ export default function CreateListing() {
   }
 
   return (
-    <div className="listing-modal-overlay mb-create-listing" onClick={closeModal}>
+    <div className="listing-modal-overlay" onClick={closeModal}>
       <main className="section listing-modal-panel" onClick={e => e.stopPropagation()}>
         <div className="container-narrow">
           <div className="listing-modal-drag-handle" aria-hidden="true" />
@@ -171,68 +172,79 @@ export default function CreateListing() {
             <Link to="/" className="back-link">← Home</Link>
             <button type="button" className="listing-modal-close" aria-label="Close" onClick={closeModal}>×</button>
           </div>
-        <span className="eyebrow">SELL ON MARKETBRIDGE</span>
-        <h1>{category === 'AGRICULTURAL' ? 'List agricultural produce' : 'List a physical product'}</h1>
-        <p className="muted">Your account can buy and sell. Agricultural listings keep the farmer as the price authority.</p>
+        <PageHeader
+          eyebrow="SELL ON MARKETBRIDGE"
+          title={category === 'AGRICULTURAL' ? 'List agricultural produce' : 'List a physical product'}
+          description="Your account can buy and sell. Agricultural listings keep the farmer as the price authority."
+        />
         <form className="card form-card" onSubmit={submit}>
           {error && <div className="alert error">{error}</div>}
-          <label>Marketplace</label>
-          <div className="choice-grid">
-            <button type="button" className={`choice ${category === 'AGRICULTURAL' ? 'selected' : ''}`} onClick={() => setCategory('AGRICULTURAL')}>
-              <b>Agricultural</b><span>Bulk produce, farm lots, inspection and transport workflows.</span>
-            </button>
-            <button type="button" className={`choice ${category === 'PRODUCT' ? 'selected' : ''}`} onClick={() => setCategory('PRODUCT')}>
-              <b>Product</b><span>General physical goods sold by MarketBridge members.</span>
-            </button>
+
+          <div className="mb-form-section">
+            <p className="mb-form-section-title">Marketplace</p>
+            <div className="choice-grid">
+              <button type="button" className={`choice ${category === 'AGRICULTURAL' ? 'selected' : ''}`} onClick={() => setCategory('AGRICULTURAL')}>
+                <b>Agricultural</b><span>Bulk produce, farm lots, inspection and transport workflows.</span>
+              </button>
+              <button type="button" className={`choice ${category === 'PRODUCT' ? 'selected' : ''}`} onClick={() => setCategory('PRODUCT')}>
+                <b>Product</b><span>General physical goods sold by MarketBridge members.</span>
+              </button>
+            </div>
           </div>
 
-          {category === 'AGRICULTURAL' ? (
-            <div className="form-grid">
-              <div><label>Produce</label><input required value={form.cropType} onChange={set('cropType')} placeholder="Potatoes, wheat, barley..." /></div>
-              <div><label>Quantity</label><input required type="number" min="0.01" value={form.quantity} onChange={set('quantity')} /></div>
-              <div><label>Unit</label><select value={form.unit} onChange={set('unit')}><option>quintal</option><option>ton</option><option>kg</option><option>crate</option><option>bag</option></select></div>
-            </div>
-          ) : (
-            <div className="form-grid">
-              <div><label>Product title</label><input required value={form.title} onChange={set('title')} placeholder="Product name" /></div>
-              <div><label>Quantity</label><input required type="number" min="0.01" value={form.quantity} onChange={set('quantity')} /></div>
-              <div><label>Unit</label><input value={form.unit} onChange={set('unit')} placeholder="piece, box, kg..." /></div>
-            </div>
-          )}
-
-          <div className="form-grid">
-            <div><label>Asking price (ETB)</label><input required type="number" min="0.01" value={form.askingPrice} onChange={set('askingPrice')} /></div>
-            {category === 'AGRICULTURAL' && <div><label>Minimum acceptable price</label><input type="number" min="0" value={form.minAcceptablePrice} onChange={set('minAcceptablePrice')} /></div>}
-            <div><label>Location</label><input required value={form.location} onChange={set('location')} placeholder="e.g. Bahir Dar, near the grain market" /></div>
-            <div>
-              <label>Region</label>
-              <select value={form.region} onChange={set('region')}>
-                <option value="">Select a region (optional)</option>
-                {regions.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </select>
-            </div>
-            <div><label>Zone</label><input value={form.zone} onChange={set('zone')} placeholder="Optional" /></div>
-            <div><label>Woreda</label><input value={form.woreda} onChange={set('woreda')} placeholder="Optional" /></div>
-            <div>
-              <label>Precise location (optional)</label>
-              <button type="button" className="btn btn-light" onClick={useMyLocation}>Use my current location</button>
-              {geoStatus && <p className="small muted">{geoStatus}</p>}
-              {form.latitude && form.longitude && (
-                <p className="small muted">Captured: {Number(form.latitude).toFixed(4)}, {Number(form.longitude).toFixed(4)}</p>
-              )}
-            </div>
-            {category === 'AGRICULTURAL' && (
-              <>
-                <div><label>Harvest date</label><input type="date" value={form.harvestedDate} onChange={set('harvestedDate')} /></div>
-                <div><label>Ready / pickup date</label><input type="date" value={form.readinessDate} onChange={set('readinessDate')} /></div>
-              </>
+          <div className="mb-form-section">
+            <p className="mb-form-section-title">Basic details</p>
+            {category === 'AGRICULTURAL' ? (
+              <div className="form-grid">
+                <div><label>Produce</label><input required value={form.cropType} onChange={set('cropType')} placeholder="Potatoes, wheat, barley..." /></div>
+                <div><label>Quantity</label><input required type="number" min="0.01" value={form.quantity} onChange={set('quantity')} /></div>
+                <div><label>Unit</label><select value={form.unit} onChange={set('unit')}><option>quintal</option><option>ton</option><option>kg</option><option>crate</option><option>bag</option></select></div>
+              </div>
+            ) : (
+              <div className="form-grid">
+                <div><label>Product title</label><input required value={form.title} onChange={set('title')} placeholder="Product name" /></div>
+                <div><label>Quantity</label><input required type="number" min="0.01" value={form.quantity} onChange={set('quantity')} /></div>
+                <div><label>Unit</label><input value={form.unit} onChange={set('unit')} placeholder="piece, box, kg..." /></div>
+              </div>
             )}
           </div>
 
-          <div>
-            <label>Description</label>
+          <div className="mb-form-section">
+            <p className="mb-form-section-title">Pricing &amp; location</p>
+            <div className="form-grid">
+              <div><label>Asking price (ETB)</label><input required type="number" min="0.01" value={form.askingPrice} onChange={set('askingPrice')} /></div>
+              {category === 'AGRICULTURAL' && <div><label>Minimum acceptable price</label><input type="number" min="0" value={form.minAcceptablePrice} onChange={set('minAcceptablePrice')} /></div>}
+              <div><label>Location</label><input required value={form.location} onChange={set('location')} placeholder="e.g. Bahir Dar, near the grain market" /></div>
+              <div>
+                <label>Region</label>
+                <select value={form.region} onChange={set('region')}>
+                  <option value="">Select a region (optional)</option>
+                  {regions.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div><label>Zone</label><input value={form.zone} onChange={set('zone')} placeholder="Optional" /></div>
+              <div><label>Woreda</label><input value={form.woreda} onChange={set('woreda')} placeholder="Optional" /></div>
+              <div>
+                <label>Precise location (optional)</label>
+                <button type="button" className="btn btn-light" onClick={useMyLocation}>Use my current location</button>
+                {geoStatus && <p className="small muted">{geoStatus}</p>}
+                {form.latitude && form.longitude && (
+                  <p className="small muted">Captured: {Number(form.latitude).toFixed(4)}, {Number(form.longitude).toFixed(4)}</p>
+                )}
+              </div>
+              {category === 'AGRICULTURAL' && (
+                <>
+                  <div><label>Harvest date</label><input type="date" value={form.harvestedDate} onChange={set('harvestedDate')} /></div>
+                  <div><label>Ready / pickup date</label><input type="date" value={form.readinessDate} onChange={set('readinessDate')} /></div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="mb-form-section">
+            <p className="mb-form-section-title">Description</p>
             <textarea
               value={form.description}
               onChange={set('description')}
@@ -241,35 +253,38 @@ export default function CreateListing() {
             />
           </div>
 
-          {mediaError && <div className="alert error">{mediaError}</div>}
+          <div className="mb-form-section">
+            <p className="mb-form-section-title">Media</p>
+            {mediaError && <div className="alert error">{mediaError}</div>}
 
-          <label>Photos</label>
-          <input type="file" accept="image/*" multiple onChange={e => handleMediaSelect('photo', e)} disabled={uploading} />
-          {form.photos.length > 0 && (
-            <div className="media-preview-grid">
-              {form.photos.map((p, i) => (
-                <div className="media-preview-item" key={p.key}>
-                  <img src={p.previewUrl} alt={p.name} />
-                  <button type="button" className="media-preview-remove" onClick={() => removeMedia('photo', i)} aria-label={`Remove ${p.name}`}>×</button>
-                </div>
-              ))}
-            </div>
-          )}
+            <label>Photos</label>
+            <input type="file" accept="image/*" multiple onChange={e => handleMediaSelect('photo', e)} disabled={uploading} />
+            {form.photos.length > 0 && (
+              <div className="media-preview-grid">
+                {form.photos.map((p, i) => (
+                  <div className="media-preview-item" key={p.key}>
+                    <img src={p.previewUrl} alt={p.name} />
+                    <button type="button" className="media-preview-remove" onClick={() => removeMedia('photo', i)} aria-label={`Remove ${p.name}`}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
 
-          <label>Short videos</label>
-          <input type="file" accept="video/*" multiple onChange={e => handleMediaSelect('video', e)} disabled={uploading} />
-          {form.videos.length > 0 && (
-            <div className="media-preview-grid">
-              {form.videos.map((v, i) => (
-                <div className="media-preview-item" key={v.key}>
-                  <video src={v.previewUrl} muted />
-                  <button type="button" className="media-preview-remove" onClick={() => removeMedia('video', i)} aria-label={`Remove ${v.name}`}>×</button>
-                </div>
-              ))}
-            </div>
-          )}
+            <label>Short videos</label>
+            <input type="file" accept="video/*" multiple onChange={e => handleMediaSelect('video', e)} disabled={uploading} />
+            {form.videos.length > 0 && (
+              <div className="media-preview-grid">
+                {form.videos.map((v, i) => (
+                  <div className="media-preview-item" key={v.key}>
+                    <video src={v.previewUrl} muted />
+                    <button type="button" className="media-preview-remove" onClick={() => removeMedia('video', i)} aria-label={`Remove ${v.name}`}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
 
-          {uploading && <p className="muted">Uploading media…</p>}
+            {uploading && <p className="muted">Uploading media…</p>}
+          </div>
 
           <button className="btn btn-primary btn-lg full" type="submit" disabled={uploading}>Publish {category === 'AGRICULTURAL' ? 'produce' : 'product'}</button>
         </form>

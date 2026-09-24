@@ -262,7 +262,7 @@ export default function ListingDetail() {
     return (list || []).filter((q) => !parentIds.has(q.id));
   }
 
-  if (!listing) return <main className="section mb-listing-detail-page"><div className="container-wide loading">Loading listing…</div></main>;
+  if (!listing) return <main className="section"><div className="container-wide loading">Loading listing…</div></main>;
 
   const isOwner = user?.id === listing.sellerId;
   const isBuyer = user?.roles?.includes('BUYER') && !isOwner;
@@ -485,7 +485,7 @@ export default function ListingDetail() {
             )}
 
             {isBuyer && (
-              <div className="card sticky-card">
+              <div className="card sticky-card" id="buy-box">
                 <h2>{isAvailable ? (isAgricultural ? 'Make an offer' : 'Buy this product') : 'Listing unavailable'}</h2>
                 {!isAvailable ? (
                   <>
