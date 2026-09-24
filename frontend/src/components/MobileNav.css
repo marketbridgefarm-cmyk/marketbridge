@@ -1,0 +1,108 @@
+/* Mobile top app bar + bottom docked navigation — design freeze §2.2.
+   Both are hidden at >=768px; the rail takes over there. */
+.mb-topbar,
+.mb-bottomnav { display: none; }
+
+@media (max-width: 767px) {
+  .mb-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: calc(56px + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) 8px 0;
+    background: rgba(255, 255, 255, .95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--mb-border);
+  }
+  .mb-topbar-menu {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--mb-radius-sm);
+    background: transparent;
+    color: var(--mb-ink);
+    cursor: pointer;
+  }
+  .mb-topbar-menu svg,
+  .mb-topbar-mark svg { fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .mb-topbar-mark {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--mb-radius-sm);
+    color: #fff;
+    background: var(--mb-primary);
+  }
+  .mb-topbar-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: Manrope, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--mb-ink);
+  }
+  .mb-topbar-lang { width: auto; flex: 0 0 auto; }
+  .mb-topbar-lang .lang-segmented-btn { min-height: 30px; min-width: 34px; padding: 0 6px; }
+  .mb-topbar-bell { flex: 0 0 44px; display: grid; place-items: center; min-height: 44px; }
+
+  .mb-bottomnav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 90;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    height: calc(64px + env(safe-area-inset-bottom, 0px));
+    padding: 6px 4px env(safe-area-inset-bottom, 0px);
+    background: rgba(255, 255, 255, .95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--mb-border);
+    box-shadow: 0 -4px 16px rgba(14, 75, 41, .08);
+  }
+  .mb-bottomnav-item {
+    min-width: 48px;
+    min-height: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    color: var(--mb-text-muted);
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .mb-bottomnav-icon {
+    width: 52px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--mb-radius-pill);
+    transition: background .2s ease;
+  }
+  .mb-bottomnav-icon svg { fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .mb-bottomnav-item.active { color: var(--mb-primary); }
+  .mb-bottomnav-item.active .mb-bottomnav-icon { background: var(--mb-surface-soft); }
+
+  /* Sticky in-page tab strips must sit below the sticky top bar. */
+  body.has-sidebar .dashboard-page .sd-tabs-list { top: calc(56px + env(safe-area-inset-top, 0px) + 6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-bottomnav-icon { transition: none; }
+}
