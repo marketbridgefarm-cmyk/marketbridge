@@ -291,11 +291,12 @@ const HOME_PAGE_STYLES = `
   /* Live marketplace statistics */
 
   .mb-home .hero-stat-card {
-    position: absolute;
+    position: relative;
     z-index: 5;
-    top: -34px;
-    right: -44px;
-    width: min(370px, 92%);
+    top: auto;
+    right: auto;
+    width: min(370px, 100%);
+    margin: 0 0 18px auto;
     padding: 18px;
     border: 1px solid rgba(255,255,255,.94);
     border-radius: 22px;
@@ -1022,7 +1023,7 @@ const HOME_PAGE_STYLES = `
 
   /* Responsive */
 
-  @media (max-width: 1000px) {
+  @media (max-width: 820px) {
     .mb-home .hero-grid {
       grid-template-columns: 1fr;
       grid-template-areas:
@@ -1037,9 +1038,6 @@ const HOME_PAGE_STYLES = `
     }
 
     .mb-home .hero-stat-card {
-      position: relative;
-      top: auto;
-      right: auto;
       width: min(560px, 100%);
       margin: 0 auto 18px;
     }
