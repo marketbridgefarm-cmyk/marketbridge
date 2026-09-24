@@ -505,7 +505,7 @@ const HOME_PAGE_STYLES = `
   /* General sections */
 
   .mb-home .home-section {
-    padding: clamp(65px, 8vw, 105px) 0;
+    padding: clamp(40px, 4.5vw, 60px) 0;
   }
 
   .mb-home .home-section-alt {
@@ -517,7 +517,7 @@ const HOME_PAGE_STYLES = `
 
   .mb-home .section-heading {
     max-width: 780px;
-    margin-bottom: 35px;
+    margin-bottom: 26px;
   }
 
   .mb-home .section-heading.center {
@@ -986,7 +986,7 @@ const HOME_PAGE_STYLES = `
     }
 
     .mb-home .home-section {
-      padding: 65px 0;
+      padding: 36px 0;
     }
 
     .mb-home .process-grid {
