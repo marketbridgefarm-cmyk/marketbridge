@@ -251,39 +251,138 @@ const HOME_PAGE_STYLES = `
     align-items: center;
     overflow: hidden;
     width: 100vw;
-    min-height: 50px;
+    min-height: 64px;
     margin: 0 0 0 calc(50% - 50vw);
     padding: 0;
-    background: var(--home-green-soft);
-    border-top: 1px solid rgba(22,114,71,.10);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.96), rgba(244,250,246,.96));
+    border-top: 1px solid rgba(22,114,71,.08);
     border-bottom: 1px solid rgba(22,114,71,.10);
+    box-shadow: 0 8px 24px rgba(25,65,42,.045);
+  }
+
+  .mb-home .trust-carousel::before,
+  .mb-home .trust-carousel::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 54px;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .mb-home .trust-carousel::before {
+    left: 0;
+    background: linear-gradient(90deg, rgba(255,255,255,.98), transparent);
+  }
+
+  .mb-home .trust-carousel::after {
+    right: 0;
+    background: linear-gradient(270deg, rgba(244,250,246,.98), transparent);
   }
 
   .mb-home .trust-carousel-track {
     display: flex;
+    align-items: center;
     width: max-content;
-    gap: 40px;
-    animation: mb-trust-scroll 16s linear infinite;
+    gap: 12px;
+    padding: 8px 18px;
+    animation: mb-trust-scroll 22s linear infinite;
+    will-change: transform;
   }
 
-  .mb-home .trust-carousel-track span {
+  .mb-home .trust-item {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 10px;
+    min-height: 42px;
+    padding: 6px 15px 6px 8px;
+    border: 1px solid rgba(22,114,71,.10);
+    border-radius: 999px;
+    background: rgba(255,255,255,.82);
+    box-shadow: 0 5px 16px rgba(25,65,42,.055);
     white-space: nowrap;
-    color: #607068;
-    font-size: 12px;
-    font-weight: 600;
   }
 
-  .mb-home .trust-carousel-track b {
-    color: var(--home-green);
-    font-size: 14px;
+  .mb-home .trust-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    color: #167247;
+    background: linear-gradient(135deg, #e8f6ee, #d8efe2);
+    box-shadow: inset 0 0 0 1px rgba(22,114,71,.07);
+  }
+
+  .mb-home .trust-icon svg {
+    width: 15px;
+    height: 15px;
+    stroke: currentColor;
+    stroke-width: 2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .mb-home .trust-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .mb-home .trust-title {
+    color: #183b29;
+    font-size: 11px;
+    line-height: 1.15;
+    font-weight: 850;
+    letter-spacing: .01em;
+  }
+
+  .mb-home .trust-subtitle {
+    color: #738079;
+    font-size: 9px;
+    line-height: 1.2;
+    font-weight: 600;
   }
 
   @keyframes mb-trust-scroll {
     from { transform: translateX(0); }
     to { transform: translateX(-50%); }
+  }
+
+  @media (max-width: 620px) {
+    .mb-home .trust-carousel {
+      min-height: 60px;
+    }
+
+    .mb-home .trust-carousel-track {
+      gap: 9px;
+      padding: 7px 12px;
+      animation-duration: 19s;
+    }
+
+    .mb-home .trust-item {
+      min-height: 40px;
+      padding-right: 13px;
+    }
+
+    .mb-home .trust-icon {
+      flex-basis: 28px;
+      width: 28px;
+      height: 28px;
+    }
+
+    .mb-home .trust-title {
+      font-size: 10.5px;
+    }
+
+    .mb-home .trust-subtitle {
+      font-size: 8.5px;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -1389,14 +1488,71 @@ export default function Home() {
       {/* FULL-WIDTH TRUST CAROUSEL — directly under the hero */}
       <div className="trust-carousel" aria-label="MarketBridge marketplace features">
         <div className="trust-carousel-track">
-          <span><b>✓</b> Independent sellers</span>
-          <span><b>✓</b> Buyer & seller accounts</span>
-          <span><b>✓</b> Offers & negotiation</span>
-          <span><b>✓</b> Marketplace records</span>
-          <span><b>✓</b> Independent sellers</span>
-          <span><b>✓</b> Buyer & seller accounts</span>
-          <span><b>✓</b> Offers & negotiation</span>
-          <span><b>✓</b> Marketplace records</span>
+          <span className="trust-item">
+            <span className="trust-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
+            <span className="trust-copy">
+              <span className="trust-title">Independent sellers</span>
+              <span className="trust-subtitle">Direct marketplace participation</span>
+            </span>
+          </span>
+
+          <span className="trust-item">
+            <span className="trust-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 10h8"/><path d="M8 14h5"/></svg>
+            </span>
+            <span className="trust-copy">
+              <span className="trust-title">Offers & negotiation</span>
+              <span className="trust-subtitle">Agree on the right deal</span>
+            </span>
+          </span>
+
+          <span className="trust-item">
+            <span className="trust-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3 20 7v5c0 4.8-3.1 7.8-8 9-4.9-1.2-8-4.2-8-9V7z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>
+            </span>
+            <span className="trust-copy">
+              <span className="trust-title">Marketplace records</span>
+              <span className="trust-subtitle">Clear transaction history</span>
+            </span>
+          </span>
+
+          <span className="trust-item">
+            <span className="trust-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-8 0"/><path d="M4 21a8 8 0 0 1 16 0"/><path d="M18 8a3 3 0 1 0-2.5-4.5"/><path d="M20 21a6 6 0 0 0-3.5-5.5"/></svg>
+            </span>
+            <span className="trust-copy">
+              <span className="trust-title">Buyer & seller accounts</span>
+              <span className="trust-subtitle">Built for both sides of trade</span>
+            </span>
+          </span>
+
+          {/* Duplicate set creates a seamless loop */}
+          <span className="trust-item" aria-hidden="true">
+            <span className="trust-icon">
+              <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
+            <span className="trust-copy"><span className="trust-title">Independent sellers</span><span className="trust-subtitle">Direct marketplace participation</span></span>
+          </span>
+          <span className="trust-item" aria-hidden="true">
+            <span className="trust-icon">
+              <svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 10h8"/><path d="M8 14h5"/></svg>
+            </span>
+            <span className="trust-copy"><span className="trust-title">Offers & negotiation</span><span className="trust-subtitle">Agree on the right deal</span></span>
+          </span>
+          <span className="trust-item" aria-hidden="true">
+            <span className="trust-icon">
+              <svg viewBox="0 0 24 24"><path d="M12 3 20 7v5c0 4.8-3.1 7.8-8 9-4.9-1.2-8-4.2-8-9V7z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>
+            </span>
+            <span className="trust-copy"><span className="trust-title">Marketplace records</span><span className="trust-subtitle">Clear transaction history</span></span>
+          </span>
+          <span className="trust-item" aria-hidden="true">
+            <span className="trust-icon">
+              <svg viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-8 0"/><path d="M4 21a8 8 0 0 1 16 0"/><path d="M18 8a3 3 0 1 0-2.5-4.5"/><path d="M20 21a6 6 0 0 0-3.5-5.5"/></svg>
+            </span>
+            <span className="trust-copy"><span className="trust-title">Buyer & seller accounts</span><span className="trust-subtitle">Built for both sides of trade</span></span>
+          </span>
         </div>
       </div>
 
