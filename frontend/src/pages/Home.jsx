@@ -444,23 +444,20 @@ const HOME_PAGE_STYLES = `
     font-size: 10px;
   }
 
-  /* Account CTA */
+  /* Hero join card */
 
-  .mb-home .account-strip {
-    position: relative;
-    z-index: 3;
-    width: min(1060px, calc(100% - 40px));
-    margin: -30px auto 0;
+  .mb-home .hero-join {
+    margin-top: 18px;
     padding: 18px 20px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 18px;
-    border: 1px solid rgba(255,255,255,.9);
-    border-radius: 18px;
-    background: rgba(255,255,255,.92);
-    box-shadow: 0 18px 50px rgba(25,65,42,.10);
-    backdrop-filter: blur(18px);
+    flex-wrap: wrap;
+    gap: 16px;
+    border: 1px solid rgba(22,114,71,.12);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(20,45,28,.06);
   }
 
   .mb-home .account-copy {
@@ -955,19 +952,9 @@ const HOME_PAGE_STYLES = `
       font-size: 16px;
     }
 
-    .mb-home .account-strip {
-      width: calc(100% - 28px);
-      margin-top: -25px;
+    .mb-home .hero-join {
       align-items: stretch;
       flex-direction: column;
-    }
-
-    .mb-home .account-actions {
-      width: 100%;
-    }
-
-    .mb-home .account-actions .home-btn {
-      flex: 1;
     }
 
     .mb-home .floating-badge {
@@ -1121,6 +1108,26 @@ export default function Home() {
               <span><b>✓</b> Offers & negotiation</span>
               <span><b>✓</b> Marketplace records</span>
             </div>
+
+            <div className="hero-join">
+              <div className="account-copy">
+                <strong>New to MarketBridge?</strong>
+                <span>
+                  Create an account to buy, sell, negotiate and participate
+                  across the marketplace.
+                </span>
+              </div>
+
+              <div className="account-actions">
+                <Link className="home-btn home-btn-primary" to="/register">
+                  Join MarketBridge
+                </Link>
+
+                <Link className="home-btn home-btn-light" to="/login">
+                  Welcome back · Sign in
+                </Link>
+              </div>
+            </div>
           </div>
 
           <div className="hero-visual">
@@ -1165,27 +1172,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      {/* ACCOUNT CTA */}
-      <div className="account-strip">
-        <div className="account-copy">
-          <strong>New to MarketBridge?</strong>
-          <span>
-            Create an account to buy, sell, negotiate and participate across
-            the marketplace.
-          </span>
-        </div>
-
-        <div className="account-actions">
-          <Link className="home-btn home-btn-primary" to="/register">
-            Join MarketBridge
-          </Link>
-
-          <Link className="home-btn home-btn-light" to="/login">
-            Welcome back · Sign in
-          </Link>
-        </div>
-      </div>
 
       <AdvertisementBanner />
 
