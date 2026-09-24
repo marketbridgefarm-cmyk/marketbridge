@@ -1,7 +1,7 @@
 {
   "name": "marketbridge-backend",
   "version": "1.0.0",
-  "description": "MarketBridge API — Ethiopian agricultural & digital marketplace",
+  "description": "MarketBridge API \u2014 Ethiopian agricultural & digital marketplace",
   "main": "src/index.js",
   "type": "commonjs",
   "engines": {
@@ -22,7 +22,8 @@
     "backup": "bash scripts/backup-postgres.sh",
     "restore": "bash scripts/restore-postgres.sh",
     "backup:list": "node scripts/backupStorage.js list",
-    "render:build": "npm run docs:generate && npx prisma migrate deploy"
+    "render:build": "npm run docs:generate && npx prisma migrate deploy",
+    "prestart": "npm run docs:generate && npx prisma migrate deploy"
   },
   "dependencies": {
     "swagger-ui-express": "^5.0.1",
