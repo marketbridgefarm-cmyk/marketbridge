@@ -4269,3 +4269,73 @@ textarea {
     transition: none !important;
   }
 }
+
+/* ==========================================================================
+   STITCH DESIGN FREEZE v1.0 — Phase 1 foundation tokens
+   Appended last on purpose: the earlier dashboard-scoped --mb-* values above
+   (bluish canvas, #166534 primary, etc.) are superseded by the frozen
+   palette. Existing --green/--ink/--line variables are unchanged.
+   ========================================================================== */
+:root {
+  /* brand */
+  --mb-primary: #176b3a;
+  --mb-primary-dark: #0e4b29;
+  --mb-primary-light: #2f9159;
+  --mb-surface-soft: #eef5ef;
+  --mb-surface-subtle: #effdf0;
+  /* canvas & surfaces */
+  --mb-bg: #f7f9f6;
+  --mb-card: #ffffff;
+  --mb-surface: #ffffff;
+  --mb-ink: #17231b;
+  --mb-text: #17231b;
+  --mb-text-muted: #667168;
+  --mb-muted: #667168;
+  --mb-border: #dfe7df;
+  --mb-border-subtle: rgba(223, 231, 223, .6);
+  /* semantic (always pair with an icon + text, never colour alone) */
+  --mb-gold: #b77b1b;
+  --mb-gold-light: #fef8ee;
+  --mb-gold-border: #fae1b8;
+  --mb-warning: #b77b1b;
+  --mb-warning-soft: #fef8ee;
+  --mb-danger: #b42318;
+  --mb-danger-light: #fef3f2;
+  --mb-danger-border: #fecdca;
+  --mb-info: #026aa2;
+  --mb-info-light: #f0f9ff;
+  --mb-info-border: #b9e6fe;
+  --mb-success: #176b3a;
+  --mb-success-light: #effdf0;
+  --mb-success-border: #bbf7d0;
+  /* radii */
+  --mb-radius-sm: 8px;
+  --mb-radius-md: 14px;
+  --mb-radius-lg: 20px;
+  --mb-radius-pill: 9999px;
+  /* elevation */
+  --mb-shadow-card: 0 2px 8px rgba(23, 107, 58, .04);
+  --mb-shadow-elevated: 0 4px 16px rgba(14, 75, 41, .08);
+  --mb-shadow-modal: 0 12px 32px rgba(14, 75, 41, .16);
+  --mb-shadow-dock: 0 -4px 16px rgba(14, 75, 41, .08);
+  /* interaction */
+  --mb-touch-min: 44px;
+  --mb-focus-ring: 2px solid #176b3a;
+}
+
+/* Visible keyboard focus (WCAG 2.1 AA). :where() keeps specificity at zero so
+   any component that defines its own focus style still wins. */
+:where(a, button, input, select, textarea, summary, [role="tab"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: var(--mb-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Motion safety net: honour reduced-motion for every remaining animation. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
