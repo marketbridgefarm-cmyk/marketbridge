@@ -35,8 +35,8 @@ export default function ListingCard({ listing }) {
     return () => observer.disconnect();
   }, [listing.sponsoredAdId]);
 
-  return <article ref={cardRef} className={`listing-card mb-produce-card${listing.sponsored ? ' listing-card--sponsored' : ''}`}>
-    <div className="listing-photo mb-produce-card__media">
+  return <article ref={cardRef} className={`listing-card${listing.sponsored ? ' listing-card--sponsored' : ''}`}>
+    <div className="listing-photo">
       {listing.sponsored && <span className="tag tag--sponsored">Sponsored</span>}
       {listing.photos?.[0]
         ? <img src={listing.photos[0]} alt={title} loading="lazy" decoding="async"/>
@@ -44,7 +44,7 @@ export default function ListingCard({ listing }) {
           ? <video src={listing.videos[0]} muted />
           : <span>{title.slice(0,2).toUpperCase()}</span>}
     </div>
-    <div className="listing-body mb-produce-card__body">
+    <div className="listing-body">
       <div className="listing-meta">
         <span className="tag">{isProduct ? 'PRODUCT' : 'AGRICULTURE'}</span>
         {!isProduct && <span className="tag tag--negotiable">Negotiable</span>}
@@ -62,6 +62,15 @@ export default function ListingCard({ listing }) {
           {isVerifiedSeller && <span className="verified-mark" title="Verified seller"> ✓ Verified</span>}
           {listing.seller?.rating ? ` · ★ ${listing.seller.rating.toFixed(1)}` : ''}
         </span>
+      </div>
+      <div className="listing-card-actions">
+        <Link
+          className="btn-ghost-sm"
+          to={`/listings/${listing.id}#buy-box`}
+          aria-label={isProduct ? 'Buy this product' : 'Make an offer on this listing'}
+        >
+          {isProduct ? 'Buy now' : 'Make offer'}
+        </Link>
         <Link className="text-link" to={`/listings/${listing.id}`}>View listing →</Link>
       </div>
     </div>
