@@ -1127,6 +1127,10 @@ model DigitalProduct {
   // Should not be exposed publicly.
   fileUrl String?
 
+  // Private object-storage keys for optional seller-supplied preview images.
+  // Never expose these keys directly; convert them to short-lived signed URLs.
+  previewKeys String[] @default([])
+
   description String?
 
   status ListingStatus @default(ACTIVE)
