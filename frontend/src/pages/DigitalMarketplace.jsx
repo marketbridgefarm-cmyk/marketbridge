@@ -47,7 +47,10 @@ export default function DigitalMarketplace() {
 
   async function submit(e) {
     e.preventDefault();
-    if (!form.file) { showToast('Choose a file', 'error'); return; }
+    if (!(form.file instanceof File) || form.file.size <= 0) {
+      showToast('Choose a valid private product file', 'error');
+      return;
+    }
     const fd = new FormData();
     fd.append('title', form.title);
     fd.append('productType', form.productType);
@@ -157,8 +160,8 @@ export default function DigitalMarketplace() {
               <div><label>Title</label><input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
               <div><label>Type</label><select value={form.productType} onChange={e => setForm({ ...form, productType: e.target.value })}>{['ebook', 'template', 'graphic', 'photo', 'software_license', 'course', 'document'].map(x => <option key={x}>{x}</option>)}</select></div>
               <div><label>Price (ETB)</label><input type="number" min="0.01" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} /></div>
-              <div><label>Private file</label><input type="file" onChange={e => setForm({ ...form, file: e.target.files?.[0] || null })} /></div>
-              <div><label>Preview images (up to 5, shown on the product card)</label><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e => setForm({ ...form, previews: Array.from(e.target.files || []).slice(0, 5) })} /></div>
+              <div><label htmlFor="digital-private-file">Private file</label><input id="digital-private-file" type="file" onChange={e => { const file = e.target.files?.[0] || null; setForm(current => ({ ...current, file })); }} /></div>
+              <div><label htmlFor="digital-preview-files">Preview images (up to 5, shown on the product card)</label><input id="digital-preview-files" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e => { const previews = Array.from(e.target.files || []).slice(0, 5); setForm(current => ({ ...current, previews })); }} /></div>
             </div>
             <label>Description</label>
             <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
