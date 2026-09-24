@@ -104,7 +104,7 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
   }, [category]);
 
   return (
-    <main className="section">
+    <main className="section mb-marketplace-page">
       <div className="container-wide">
         <div className="page-header">
           <div>

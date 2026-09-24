@@ -163,7 +163,7 @@ export default function CreateListing() {
   }
 
   return (
-    <div className="listing-modal-overlay" onClick={closeModal}>
+    <div className="listing-modal-overlay mb-create-listing" onClick={closeModal}>
       <main className="section listing-modal-panel" onClick={e => e.stopPropagation()}>
         <div className="container-narrow">
           <div className="listing-modal-drag-handle" aria-hidden="true" />
