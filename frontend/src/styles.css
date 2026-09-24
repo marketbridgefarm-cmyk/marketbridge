@@ -4339,3 +4339,11 @@ textarea {
     scroll-behavior: auto !important;
   }
 }
+
+/* Phase 1 fix: `.dashboard-page h1` (specificity 0,1,1) was overriding the
+   white heading on the green welcome card, leaving dark text on dark green. */
+.dashboard-page .dash-welcome-heading { color: #fff; }
+.dashboard-page .dash-welcome-subtitle { color: rgba(255, 255, 255, .85); }
+
+/* Notification bell is now an SVG (the old glyph was a rotated character). */
+.notification-bell { transform: none; display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
