@@ -237,30 +237,47 @@ const HOME_PAGE_STYLES = `
     background: #fff;
   }
 
-  .mb-home .hero-trust {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px 23px;
-    margin-top: 30px;
-    padding: 18px 22px;
+  .mb-home .trust-carousel {
+    overflow: hidden;
+    width: 100%;
+    padding: 16px 0;
+    margin-top: 10px;
     background: #fff;
-    border: 1px solid rgba(22,114,71,.12);
-    border-radius: 16px;
-    box-shadow: 0 8px 24px rgba(20,45,28,.06);
+    border-top: 1px solid rgba(22,114,71,.10);
+    border-bottom: 1px solid rgba(22,114,71,.10);
+  }
+
+  .mb-home .trust-carousel-track {
+    display: flex;
+    width: max-content;
+    gap: 40px;
+    animation: mb-trust-scroll 16s linear infinite;
+  }
+
+  .mb-home .trust-carousel-track span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
     color: #607068;
     font-size: 12px;
     font-weight: 600;
   }
 
-  .mb-home .hero-trust span {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .mb-home .hero-trust b {
+  .mb-home .trust-carousel-track b {
     color: var(--home-green);
     font-size: 14px;
+  }
+
+  @keyframes mb-trust-scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mb-home .trust-carousel-track {
+      animation: none;
+    }
   }
 
   /* Hero visual */
@@ -444,44 +461,32 @@ const HOME_PAGE_STYLES = `
     font-size: 10px;
   }
 
-  /* Hero join card */
+  /* Hero join (plain hero elements) */
 
   .mb-home .hero-join {
-    margin-top: 18px;
-    padding: 18px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 16px;
-    border: 1px solid rgba(22,114,71,.12);
-    border-radius: 16px;
-    background: #fff;
-    box-shadow: 0 8px 24px rgba(20,45,28,.06);
+    margin-top: 26px;
   }
 
-  .mb-home .account-copy {
-    min-width: 0;
-  }
-
-  .mb-home .account-copy strong {
+  .mb-home .hero-join strong {
     display: block;
     color: #173b2a;
-    font-size: 14px;
+    font-size: 17px;
   }
 
-  .mb-home .account-copy span {
+  .mb-home .hero-join > span {
     display: block;
-    margin-top: 4px;
-    color: #68766e;
-    font-size: 11px;
-    line-height: 1.5;
+    margin-top: 6px;
+    max-width: 46ch;
+    color: #56635a;
+    font-size: 13px;
+    line-height: 1.55;
   }
 
   .mb-home .account-actions {
     display: flex;
-    flex: 0 0 auto;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 11px;
+    margin-top: 16px;
   }
 
   .mb-home .account-actions .home-btn {
@@ -952,11 +957,6 @@ const HOME_PAGE_STYLES = `
       font-size: 16px;
     }
 
-    .mb-home .hero-join {
-      align-items: stretch;
-      flex-direction: column;
-    }
-
     .mb-home .floating-badge {
       right: 8px;
     }
@@ -1023,11 +1023,6 @@ const HOME_PAGE_STYLES = `
       bottom: auto;
       display: inline-block;
       margin-top: 12px;
-    }
-
-    .mb-home .hero-trust {
-      display: grid;
-      gap: 9px;
     }
 
     .mb-home .account-actions {
@@ -1102,21 +1097,12 @@ export default function Home() {
               commerce.
             </p>
 
-            <div className="hero-trust">
-              <span><b>✓</b> Independent sellers</span>
-              <span><b>✓</b> Buyer & seller accounts</span>
-              <span><b>✓</b> Offers & negotiation</span>
-              <span><b>✓</b> Marketplace records</span>
-            </div>
-
             <div className="hero-join">
-              <div className="account-copy">
-                <strong>New to MarketBridge?</strong>
-                <span>
-                  Create an account to buy, sell, negotiate and participate
-                  across the marketplace.
-                </span>
-              </div>
+              <strong>New to MarketBridge?</strong>
+              <span>
+                Create an account to buy, sell, negotiate and participate
+                across the marketplace.
+              </span>
 
               <div className="account-actions">
                 <Link className="home-btn home-btn-primary" to="/register">
@@ -1172,6 +1158,20 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* TRUST CAROUSEL */}
+      <div className="trust-carousel">
+        <div className="trust-carousel-track">
+          <span><b>✓</b> Independent sellers</span>
+          <span><b>✓</b> Buyer & seller accounts</span>
+          <span><b>✓</b> Offers & negotiation</span>
+          <span><b>✓</b> Marketplace records</span>
+          <span><b>✓</b> Independent sellers</span>
+          <span><b>✓</b> Buyer & seller accounts</span>
+          <span><b>✓</b> Offers & negotiation</span>
+          <span><b>✓</b> Marketplace records</span>
+        </div>
+      </div>
 
       <AdvertisementBanner />
 
