@@ -144,10 +144,17 @@ const HOME_PAGE_STYLES = `
     z-index: 2;
     display: grid;
     grid-template-columns: minmax(0, 1.15fr) minmax(340px, .85fr);
+    grid-template-areas:
+      "content visual"
+      "carousel visual";
     gap: clamp(40px, 7vw, 90px);
     align-items: center;
     padding: 82px 0;
   }
+
+  .mb-home .hero-content { grid-area: content; }
+  .mb-home .hero-grid .trust-carousel { grid-area: carousel; align-self: start; }
+  .mb-home .hero-grid .hero-visual { grid-area: visual; }
 
   .mb-home .hero-eyebrow {
     display: inline-flex;
@@ -887,6 +894,10 @@ const HOME_PAGE_STYLES = `
   @media (max-width: 1000px) {
     .mb-home .hero-grid {
       grid-template-columns: 1fr;
+      grid-template-areas:
+        "content"
+        "carousel"
+        "visual";
       padding: 70px 0 85px;
     }
 
@@ -1082,7 +1093,7 @@ export default function Home() {
       {/* HERO */}
       <section className="home-hero">
         <div className="home-container hero-grid">
-          <div>
+          <div className="hero-content">
             <div className="hero-eyebrow">MARKETBRIDGE PLATFORM</div>
 
             <h1 className="hero-title">
@@ -1113,6 +1124,20 @@ export default function Home() {
                   Welcome back · Sign in
                 </Link>
               </div>
+            </div>
+          </div>
+
+          {/* TRUST CAROUSEL */}
+          <div className="trust-carousel">
+            <div className="trust-carousel-track">
+              <span><b>✓</b> Independent sellers</span>
+              <span><b>✓</b> Buyer & seller accounts</span>
+              <span><b>✓</b> Offers & negotiation</span>
+              <span><b>✓</b> Marketplace records</span>
+              <span><b>✓</b> Independent sellers</span>
+              <span><b>✓</b> Buyer & seller accounts</span>
+              <span><b>✓</b> Offers & negotiation</span>
+              <span><b>✓</b> Marketplace records</span>
             </div>
           </div>
 
@@ -1158,20 +1183,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      {/* TRUST CAROUSEL */}
-      <div className="trust-carousel">
-        <div className="trust-carousel-track">
-          <span><b>✓</b> Independent sellers</span>
-          <span><b>✓</b> Buyer & seller accounts</span>
-          <span><b>✓</b> Offers & negotiation</span>
-          <span><b>✓</b> Marketplace records</span>
-          <span><b>✓</b> Independent sellers</span>
-          <span><b>✓</b> Buyer & seller accounts</span>
-          <span><b>✓</b> Offers & negotiation</span>
-          <span><b>✓</b> Marketplace records</span>
-        </div>
-      </div>
 
       <AdvertisementBanner />
 
