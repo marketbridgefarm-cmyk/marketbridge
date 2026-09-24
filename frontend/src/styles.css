@@ -13,6 +13,15 @@
   --shadow: 0 12px 35px rgba(20, 45, 28, .07);
   --shadow-lift: 0 18px 40px rgba(20, 45, 28, .12);
   --shadow-tight: 0 2px 8px rgba(20, 45, 28, .06);
+  /* Elevation scale — consistent depth tiers built on the brand shadow tint.
+     0: flush  1: resting card  2: raised card/hover  3: sticky/dropdown
+     4: popover/modal-lite  5: modal/dialog */
+  --elevation-0: none;
+  --elevation-1: 0 2px 8px rgba(20, 45, 28, .06);
+  --elevation-2: 0 8px 24px rgba(20, 45, 28, .08);
+  --elevation-3: 0 12px 35px rgba(20, 45, 28, .10);
+  --elevation-4: 0 18px 40px rgba(20, 45, 28, .14);
+  --elevation-5: 0 24px 70px rgba(20, 45, 28, .20);
   --serif: 'Fraunces', Georgia, serif;
   --radius-sm: 8px;
   --radius-md: 14px;
@@ -23,7 +32,14 @@
   --space-md: clamp(16px, 3vw, 26px);
   --space-lg: clamp(24px, 5vw, 48px);
   --gutter: clamp(16px, 4vw, 22px);
-}* {
+}
+.elevation-0 { box-shadow: var(--elevation-0); }
+.elevation-1 { box-shadow: var(--elevation-1); }
+.elevation-2 { box-shadow: var(--elevation-2); }
+.elevation-3 { box-shadow: var(--elevation-3); }
+.elevation-4 { box-shadow: var(--elevation-4); }
+.elevation-5 { box-shadow: var(--elevation-5); }
+* {
   box-sizing: border-box;
   min-width: 0;
 }html {
@@ -4253,5 +4269,3 @@ textarea {
     transition: none !important;
   }
 }
-
-
