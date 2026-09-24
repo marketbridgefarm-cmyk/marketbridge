@@ -301,6 +301,43 @@ app.get('/health', (req, res) => {
 app.use('/api', apiLimiter);
 
 // ============================================================================
+// PUBLIC MARKETPLACE STATS
+// ============================================================================
+// Aggregate-only homepage statistics. No user identities, prices, locations,
+// or other private data are exposed. The frontend polls this endpoint every
+// 60 seconds so the hero card stays current without a page reload.
+app.get('/api/public/stats', async (req, res) => {
+  try {
+    const [activeListings, activeUsers, completedOrders, agriculturalLots] =
+      await Promise.all([
+        prisma.listing.count({ where: { status: 'ACTIVE' } }),
+        prisma.user.count({ where: { accountStatus: 'ACTIVE' } }),
+        prisma.order.count({ where: { status: 'COMPLETED' } }),
+        prisma.listing.count({
+          where: { category: 'AGRICULTURAL', status: 'ACTIVE' },
+        }),
+      ]);
+
+    res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+
+    return res.status(200).json({
+      stats: {
+        activeListings,
+        activeUsers,
+        completedOrders,
+        agriculturalLots,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Could not load public marketplace stats');
+    return res.status(503).json({
+      error: 'Marketplace statistics are temporarily unavailable',
+    });
+  }
+});
+
+// ============================================================================
 // API ROUTES
 // ============================================================================
 
