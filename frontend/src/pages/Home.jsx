@@ -196,13 +196,6 @@ const HOME_PAGE_STYLES = `
     line-height: 1.7;
   }
 
-  .mb-home .hero-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 11px;
-    margin-top: 30px;
-  }
-
   .mb-home .home-btn {
     min-height: 48px;
     display: inline-flex;
@@ -248,7 +241,12 @@ const HOME_PAGE_STYLES = `
     display: flex;
     flex-wrap: wrap;
     gap: 15px 23px;
-    margin-top: 24px;
+    margin-top: 30px;
+    padding: 18px 22px;
+    background: #fff;
+    border: 1px solid rgba(22,114,71,.12);
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(20,45,28,.06);
     color: #607068;
     font-size: 12px;
     font-weight: 600;
@@ -957,14 +955,6 @@ const HOME_PAGE_STYLES = `
       font-size: 16px;
     }
 
-    .mb-home .hero-actions {
-      margin-top: 23px;
-    }
-
-    .mb-home .hero-actions .home-btn {
-      width: 100%;
-    }
-
     .mb-home .account-strip {
       width: calc(100% - 28px);
       margin-top: -25px;
@@ -1124,16 +1114,6 @@ export default function Home() {
               marketplace platform for agricultural, physical and digital
               commerce.
             </p>
-
-            <div className="hero-actions">
-              <Link className="home-btn home-btn-primary" to="#marketplaces">
-                Explore Marketplaces <span>→</span>
-              </Link>
-
-              <Link className="home-btn home-btn-light" to="/agricultural">
-                Start with Agriculture
-              </Link>
-            </div>
 
             <div className="hero-trust">
               <span><b>✓</b> Independent sellers</span>
