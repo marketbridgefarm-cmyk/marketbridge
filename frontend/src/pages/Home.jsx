@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AdvertisementBanner from '../components/AdvertisementBanner.jsx';
+import api from '../api/client';
 
 const pillars = [
   [
@@ -285,6 +286,124 @@ const HOME_PAGE_STYLES = `
     .mb-home .trust-carousel-track {
       animation: none;
     }
+  }
+
+  /* Live marketplace statistics */
+
+  .mb-home .hero-stat-card {
+    position: absolute;
+    z-index: 5;
+    top: -34px;
+    right: -44px;
+    width: min(370px, 92%);
+    padding: 18px;
+    border: 1px solid rgba(255,255,255,.94);
+    border-radius: 22px;
+    background: rgba(255,255,255,.90);
+    box-shadow: 0 24px 55px rgba(25,65,42,.14), inset 0 1px 0 rgba(255,255,255,.95);
+    backdrop-filter: blur(18px);
+  }
+
+  .mb-home .hero-stat-card::before {
+    content: '';
+    position: absolute;
+    width: 120px;
+    height: 120px;
+    right: -45px;
+    top: -55px;
+    border-radius: 50%;
+    background: rgba(22,114,71,.06);
+    pointer-events: none;
+  }
+
+  .mb-home .hero-stat-header {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .mb-home .hero-stat-label {
+    color: #183b29;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+  }
+
+  .mb-home .hero-stat-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #28734c;
+    font-size: 9px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .mb-home .hero-stat-live::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #35a461;
+    box-shadow: 0 0 0 4px rgba(53,164,97,.10);
+  }
+
+  .mb-home .hero-stat-grid {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .mb-home .hero-stat {
+    min-width: 0;
+    padding: 12px 13px;
+    border: 1px solid rgba(21,67,45,.08);
+    border-radius: 14px;
+    background: rgba(248,251,249,.82);
+  }
+
+  .mb-home .hero-stat strong {
+    display: block;
+    color: #123c29;
+    font-size: 21px;
+    line-height: 1.05;
+    letter-spacing: -.7px;
+  }
+
+  .mb-home .hero-stat span {
+    display: block;
+    margin-top: 5px;
+    color: #718078;
+    font-size: 9px;
+    font-weight: 750;
+    line-height: 1.25;
+  }
+
+  .mb-home .hero-stat-footer {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 11px;
+    color: #7a867f;
+    font-size: 8px;
+  }
+
+  .mb-home .hero-stat-refresh {
+    color: #28734c;
+    font-weight: 800;
+  }
+
+  .mb-home .hero-stat-loading {
+    opacity: .58;
   }
 
   /* Hero visual */
@@ -914,7 +1033,15 @@ const HOME_PAGE_STYLES = `
     }
 
     .mb-home .hero-visual {
-      margin-top: clamp(-90px, -7vw, -40px);
+      margin-top: clamp(-20px, -2vw, -8px);
+    }
+
+    .mb-home .hero-stat-card {
+      position: relative;
+      top: auto;
+      right: auto;
+      width: min(560px, 100%);
+      margin: 0 auto 18px;
     }
 
     .mb-home .hero-title {
@@ -977,6 +1104,10 @@ const HOME_PAGE_STYLES = `
 
     .mb-home .hero-visual {
       margin-top: -45px;
+    }
+
+    .mb-home .hero-stat-card {
+      display: none;
     }
 
     .mb-home .hero-title {
@@ -1079,6 +1210,43 @@ const HOME_PAGE_STYLES = `
   }
 `;
 
+function formatStat(value) {
+  if (value === null || value === undefined) return '—';
+  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+}
+
+function HeroMarketplaceStats({ stats, loading }) {
+  const items = [
+    ['activeListings', 'Active listings'],
+    ['activeUsers', 'Marketplace users'],
+    ['completedOrders', 'Completed orders'],
+    ['agriculturalLots', 'Agricultural lots'],
+  ];
+
+  return (
+    <aside className={`hero-stat-card${loading ? ' hero-stat-loading' : ''}`} aria-label="Live MarketBridge marketplace statistics">
+      <div className="hero-stat-header">
+        <span className="hero-stat-label">MARKETPLACE LIVE</span>
+        <span className="hero-stat-live">Live statistics</span>
+      </div>
+
+      <div className="hero-stat-grid">
+        {items.map(([key, label]) => (
+          <div className="hero-stat" key={key}>
+            <strong>{formatStat(stats?.[key])}</strong>
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="hero-stat-footer">
+        <span>{stats?.updatedAt ? `Updated ${new Date(stats.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Connecting to marketplace data'}</span>
+        <span className="hero-stat-refresh">Auto-refresh · 60s</span>
+      </div>
+    </aside>
+  );
+}
+
 function PlatformStep({ number, title, description, link }) {
   return (
     <Link className="platform-step" to={link}>
@@ -1093,6 +1261,32 @@ function PlatformStep({ number, title, description, link }) {
 }
 
 export default function Home() {
+  const [marketStats, setMarketStats] = useState(null);
+  const [marketStatsLoading, setMarketStatsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadStats = async () => {
+      try {
+        const response = await api.get('/public/stats', { timeout: 8000 });
+        if (!cancelled) setMarketStats(response.data?.stats || null);
+      } catch {
+        if (!cancelled) setMarketStats(null);
+      } finally {
+        if (!cancelled) setMarketStatsLoading(false);
+      }
+    };
+
+    loadStats();
+    const interval = window.setInterval(loadStats, 60_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
   return (
     <main className="mb-home">
       <style>{HOME_PAGE_STYLES}</style>
@@ -1149,6 +1343,8 @@ export default function Home() {
           </div>
 
           <div className="hero-visual">
+            <HeroMarketplaceStats stats={marketStats} loading={marketStatsLoading} />
+
             <div className="platform-card">
               <div className="platform-header">
                 <span className="platform-label">MARKETBRIDGE STRUCTURE</span>
