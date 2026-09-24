@@ -4347,3 +4347,328 @@ textarea {
 
 /* Notification bell is now an SVG (the old glyph was a rotated character). */
 .notification-bell { transform: none; display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
+
+
+/* ==========================================================================
+   MARKETBRIDGE STITCH DESIGN FREEZE — PHASE 2 MARKETPLACE
+   Presentation-only layer. Existing routes, state, API calls and business
+   logic remain unchanged.
+   ========================================================================== */
+
+.mb-home-page,
+.mb-marketplace-page,
+.mb-listing-detail-page {
+  color: var(--mb-ink);
+}
+
+.mb-home-page .container-wide,
+.mb-marketplace-page .container-wide,
+.mb-listing-detail-page .container-wide {
+  max-width: 1280px;
+}
+
+.mb-home-page .eyebrow,
+.mb-marketplace-page .eyebrow,
+.mb-listing-detail-page .eyebrow,
+.mb-create-listing .eyebrow {
+  color: var(--mb-primary);
+  font-family: Manrope, system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.mb-home-page h1,
+.mb-home-page h2,
+.mb-home-page h3,
+.mb-marketplace-page h1,
+.mb-marketplace-page h2,
+.mb-marketplace-page h3,
+.mb-listing-detail-page h1,
+.mb-listing-detail-page h2,
+.mb-listing-detail-page h3,
+.mb-create-listing h1,
+.mb-create-listing h2 {
+  font-family: Manrope, system-ui, sans-serif;
+  color: var(--mb-ink);
+  letter-spacing: -.025em;
+}
+
+.mb-home-page .card,
+.mb-marketplace-page .card,
+.mb-listing-detail-page .card,
+.mb-create-listing .card {
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-md);
+  box-shadow: var(--mb-shadow-card);
+  background: var(--mb-card);
+}
+
+.mb-home-page .btn,
+.mb-marketplace-page .btn,
+.mb-listing-detail-page .btn,
+.mb-create-listing .btn {
+  min-height: 44px;
+  border-radius: var(--mb-radius-sm);
+  font-family: Manrope, system-ui, sans-serif;
+  font-weight: 700;
+}
+
+.mb-home-page .btn-primary,
+.mb-marketplace-page .btn-primary,
+.mb-listing-detail-page .btn-primary,
+.mb-create-listing .btn-primary {
+  background: var(--mb-primary);
+  border-color: var(--mb-primary);
+  color: #fff;
+}
+
+.mb-home-page .btn-primary:hover,
+.mb-marketplace-page .btn-primary:hover,
+.mb-listing-detail-page .btn-primary:hover,
+.mb-create-listing .btn-primary:hover {
+  background: var(--mb-primary-light);
+  border-color: var(--mb-primary-light);
+}
+
+/* Marketplace cards: preserve the existing data/actions while making the
+   visual hierarchy match the frozen produce-lot design. */
+.mb-produce-card {
+  overflow: hidden;
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-md);
+  background: var(--mb-card);
+  box-shadow: var(--mb-shadow-card);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.mb-produce-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(23,107,58,.25);
+  box-shadow: var(--mb-shadow-elevated);
+}
+
+.mb-produce-card__media {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--mb-surface-soft);
+}
+
+.mb-produce-card__media img,
+.mb-produce-card__media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.mb-produce-card__body {
+  padding: 16px;
+}
+
+.mb-produce-card .listing-meta {
+  gap: 6px;
+  align-items: center;
+}
+
+.mb-produce-card .tag {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--mb-radius-sm);
+  border: 1px solid var(--mb-border);
+  background: var(--mb-surface-soft);
+  color: var(--mb-primary-dark);
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mb-produce-card .tag--good {
+  background: var(--mb-success-light);
+  border-color: var(--mb-success-border);
+  color: var(--mb-success);
+}
+
+.mb-produce-card .tag--sponsored {
+  background: var(--mb-gold-light);
+  border-color: var(--mb-gold-border);
+  color: var(--mb-gold);
+}
+
+.mb-produce-card h3 {
+  margin: 10px 0 6px;
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 800;
+}
+
+.mb-produce-card .listing-location {
+  color: var(--mb-text-muted);
+  font-size: 14px;
+}
+
+.mb-produce-card .listing-stats {
+  border-top: 1px solid var(--mb-border);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.mb-produce-card .listing-stats span {
+  color: var(--mb-text-muted);
+}
+
+.mb-produce-card .listing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.mb-produce-card .listing-actions .btn {
+  flex: 1 1 140px;
+}
+
+/* Marketplace filter/search surface */
+.mb-marketplace-page .filters,
+.mb-marketplace-page .filter-bar {
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-md);
+  background: rgba(255,255,255,.92);
+  box-shadow: var(--mb-shadow-card);
+}
+
+.mb-marketplace-page input,
+.mb-marketplace-page select,
+.mb-marketplace-page textarea,
+.mb-create-listing input,
+.mb-create-listing select,
+.mb-create-listing textarea {
+  min-height: 44px;
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-sm);
+  background: #fff;
+  color: var(--mb-ink);
+}
+
+.mb-marketplace-page input:focus,
+.mb-marketplace-page select:focus,
+.mb-marketplace-page textarea:focus,
+.mb-create-listing input:focus,
+.mb-create-listing select:focus,
+.mb-create-listing textarea:focus {
+  border-color: var(--mb-primary-light);
+  box-shadow: 0 0 0 3px rgba(47,145,89,.12);
+  outline: none;
+}
+
+/* Listing detail: stronger two-column decision hierarchy without changing
+   the existing purchase/inspection/offer handlers. */
+.mb-listing-detail-page .listing-detail,
+.mb-listing-detail-page .listing-detail-layout {
+  align-items: start;
+}
+
+.mb-listing-detail-page .listing-gallery,
+.mb-listing-detail-page .media-gallery,
+.mb-listing-detail-page .listing-media {
+  border-radius: var(--mb-radius-md);
+  overflow: hidden;
+}
+
+.mb-listing-detail-page .listing-price,
+.mb-listing-detail-page .purchase-card,
+.mb-listing-detail-page .offer-card,
+.mb-listing-detail-page .inspection-card {
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-md);
+  background: var(--mb-card);
+  box-shadow: var(--mb-shadow-card);
+}
+
+.mb-listing-detail-page .listing-price strong,
+.mb-listing-detail-page .price,
+.mb-listing-detail-page .asking-price {
+  font-family: Manrope, system-ui, sans-serif;
+  color: var(--mb-primary-dark);
+  font-weight: 800;
+}
+
+.mb-listing-detail-page .status,
+.mb-listing-detail-page .tag {
+  border-radius: var(--mb-radius-sm);
+}
+
+/* Create-listing modal: retain the existing single-form logic while giving
+   it the frozen marketplace surface treatment. */
+.mb-create-listing .listing-modal-panel {
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-lg);
+  background: var(--mb-card);
+  box-shadow: var(--mb-shadow-modal);
+}
+
+.mb-create-listing .form-card {
+  box-shadow: none;
+}
+
+.mb-create-listing .choice-grid {
+  gap: 12px;
+}
+
+.mb-create-listing .choice {
+  min-height: 92px;
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-md);
+  background: #fff;
+  text-align: left;
+}
+
+.mb-create-listing .choice.selected {
+  border-color: var(--mb-primary);
+  background: var(--mb-surface-soft);
+  box-shadow: 0 0 0 2px rgba(23,107,58,.08);
+}
+
+.mb-create-listing .media-preview-grid {
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .mb-home-page,
+  .mb-marketplace-page,
+  .mb-listing-detail-page {
+    overflow-x: hidden;
+  }
+
+  .mb-produce-card:hover {
+    transform: none;
+  }
+
+  .mb-produce-card .listing-actions .btn {
+    flex-basis: 100%;
+  }
+
+  .mb-create-listing .listing-modal-panel {
+    border-radius: var(--mb-radius-lg) var(--mb-radius-lg) 0 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .mb-home-page .container-wide,
+  .mb-marketplace-page .container-wide,
+  .mb-listing-detail-page .container-wide {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .mb-produce-card__body {
+    padding: 14px;
+  }
+
+  .mb-create-listing .choice-grid {
+    grid-template-columns: 1fr;
+  }
+}
