@@ -278,7 +278,7 @@ export default function Negotiations() {
   }, [loadAll, toast]);
 
   return (
-    <main className="section mb-negotiations-page">
+    <main className="section">
       <div className="container-narrow">
         <span className="eyebrow">NEGOTIATIONS</span>
         <h1>Your negotiations</h1>
@@ -362,13 +362,19 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
   }
 
   return (
-    <article className="card">
+    <article className={`neg-card${myTurn ? ' neg-card--my-turn' : ''}`}>
+      {myTurn && (
+        <span className="neg-turn-label" aria-label="Your turn to respond">⚡ Your turn</span>
+      )}
       <div className="row-between">
         <div>
           <span className="role-chip">{item.status}</span>{' '}
           <span className="role-chip" style={{ marginLeft: 6 }}>{item.subtitle}</span>
-          <h3>{item.title}</h3>
-          <p>{Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB</p>
+          <h3 className="neg-title">{item.title}</h3>
+          <p className="neg-amount">
+            {Number.isFinite(amount) ? amount.toLocaleString() : '—'}
+            {' '}<span className="neg-amount-unit">ETB</span>
+          </p>
         </div>
         {item.linkTo && <Link className="btn btn-outline" to={item.linkTo}>Open</Link>}
       </div>
@@ -379,7 +385,7 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
       {item.status === 'ACCEPTED' && <p className="muted" style={{ marginTop: 8 }}>Agreed at <strong>{Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB</strong>.</p>}
 
       {canAct && (
-        <div className="row-actions" style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="neg-actions">
           <button type="button" className="sd-btn sd-btn-primary" disabled={anyBusy} onClick={() => onRespond(item, acceptAction)}>
             {busy(acceptAction) ? 'Accepting…' : 'Accept'}
           </button>

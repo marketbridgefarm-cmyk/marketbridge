@@ -18,6 +18,16 @@ const getError = (error, fallback) =>
   error?.message ||
   fallback;
 
+// Maps backend order status strings to Stitch tone variants.
+function statusTone(status) {
+  const s = String(status || '').toUpperCase();
+  if (['COMPLETED', 'DELIVERED', 'CONFIRMED', 'PAID'].includes(s)) return 'success';
+  if (['IN_TRANSIT', 'TRANSPORT_ARRANGED', 'TRANSPORT_PAID'].includes(s)) return 'info';
+  if (['CANCELLED', 'DISPUTED', 'FROZEN'].includes(s)) return 'danger';
+  if (['PENDING_PAYMENT', 'PENDING', 'AWAITING_INSPECTION', 'INSPECTION_PENDING'].includes(s)) return 'gold';
+  return 'muted';
+}
+
 const TABS = [
   { id: 'all', label: 'All orders' },
   { id: 'buying', label: 'Buying' },
@@ -67,14 +77,28 @@ function OrderRow({ order, currentUserId }) {
           ORDER {shortId(order.id)} · {counterparty?.name || 'Unknown party'} · {money(order.finalPrice)} ETB
         </p>
 
-        <p>
-          <span className="badge">{order.status}</span>
-          {openDispute && <span className="badge"> DISPUTED</span>}
-          {marketplaceStatus && <span className="badge"> Payment: {marketplaceStatus}</span>}
-          {transportJob && (
-            <span className="badge"> Transport: {transportStatus ? `${transportJob.status} · ${transportStatus}` : transportJob.status}</span>
+        <div className="badges">
+          <span className={`status-pill tone-${statusTone(order.status)}`}>
+            <span className="status-pill-dot" aria-hidden="true" />
+            {String(order.status || '').replace(/_/g, ' ')}
+          </span>
+          {openDispute && (
+            <span className="status-pill tone-danger">
+              <span className="status-pill-dot" aria-hidden="true" />
+              DISPUTED
+            </span>
           )}
-        </p>
+          {marketplaceStatus && (
+            <span className={`status-pill tone-${statusTone(marketplaceStatus)}`}>
+              Payment: {marketplaceStatus}
+            </span>
+          )}
+          {transportJob && (
+            <span className={`status-pill tone-${statusTone(transportJob.status)}`}>
+              Transport: {transportStatus ? `${transportJob.status} · ${transportStatus}` : transportJob.status}
+            </span>
+          )}
+        </div>
       </div>
 
       <Link className="btn btn-primary" to={`/orders/${order.id}`}>
@@ -126,7 +150,7 @@ export default function Orders() {
   }, [orders, tab, currentUserId]);
 
   return (
-    <main className="section mb-orders-page">
+    <main className="section">
       <div className="container-narrow">
         <div className="page-header">
           <div>
