@@ -540,20 +540,22 @@ export default function InspectorDashboard() {
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        className="sd-btn sd-btn-primary"
-                        style={{
-                          marginTop: 6,
-                        }}
-                        onClick={() =>
-                          accept(r.id)
-                        }
-                      >
-                        Accept job
-                      </button>
+                      {!(r.quotes || []).some((q) => q.status === 'SELECTED') && (
+                        <button
+                          type="button"
+                          className="sd-btn sd-btn-primary"
+                          style={{
+                            marginTop: 6,
+                          }}
+                          onClick={() =>
+                            accept(r.id)
+                          }
+                        >
+                          Accept job
+                        </button>
+                      )}
 
-                      {!(quotedRequestIds.has(r.id) || (() => { const l = leafInspectionQuote(r.quotes); return l && ['PENDING', 'COUNTERED'].includes(l.status); })()) && (
+                      {!(quotedRequestIds.has(r.id) || (() => { const l = leafInspectionQuote(r.quotes); return l && ['PENDING', 'SELECTED', 'COUNTERED'].includes(l.status); })()) && (
                         <p className="sd-muted" style={{ marginTop: 10, marginBottom: 4 }}>
                           Or submit a sealed quote instead of claiming it outright — the requester compares every inspector's quote and picks one; nobody, including you, sees anyone else's amount.
                         </p>
@@ -561,7 +563,7 @@ export default function InspectorDashboard() {
 
                       {(() => {
                         const myLeaf = leafInspectionQuote(r.quotes);
-                        const hasActiveThread = myLeaf && ['PENDING', 'COUNTERED'].includes(myLeaf.status);
+                        const hasActiveThread = myLeaf && ['PENDING', 'SELECTED', 'COUNTERED'].includes(myLeaf.status);
 
                         if (!hasActiveThread) {
                           if (quotedRequestIds.has(r.id)) {

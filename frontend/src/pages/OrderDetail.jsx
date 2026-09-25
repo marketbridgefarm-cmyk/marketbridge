@@ -16,7 +16,6 @@ import ActionCenter from '../components/ActionCenter.jsx';
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
-import BidBoard from '../components/BidBoard.jsx';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
 
 const shortId = (id) => id?.slice(0, 8) || '—';
@@ -284,6 +283,35 @@ const PAYMENT_METHODS = [
     label: 'QR Code',
   },
 ];
+
+function InspectionNegotiationControls({ quote, busy, onAction }) {
+  const [counter, setCounter] = useState('');
+  const amount = Number(quote.counterAmount ?? quote.amount);
+  return (
+    <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+      <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => onAction('ACCEPT')}>
+        {busy ? 'Working…' : 'Accept'}
+      </button>
+      <button type="button" className="btn btn-light btn-sm" disabled={busy} onClick={() => onAction('REJECT')}>
+        Reject
+      </button>
+      <input
+        type="number"
+        min="0.01"
+        step="0.01"
+        placeholder="Counter ETB"
+        value={counter}
+        disabled={busy}
+        onChange={(e) => setCounter(e.target.value)}
+        style={{ width: 120 }}
+        aria-label={`Counter inspection quote, current ${amount} ETB`}
+      />
+      <button type="button" className="btn btn-light btn-sm" disabled={busy || !(Number(counter) > 0)} onClick={() => onAction('COUNTER', Number(counter))}>
+        Counter
+      </button>
+    </div>
+  );
+}
 
 export default function OrderDetail() {
   const { orderId } = useParams();
@@ -810,6 +838,59 @@ export default function OrderDetail() {
       behavior: 'smooth',
       block: 'start',
     });
+  };
+
+  const selectTransportQuote = async (quoteId) => {
+    if (!quoteId) return;
+    setBusy(`quote-${quoteId}`);
+    setError('');
+    try {
+      await api.patch(`/transport/quotes/${quoteId}/select`);
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not select transport bid'));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const selectInspectionQuote = async (requestId, quoteId) => {
+    if (!requestId || !quoteId) return;
+    setBusy(`inspection-quote-${quoteId}`);
+    setError('');
+    try {
+      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/select`);
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not select inspection bid'));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const respondInspectionQuote = async (requestId, quoteId, action, counterAmount) => {
+    if (!requestId || !quoteId) return;
+    setBusy(`inspection-quote-${quoteId}-${action}`);
+    setError('');
+    try {
+      if (action === 'ACCEPT') {
+        await api.patch(`/inspections/${requestId}/quotes/${quoteId}/accept`);
+      } else if (action === 'REJECT') {
+        await api.patch(`/inspections/${requestId}/quotes/${quoteId}/reject`);
+      } else if (action === 'COUNTER') {
+        const amount = Number(counterAmount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+          setError('Enter a valid inspection counter amount.');
+          return;
+        }
+        await api.post(`/inspections/${requestId}/quotes/${quoteId}/counter`, { counterAmount: amount });
+      }
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not update inspection negotiation'));
+    } finally {
+      setBusy('');
+    }
   };
 
   const acceptQuote = async (quoteId) => {
@@ -1558,26 +1639,6 @@ export default function OrderDetail() {
     );
   }
 
-  // respondQuote — used by BidBoard embedded in inspection and transport sections.
-  // Plain function, not useCallback: this point in the component is reached only
-  // after the `loading` / `!order` early returns above, and a hook can never be
-  // called conditionally like that (it would change the hook count between the
-  // loading render and the loaded render, which is what was crashing the page).
-  const respondQuote = async (type, requestId, quote, action, counterAmount) => {
-    let response;
-    if (type === 'INSPECTION_QUOTE') {
-      if      (action === 'ACCEPT')  response = await api.patch(`/inspections/${requestId}/quotes/${quote.id}/accept`);
-      else if (action === 'REJECT')  response = await api.patch(`/inspections/${requestId}/quotes/${quote.id}/reject`);
-      else if (action === 'COUNTER') response = await api.post(`/inspections/${requestId}/quotes/${quote.id}/counter`, { counterAmount: Number(counterAmount) });
-    } else if (type === 'TRANSPORT_QUOTE') {
-      const payload = { action };
-      if (action === 'COUNTER') payload.counterAmount = Number(counterAmount);
-      response = await api.patch(`/transport/quotes/${quote.id}`, payload);
-    }
-    await load({ silent: true });
-    return response;
-  };
-
   // ==========================================================================
   // RENDER
   // ==========================================================================
@@ -1790,27 +1851,56 @@ export default function OrderDetail() {
           currentInspectionRequest ? (
             <div className="card">
               <h2>Inspection</h2>
-              {/* ---- Competition phase: show BidBoard when bids exist but inspector not yet hired ---- */}
-              {Array.isArray(currentInspectionRequest.quotes) &&
-               currentInspectionRequest.quotes.length > 0 &&
-               !currentInspectionRequest.inspector ? (
+              {currentInspectionRequest.status === 'REQUESTED' &&
+               !currentInspectionRequest.inspector &&
+               Array.isArray(currentInspectionRequest.quotes) &&
+               currentInspectionRequest.quotes.length > 0 ? (
                 <>
                   <p className="muted">
-                    {currentInspectionRequest.quotes.filter(q => q.status === 'PENDING' || q.status === 'COUNTERED').length} inspector{currentInspectionRequest.quotes.length === 1 ? '' : 's'} have bid on this request.
-                    Compare their quotes and hire the best match — or negotiate a price first.
+                    {currentInspectionRequest.quotes.filter((q) => ['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status)).length} inspector{currentInspectionRequest.quotes.filter((q) => ['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status)).length === 1 ? '' : 's'} in the sealed competition. Select one bid to open price negotiation.
                   </p>
-                  <BidBoard
-                    quotes={currentInspectionRequest.quotes}
-                    type="INSPECTION_QUOTE"
-                    requestId={currentInspectionRequest.id}
-                    onRespond={(quote, action, amount) =>
-                      respondQuote('INSPECTION_QUOTE', currentInspectionRequest.id, quote, action, amount)
-                    }
-                    disabled={!isParticipant}
-                  />
+                  {currentInspectionRequest.quotes
+                    .filter((q) => !q.parentQuoteId || !currentInspectionRequest.quotes.some((child) => child.parentQuoteId === q.id))
+                    .map((quote) => {
+                      const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
+                      const canSelectInspection = isParticipant && currentInspectionRequest.requestedById === currentUserId && quote.status === 'PENDING';
+                      const requesterTurn = quote.status === 'SELECTED' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+                      const waitingOnInspector = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
+                      const quoteBusy = busy === `inspection-quote-${quote.id}` || busy?.startsWith(`inspection-quote-${quote.id}-`);
+                      return (
+                        <div key={quote.id} className="transporter" style={{ marginTop: 10 }}>
+                          <div>
+                            <strong>{quote.inspector?.name || 'Inspector'}</strong>{' — '}
+                            <strong>{money(displayAmount)} ETB</strong>
+                            <span className="badge" style={{ marginLeft: 8 }}>{quote.status}</span>
+                            {quote.inspector?.rating != null && <span className="muted"> · Rating {Number(quote.inspector.rating).toFixed(1)}</span>}
+                            {quote.message && <p className="muted" style={{ marginTop: 4 }}>{quote.message}</p>}
+                          </div>
+
+                          {canSelectInspection && (
+                            <div style={{ marginTop: 8 }}>
+                              <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(busy)} onClick={() => selectInspectionQuote(currentInspectionRequest.id, quote.id)}>
+                                {busy === `inspection-quote-${quote.id}` ? 'Selecting…' : 'Select bid for deal'}
+                              </button>
+                            </div>
+                          )}
+
+                          {requesterTurn && currentInspectionRequest.requestedById === currentUserId && (
+                            <InspectionNegotiationControls
+                              quote={quote}
+                              busy={quoteBusy}
+                              onAction={(action, amount) => respondInspectionQuote(currentInspectionRequest.id, quote.id, action, amount)}
+                            />
+                          )}
+
+                          {waitingOnInspector && (
+                            <p className="muted" style={{ marginTop: 8 }}>You made the latest counter. Waiting for the inspector to respond.</p>
+                          )}
+                        </div>
+                      );
+                    })}
                 </>
               ) : (
-                /* ---- Inspector already assigned: summary view ---- */
                 <>
                   <p className="muted">An inspection already exists for this order. Continue with this inspection; a second request is not needed.</p>
                   <div className="detail-facts">
@@ -1899,28 +1989,10 @@ export default function OrderDetail() {
             )
           ) : (
             <>
-              {/* ---- Competition phase: BidBoard for hired-transport quotes ---- */}
-              {transportJob.method === 'HIRE_TRANSPORTER' &&
-               !transportJob.truckOwnerId &&
-               Array.isArray(transportJob.quotes) &&
-               transportJob.quotes.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <p className="muted">
-                    {transportJob.quotes.filter(q => q.status === 'PENDING' || q.status === 'COUNTERED').length} transporter{transportJob.quotes.length === 1 ? '' : 's'} have bid.
-                    Review their offers and hire the one that fits your route and capacity.
-                  </p>
-                  <BidBoard
-                    quotes={transportJob.quotes}
-                    type="TRANSPORT_QUOTE"
-                    onRespond={(quote, action, amount) =>
-                      respondQuote('TRANSPORT_QUOTE', null, quote, action, amount)
-                    }
-                    disabled={!isParticipant}
-                  />
-                </div>
-              )}
+              {/* ------------------------------------------------------------ */}
+              {/* TRANSPORT SUMMARY */}
+              {/* ------------------------------------------------------------ */}
 
-              {/* ---- Transport summary (after hire or own-truck) ---- */}
               <div className="detail-facts">
                 <div>
                   <span>Arranged by</span>
@@ -2355,7 +2427,8 @@ export default function OrderDetail() {
                       leafTransportQuotes(transportJob.quotes).map(
                         (quote) => {
                           const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
-                          const isArrangerTurn = quote.status === 'PENDING' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+                          const isArrangerTurn = quote.status === 'SELECTED' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+                          const isCompetitionBid = quote.status === 'PENDING';
                           const isWaitingOnTransporter = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
                           return (
                           <div
@@ -2424,6 +2497,14 @@ export default function OrderDetail() {
                                 ETB
                               </strong>
 
+                              {canChooseQuote && isCompetitionBid && (
+                                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                  <button type="button" className="btn btn-primary btn-sm" disabled={busy === `quote-${quote.id}`} onClick={() => selectTransportQuote(quote.id)}>
+                                    {busy === `quote-${quote.id}` ? 'Selecting…' : 'Select bid for deal'}
+                                  </button>
+                                  <span className="muted small">Competition bid — selecting opens price negotiation.</span>
+                                </div>
+                              )}
                               {canChooseQuote &&
                                 isArrangerTurn && (
                                   <div
