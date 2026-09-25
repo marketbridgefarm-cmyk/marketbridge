@@ -78,7 +78,7 @@ function isOfferExpired(offer) {
 
 async function expireOfferIfNeeded(tx, offer, actorId = null) {
   if (!offer || !isOfferExpired(offer)) return false;
-  if (!['PENDING', 'COUNTERED'].includes(offer.status)) return false;
+  if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(offer.status)) return false;
 
   const updated = await tx.offer.update({
     where: { id: offer.id },
@@ -879,7 +879,9 @@ router.patch(
                 throw offerError('Offer has expired and can no longer be acted on', 409);
               }
 
-              if (!['SELECTED', 'COUNTERED'].includes(freshOffer.status)) {
+              if (
+                !['SELECTED', 'COUNTERED'].includes(freshOffer.status)
+              ) {
                 throw offerError(
                   `Offer cannot be re-countered because it is ${freshOffer.status}`,
                   409

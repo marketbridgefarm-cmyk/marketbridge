@@ -320,7 +320,7 @@ router.get(
           // GET /:id/quotes route below.
           quotes: {
             where: {
-              status: { in: ['PENDING', 'COUNTERED', 'ACCEPTED', 'REJECTED'] },
+              status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'] },
               inspectorId: req.user.id,
             },
 
@@ -989,6 +989,19 @@ router.patch(
               ? 'assigned'
               : request.status.toLowerCase()
           } and cannot be accepted`,
+        });
+      }
+
+      // Once the requester has selected a sealed bid, the provider must
+      // continue through that selected quote's bilateral negotiation. Do not
+      // let the legacy direct-accept endpoint bypass the selection stage.
+      const selectedQuote = await prisma.inspectionQuote.findFirst({
+        where: { inspectionRequestId: request.id, status: 'SELECTED' },
+        select: { id: true },
+      });
+      if (selectedQuote) {
+        return res.status(409).json({
+          error: 'A bid has already been selected. Continue the selected quote negotiation instead of claiming the job directly.',
         });
       }
 
