@@ -600,7 +600,9 @@ router.patch(
         'REJECT',
         'COUNTER',
         'ACCEPT_COUNTER',
+        'ACCEPT_SELECTED',
         'RE_COUNTER',
+        'SELECT',
       ];
 
       if (
@@ -657,8 +659,55 @@ router.patch(
       }
 
       // ======================================================================
+      // SELLER SELECTS A BUYER BID FOR DEAL NEGOTIATION
+      // Competition and price-deal negotiation are deliberately separate.
+      // Selecting a bid does not create an order; it simply opens that buyer
+      // as the seller's chosen negotiation counterpart.
+      // ======================================================================
+
+      if (action === 'SELECT') {
+        if (!isSeller && !admin) {
+          return res.status(403).json({ error: 'Only the seller can select a buyer bid' });
+        }
+        if (offer.status !== 'PENDING') {
+          return res.status(400).json({ error: `Only a pending bid can be selected (current: ${offer.status})` });
+        }
+
+        const selected = await prisma.$transaction(async (tx) => {
+          const fresh = await tx.offer.findUnique({ where: { id: offer.id }, include: { listing: true } });
+          if (!fresh) throw offerError('Offer not found', 404);
+          if (fresh.status !== 'PENDING') throw offerError(`Only a pending bid can be selected (current: ${fresh.status})`, 409);
+          // One seller-selected buyer at a time. Other independent bids remain
+          // in the competition pool and can still be reviewed/rejected.
+          await tx.offer.updateMany({
+            where: {
+              listingId: fresh.listingId,
+              id: { not: fresh.id },
+              status: 'SELECTED',
+            },
+            data: { status: 'PENDING' },
+          });
+          await tx.offer.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
+          return tx.offer.findUnique({ where: { id: fresh.id } });
+        }, { maxWait: 10000, timeout: 15000 });
+
+        return res.json({ message: 'Buyer bid selected for price negotiation', offer: selected });
+      }
+
+      // ======================================================================
       // BUYER ACCEPTS SELLER COUNTER
       // ======================================================================
+
+      if (action === 'ACCEPT_SELECTED') {
+        if (!isBuyer && !admin) return res.status(403).json({ error: 'Only the buyer can accept a selected bid' });
+        if (offer.status !== 'SELECTED') return res.status(400).json({ error: `Offer must be SELECTED before acceptance (current: ${offer.status})` });
+        const result = await prisma.$transaction(async (tx) => {
+          const fresh = await tx.offer.findUnique({ where: { id: offer.id }, include: { listing: true } });
+          if (!fresh || fresh.status !== 'SELECTED') throw offerError('This selected bid is no longer available', 409);
+          return acceptOfferAndCreateOrder(tx, fresh, Number(fresh.amount), fresh.listing.sellerId, req.user.id);
+        }, { maxWait: 10000, timeout: 15000 });
+        return res.json({ message: 'Selected buyer bid accepted and order created successfully', offer: result.offer, order: result.order, transportAutomaticallyAssigned: false });
+      }
 
       if (action === 'ACCEPT_COUNTER') {
         if (!isBuyer && !admin) {
@@ -721,20 +770,14 @@ router.patch(
                 throw offerError('Offer has expired and can no longer be acted on', 409);
               }
 
-              if (
-                freshOffer.status !==
-                'COUNTERED'
-              ) {
+              if (!['SELECTED', 'COUNTERED'].includes(freshOffer.status)) {
                 throw offerError(
                   `Offer cannot be accepted because it is ${freshOffer.status}`,
                   409
                 );
               }
 
-              if (
-                freshOffer.counteredBy !==
-                'SELLER'
-              ) {
+              if (freshOffer.status === 'COUNTERED' && freshOffer.counteredBy !== 'SELLER') {
                 throw offerError(
                   'The buyer can only accept a seller counter-offer',
                   409
@@ -789,18 +832,11 @@ router.patch(
           });
         }
 
-        if (offer.status !== 'COUNTERED') {
-          return res.status(400).json({
-            error:
-              `Offer must be COUNTERED before another counter-offer can be made (current: ${offer.status})`,
-          });
+        if (!['SELECTED', 'COUNTERED'].includes(offer.status)) {
+          return res.status(400).json({ error: `Offer must be SELECTED or COUNTERED before another counter-offer can be made (current: ${offer.status})` });
         }
 
-        // Seller must have made the previous counter.
-        if (
-          offer.counteredBy !==
-          'SELLER'
-        ) {
+        if (offer.status === 'COUNTERED' && offer.counteredBy !== 'SELLER') {
           return res.status(409).json({
             error:
               'The buyer cannot counter twice in a row. The seller must respond first.',
@@ -843,10 +879,7 @@ router.patch(
                 throw offerError('Offer has expired and can no longer be acted on', 409);
               }
 
-              if (
-                freshOffer.status !==
-                'COUNTERED'
-              ) {
+              if (!['SELECTED', 'COUNTERED'].includes(freshOffer.status)) {
                 throw offerError(
                   `Offer cannot be re-countered because it is ${freshOffer.status}`,
                   409
@@ -854,8 +887,8 @@ router.patch(
               }
 
               if (
-                freshOffer.counteredBy !==
-                'SELLER'
+                freshOffer.status === 'COUNTERED' &&
+                freshOffer.counteredBy !== 'SELLER'
               ) {
                 throw offerError(
                   'The buyer cannot counter twice in a row. The seller must respond first.',
@@ -932,15 +965,8 @@ router.patch(
           });
         }
 
-        if (
-          !['PENDING', 'COUNTERED'].includes(
-            offer.status
-          )
-        ) {
-          return res.status(400).json({
-            error:
-              `Offer cannot be accepted because it is ${offer.status}`,
-          });
+        if (!['SELECTED', 'COUNTERED'].includes(offer.status)) {
+          return res.status(400).json({ error: `Offer cannot be accepted because it is ${offer.status}` });
         }
 
         // If the offer is COUNTERED, it must have been
@@ -977,11 +1003,7 @@ router.patch(
                 );
               }
 
-              if (
-                !['PENDING', 'COUNTERED'].includes(
-                  freshOffer.status
-                )
-              ) {
+              if (!['SELECTED', 'COUNTERED'].includes(freshOffer.status)) {
                 throw offerError(
                   `Offer cannot be accepted because it is ${freshOffer.status}`,
                   409
@@ -1078,15 +1100,8 @@ router.patch(
           });
         }
 
-        if (
-          !['PENDING', 'COUNTERED'].includes(
-            offer.status
-          )
-        ) {
-          return res.status(400).json({
-            error:
-              `Offer cannot be rejected because it is ${offer.status}`,
-          });
+        if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(offer.status)) {
+          return res.status(400).json({ error: `Offer cannot be rejected because it is ${offer.status}` });
         }
 
         const result =
@@ -1107,15 +1122,8 @@ router.patch(
                 );
               }
 
-              if (
-                !['PENDING', 'COUNTERED'].includes(
-                  freshOffer.status
-                )
-              ) {
-                throw offerError(
-                  `Offer cannot be rejected because it is ${freshOffer.status}`,
-                  409
-                );
+              if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(freshOffer.status)) {
+                throw offerError(`Offer cannot be rejected because it is ${freshOffer.status}`, 409);
               }
 
               const updatedOffer =
@@ -1201,7 +1209,7 @@ router.patch(
         }
 
         if (
-          !['PENDING', 'COUNTERED'].includes(
+          !['SELECTED', 'COUNTERED'].includes(
             offer.status
           )
         ) {
@@ -1245,7 +1253,7 @@ router.patch(
               }
 
               if (
-                !['PENDING', 'COUNTERED'].includes(
+                !['SELECTED', 'COUNTERED'].includes(
                   freshOffer.status
                 )
               ) {

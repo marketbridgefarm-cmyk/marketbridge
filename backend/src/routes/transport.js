@@ -71,6 +71,7 @@ function quoteError(message, statusCode = 400) {
 
 function quoteTurn(quote) {
   if (quote.status === 'PENDING') return 'REQUESTER';
+  if (quote.status === 'SELECTED') return 'REQUESTER';
   if (quote.status === 'COUNTERED') {
     return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
   }
@@ -2178,6 +2179,43 @@ async function loadTransportQuoteForNegotiation(req, res) {
 }
 
 // ============================================================================
+// SELECT TRANSPORT BID FOR DEAL NEGOTIATION
+// The arranging party compares sealed provider bids and selects one before
+// price negotiation. Selection alone does not assign the truck or authorize
+// transport payment.
+// ============================================================================
+
+router.patch(
+  '/quotes/:quoteId/select',
+  authenticate,
+  async (req, res) => {
+    try {
+      const loaded = await loadTransportQuoteForNegotiation(req, res);
+      if (!loaded) return;
+      const { quote, job, actorRole } = loaded;
+      if (actorRole !== 'REQUESTER') return res.status(403).json({ error: 'Only the arranging party can select a transport bid' });
+      if (!['REQUESTED', 'QUOTED'].includes(job.status)) return res.status(400).json({ error: 'This transport request is no longer accepting bids' });
+      if (quote.status !== 'PENDING') return res.status(400).json({ error: `Only a pending bid can be selected (current: ${quote.status})` });
+      if (isQuoteExpired(quote)) return res.status(409).json({ error: 'This quote has expired' });
+
+      const selected = await prisma.$transaction(async (tx) => {
+        const fresh = await tx.transportQuote.findUnique({ where: { id: quote.id } });
+        if (!fresh || fresh.status !== 'PENDING') throw quoteError('This bid is no longer available', 409);
+        await tx.transportQuote.updateMany({
+          where: { transportJobId: job.id, id: { not: fresh.id }, status: 'SELECTED' },
+          data: { status: 'PENDING' },
+        });
+        return tx.transportQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
+      }, { maxWait: 10000, timeout: 15000 });
+      return res.json({ message: 'Transporter bid selected for price negotiation', quote: selected });
+    } catch (error) {
+      req.log.error({ err: error }, 'SELECT TRANSPORT QUOTE ERROR:');
+      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not select transport bid' });
+    }
+  }
+);
+
+// ============================================================================
 // ACCEPT / REJECT / COUNTER QUOTE
 // Either the arranging party (buyer/seller) accepts or counters the truck
 // owner's (counter-)quote, or the truck owner accepts or counters the
@@ -2224,7 +2262,7 @@ router.patch(
       // ----------------------------------------------------------------------
 
       if (req.body.action === 'COUNTER') {
-        if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
+        if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
           return res.status(400).json({
             error: `Quote cannot be countered because it is ${quote.status}`,
           });
@@ -2245,7 +2283,7 @@ router.patch(
         const counterQuote = await prisma.$transaction(async (tx) => {
           const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
           if (!freshQuote) throw quoteError('Quote not found', 404);
-          if (!['PENDING', 'COUNTERED'].includes(freshQuote.status)) {
+          if (!['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
             throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
           }
           if (quoteTurn(freshQuote) !== effectiveRole) {
@@ -2306,7 +2344,7 @@ router.patch(
       // ----------------------------------------------------------------------
 
       if (req.body.action === 'REJECT') {
-        if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
+        if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(quote.status)) {
           return res.status(400).json({
             error: `This quote is already ${quote.status.toLowerCase()}`,
           });
@@ -2333,7 +2371,7 @@ router.patch(
       // ACCEPT
       // ----------------------------------------------------------------------
 
-      if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
+      if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
         return res.status(400).json({
           error: `This quote is already ${quote.status.toLowerCase()}`,
         });
@@ -2363,7 +2401,7 @@ router.patch(
           throw error;
         }
 
-        if (!['PENDING', 'COUNTERED'].includes(freshQuote.status)) {
+        if (!['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
           const error = new Error(`This quote is already ${freshQuote.status.toLowerCase()}`);
           error.statusCode = 409;
           throw error;

@@ -42,6 +42,7 @@ function quoteError(message, statusCode = 400) {
 // must respond. COUNTERED flips based on who made the most recent counter.
 function quoteTurn(quote) {
   if (quote.status === 'PENDING') return 'REQUESTER';
+  if (quote.status === 'SELECTED') return 'REQUESTER';
   if (quote.status === 'COUNTERED') {
     return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
   }
@@ -601,6 +602,42 @@ async function loadQuoteForNegotiation(req, res) {
 }
 
 // ============================================================================
+// SELECT INSPECTION BID FOR DEAL NEGOTIATION
+// Competition is sealed: the requester can compare all bids, then select one
+// provider. Selection does not assign the inspector or trigger payment.
+// ============================================================================
+
+router.patch(
+  '/:id/quotes/:quoteId/select',
+  authenticate,
+  async (req, res) => {
+    try {
+      const loaded = await loadQuoteForNegotiation(req, res);
+      if (!loaded) return;
+      const { request, quote, actorRole } = loaded;
+      if (actorRole !== 'REQUESTER') return res.status(403).json({ error: 'Only the requester can select an inspection bid' });
+      if (request.status !== 'REQUESTED') return res.status(400).json({ error: 'This inspection is no longer accepting bids' });
+      if (quote.status !== 'PENDING') return res.status(400).json({ error: `Only a pending bid can be selected (current: ${quote.status})` });
+      if (isQuoteExpired(quote)) return res.status(409).json({ error: 'This quote has expired' });
+
+      const selected = await prisma.$transaction(async (tx) => {
+        const fresh = await tx.inspectionQuote.findUnique({ where: { id: quote.id } });
+        if (!fresh || fresh.status !== 'PENDING') throw quoteError('This bid is no longer available', 409);
+        await tx.inspectionQuote.updateMany({
+          where: { inspectionRequestId: request.id, id: { not: fresh.id }, status: 'SELECTED' },
+          data: { status: 'PENDING' },
+        });
+        return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
+      }, { maxWait: 10000, timeout: 15000 });
+      return res.json({ message: 'Inspector bid selected for price negotiation', quote: selected });
+    } catch (error) {
+      req.log.error({ err: error }, 'SELECT INSPECTION QUOTE ERROR:');
+      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not select inspection bid' });
+    }
+  }
+);
+
+// ============================================================================
 // ACCEPT INSPECTION QUOTE
 // Either the requester accepts the inspector's (counter-)offer, or the
 // inspector accepts the requester's counter — whichever party's turn it is.
@@ -621,7 +658,7 @@ router.patch(
         });
       }
 
-      if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
+      if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
         return res.status(400).json({
           error: 'This quote is no longer available',
         });
@@ -770,7 +807,7 @@ router.post(
         return res.status(400).json({ error: 'This inspection is no longer accepting quotes' });
       }
 
-      if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
+      if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
         return res.status(400).json({ error: `Quote cannot be countered because it is ${quote.status}` });
       }
 
@@ -791,7 +828,7 @@ router.post(
 
         const freshQuote = await tx.inspectionQuote.findUnique({ where: { id: quote.id } });
         if (!freshQuote) throw quoteError('Inspection quote not found', 404);
-        if (!['PENDING', 'COUNTERED'].includes(freshQuote.status)) {
+        if (!['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
           throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
         }
         if (quoteTurn(freshQuote) !== actorRole) {
@@ -869,7 +906,7 @@ router.patch(
       if (!loaded) return;
       const { quote, actorRole } = loaded;
 
-      if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
+      if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(quote.status)) {
         return res.status(400).json({ error: `Quote cannot be rejected because it is ${quote.status}` });
       }
 
