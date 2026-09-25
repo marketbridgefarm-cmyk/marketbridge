@@ -71,6 +71,7 @@ enum ListingStatus {
 
 enum OfferStatus {
   PENDING
+  SELECTED
   COUNTERED
   ACCEPTED
   REJECTED
@@ -99,6 +100,7 @@ enum InspectionStatus {
 
 enum InspectionQuoteStatus {
   PENDING
+  SELECTED
   COUNTERED
   ACCEPTED
   REJECTED
@@ -157,6 +159,7 @@ enum TransportEvidenceType {
 
 enum TransportQuoteStatus {
   PENDING
+  SELECTED
   COUNTERED
   ACCEPTED
   REJECTED
