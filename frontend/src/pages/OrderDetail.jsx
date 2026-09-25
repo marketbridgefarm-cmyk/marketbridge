@@ -16,6 +16,7 @@ import ActionCenter from '../components/ActionCenter.jsx';
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
+import BidBoard from '../components/BidBoard.jsx';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
 
 const shortId = (id) => id?.slice(0, 8) || '—';
@@ -1523,7 +1524,7 @@ export default function OrderDetail() {
 
   if (loading) {
     return (
-      <main className="section order-detail-page mb-order-detail-page">
+      <main className="section order-detail-page">
         <div className="container-narrow">
           <div className="card loading">
             <p>Loading order…</p>
@@ -1539,7 +1540,7 @@ export default function OrderDetail() {
 
   if (!order) {
     return (
-      <main className="section order-detail-page mb-order-detail-page">
+      <main className="section order-detail-page">
         <div className="container-narrow">
           <button
             type="button"
@@ -1557,12 +1558,32 @@ export default function OrderDetail() {
     );
   }
 
+  // respondQuote — used by BidBoard embedded in inspection and transport sections
+  const respondQuote = useCallback(async (type, requestId, quote, action, counterAmount) => {
+    try {
+      let response;
+      if (type === 'INSPECTION_QUOTE') {
+        if      (action === 'ACCEPT')  response = await api.patch(`/inspections/${requestId}/quotes/${quote.id}/accept`);
+        else if (action === 'REJECT')  response = await api.patch(`/inspections/${requestId}/quotes/${quote.id}/reject`);
+        else if (action === 'COUNTER') response = await api.post(`/inspections/${requestId}/quotes/${quote.id}/counter`, { counterAmount: Number(counterAmount) });
+      } else if (type === 'TRANSPORT_QUOTE') {
+        const payload = { action };
+        if (action === 'COUNTER') payload.counterAmount = Number(counterAmount);
+        response = await api.patch(`/transport/quotes/${quote.id}`, payload);
+      }
+      await load({ silent: true });
+      return response;
+    } catch (err) {
+      throw err;
+    }
+  }, [load]);
+
   // ==========================================================================
   // RENDER
   // ==========================================================================
 
   return (
-    <main className="section order-detail-page mb-order-detail-page">
+    <main className="section order-detail-page">
       <div className="container-narrow">
 
         {/* ================================================================== */}
@@ -1769,14 +1790,38 @@ export default function OrderDetail() {
           currentInspectionRequest ? (
             <div className="card">
               <h2>Inspection</h2>
-              <p className="muted">An inspection already exists for this order. Continue with this inspection; a second request is not needed.</p>
-              <div className="detail-facts">
-                <div><span>Status</span><strong>{currentInspectionRequest.status}</strong></div>
-                {currentInspectionRequest.inspector?.name && <div><span>Inspector</span><strong>{currentInspectionRequest.inspector.name}</strong></div>}
-                {currentInspectionRequest.fee != null && <div><span>Fee</span><strong>{money(currentInspectionRequest.fee)} ETB</strong></div>}
-              </div>
-              {currentInspectionRequest.status === 'COMPLETED' && currentInspectionRequest.report && (
-                <p className="muted" style={{ marginTop: 10 }}>Inspection report is available. The buyer can now proceed to the goods payment.</p>
+              {/* ---- Competition phase: show BidBoard when bids exist but inspector not yet hired ---- */}
+              {Array.isArray(currentInspectionRequest.quotes) &&
+               currentInspectionRequest.quotes.length > 0 &&
+               !currentInspectionRequest.inspector ? (
+                <>
+                  <p className="muted">
+                    {currentInspectionRequest.quotes.filter(q => q.status === 'PENDING' || q.status === 'COUNTERED').length} inspector{currentInspectionRequest.quotes.length === 1 ? '' : 's'} have bid on this request.
+                    Compare their quotes and hire the best match — or negotiate a price first.
+                  </p>
+                  <BidBoard
+                    quotes={currentInspectionRequest.quotes}
+                    type="INSPECTION_QUOTE"
+                    requestId={currentInspectionRequest.id}
+                    onRespond={(quote, action, amount) =>
+                      respondQuote('INSPECTION_QUOTE', currentInspectionRequest.id, quote, action, amount)
+                    }
+                    disabled={!isParticipant}
+                  />
+                </>
+              ) : (
+                /* ---- Inspector already assigned: summary view ---- */
+                <>
+                  <p className="muted">An inspection already exists for this order. Continue with this inspection; a second request is not needed.</p>
+                  <div className="detail-facts">
+                    <div><span>Status</span><strong>{currentInspectionRequest.status}</strong></div>
+                    {currentInspectionRequest.inspector?.name && <div><span>Inspector</span><strong>{currentInspectionRequest.inspector.name}</strong></div>}
+                    {currentInspectionRequest.fee != null && <div><span>Fee</span><strong>{money(currentInspectionRequest.fee)} ETB</strong></div>}
+                  </div>
+                  {currentInspectionRequest.status === 'COMPLETED' && currentInspectionRequest.report && (
+                    <p className="muted" style={{ marginTop: 10 }}>Inspection report is available. The buyer can now proceed to the goods payment.</p>
+                  )}
+                </>
               )}
             </div>
           ) : (
@@ -1854,10 +1899,28 @@ export default function OrderDetail() {
             )
           ) : (
             <>
-              {/* ------------------------------------------------------------ */}
-              {/* TRANSPORT SUMMARY */}
-              {/* ------------------------------------------------------------ */}
+              {/* ---- Competition phase: BidBoard for hired-transport quotes ---- */}
+              {transportJob.method === 'HIRE_TRANSPORTER' &&
+               !transportJob.truckOwnerId &&
+               Array.isArray(transportJob.quotes) &&
+               transportJob.quotes.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <p className="muted">
+                    {transportJob.quotes.filter(q => q.status === 'PENDING' || q.status === 'COUNTERED').length} transporter{transportJob.quotes.length === 1 ? '' : 's'} have bid.
+                    Review their offers and hire the one that fits your route and capacity.
+                  </p>
+                  <BidBoard
+                    quotes={transportJob.quotes}
+                    type="TRANSPORT_QUOTE"
+                    onRespond={(quote, action, amount) =>
+                      respondQuote('TRANSPORT_QUOTE', null, quote, action, amount)
+                    }
+                    disabled={!isParticipant}
+                  />
+                </div>
+              )}
 
+              {/* ---- Transport summary (after hire or own-truck) ---- */}
               <div className="detail-facts">
                 <div>
                   <span>Arranged by</span>
