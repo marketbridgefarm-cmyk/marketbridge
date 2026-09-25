@@ -286,7 +286,7 @@ export default function ListingDetail() {
     <main className="section">
       <div className="container-wide">
         <Link className="back-link" to={isAgricultural ? '/agricultural' : '/products'}>← Back to marketplace</Link>
-        <div className="detail-grid">
+        <div className="detail-grid detail-grid--stitch">
           <section>
             <div className="detail-media">
               {activeMedia ? (
@@ -461,7 +461,7 @@ export default function ListingDetail() {
             )}
           </section>
 
-          <aside>
+          <aside className="detail-dock">
             {isBuyer && myLatestOffer && isAgricultural && (
               <div className="card" id="negotiation">
                 <h2>Your negotiation</h2>
@@ -485,7 +485,7 @@ export default function ListingDetail() {
             )}
 
             {isBuyer && (
-              <div className="card sticky-card" id="buy-box">
+              <div className="card sticky-card">
                 <h2>{isAvailable ? (isAgricultural ? 'Make an offer' : 'Buy this product') : 'Listing unavailable'}</h2>
                 {!isAvailable ? (
                   <>
