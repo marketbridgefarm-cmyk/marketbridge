@@ -1895,7 +1895,6 @@ router.post(
             status: {
               in: [
                 'PENDING',
-                'SELECTED',
                 'COUNTERED',
                 'ACCEPTED',
               ],

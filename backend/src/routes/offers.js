@@ -78,7 +78,7 @@ function isOfferExpired(offer) {
 
 async function expireOfferIfNeeded(tx, offer, actorId = null) {
   if (!offer || !isOfferExpired(offer)) return false;
-  if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(offer.status)) return false;
+  if (!['PENDING', 'COUNTERED'].includes(offer.status)) return false;
 
   const updated = await tx.offer.update({
     where: { id: offer.id },
@@ -880,7 +880,9 @@ router.patch(
               }
 
               if (
-                !['SELECTED', 'COUNTERED'].includes(freshOffer.status)
+                !['SELECTED', 'COUNTERED'].includes(
+                  freshOffer.status
+                )
               ) {
                 throw offerError(
                   `Offer cannot be re-countered because it is ${freshOffer.status}`,
@@ -890,7 +892,8 @@ router.patch(
 
               if (
                 freshOffer.status === 'COUNTERED' &&
-                freshOffer.counteredBy !== 'SELLER'
+                freshOffer.counteredBy !==
+                'SELLER'
               ) {
                 throw offerError(
                   'The buyer cannot counter twice in a row. The seller must respond first.',
