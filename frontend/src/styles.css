@@ -4348,232 +4348,365 @@ textarea {
 /* Notification bell is now an SVG (the old glyph was a rotated character). */
 .notification-bell { transform: none; display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
 
+
 /* ==========================================================================
-   STITCH DESIGN FREEZE v1.0 — Phase 2: Marketplace & listing pages
+   MARKETBRIDGE STITCH DESIGN FREEZE — PHASE 2 MARKETPLACE
+   Presentation-only layer. Existing routes, state, API calls and business
+   logic remain unchanged.
    ========================================================================== */
 
-/* ---- ProduceCard (.lc) — replaces old .listing-card in ListingCard.jsx ---- */
-.lc {
-  background: var(--mb-card);
+.mb-home-page,
+.mb-marketplace-page,
+.mb-listing-detail-page {
+  color: var(--mb-ink);
+}
+
+.mb-home-page .container-wide,
+.mb-marketplace-page .container-wide,
+.mb-listing-detail-page .container-wide {
+  max-width: 1280px;
+}
+
+.mb-home-page .eyebrow,
+.mb-marketplace-page .eyebrow,
+.mb-listing-detail-page .eyebrow,
+.mb-create-listing .eyebrow {
+  color: var(--mb-primary);
+  font-family: Manrope, system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.mb-home-page h1,
+.mb-home-page h2,
+.mb-home-page h3,
+.mb-marketplace-page h1,
+.mb-marketplace-page h2,
+.mb-marketplace-page h3,
+.mb-listing-detail-page h1,
+.mb-listing-detail-page h2,
+.mb-listing-detail-page h3,
+.mb-create-listing h1,
+.mb-create-listing h2 {
+  font-family: Manrope, system-ui, sans-serif;
+  color: var(--mb-ink);
+  letter-spacing: -.025em;
+}
+
+.mb-home-page .card,
+.mb-marketplace-page .card,
+.mb-listing-detail-page .card,
+.mb-create-listing .card {
   border: 1px solid var(--mb-border);
   border-radius: var(--mb-radius-md);
-  overflow: hidden;
   box-shadow: var(--mb-shadow-card);
-  transition: transform .2s ease, box-shadow .2s ease;
-  display: flex;
-  flex-direction: column;
+  background: var(--mb-card);
 }
-.lc:hover {
+
+.mb-home-page .btn,
+.mb-marketplace-page .btn,
+.mb-listing-detail-page .btn,
+.mb-create-listing .btn {
+  min-height: 44px;
+  border-radius: var(--mb-radius-sm);
+  font-family: Manrope, system-ui, sans-serif;
+  font-weight: 700;
+}
+
+.mb-home-page .btn-primary,
+.mb-marketplace-page .btn-primary,
+.mb-listing-detail-page .btn-primary,
+.mb-create-listing .btn-primary {
+  background: var(--mb-primary);
+  border-color: var(--mb-primary);
+  color: #fff;
+}
+
+.mb-home-page .btn-primary:hover,
+.mb-marketplace-page .btn-primary:hover,
+.mb-listing-detail-page .btn-primary:hover,
+.mb-create-listing .btn-primary:hover {
+  background: var(--mb-primary-light);
+  border-color: var(--mb-primary-light);
+}
+
+/* Marketplace cards: preserve the existing data/actions while making the
+   visual hierarchy match the frozen produce-lot design. */
+.mb-produce-card {
+  overflow: hidden;
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-md);
+  background: var(--mb-card);
+  box-shadow: var(--mb-shadow-card);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.mb-produce-card:hover {
   transform: translateY(-2px);
+  border-color: rgba(23,107,58,.25);
   box-shadow: var(--mb-shadow-elevated);
 }
-.lc--sponsored {
-  border-color: var(--mb-gold-border);
-  box-shadow: 0 4px 16px rgba(183,123,27,.1);
-}
 
-.lc-photo {
+.mb-produce-card__media {
   position: relative;
   aspect-ratio: 16 / 9;
-  background: var(--mb-surface-soft);
-  display: grid;
-  place-items: center;
   overflow: hidden;
-  text-decoration: none;
-  color: var(--mb-primary);
-}
-.lc-photo img, .lc-photo video {
-  width: 100%; height: 100%; object-fit: cover;
-  transition: transform .3s ease;
-}
-.lc:hover .lc-photo img { transform: scale(1.03); }
-.lc-photo-initials {
-  font: 800 clamp(28px,5vw,36px) Manrope, sans-serif;
-  color: var(--mb-primary);
-  opacity: .3;
-}
-
-.lc-badge {
-  position: absolute;
-  padding: 4px 9px;
-  border-radius: var(--mb-radius-pill);
-  font: 700 10px/1 'DM Sans', system-ui, sans-serif;
-  letter-spacing: .3px;
-}
-.lc-badge--sponsored { top: 10px; left: 10px; background: var(--mb-gold); color: #fff; }
-.lc-badge--grade     { bottom: 10px; left: 10px; background: var(--mb-primary-dark); color: #fff; }
-.lc-badge--active    { top: 10px; right: 10px; width: 10px; height: 10px; padding: 0;
-  background: #22c55e; border-radius: 50%; box-shadow: 0 0 0 3px rgba(34,197,94,.22); }
-
-.lc-body { flex: 1; display: flex; flex-direction: column; padding: 15px; gap: 6px; }
-
-.lc-tags { display: flex; flex-wrap: wrap; gap: 5px; }
-.lc-tag {
-  display: inline-flex; align-items: center;
-  height: 20px; padding: 0 8px;
-  border-radius: var(--mb-radius-pill);
-  background: var(--mb-surface-soft); color: var(--mb-primary);
-  font: 700 10px/1 'DM Sans', sans-serif; letter-spacing: .4px; text-transform: uppercase;
-}
-.lc-tag--neg     { background: var(--mb-gold-light);    color: var(--mb-gold);    }
-.lc-tag--verified{ background: var(--mb-success-light); color: var(--mb-success); }
-
-.lc-title {
-  margin: 4px 0 0;
-  font: 700 15px/1.25 Manrope, sans-serif;
-  color: var(--mb-ink); letter-spacing: -.02em;
-}
-.lc-location {
-  display: flex; align-items: center; gap: 4px;
-  font-size: 12px; color: var(--mb-text-muted); margin: 0;
-}
-.lc-location svg { flex: 0 0 12px; }
-
-.lc-stats {
-  display: grid; grid-template-columns: 1fr 1fr;
-  border-top: 1px solid var(--mb-border); border-bottom: 1px solid var(--mb-border);
-  padding: 9px 0; margin: 4px 0;
-}
-.lc-stats > div + div { padding-left: 12px; border-left: 1px solid var(--mb-border); }
-.lc-stats span {
-  display: block;
-  font: 500 10px/1 'DM Sans', sans-serif; color: var(--mb-text-muted);
-  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px;
-}
-.lc-stats strong { display: block; font: 700 13px/1.2 Manrope, sans-serif; color: var(--mb-ink); }
-
-.lc-footer {
-  display: flex; justify-content: space-between; align-items: center;
-  gap: 8px; margin-top: auto; padding-top: 4px;
-}
-.lc-seller {
-  font: 500 11px/1 'DM Sans', sans-serif; color: var(--mb-text-muted);
-  flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.lc-ctas { display: flex; gap: 6px; flex: 0 0 auto; }
-.lc-cta {
-  display: inline-flex; align-items: center;
-  height: 30px; padding: 0 12px; border-radius: var(--mb-radius-sm);
-  font: 600 12px/1 'DM Sans', sans-serif;
-  cursor: pointer; text-decoration: none; border: 0;
-  transition: background .15s ease, color .15s ease;
-  white-space: nowrap;
-}
-.lc-cta--view  { background: var(--mb-primary);   color: #fff; }
-.lc-cta--view:hover  { background: var(--mb-primary-dark); color: #fff; }
-.lc-cta--offer { background: transparent; color: var(--mb-primary); border: 1px solid var(--mb-border); }
-.lc-cta--offer:hover { background: var(--mb-surface-soft); border-color: var(--mb-primary); }
-
-/* ---- Filter bar (used in Listings.jsx) ---- */
-.filter-bar-wrap { margin: 0 0 20px; }
-
-.filter-bar-search {
-  display: flex; gap: 8px; align-items: center; margin-bottom: 10px;
-}
-.filter-bar-search input {
-  flex: 1; height: 44px; padding: 0 14px;
-  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
-  background: var(--mb-card);
-  font: 400 15px/1 'DM Sans', system-ui, sans-serif; color: var(--mb-ink);
-  outline: none; transition: border-color .15s ease;
-}
-.filter-bar-search input::placeholder { color: var(--mb-text-muted); }
-.filter-bar-search input:focus {
-  border-color: var(--mb-primary);
-  box-shadow: 0 0 0 3px rgba(23,107,58,.1);
-}
-
-.filter-bar-scroll {
-  display: flex; gap: 8px; overflow-x: auto;
-  scrollbar-width: none; padding-bottom: 2px;
-  -webkit-overflow-scrolling: touch;
-}
-.filter-bar-scroll::-webkit-scrollbar { display: none; }
-
-.filter-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  height: 36px; padding: 0 13px;
-  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-pill);
-  background: var(--mb-card); color: var(--mb-text-muted);
-  font: 500 13px/1 'DM Sans', sans-serif;
-  cursor: pointer; white-space: nowrap; flex: 0 0 auto;
-  transition: border-color .15s ease, color .15s ease, background .15s ease;
-}
-.filter-chip:hover { border-color: var(--mb-primary); color: var(--mb-primary); }
-.filter-chip.active {
   background: var(--mb-surface-soft);
-  border-color: var(--mb-primary); color: var(--mb-primary); font-weight: 700;
-}
-.filter-chip select {
-  border: 0; background: transparent; color: inherit; font: inherit;
-  cursor: pointer; outline: none; appearance: none; -webkit-appearance: none;
-  max-width: 120px;
-}
-.filter-chip input[type="number"] {
-  border: 0; background: transparent; color: inherit; font: inherit;
-  outline: none; width: 80px; padding: 0;
 }
 
-.filter-more-panel {
-  margin-top: 10px; padding: 16px;
-  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
-  background: var(--mb-card);
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px;
-}
-.filter-more-panel label {
-  display: block; font: 600 11px/1 'DM Sans', sans-serif;
-  color: var(--mb-text-muted); text-transform: uppercase; letter-spacing: .5px;
-  margin-bottom: 6px;
-}
-.filter-more-panel input, .filter-more-panel select {
-  width: 100%; height: 36px; padding: 0 10px;
-  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-sm);
-  background: var(--mb-bg); font: 400 13px/1 'DM Sans', sans-serif; color: var(--mb-ink);
-}
-.filter-actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
-
-/* Market toolbar (Phase 2 stitch class) */
-.market-toolbar--stitch {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; padding: 10px 0 12px;
-  border-bottom: 1px solid var(--mb-border); margin-bottom: 18px;
-}
-.market-toolbar--stitch strong { font: 700 14px/1 Manrope, sans-serif; color: var(--mb-ink); }
-.market-toolbar--stitch .muted { font-size: 13px; color: var(--mb-text-muted); }
-
-/* ---- Sticky pricing dock in ListingDetail ---- */
-@media (min-width: 768px) {
-  .detail-grid--stitch {
-    grid-template-columns: minmax(0, 1fr) 360px;
-    align-items: start;
-  }
-  .detail-dock {
-    position: sticky;
-    top: 80px;
-    max-height: calc(100vh - 96px);
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--mb-border) transparent;
-  }
+.mb-produce-card__media img,
+.mb-produce-card__media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
-/* ---- CreateListing visual grouping sections ---- */
-.cl-section {
-  margin: 20px 0 0;
-  padding: 18px 20px;
+.mb-produce-card__body {
+  padding: 16px;
+}
+
+.mb-produce-card .listing-meta {
+  gap: 6px;
+  align-items: center;
+}
+
+.mb-produce-card .tag {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--mb-radius-sm);
+  border: 1px solid var(--mb-border);
+  background: var(--mb-surface-soft);
+  color: var(--mb-primary-dark);
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mb-produce-card .tag--good {
+  background: var(--mb-success-light);
+  border-color: var(--mb-success-border);
+  color: var(--mb-success);
+}
+
+.mb-produce-card .tag--sponsored {
+  background: var(--mb-gold-light);
+  border-color: var(--mb-gold-border);
+  color: var(--mb-gold);
+}
+
+.mb-produce-card h3 {
+  margin: 10px 0 6px;
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 800;
+}
+
+.mb-produce-card .listing-location {
+  color: var(--mb-text-muted);
+  font-size: 14px;
+}
+
+.mb-produce-card .listing-stats {
+  border-top: 1px solid var(--mb-border);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.mb-produce-card .listing-stats span {
+  color: var(--mb-text-muted);
+}
+
+.mb-produce-card .listing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.mb-produce-card .listing-actions .btn {
+  flex: 1 1 140px;
+}
+
+/* Marketplace filter/search surface */
+.mb-marketplace-page .filters,
+.mb-marketplace-page .filter-bar {
   border: 1px solid var(--mb-border);
   border-radius: var(--mb-radius-md);
-  background: var(--mb-bg);
+  background: rgba(255,255,255,.92);
+  box-shadow: var(--mb-shadow-card);
 }
-.cl-section-title {
-  font: 700 11px/1 Manrope, sans-serif;
-  color: var(--mb-text-muted); text-transform: uppercase; letter-spacing: .7px;
-  margin: 0 0 14px; padding-bottom: 10px;
-  border-bottom: 1px solid var(--mb-border);
-}
-.cl-hint { font-size: 12px; color: var(--mb-text-muted); margin: 4px 0 0; }
 
-@media (prefers-reduced-motion: reduce) {
-  .lc, .lc-photo img, .lc-cta,
-  .filter-chip { transition: none; }
+.mb-marketplace-page input,
+.mb-marketplace-page select,
+.mb-marketplace-page textarea,
+.mb-create-listing input,
+.mb-create-listing select,
+.mb-create-listing textarea {
+  min-height: 44px;
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-sm);
+  background: #fff;
+  color: var(--mb-ink);
 }
+
+.mb-marketplace-page input:focus,
+.mb-marketplace-page select:focus,
+.mb-marketplace-page textarea:focus,
+.mb-create-listing input:focus,
+.mb-create-listing select:focus,
+.mb-create-listing textarea:focus {
+  border-color: var(--mb-primary-light);
+  box-shadow: 0 0 0 3px rgba(47,145,89,.12);
+  outline: none;
+}
+
+/* Listing detail: stronger two-column decision hierarchy without changing
+   the existing purchase/inspection/offer handlers. */
+.mb-listing-detail-page .listing-detail,
+.mb-listing-detail-page .listing-detail-layout {
+  align-items: start;
+}
+
+.mb-listing-detail-page .listing-gallery,
+.mb-listing-detail-page .media-gallery,
+.mb-listing-detail-page .listing-media {
+  border-radius: var(--mb-radius-md);
+  overflow: hidden;
+}
+
+.mb-listing-detail-page .listing-price,
+.mb-listing-detail-page .purchase-card,
+.mb-listing-detail-page .offer-card,
+.mb-listing-detail-page .inspection-card {
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-md);
+  background: var(--mb-card);
+  box-shadow: var(--mb-shadow-card);
+}
+
+.mb-listing-detail-page .listing-price strong,
+.mb-listing-detail-page .price,
+.mb-listing-detail-page .asking-price {
+  font-family: Manrope, system-ui, sans-serif;
+  color: var(--mb-primary-dark);
+  font-weight: 800;
+}
+
+.mb-listing-detail-page .status,
+.mb-listing-detail-page .tag {
+  border-radius: var(--mb-radius-sm);
+}
+
+/* Create-listing modal: retain the existing single-form logic while giving
+   it the frozen marketplace surface treatment. */
+.mb-create-listing .listing-modal-panel {
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-lg);
+  background: var(--mb-card);
+  box-shadow: var(--mb-shadow-modal);
+}
+
+.mb-create-listing .form-card {
+  box-shadow: none;
+}
+
+.mb-create-listing .choice-grid {
+  gap: 12px;
+}
+
+.mb-create-listing .choice {
+  min-height: 92px;
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-md);
+  background: #fff;
+  text-align: left;
+}
+
+.mb-create-listing .choice.selected {
+  border-color: var(--mb-primary);
+  background: var(--mb-surface-soft);
+  box-shadow: 0 0 0 2px rgba(23,107,58,.08);
+}
+
+.mb-create-listing .media-preview-grid {
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .mb-home-page,
+  .mb-marketplace-page,
+  .mb-listing-detail-page {
+    overflow-x: hidden;
+  }
+
+  .mb-produce-card:hover {
+    transform: none;
+  }
+
+  .mb-produce-card .listing-actions .btn {
+    flex-basis: 100%;
+  }
+
+  .mb-create-listing .listing-modal-panel {
+    border-radius: var(--mb-radius-lg) var(--mb-radius-lg) 0 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .mb-home-page .container-wide,
+  .mb-marketplace-page .container-wide,
+  .mb-listing-detail-page .container-wide {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .mb-produce-card__body {
+    padding: 14px;
+  }
+
+  .mb-create-listing .choice-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==========================================================================
+   MARKETBRIDGE STITCH DESIGN FREEZE — PHASE 3 DEALS & ORDERS
+   Presentation-only. Existing workflow handlers, API calls and state remain.
+   ========================================================================== */
+.mb-dashboard-page,.mb-negotiations-page,.mb-orders-page,.mb-order-detail-page,.mb-transport-setup{color:var(--mb-ink)}
+.mb-dashboard-page h1,.mb-dashboard-page h2,.mb-dashboard-page h3,.mb-negotiations-page h1,.mb-negotiations-page h2,.mb-negotiations-page h3,.mb-orders-page h1,.mb-orders-page h2,.mb-orders-page h3,.mb-order-detail-page h1,.mb-order-detail-page h2,.mb-order-detail-page h3,.mb-transport-setup h1,.mb-transport-setup h2,.mb-transport-setup h3{font-family:Manrope,system-ui,sans-serif;color:var(--mb-ink);letter-spacing:-.025em}
+.mb-dashboard-page .card,.mb-negotiations-page .card,.mb-orders-page .card,.mb-order-detail-page .card,.mb-transport-setup.card,.mb-transport-setup .card{border-color:var(--mb-border);border-radius:var(--mb-radius-md);box-shadow:var(--mb-shadow-card);background:var(--mb-card)}
+.mb-dashboard-page .sd-tabs,.mb-negotiations-page .sd-tabs,.mb-orders-page .sd-tabs{border-color:var(--mb-border)}
+.mb-dashboard-page .sd-tab,.mb-negotiations-page .sd-tab,.mb-orders-page .sd-tab{min-height:44px;border-radius:var(--mb-radius-sm);font-family:Manrope,system-ui,sans-serif;font-weight:700}
+.mb-dashboard-page .sd-active,.mb-negotiations-page .sd-active,.mb-orders-page .sd-active{background:var(--mb-surface-soft);color:var(--mb-primary);border-color:var(--mb-border)}
+.mb-dashboard-page .sd-table,.mb-orders-page .order-card{border:1px solid var(--mb-border);border-radius:var(--mb-radius-md);background:var(--mb-card);box-shadow:var(--mb-shadow-card)}
+.mb-dashboard-page .service-access-card{border:1px solid var(--mb-border);border-radius:var(--mb-radius-md);background:#fff;box-shadow:var(--mb-shadow-card)}
+.mb-negotiations-page .role-chip,.mb-negotiations-page .badge,.mb-orders-page .badge{border-radius:var(--mb-radius-sm)}
+.mb-negotiations-page .row-actions{padding-top:10px;border-top:1px solid var(--mb-border);margin-top:14px!important}
+.mb-negotiations-page .sd-btn,.mb-orders-page .btn,.mb-dashboard-page .btn,.mb-order-detail-page .btn,.mb-transport-setup .btn{min-height:44px}
+.mb-negotiations-page .sd-btn-primary{background:var(--mb-primary);border-color:var(--mb-primary)}
+.mb-negotiations-page .sd-btn-primary:hover{background:var(--mb-primary-light)}
+.mb-order-detail-page .order-detail-page,.mb-order-detail-page .container-narrow{max-width:1280px}
+.mb-order-detail-page .status-pill,.mb-payment-status .badge,.mb-payment-center .badge{border-radius:var(--mb-radius-sm);font-weight:700}
+.mb-order-detail-page .payout-summary-card,.mb-order-detail-page .payout-table{border-color:var(--mb-border)}
+.mb-order-timeline{position:relative}
+.mb-order-timeline .order-timeline-step{min-height:56px}
+.mb-order-timeline .order-timeline-label{font-family:Manrope,system-ui,sans-serif;font-weight:700;color:var(--mb-ink)}
+.mb-order-timeline .order-timeline-dot{border-color:var(--mb-primary)}
+.mb-payment-center .payment-action-center,.mb-payment-center{border:1px solid var(--mb-border);border-radius:var(--mb-radius-md);box-shadow:var(--mb-shadow-card)}
+.mb-payment-center .payment-row{border-color:var(--mb-border)}
+.mb-payment-center .btn-primary{min-height:44px}
+.mb-payment-status .payment-status-row{padding:12px 0;border-bottom:1px solid var(--mb-border)}
+.mb-payment-status .payment-status-row:last-child{border-bottom:0}
+.mb-transport-setup .choice{border-color:var(--mb-border);border-radius:var(--mb-radius-md);background:#fff;min-height:76px}
+.mb-transport-setup .choice.selected{border-color:var(--mb-primary);background:var(--mb-surface-soft);box-shadow:0 0 0 2px rgba(23,107,58,.08)}
+.mb-transport-setup .match-box{border:1px solid var(--mb-border);border-radius:var(--mb-radius-md);background:var(--mb-surface-soft);padding:16px}
+.mb-transport-setup input,.mb-transport-setup select,.mb-transport-setup textarea{min-height:44px;border-color:var(--mb-border);border-radius:var(--mb-radius-sm)}
+.mb-transport-setup input:focus,.mb-transport-setup select:focus,.mb-transport-setup textarea:focus{border-color:var(--mb-primary-light);box-shadow:0 0 0 3px rgba(47,145,89,.12);outline:none}
+@media(max-width:900px){.mb-dashboard-page,.mb-negotiations-page,.mb-orders-page,.mb-order-detail-page{overflow-x:hidden}.mb-order-detail-page .payout-table{overflow-x:auto}.mb-negotiations-page .row-actions{flex-direction:column;align-items:stretch!important}.mb-negotiations-page .row-actions .sd-btn{width:100%}}
+@media(max-width:600px){.mb-dashboard-page .card,.mb-negotiations-page .card,.mb-orders-page .order-card,.mb-order-detail-page .card{border-radius:var(--mb-radius-md)}.mb-dashboard-page .sd-table--mobile-cards tr{display:block;margin-bottom:12px}.mb-transport-setup .choice-grid{grid-template-columns:1fr}.mb-payment-center .row-between{align-items:flex-start}}
