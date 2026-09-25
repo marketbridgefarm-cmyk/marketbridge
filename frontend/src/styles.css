@@ -4348,157 +4348,232 @@ textarea {
 /* Notification bell is now an SVG (the old glyph was a rotated character). */
 .notification-bell { transform: none; display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
 
-/* ================================================================
-   Phase 2 — Marketplace screens (Home / Listings / Listing Detail /
-   Create Listing). Presentational additions only — see PageHeader,
-   FilterBar, EmptyState, LoadingSkeleton, and the updated ListingCard
-   (dual CTA) in src/components/.
-   ================================================================ */
+/* ==========================================================================
+   STITCH DESIGN FREEZE v1.0 — Phase 2: Marketplace & listing pages
+   ========================================================================== */
 
-/* PageHeader ----------------------------------------------------- */
-.mb-page-header-desc { max-width: 60ch; color: var(--mb-text-soft, var(--muted)); }
-.mb-page-header-action { display: flex; align-items: center; gap: 10px; }
-
-/* FilterBar -------------------------------------------------------
-   Horizontally scrollable chip row + debounced search, per the
-   Stitch freeze's FilterBar component (Section 7, #20). */
-.mb-filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 12px;
-  margin-bottom: 16px;
-}
-.mb-filter-bar-search {
-  flex: 1 1 220px;
-  min-height: var(--mb-touch-min, 44px);
+/* ---- ProduceCard (.lc) — replaces old .listing-card in ListingCard.jsx ---- */
+.lc {
+  background: var(--mb-card);
   border: 1px solid var(--mb-border);
-  border-radius: var(--radius-pill, 9999px);
-  padding: 0 16px;
-  background: #fff;
-}
-.mb-filter-bar-chips {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-  padding: 2px;
-  flex: 1 1 100%;
-}
-.mb-filter-bar-chips::-webkit-scrollbar { display: none; }
-.mb-chip {
-  flex: 0 0 auto;
-  min-height: 36px;
-  padding: 0 14px;
-  border-radius: 9999px;
-  border: 1px solid var(--mb-border, var(--line));
-  background: #fff;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background .15s ease, border-color .15s ease, color .15s ease;
-  white-space: nowrap;
-}
-.mb-chip:hover { border-color: var(--green-light); }
-.mb-chip--active {
-  background: var(--soft);
-  border-color: var(--green);
-  color: var(--green-dark);
-}
-.mb-chip--more { display: inline-flex; align-items: center; gap: 4px; }
-
-/* 3-column marketplace grid (desktop), collapsing per the existing
-   .listing-grid breakpoints already in this file. */
-.mb-listing-grid-3col {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-@media (max-width: 1024px) {
-  .mb-listing-grid-3col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (max-width: 620px) {
-  .mb-listing-grid-3col { grid-template-columns: 1fr; }
-}
-
-/* Dual CTA on ProduceCard (ListingCard) --------------------------- */
-.listing-card-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.listing-card-actions .btn-ghost-sm {
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 9999px;
-  border: 1px solid var(--mb-border, var(--line));
-  background: #fff;
-  color: var(--green-dark);
-  font-size: 12px;
-  font-weight: 700;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-}
-.listing-card-actions .btn-ghost-sm:hover { border-color: var(--green-light); background: var(--soft); }
-
-/* EmptyState ------------------------------------------------------- */
-.mb-empty-state {
-  grid-column: 1 / -1;
+  border-radius: var(--mb-radius-md);
+  overflow: hidden;
+  box-shadow: var(--mb-shadow-card);
+  transition: transform .2s ease, box-shadow .2s ease;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 6px;
-  padding: 56px 24px;
-  border: 1px dashed var(--mb-border, var(--line));
-  border-radius: var(--radius-lg, 20px);
-  background: var(--mb-surface-soft, var(--soft));
 }
-.mb-empty-state-icon { font-size: 34px; line-height: 1; margin-bottom: 6px; }
-.mb-empty-state h3 { margin: 0 0 4px; }
-.mb-empty-state .btn { margin-top: 10px; }
+.lc:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--mb-shadow-elevated);
+}
+.lc--sponsored {
+  border-color: var(--mb-gold-border);
+  box-shadow: 0 4px 16px rgba(183,123,27,.1);
+}
 
-/* LoadingSkeleton --------------------------------------------------- */
-.mb-skeleton-shimmer {
-  background: linear-gradient(90deg, #eef2ee 25%, #f7f9f6 37%, #eef2ee 63%);
-  background-size: 400% 100%;
-  animation: mb-shimmer 1.4s ease infinite;
-  border-radius: 6px;
-}
-@keyframes mb-shimmer {
-  0% { background-position: 100% 50%; }
-  100% { background-position: 0 50%; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .mb-skeleton-shimmer { animation: none; }
-}
-.mb-skeleton-card {
-  border: 1px solid var(--line);
-  border-radius: 15px;
+.lc-photo {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--mb-surface-soft);
+  display: grid;
+  place-items: center;
   overflow: hidden;
-  background: #fff;
+  text-decoration: none;
+  color: var(--mb-primary);
 }
-.mb-skeleton-photo { aspect-ratio: 16 / 10; }
-.mb-skeleton-body { padding: 18px; display: grid; gap: 10px; }
-.mb-skeleton-body .mb-skeleton-line { height: 12px; }
-.mb-skeleton-lines { display: grid; gap: 10px; }
-.mb-skeleton-lines .mb-skeleton-line { height: 14px; width: 100%; }
+.lc-photo img, .lc-photo video {
+  width: 100%; height: 100%; object-fit: cover;
+  transition: transform .3s ease;
+}
+.lc:hover .lc-photo img { transform: scale(1.03); }
+.lc-photo-initials {
+  font: 800 clamp(28px,5vw,36px) Manrope, sans-serif;
+  color: var(--mb-primary);
+  opacity: .3;
+}
 
-/* CreateListing — visual section grouping (single form, no wizard;
-   per the Stitch-freeze decision the listing form stays one form). */
-.mb-form-section { margin-top: 26px; }
-.mb-form-section:first-of-type { margin-top: 0; }
-.mb-form-section-title {
-  font-family: Manrope, system-ui, sans-serif;
-  font-size: 13px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: .6px;
-  color: var(--mb-text-soft, var(--muted));
-  margin: 0 0 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--mb-border, var(--line));
+.lc-badge {
+  position: absolute;
+  padding: 4px 9px;
+  border-radius: var(--mb-radius-pill);
+  font: 700 10px/1 'DM Sans', system-ui, sans-serif;
+  letter-spacing: .3px;
+}
+.lc-badge--sponsored { top: 10px; left: 10px; background: var(--mb-gold); color: #fff; }
+.lc-badge--grade     { bottom: 10px; left: 10px; background: var(--mb-primary-dark); color: #fff; }
+.lc-badge--active    { top: 10px; right: 10px; width: 10px; height: 10px; padding: 0;
+  background: #22c55e; border-radius: 50%; box-shadow: 0 0 0 3px rgba(34,197,94,.22); }
+
+.lc-body { flex: 1; display: flex; flex-direction: column; padding: 15px; gap: 6px; }
+
+.lc-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.lc-tag {
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 0 8px;
+  border-radius: var(--mb-radius-pill);
+  background: var(--mb-surface-soft); color: var(--mb-primary);
+  font: 700 10px/1 'DM Sans', sans-serif; letter-spacing: .4px; text-transform: uppercase;
+}
+.lc-tag--neg     { background: var(--mb-gold-light);    color: var(--mb-gold);    }
+.lc-tag--verified{ background: var(--mb-success-light); color: var(--mb-success); }
+
+.lc-title {
+  margin: 4px 0 0;
+  font: 700 15px/1.25 Manrope, sans-serif;
+  color: var(--mb-ink); letter-spacing: -.02em;
+}
+.lc-location {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 12px; color: var(--mb-text-muted); margin: 0;
+}
+.lc-location svg { flex: 0 0 12px; }
+
+.lc-stats {
+  display: grid; grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--mb-border); border-bottom: 1px solid var(--mb-border);
+  padding: 9px 0; margin: 4px 0;
+}
+.lc-stats > div + div { padding-left: 12px; border-left: 1px solid var(--mb-border); }
+.lc-stats span {
+  display: block;
+  font: 500 10px/1 'DM Sans', sans-serif; color: var(--mb-text-muted);
+  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px;
+}
+.lc-stats strong { display: block; font: 700 13px/1.2 Manrope, sans-serif; color: var(--mb-ink); }
+
+.lc-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 8px; margin-top: auto; padding-top: 4px;
+}
+.lc-seller {
+  font: 500 11px/1 'DM Sans', sans-serif; color: var(--mb-text-muted);
+  flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lc-ctas { display: flex; gap: 6px; flex: 0 0 auto; }
+.lc-cta {
+  display: inline-flex; align-items: center;
+  height: 30px; padding: 0 12px; border-radius: var(--mb-radius-sm);
+  font: 600 12px/1 'DM Sans', sans-serif;
+  cursor: pointer; text-decoration: none; border: 0;
+  transition: background .15s ease, color .15s ease;
+  white-space: nowrap;
+}
+.lc-cta--view  { background: var(--mb-primary);   color: #fff; }
+.lc-cta--view:hover  { background: var(--mb-primary-dark); color: #fff; }
+.lc-cta--offer { background: transparent; color: var(--mb-primary); border: 1px solid var(--mb-border); }
+.lc-cta--offer:hover { background: var(--mb-surface-soft); border-color: var(--mb-primary); }
+
+/* ---- Filter bar (used in Listings.jsx) ---- */
+.filter-bar-wrap { margin: 0 0 20px; }
+
+.filter-bar-search {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 10px;
+}
+.filter-bar-search input {
+  flex: 1; height: 44px; padding: 0 14px;
+  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
+  background: var(--mb-card);
+  font: 400 15px/1 'DM Sans', system-ui, sans-serif; color: var(--mb-ink);
+  outline: none; transition: border-color .15s ease;
+}
+.filter-bar-search input::placeholder { color: var(--mb-text-muted); }
+.filter-bar-search input:focus {
+  border-color: var(--mb-primary);
+  box-shadow: 0 0 0 3px rgba(23,107,58,.1);
+}
+
+.filter-bar-scroll {
+  display: flex; gap: 8px; overflow-x: auto;
+  scrollbar-width: none; padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+.filter-bar-scroll::-webkit-scrollbar { display: none; }
+
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 36px; padding: 0 13px;
+  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-pill);
+  background: var(--mb-card); color: var(--mb-text-muted);
+  font: 500 13px/1 'DM Sans', sans-serif;
+  cursor: pointer; white-space: nowrap; flex: 0 0 auto;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.filter-chip:hover { border-color: var(--mb-primary); color: var(--mb-primary); }
+.filter-chip.active {
+  background: var(--mb-surface-soft);
+  border-color: var(--mb-primary); color: var(--mb-primary); font-weight: 700;
+}
+.filter-chip select {
+  border: 0; background: transparent; color: inherit; font: inherit;
+  cursor: pointer; outline: none; appearance: none; -webkit-appearance: none;
+  max-width: 120px;
+}
+.filter-chip input[type="number"] {
+  border: 0; background: transparent; color: inherit; font: inherit;
+  outline: none; width: 80px; padding: 0;
+}
+
+.filter-more-panel {
+  margin-top: 10px; padding: 16px;
+  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
+  background: var(--mb-card);
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px;
+}
+.filter-more-panel label {
+  display: block; font: 600 11px/1 'DM Sans', sans-serif;
+  color: var(--mb-text-muted); text-transform: uppercase; letter-spacing: .5px;
+  margin-bottom: 6px;
+}
+.filter-more-panel input, .filter-more-panel select {
+  width: 100%; height: 36px; padding: 0 10px;
+  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-sm);
+  background: var(--mb-bg); font: 400 13px/1 'DM Sans', sans-serif; color: var(--mb-ink);
+}
+.filter-actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+
+/* Market toolbar (Phase 2 stitch class) */
+.market-toolbar--stitch {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 10px 0 12px;
+  border-bottom: 1px solid var(--mb-border); margin-bottom: 18px;
+}
+.market-toolbar--stitch strong { font: 700 14px/1 Manrope, sans-serif; color: var(--mb-ink); }
+.market-toolbar--stitch .muted { font-size: 13px; color: var(--mb-text-muted); }
+
+/* ---- Sticky pricing dock in ListingDetail ---- */
+@media (min-width: 768px) {
+  .detail-grid--stitch {
+    grid-template-columns: minmax(0, 1fr) 360px;
+    align-items: start;
+  }
+  .detail-dock {
+    position: sticky;
+    top: 80px;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--mb-border) transparent;
+  }
+}
+
+/* ---- CreateListing visual grouping sections ---- */
+.cl-section {
+  margin: 20px 0 0;
+  padding: 18px 20px;
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-md);
+  background: var(--mb-bg);
+}
+.cl-section-title {
+  font: 700 11px/1 Manrope, sans-serif;
+  color: var(--mb-text-muted); text-transform: uppercase; letter-spacing: .7px;
+  margin: 0 0 14px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--mb-border);
+}
+.cl-hint { font-size: 12px; color: var(--mb-text-muted); margin: 4px 0 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lc, .lc-photo img, .lc-cta,
+  .filter-chip { transition: none; }
 }
