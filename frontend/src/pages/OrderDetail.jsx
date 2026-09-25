@@ -284,35 +284,6 @@ const PAYMENT_METHODS = [
   },
 ];
 
-function InspectionNegotiationControls({ quote, busy, onAction }) {
-  const [counter, setCounter] = useState('');
-  const amount = Number(quote.counterAmount ?? quote.amount);
-  return (
-    <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-      <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => onAction('ACCEPT')}>
-        {busy ? 'Working…' : 'Accept'}
-      </button>
-      <button type="button" className="btn btn-light btn-sm" disabled={busy} onClick={() => onAction('REJECT')}>
-        Reject
-      </button>
-      <input
-        type="number"
-        min="0.01"
-        step="0.01"
-        placeholder="Counter ETB"
-        value={counter}
-        disabled={busy}
-        onChange={(e) => setCounter(e.target.value)}
-        style={{ width: 120 }}
-        aria-label={`Counter inspection quote, current ${amount} ETB`}
-      />
-      <button type="button" className="btn btn-light btn-sm" disabled={busy || !(Number(counter) > 0)} onClick={() => onAction('COUNTER', Number(counter))}>
-        Counter
-      </button>
-    </div>
-  );
-}
-
 export default function OrderDetail() {
   const { orderId } = useParams();
   const navigate = useNavigate();
@@ -849,45 +820,6 @@ export default function OrderDetail() {
       await load({ silent: true });
     } catch (err) {
       setError(getError(err, 'Could not select transport bid'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const selectInspectionQuote = async (requestId, quoteId) => {
-    if (!requestId || !quoteId) return;
-    setBusy(`inspection-quote-${quoteId}`);
-    setError('');
-    try {
-      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/select`);
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not select inspection bid'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const respondInspectionQuote = async (requestId, quoteId, action, counterAmount) => {
-    if (!requestId || !quoteId) return;
-    setBusy(`inspection-quote-${quoteId}-${action}`);
-    setError('');
-    try {
-      if (action === 'ACCEPT') {
-        await api.patch(`/inspections/${requestId}/quotes/${quoteId}/accept`);
-      } else if (action === 'REJECT') {
-        await api.patch(`/inspections/${requestId}/quotes/${quoteId}/reject`);
-      } else if (action === 'COUNTER') {
-        const amount = Number(counterAmount);
-        if (!Number.isFinite(amount) || amount <= 0) {
-          setError('Enter a valid inspection counter amount.');
-          return;
-        }
-        await api.post(`/inspections/${requestId}/quotes/${quoteId}/counter`, { counterAmount: amount });
-      }
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not update inspection negotiation'));
     } finally {
       setBusy('');
     }
@@ -1851,67 +1783,14 @@ export default function OrderDetail() {
           currentInspectionRequest ? (
             <div className="card">
               <h2>Inspection</h2>
-              {currentInspectionRequest.status === 'REQUESTED' &&
-               !currentInspectionRequest.inspector &&
-               Array.isArray(currentInspectionRequest.quotes) &&
-               currentInspectionRequest.quotes.length > 0 ? (
-                <>
-                  <p className="muted">
-                    {currentInspectionRequest.quotes.filter((q) => ['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status)).length} inspector{currentInspectionRequest.quotes.filter((q) => ['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status)).length === 1 ? '' : 's'} in the sealed competition. Select one bid to open price negotiation.
-                  </p>
-                  {currentInspectionRequest.quotes
-                    .filter((q) => !q.parentQuoteId || !currentInspectionRequest.quotes.some((child) => child.parentQuoteId === q.id))
-                    .map((quote) => {
-                      const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
-                      const canSelectInspection = isParticipant && currentInspectionRequest.requestedById === currentUserId && quote.status === 'PENDING';
-                      const requesterTurn = quote.status === 'SELECTED' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
-                      const waitingOnInspector = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
-                      const quoteBusy = busy === `inspection-quote-${quote.id}` || busy?.startsWith(`inspection-quote-${quote.id}-`);
-                      return (
-                        <div key={quote.id} className="transporter" style={{ marginTop: 10 }}>
-                          <div>
-                            <strong>{quote.inspector?.name || 'Inspector'}</strong>{' — '}
-                            <strong>{money(displayAmount)} ETB</strong>
-                            <span className="badge" style={{ marginLeft: 8 }}>{quote.status}</span>
-                            {quote.inspector?.rating != null && <span className="muted"> · Rating {Number(quote.inspector.rating).toFixed(1)}</span>}
-                            {quote.message && <p className="muted" style={{ marginTop: 4 }}>{quote.message}</p>}
-                          </div>
-
-                          {canSelectInspection && (
-                            <div style={{ marginTop: 8 }}>
-                              <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(busy)} onClick={() => selectInspectionQuote(currentInspectionRequest.id, quote.id)}>
-                                {busy === `inspection-quote-${quote.id}` ? 'Selecting…' : 'Select bid for deal'}
-                              </button>
-                            </div>
-                          )}
-
-                          {requesterTurn && currentInspectionRequest.requestedById === currentUserId && (
-                            <InspectionNegotiationControls
-                              quote={quote}
-                              busy={quoteBusy}
-                              onAction={(action, amount) => respondInspectionQuote(currentInspectionRequest.id, quote.id, action, amount)}
-                            />
-                          )}
-
-                          {waitingOnInspector && (
-                            <p className="muted" style={{ marginTop: 8 }}>You made the latest counter. Waiting for the inspector to respond.</p>
-                          )}
-                        </div>
-                      );
-                    })}
-                </>
-              ) : (
-                <>
-                  <p className="muted">An inspection already exists for this order. Continue with this inspection; a second request is not needed.</p>
-                  <div className="detail-facts">
-                    <div><span>Status</span><strong>{currentInspectionRequest.status}</strong></div>
-                    {currentInspectionRequest.inspector?.name && <div><span>Inspector</span><strong>{currentInspectionRequest.inspector.name}</strong></div>}
-                    {currentInspectionRequest.fee != null && <div><span>Fee</span><strong>{money(currentInspectionRequest.fee)} ETB</strong></div>}
-                  </div>
-                  {currentInspectionRequest.status === 'COMPLETED' && currentInspectionRequest.report && (
-                    <p className="muted" style={{ marginTop: 10 }}>Inspection report is available. The buyer can now proceed to the goods payment.</p>
-                  )}
-                </>
+              <p className="muted">An inspection already exists for this order. Continue with this inspection; a second request is not needed.</p>
+              <div className="detail-facts">
+                <div><span>Status</span><strong>{currentInspectionRequest.status}</strong></div>
+                {currentInspectionRequest.inspector?.name && <div><span>Inspector</span><strong>{currentInspectionRequest.inspector.name}</strong></div>}
+                {currentInspectionRequest.fee != null && <div><span>Fee</span><strong>{money(currentInspectionRequest.fee)} ETB</strong></div>}
+              </div>
+              {currentInspectionRequest.status === 'COMPLETED' && currentInspectionRequest.report && (
+                <p className="muted" style={{ marginTop: 10 }}>Inspection report is available. The buyer can now proceed to the goods payment.</p>
               )}
             </div>
           ) : (

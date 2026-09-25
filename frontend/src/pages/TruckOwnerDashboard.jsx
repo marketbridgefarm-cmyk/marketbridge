@@ -808,7 +808,7 @@ export default function TruckOwnerDashboard() {
                   `job-${job.id}-QUOTE`;
 
                 const myLeaf = leafTransportQuote(job.quotes);
-                const hasActiveThread = myLeaf && ['PENDING', 'COUNTERED'].includes(myLeaf.status);
+                const hasActiveThread = myLeaf && ['PENDING', 'SELECTED', 'COUNTERED'].includes(myLeaf.status);
                 const isMyTurn = hasActiveThread && myLeaf.status === 'COUNTERED' && myLeaf.counteredBy === 'REQUESTER';
                 const respondBusy = myLeaf && actionLoading === `quote-${myLeaf.id}`;
 

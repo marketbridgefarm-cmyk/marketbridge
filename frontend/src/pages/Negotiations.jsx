@@ -39,7 +39,6 @@ const SELLER_LISTING_STATUSES = ['ACTIVE', 'UNDER_NEGOTIATION', 'SOLD'];
 // correctly reject with a 409.
 function quoteTurn(quote) {
   if (quote.status === 'PENDING') return 'REQUESTER';
-  if (quote.status === 'SELECTED') return 'REQUESTER';
   if (quote.status === 'COUNTERED') {
     return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
   }

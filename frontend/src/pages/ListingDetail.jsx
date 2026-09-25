@@ -205,6 +205,19 @@ export default function ListingDetail() {
     }
   }
 
+  async function selectInspectionQuote(requestId, quoteId) {
+    setAcceptingQuoteId(quoteId);
+    try {
+      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/select`);
+      showToast('Inspector bid selected. Price-deal negotiation is now open.', 'success');
+      await loadQuotes(requestId);
+    } catch (e) {
+      showToast(e.response?.data?.error || 'Could not select this inspection bid.', 'error');
+    } finally {
+      setAcceptingQuoteId('');
+    }
+  }
+
   async function acceptQuote(requestId, quoteId) {
     setAcceptingQuoteId(quoteId);
     try {
@@ -286,7 +299,7 @@ export default function ListingDetail() {
     <main className="section">
       <div className="container-wide">
         <Link className="back-link" to={isAgricultural ? '/agricultural' : '/products'}>← Back to marketplace</Link>
-        <div className="detail-grid detail-grid--stitch">
+        <div className="detail-grid">
           <section>
             <div className="detail-media">
               {activeMedia ? (
@@ -366,7 +379,8 @@ export default function ListingDetail() {
                             )}
                             {leafQuotes(quotesByRequest[request.id]).map((quote) => {
                               const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
-                              const isRequesterTurn = quote.status === 'PENDING' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+                              const isRequesterTurn = quote.status === 'SELECTED' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+                              const isCompetitionBid = quote.status === 'PENDING';
                               const isWaitingOnInspector = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
                               return (
                                 <div key={quote.id} className="evidence" style={{ marginBottom: 6 }}>
@@ -383,6 +397,11 @@ export default function ListingDetail() {
                                   {quote.message && <p className="muted">"{quote.message}"</p>}
                                   {isWaitingOnInspector && (
                                     <p className="muted">You countered {Number(displayAmount).toLocaleString()} ETB — waiting for the inspector to respond.</p>
+                                  )}
+                                  {isCompetitionBid && request.requestedById === user?.id && (
+                                    <button type="button" className="btn btn-primary btn-sm" disabled={acceptingQuoteId === quote.id} onClick={() => selectInspectionQuote(request.id, quote.id)}>
+                                      {acceptingQuoteId === quote.id ? 'Selecting…' : 'Select bid for deal'}
+                                    </button>
                                   )}
                                   {isRequesterTurn && (
                                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
@@ -461,12 +480,22 @@ export default function ListingDetail() {
             )}
           </section>
 
-          <aside className="detail-dock">
+          <aside>
             {isBuyer && myLatestOffer && isAgricultural && (
               <div className="card" id="negotiation">
                 <h2>Your negotiation</h2>
                 <p>Current amount: <strong>{money(myLatestOffer.counterAmount ?? myLatestOffer.amount)} ETB</strong></p>
                 <span className="badge">{myLatestOffer.status}</span>
+                {myLatestOffer.status === 'SELECTED' && (
+                  <>
+                    <p className="muted" style={{ marginTop: 10 }}><strong>The seller selected your bid.</strong> Competition is complete for this deal. Accept the selected price or make your counter.</p>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button className="btn btn-primary" onClick={() => respondToOffer(myLatestOffer.id, 'ACCEPT_SELECTED')}>Accept selected price</button>
+                      <input type="number" min="0.01" step="0.01" placeholder="Counter ETB" value={buyerCounter} onChange={(e) => setBuyerCounter(e.target.value)} style={{ minWidth: 140 }} />
+                      <button className="btn btn-light" disabled={!buyerCounter} onClick={() => respondToOffer(myLatestOffer.id, 'RE_COUNTER', buyerCounter)}>Counter</button>
+                    </div>
+                  </>
+                )}
                 {sellerCounterWaitingForBuyer && (
                   <>
                     <p className="muted" style={{ marginTop: 10 }}>The seller has countered. <strong>Your turn.</strong></p>
@@ -610,7 +639,7 @@ function OfferRow({ offer, onAction }) {
   // The seller may respond to an original PENDING offer, or to the buyer's
   // latest COUNTERED offer. A seller counter means the buyer must respond.
   const sellerCanAct =
-    offer.status === 'PENDING' ||
+    offer.status === 'SELECTED' ||
     (offer.status === 'COUNTERED' && String(offer.counteredBy || '').toUpperCase() === 'BUYER');
 
   const buyerCountered =
@@ -655,6 +684,17 @@ function OfferRow({ offer, onAction }) {
 
       {offer.status === 'COUNTERED' && String(offer.counteredBy || '').toUpperCase() === 'SELLER' && (
         <p className="muted" style={{ marginTop: 8 }}>You made the latest counter. Waiting for the buyer.</p>
+      )}
+
+      {offer.status === 'PENDING' && (
+        <div className="row-actions" style={{ marginTop: 8 }}>
+          <button type="button" className="btn btn-sm btn-primary" disabled={Boolean(busy)} onClick={() => submit('SELECT')}>
+            {busy === 'SELECT' ? 'Selecting…' : 'Select buyer for deal'}
+          </button>
+          <button type="button" className="btn btn-sm btn-light" disabled={Boolean(busy)} onClick={() => submit('REJECT')}>
+            {busy === 'REJECT' ? 'Rejecting…' : 'Reject bid'}
+          </button>
+        </div>
       )}
 
       {sellerCanAct && (

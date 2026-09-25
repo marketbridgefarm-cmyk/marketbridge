@@ -540,20 +540,18 @@ export default function InspectorDashboard() {
                         </div>
                       </div>
 
-                      {!(r.quotes || []).some((q) => q.status === 'SELECTED') && (
-                        <button
-                          type="button"
-                          className="sd-btn sd-btn-primary"
-                          style={{
-                            marginTop: 6,
-                          }}
-                          onClick={() =>
-                            accept(r.id)
-                          }
-                        >
-                          Accept job
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        className="sd-btn sd-btn-primary"
+                        style={{
+                          marginTop: 6,
+                        }}
+                        onClick={() =>
+                          accept(r.id)
+                        }
+                      >
+                        Accept job
+                      </button>
 
                       {!(quotedRequestIds.has(r.id) || (() => { const l = leafInspectionQuote(r.quotes); return l && ['PENDING', 'SELECTED', 'COUNTERED'].includes(l.status); })()) && (
                         <p className="sd-muted" style={{ marginTop: 10, marginBottom: 4 }}>
