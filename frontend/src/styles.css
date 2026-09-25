@@ -4577,3 +4577,423 @@ textarea {
   .lc, .lc-photo img, .lc-cta,
   .filter-chip { transition: none; }
 }
+
+/* ==========================================================================
+   STITCH DESIGN FREEZE v1.0 — Phase 3: Deals, orders and payments
+   ========================================================================== */
+
+/* ---- Status pill (used in OrderDetail hero and OrderRow) ---- */
+.status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 26px; padding: 0 10px;
+  border-radius: var(--mb-radius-pill);
+  font: 600 12px/1 'DM Sans', sans-serif;
+  letter-spacing: .2px;
+  background: var(--mb-surface-soft); color: var(--mb-text-muted);
+}
+.status-pill-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor; flex: 0 0 7px;
+}
+.status-pill.tone-success { background: var(--mb-success-light); color: var(--mb-success); }
+.status-pill.tone-gold    { background: var(--mb-gold-light);    color: var(--mb-gold);    }
+.status-pill.tone-danger  { background: var(--mb-danger-light);  color: var(--mb-danger);  }
+.status-pill.tone-info    { background: var(--mb-info-light);    color: var(--mb-info);    }
+.status-pill.tone-muted   { background: var(--mb-surface-soft);  color: var(--mb-text-muted); }
+
+/* ---- sd-* dashboard shell ---- */
+.sd-tabs,
+.sd-tabs-list { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.sd-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 36px; padding: 0 14px;
+  border-radius: var(--mb-radius-pill);
+  border: 1px solid transparent;
+  background: transparent; color: var(--mb-text-muted);
+  font: 600 13px/1 'DM Sans', sans-serif;
+  cursor: pointer; transition: background .15s ease, color .15s ease;
+  white-space: nowrap;
+}
+.sd-tab:hover { background: var(--mb-surface-soft); color: var(--mb-primary); }
+.sd-tab.sd-active {
+  background: var(--mb-surface-soft);
+  border-color: var(--mb-primary); color: var(--mb-primary);
+}
+.sd-tab-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: var(--mb-radius-pill);
+  background: var(--mb-gold); color: #fff;
+  font: 700 10px/1 'DM Sans', sans-serif;
+}
+
+/* Mobile tabs nav (Dashboard dropdown) */
+.sd-tabs-nav {
+  position: relative; margin-bottom: 16px;
+}
+.sd-tabs-current {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 44px; padding: 0 14px;
+  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
+  background: var(--mb-card);
+  font: 600 14px/1 'DM Sans', sans-serif; color: var(--mb-ink);
+  cursor: pointer; width: 100%;
+}
+.sd-tabs-chevron { font-size: 18px; color: var(--mb-text-muted); }
+@media (min-width: 768px) {
+  .sd-tabs-current { display: none; }
+  .sd-tabs-list { display: flex !important; }
+}
+@media (max-width: 767px) {
+  .sd-tabs-list {
+    display: none; flex-direction: column;
+    position: absolute; top: 48px; left: 0; right: 0; z-index: 20;
+    background: var(--mb-card);
+    border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
+    padding: 6px; gap: 2px;
+    box-shadow: var(--mb-shadow-elevated);
+  }
+  .sd-tabs-open .sd-tabs-list { display: flex; }
+  .sd-tab { border-radius: var(--mb-radius-sm); height: 40px; }
+}
+
+/* Dashboard stat grid */
+.sd-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px; margin-bottom: 20px;
+}
+.sd-stat {
+  padding: 16px;
+  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
+  background: var(--mb-card); box-shadow: var(--mb-shadow-card);
+  position: relative; overflow: hidden;
+}
+.sd-stat::after {
+  content: ''; position: absolute; top: 0; left: 0;
+  width: 3px; height: 100%;
+  background: var(--mb-primary);
+  border-radius: 4px 0 0 4px;
+}
+.sd-stat b {
+  display: block;
+  font: 800 24px/1.1 Manrope, sans-serif;
+  color: var(--mb-ink); letter-spacing: -.03em;
+  margin: 4px 0 2px;
+}
+.sd-eyebrow, .sd-stat span {
+  font: 600 11px/1 'DM Sans', sans-serif;
+  color: var(--mb-text-muted); text-transform: uppercase; letter-spacing: .5px;
+}
+
+/* sd-table — responsive data table */
+.sd-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.sd-table {
+  width: 100%; border-collapse: collapse;
+  font: 400 13px/1.4 'DM Sans', sans-serif;
+}
+.sd-table th {
+  font: 600 11px/1 'DM Sans', sans-serif;
+  color: var(--mb-text-muted); text-transform: uppercase; letter-spacing: .5px;
+  padding: 10px 12px; text-align: left;
+  border-bottom: 2px solid var(--mb-border);
+}
+.sd-table td {
+  padding: 10px 12px; color: var(--mb-ink);
+  border-bottom: 1px solid var(--mb-border-subtle);
+}
+.sd-table tr:last-child td { border-bottom: 0; }
+.sd-table tr:hover td { background: var(--mb-surface-soft); }
+
+/* Mobile stacked cards from sd-table--mobile-cards */
+@media (max-width: 639px) {
+  .sd-table--mobile-cards thead { display: none; }
+  .sd-table--mobile-cards tr {
+    display: block;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--mb-border);
+  }
+  .sd-table--mobile-cards td {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 4px 0; border-bottom: 0;
+  }
+  .sd-table--mobile-cards td::before {
+    content: attr(data-label);
+    font: 600 11px/1 'DM Sans', sans-serif;
+    color: var(--mb-text-muted); text-transform: uppercase; letter-spacing: .4px;
+    flex: 0 0 110px;
+  }
+}
+
+/* sd-toast */
+.sd-toast {
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+  padding: 10px 20px; border-radius: var(--mb-radius-pill);
+  background: var(--mb-primary-dark); color: #fff;
+  font: 600 13px/1 'DM Sans', sans-serif;
+  box-shadow: var(--mb-shadow-elevated); z-index: 300;
+  pointer-events: none;
+  animation: toast-in .2s ease;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ---- Order cards (Orders feed) ---- */
+.order-card {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 16px; flex-wrap: wrap;
+  padding: 18px 20px;
+  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
+  background: var(--mb-card); box-shadow: var(--mb-shadow-card);
+  margin-bottom: 10px;
+  transition: box-shadow .2s ease;
+}
+.order-card:hover { box-shadow: var(--mb-shadow-elevated); }
+.order-card h3 {
+  font: 700 16px/1.25 Manrope, sans-serif;
+  color: var(--mb-ink); margin: 6px 0 4px; letter-spacing: -.015em;
+}
+.order-card p {
+  font-size: 13px; color: var(--mb-text-muted); margin: 3px 0;
+}
+.order-card .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+
+/* ---- Order hero (OrderDetail top section) ---- */
+.order-hero {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 16px; flex-wrap: wrap;
+  padding: 20px 22px;
+  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
+  background: var(--mb-card); box-shadow: var(--mb-shadow-card);
+  margin-bottom: 16px;
+}
+.order-hero-eyebrow {
+  font: 700 11px/1 'DM Sans', sans-serif;
+  color: var(--mb-text-muted); text-transform: uppercase; letter-spacing: .7px;
+}
+.order-hero-title {
+  font: 800 22px/1.2 Manrope, sans-serif;
+  color: var(--mb-ink); margin: 6px 0 8px; letter-spacing: -.025em;
+}
+.order-hero-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.order-hero-chip {
+  display: inline-flex; align-items: center;
+  height: 24px; padding: 0 10px;
+  border-radius: var(--mb-radius-pill);
+  background: var(--mb-surface-soft);
+  font: 600 11px/1 'DM Sans', sans-serif; color: var(--mb-text-muted);
+  letter-spacing: .3px;
+}
+.order-hero-side {
+  text-align: right; flex: 0 0 auto;
+}
+.order-hero-price-label {
+  display: block;
+  font: 600 11px/1 'DM Sans', sans-serif;
+  color: var(--mb-text-muted); text-transform: uppercase; letter-spacing: .5px;
+  margin-bottom: 4px;
+}
+.order-hero-price {
+  font: 800 26px/1 Manrope, sans-serif; color: var(--mb-primary);
+  letter-spacing: -.03em;
+}
+.order-hero-price small {
+  font-size: 14px; color: var(--mb-text-muted); font-weight: 500;
+}
+
+/* ---- Order timeline — Stitch milestone stepper ---- */
+.order-timeline {
+  list-style: none; margin: 0; padding: 0;
+  position: relative;
+}
+.order-timeline::before {
+  content: ''; position: absolute;
+  left: 12px; top: 12px; bottom: 12px; width: 2px;
+  background: var(--mb-border); z-index: 0;
+}
+.order-timeline-step {
+  display: flex; gap: 14px; align-items: flex-start;
+  position: relative; padding: 0 0 18px; z-index: 1;
+}
+.order-timeline-step:last-child { padding-bottom: 0; }
+
+/* The dot */
+.order-timeline-dot {
+  flex: 0 0 26px; width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--mb-border);
+  background: var(--mb-card);
+  display: flex; align-items: center; justify-content: center;
+  position: relative; z-index: 1;
+  transition: border-color .2s ease, background .2s ease;
+}
+.order-timeline-step.is-complete .order-timeline-dot {
+  background: var(--mb-primary); border-color: var(--mb-primary);
+}
+.order-timeline-step.is-current .order-timeline-dot {
+  background: var(--mb-card); border-color: var(--mb-primary);
+  box-shadow: 0 0 0 4px rgba(23,107,58,.15);
+}
+.order-timeline-step.is-pending .order-timeline-dot {
+  background: var(--mb-bg); border-color: var(--mb-border);
+}
+.order-timeline-step.is-recorded .order-timeline-dot {
+  background: var(--mb-info-light); border-color: var(--mb-info-border);
+}
+
+.order-timeline-label {
+  font: 600 14px/1.3 'DM Sans', sans-serif; color: var(--mb-ink);
+  padding-top: 4px;
+}
+.order-timeline-step.is-pending .order-timeline-label { color: var(--mb-text-muted); font-weight: 400; }
+.order-timeline-step.is-complete .order-timeline-label { color: var(--mb-text-muted); font-weight: 500; }
+.order-timeline-step.is-current .order-timeline-label { color: var(--mb-primary); font-weight: 700; }
+.order-timeline-date {
+  font-size: 11px; color: var(--mb-text-muted); margin-top: 2px;
+}
+
+/* ---- Negotiation cards ---- */
+.neg-card {
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-md);
+  background: var(--mb-card); box-shadow: var(--mb-shadow-card);
+  padding: 16px 18px; margin-bottom: 10px;
+  transition: box-shadow .15s ease;
+}
+.neg-card:hover { box-shadow: var(--mb-shadow-elevated); }
+/* Gold left-bar when it's the viewer's turn to act */
+.neg-card--my-turn {
+  border-color: var(--mb-gold-border);
+  box-shadow: 0 0 0 1px var(--mb-gold-border), var(--mb-shadow-card);
+}
+.neg-card--my-turn::before {
+  content: ''; display: block;
+  width: 100%; height: 3px;
+  background: var(--mb-gold);
+  border-radius: 6px 6px 0 0;
+  margin: -16px -18px 12px;
+  width: calc(100% + 36px);
+}
+.neg-turn-label {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 22px; padding: 0 9px;
+  border-radius: var(--mb-radius-pill);
+  background: var(--mb-gold-light); color: var(--mb-gold);
+  font: 700 11px/1 'DM Sans', sans-serif; letter-spacing: .3px;
+  margin-bottom: 8px;
+}
+.neg-title {
+  font: 700 15px/1.25 Manrope, sans-serif; color: var(--mb-ink);
+  margin: 0 0 4px; letter-spacing: -.015em;
+}
+.neg-amount {
+  font: 800 20px/1 Manrope, sans-serif; color: var(--mb-primary);
+  letter-spacing: -.025em;
+}
+.neg-amount-unit { font-size: 13px; color: var(--mb-text-muted); font-weight: 500; }
+.neg-actions {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--mb-border);
+}
+
+/* ---- Payment center / status ---- */
+.payment-action-center {
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-md);
+  box-shadow: var(--mb-shadow-card);
+  overflow: hidden;
+}
+.payment-center-row {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--mb-border);
+  background: var(--mb-bg);
+}
+.payment-center-row:last-of-type { border-bottom: 0; }
+.payment-center-row strong { font: 600 14px/1.3 'DM Sans', sans-serif; color: var(--mb-ink); }
+.payment-center-row .muted { font-size: 12px; color: var(--mb-text-muted); }
+
+.payment-status { padding: 4px 0; }
+.payment-status-row {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 12px; padding: 12px 0;
+  border-bottom: 1px solid var(--mb-border);
+}
+.payment-status-row:last-child { border-bottom: 0; }
+
+/* Chapa escrow neutral-custody badge */
+.escrow-shield {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  border: 1px solid var(--mb-success-border);
+  border-radius: var(--mb-radius-sm);
+  background: var(--mb-success-light);
+  font: 600 13px/1.4 'DM Sans', sans-serif; color: var(--mb-success);
+  margin-bottom: 14px;
+}
+.escrow-shield svg { flex: 0 0 20px; }
+
+/* ---- Transporter / match box (TransportSetup) ---- */
+.match-box {
+  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
+  overflow: hidden; background: var(--mb-bg);
+}
+.match-box > .row-between {
+  padding: 10px 14px;
+  background: var(--mb-card); border-bottom: 1px solid var(--mb-border);
+}
+.transporter {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; padding: 12px 14px;
+  border-bottom: 1px solid var(--mb-border);
+  transition: background .15s ease;
+}
+.transporter:last-child { border-bottom: 0; }
+.transporter.chosen {
+  background: var(--mb-surface-soft);
+  outline: 2px solid var(--mb-primary); outline-offset: -2px;
+  border-radius: var(--mb-radius-sm);
+}
+.transporter strong { font: 600 14px/1.3 'DM Sans', sans-serif; color: var(--mb-ink); }
+.transporter p { font-size: 12px; color: var(--mb-text-muted); margin: 2px 0 0; }
+
+/* ---- service-access cards (Dashboard quick links) ---- */
+.service-access { margin-bottom: 24px; }
+.service-access-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px; margin-top: 12px;
+}
+.service-access-card {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
+  background: var(--mb-card); box-shadow: var(--mb-shadow-card);
+  text-decoration: none; color: var(--mb-ink);
+  transition: box-shadow .15s ease, border-color .15s ease;
+}
+.service-access-card:hover {
+  box-shadow: var(--mb-shadow-elevated); border-color: var(--mb-primary);
+}
+.service-access-icon { font-size: 26px; flex: 0 0 36px; }
+.service-access-copy strong {
+  display: block; font: 700 14px/1.3 Manrope, sans-serif; color: var(--mb-ink);
+}
+.service-access-copy span { font-size: 12px; color: var(--mb-text-muted); }
+.service-access-arrow { margin-left: auto; color: var(--mb-text-muted); font-size: 18px; }
+
+/* ---- badge variants (referenced in PaymentStatus + PaymentCenter) ---- */
+.badge-success { background: var(--mb-success-light); color: var(--mb-success); border-color: var(--mb-success-border); }
+.badge-pending { background: var(--mb-gold-light);    color: var(--mb-gold);    border-color: var(--mb-gold-border);    }
+.badge-danger  { background: var(--mb-danger-light);  color: var(--mb-danger);  border-color: var(--mb-danger-border);  }
+.badge-info    { background: var(--mb-info-light);    color: var(--mb-info);    border-color: var(--mb-info-border);    }
+
+@media (prefers-reduced-motion: reduce) {
+  .order-timeline-dot,
+  .neg-card, .order-card,
+  .service-access-card,
+  .transporter { transition: none; }
+}
