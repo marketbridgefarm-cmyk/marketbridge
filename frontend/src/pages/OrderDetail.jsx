@@ -1558,25 +1558,25 @@ export default function OrderDetail() {
     );
   }
 
-  // respondQuote — used by BidBoard embedded in inspection and transport sections
-  const respondQuote = useCallback(async (type, requestId, quote, action, counterAmount) => {
-    try {
-      let response;
-      if (type === 'INSPECTION_QUOTE') {
-        if      (action === 'ACCEPT')  response = await api.patch(`/inspections/${requestId}/quotes/${quote.id}/accept`);
-        else if (action === 'REJECT')  response = await api.patch(`/inspections/${requestId}/quotes/${quote.id}/reject`);
-        else if (action === 'COUNTER') response = await api.post(`/inspections/${requestId}/quotes/${quote.id}/counter`, { counterAmount: Number(counterAmount) });
-      } else if (type === 'TRANSPORT_QUOTE') {
-        const payload = { action };
-        if (action === 'COUNTER') payload.counterAmount = Number(counterAmount);
-        response = await api.patch(`/transport/quotes/${quote.id}`, payload);
-      }
-      await load({ silent: true });
-      return response;
-    } catch (err) {
-      throw err;
+  // respondQuote — used by BidBoard embedded in inspection and transport sections.
+  // Plain function, not useCallback: this point in the component is reached only
+  // after the `loading` / `!order` early returns above, and a hook can never be
+  // called conditionally like that (it would change the hook count between the
+  // loading render and the loaded render, which is what was crashing the page).
+  const respondQuote = async (type, requestId, quote, action, counterAmount) => {
+    let response;
+    if (type === 'INSPECTION_QUOTE') {
+      if      (action === 'ACCEPT')  response = await api.patch(`/inspections/${requestId}/quotes/${quote.id}/accept`);
+      else if (action === 'REJECT')  response = await api.patch(`/inspections/${requestId}/quotes/${quote.id}/reject`);
+      else if (action === 'COUNTER') response = await api.post(`/inspections/${requestId}/quotes/${quote.id}/counter`, { counterAmount: Number(counterAmount) });
+    } else if (type === 'TRANSPORT_QUOTE') {
+      const payload = { action };
+      if (action === 'COUNTER') payload.counterAmount = Number(counterAmount);
+      response = await api.patch(`/transport/quotes/${quote.id}`, payload);
     }
-  }, [load]);
+    await load({ silent: true });
+    return response;
+  };
 
   // ==========================================================================
   // RENDER
