@@ -111,7 +111,7 @@ export default function TransportSetup({
   const availableOwnTrucks = ownTrucks.filter((t) => t.availability === 'AVAILABLE');
 
   return (
-    <form className="card form-card" onSubmit={submit} style={{ marginTop: 12 }}>
+    <form className="card form-card mb-transport-setup" onSubmit={submit} style={{ marginTop: 12 }}>
       <p className="lead" style={{ marginTop: 0 }}>
         Choose who controls the transport arrangement. The buyer remains responsible for paying
         a hired transporter.

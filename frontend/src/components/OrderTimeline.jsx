@@ -34,7 +34,7 @@ export default function OrderTimeline({ steps, events = [] }) {
   );
 
   return (
-    <ol className="order-timeline">
+    <ol className="order-timeline mb-order-timeline">
       {milestoneSteps.map((step, index) => {
         const isCurrent = !step.completed && index === lastCompletedIndex + 1;
         const stateClass = step.completed ? 'is-complete' : isCurrent ? 'is-current' : 'is-pending';

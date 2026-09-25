@@ -48,7 +48,7 @@ export default function PaymentStatus({ payments }) {
     (transport?.required && !transport.paid ? 1 : 0);
 
   return (
-    <div className="payment-status">
+    <div className="payment-status mb-payment-status">
       <div className="row-between">
         <strong>Required payments</strong>
         {outstanding === 0 ? (

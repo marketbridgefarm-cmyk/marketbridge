@@ -104,7 +104,7 @@ export default function PaymentCenter({
     (transport?.required && !transport.paid ? 1 : 0);
 
   return (
-    <div className="card payment-action-center" id="payment-center">
+    <div className="card payment-action-center mb-payment-center" id="payment-center">
       <div className="row-between" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div>
           <span className="eyebrow">PAYMENT CENTER</span>
