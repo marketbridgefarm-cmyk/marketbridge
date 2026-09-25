@@ -246,7 +246,7 @@ export default function Dashboard() {
   }
 
   return (
-    <main className="section dashboard-page">
+    <main className="section dashboard-page mb-dashboard-page">
       <div className="container-wide">
         <DashboardWelcome user={user} subtitle="Buying, selling, and everything in between — all in one place.">
           <RecentActivity items={activityItems} emptyText="No activity yet — browse listings or create one to get started." />

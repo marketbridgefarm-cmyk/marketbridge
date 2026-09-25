@@ -1523,7 +1523,7 @@ export default function OrderDetail() {
 
   if (loading) {
     return (
-      <main className="section order-detail-page">
+      <main className="section order-detail-page mb-order-detail-page">
         <div className="container-narrow">
           <div className="card loading">
             <p>Loading order…</p>
@@ -1539,7 +1539,7 @@ export default function OrderDetail() {
 
   if (!order) {
     return (
-      <main className="section order-detail-page">
+      <main className="section order-detail-page mb-order-detail-page">
         <div className="container-narrow">
           <button
             type="button"
@@ -1562,7 +1562,7 @@ export default function OrderDetail() {
   // ==========================================================================
 
   return (
-    <main className="section order-detail-page">
+    <main className="section order-detail-page mb-order-detail-page">
       <div className="container-narrow">
 
         {/* ================================================================== */}

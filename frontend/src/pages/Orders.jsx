@@ -126,7 +126,7 @@ export default function Orders() {
   }, [orders, tab, currentUserId]);
 
   return (
-    <main className="section">
+    <main className="section mb-orders-page">
       <div className="container-narrow">
         <div className="page-header">
           <div>

@@ -278,7 +278,7 @@ export default function Negotiations() {
   }, [loadAll, toast]);
 
   return (
-    <main className="section">
+    <main className="section mb-negotiations-page">
       <div className="container-narrow">
         <span className="eyebrow">NEGOTIATIONS</span>
         <h1>Your negotiations</h1>
