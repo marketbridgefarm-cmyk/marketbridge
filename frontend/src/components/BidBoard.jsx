@@ -134,7 +134,7 @@ function BidCard({ quote, type, onRespond, disabled }) {
       {/* Negotiation state bar */}
       {(isSelected || isNeg) && (
         <div className={`bid-card-neg-bar${myTurn ? ' bid-card-neg-bar--mine' : ''}`}>
-          {isSelected && myTurn && `⚡ You selected this ${type === 'INSPECTION_QUOTE' ? 'inspector' : 'transporter'} bid — accept, counter, or reject below`}
+          {isSelected && myTurn && '⚡ You selected this bid — accept, counter, or reject below'}
           {isNeg && myTurn && `⚡ Provider countered · last offer: ${money(quote.counterAmount)} ETB — your turn`}
           {isNeg && waiting && `⏳ You offered ${money(quote.counterAmount)} ETB — waiting for provider`}
         </div>
@@ -143,7 +143,7 @@ function BidCard({ quote, type, onRespond, disabled }) {
       {/* Hired */}
       {isHired && (
         <div className="bid-card-status-bar bid-card-status-bar--hired">
-          ✓ Negotiated — {type === 'INSPECTION_QUOTE' ? 'inspector' : 'transporter'} is provisionally selected; payment completes the commitment.
+          ✓ Provisional agreement — payment is still required to commit the {type === 'INSPECTION_QUOTE' ? 'inspector' : 'transporter'}
         </div>
       )}
 
@@ -180,8 +180,8 @@ function BidCard({ quote, type, onRespond, disabled }) {
                 onClick={() => handle('ACCEPT')}
               >
                 {busy === 'ACCEPT'
-                  ? 'Hiring…'
-                  : `${type === 'INSPECTION_QUOTE' ? 'Accept inspector' : 'Accept transporter'} for ${money(displayAmount)} ETB`}
+                  ? 'Accepting…'
+                  : `Accept for ${money(displayAmount)} ETB`}
               </button>
 
               {!showCounter ? (
@@ -235,19 +235,6 @@ function BidCard({ quote, type, onRespond, disabled }) {
               </button>
             </>
           )}
-        </div>
-      )}
-
-      {isHired && !disabled && (
-        <div className="bid-card-actions">
-          <button
-            type="button"
-            className="btn btn-light btn-sm"
-            disabled={!!busy}
-            onClick={() => handle('REJECT')}
-          >
-            {busy === 'REJECT' ? 'Cancelling…' : 'Cancel provisional deal'}
-          </button>
         </div>
       )}
     </div>
