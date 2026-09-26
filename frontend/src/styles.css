@@ -5212,3 +5212,253 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   .bid-card, .bid-sort-btn { transition: none; }
 }
+
+/* ---- Order overview + transport card refresh --------------------------- */
+.order-detail-page .order-overview-card {
+  margin-bottom: var(--space-md);
+  padding: clamp(18px, 3vw, 28px);
+}
+
+.order-section-heading,
+.transport-card-heading,
+.transport-subheading,
+.transport-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.order-section-heading {
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.order-section-heading h2,
+.order-section-heading h3,
+.transport-card-heading h2,
+.transport-subheading h3,
+.transport-panel-heading h3 {
+  margin: 3px 0 0;
+}
+
+.order-section-heading h2 {
+  font-size: clamp(24px, 3vw, 32px);
+}
+
+.order-section-heading h3,
+.transport-subheading h3,
+.transport-panel-heading h3 {
+  font-size: 18px;
+}
+
+.order-overview-card .status-pill {
+  flex: 0 0 auto;
+  margin-top: 4px;
+}
+
+.order-overview-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.order-overview-fact {
+  min-height: 76px;
+  padding: 14px 15px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fbfdfb;
+}
+
+.order-overview-fact span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .45px;
+  margin-bottom: 5px;
+}
+
+.order-overview-fact strong {
+  display: block;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.order-overview-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 24px 0 20px;
+}
+
+.order-parties-heading {
+  align-items: center;
+}
+
+.order-section-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.party-list-inline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.party-list-inline .party-row {
+  margin: 0;
+  min-width: 0;
+}
+
+.transport-overview-card {
+  margin-bottom: var(--space-md);
+  padding: clamp(18px, 3vw, 28px);
+}
+
+.transport-card-heading {
+  align-items: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.transport-card-icon {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--soft);
+  color: var(--green);
+  border: 1px solid #d7e7d9;
+}
+
+.transport-card-icon svg {
+  width: 27px;
+  height: 27px;
+}
+
+.transport-card-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.transport-card-title h2 {
+  font-size: clamp(24px, 3vw, 32px);
+}
+
+.transport-card-title p {
+  max-width: 68ch;
+  margin: 7px 0 0;
+  font-size: 13px;
+}
+
+.transport-status-badge {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.transport-details-block {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #fbfdfb;
+}
+
+.transport-subheading {
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.transport-detail-facts {
+  margin-bottom: 0;
+}
+
+.transport-info-panel {
+  margin-top: 14px;
+  border-color: var(--line);
+  background: #fff;
+}
+
+.transport-panel-heading {
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.transport-panel-heading h3 {
+  margin: 0;
+}
+
+.transport-panel-icon {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--soft);
+  color: var(--green);
+  font-size: 14px;
+  border: 1px solid #dceade;
+}
+
+.transport-info-panel > p:last-child,
+.transport-payment-confirmed > p:last-child {
+  margin-bottom: 0;
+}
+
+.transport-payment-confirmed {
+  margin-top: 14px;
+  border-color: #b9d9c0;
+  background: #f4fbf5;
+}
+
+.transport-payment-confirmed .transport-panel-icon {
+  background: #e2f3e5;
+  color: var(--green);
+}
+
+@media (max-width: 760px) {
+  .order-overview-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .party-list-inline {
+    grid-template-columns: 1fr;
+  }
+
+  .transport-card-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .transport-status-badge {
+    margin-left: 62px;
+    margin-top: -10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .order-overview-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .order-section-heading {
+    align-items: flex-start;
+  }
+
+  .order-section-heading .status-pill {
+    font-size: 10px;
+    padding-inline: 8px;
+  }
+
+  .transport-details-block {
+    padding: 14px;
+  }
+}
