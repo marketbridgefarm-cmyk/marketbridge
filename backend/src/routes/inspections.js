@@ -413,18 +413,23 @@ router.post(
         });
       }
 
+      // Each inspector gets exactly one initial competitive quote for an
+      // inspection request. Once submitted, the inspector cannot create a
+      // second root quote; if selected, they continue only through the
+      // existing negotiation chain with COUNTER actions.
       const existing = await prisma.inspectionQuote.findFirst({
         where: {
           inspectionRequestId: request.id,
           inspectorId: req.user.id,
-          status: { in: ['PENDING', 'COUNTERED'] },
-          childQuotes: { none: {} },
+          parentQuoteId: null,
         },
+        orderBy: { createdAt: 'asc' },
       });
 
       if (existing) {
         return res.status(409).json({
-          error: 'You already have an active quote or negotiation for this inspection',
+          error: 'You already submitted an inspection quote. Only the selected inspector may continue through negotiation/counter-offers.',
+          quote: existing,
         });
       }
 
@@ -668,7 +673,7 @@ router.patch(
         return res.status(409).json({ error: 'This quote has expired' });
       }
 
-      if (quote.status !== 'ACCEPTED' && quoteTurn(quote) !== actorRole) {
+      if (quoteTurn(quote) !== actorRole) {
         return res.status(409).json({
           error: 'It is the other party\u2019s turn to respond to this negotiation',
         });
@@ -686,19 +691,26 @@ router.patch(
             inspectorId: null,
           },
 
-          // This is a provisional commercial selection. The inspection
-          // request remains REQUESTED until the inspector payment settles.
-          // Keeping the other quotes open is what allows the buyer to cancel
-          // this provisional agreement and continue with another bidder.
           data: {
             inspectorId: quote.inspectorId,
             fee: finalAmount,
+            status: 'ACCEPTED',
           },
         });
 
         if (claim.count !== 1) {
           throw new Error('INSPECTION_ALREADY_CLAIMED');
         }
+
+        // Close out every other negotiation thread on this request.
+        await tx.inspectionQuote.updateMany({
+          where: {
+            inspectionRequestId: request.id,
+            status: { in: ['PENDING', 'COUNTERED'] },
+            id: { not: quote.id },
+          },
+          data: { status: 'REJECTED' },
+        });
 
         const acceptedQuote = await tx.inspectionQuote.update({
           where: {
@@ -897,20 +909,10 @@ router.patch(
     try {
       const loaded = await loadQuoteForNegotiation(req, res);
       if (!loaded) return;
-      const { request, quote, actorRole } = loaded;
+      const { quote, actorRole } = loaded;
 
-      if (!['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(quote.status)) {
+      if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(quote.status)) {
         return res.status(400).json({ error: `Quote cannot be rejected because it is ${quote.status}` });
-      }
-
-      if (quote.status === 'ACCEPTED') {
-        const paid = await prisma.payment.findFirst({
-          where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: 'PAID' },
-          select: { id: true },
-        });
-        if (paid || request.status !== 'REQUESTED') {
-          return res.status(409).json({ error: 'This inspection agreement is already committed by payment' });
-        }
       }
 
       if (quoteTurn(quote) !== actorRole) {
@@ -926,13 +928,6 @@ router.patch(
           where: { id: quote.id },
           data: { status: 'REJECTED' },
         });
-
-        if (quote.status === 'ACCEPTED') {
-          await tx.inspectionRequest.updateMany({
-            where: { id: request.id, status: 'REQUESTED', inspectorId: quote.inspectorId },
-            data: { inspectorId: null, fee: null },
-          });
-        }
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,

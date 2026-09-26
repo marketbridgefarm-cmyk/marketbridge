@@ -207,22 +207,24 @@ router.post(
         return res.status(409).json({ error: 'The agricultural pickup window is too close or has expired.' });
       }
 
+      // A competitor gets exactly one initial offer for a listing.
+      // After that first offer, the same competitor may only continue the
+      // selected negotiation through COUNTER actions on the immutable chain;
+      // they cannot create a new root offer to restart/rebid the competition.
       const existingOffer =
         await prisma.offer.findFirst({
           where: {
             listingId,
             buyerId: req.user.id,
-            status: {
-              in: ['PENDING', 'COUNTERED'],
-            },
-            childOffers: { none: {} },
+            parentOfferId: null,
           },
+          orderBy: { createdAt: 'asc' },
         });
 
       if (existingOffer) {
         return res.status(409).json({
           error:
-            'You already have an active negotiation on this listing',
+            'You already submitted an offer for this listing. Only the selected buyer may continue through negotiation/counter-offers.',
           offer: existingOffer,
         });
       }

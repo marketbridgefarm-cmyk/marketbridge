@@ -1899,27 +1899,25 @@ router.post(
         }
       }
 
+      // Each transporter competitor gets exactly one initial quote for a
+      // transport job. A transporter who has already quoted cannot submit a
+      // second root quote (even with another truck); if selected, they may
+      // continue only through the existing negotiation chain.
       const existing =
         await prisma.transportQuote.findFirst({
           where: {
             transportJobId: job.id,
-            truckOwnerId:
-              req.user.id,
-            status: {
-              in: [
-                'PENDING',
-                'COUNTERED',
-                'ACCEPTED',
-              ],
-            },
-            childQuotes: { none: {} },
+            truckOwnerId: req.user.id,
+            parentQuoteId: null,
           },
+          orderBy: { createdAt: 'asc' },
         });
 
       if (existing) {
         return res.status(409).json({
           error:
-            'You already have a pending, negotiating, or accepted quote for this job',
+            'You already submitted a transport quote. Only the selected transporter may continue through negotiation/counter-offers.',
+          quote: existing,
         });
       }
 
@@ -2357,40 +2355,22 @@ router.patch(
       // ----------------------------------------------------------------------
 
       if (req.body.action === 'REJECT') {
-        if (!['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(quote.status)) {
+        if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(quote.status)) {
           return res.status(400).json({
             error: `This quote is already ${quote.status.toLowerCase()}`,
           });
         }
 
-        if (quote.status === 'ACCEPTED') {
-          const paid = await prisma.payment.findFirst({
-            where: { transportJobId: job.id, type: 'TRANSPORT', status: 'PAID' },
-            select: { id: true },
-          });
-          if (paid) return res.status(409).json({ error: 'This transport agreement is already committed by payment' });
-        }
-
-        if (quote.status !== 'ACCEPTED' && quoteTurn(quote) !== effectiveRole && !isAdmin(req.user)) {
+        if (quoteTurn(quote) !== effectiveRole && !isAdmin(req.user)) {
           return res.status(409).json({
             error: 'It is the other party\u2019s turn to respond to this negotiation',
           });
         }
 
-        const updatedQuote = await prisma.$transaction(async (tx) => {
-          const updated = await tx.transportQuote.update({
-            where: { id: quote.id },
-            data: { status: 'REJECTED' },
-          });
-
-          if (quote.status === 'ACCEPTED') {
-            await tx.transportJob.updateMany({
-              where: { id: job.id, status: { in: ['REQUESTED', 'QUOTED'] }, truckOwnerId: quote.truckOwnerId, truckId: quote.truckId },
-              data: { truckOwnerId: null, truckId: null, agreedAmount: null },
-            });
-          }
-          return updated;
-        }, { maxWait: 10000, timeout: 15000 });
+        const updatedQuote = await prisma.transportQuote.update({
+          where: { id: quote.id },
+          data: { status: 'REJECTED' },
+        });
 
         return res.json({
           message: 'Quote rejected',
@@ -2454,11 +2434,13 @@ router.patch(
         // cancelOrderInTransaction cascade-cancels the transport job itself.)
         await lockOrderAndAssertNotClosed(tx, freshJob.orderId, 'a transport quote cannot be accepted until that is resolved');
 
-        // Acceptance is a provisional commercial agreement. Do NOT mark the
-        // truck BUSY, reject the competing quotes, or mark the transport job
-        // ACCEPTED yet. The transport payment is the commitment point.
-        // Store the selected provider/price so the payment obligation can be
-        // created, while leaving the remaining PENDING bids available.
+        // CRITICAL:
+        //
+        // Claim the selected truck before accepting the quote.
+        // If another active job has already claimed it, this transaction
+        // receives a 409 and nothing else is committed.
+        await claimAvailableTruck(tx, freshQuote.truckId);
+
         const updatedQuote = await tx.transportQuote.update({
           where: { id: freshQuote.id },
           data: {
@@ -2467,19 +2449,32 @@ router.patch(
           },
         });
 
+        // Close out every other negotiation thread on this job.
+        await tx.transportQuote.updateMany({
+          where: {
+            transportJobId: freshJob.id,
+            id: { not: freshQuote.id },
+            status: { in: ['PENDING', 'COUNTERED'] },
+          },
+          data: { status: 'REJECTED' },
+        });
+
         await tx.transportJob.update({
           where: { id: freshJob.id },
           data: {
             truckOwnerId: freshQuote.truckOwnerId,
             truckId: freshQuote.truckId,
             agreedAmount: finalAmount,
+            status: 'ACCEPTED',
           },
         });
 
-        // The accepted quote now creates/refreshes the transport payment
-        // obligation, but the truck remains AVAILABLE until that payment is
-        // actually settled.
-        await syncOrderPaymentObligations(tx, freshJob.orderId);
+        if (freshJob.order.status === 'CONFIRMED') {
+          await tx.order.update({
+            where: { id: freshJob.order.id },
+            data: { status: 'TRANSPORT_ARRANGED' },
+          });
+        }
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
