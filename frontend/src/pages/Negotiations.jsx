@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import BidBoard from '../components/BidBoard.jsx';
+import './negotiations/Negotiations.css';
 
 // ============================================================================
 // NEGOTIATIONS — unified hub for all three negotiation types
@@ -149,7 +150,7 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
       )}
       {item.status === 'ACCEPTED' && (
         <p className="muted" style={{ marginTop: 8 }}>
-          Provisional agreement at <strong>{Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB</strong>. Payment is required before the inspector/transporter is committed.
+          Agreed at <strong>{Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB</strong>.
         </p>
       )}
 
@@ -465,7 +466,7 @@ export default function Negotiations() {
   const hasAnything = visibleGroups.length > 0 || visible.length > 0;
 
   return (
-    <main className="section">
+    <main className="section neg-page">
       <div className="container-narrow">
         <span className="eyebrow">NEGOTIATIONS</span>
         <h1>Your negotiations</h1>
