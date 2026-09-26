@@ -143,7 +143,7 @@ function BidCard({ quote, type, onRespond, disabled }) {
       {/* Hired */}
       {isHired && (
         <div className="bid-card-status-bar bid-card-status-bar--hired">
-          ✓ Provisional agreement — payment is still required to commit the {type === 'INSPECTION_QUOTE' ? 'inspector' : 'transporter'}
+          ✓ Hired — {type === 'INSPECTION_QUOTE' ? 'inspector' : 'transporter'} assigned
         </div>
       )}
 
@@ -180,8 +180,8 @@ function BidCard({ quote, type, onRespond, disabled }) {
                 onClick={() => handle('ACCEPT')}
               >
                 {busy === 'ACCEPT'
-                  ? 'Accepting…'
-                  : `Accept for ${money(displayAmount)} ETB`}
+                  ? 'Hiring…'
+                  : `Hire for ${money(displayAmount)} ETB`}
               </button>
 
               {!showCounter ? (
