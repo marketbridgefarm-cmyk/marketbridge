@@ -246,15 +246,6 @@ router.post(
               },
             });
 
-          await tx.listing.update({
-            where: {
-              id: listingId,
-            },
-            data: {
-              status: 'UNDER_NEGOTIATION',
-            },
-          });
-
           await recordAuditEvent(tx, {
             actorId: req.user.id,
             action: 'OFFER_CREATED',
@@ -449,13 +440,15 @@ async function acceptOfferAndCreateOrder(
     throw offerError('Offer has no valid quantity', 400);
   }
 
-  // Claim the offer itself before allocating inventory. This prevents the
-  // same offer from being accepted twice by concurrent requests. If the
-  // inventory reservation fails, the whole transaction rolls back this claim.
+  // Claim the offer itself before allocating inventory. A seller-selected
+  // bid is intentionally accepted through the same atomic path as a pending
+  // or countered bid: SELECTED means the parties chose this negotiation
+  // thread, not that inventory has already been committed. If the inventory
+  // reservation fails, the whole transaction rolls back this claim.
   const offerClaim = await tx.offer.updateMany({
     where: {
       id: offer.id,
-      status: { in: ['PENDING', 'COUNTERED'] },
+      status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
     },
     data: { status: 'ACCEPTED' },
   });
