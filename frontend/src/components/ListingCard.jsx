@@ -85,6 +85,12 @@ export default function ListingCard({ listing }) {
           {listing.location}
         </p>
 
+        {!isProduct && listing.status === 'ACTIVE' && Number(listing.offerCount || listing._count?.offers || 0) > 0 && (
+          <p className="lc-offer-count" aria-label="Buyer offers">
+            {Number(listing.offerCount || listing._count?.offers || 0).toLocaleString()} buyer offer{Number(listing.offerCount || listing._count?.offers || 0) === 1 ? '' : 's'} · still open to competing buyers
+          </p>
+        )}
+
         <div className="lc-stats">
           <div>
             <span>Quantity</span>
