@@ -211,7 +211,15 @@ export default function Dashboard() {
         action,
         ...(counterAmount ? { counterAmount: Number(counterAmount) } : {}),
       });
-      toast(action === 'ACCEPT' ? 'Offer accepted' : action === 'REJECT' ? 'Offer rejected' : 'Counter-offer sent');
+      toast(
+        action === 'SELECT'
+          ? 'Buyer selected — negotiation opened.'
+          : action === 'ACCEPT' || action === 'ACCEPT_COUNTER'
+            ? 'Offer accepted'
+            : action === 'REJECT'
+              ? 'Offer rejected'
+              : 'Counter-offer sent'
+      );
       await loadAll();
     } catch (err) {
       toast(err.response?.data?.error || 'Could not update the offer');
@@ -433,13 +441,15 @@ export default function Dashboard() {
                                   // action. ACCEPT_COUNTER is specifically for
                                   // a buyer accepting a seller counter.
                                   const acceptAction =
-                                    o.status === 'COUNTERED' && o.counteredBy === 'SELLER'
-                                      ? 'ACCEPT_COUNTER'
-                                      : 'ACCEPT';
+                                    o.status === 'PENDING' && o.viewerRole === 'SELLER'
+                                      ? 'SELECT'
+                                      : o.status === 'COUNTERED' && o.counteredBy === 'SELLER'
+                                        ? 'ACCEPT_COUNTER'
+                                        : 'ACCEPT';
                                   respondToOffer(o.id, acceptAction);
                                 }}
                               >
-                                Accept
+                                {o.status === 'PENDING' && o.viewerRole === 'SELLER' ? 'Select buyer' : 'Accept'}
                               </button>
                               <button
                                 type="button"

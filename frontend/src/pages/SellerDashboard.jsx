@@ -248,7 +248,13 @@ export default function SellerDashboard() {
           navigate(`/orders/${response.data.order.id}`);
           return;
         }
-        toast(action === 'ACCEPT' ? 'Offer accepted. Order created.' : 'Offer rejected.');
+        toast(
+          action === 'SELECT'
+            ? 'Buyer selected — negotiation opened.'
+            : action === 'ACCEPT'
+              ? 'Offer accepted. Provisional order created.'
+              : 'Offer rejected.'
+        );
       }
       offerModalRef.current.close();
       loadAll();
@@ -552,9 +558,17 @@ export default function SellerDashboard() {
           <span className="sd-eyebrow">NEGOTIATION</span>
           <h2>Review buyer offer</h2>
           <p>Current offer: <b>{selectedOffer?.amount?.toLocaleString() || '—'}</b> ETB</p>
-          <div className="sd-notice">You retain the decision to accept, reject or counteroffer.</div>
+          <div className="sd-notice">
+            {selectedOffer?.status === 'PENDING'
+              ? 'Select a buyer to open one-to-one negotiation. Selection does not complete the sale.'
+              : 'You retain the decision to accept, reject or counteroffer.'}
+          </div>
           <div className="sd-modal-actions" style={{ marginTop: 20 }}>
-            <button className="sd-btn sd-btn-primary" onClick={() => respondOffer('ACCEPT')}>Accept</button>
+            {selectedOffer?.status === 'PENDING' ? (
+               <button className="sd-btn sd-btn-primary" onClick={() => respondOffer('SELECT')}>Select buyer</button>
+             ) : (
+               <button className="sd-btn sd-btn-primary" onClick={() => respondOffer('ACCEPT')}>Accept</button>
+             )}
             <button className="sd-btn sd-btn-outline" onClick={() => respondOffer('COUNTER')}>Counteroffer</button>
             <button className="sd-btn sd-btn-outline" onClick={() => respondOffer('REJECT')}>Reject</button>
           </div>
