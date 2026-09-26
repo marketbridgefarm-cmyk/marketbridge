@@ -113,7 +113,7 @@ export default function ListingCard({ listing }) {
             {!isProduct && ['ACTIVE', 'UNDER_NEGOTIATION'].includes(listing.status) && (
               <Link
                 className="lc-cta lc-cta--offer"
-                to={`/listings/${listing.id}#negotiation`}
+                to={`/listings/${listing.id}#make-offer`}
               >
                 Make offer
               </Link>
