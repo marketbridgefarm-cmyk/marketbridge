@@ -4,10 +4,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")      // This will be your pooled URL
+  directUrl = env("DATABASE_URL_UNPOOLED") // This will be your direct URL
 }
-
 // ============================================================================
 // ENUMS
 // ============================================================================
