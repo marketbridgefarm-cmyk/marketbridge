@@ -8,6 +8,7 @@ import { AuthProvider } from './context/AuthContext.jsx';
 import { I18nProvider } from './context/I18nContext.jsx';
 import { ToastProvider } from './context/ToastContext.jsx';
 import './components/Toast.css';
+import './mb-tokens.css';
 import './styles.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(

@@ -1,0 +1,82 @@
+/* ============================================================
+   MarketBridge — Canonical Design Tokens  (mb-tokens.css)
+   SAFE TO ADD: drop this file, import before styles.css.
+   It only ADDS aliases. It breaks nothing in the existing code.
+   ============================================================ */
+
+:root {
+  /* ── Brand ─────────────────────────────────────────── */
+  --mb-primary:          #176b3a;
+  --mb-primary-dark:     #0e4b29;
+  --mb-primary-light:    #2f9159;
+  --mb-primary-soft:     #eef5ef;
+  --mb-primary-subtle:   #effdf0;
+
+  /* ── Surfaces ───────────────────────────────────────── */
+  --mb-bg:               #f7f9f6;
+  --mb-card:             #ffffff;
+  --mb-surface:          #ffffff;
+  --mb-surface-soft:     #f3f7f3;
+
+  /* ── Text ───────────────────────────────────────────── */
+  --mb-ink:              #17231b;
+  --mb-text:             #17231b;
+  --mb-text-muted:       #667168;
+  --mb-muted:            #667168;
+
+  /* ── Borders ────────────────────────────────────────── */
+  --mb-border:           #dfe7df;
+  --mb-border-strong:    #c5d5c8;
+  --mb-border-subtle:    rgba(223,231,223,.6);
+
+  /* ── Semantic colours (pair with icon + text) ───────── */
+  --mb-gold:             #b77b1b;
+  --mb-gold-light:       #fef8ee;
+  --mb-gold-border:      #fae1b8;
+  --mb-warning:          #b77b1b;
+  --mb-warning-soft:     #fef8ee;
+
+  --mb-danger:           #b42318;
+  --mb-danger-light:     #fef3f2;
+  --mb-danger-border:    #fecdca;
+
+  --mb-info:             #026aa2;
+  --mb-info-light:       #f0f9ff;
+  --mb-info-border:      #b9e6fe;
+
+  --mb-success:          #176b3a;
+  --mb-success-light:    #effdf0;
+  --mb-success-border:   #bbf7d0;
+
+  /* ── Radii ───────────────────────────────────────────── */
+  --mb-radius-sm:        8px;
+  --mb-radius-md:        14px;
+  --mb-radius-lg:        20px;
+  --mb-radius-pill:      9999px;
+
+  /* ── Elevation ───────────────────────────────────────── */
+  --mb-shadow-card:      0 2px 8px rgba(23,107,58,.04);
+  --mb-shadow-elevated:  0 4px 16px rgba(14,75,41,.08);
+  --mb-shadow-modal:     0 12px 32px rgba(14,75,41,.16);
+
+  /* ── Interaction ─────────────────────────────────────── */
+  --mb-touch-min:        44px;
+  --mb-focus-ring:       2px solid #176b3a;
+
+  /* ── Typography ──────────────────────────────────────── */
+  --mb-font-head:        'Manrope', system-ui, sans-serif;
+  --mb-font-body:        'DM Sans',  system-ui, sans-serif;
+
+  /* ── Backward-compat aliases (delete after full migration) ── */
+  --green:               var(--mb-primary);
+  --green-dark:          var(--mb-primary-dark);
+  --green-light:         var(--mb-primary-light);
+  --ink:                 var(--mb-ink);
+  --muted:               var(--mb-text-muted);
+  --line:                var(--mb-border);
+  --bg:                  var(--mb-bg);
+  --paper:               var(--mb-card);
+  --soft:                var(--mb-primary-soft);
+  --gold:                var(--mb-gold);
+  --danger:              var(--mb-danger);
+}
