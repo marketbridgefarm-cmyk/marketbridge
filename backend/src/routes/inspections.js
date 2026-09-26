@@ -113,6 +113,23 @@ router.post(
         });
       }
 
+      // Agricultural inspection competition is buyer-controlled: the buyer
+      // opens the request, compares inspector bids, selects one provider,
+      // and then negotiates bilaterally. Sellers may still view the order,
+      // but they do not create or control this competitive inspector flow.
+      if (order.buyerId !== req.user.id && !req.user.roles.includes('ADMIN')) {
+        return res.status(403).json({
+          code: 'BUYER_INSPECTION_COMPETITION_REQUIRED',
+          error: 'The buyer controls the agricultural inspector competition.',
+        });
+      }
+      if (mode !== 'BUYER_REQUESTED') {
+        return res.status(400).json({
+          code: 'BUYER_INSPECTION_COMPETITION_REQUIRED',
+          error: 'Agricultural inspection requests must use BUYER_REQUESTED mode.',
+        });
+      }
+
       const resolvedListingId = order.listingId;
 
       if (inspectorId) {
@@ -616,17 +633,24 @@ router.patch(
       if (!loaded) return;
       const { request, quote, actorRole } = loaded;
       if (actorRole !== 'REQUESTER') return res.status(403).json({ error: 'Only the requester can select an inspection bid' });
-      if (request.status !== 'REQUESTED') return res.status(400).json({ error: 'This inspection is no longer accepting bids' });
+      if (!['REQUESTED', 'ACCEPTED'].includes(request.status)) return res.status(400).json({ error: 'This inspection is no longer accepting bids' });
       if (quote.status !== 'PENDING') return res.status(400).json({ error: `Only a pending bid can be selected (current: ${quote.status})` });
       if (isQuoteExpired(quote)) return res.status(409).json({ error: 'This quote has expired' });
 
       const selected = await prisma.$transaction(async (tx) => {
+        const current = await tx.inspectionRequest.findUnique({ where: { id: request.id }, include: { payments: true } });
+        if (!current) throw quoteError('Inspection request not found', 404);
+        if (current.status === 'ACCEPTED') {
+          const paid = current.payments?.some((payment) => payment.type === 'INSPECTOR' && payment.status === 'PAID');
+          if (paid) throw quoteError('The inspection is already paid and committed to its inspector.', 409);
+          await tx.payment.updateMany({ where: { inspectionRequestId: current.id, type: 'INSPECTOR', status: { in: ['PENDING', 'PROCESSING'] } }, data: { status: 'CANCELLED' } });
+          await tx.paymentObligation.updateMany({ where: { inspectionRequestId: current.id, status: 'OPEN' }, data: { status: 'CANCELLED' } });
+          await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: current.id, status: 'ACCEPTED' }, data: { status: 'REJECTED' } });
+          await tx.inspectionRequest.update({ where: { id: current.id }, data: { status: 'REQUESTED', inspectorId: null, fee: null } });
+        }
         const fresh = await tx.inspectionQuote.findUnique({ where: { id: quote.id } });
         if (!fresh || fresh.status !== 'PENDING') throw quoteError('This bid is no longer available', 409);
-        await tx.inspectionQuote.updateMany({
-          where: { inspectionRequestId: request.id, id: { not: fresh.id }, status: 'SELECTED' },
-          data: { status: 'PENDING' },
-        });
+        await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: request.id, id: { not: fresh.id }, status: 'SELECTED' }, data: { status: 'PENDING' } });
         return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
       }, { maxWait: 10000, timeout: 15000 });
       return res.json({ message: 'Inspector bid selected for price negotiation', quote: selected });
@@ -697,15 +721,10 @@ router.patch(
           throw new Error('INSPECTION_ALREADY_CLAIMED');
         }
 
-        // Close out every other negotiation thread on this request.
-        await tx.inspectionQuote.updateMany({
-          where: {
-            inspectionRequestId: request.id,
-            status: { in: ['PENDING', 'COUNTERED'] },
-            id: { not: quote.id },
-          },
-          data: { status: 'REJECTED' },
-        });
+        // IMPORTANT: other competition bids remain PENDING. Acceptance is
+        // only a provisional commercial selection until the inspection fee
+        // is paid. If the selected provider fails/cancels before payment,
+        // the requester can return to the waiting bids and select another.
 
         const acceptedQuote = await tx.inspectionQuote.update({
           where: {
@@ -906,11 +925,12 @@ router.patch(
       if (!loaded) return;
       const { quote, actorRole } = loaded;
 
-      if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(quote.status)) {
+      const isAcceptedProvisionally = quote.status === 'ACCEPTED';
+      if (!['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(quote.status)) {
         return res.status(400).json({ error: `Quote cannot be rejected because it is ${quote.status}` });
       }
 
-      if (quoteTurn(quote) !== actorRole) {
+      if (!isAcceptedProvisionally && quoteTurn(quote) !== actorRole) {
         return res.status(409).json({
           error: 'It is the other party\u2019s turn to respond to this negotiation',
         });
@@ -918,6 +938,29 @@ router.patch(
 
       const updated = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, loaded.request.orderId, 'an inspection quote cannot be rejected until the order dispute is resolved');
+
+        const current = await tx.inspectionRequest.findUnique({
+          where: { id: loaded.request.id },
+          include: { payments: true },
+        });
+        if (!current) throw quoteError('Inspection request not found', 404);
+
+        if (isAcceptedProvisionally) {
+          const paid = current.payments?.some((payment) => payment.type === 'INSPECTOR' && payment.status === 'PAID');
+          if (paid) throw quoteError('The inspection fee is already paid; this assignment cannot be cancelled from negotiation.', 409);
+          await tx.payment.updateMany({
+            where: { inspectionRequestId: current.id, type: 'INSPECTOR', status: { in: ['PENDING', 'PROCESSING'] } },
+            data: { status: 'CANCELLED' },
+          });
+          await tx.paymentObligation.updateMany({
+            where: { inspectionRequestId: current.id, status: 'OPEN' },
+            data: { status: 'CANCELLED' },
+          });
+          await tx.inspectionRequest.update({
+            where: { id: current.id },
+            data: { status: 'REQUESTED', inspectorId: null, fee: null },
+          });
+        }
 
         const rejected = await tx.inspectionQuote.update({
           where: { id: quote.id },
@@ -929,7 +972,7 @@ router.patch(
           action: 'INSPECTION_QUOTE_REJECTED',
           resourceType: 'InspectionQuote',
           resourceId: rejected.id,
-          metadata: { inspectionRequestId: rejected.inspectionRequestId, rejectedBy: actorRole },
+          metadata: { inspectionRequestId: rejected.inspectionRequestId, rejectedBy: actorRole, provisionalAssignmentCancelled: isAcceptedProvisionally },
         });
 
         return rejected;
@@ -1160,6 +1203,12 @@ router.get(
           },
 
           report: true,
+          payments: { select: { id: true, type: true, status: true, amount: true } },
+          quotes: {
+            where: { inspectorId: req.user.id },
+            select: { id: true, inspectorId: true, amount: true, status: true, counterAmount: true, counteredBy: true, parentQuoteId: true, expiresAt: true },
+            orderBy: { createdAt: 'asc' },
+          },
         },
 
         orderBy: {
