@@ -49,8 +49,24 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
         if (readyAfter) params.readyAfter = readyAfter;
         if (readyBy) params.readyBy = readyBy;
       }
-      const r = await api.get('/listings', { params });
-      setListings(r.data.listings || []);
+      if (agriculture) {
+        // The backend keeps agricultural listings visible to competing buyers
+        // in UNDER_NEGOTIATION as well as ACTIVE. Fetch both states so the
+        // first buyer's offer does not hide the listing from later buyers.
+        const [activeResponse, negotiatingResponse] = await Promise.all([
+          api.get('/listings', { params: { ...params, status: 'ACTIVE' } }),
+          api.get('/listings', { params: { ...params, status: 'UNDER_NEGOTIATION' } }),
+        ]);
+        const merged = [
+          ...(activeResponse.data.listings || []),
+          ...(negotiatingResponse.data.listings || []),
+        ];
+        const unique = Array.from(new Map(merged.map((item) => [item.id, item])).values());
+        setListings(unique);
+      } else {
+        const r = await api.get('/listings', { params });
+        setListings(r.data.listings || []);
+      }
     } catch {
       setError('Could not load marketplace listings.');
     } finally {
@@ -69,16 +85,36 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
         setLoading(true);
         setError('');
         try {
-          const r = await api.get('/listings/nearby', {
-            params: {
+          if (agriculture) {
+            const base = {
               lat: pos.coords.latitude,
               lng: pos.coords.longitude,
               radiusKm: 100,
               category,
-              cropType: agriculture ? filters.cropType || undefined : undefined,
-            },
-          });
-          setListings(r.data.listings || []);
+              cropType: filters.cropType || undefined,
+            };
+            const [activeResponse, negotiatingResponse] = await Promise.all([
+              api.get('/listings/nearby', { params: { ...base, status: 'ACTIVE' } }),
+              api.get('/listings/nearby', { params: { ...base, status: 'UNDER_NEGOTIATION' } }),
+            ]);
+            const merged = [
+              ...(activeResponse.data.listings || []),
+              ...(negotiatingResponse.data.listings || []),
+            ];
+            const unique = Array.from(new Map(merged.map((item) => [item.id, item])).values());
+            unique.sort((a, b) => Number(a.distanceKm || Infinity) - Number(b.distanceKm || Infinity));
+            setListings(unique);
+          } else {
+            const r = await api.get('/listings/nearby', {
+              params: {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                radiusKm: 100,
+                category,
+              },
+            });
+            setListings(r.data.listings || []);
+          }
           setNearMode(true);
           setNearStatus('');
         } catch {
