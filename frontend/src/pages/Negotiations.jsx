@@ -439,7 +439,7 @@ export default function Negotiations() {
           response = await api.patch(`/transport/quotes/${quote.id}`, payload);
         }
       }
-      toast(response?.data?.message || (action === 'ACCEPT' ? '✓ Provider hired!' : action === 'SELECT' ? 'Bid selected — negotiation opened.' : 'Offer sent.'));
+      toast(response?.data?.message || (action === 'ACCEPT' ? '✓ Negotiated provisionally — payment is still required.' : action === 'SELECT' ? 'Bid selected — negotiation opened.' : 'Offer sent.'));
       await loadAll();
     } catch (err) {
       toast(err?.response?.data?.error || 'Could not update this bid.');

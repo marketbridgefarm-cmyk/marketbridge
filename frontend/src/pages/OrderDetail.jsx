@@ -670,11 +670,14 @@ export default function OrderDetail() {
    * Buyer or seller can create a transport job. Joint arrangements
    * are supported through the transport workflow.
    */
+  // Physical-goods hired transport is buyer-controlled. The seller may
+  // still participate in the order, but cannot open/select a transporter
+  // competition on the buyer's behalf.
   const canArrangeTransport =
     Boolean(order) &&
     !transportJob &&
     order.status !== 'CANCELLED' &&
-    isParticipant;
+    (isPhysicalGoods ? isBuyer : isParticipant);
 
   /*
    * Only the arranging buyer/seller can select a quote.
@@ -686,10 +689,10 @@ export default function OrderDetail() {
   const canChooseQuote =
     Boolean(transportJob) &&
     isTransportArranger &&
-    ['REQUESTED', 'QUOTED'].includes(
+    ['REQUESTED', 'QUOTED', 'ACCEPTED'].includes(
       transportJob.status
     ) &&
-    !transportJob.truckOwnerId;
+    !transportPaid;
 
   /*
    * Transport payment is ONLY for hired transport.
@@ -1778,16 +1781,22 @@ export default function OrderDetail() {
           ) : (
             <div className="card">
               <h2>Request inspection</h2>
-              <p className="muted">Request an independent quality check for this order.</p>
-              <p className="muted">All registered inspectors can compete for this request by submitting a sealed fee quote. You compare the bids, select one for negotiation, and only the accepted negotiated quote assigns the inspector.</p>
-              <button
-                type="button"
-                className="btn btn-light"
-                disabled={requestingInspection}
-                onClick={() => requestInspection(isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}
-              >
-                {requestingInspection ? 'Requesting…' : 'Open competitive inspection request'}
-              </button>
+              <p className="muted">Request an independent quality check for this agricultural order.</p>
+              {isBuyer ? (
+                <>
+                  <p className="muted">Inspectors compete with sealed fee quotes. You compare the bids, select one inspector for negotiation, and only the final negotiated deal becomes eligible for the inspection payment.</p>
+                  <button
+                    type="button"
+                    className="btn btn-light"
+                    disabled={requestingInspection}
+                    onClick={() => requestInspection('BUYER_REQUESTED')}
+                  >
+                    {requestingInspection ? 'Requesting…' : 'Open competitive inspection request'}
+                  </button>
+                </>
+              ) : (
+                <p className="muted">The buyer controls the inspector competition for this agricultural order.</p>
+              )}
             </div>
           )
         )}
@@ -1811,7 +1820,7 @@ export default function OrderDetail() {
               <span className="eyebrow">LOGISTICS</span>
               <h2>Transport</h2>
               <p className="muted">
-                The buyer or seller arranges transport. MarketBridge does not automatically assign a transporter.
+                The buyer controls hired transport for physical goods. MarketBridge does not automatically assign a transporter.
               </p>
             </div>
             {transportJob?.status && (
@@ -1826,7 +1835,8 @@ export default function OrderDetail() {
                 pickupDefault={order.listing?.location}
                 destinationDefault={order.buyer?.location}
                 canBuyer={isBuyer}
-                canSeller={isSeller}
+                canSeller={isPhysicalGoods ? false : isSeller}
+                buyerOnlyCompetition={isPhysicalGoods}
                 onCreated={() => load({ silent: true })}
               />
             ) : (
@@ -1920,7 +1930,7 @@ export default function OrderDetail() {
                 <div className="notice transport-info-panel">
                   <div className="transport-panel-heading">
                     <span className="transport-panel-icon" aria-hidden="true">👤</span>
-                    <h3>Transporter</h3>
+                    <h3>{transportPaid ? 'Transporter' : 'Provisional transporter'}</h3>
                   </div>
 
                   <p>
@@ -2286,7 +2296,7 @@ export default function OrderDetail() {
 
               {transportJob.method ===
                 'HIRE_TRANSPORTER' &&
-                !transportJob.truckOwnerId && (
+                !transportPaid && (
                   <div className="match-box">
                     <h3>
                       Transport quotes
@@ -2299,6 +2309,7 @@ export default function OrderDetail() {
                           const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
                           const isArrangerTurn = quote.status === 'SELECTED' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
                           const isCompetitionBid = quote.status === 'PENDING';
+                          const isProvisionalAccepted = quote.status === 'ACCEPTED';
                           const isWaitingOnTransporter = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
                           return (
                           <div
@@ -2373,6 +2384,19 @@ export default function OrderDetail() {
                                     {busy === `quote-${quote.id}` ? 'Selecting…' : 'Select bid for deal'}
                                   </button>
                                   <span className="muted small">Competition bid — selecting opens price negotiation.</span>
+                                </div>
+                              )}
+                              {canChooseQuote && isProvisionalAccepted && (
+                                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                  <span className="muted small">Negotiated provisionally — transport payment is required before the transporter is committed.</span>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-light"
+                                    disabled={busy === `quote-${quote.id}`}
+                                    onClick={() => rejectQuote(quote.id)}
+                                  >
+                                    {busy === `quote-${quote.id}` ? 'Cancelling…' : 'Cancel provisional deal'}
+                                  </button>
                                 </div>
                               )}
                               {canChooseQuote &&

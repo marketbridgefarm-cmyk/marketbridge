@@ -180,6 +180,21 @@ export default function InspectorDashboard() {
     }
   }
 
+  async function cancelAcceptedInspection(requestId, quoteId) {
+    setError('');
+    setMsg('');
+    setRespondingQuoteId(quoteId);
+    try {
+      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/reject`);
+      setMsg('Provisional inspection deal cancelled. The buyer can select another inspector bid.');
+      await loadAll();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not cancel the provisional inspection deal.');
+    } finally {
+      setRespondingQuoteId('');
+    }
+  }
+
   async function counterInspectionQuote(requestId, quoteId) {
     setError('');
     setMsg('');
@@ -726,17 +741,33 @@ export default function InspectorDashboard() {
                       >
                         {r.status ===
                           'ACCEPTED' && (
-                          <button
-                            type="button"
-                            className="sd-btn sd-btn-primary"
-                            onClick={() =>
-                              startInspection(
-                                r.id
-                              )
-                            }
-                          >
-                            Start inspection
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className="sd-btn sd-btn-primary"
+                              onClick={() =>
+                                startInspection(
+                                  r.id
+                                )
+                              }
+                            >
+                              Start inspection
+                            </button>
+                            {(() => {
+                              const acceptedQuote = (r.quotes || []).find((q) => q.status === 'ACCEPTED');
+                              const paid = (r.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID');
+                              return acceptedQuote && !paid ? (
+                                <button
+                                  type="button"
+                                  className="sd-btn sd-btn-outline"
+                                  disabled={respondingQuoteId === acceptedQuote.id}
+                                  onClick={() => cancelAcceptedInspection(r.id, acceptedQuote.id)}
+                                >
+                                  {respondingQuoteId === acceptedQuote.id ? 'Cancelling…' : 'Cancel provisional deal'}
+                                </button>
+                              ) : null;
+                            })()}
+                          </>
                         )}
 
                         {r.status ===

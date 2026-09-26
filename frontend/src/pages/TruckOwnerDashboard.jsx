@@ -208,7 +208,7 @@ export default function TruckOwnerDashboard() {
     setActionLoading(`job-${job.id}-QUOTE`);
     try {
       await api.post(`/transport/${job.id}/quotes`, { truckId: available[0].id, amount: Number(amount) });
-      toast('Transport quote submitted. The buyer/seller can now choose your quote.');
+      toast('Transport quote submitted. The buyer can compare your sealed bid with other transporters.');
       await loadAll(false); setActiveTab('jobs');
     } catch (err) { toast(getErrorMessage(err,'Could not submit transport quote.')); }
     finally { setActionLoading(null); }
@@ -228,7 +228,7 @@ export default function TruckOwnerDashboard() {
     setActionLoading(`quote-${quoteId}`);
     try {
       await api.patch(`/transport/quotes/${quoteId}`, { action: 'ACCEPT' });
-      toast('Requester\u2019s price accepted. You have been assigned to this job.');
+      toast('Requester\u2019s price accepted. The transport deal is provisional until payment settles.');
       await loadAll(false); setActiveTab('jobs');
     } catch (err) { toast(getErrorMessage(err, 'Could not accept this negotiation.')); }
     finally { setActionLoading(null); }
@@ -355,6 +355,7 @@ export default function TruckOwnerDashboard() {
     const busy = actionLoading?.startsWith(`status-${job.id}`);
 
     if (job.status === 'ACCEPTED') {
+      const acceptedQuote = (job.quotes || []).find((quote) => quote.status === 'ACCEPTED');
       const orderPayments = job.order?.payments || [];
       const marketplacePaid = orderPayments.some((p) => p.type === 'MARKETPLACE' && p.status === 'PAID');
       const transportPaid = job.method !== 'HIRE_TRANSPORTER' || (orderPayments.some((p) => p.type === 'TRANSPORT' && p.status === 'PAID') || (job.payments || []).some((p) => p.type === 'TRANSPORT' && p.status === 'PAID'));
@@ -370,7 +371,18 @@ export default function TruckOwnerDashboard() {
           >
             {busy ? 'Updating...' : paymentsReady ? 'Mark picked up' : 'Waiting for all payments'}
           </button>
-          {!paymentsReady && <p className="sd-muted" style={{ marginTop: 6 }}>Buyer payments (seller, transport and inspection) are not complete. The server will also block PICKUP until all required payments are PAID.</p>}
+          {!paymentsReady && <p className="sd-muted" style={{ marginTop: 6 }}>This transport deal is provisional until payment settles. The buyer can still cancel it and select another transporter before payment.</p>}
+          {!transportPaid && acceptedQuote && (
+            <button
+              type="button"
+              className="sd-btn sd-btn-outline"
+              disabled={actionLoading === `quote-${acceptedQuote.id}`}
+              onClick={() => rejectTransportQuote(acceptedQuote.id)}
+              style={{ marginTop: 6 }}
+            >
+              {actionLoading === `quote-${acceptedQuote.id}` ? 'Cancelling…' : 'Cancel provisional deal'}
+            </button>
+          )}
         </div>
       );
     }
