@@ -18,6 +18,7 @@ import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
 
+import './order-details/OrderDetail.css';
 const shortId = (id) => id?.slice(0, 8) || '—';
 
 const money = (value) =>
