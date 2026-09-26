@@ -8,7 +8,7 @@ import BidBoard from '../components/BidBoard.jsx';
 // NEGOTIATIONS — unified hub for all three negotiation types
 // ============================================================================
 //
-// 1. LISTING_OFFER      buyer  ↔ seller              (bilateral, always)
+// 1. LISTING_OFFER      many buyers → seller selection → bilateral negotiation
 // 2. TRANSPORT_QUOTE    arranging party ↔ truck owners (competition → bilateral)
 // 3. INSPECTION_QUOTE   requester ↔ inspectors        (competition → bilateral)
 //
@@ -28,7 +28,8 @@ import BidBoard from '../components/BidBoard.jsx';
 //    → PATCH /inspections/:id/quotes/:qid/reject
 //    → PATCH /transport/quotes/:qid  {action, counterAmount?}
 //
-// Listing offers are always bilateral (no competition phase).
+// Listing offers have a competition phase: many PENDING buyers remain visible until
+// the seller selects one buyer. SELECTED then opens bilateral negotiation.
 // ============================================================================
 
 const SELLER_LISTING_STATUSES = ['ACTIVE', 'UNDER_NEGOTIATION', 'SOLD'];
@@ -88,14 +89,21 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
 
   if (item.type === 'LISTING_OFFER') {
     if (item.viewerRole === 'SELLER') {
-      canAct = item.status === 'SELECTED' || (item.status === 'COUNTERED' && item.counteredBy === 'BUYER');
-      if (!canAct && item.status === 'COUNTERED' && item.counteredBy === 'SELLER')
-        waitingMessage = 'You made the latest counter. Waiting for the buyer.';
+      // Seller can select any still-pending buyer. Selection does NOT commit
+      // the listing; it only opens one-to-one negotiation with that buyer.
+      if (item.status === 'PENDING') {
+        canAct = true;
+        acceptAction = 'SELECT';
+      } else {
+        canAct = item.status === 'SELECTED' || (item.status === 'COUNTERED' && item.counteredBy === 'BUYER');
+        if (!canAct && item.status === 'COUNTERED' && item.counteredBy === 'SELLER')
+          waitingMessage = 'You made the latest counter. Waiting for the buyer.';
+      }
     } else {
       acceptAction  = item.status === 'SELECTED' ? 'ACCEPT_SELECTED' : 'ACCEPT_COUNTER';
       counterAction = 'RE_COUNTER';
       canAct = item.status === 'SELECTED' || (item.status === 'COUNTERED' && item.counteredBy === 'SELLER');
-      if (!canAct && item.status === 'PENDING') waitingMessage = 'Waiting for the seller to respond.';
+      if (!canAct && item.status === 'PENDING') waitingMessage = 'Your offer is competing with other buyer offers. Waiting for the seller to select a buyer.';
       if (!canAct && item.status === 'COUNTERED' && item.counteredBy === 'BUYER')
         waitingMessage = 'You made the latest counter. Waiting for the seller.';
     }
@@ -149,7 +157,9 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
         <div className="neg-actions">
           <button type="button" className="sd-btn sd-btn-primary" disabled={anyBusy}
             onClick={() => onRespond(item, acceptAction)}>
-            {busy(acceptAction) ? 'Accepting…' : 'Accept'}
+            {busy(acceptAction)
+              ? (acceptAction === 'SELECT' ? 'Selecting…' : 'Accepting…')
+              : (acceptAction === 'SELECT' ? 'Select buyer for negotiation' : 'Accept')}
           </button>
 
           {!(item.type === 'LISTING_OFFER' && item.viewerRole === 'BUYER') && (
@@ -213,7 +223,7 @@ export default function Negotiations() {
     const groups    = [];
 
     try {
-      // ---- 1. Listing offers (always bilateral) --------------------------
+      // ---- 1. Listing offers: competition → selection → negotiation -----
       const [mineRes, listingResults] = await Promise.all([
         api.get('/offers/mine'),
         Promise.all(
@@ -223,6 +233,9 @@ export default function Negotiations() {
         ),
       ]);
 
+      // Every buyer's leaf offer remains visible while the listing is active.
+      // A selected buyer enters bilateral negotiation; other PENDING buyers
+      // remain available to the seller until one offer is accepted.
       const buyerOffers  = (mineRes.data?.offers || []).map((o) => ({ ...o, viewerRole: 'BUYER' }));
       const myListings   = listingResults.flatMap((r) => r.data?.listings || []);
       const sellerOfferResults = await Promise.all(

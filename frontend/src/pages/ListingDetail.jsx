@@ -331,13 +331,13 @@ export default function ListingDetail() {
                 <span className="badge">{listing.status}</span>
               </div>
               <h1>{listing.title || listing.cropType}</h1>
-              <p className="lead">{Number(listing.quantity).toLocaleString()} {listing.unit} {isAvailable ? 'available' : 'currently reserved / unavailable'} · {listing.location}</p>
+              <p className="lead">{Number(listing.quantity).toLocaleString()} {listing.unit} {isAvailable ? 'available for competing buyers' : 'currently reserved / unavailable'} · {listing.location}</p>
               <div className="detail-facts">
                 <div><span>Asking price</span><strong>{money(listing.askingPrice)} ETB</strong></div>
                 <div><span>Ready</span><strong>{listing.readinessDate ? new Date(listing.readinessDate).toLocaleDateString() : 'To be agreed'}</strong></div>
                 <div><span>Seller</span><strong>{listing.seller?.name}</strong></div>
               </div>
-              <p className="muted">A pending, rejected or countered offer does not remove a listing from buyer availability. Acceptance creates a temporary reservation.</p>
+              <p className="muted">Multiple buyers can compete while this listing is active. Selecting a buyer opens negotiation; only acceptance creates the reservation.</p>
               {(() => {
                 const myOrder = (listing.orders || []).find((o) => o.buyerId === user?.id);
                 if (!myOrder) return null;
@@ -507,7 +507,7 @@ export default function ListingDetail() {
                   </>
                 )}
                 {buyerCounterWaitingForSeller && <p className="muted" style={{ marginTop: 10 }}>You made the latest counter. Waiting for the seller.</p>}
-                {myLatestOffer.status === 'PENDING' && <p className="muted" style={{ marginTop: 10 }}>Waiting for the seller to respond.</p>}
+                {myLatestOffer.status === 'PENDING' && <p className="muted" style={{ marginTop: 10 }}>Your offer remains active while other buyers may compete. The seller will select one buyer to open negotiation.</p>}
                 {myLatestOffer.status === 'REJECTED' && <p className="muted" style={{ marginTop: 10 }}>The seller rejected this offer. If the listing is available, you can make a new offer.</p>}
                 {myLatestOffer.status === 'ACCEPTED' && <Link className="btn btn-primary full" style={{ marginTop: 10 }} to={(listing.orders || []).find((o) => o.buyerId === user?.id)?.id ? `/orders/${(listing.orders || []).find((o) => o.buyerId === user?.id).id}` : '#'}>Continue to order →</Link>}
               </div>
