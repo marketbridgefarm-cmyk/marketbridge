@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AdvertisementBanner from '../components/AdvertisementBanner.jsx';
 import api from '../api/client';
-import './mb-home.css';
+import '../mb-home.css';
 
 const pillars = [
   ['Agricultural marketplace', 'Connect farmers, agricultural producers, investors and buyers for farm-produced goods, including bulk and time-sensitive harvests.'],
