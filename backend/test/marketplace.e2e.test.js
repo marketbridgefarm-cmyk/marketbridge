@@ -222,6 +222,12 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
       roles: ['BUYER', 'SELLER'],
     });
 
+    const competingBuyer = await register({
+      name: 'E2E Competing Buyer',
+      email: `competing-buyer-${suffix}@marketbridge.test`,
+      roles: ['BUYER'],
+    });
+
     const inspector = await register({
       name: 'E2E Inspector',
       email: `inspector-${suffix}@marketbridge.test`,
@@ -289,6 +295,40 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
     assert.equal(offerResponse.status, 201, JSON.stringify(offerResponse.body));
     const offerId = offerResponse.body.offer.id;
     created.offerIds.push(offerId);
+
+    // A buyer bid must not close or hide the public produce listing. A second
+    // buyer must still be able to enter the competition until the seller
+    // accepts one of the competing negotiations.
+    const publicListingAfterFirstOffer = await api(`/api/listings/${created.listingId}`);
+    assert.equal(publicListingAfterFirstOffer.status, 200, JSON.stringify(publicListingAfterFirstOffer.body));
+    assert.equal(publicListingAfterFirstOffer.body.listing.status, 'ACTIVE');
+
+    const competingOfferResponse = await api('/api/offers', {
+      token: competingBuyer.token,
+      method: 'POST',
+      idempotencyKey: `e2e-competing-offer-${suffix}`,
+      body: {
+        listingId: created.listingId,
+        amount: 39000,
+        quantity: 1,
+        message: 'Competing buyer offer',
+      },
+    });
+    assert.equal(competingOfferResponse.status, 201, JSON.stringify(competingOfferResponse.body));
+    created.offerIds.push(competingOfferResponse.body.offer.id);
+
+    const publicListingAfterCompetingOffer = await api(`/api/listings/${created.listingId}`);
+    assert.equal(publicListingAfterCompetingOffer.status, 200, JSON.stringify(publicListingAfterCompetingOffer.body));
+    assert.equal(publicListingAfterCompetingOffer.body.listing.status, 'ACTIVE');
+
+    const selectResponse = await api(`/api/offers/${offerId}`, {
+      token: seller.token,
+      method: 'PATCH',
+      idempotencyKey: `e2e-offer-select-${suffix}`,
+      body: { action: 'SELECT' },
+    });
+    assert.equal(selectResponse.status, 200, JSON.stringify(selectResponse.body));
+    assert.equal(selectResponse.body.offer.status, 'SELECTED');
 
     const counterResponse = await api(`/api/offers/${offerId}`, {
       token: seller.token,
