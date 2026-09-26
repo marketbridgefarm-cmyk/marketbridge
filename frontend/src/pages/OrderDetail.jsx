@@ -1685,77 +1685,68 @@ export default function OrderDetail() {
         {/* ORDER DETAILS */}
         {/* ================================================================== */}
 
-        <div className="card-grid two-col order-summary-grid">
-          <div className="card">
-            <h2>Order details</h2>
-
-            <div className="detail-facts">
-              <div>
-                <span>Order</span>
-                <strong>
-                  {shortId(order.id)}
-                </strong>
-              </div>
-
-              <div>
-                <span>Status</span>
-                <strong>
-                  {order.status}
-                </strong>
-              </div>
-
-              <div>
-                <span>Amount</span>
-                <strong>
-                  {money(order.finalPrice)} ETB
-                </strong>
-              </div>
-
-              {order.listing?.cropType && (
-                <div>
-                  <span>Product</span>
-                  <strong>
-                    {order.listing.cropType}
-                  </strong>
-                </div>
-              )}
-
-              {order.listing?.quantity != null && (
-                <div>
-                  <span>Quantity</span>
-                  <strong>
-                    {order.listing.quantity}
-                  </strong>
-                </div>
-              )}
+        <div className="card order-overview-card">
+          <div className="order-section-heading">
+            <div>
+              <span className="eyebrow">ORDER OVERVIEW</span>
+              <h2>Order details</h2>
             </div>
+            <span className={`status-pill tone-${statusTone(order.status)}`}>
+              <span className="status-pill-dot" aria-hidden="true" />
+              {String(order.status || '').replace(/_/g, ' ')}
+            </span>
           </div>
 
-          {/* ================================================================ */}
-          {/* PARTIES */}
-          {/* ================================================================ */}
-
-          <div className="card">
-            <h2>Parties</h2>
-
-            <div className="party-list">
-              <div className="party-row">
-                <span className="party-avatar" aria-hidden="true">{initials(order.buyer?.name)}</span>
-                <div>
-                  <span className="party-role">Buyer</span>
-                  <strong className="party-name">{order.buyer?.name || '—'}</strong>
-                </div>
-                {isBuyer && <span className="party-you">You</span>}
+          <div className="order-overview-facts">
+            <div className="order-overview-fact">
+              <span>Order</span>
+              <strong>{shortId(order.id)}</strong>
+            </div>
+            <div className="order-overview-fact">
+              <span>Amount</span>
+              <strong>{money(order.finalPrice)} ETB</strong>
+            </div>
+            {order.listing?.cropType && (
+              <div className="order-overview-fact">
+                <span>Product</span>
+                <strong>{order.listing.cropType}</strong>
               </div>
-
-              <div className="party-row">
-                <span className="party-avatar party-avatar-seller" aria-hidden="true">{initials(order.seller?.name)}</span>
-                <div>
-                  <span className="party-role">Seller</span>
-                  <strong className="party-name">{order.seller?.name || '—'}</strong>
-                </div>
-                {isSeller && <span className="party-you">You</span>}
+            )}
+            {order.listing?.quantity != null && (
+              <div className="order-overview-fact">
+                <span>Quantity</span>
+                <strong>{order.listing.quantity}</strong>
               </div>
+            )}
+          </div>
+
+          <div className="order-overview-divider" />
+
+          <div className="order-section-heading order-parties-heading">
+            <div>
+              <span className="eyebrow">PARTICIPANTS</span>
+              <h3>Parties</h3>
+            </div>
+            <span className="order-section-note">Buyer &amp; seller</span>
+          </div>
+
+          <div className="party-list party-list-inline">
+            <div className="party-row">
+              <span className="party-avatar" aria-hidden="true">{initials(order.buyer?.name)}</span>
+              <div>
+                <span className="party-role">Buyer</span>
+                <strong className="party-name">{order.buyer?.name || '—'}</strong>
+              </div>
+              {isBuyer && <span className="party-you">You</span>}
+            </div>
+
+            <div className="party-row">
+              <span className="party-avatar party-avatar-seller" aria-hidden="true">{initials(order.seller?.name)}</span>
+              <div>
+                <span className="party-role">Seller</span>
+                <strong className="party-name">{order.seller?.name || '—'}</strong>
+              </div>
+              {isSeller && <span className="party-you">You</span>}
             </div>
           </div>
         </div>
@@ -1805,17 +1796,26 @@ export default function OrderDetail() {
         {/* TRANSPORT */}
         {/* ================================================================== */}
 
-        <div className="card" id="transport-section">
-          <div className="row-between">
-            <div>
+        <div className="card transport-overview-card" id="transport-section">
+          <div className="transport-card-heading">
+            <div className="transport-card-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="presentation">
+                <path d="M3 6.5h11v9H3zM14 9h3.2l3 3.2V15H14z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+                <circle cx="7" cy="17" r="1.7" fill="currentColor" />
+                <circle cx="18" cy="17" r="1.7" fill="currentColor" />
+                <path d="M3 15h2M20 15h1" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+            </div>
+            <div className="transport-card-title">
+              <span className="eyebrow">LOGISTICS</span>
               <h2>Transport</h2>
-
               <p className="muted">
-                The buyer or seller arranges
-                transport. MarketBridge does not
-                automatically assign a transporter.
+                The buyer or seller arranges transport. MarketBridge does not automatically assign a transporter.
               </p>
             </div>
+            {transportJob?.status && (
+              <span className="badge transport-status-badge">{String(transportJob.status).replace(/_/g, ' ')}</span>
+            )}
           </div>
 
           {!transportJob ? (
@@ -1842,7 +1842,14 @@ export default function OrderDetail() {
               {/* TRANSPORT SUMMARY */}
               {/* ------------------------------------------------------------ */}
 
-              <div className="detail-facts">
+              <div className="transport-details-block">
+                <div className="transport-subheading">
+                  <div>
+                    <span className="eyebrow">TRIP DETAILS</span>
+                    <h3>Transport information</h3>
+                  </div>
+                </div>
+                <div className="detail-facts transport-detail-facts">
                 <div>
                   <span>Arranged by</span>
                   <strong>
@@ -1902,14 +1909,18 @@ export default function OrderDetail() {
                   </div>
                 )}
               </div>
+              </div>
 
               {/* ------------------------------------------------------------ */}
               {/* ASSIGNED TRANSPORTER */}
               {/* ------------------------------------------------------------ */}
 
               {transportJob.truckOwner && (
-                <div className="notice">
-                  <h3>Transporter</h3>
+                <div className="notice transport-info-panel">
+                  <div className="transport-panel-heading">
+                    <span className="transport-panel-icon" aria-hidden="true">👤</span>
+                    <h3>Transporter</h3>
+                  </div>
 
                   <p>
                     <strong>
@@ -1966,8 +1977,11 @@ export default function OrderDetail() {
               {/* TRANSPORT EVIDENCE */}
               {/* ------------------------------------------------------------ */}
 
-              <div className="notice">
-                <h3>Pickup / delivery evidence</h3>
+              <div className="notice transport-info-panel">
+                <div className="transport-panel-heading">
+                  <span className="transport-panel-icon" aria-hidden="true">📍</span>
+                  <h3>Pickup / delivery evidence</h3>
+                </div>
                 <p className="muted">
                   Pickup evidence is required before the transporter can move this trip from <strong>PICKUP</strong> to <strong>IN TRANSIT</strong>. Upload a photo or video here, then submit it with the status change.
                 </p>
@@ -2064,8 +2078,11 @@ export default function OrderDetail() {
 
               {transportJob.method ===
                 'OWN_TRUCK' && (
-                <div className="notice">
-                  <h3>Transport payment</h3>
+                <div className="notice transport-info-panel">
+                  <div className="transport-panel-heading">
+                    <span className="transport-panel-icon" aria-hidden="true">✓</span>
+                    <h3>Transport payment</h3>
+                  </div>
 
                   <p>
                     <strong>
@@ -2086,8 +2103,11 @@ export default function OrderDetail() {
               {transportJob.method ===
                 'HIRE_TRANSPORTER' &&
                 !transportPaid && (
-                  <div className="notice">
-                    <h3>Transport payment</h3>
+                  <div className="notice transport-info-panel">
+                    <div className="transport-panel-heading">
+                      <span className="transport-panel-icon" aria-hidden="true">💳</span>
+                      <h3>Transport payment</h3>
+                    </div>
 
                     <p className="muted">
                       Transport payment is separate from the seller payment. You may pay it as soon as the transport quote is accepted. The transporter cannot start the trip until every required payment is confirmed.
@@ -2109,10 +2129,11 @@ export default function OrderDetail() {
                 )}
 
               {canStartTransportPayment && (
-                <div className="notice">
-                  <h3>
-                    Transport payment
-                  </h3>
+                <div className="notice transport-info-panel">
+                  <div className="transport-panel-heading">
+                    <span className="transport-panel-icon" aria-hidden="true">💳</span>
+                    <h3>Transport payment</h3>
+                  </div>
 
                   <p>
                     Transport fee due:{' '}
@@ -2183,10 +2204,11 @@ export default function OrderDetail() {
               {/* ------------------------------------------------------------ */}
 
               {canResumeTransportPayment && (
-                <div className="notice">
-                  <h3>
-                    Transport payment pending
-                  </h3>
+                <div className="notice transport-info-panel">
+                  <div className="transport-panel-heading">
+                    <span className="transport-panel-icon" aria-hidden="true">⏳</span>
+                    <h3>Transport payment pending</h3>
+                  </div>
 
                   <p>
                     Amount:{' '}
@@ -2238,13 +2260,11 @@ export default function OrderDetail() {
               {/* ------------------------------------------------------------ */}
 
               {transportPaid && (
-                <div className="notice">
-                  <p>
-                    <strong>
-                      ✓ Transport payment confirmed.
-                    </strong>
-                  </p>
-
+                <div className="notice transport-payment-confirmed">
+                  <div className="transport-panel-heading">
+                    <span className="transport-panel-icon" aria-hidden="true">✓</span>
+                    <h3>Transport payment confirmed</h3>
+                  </div>
                   <p className="muted">
                     Paid amount:{' '}
                     {money(
