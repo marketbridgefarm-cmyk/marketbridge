@@ -540,22 +540,9 @@ export default function InspectorDashboard() {
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        className="sd-btn sd-btn-primary"
-                        style={{
-                          marginTop: 6,
-                        }}
-                        onClick={() =>
-                          accept(r.id)
-                        }
-                      >
-                        Accept job
-                      </button>
-
                       {!(quotedRequestIds.has(r.id) || (() => { const l = leafInspectionQuote(r.quotes); return l && ['PENDING', 'SELECTED', 'COUNTERED'].includes(l.status); })()) && (
                         <p className="sd-muted" style={{ marginTop: 10, marginBottom: 4 }}>
-                          Or submit a sealed quote instead of claiming it outright — the requester compares every inspector's quote and picks one; nobody, including you, sees anyone else's amount.
+                          Submit a sealed quote. The requester compares all inspector bids and selects one for price negotiation; you cannot claim the job directly and you cannot see other inspectors' amounts.
                         </p>
                       )}
 

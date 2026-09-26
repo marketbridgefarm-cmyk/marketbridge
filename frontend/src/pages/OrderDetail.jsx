@@ -1001,20 +1001,10 @@ export default function OrderDetail() {
 
     setError('');
 
-    if (inspectorId && (!inspectionFee || Number(inspectionFee) <= 0)) {
-      setError('Enter the agreed inspection fee before requesting this inspector.');
-      return;
-    }
-
     setRequestingInspection(true);
 
     try {
       const body = { orderId: order.id, listingId: order.listing.id, mode };
-
-      if (inspectorId) {
-        body.inspectorId = inspectorId;
-        body.fee = Number(inspectionFee);
-      }
 
       await api.post('/inspections', body);
 
@@ -1797,35 +1787,15 @@ export default function OrderDetail() {
             <div className="card">
               <h2>Request inspection</h2>
               <p className="muted">Request an independent quality check for this order.</p>
-              {inspectorId && (
-                <input
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  placeholder="Agreed fee (ETB)"
-                  value={inspectionFee}
-                  onChange={(event) => setInspectionFee(event.target.value)}
-                  style={{ marginBottom: 8, width: '100%' }}
-                />
-              )}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="btn btn-light"
-                  disabled={requestingInspection}
-                  onClick={() => requestInspection(isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}
-                >
-                  {requestingInspection ? 'Requesting…' : 'Request inspection'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-light"
-                  disabled={findingInspector}
-                  onClick={findInspector}
-                >
-                  {findingInspector ? 'Searching…' : 'Find an inspector'}
-                </button>
-              </div>
+              <p className="muted">All registered inspectors can compete for this request by submitting a sealed fee quote. You compare the bids, select one for negotiation, and only the accepted negotiated quote assigns the inspector.</p>
+              <button
+                type="button"
+                className="btn btn-light"
+                disabled={requestingInspection}
+                onClick={() => requestInspection(isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}
+              >
+                {requestingInspection ? 'Requesting…' : 'Open competitive inspection request'}
+              </button>
             </div>
           )
         )}

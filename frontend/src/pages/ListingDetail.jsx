@@ -374,7 +374,7 @@ export default function ListingDetail() {
                           <div>
                             <p className="muted" style={{ marginBottom: 6 }}>
                               {quotesByRequest[request.id].filter((q) => ['PENDING', 'COUNTERED'].includes(q.status)).length} open quote(s).
-                              {' '}This request has no pre-selected inspector — any inspector may also claim it outright at any time, which closes it to further quotes.
+                              {' '}This is a competitive inspection request. Inspectors submit their own sealed quotes; you compare them and select one bid to negotiate.
                             </p>
                             {quotesByRequest[request.id].length === 0 && (
                               <p className="muted">No quotes submitted yet.</p>
@@ -548,7 +548,7 @@ export default function ListingDetail() {
                              </p>
                             {inspector && <input type="number" min="1" step="0.01" placeholder="Agreed fee (ETB)" value={feeForInspector} onChange={(e) => setFeeForInspector(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />}
                             <button className="btn btn-light full" onClick={() => requestInspection('BUYER_REQUESTED')}>Request inspection</button>
-                            <button className="btn btn-light full" style={{ marginTop: 8 }} onClick={chooseInspector}>Find an inspector</button>
+                            
                           </>
                         )}
                       </>
@@ -582,7 +582,7 @@ export default function ListingDetail() {
                       <>
                         {inspector && <input type="number" min="1" step="0.01" placeholder="Agreed fee (ETB)" value={feeForInspector} onChange={(e) => setFeeForInspector(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />}
                         <button className="btn btn-light full" onClick={() => requestInspection('SELLER_REQUESTED')}>Request inspection</button>
-                        <button className="btn btn-light full" style={{ marginTop: 8 }} onClick={chooseInspector}>Find an inspector</button>
+                        
                       </>
                     )}
                   </>
