@@ -57,7 +57,7 @@ export default function ListingCard({ listing }) {
             {grade}
           </span>
         )}
-        {listing.status === 'ACTIVE' && (
+        {(listing.status === 'ACTIVE' || listing.status === 'UNDER_NEGOTIATION') && (
           <span className="lc-badge lc-badge--active" aria-label="Active listing" />
         )}
       </Link>
@@ -85,7 +85,7 @@ export default function ListingCard({ listing }) {
           {listing.location}
         </p>
 
-        {!isProduct && listing.status === 'ACTIVE' && Number(listing.offerCount || listing._count?.offers || 0) > 0 && (
+        {!isProduct && ['ACTIVE', 'UNDER_NEGOTIATION'].includes(listing.status) && Number(listing.offerCount || listing._count?.offers || 0) > 0 && (
           <p className="lc-offer-count" aria-label="Buyer offers">
             {Number(listing.offerCount || listing._count?.offers || 0).toLocaleString()} buyer offer{Number(listing.offerCount || listing._count?.offers || 0) === 1 ? '' : 's'} · still open to competing buyers
           </p>
@@ -109,8 +109,8 @@ export default function ListingCard({ listing }) {
           </span>
 
           <div className="lc-ctas">
-            {/* "Make offer" only for agricultural listings that are still active */}
-            {!isProduct && listing.status === 'ACTIVE' && (
+            {/* Agricultural listings remain offerable while competition is open. */}
+            {!isProduct && ['ACTIVE', 'UNDER_NEGOTIATION'].includes(listing.status) && (
               <Link
                 className="lc-cta lc-cta--offer"
                 to={`/listings/${listing.id}#negotiation`}
