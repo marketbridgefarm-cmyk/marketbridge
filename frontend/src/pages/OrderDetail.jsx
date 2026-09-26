@@ -2766,8 +2766,17 @@ export default function OrderDetail() {
       </div>
 
       {error && (
-        <div className="sd-toast" role="alert">
-          {error}
+        <div className="order-detail-toast" role="alert" aria-live="assertive">
+          <span className="order-detail-toast-icon" aria-hidden="true">!</span>
+          <span className="order-detail-toast-message">{error}</span>
+          <button
+            type="button"
+            className="order-detail-toast-close"
+            onClick={() => setError('')}
+            aria-label="Dismiss message"
+          >
+            ×
+          </button>
         </div>
       )}
     </main>
