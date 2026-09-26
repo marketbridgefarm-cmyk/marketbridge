@@ -516,7 +516,7 @@ export default function ListingDetail() {
             )}
 
             {isBuyer && (
-              <div className="card sticky-card">
+              <div className="card sticky-card" id="make-offer">
                 <h2>{isAvailable ? (isAgricultural ? 'Make an offer' : 'Buy this product') : 'Listing unavailable'}</h2>
                 {!isAvailable ? (
                   <>
@@ -528,10 +528,10 @@ export default function ListingDetail() {
                     <p className="muted">Your offer does not reserve the listing. Other buyers may also submit offers while the seller decides whether to accept, reject or counter.</p>
                     <form onSubmit={submitOffer}>
                       <label>Your offer (ETB)</label>
-                      <input required type="number" min="0.01" value={offerAmount} onChange={(e) => setOfferAmount(e.target.value)} />
+                      <input required type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter your offer amount (ETB)" value={offerAmount} onChange={(e) => setOfferAmount(e.target.value)} aria-label="Your offer amount in ETB" />
                       <label>Message</label>
                       <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Optional message to the farmer" />
-                      <button className="btn btn-primary full">Submit offer</button>
+                      <button type="submit" className="btn btn-primary full" disabled={!offerAmount || Number(offerAmount) <= 0}>Submit offer</button>
                     </form>
                     {isAgricultural && (
                       <>
