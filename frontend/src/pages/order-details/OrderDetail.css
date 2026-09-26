@@ -1,6 +1,39 @@
+/* ==========================================================================
+   OrderDetail — page-level styles
+   ==========================================================================
+   Table of contents
+   1.  Page & card shell
+   2.  Hero
+   3.  Status pills
+   4.  Order overview facts
+   5.  Parties
+   6.  Timeline / next-action
+   7.  Match box & transporter list
+   8.  Transport overview & details
+   9.  Payout summary card + table
+   10. Notices, alerts, choice cards
+   11. Messages
+   12. Rating
+   13. Evidence
+   14. Payment center rows
+   15. Toast (screen only)
+   16. Responsive breakpoints
+   17. Print — quarterly report output
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Page & card shell
+   -------------------------------------------------------------------------- */
+
+.order-detail-page {
+  --odp-radius-lg: 18px;
+  --odp-radius-md: 14px;
+  --odp-radius-sm: 10px;
+  --odp-surface: #fbfdfb;
+}
 
 .order-detail-page .card {
-  border-radius: 18px;
+  border-radius: var(--odp-radius-lg);
   margin-bottom: var(--space-md);
   transition: box-shadow .18s var(--ease), transform .18s var(--ease);
 }
@@ -40,7 +73,9 @@
   margin-top: 16px;
 }
 
-
+/* --------------------------------------------------------------------------
+   2. Hero
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .order-hero {
   display: flex;
@@ -63,19 +98,19 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(140% 100% at 100% 0%, rgba(255,255,255,.14), transparent 55%),
-    radial-gradient(90% 90% at 0% 100%, rgba(0,0,0,.14), transparent 60%);
+    radial-gradient(140% 100% at 100% 0%, rgba(255, 255, 255, .14), transparent 55%),
+    radial-gradient(90% 90% at 0% 100%, rgba(0, 0, 0, .14), transparent 60%);
   pointer-events: none;
 }
 
-.order-detail-page .order-hero-main,.order-detail-page 
-.order-hero-side {
+.order-detail-page .order-hero-main,
+.order-detail-page .order-hero-side {
   position: relative;
   z-index: 1;
 }
 
 .order-detail-page .order-hero-eyebrow {
-  color: rgba(255,255,255,.75);
+  color: rgba(255, 255, 255, .75);
   letter-spacing: 2px;
 }
 
@@ -85,6 +120,7 @@
   margin: 6px 0 14px;
   font-size: clamp(24px, 3.4vw, 36px);
   line-height: 1.1;
+  overflow-wrap: anywhere;
 }
 
 .order-detail-page .order-hero-meta {
@@ -95,8 +131,8 @@
 }
 
 .order-detail-page .order-hero-chip {
-  background: rgba(255,255,255,.14);
-  border: 1px solid rgba(255,255,255,.22);
+  background: rgba(255, 255, 255, .14);
+  border: 1px solid rgba(255, 255, 255, .22);
   color: #fff;
   padding: 5px 11px;
   border-radius: 999px;
@@ -116,7 +152,7 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: .6px;
-  color: rgba(255,255,255,.7);
+  color: rgba(255, 255, 255, .7);
 }
 
 .order-detail-page .order-hero-price {
@@ -134,28 +170,19 @@
 }
 
 .order-detail-page .order-hero .btn-outline {
-  border-color: rgba(255,255,255,.55);
+  border-color: rgba(255, 255, 255, .55);
   color: #fff;
-  background: rgba(255,255,255,.06);
+  background: rgba(255, 255, 255, .06);
 }
 
 .order-detail-page .order-hero .btn-outline:hover {
-  background: rgba(255,255,255,.16);
+  background: rgba(255, 255, 255, .16);
   border-color: #fff;
 }
 
-@media (max-width: 620px) {
-  .order-detail-page .order-hero {
-    flex-direction: column;
-  }
-  .order-detail-page .order-hero-side {
-    align-items: flex-start;
-    text-align: left;
-    width: 100%;
-  }
-}
-
-
+/* --------------------------------------------------------------------------
+   3. Status pills
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .status-pill {
   display: inline-flex;
@@ -167,8 +194,8 @@
   font-weight: 700;
   letter-spacing: .3px;
   text-transform: uppercase;
-  background: rgba(255,255,255,.16);
-  border: 1px solid rgba(255,255,255,.28);
+  background: rgba(255, 255, 255, .16);
+  border: 1px solid rgba(255, 255, 255, .28);
   color: #fff;
 }
 
@@ -179,18 +206,19 @@
   background: currentColor;
 }
 
-.order-detail-page .status-pill.tone-good { background: rgba(255,255,255,.92); color: var(--green-dark); border-color: transparent; }
-.order-detail-page .status-pill.tone-wait { background: #fff3da; color: #8a5a10; border-color: transparent; }
-.order-detail-page .status-pill.tone-bad { background: #ffe3e0; color: var(--danger); border-color: transparent; }
-.order-detail-page .status-pill.tone-neutral { background: rgba(255,255,255,.85); color: var(--ink); border-color: transparent; }
+.order-detail-page .status-pill.tone-good    { background: rgba(255, 255, 255, .92); color: var(--green-dark); border-color: transparent; }
+.order-detail-page .status-pill.tone-wait    { background: #fff3da; color: #8a5a10; border-color: transparent; }
+.order-detail-page .status-pill.tone-bad     { background: #ffe3e0; color: var(--danger); border-color: transparent; }
+.order-detail-page .status-pill.tone-neutral { background: rgba(255, 255, 255, .85); color: var(--ink); border-color: transparent; }
 
-
-.order-detail-page .card .status-pill.tone-good { background: #e7f6ea; color: #146b38; }
-.order-detail-page .card .status-pill.tone-wait { background: #fff5df; color: #875b12; }
-.order-detail-page .card .status-pill.tone-bad { background: #fdeceb; color: var(--danger); }
+.order-detail-page .card .status-pill.tone-good    { background: #e7f6ea; color: #146b38; }
+.order-detail-page .card .status-pill.tone-wait    { background: #fff5df; color: #875b12; }
+.order-detail-page .card .status-pill.tone-bad     { background: #fdeceb; color: var(--danger); }
 .order-detail-page .card .status-pill.tone-neutral { background: #eef1ee; color: var(--muted); }
 
-
+/* --------------------------------------------------------------------------
+   4. Order overview facts
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .order-summary-grid {
   margin-bottom: var(--space-md);
@@ -200,11 +228,115 @@
   margin-bottom: 0;
 }
 
+.order-detail-page .order-overview-card {
+  margin-bottom: var(--space-md);
+  padding: clamp(18px, 3vw, 28px);
+}
+
+.order-detail-page .order-section-heading,
+.order-detail-page .transport-card-heading,
+.order-detail-page .transport-subheading,
+.order-detail-page .transport-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.order-detail-page .order-section-heading {
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.order-detail-page .order-section-heading h2,
+.order-detail-page .order-section-heading h3,
+.order-detail-page .transport-card-heading h2,
+.order-detail-page .transport-subheading h3,
+.order-detail-page .transport-panel-heading h3 {
+  margin: 3px 0 0;
+}
+
+.order-detail-page .order-section-heading h2 {
+  font-size: clamp(22px, 3vw, 32px);
+}
+
+.order-detail-page .order-section-heading h3,
+.order-detail-page .transport-subheading h3,
+.order-detail-page .transport-panel-heading h3 {
+  font-size: 18px;
+}
+
+.order-detail-page .order-overview-card .status-pill {
+  flex: 0 0 auto;
+  margin-top: 4px;
+}
+
+.order-detail-page .order-overview-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.order-detail-page .order-overview-fact {
+  min-height: 76px;
+  padding: 14px 15px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--odp-surface);
+}
+
+.order-detail-page .order-overview-fact span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .45px;
+  margin-bottom: 5px;
+}
+
+.order-detail-page .order-overview-fact strong {
+  display: block;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.order-detail-page .order-overview-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 24px 0 20px;
+}
+
+/* --------------------------------------------------------------------------
+   5. Parties
+   -------------------------------------------------------------------------- */
+
+.order-detail-page .order-parties-heading {
+  align-items: center;
+}
+
+.order-detail-page .order-section-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .order-detail-page .party-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
   margin-top: 16px;
+}
+
+.order-detail-page .party-list-inline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.order-detail-page .party-list-inline .party-row {
+  margin: 0;
+  min-width: 0;
 }
 
 .order-detail-page .party-row {
@@ -214,7 +346,7 @@
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: #fbfdfb;
+  background: var(--odp-surface);
 }
 
 .order-detail-page .party-avatar {
@@ -246,6 +378,7 @@
   display: block;
   font-size: 14.5px;
   margin-top: 2px;
+  overflow-wrap: anywhere;
 }
 
 .order-detail-page .party-you {
@@ -259,10 +392,14 @@
   letter-spacing: .3px;
 }
 
-
+/* --------------------------------------------------------------------------
+   6. Timeline / next action
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .order-timeline {
   margin-top: 14px;
+  list-style: none;
+  padding: 0;
 }
 
 .order-detail-page .order-timeline-dot {
@@ -274,20 +411,17 @@
   color: var(--green-dark);
 }
 
-
-
 .order-detail-page .next-action-card {
   border-radius: 18px;
-  box-shadow: 0 12px 30px rgba(20,45,28,.08);
+  box-shadow: 0 12px 30px rgba(20, 45, 28, .08);
 }
 
-@media (max-width: 620px) {
-  .order-detail-page .order-summary-grid {
-    grid-template-columns: 1fr;
-  }
+.order-detail-page .next-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
 }
-
-
 
 .order-detail-page .card-warning {
   border-color: #f3c9c3;
@@ -298,133 +432,176 @@
   background: var(--danger);
 }
 
+/* --------------------------------------------------------------------------
+   7. Match box & transporter list
+   -------------------------------------------------------------------------- */
 
-
-.order-detail-page .message-thread {
-  background: #fbfdfb;
+.order-detail-page .match-box {
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: var(--odp-radius-md);
+  overflow: hidden;
+  background: var(--odp-surface);
 }
 
-.order-detail-page .message-bubble {
-  border-radius: 16px;
-  box-shadow: var(--shadow-tight);
-}
-
-.order-detail-page .message-mine {
-  border-bottom-right-radius: 4px;
-}
-
-.order-detail-page .message-theirs {
-  border-bottom-left-radius: 4px;
+.order-detail-page .match-box > .row-between {
+  padding: 10px 14px;
   background: #fff;
-  border: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
-.order-detail-page .message-composer {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 8px;
+.order-detail-page .transporter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  transition: background .15s var(--ease);
 }
 
-.order-detail-page .message-composer textarea {
-  border: none;
-  background: transparent;
-  padding: 6px 8px;
+.order-detail-page .transporter:last-child {
+  border-bottom: 0;
 }
 
-.order-detail-page .message-composer textarea:focus {
-  outline: none;
-  box-shadow: none;
+.order-detail-page .transporter.chosen {
+  background: var(--soft);
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+  border-radius: var(--odp-radius-sm);
 }
 
-
-
-.order-detail-page .rating-form {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 14px;
-  margin-top: 12px;
-  background: #fbfdfb;
+.order-detail-page .transporter strong {
+  font: 600 14px/1.3 Manrope, system-ui, sans-serif;
+  color: var(--ink);
 }
 
-.order-detail-page .rating-list {
-  margin-top: 16px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-
-.order-detail-page .rating-list h3 {
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: .5px;
+.order-detail-page .transporter p {
+  font-size: 12px;
   color: var(--muted);
-  margin-bottom: 8px;
+  margin: 2px 0 0;
 }
 
-.order-detail-page .rating-list-row {
-  padding: 10px 0;
-  border-top: 1px solid #edf0ec;
+/* --------------------------------------------------------------------------
+   8. Transport overview & details
+   -------------------------------------------------------------------------- */
+
+.order-detail-page .transport-overview-card {
+  margin-bottom: var(--space-md);
+  padding: clamp(18px, 3vw, 28px);
 }
 
-.order-detail-page .rating-list-row:first-of-type {
-  border-top: 0;
+.order-detail-page .transport-card-heading {
+  align-items: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
 }
 
-
-
-.order-detail-page .evidence-item {
+.order-detail-page .transport-card-icon {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
   border-radius: 14px;
-  background: #fbfdfb;
+  background: var(--soft);
+  color: var(--green);
+  border: 1px solid #d7e7d9;
 }
 
-.order-detail-page .evidence-thumb {
-  width: 92px;
-  height: 92px;
-  border-radius: 10px;
-  transition: transform .15s var(--ease);
+.order-detail-page .transport-card-icon svg {
+  width: 27px;
+  height: 27px;
 }
 
-.order-detail-page .evidence-thumb:hover {
-  transform: scale(1.04);
+.order-detail-page .transport-card-title {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-
-
-.order-detail-page .payment-center-row {
-  border-radius: 14px;
-  border-left: 3px solid var(--line);
-  background: #fbfdfb;
+.order-detail-page .transport-card-title h2 {
+  font-size: clamp(22px, 3vw, 32px);
 }
 
-.order-detail-page .payment-center-row:has(.badge-success) {
-  border-left-color: var(--green);
+.order-detail-page .transport-card-title p {
+  max-width: 68ch;
+  margin: 7px 0 0;
+  font-size: 13px;
 }
 
-.order-detail-page .payment-center-row:has(.badge-pending) {
-  border-left-color: var(--gold);
+.order-detail-page .transport-status-badge {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
-
-
-.order-detail-page .notice {
-  border-radius: 12px;
+.order-detail-page .transport-details-block {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--odp-surface);
 }
 
-.order-detail-page .choice {
-  border-radius: 14px;
+.order-detail-page .transport-subheading {
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
 }
 
-.order-detail-page .choice:hover {
-  border-color: var(--green-light);
-  box-shadow: var(--shadow-tight);
-  transform: translateY(-2px);
+.order-detail-page .transport-detail-facts {
+  margin-bottom: 0;
 }
 
+.order-detail-page .transport-info-panel {
+  margin-top: 14px;
+  border-color: var(--line);
+  background: #fff;
+}
 
+.order-detail-page .transport-panel-heading {
+  align-items: center;
+  margin-bottom: 10px;
+}
 
+.order-detail-page .transport-panel-heading h3 {
+  margin: 0;
+}
+
+.order-detail-page .transport-panel-icon {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--soft);
+  color: var(--green);
+  font-size: 14px;
+  border: 1px solid #dceade;
+}
+
+.order-detail-page .transport-info-panel > p:last-child,
+.order-detail-page .transport-payment-confirmed > p:last-child {
+  margin-bottom: 0;
+}
+
+.order-detail-page .transport-payment-confirmed {
+  margin-top: 14px;
+  border-color: #b9d9c0;
+  background: #f4fbf5;
+}
+
+.order-detail-page .transport-payment-confirmed .transport-panel-icon {
+  background: #e2f3e5;
+  color: var(--green);
+}
+
+/* --------------------------------------------------------------------------
+   9. Payout summary card + table
+   -------------------------------------------------------------------------- */
+
+.order-detail-page .payout-summary-card {
+  overflow-x: auto;
+}
 
 .order-detail-page .payout-intro {
   margin: 14px 0 20px;
@@ -432,7 +609,6 @@
   color: var(--muted);
   line-height: 1.7;
 }
-
 
 .order-detail-page .payout-hold-chip {
   display: inline-block;
@@ -447,16 +623,15 @@
   white-space: nowrap;
 }
 
-
 .order-detail-page .payout-table {
   width: 100%;
+  min-width: 460px;
   border-collapse: collapse;
   margin: 0;
 }
 
-
-.order-detail-page .payout-table th,.order-detail-page 
-.payout-table td {
+.order-detail-page .payout-table th,
+.order-detail-page .payout-table td {
   background: none;
   text-transform: none;
   letter-spacing: 0;
@@ -478,16 +653,30 @@
   white-space: nowrap;
 }
 
-.order-detail-page .payout-table tbody th,.order-detail-page 
-.payout-table tbody td {
+.order-detail-page .payout-table thead th.payout-status-col {
+  padding-left: 16px;
+}
+
+.order-detail-page .payout-table tbody th,
+.order-detail-page .payout-table tbody td {
   padding: 14px 0;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
 }
 
-.order-detail-page .payout-table tbody tr:last-child th,.order-detail-page 
-.payout-table tbody tr:last-child td {
+.order-detail-page .payout-table tbody tr:last-child th,
+.order-detail-page .payout-table tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.order-detail-page .payout-table tbody td.payout-status {
+  padding-left: 16px;
+  white-space: nowrap;
+}
+
+.order-detail-page .payout-table .status-pill {
+  padding: 4px 10px;
+  font-size: 11px;
 }
 
 .order-detail-page .payout-party {
@@ -542,27 +731,12 @@
   color: var(--ink);
 }
 
-.order-detail-page .payout-table thead th.payout-status-col {
-  padding-left: 16px;
-}
-
-.order-detail-page .payout-table tbody td.payout-status {
-  padding-left: 16px;
-  white-space: nowrap;
-}
-
-.order-detail-page .payout-table .status-pill {
-  padding: 4px 10px;
-  font-size: 11px;
-}
-
 .order-detail-page .payout-currency {
   margin-left: 5px;
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
 }
-
 
 .order-detail-page .payout-due {
   display: flex;
@@ -623,7 +797,6 @@
   color: #875b12;
 }
 
-
 .order-detail-page .payout-due-done {
   border-color: #cfe6d6;
   border-left-color: var(--green);
@@ -637,7 +810,7 @@
 .order-detail-page .payout-due-idle {
   border-color: var(--line);
   border-left-color: var(--line);
-  background: #fbfdfb;
+  background: var(--odp-surface);
 }
 
 .order-detail-page .payout-due-idle .payout-due-label {
@@ -650,331 +823,146 @@
   color: var(--muted);
 }
 
-@media (max-width: 420px) {
+/* --------------------------------------------------------------------------
+   10. Notices, alerts, choice cards
+   -------------------------------------------------------------------------- */
 
-
-.order-detail-page .order-hero {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  gap: 16px; flex-wrap: wrap;
-  padding: 20px 22px;
-  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
-  background: var(--mb-card); box-shadow: var(--mb-shadow-card);
-  margin-bottom: 16px;
-}
-.order-detail-page .order-hero-eyebrow {
-  font: 700 11px/1 "DM Sans", sans-serif;
-  color: var(--mb-text-muted); text-transform: uppercase; letter-spacing: .7px;
-}
-.order-detail-page .order-hero-title {
-  font: 800 22px/1.2 Manrope, sans-serif;
-  color: var(--mb-ink); margin: 6px 0 8px; letter-spacing: -.025em;
-}
-.order-detail-page .order-hero-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.order-detail-page .order-hero-chip {
-  display: inline-flex; align-items: center;
-  height: 24px; padding: 0 10px;
-  border-radius: var(--mb-radius-pill);
-  background: var(--mb-surface-soft);
-  font: 600 11px/1 "DM Sans", sans-serif; color: var(--mb-text-muted);
-  letter-spacing: .3px;
-}
-.order-detail-page .order-hero-side {
-  text-align: right; flex: 0 0 auto;
-}
-.order-detail-page .order-hero-price-label {
-  display: block;
-  font: 600 11px/1 "DM Sans", sans-serif;
-  color: var(--mb-text-muted); text-transform: uppercase; letter-spacing: .5px;
-  margin-bottom: 4px;
-}
-.order-detail-page .order-hero-price {
-  font: 800 26px/1 Manrope, sans-serif; color: var(--mb-primary);
-  letter-spacing: -.03em;
-}
-.order-detail-page .order-hero-price small {
-  font-size: 14px; color: var(--mb-text-muted); font-weight: 500;
+.order-detail-page .notice {
+  border-radius: 12px;
 }
 
-
-.order-detail-page .order-timeline {
-  list-style: none; margin: 0; padding: 0;
-}
-
-.order-detail-page .match-box {
-  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
-  overflow: hidden; background: var(--mb-bg);
-}
-.order-detail-page .match-box > .row-between {
-  padding: 10px 14px;
-  background: var(--mb-card); border-bottom: 1px solid var(--mb-border);
-}
-.order-detail-page .transporter {
-  display: flex; justify-content: space-between; align-items: center;
-  gap: 12px; padding: 12px 14px;
-  border-bottom: 1px solid var(--mb-border);
-  transition: background .15s ease;
-}
-.order-detail-page .transporter:last-child { border-bottom: 0; }
-.order-detail-page .transporter.chosen {
-  background: var(--mb-surface-soft);
-  outline: 2px solid var(--mb-primary); outline-offset: -2px;
-  border-radius: var(--mb-radius-sm);
-}
-.order-detail-page .transporter strong { font: 600 14px/1.3 "DM Sans", sans-serif; color: var(--mb-ink); }
-.order-detail-page .transporter p { font-size: 12px; color: var(--mb-text-muted); margin: 2px 0 0; }
-}
-
-.order-detail-page .order-overview-card {
-  margin-bottom: var(--space-md);
-  padding: clamp(18px, 3vw, 28px);
-}
-
-.order-detail-page .order-section-heading,.order-detail-page 
-.transport-card-heading,.order-detail-page 
-.transport-subheading,.order-detail-page 
-.transport-panel-heading {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-}
-
-.order-detail-page .order-section-heading {
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.order-detail-page .order-section-heading h2,.order-detail-page 
-.order-section-heading h3,.order-detail-page 
-.transport-card-heading h2,.order-detail-page 
-.transport-subheading h3,.order-detail-page 
-.transport-panel-heading h3 {
-  margin: 3px 0 0;
-}
-
-.order-detail-page .order-section-heading h2 {
-  font-size: clamp(24px, 3vw, 32px);
-}
-
-.order-detail-page .order-section-heading h3,.order-detail-page 
-.transport-subheading h3,.order-detail-page 
-.transport-panel-heading h3 {
-  font-size: 18px;
-}
-
-.order-detail-page .order-overview-card .status-pill {
-  flex: 0 0 auto;
-  margin-top: 4px;
-}
-
-.order-detail-page .order-overview-facts {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 22px;
-}
-
-.order-detail-page .order-overview-fact {
-  min-height: 76px;
-  padding: 14px 15px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  background: #fbfdfb;
-}
-
-.order-detail-page .order-overview-fact span {
-  display: block;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .45px;
-  margin-bottom: 5px;
-}
-
-.order-detail-page .order-overview-fact strong {
-  display: block;
-  font-size: 15px;
-  overflow-wrap: anywhere;
-}
-
-.order-detail-page .order-overview-divider {
-  height: 1px;
-  background: var(--line);
-  margin: 24px 0 20px;
-}
-
-.order-detail-page .order-parties-heading {
-  align-items: center;
-}
-
-.order-detail-page .order-section-note {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.order-detail-page .party-list-inline {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.order-detail-page .party-list-inline .party-row {
-  margin: 0;
-  min-width: 0;
-}
-
-.order-detail-page .transport-overview-card {
-  margin-bottom: var(--space-md);
-  padding: clamp(18px, 3vw, 28px);
-}
-
-.order-detail-page .transport-card-heading {
-  align-items: center;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--line);
-}
-
-.order-detail-page .transport-card-icon {
-  flex: 0 0 auto;
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
+.order-detail-page .choice {
   border-radius: 14px;
-  background: var(--soft);
-  color: var(--green);
-  border: 1px solid #d7e7d9;
+  transition: border-color .15s var(--ease), box-shadow .15s var(--ease), transform .15s var(--ease);
 }
 
-.order-detail-page .transport-card-icon svg {
-  width: 27px;
-  height: 27px;
+.order-detail-page .choice:hover {
+  border-color: var(--green-light);
+  box-shadow: var(--shadow-tight);
+  transform: translateY(-2px);
 }
 
-.order-detail-page .transport-card-title {
-  flex: 1 1 auto;
-  min-width: 0;
-}
+/* --------------------------------------------------------------------------
+   11. Messages
+   -------------------------------------------------------------------------- */
 
-.order-detail-page .transport-card-title h2 {
-  font-size: clamp(24px, 3vw, 32px);
-}
-
-.order-detail-page .transport-card-title p {
-  max-width: 68ch;
-  margin: 7px 0 0;
-  font-size: 13px;
-}
-
-.order-detail-page .transport-status-badge {
-  flex: 0 0 auto;
-  margin-left: auto;
-}
-
-.order-detail-page .transport-details-block {
-  margin-top: 20px;
-  padding: 18px;
+.order-detail-page .message-thread {
+  background: var(--odp-surface);
   border: 1px solid var(--line);
-  border-radius: 15px;
-  background: #fbfdfb;
+  border-radius: 14px;
+  padding: 12px;
 }
 
-.order-detail-page .transport-subheading {
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2px;
+.order-detail-page .message-bubble {
+  border-radius: 16px;
+  box-shadow: var(--shadow-tight);
 }
 
-.order-detail-page .transport-detail-facts {
-  margin-bottom: 0;
+.order-detail-page .message-mine {
+  border-bottom-right-radius: 4px;
 }
 
-.order-detail-page .transport-info-panel {
-  margin-top: 14px;
-  border-color: var(--line);
+.order-detail-page .message-theirs {
+  border-bottom-left-radius: 4px;
   background: #fff;
+  border: 1px solid var(--line);
 }
 
-.order-detail-page .transport-panel-heading {
-  align-items: center;
-  margin-bottom: 10px;
+.order-detail-page .message-composer {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 8px;
 }
 
-.order-detail-page .transport-panel-heading h3 {
-  margin: 0;
+.order-detail-page .message-composer textarea {
+  border: none;
+  background: transparent;
+  padding: 6px 8px;
 }
 
-.order-detail-page .transport-panel-icon {
-  flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  background: var(--soft);
-  color: var(--green);
-  font-size: 14px;
-  border: 1px solid #dceade;
+.order-detail-page .message-composer textarea:focus {
+  outline: none;
+  box-shadow: none;
 }
 
-.order-detail-page .transport-info-panel > p:last-child,.order-detail-page 
-.transport-payment-confirmed > p:last-child {
-  margin-bottom: 0;
+/* --------------------------------------------------------------------------
+   12. Rating
+   -------------------------------------------------------------------------- */
+
+.order-detail-page .rating-form {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  margin-top: 12px;
+  background: var(--odp-surface);
 }
 
-.order-detail-page .transport-payment-confirmed {
-  margin-top: 14px;
-  border-color: #b9d9c0;
-  background: #f4fbf5;
+.order-detail-page .rating-list {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
 }
 
-.order-detail-page .transport-payment-confirmed .transport-panel-icon {
-  background: #e2f3e5;
-  color: var(--green);
+.order-detail-page .rating-list h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  margin-bottom: 8px;
 }
 
-@media (max-width: 760px) {
-  .order-detail-page .order-overview-facts {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .order-detail-page .party-list-inline {
-    grid-template-columns: 1fr;
-  }
-
-  .order-detail-page .transport-card-heading {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .order-detail-page .transport-status-badge {
-    margin-left: 62px;
-    margin-top: -10px;
-  }
+.order-detail-page .rating-list-row {
+  padding: 10px 0;
+  border-top: 1px solid #edf0ec;
 }
 
-@media (max-width: 480px) {
-  .order-detail-page .order-overview-facts {
-    grid-template-columns: 1fr;
-  }
-
-  .order-detail-page .order-section-heading {
-    align-items: flex-start;
-  }
-
-  .order-detail-page .order-section-heading .status-pill {
-    font-size: 10px;
-    padding-inline: 8px;
-  }
-
-  .order-detail-page .transport-details-block {
-    padding: 14px;
-  }
+.order-detail-page .rating-list-row:first-of-type {
+  border-top: 0;
 }
 
-/* Action feedback popup: floats above the page instead of pushing content
-   or appearing as a top/bottom banner. */
+/* --------------------------------------------------------------------------
+   13. Evidence
+   -------------------------------------------------------------------------- */
+
+.order-detail-page .evidence-item {
+  border-radius: 14px;
+  background: var(--odp-surface);
+}
+
+.order-detail-page .evidence-thumb {
+  width: 92px;
+  height: 92px;
+  border-radius: 10px;
+  transition: transform .15s var(--ease);
+}
+
+.order-detail-page .evidence-thumb:hover {
+  transform: scale(1.04);
+}
+
+/* --------------------------------------------------------------------------
+   14. Payment center rows
+   -------------------------------------------------------------------------- */
+
+.order-detail-page .payment-center-row {
+  border-radius: 14px;
+  border-left: 3px solid var(--line);
+  background: var(--odp-surface);
+}
+
+.order-detail-page .payment-center-row:has(.badge-success) {
+  border-left-color: var(--green);
+}
+
+.order-detail-page .payment-center-row:has(.badge-pending) {
+  border-left-color: var(--gold);
+}
+
+/* --------------------------------------------------------------------------
+   15. Toast (screen only — hidden from print in section 17)
+   -------------------------------------------------------------------------- */
+
 .order-detail-toast {
   position: fixed;
   z-index: 2000;
@@ -990,7 +978,7 @@
   border-radius: 14px;
   background: #fffdf4;
   color: #4a3a0a;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .18);
   animation: order-detail-toast-in 180ms ease-out;
 }
 
@@ -1031,13 +1019,13 @@
 }
 
 .order-detail-toast-close:hover {
-  background: rgba(118, 101, 31, 0.09);
+  background: rgba(118, 101, 31, .09);
 }
 
 @keyframes order-detail-toast-in {
   from {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + 10px)) scale(0.98);
+    transform: translate(-50%, calc(-50% + 10px)) scale(.98);
   }
   to {
     opacity: 1;
@@ -1045,7 +1033,80 @@
   }
 }
 
+/* --------------------------------------------------------------------------
+   16. Responsive breakpoints (screen)
+   -------------------------------------------------------------------------- */
+
+/* Tablet — tighten the 4-column fact grid and give the hero side a touch
+   more breathing room before it has to wrap. */
+@media (max-width: 900px) {
+  .order-detail-page .order-overview-facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Large phone / small tablet */
+@media (max-width: 760px) {
+  .order-detail-page .order-overview-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .order-detail-page .party-list-inline {
+    grid-template-columns: 1fr;
+  }
+
+  .order-detail-page .transport-card-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .order-detail-page .transport-status-badge {
+    margin-left: 62px;
+    margin-top: -10px;
+  }
+}
+
+/* Where the hero stops sitting side-by-side */
+@media (max-width: 620px) {
+  .order-detail-page .order-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .order-detail-page .order-hero {
+    flex-direction: column;
+  }
+
+  .order-detail-page .order-hero-side {
+    align-items: flex-start;
+    text-align: left;
+    width: 100%;
+  }
+
+  .order-detail-page .payout-due {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* Small phone */
 @media (max-width: 480px) {
+  .order-detail-page .order-overview-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .order-detail-page .order-section-heading {
+    align-items: flex-start;
+  }
+
+  .order-detail-page .order-section-heading .status-pill {
+    font-size: 10px;
+    padding-inline: 8px;
+  }
+
+  .order-detail-page .transport-details-block {
+    padding: 14px;
+  }
+
   .order-detail-toast {
     width: calc(100vw - 24px);
     padding: 14px;
@@ -1053,5 +1114,250 @@
 
   .order-detail-toast-message {
     font-size: 13px;
+  }
+}
+
+/* Very small phone — the payout table gets a horizontal scroller rather
+   than crushing its columns unreadably. */
+@media (max-width: 420px) {
+  .order-detail-page .payout-summary-card {
+    padding-inline: 14px;
+  }
+
+  .order-detail-page .payout-due-digits {
+    font-size: 26px;
+  }
+}
+
+/* ==========================================================================
+   17. Print — quarterly report output
+   ==========================================================================
+   Goal: every fact on the page reaches paper, nothing interactive (buttons,
+   forms, composer, uploader, toast) does, and long tables/cards don't get
+   sliced across a page break. Colour is toned down to a print-safe palette
+   so a black & white office printer still reads every pill and heading.
+   ========================================================================== */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  /* Ask the browser to keep pill/background colours rather than
+     stripping them to white-on-white. */
+  .order-detail-page,
+  .order-detail-page * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .order-detail-page {
+    max-width: 100%;
+    width: 100%;
+    padding: 0 !important;
+    font-size: 12.5px;
+    color: #111 !important;
+  }
+
+  /* -- Hide anything that only makes sense on a live, editable page ----- */
+
+  .order-detail-page .back-link,
+  .order-detail-page .btn,
+  .order-detail-page .next-action-buttons,
+  .order-detail-page .order-hero .btn-outline,
+  .order-detail-page .message-composer,
+  .order-detail-page .rating-form,
+  .order-detail-page form,
+  .order-detail-page input,
+  .order-detail-page select,
+  .order-detail-page textarea,
+  .order-detail-page [class*="uploader"],
+  .order-detail-toast {
+    display: none !important;
+  }
+
+  /* Dispute form fields hide above, but if a dispute is genuinely open
+     the read-only notice card must still print in full. */
+  .order-detail-page .card-warning {
+    display: block !important;
+  }
+
+  /* -- Hero: swap the dark gradient for an ink-friendly letterhead ------ */
+
+  .order-detail-page .order-hero {
+    background: #fff !important;
+    color: #111 !important;
+    border: 1.5px solid #111;
+    border-radius: 0;
+    box-shadow: none !important;
+    padding: 10mm 0 8mm;
+    margin-bottom: 8mm;
+    break-inside: avoid;
+    break-after: avoid;
+  }
+
+  .order-detail-page .order-hero::after {
+    display: none;
+  }
+
+  .order-detail-page .order-hero-eyebrow {
+    color: #555 !important;
+  }
+
+  .order-detail-page .order-hero-title {
+    color: #111 !important;
+  }
+
+  .order-detail-page .order-hero-chip {
+    background: #fff !important;
+    border: 1px solid #111 !important;
+    color: #111 !important;
+  }
+
+  .order-detail-page .order-hero-price-label {
+    color: #555 !important;
+  }
+
+  .order-detail-page .order-hero-price {
+    color: #111 !important;
+  }
+
+  .order-detail-page .status-pill {
+    border: 1px solid #111 !important;
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  .order-detail-page .card .status-pill.tone-good,
+  .order-detail-page .status-pill.tone-good {
+    border-color: #146b38 !important;
+    color: #146b38 !important;
+  }
+
+  .order-detail-page .card .status-pill.tone-wait,
+  .order-detail-page .status-pill.tone-wait {
+    border-color: #875b12 !important;
+    color: #875b12 !important;
+  }
+
+  .order-detail-page .card .status-pill.tone-bad,
+  .order-detail-page .status-pill.tone-bad {
+    border-color: var(--danger) !important;
+    color: var(--danger) !important;
+  }
+
+  /* -- Cards: flatten the shadowed, rounded "app" look into a plain,
+     bordered report block, and never let one split across a page ------- */
+
+  .order-detail-page .card {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 5mm 6mm;
+    margin-bottom: 5mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .order-detail-page .card > h2:first-child {
+    font-size: 14px;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .order-detail-page .card > h2:first-child::before {
+    background: #111 !important;
+  }
+
+  /* -- Fact grids: two columns reads cleanly on A4/Letter -------------- */
+
+  .order-detail-page .order-overview-facts,
+  .order-detail-page .party-list-inline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3mm;
+  }
+
+  .order-detail-page .order-overview-fact,
+  .order-detail-page .party-row,
+  .order-detail-page .transporter,
+  .order-detail-page .evidence-item,
+  .order-detail-page .message-bubble,
+  .order-detail-page .rating-list-row {
+    border: 1px solid #ddd;
+    background: #fff !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* -- Payout table: force it to always fit the printed width, with
+     visible rules since the soft background won't reliably print ------ */
+
+  .order-detail-page .payout-summary-card {
+    overflow: visible;
+  }
+
+  .order-detail-page .payout-table {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .order-detail-page .payout-table thead {
+    display: table-header-group;
+  }
+
+  .order-detail-page .payout-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .order-detail-page .payout-table th,
+  .order-detail-page .payout-table td {
+    border-bottom: 1px solid #ccc !important;
+    color: #111 !important;
+  }
+
+  .order-detail-page .payout-due {
+    background: #fff !important;
+    border: 1px solid #111;
+    border-left: 4px solid #111;
+    break-inside: avoid;
+  }
+
+  /* A live countdown is meaningless on paper — show the due date only. */
+  .order-detail-page .payout-due-clock {
+    display: none !important;
+  }
+
+  /* -- Evidence photos: keep them, but modestly sized so a gallery
+     doesn't burn through pages ------------------------------------------ */
+
+  .order-detail-page .evidence-thumb {
+    width: 60px;
+    height: 60px;
+  }
+
+  /* -- Section-level page breaks: start a few key sections on a clean
+     page so the printed packet reads like a formal report -------------- */
+
+  .order-detail-page .payout-summary-card,
+  .order-detail-page .transport-overview-card {
+    break-before: page;
+  }
+
+  h1, h2, h3 {
+    break-after: avoid;
+  }
+
+  a[href]::after {
+    content: none !important;
   }
 }
