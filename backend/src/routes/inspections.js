@@ -944,154 +944,17 @@ router.patch(
 );
 
 // ============================================================================
-// BACKWARD-COMPATIBLE DIRECT ACCEPT
-// Existing inspector workflow remains supported.
+// INSPECTION ASSIGNMENT
+// Assignment is intentionally quote-driven: an inspector cannot bypass the
+// competitive marketplace by directly claiming an open request. The requester
+// selects a bid, negotiates if needed, and accepts the final quote.
 // ============================================================================
 
-router.patch(
-  '/:id/accept',
-  authenticate,
-  requireRole('INSPECTOR'),
-  [
-    body('fee')
-      .isFloat({ gt: 0 })
-      .withMessage('A fee greater than zero is required to accept a request'),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          error: errors.array()[0]?.msg || 'Validation failed',
-          errors: errors.array(),
-        });
-      }
-
-      const request = await prisma.inspectionRequest.findUnique({
-        where: {
-          id: req.params.id,
-        },
-      });
-
-      if (!request) {
-        return res.status(404).json({
-          error: 'Request not found',
-        });
-      }
-
-      if (
-        request.status !== 'REQUESTED' ||
-        request.inspectorId
-      ) {
-        return res.status(400).json({
-          error: `This request is already ${
-            request.inspectorId
-              ? 'assigned'
-              : request.status.toLowerCase()
-          } and cannot be accepted`,
-        });
-      }
-
-      // Fast, friendly pre-check outside the transaction — not itself the
-      // guard against the race (see lockOrderAndAssertNotClosed below), just
-      // avoids starting a transaction for the common, non-racy case.
-      const orderForAccept = await prisma.order.findUnique({
-        where: { id: request.orderId },
-        select: { status: true },
-      });
-      if (orderForAccept && ['DISPUTED', 'CANCELLED'].includes(orderForAccept.status)) {
-        return res.status(409).json({
-          error: `This order is ${orderForAccept.status.toLowerCase()}, so this request cannot be accepted.`,
-        });
-      }
-
-      const claim = await prisma.$transaction(async (tx) => {
-        await lockOrderAndAssertNotClosed(tx, request.orderId, 'this request cannot be accepted');
-
-        const result = await tx.inspectionRequest.updateMany({
-          where: {
-            id: req.params.id,
-            status: 'REQUESTED',
-            inspectorId: null,
-          },
-
-          data: {
-            inspectorId: req.user.id,
-            status: 'ACCEPTED',
-            fee: Number(req.body.fee),
-          },
-        });
-
-        if (result.count === 1) {
-          await recordAuditEvent(tx, {
-            actorId: req.user.id,
-            action: 'INSPECTION_ASSIGNED',
-            resourceType: 'InspectionRequest',
-            resourceId: req.params.id,
-            metadata: { fee: Number(req.body.fee), inspectorId: req.user.id },
-          });
-        }
-
-        return result;
-      }, { maxWait: 10000, timeout: 15000 });
-
-      if (claim.count === 0) {
-        return res.status(409).json({
-          error: 'This request was just claimed by another inspector',
-        });
-      }
-
-      const updated = await prisma.inspectionRequest.findUnique({
-        where: {
-          id: req.params.id,
-        },
-
-        include: {
-          listing: {
-            select: {
-              id: true,
-              cropType: true,
-              title: true,
-              quantity: true,
-              unit: true,
-              location: true,
-            },
-          },
-
-          requestedBy: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-
-          inspector: {
-            select: {
-              id: true,
-              name: true,
-              rating: true,
-              location: true,
-            },
-          },
-        },
-      });
-
-      return res.json({
-        request: updated,
-      });
-    } catch (error) {
-      req.log.error({ err: error }, 'ACCEPT INSPECTION ERROR:');
-
-      if (error.code === 'ORDER_NOT_ACTIONABLE') {
-        return res.status(error.status || 409).json({ error: error.message });
-      }
-
-      return res.status(500).json({
-        error: 'Could not accept inspection request',
-      });
-    }
-  }
-);
+router.patch('/:id/accept', authenticate, requireRole('INSPECTOR'), async (req, res) => {
+  return res.status(410).json({
+    error: 'Direct inspection acceptance is no longer supported. Submit a competitive quote; the requester selects and negotiates the winning bid.',
+  });
+});
 
 // ============================================================================
 // INSPECTOR STARTS INSPECTION

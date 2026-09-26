@@ -667,9 +667,8 @@ router.post(
         });
       }
 
-      const isAgricultural =
-        order.listing?.category ===
-        'AGRICULTURAL';
+      const isAgricultural = order.listing?.category === 'AGRICULTURAL';
+      const isPhysicalGoods = ['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category);
 
       // Agricultural transport begins only after the buyer has explicitly
       // chosen BUY following the inspection report. Arrangement itself does
@@ -707,6 +706,20 @@ router.post(
 
       let resolvedArrangingParty =
         arrangingParty;
+
+      if (isPhysicalGoods && method === 'HIRE_TRANSPORTER' && resolvedArrangingParty !== 'BUYER') {
+        return res.status(409).json({
+          code: 'BUYER_TRANSPORT_COMPETITION_REQUIRED',
+          error: 'Physical-goods hired transport is buyer-controlled: registered truck owners submit competing quotes and the buyer selects and negotiates the transporter.',
+        });
+      }
+
+      if (isPhysicalGoods && method === 'OWN_TRUCK') {
+        return res.status(409).json({
+          code: 'AGRICULTURAL_TRANSPORT_COMPETITION_REQUIRED',
+          error: 'Physical goods use the competitive transporter workflow: the buyer requests transport and registered truck owners submit competing quotes.',
+        });
+      }
 
       if (!['SELLER', 'BUYER', 'JOINT'].includes(resolvedArrangingParty)) {
         return res.status(400).json({
