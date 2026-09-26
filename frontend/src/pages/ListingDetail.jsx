@@ -280,7 +280,9 @@ export default function ListingDetail() {
   const isOwner = user?.id === listing.sellerId;
   const isBuyer = user?.roles?.includes('BUYER') && !isOwner;
   const isAgricultural = listing.category === 'AGRICULTURAL';
-  // Agricultural listings stay open to competing buyers while negotiation is active.\n  // The backend accepts offers in both ACTIVE and UNDER_NEGOTIATION states.\n  const isAvailable = listing.status === 'ACTIVE' || (isAgricultural && listing.status === 'UNDER_NEGOTIATION');
+  // Agricultural listings remain open to competing buyers while negotiation is active.
+  // The backend accepts new offers in both ACTIVE and UNDER_NEGOTIATION.
+  const isAvailable = listing.status === 'ACTIVE' || (isAgricultural && listing.status === 'UNDER_NEGOTIATION');
   const listingParentIds = new Set((listing.offers || []).map((offer) => offer.parentOfferId).filter(Boolean));
   const myLatestOffer = (listing.offers || [])
     .filter((offer) => offer.buyerId === user?.id && !listingParentIds.has(offer.id))
@@ -337,7 +339,7 @@ export default function ListingDetail() {
                 <div><span>Ready</span><strong>{listing.readinessDate ? new Date(listing.readinessDate).toLocaleDateString() : 'To be agreed'}</strong></div>
                 <div><span>Seller</span><strong>{listing.seller?.name}</strong></div>
               </div>
-              <p className="muted">Multiple buyers can compete while this listing is active. Selecting a buyer opens negotiation; only acceptance creates the reservation.</p>
+              <p className="muted">Multiple buyers can compete while this listing is active or under negotiation. Selecting a buyer opens negotiation; only acceptance creates the reservation.</p>
               {(() => {
                 const myOrder = (listing.orders || []).find((o) => o.buyerId === user?.id);
                 if (!myOrder) return null;
@@ -518,12 +520,12 @@ export default function ListingDetail() {
                 <h2>{isAvailable ? (isAgricultural ? 'Make an offer' : 'Buy this product') : 'Listing unavailable'}</h2>
                 {!isAvailable ? (
                   <>
-                    <p className="muted">This listing is no longer open for new offers.</p>
+                    <p className="muted">This listing has an accepted offer and is temporarily unavailable to new buyers.</p>
                     <Link className="btn btn-light full" to={isAgricultural ? '/agricultural' : '/products'}>Browse available listings</Link>
                   </>
                 ) : isAgricultural ? (
                   <>
-                    <p className="muted">Your offer does not reserve the listing. Multiple buyers can compete while the seller decides whether to accept, reject or counter.</p>
+                    <p className="muted">Your offer does not reserve the listing. Other buyers may also submit offers while the seller decides whether to accept, reject or counter.</p>
                     <form onSubmit={submitOffer}>
                       <label>Your offer (ETB)</label>
                       <input required type="number" min="0.01" value={offerAmount} onChange={(e) => setOfferAmount(e.target.value)} />

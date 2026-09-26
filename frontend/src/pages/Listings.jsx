@@ -50,9 +50,8 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
         if (readyBy) params.readyBy = readyBy;
       }
       if (agriculture) {
-        // The backend keeps agricultural listings visible to competing buyers
-        // in UNDER_NEGOTIATION as well as ACTIVE. Fetch both states so the
-        // first buyer's offer does not hide the listing from later buyers.
+        // Agricultural listings stay discoverable to competing buyers after
+        // the first offer changes the listing to UNDER_NEGOTIATION.
         const [activeResponse, negotiatingResponse] = await Promise.all([
           api.get('/listings', { params: { ...params, status: 'ACTIVE' } }),
           api.get('/listings', { params: { ...params, status: 'UNDER_NEGOTIATION' } }),
