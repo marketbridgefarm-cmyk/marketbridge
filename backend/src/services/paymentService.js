@@ -1216,37 +1216,6 @@ async function settlePayment({
 
       if (status === 'PAID') {
         // --------------------------------------------------------------------
-        // HIRED TRANSPORT COMMITMENT
-        // --------------------------------------------------------------------
-        // A transport quote is only provisional while payment is outstanding.
-        // Once the buyer's transport payment settles, atomically claim the
-        // selected truck and commit the transport assignment.
-        if (payment.type === 'TRANSPORT' && payment.transportJob && payment.transportJob.method === 'HIRE_TRANSPORTER') {
-          const job = await tx.transportJob.findUnique({
-            where: { id: payment.transportJob.id },
-            include: { order: true },
-          });
-          if (!job || !job.truckId || !job.truckOwnerId) {
-            throw Object.assign(new Error('Transport assignment is missing a selected truck.'), { statusCode: 409 });
-          }
-
-          const claimed = await tx.truck.updateMany({
-            where: { id: job.truckId, ownerId: job.truckOwnerId, availability: 'AVAILABLE' },
-            data: { availability: 'BUSY' },
-          });
-          if (claimed.count !== 1) {
-            throw Object.assign(new Error('Selected truck is no longer available. Transport payment cannot be committed.'), { statusCode: 409 });
-          }
-
-          if (job.order.status === 'CONFIRMED') {
-            await tx.order.update({
-              where: { id: job.orderId },
-              data: { status: 'TRANSPORT_ARRANGED' },
-            });
-          }
-        }
-
-        // --------------------------------------------------------------------
         // MARKETPLACE ORDER
         // --------------------------------------------------------------------
 
@@ -1396,6 +1365,87 @@ async function settlePayment({
               );
             }
           }
+        }
+
+        // --------------------------------------------------------------------
+        // HIRED TRANSPORT COMMITMENT
+        // --------------------------------------------------------------------
+        // A quote acceptance is only provisional. The transport payment is
+        // the commitment point: atomically claim the truck, commit the job,
+        // and close the competing quotes only after PAID is confirmed.
+        if (
+          payment.type === 'TRANSPORT' &&
+          payment.transportJob &&
+          payment.transportJob.method === 'HIRE_TRANSPORTER' &&
+          payment.transportJob.truckId &&
+          payment.transportJob.truckOwnerId
+        ) {
+          const job = await tx.transportJob.findUnique({
+            where: { id: payment.transportJob.id },
+            select: { id: true, status: true, truckId: true, truckOwnerId: true, orderId: true },
+          });
+
+          if (!job || !['REQUESTED', 'QUOTED'].includes(job.status)) {
+            throw Object.assign(new Error('Transport job is no longer available for payment commitment'), { status: 409 });
+          }
+
+          const truckClaim = await tx.truck.updateMany({
+            where: { id: job.truckId, availability: 'AVAILABLE' },
+            data: { availability: 'BUSY' },
+          });
+          if (truckClaim.count !== 1) {
+            throw Object.assign(new Error('The selected truck is no longer available'), { status: 409 });
+          }
+
+          await tx.transportJob.update({
+            where: { id: job.id },
+            data: { status: 'ACCEPTED' },
+          });
+
+          await tx.transportQuote.updateMany({
+            where: {
+              transportJobId: job.id,
+              status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
+            },
+            data: { status: 'REJECTED' },
+          });
+
+          const order = await tx.order.findUnique({ where: { id: job.orderId }, select: { id: true, status: true } });
+          if (order?.status === 'CONFIRMED') {
+            await tx.order.update({ where: { id: order.id }, data: { status: 'TRANSPORT_ARRANGED' } });
+          }
+        }
+
+        // --------------------------------------------------------------------
+        // INSPECTION COMMITMENT
+        // --------------------------------------------------------------------
+        // Inspection selection/acceptance is provisional. Payment makes the
+        // inspector assignment commercial and closes the remaining quotes.
+        if (
+          payment.type === 'INSPECTOR' &&
+          payment.inspectionRequest &&
+          payment.inspectionRequest.inspectorId
+        ) {
+          const request = await tx.inspectionRequest.findUnique({
+            where: { id: payment.inspectionRequest.id },
+            select: { id: true, status: true, inspectorId: true },
+          });
+          if (!request || !['REQUESTED', 'ACCEPTED'].includes(request.status)) {
+            throw Object.assign(new Error('Inspection is no longer available for payment commitment'), { status: 409 });
+          }
+
+          await tx.inspectionRequest.update({
+            where: { id: request.id },
+            data: { status: 'ACCEPTED' },
+          });
+
+          await tx.inspectionQuote.updateMany({
+            where: {
+              inspectionRequestId: request.id,
+              status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
+            },
+            data: { status: 'REJECTED' },
+          });
         }
 
         // --------------------------------------------------------------------
