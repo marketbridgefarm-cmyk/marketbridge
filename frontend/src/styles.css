@@ -3235,11 +3235,666 @@ textarea {
 
 /* ============================================================================
    ORDER DETAIL PAGE — restyle
+   Scoped under .order-detail-page so it only affects the shared order
+   detail view (used by buyer, seller, inspector and admin) and doesn't
+   change card styling elsewhere in the app.
+   ============================================================================ */
+
+.order-detail-page .card {
+  border-radius: 18px;
+  margin-bottom: var(--space-md);
+  transition: box-shadow .18s var(--ease), transform .18s var(--ease);
+}
+
+.order-detail-page .card:last-child {
+  margin-bottom: 0;
+}
+
+.order-detail-page .card > h2:first-child,
+.order-detail-page .card > .row-between:first-child h2 {
+  font-family: var(--serif);
+  font-size: 19px;
+  letter-spacing: -.2px;
+  margin: 0 0 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.order-detail-page .card > h2:first-child::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--green-light);
+  flex: 0 0 auto;
+}
+
+.order-detail-page .card > h2:first-child + p.muted {
+  margin-top: 10px;
+}
+
+.order-detail-page .card > .detail-facts:first-child,
+.order-detail-page .card > h2:first-child + .detail-facts {
+  margin-top: 16px;
+}
+
+/* ---- Hero header ---------------------------------------------------- */
+
+.order-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+  background: linear-gradient(155deg, var(--green-dark) 0%, var(--green) 62%, var(--green-light) 130%);
+  border-radius: 22px;
+  padding: clamp(20px, 3.4vw, 34px);
+  margin-bottom: var(--space-md);
+  box-shadow: var(--shadow-lift);
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+
+.order-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(140% 100% at 100% 0%, rgba(255,255,255,.14), transparent 55%),
+    radial-gradient(90% 90% at 0% 100%, rgba(0,0,0,.14), transparent 60%);
+  pointer-events: none;
+}
+
+.order-hero-main,
+.order-hero-side {
+  position: relative;
+  z-index: 1;
+}
+
+.order-hero-eyebrow {
+  color: rgba(255,255,255,.75);
+  letter-spacing: 2px;
+}
+
+.order-hero-title {
+  font-family: var(--serif);
+  color: #fff;
+  margin: 6px 0 14px;
+  font-size: clamp(24px, 3.4vw, 36px);
+  line-height: 1.1;
+}
+
+.order-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.order-hero-chip {
+  background: rgba(255,255,255,.14);
+  border: 1px solid rgba(255,255,255,.22);
+  color: #fff;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.order-hero-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  text-align: right;
+}
+
+.order-hero-price-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: rgba(255,255,255,.7);
+}
+
+.order-hero-price {
+  font-family: var(--serif);
+  font-size: clamp(26px, 3.6vw, 38px);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.order-hero-price small {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: .8;
+  margin-left: 3px;
+}
+
+.order-hero .btn-outline {
+  border-color: rgba(255,255,255,.55);
+  color: #fff;
+  background: rgba(255,255,255,.06);
+}
+
+.order-hero .btn-outline:hover {
+  background: rgba(255,255,255,.16);
+  border-color: #fff;
+}
+
+@media (max-width: 620px) {
+  .order-hero {
+    flex-direction: column;
+  }
+  .order-hero-side {
+    align-items: flex-start;
+    text-align: left;
+    width: 100%;
+  }
+}
+
+/* ---- Status pill ------------------------------------------------------ */
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 5px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  background: rgba(255,255,255,.16);
+  border: 1px solid rgba(255,255,255,.28);
+  color: #fff;
+}
+
+.status-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.status-pill.tone-good { background: rgba(255,255,255,.92); color: var(--green-dark); border-color: transparent; }
+.status-pill.tone-wait { background: #fff3da; color: #8a5a10; border-color: transparent; }
+.status-pill.tone-bad { background: #ffe3e0; color: var(--danger); border-color: transparent; }
+.status-pill.tone-neutral { background: rgba(255,255,255,.85); color: var(--ink); border-color: transparent; }
+
+/* Standalone (non-hero) status pill, e.g. reused on light backgrounds */
+.order-detail-page .card .status-pill.tone-good { background: #e7f6ea; color: #146b38; }
+.order-detail-page .card .status-pill.tone-wait { background: #fff5df; color: #875b12; }
+.order-detail-page .card .status-pill.tone-bad { background: #fdeceb; color: var(--danger); }
+.order-detail-page .card .status-pill.tone-neutral { background: #eef1ee; color: var(--muted); }
+
+/* ---- Order details / Parties grid -------------------------------------- */
+
+.order-summary-grid {
+  margin-bottom: var(--space-md);
+}
+
+.order-summary-grid .card {
+  margin-bottom: 0;
+}
+
+.party-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.party-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfdfb;
+}
+
+.party-avatar {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+  background: linear-gradient(145deg, var(--green-light), var(--green-dark));
+}
+
+.party-avatar-seller {
+  background: linear-gradient(145deg, var(--gold), #8a5a10);
+}
+
+.party-role {
+  display: block;
+  font-size: 11px;
+  color: #77827a;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+
+.party-name {
+  display: block;
+  font-size: 14.5px;
+  margin-top: 2px;
+}
+
+.party-you {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--green);
+  background: var(--soft);
+  padding: 3px 8px;
+  border-radius: 999px;
+  letter-spacing: .3px;
+}
+
+/* ---- Timeline polish ---------------------------------------------------- */
+
+.order-detail-page .order-timeline {
+  margin-top: 14px;
+}
+
+.order-detail-page .order-timeline-dot {
+  width: 18px;
+  height: 18px;
+}
+
+.order-detail-page .order-timeline-step.is-current .order-timeline-label {
+  color: var(--green-dark);
+}
+
+/* ---- Next action card ---------------------------------------------------- */
+
+.order-detail-page .next-action-card {
+  border-radius: 18px;
+  box-shadow: 0 12px 30px rgba(20,45,28,.08);
+}
+
+@media (max-width: 620px) {
+  .order-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Dispute warning card ------------------------------------------------ */
+
+.order-detail-page .card-warning {
+  border-color: #f3c9c3;
+  background: linear-gradient(180deg, #fff8f7, #fff);
+}
+
+.order-detail-page .card-warning > h2:first-child::before {
+  background: var(--danger);
+}
+
+/* ---- Messages ------------------------------------------------------------ */
+
+.order-detail-page .message-thread {
+  background: #fbfdfb;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.order-detail-page .message-bubble {
+  border-radius: 16px;
+  box-shadow: var(--shadow-tight);
+}
+
+.order-detail-page .message-mine {
+  border-bottom-right-radius: 4px;
+}
+
+.order-detail-page .message-theirs {
+  border-bottom-left-radius: 4px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+
+.order-detail-page .message-composer {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 8px;
+}
+
+.order-detail-page .message-composer textarea {
+  border: none;
+  background: transparent;
+  padding: 6px 8px;
+}
+
+.order-detail-page .message-composer textarea:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ---- Ratings --------------------------------------------------------------- */
+
+.order-detail-page .rating-form {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  margin-top: 12px;
+  background: #fbfdfb;
+}
+
+.order-detail-page .rating-list {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.order-detail-page .rating-list h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.order-detail-page .rating-list-row {
+  padding: 10px 0;
+  border-top: 1px solid #edf0ec;
+}
+
+.order-detail-page .rating-list-row:first-of-type {
+  border-top: 0;
+}
+
+/* ---- Evidence gallery ------------------------------------------------------ */
+
+.order-detail-page .evidence-item {
+  border-radius: 14px;
+  background: #fbfdfb;
+}
+
+.order-detail-page .evidence-thumb {
+  width: 92px;
+  height: 92px;
+  border-radius: 10px;
+  transition: transform .15s var(--ease);
+}
+
+.order-detail-page .evidence-thumb:hover {
+  transform: scale(1.04);
+}
+
+/* ---- Payment center rows ---------------------------------------------------- */
+
+.order-detail-page .payment-center-row {
+  border-radius: 14px;
+  border-left: 3px solid var(--line);
+  background: #fbfdfb;
+}
+
+.order-detail-page .payment-center-row:has(.badge-success) {
+  border-left-color: var(--green);
+}
+
+.order-detail-page .payment-center-row:has(.badge-pending) {
+  border-left-color: var(--gold);
+}
+
+/* ---- Notices & inspector choice cards --------------------------------------- */
+
+.order-detail-page .notice {
+  border-radius: 12px;
+}
+
+.order-detail-page .choice {
+  border-radius: 14px;
+}
+
+.order-detail-page .choice:hover {
+  border-color: var(--green-light);
+  box-shadow: var(--shadow-tight);
+  transform: translateY(-2px);
+}
+
+
 /* ---- Order payout status card -------------------------------------------
    Layout: title, one short paragraph (with the boxed "3-day" hold), a
    Parties / Amount table, then a single common due date + live countdown.
    ------------------------------------------------------------------------ */
 
+.payout-intro {
+  margin: 14px 0 20px;
+  max-width: 62ch;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+/* The boxed "3-day" from the sketch */
+.payout-hold-chip {
+  display: inline-block;
+  padding: 0 7px;
+  margin: 0 1px;
+  border: 1.5px solid var(--green);
+  border-radius: 6px;
+  background: var(--soft);
+  color: var(--green-dark);
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* Parties / Amount table */
+.payout-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+}
+
+/* Neutralise the global th look (grey fill, small uppercase) for this table */
+.payout-table th,
+.payout-table td {
+  background: none;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink);
+  font-size: inherit;
+}
+
+.payout-table thead th {
+  padding: 0 0 10px;
+  border-bottom: 1.5px solid var(--ink);
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.payout-table thead th.payout-amount-col {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.payout-table tbody th,
+.payout-table tbody td {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.payout-table tbody tr:last-child th,
+.payout-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.payout-party {
+  text-align: left;
+  font-weight: 400;
+}
+
+.payout-party-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.payout-party-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+}
+
+.payout-party-role {
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.payout-party-name {
+  font-size: 15px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.payout-table .party-you {
+  margin-left: 2px;
+  align-self: center;
+}
+
+.payout-party-note {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.payout-amount {
+  text-align: right;
+  white-space: nowrap;
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.payout-table thead th.payout-status-col {
+  padding-left: 16px;
+}
+
+.payout-table tbody td.payout-status {
+  padding-left: 16px;
+  white-space: nowrap;
+}
+
+.payout-table .status-pill {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.payout-currency {
+  margin-left: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* Common due — one date and one live clock for the whole card */
+.payout-due {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 20px;
+  margin-top: 16px;
+  padding: 16px 18px;
+  border: 1px solid #f0dcae;
+  border-left: 4px solid var(--gold);
+  border-radius: 12px;
+  background: #fff8e8;
+}
+
+.payout-due-when {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.payout-due-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #875b12;
+}
+
+.payout-due-date {
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.payout-due-clock {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.payout-due-digits {
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: clamp(28px, 8vw, 36px);
+  font-weight: 800;
+  letter-spacing: .5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.payout-due-digits-now {
+  font-size: 20px;
+  letter-spacing: 0;
+  color: var(--green-dark);
+}
+
+.payout-due-unit {
+  font-size: 13px;
+  color: #875b12;
+}
+
+/* After the due time: the hold has cleared */
+.payout-due-done {
+  border-color: #cfe6d6;
+  border-left-color: var(--green);
+  background: #f1f9f3;
+}
+
+.payout-due-done .payout-due-label {
+  color: var(--green-dark);
+}
+
+.payout-due-idle {
+  border-color: var(--line);
+  border-left-color: var(--line);
+  background: #fbfdfb;
+}
+
+.payout-due-idle .payout-due-label {
+  color: var(--muted);
+}
+
+.payout-due-idle .payout-due-date {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+@media (max-width: 420px) {
   .payout-due {
     flex-direction: column;
     align-items: flex-start;
@@ -4107,6 +4762,51 @@ textarea {
 .order-card .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 
 /* ---- Order hero (OrderDetail top section) ---- */
+.order-hero {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 16px; flex-wrap: wrap;
+  padding: 20px 22px;
+  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
+  background: var(--mb-card); box-shadow: var(--mb-shadow-card);
+  margin-bottom: 16px;
+}
+.order-hero-eyebrow {
+  font: 700 11px/1 'DM Sans', sans-serif;
+  color: var(--mb-text-muted); text-transform: uppercase; letter-spacing: .7px;
+}
+.order-hero-title {
+  font: 800 22px/1.2 Manrope, sans-serif;
+  color: var(--mb-ink); margin: 6px 0 8px; letter-spacing: -.025em;
+}
+.order-hero-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.order-hero-chip {
+  display: inline-flex; align-items: center;
+  height: 24px; padding: 0 10px;
+  border-radius: var(--mb-radius-pill);
+  background: var(--mb-surface-soft);
+  font: 600 11px/1 'DM Sans', sans-serif; color: var(--mb-text-muted);
+  letter-spacing: .3px;
+}
+.order-hero-side {
+  text-align: right; flex: 0 0 auto;
+}
+.order-hero-price-label {
+  display: block;
+  font: 600 11px/1 'DM Sans', sans-serif;
+  color: var(--mb-text-muted); text-transform: uppercase; letter-spacing: .5px;
+  margin-bottom: 4px;
+}
+.order-hero-price {
+  font: 800 26px/1 Manrope, sans-serif; color: var(--mb-primary);
+  letter-spacing: -.03em;
+}
+.order-hero-price small {
+  font-size: 14px; color: var(--mb-text-muted); font-weight: 500;
+}
+
+/* ---- Order timeline — Stitch milestone stepper ---- */
+.order-timeline {
+  list-style: none; margin: 0; padding: 0;
   position: relative;
 }
 .order-timeline::before {
@@ -4237,6 +4937,28 @@ textarea {
 .escrow-shield svg { flex: 0 0 20px; }
 
 /* ---- Transporter / match box (TransportSetup) ---- */
+.match-box {
+  border: 1px solid var(--mb-border); border-radius: var(--mb-radius-md);
+  overflow: hidden; background: var(--mb-bg);
+}
+.match-box > .row-between {
+  padding: 10px 14px;
+  background: var(--mb-card); border-bottom: 1px solid var(--mb-border);
+}
+.transporter {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; padding: 12px 14px;
+  border-bottom: 1px solid var(--mb-border);
+  transition: background .15s ease;
+}
+.transporter:last-child { border-bottom: 0; }
+.transporter.chosen {
+  background: var(--mb-surface-soft);
+  outline: 2px solid var(--mb-primary); outline-offset: -2px;
+  border-radius: var(--mb-radius-sm);
+}
+.transporter strong { font: 600 14px/1.3 'DM Sans', sans-serif; color: var(--mb-ink); }
+.transporter p { font-size: 12px; color: var(--mb-text-muted); margin: 2px 0 0; }
 
 /* ---- service-access cards (Dashboard quick links) ---- */
 .service-access { margin-bottom: 24px; }
@@ -4492,6 +5214,251 @@ textarea {
 }
 
 /* ---- Order overview + transport card refresh --------------------------- */
+.order-detail-page .order-overview-card {
+  margin-bottom: var(--space-md);
+  padding: clamp(18px, 3vw, 28px);
+}
+
+.order-section-heading,
+.transport-card-heading,
+.transport-subheading,
+.transport-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.order-section-heading {
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.order-section-heading h2,
+.order-section-heading h3,
+.transport-card-heading h2,
+.transport-subheading h3,
+.transport-panel-heading h3 {
+  margin: 3px 0 0;
+}
+
+.order-section-heading h2 {
+  font-size: clamp(24px, 3vw, 32px);
+}
+
+.order-section-heading h3,
+.transport-subheading h3,
+.transport-panel-heading h3 {
+  font-size: 18px;
+}
+
+.order-overview-card .status-pill {
+  flex: 0 0 auto;
+  margin-top: 4px;
+}
+
+.order-overview-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.order-overview-fact {
+  min-height: 76px;
+  padding: 14px 15px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fbfdfb;
+}
+
+.order-overview-fact span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .45px;
+  margin-bottom: 5px;
+}
+
+.order-overview-fact strong {
+  display: block;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.order-overview-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 24px 0 20px;
+}
+
+.order-parties-heading {
+  align-items: center;
+}
+
+.order-section-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.party-list-inline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.party-list-inline .party-row {
+  margin: 0;
+  min-width: 0;
+}
+
+.transport-overview-card {
+  margin-bottom: var(--space-md);
+  padding: clamp(18px, 3vw, 28px);
+}
+
+.transport-card-heading {
+  align-items: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.transport-card-icon {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--soft);
+  color: var(--green);
+  border: 1px solid #d7e7d9;
+}
+
+.transport-card-icon svg {
+  width: 27px;
+  height: 27px;
+}
+
+.transport-card-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.transport-card-title h2 {
+  font-size: clamp(24px, 3vw, 32px);
+}
+
+.transport-card-title p {
+  max-width: 68ch;
+  margin: 7px 0 0;
+  font-size: 13px;
+}
+
+.transport-status-badge {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.transport-details-block {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #fbfdfb;
+}
+
+.transport-subheading {
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.transport-detail-facts {
+  margin-bottom: 0;
+}
+
+.transport-info-panel {
+  margin-top: 14px;
+  border-color: var(--line);
+  background: #fff;
+}
+
+.transport-panel-heading {
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.transport-panel-heading h3 {
+  margin: 0;
+}
+
+.transport-panel-icon {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--soft);
+  color: var(--green);
+  font-size: 14px;
+  border: 1px solid #dceade;
+}
+
+.transport-info-panel > p:last-child,
+.transport-payment-confirmed > p:last-child {
+  margin-bottom: 0;
+}
+
+.transport-payment-confirmed {
+  margin-top: 14px;
+  border-color: #b9d9c0;
+  background: #f4fbf5;
+}
+
+.transport-payment-confirmed .transport-panel-icon {
+  background: #e2f3e5;
+  color: var(--green);
+}
+
+@media (max-width: 760px) {
+  .order-overview-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .party-list-inline {
+    grid-template-columns: 1fr;
+  }
+
+  .transport-card-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .transport-status-badge {
+    margin-left: 62px;
+    margin-top: -10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .order-overview-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .order-section-heading {
+    align-items: flex-start;
+  }
+
+  .order-section-heading .status-pill {
+    font-size: 10px;
+    padding-inline: 8px;
+  }
+
+  .transport-details-block {
     padding: 14px;
   }
 }
