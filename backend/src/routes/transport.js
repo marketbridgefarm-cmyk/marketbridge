@@ -2207,24 +2207,17 @@ router.patch(
       if (!loaded) return;
       const { quote, job, actorRole } = loaded;
       if (actorRole !== 'REQUESTER') return res.status(403).json({ error: 'Only the arranging party can select a transport bid' });
-      if (!['REQUESTED', 'QUOTED', 'ACCEPTED'].includes(job.status)) return res.status(400).json({ error: 'This transport request is no longer accepting bids' });
+      if (!['REQUESTED', 'QUOTED'].includes(job.status)) return res.status(400).json({ error: 'This transport request is no longer accepting bids' });
       if (quote.status !== 'PENDING') return res.status(400).json({ error: `Only a pending bid can be selected (current: ${quote.status})` });
       if (isQuoteExpired(quote)) return res.status(409).json({ error: 'This quote has expired' });
 
       const selected = await prisma.$transaction(async (tx) => {
-        const current = await tx.transportJob.findUnique({ where: { id: job.id }, include: { payments: true } });
-        if (!current) throw quoteError('Transport job not found', 404);
-        if (current.status === 'ACCEPTED') {
-          const paid = current.payments?.some((payment) => payment.type === 'TRANSPORT' && payment.status === 'PAID');
-          if (paid) throw quoteError('Transport payment is already paid and the transporter is committed.', 409);
-          await tx.payment.updateMany({ where: { transportJobId: current.id, type: 'TRANSPORT', status: { in: ['PENDING', 'PROCESSING'] } }, data: { status: 'CANCELLED' } });
-          await tx.paymentObligation.updateMany({ where: { transportJobId: current.id, status: 'OPEN' }, data: { status: 'CANCELLED' } });
-          await tx.transportQuote.updateMany({ where: { transportJobId: current.id, status: 'ACCEPTED' }, data: { status: 'REJECTED' } });
-          await tx.transportJob.update({ where: { id: current.id }, data: { status: 'QUOTED', truckOwnerId: null, truckId: null, agreedAmount: null } });
-        }
         const fresh = await tx.transportQuote.findUnique({ where: { id: quote.id } });
         if (!fresh || fresh.status !== 'PENDING') throw quoteError('This bid is no longer available', 409);
-        await tx.transportQuote.updateMany({ where: { transportJobId: job.id, id: { not: fresh.id }, status: 'SELECTED' }, data: { status: 'PENDING' } });
+        await tx.transportQuote.updateMany({
+          where: { transportJobId: job.id, id: { not: fresh.id }, status: 'SELECTED' },
+          data: { status: 'PENDING' },
+        });
         return tx.transportQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
       }, { maxWait: 10000, timeout: 15000 });
       return res.json({ message: 'Transporter bid selected for price negotiation', quote: selected });
@@ -2364,34 +2357,43 @@ router.patch(
       // ----------------------------------------------------------------------
 
       if (req.body.action === 'REJECT') {
-        const isAcceptedProvisionally = quote.status === 'ACCEPTED';
         if (!['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(quote.status)) {
           return res.status(400).json({
             error: `This quote is already ${quote.status.toLowerCase()}`,
           });
         }
 
-        if (!isAcceptedProvisionally && quoteTurn(quote) !== effectiveRole && !isAdmin(req.user)) {
+        if (quote.status === 'ACCEPTED') {
+          const paid = await prisma.payment.findFirst({
+            where: { transportJobId: job.id, type: 'TRANSPORT', status: 'PAID' },
+            select: { id: true },
+          });
+          if (paid) return res.status(409).json({ error: 'This transport agreement is already committed by payment' });
+        }
+
+        if (quote.status !== 'ACCEPTED' && quoteTurn(quote) !== effectiveRole && !isAdmin(req.user)) {
           return res.status(409).json({
             error: 'It is the other party\u2019s turn to respond to this negotiation',
           });
         }
 
         const updatedQuote = await prisma.$transaction(async (tx) => {
-          if (isAcceptedProvisionally) {
-            const currentJob = await tx.transportJob.findUnique({ where: { id: job.id }, include: { payments: true } });
-            const paid = currentJob?.payments?.some((payment) => payment.type === 'TRANSPORT' && payment.status === 'PAID');
-            if (paid) throw quoteError('Transport payment is already paid; this transporter cannot be cancelled from negotiation.', 409);
-            await tx.payment.updateMany({ where: { transportJobId: job.id, type: 'TRANSPORT', status: { in: ['PENDING', 'PROCESSING'] } }, data: { status: 'CANCELLED' } });
-            await tx.paymentObligation.updateMany({ where: { transportJobId: job.id, status: 'OPEN' }, data: { status: 'CANCELLED' } });
-            const pendingCount = await tx.transportQuote.count({ where: { transportJobId: job.id, status: 'PENDING' } });
-            await tx.transportJob.update({ where: { id: job.id }, data: { status: pendingCount ? 'QUOTED' : 'REQUESTED', truckOwnerId: null, truckId: null, agreedAmount: null } });
+          const updated = await tx.transportQuote.update({
+            where: { id: quote.id },
+            data: { status: 'REJECTED' },
+          });
+
+          if (quote.status === 'ACCEPTED') {
+            await tx.transportJob.updateMany({
+              where: { id: job.id, status: { in: ['REQUESTED', 'QUOTED'] }, truckOwnerId: quote.truckOwnerId, truckId: quote.truckId },
+              data: { truckOwnerId: null, truckId: null, agreedAmount: null },
+            });
           }
-          return tx.transportQuote.update({ where: { id: quote.id }, data: { status: 'REJECTED' } });
+          return updated;
         }, { maxWait: 10000, timeout: 15000 });
 
         return res.json({
-          message: isAcceptedProvisionally ? 'Provisional transport deal cancelled. Other bids remain available.' : 'Quote rejected',
+          message: 'Quote rejected',
           quote: updatedQuote,
         });
       }
@@ -2452,27 +2454,11 @@ router.patch(
         // cancelOrderInTransaction cascade-cancels the transport job itself.)
         await lockOrderAndAssertNotClosed(tx, freshJob.orderId, 'a transport quote cannot be accepted until that is resolved');
 
-        // The selected truck is only a provisional commercial assignment at
-        // this stage. Do NOT mark it BUSY yet: transport payment is the
-        // commitment point. The payment settlement transaction claims the
-        // truck atomically before the trip can start.
-        //
-        // Still prevent the same truck from being provisionally accepted on
-        // two different jobs at once. This protects the later payment claim
-        // from a double-booking race without prematurely marking the truck BUSY.
-        const competingAccepted = await tx.transportQuote.findFirst({
-          where: {
-            truckId: freshQuote.truckId,
-            status: 'ACCEPTED',
-            transportJobId: { not: freshJob.id },
-            transportJob: { status: { in: ['ACCEPTED', 'PICKUP', 'IN_TRANSIT'] } },
-          },
-          select: { id: true, transportJobId: true },
-        });
-        if (competingAccepted) {
-          throw new TruckConflictError('This truck is already provisionally committed to another transport negotiation.');
-        }
-
+        // Acceptance is a provisional commercial agreement. Do NOT mark the
+        // truck BUSY, reject the competing quotes, or mark the transport job
+        // ACCEPTED yet. The transport payment is the commitment point.
+        // Store the selected provider/price so the payment obligation can be
+        // created, while leaving the remaining PENDING bids available.
         const updatedQuote = await tx.transportQuote.update({
           where: { id: freshQuote.id },
           data: {
@@ -2481,23 +2467,19 @@ router.patch(
           },
         });
 
-        // IMPORTANT: competing PENDING bids remain available until payment
-        // confirms the selected transporter. If this provisional deal is
-        // cancelled before payment, the requester can select another bid.
-
         await tx.transportJob.update({
           where: { id: freshJob.id },
           data: {
             truckOwnerId: freshQuote.truckOwnerId,
             truckId: freshQuote.truckId,
             agreedAmount: finalAmount,
-            status: 'ACCEPTED',
           },
         });
 
-        // The order remains CONFIRMED until the transport payment settles.
-        // Payment confirmation is the commitment point and will transition
-        // the order to TRANSPORT_ARRANGED after the truck is atomically claimed.
+        // The accepted quote now creates/refreshes the transport payment
+        // obligation, but the truck remains AVAILABLE until that payment is
+        // actually settled.
+        await syncOrderPaymentObligations(tx, freshJob.orderId);
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
