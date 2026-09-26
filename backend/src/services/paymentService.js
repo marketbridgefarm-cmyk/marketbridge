@@ -1216,6 +1216,37 @@ async function settlePayment({
 
       if (status === 'PAID') {
         // --------------------------------------------------------------------
+        // HIRED TRANSPORT COMMITMENT
+        // --------------------------------------------------------------------
+        // A transport quote is only provisional while payment is outstanding.
+        // Once the buyer's transport payment settles, atomically claim the
+        // selected truck and commit the transport assignment.
+        if (payment.type === 'TRANSPORT' && payment.transportJob && payment.transportJob.method === 'HIRE_TRANSPORTER') {
+          const job = await tx.transportJob.findUnique({
+            where: { id: payment.transportJob.id },
+            include: { order: true },
+          });
+          if (!job || !job.truckId || !job.truckOwnerId) {
+            throw Object.assign(new Error('Transport assignment is missing a selected truck.'), { statusCode: 409 });
+          }
+
+          const claimed = await tx.truck.updateMany({
+            where: { id: job.truckId, ownerId: job.truckOwnerId, availability: 'AVAILABLE' },
+            data: { availability: 'BUSY' },
+          });
+          if (claimed.count !== 1) {
+            throw Object.assign(new Error('Selected truck is no longer available. Transport payment cannot be committed.'), { statusCode: 409 });
+          }
+
+          if (job.order.status === 'CONFIRMED') {
+            await tx.order.update({
+              where: { id: job.orderId },
+              data: { status: 'TRANSPORT_ARRANGED' },
+            });
+          }
+        }
+
+        // --------------------------------------------------------------------
         // MARKETPLACE ORDER
         // --------------------------------------------------------------------
 
