@@ -10,7 +10,6 @@ const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { idempotency } = require('../middleware/idempotency');
-const { reserveListingQuantity } = require('../services/inventoryService');
 const { computePaymentDueAt } = require('../utils/orderTiming');
 
 const router = express.Router();
@@ -431,8 +430,8 @@ async function acceptOfferAndCreateOrder(
   sellerId,
   actorId = sellerId
 ) {
-  if (offer.listing.category !== 'AGRICULTURAL') {
-    throw offerError('Only agricultural offers can create quantity-allocated orders', 400);
+  if (!['AGRICULTURAL', 'PRODUCT'].includes(offer.listing.category)) {
+    throw offerError('Offers can only create orders for physical goods listings', 400);
   }
 
   const requestedQuantity = Number(offer.quantity);
@@ -457,29 +456,16 @@ async function acceptOfferAndCreateOrder(
     throw offerError('This offer has already been acted on', 409);
   }
 
-  const reservation = await reserveListingQuantity(
-    tx,
-    offer.listingId,
-    requestedQuantity
-  );
-
   const updatedOffer = await tx.offer.findUnique({
     where: { id: offer.id },
   });
 
-  // A full-quantity sale closes the negotiation. A partial agricultural
-  // sale deliberately leaves other negotiations alive for the remaining
-  // produce; their acceptance is re-checked against current inventory.
-  if (reservation.remainingQuantity <= 1e-9) {
-    await tx.offer.updateMany({
-      where: {
-        listingId: offer.listingId,
-        id: { not: offer.id },
-        status: { in: ['PENDING', 'COUNTERED'] },
-      },
-      data: { status: 'REJECTED' },
-    });
-  }
+  // IMPORTANT: acceptance creates a provisional winner/order only. It must
+  // not consume inventory or reject the other competing buyers yet. The
+  // goods are committed atomically only when the MARKETPLACE payment settles
+  // successfully. This lets the buyer inspect the goods and cancel after a
+  // bad report without making the seller lose the public listing or the
+  // waiting buyer queue.
 
   const order =
     await tx.order.create({
@@ -492,10 +478,10 @@ async function acceptOfferAndCreateOrder(
         status: 'PENDING_PAYMENT',
         agreedOfferId: updatedOffer.id,
         agreedAt: new Date(),
-        // Agricultural orders must pass inspection + buyer decision before
-        // goods payment, so do not let the generic unpaid-order expiry race
-        // the inspection workflow. The deadline is started when BUY is chosen.
-        paymentDueAt: null,
+        // Agricultural orders unlock payment only after inspection + BUY.
+        // General physical-product orders can pay immediately after the
+        // negotiated agreement, so their normal payment deadline starts now.
+        paymentDueAt: offer.listing.category === 'AGRICULTURAL' ? null : computePaymentDueAt(),
       },
     });
 

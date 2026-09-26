@@ -133,21 +133,19 @@ router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req,
         throw Object.assign(new Error('You cannot purchase your own listing'), { status: 400 });
       }
 
-      // Database-authoritative sale claim. The conditional update is the
-      // concurrency gate: PostgreSQL locks the listing row while the update
-      // is evaluated, so only one concurrent buyer can transition ACTIVE ->
-      // SOLD. A preceding read/check is not sufficient here because two
-      // requests can otherwise observe ACTIVE before either commits.
-      const claim = await tx.listing.updateMany({
+      // Lock the listing row for this provisional buy-now order, but do not
+      // mark it SOLD or reduce inventory yet. Payment settlement is the
+      // commercial commitment point, just as it is for negotiated offers.
+      const lock = await tx.listing.updateMany({
         where: {
           id: listingId,
           status: 'ACTIVE',
         },
-        data: { status: 'SOLD', availableQuantity: 0 },
+        data: { updatedAt: new Date() },
       });
 
-      if (claim.count !== 1) {
-        throw Object.assign(new Error('This product is currently reserved or sold'), { status: 409 });
+      if (lock.count !== 1) {
+        throw Object.assign(new Error('This product is currently unavailable'), { status: 409 });
       }
 
       const existing = await tx.order.findFirst({
@@ -199,7 +197,7 @@ router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req,
     }, { maxWait: 10000, timeout: 15000 });
 
     return res.status(201).json({
-      message: 'Order created. Complete payment to confirm the purchase.',
+      message: 'Order created provisionally. Complete payment to commit the purchase.',
       order: result,
       paymentConfirmed: false,
     });
