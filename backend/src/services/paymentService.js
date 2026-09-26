@@ -12,6 +12,7 @@ const {
   createReconciliationIssue,
 } = require('./paymentReconciliationService');
 const { transitionOrderStatus } = require('./orderStateMachine');
+const { commitListingQuantity } = require('./inventoryService');
 const payoutService = require('./payoutService');
 
 // ============================================================================
@@ -1243,6 +1244,25 @@ async function settlePayment({
             currentOrder?.status ===
             'PENDING_PAYMENT'
           ) {
+            // The order was only provisional until payment. Commit the
+            // agricultural quantity now, inside the same transaction as the
+            // PAID state transition. If inventory is unexpectedly unavailable
+            // the whole settlement rolls back rather than creating a paid
+            // order with no goods behind it.
+            if (payment.order?.listingId) {
+              const listing = await tx.listing.findUnique({
+                where: { id: payment.order.listingId },
+                select: { id: true, category: true },
+              });
+              if (['AGRICULTURAL', 'PRODUCT'].includes(listing?.category)) {
+                await commitListingQuantity(
+                  tx,
+                  payment.order.listingId,
+                  payment.order.quantity
+                );
+              }
+            }
+
             await transitionOrderStatus(
               tx,
               payment.orderId,

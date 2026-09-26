@@ -88,13 +88,10 @@ async function activateScheduledAdvertisements(now = new Date()) {
 }
 
 /**
- * Automatic inventory release for abandoned orders. An order sits in
- * PENDING_PAYMENT the moment it's created — via buy-now or offer
- * acceptance — with the sold quantity already deducted from the listing
- * (see inventoryService.reserveListingQuantity / the buy-now atomic claim).
- * If the buyer never completes payment, that quantity would otherwise stay
- * locked forever, since nothing else transitions the order out of
- * PENDING_PAYMENT. This finds every such order past its paymentDueAt
+ * Automatic inventory release for abandoned orders. An order sits in PENDING_PAYMENT after buy-now or offer acceptance, but
+ * inventory is intentionally NOT committed yet. If the buyer never completes
+ * payment, the order is cancelled so the provisional winner is removed and
+ * the next waiting buyer can be promoted without any inventory restoration. This finds every such order past its paymentDueAt
  * deadline and cancels it through the same path as a manual cancel
  * (cancelOrderInTransaction), which returns the quantity to the listing,
  * closes open payment obligations, and records the audit/event trail.

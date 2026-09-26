@@ -25,10 +25,53 @@ const NON_CANCELLABLE_STATUSES = ['COMPLETED', 'CANCELLED'];
  * NON_CANCELLABLE_STATUSES guard below is evaluated against a row locked by
  * the current transaction rather than a possibly-stale earlier read.
  */
+async function promoteNextWaitingBuyer(tx, listingId, actorId = null) {
+  const next = await tx.offer.findFirst({
+    where: {
+      listingId,
+      status: 'PENDING',
+    },
+    orderBy: [
+      { amount: 'desc' },
+      { createdAt: 'asc' },
+    ],
+  });
+
+  if (!next) {
+    await tx.listing.update({
+      where: { id: listingId },
+      data: { status: 'ACTIVE' },
+    });
+    return null;
+  }
+
+  const selected = await tx.offer.update({
+    where: { id: next.id },
+    data: { status: 'SELECTED' },
+  });
+
+  await tx.listing.update({
+    where: { id: listingId },
+    data: { status: 'UNDER_NEGOTIATION' },
+  });
+
+  await recordAuditEvent(tx, {
+    actorId,
+    action: 'WAITING_BUYER_PROMOTED',
+    resourceType: 'Offer',
+    resourceId: selected.id,
+    metadata: { listingId, buyerId: selected.buyerId },
+  });
+
+  return selected;
+}
+
 async function cancelOrderInTransaction(tx, { order, actorId = null, reason = null, cancelledByRole }) {
   if (!order || NON_CANCELLABLE_STATUSES.includes(order.status)) {
     throw Object.assign(new Error('Order is no longer cancellable'), { status: 409 });
   }
+
+  const previousOrderStatus = order.status;
 
   await transitionOrderStatus(
     tx,
@@ -51,13 +94,13 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
     metadata: { reason, cancelledByRole },
   });
 
-  // Return allocated agricultural quantity to inventory. Generic products
-  // remain whole-listing sales and simply become ACTIVE again.
+  // Only a paid/CONFIRMED order ever consumed agricultural inventory. A
+  // PENDING_PAYMENT provisional winner must leave availableQuantity untouched.
   const restoredListing = await releaseListingQuantity(tx, order);
-  if (!restoredListing) {
+  if (!restoredListing && previousOrderStatus !== 'PENDING_PAYMENT') {
     await tx.listing.update({
       where: { id: order.listingId },
-      data: { status: 'ACTIVE', availableQuantity: order.quantity },
+      data: { status: 'ACTIVE' },
     });
   }
 
@@ -115,6 +158,13 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
     refundRequests.push(refund);
   }
 
+  // A buyer who cancels before payment was only a provisional winner. Keep
+  // the listing public and immediately promote the next waiting buyer so the
+  // seller does not have to restart the competition manually.
+  if (previousOrderStatus === 'PENDING_PAYMENT') {
+    await promoteNextWaitingBuyer(tx, order.listingId, actorId);
+  }
+
   await recordAuditEvent(tx, {
     actorId,
     action: 'ORDER_CANCELLED',
@@ -133,4 +183,4 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
   return tx.order.findUnique({ where: { id: order.id } });
 }
 
-module.exports = { cancelOrderInTransaction, NON_CANCELLABLE_STATUSES };
+module.exports = { cancelOrderInTransaction, NON_CANCELLABLE_STATUSES, promoteNextWaitingBuyer };
