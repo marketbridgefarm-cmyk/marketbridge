@@ -33,9 +33,10 @@ export default function TransportSetup({
   destinationDefault,
   canBuyer,
   canSeller,
+  buyerOnlyCompetition = false,
   onCreated,
 }) {
-  const [method, setMethod] = useState('OWN_TRUCK');
+  const [method, setMethod] = useState(buyerOnlyCompetition ? 'HIRE_TRANSPORTER' : 'OWN_TRUCK');
   const [form, setForm] = useState({
     ...emptyForm,
     pickupLocation: pickupDefault || '',
@@ -57,7 +58,7 @@ export default function TransportSetup({
       .catch(() => {});
   }, []);
 
-  const party = arrangingParty || (canSeller ? 'SELLER' : canBuyer ? 'BUYER' : '');
+  const party = arrangingParty || (canBuyer ? 'BUYER' : canSeller ? 'SELLER' : '');
 
   const findMatches = async () => {
     try {
@@ -113,8 +114,9 @@ export default function TransportSetup({
   return (
     <form className="card form-card mb-transport-setup" onSubmit={submit} style={{ marginTop: 12 }}>
       <p className="lead" style={{ marginTop: 0 }}>
-        Choose who controls the transport arrangement. The buyer remains responsible for paying
-        a hired transporter.
+        {buyerOnlyCompetition
+          ? 'The buyer controls the transporter competition. Registered truck owners submit sealed quotes, then the buyer selects and negotiates one.'
+          : 'Choose who controls the transport arrangement. The buyer remains responsible for paying a hired transporter.'}
       </p>
 
       <div className="choice-grid" style={{ marginBottom: 16 }}>
@@ -128,7 +130,7 @@ export default function TransportSetup({
             <span>Buyer controls the transport request and quote selection.</span>
           </button>
         )}
-        {canSeller && (
+        {canSeller && !buyerOnlyCompetition && (
           <button
             type="button"
             className={`choice ${party === 'SELLER' ? 'selected' : ''}`}
@@ -138,7 +140,7 @@ export default function TransportSetup({
             <span>Seller controls the transport request and quote selection.</span>
           </button>
         )}
-        {canBuyer && canSeller && (
+        {canBuyer && canSeller && !buyerOnlyCompetition && (
           <button
             type="button"
             className={`choice ${party === 'JOINT' ? 'selected' : ''}`}
@@ -156,7 +158,7 @@ export default function TransportSetup({
       {error && <div className="alert error">{error}</div>}
 
       <div className="choice-grid">
-        <button
+        {!buyerOnlyCompetition && <button
           type="button"
           disabled={party === 'JOINT'}
           className={`choice ${method === 'OWN_TRUCK' ? 'selected' : ''}`}
@@ -165,7 +167,7 @@ export default function TransportSetup({
           <b>🚚 Use my own truck</b>
           <span>Record your own legally permitted vehicle and pickup details. No
             transport-hiring commission.</span>
-        </button>
+        </button>}
         <button
           type="button"
           className={`choice ${method === 'HIRE_TRANSPORTER' ? 'selected' : ''}`}
