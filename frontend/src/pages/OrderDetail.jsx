@@ -303,6 +303,9 @@ export default function OrderDetail() {
   const [transportEvidenceBusy, setTransportEvidenceBusy] = useState(false);
 
   const [payMethod, setPayMethod] = useState('TELEBIRR');
+  const [offerAmount, setOfferAmount] = useState('');
+  const [offerMessage, setOfferMessage] = useState('');
+  const [submittingOffer, setSubmittingOffer] = useState(false);
 
   const [inspectorId, setInspectorId] = useState('');
   const [inspectionFee, setInspectionFee] = useState('');
@@ -396,6 +399,33 @@ export default function OrderDetail() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function submitProductOffer(event) {
+    event.preventDefault();
+    const amount = Number(offerAmount);
+    if (!Number.isFinite(amount) || amount <= 0 || !order?.listingId) {
+      setError('Enter a valid offer amount before submitting.');
+      return;
+    }
+    setSubmittingOffer(true);
+    setError('');
+    try {
+      await api.post('/offers', {
+        listingId: order.listingId,
+        amount,
+        message: offerMessage.trim() || undefined,
+      });
+      setOfferAmount('');
+      setOfferMessage('');
+      await load({ silent: true });
+      setError('Offer submitted. The seller can select it and begin negotiation.');
+    } catch (err) {
+      setError(getError(err, 'Could not submit your offer'));
+    } finally {
+      setSubmittingOffer(false);
+    }
+  }
+
 
   // Cross-page links (e.g. SellerDashboard's "Arrange transport" button) now
   // point at /orders/:id#transport-section instead of the old dedicated
@@ -2637,23 +2667,47 @@ export default function OrderDetail() {
         )}
 
         {/* ================================================================== */}
-        {/* PAYMENT CENTER */}
+        {/* PRODUCT MARKETPLACE OFFER GATE                                    */}
         {/* ================================================================== */}
 
-        <PaymentCenter
-          workflowPayments={workflow?.payments}
-          rawPayments={payments}
-          isBuyer={isBuyer}
-          buyerIdentityMismatch={buyerIdentityMismatch}
-          marketplaceBlockedReason={marketplaceBlockedReason}
-          payMethod={payMethod}
-          setPayMethod={setPayMethod}
-          paymentMethods={PAYMENT_METHODS}
-          busy={busy}
-          marketplace={marketplaceObligation}
-          inspections={inspectionPaymentGroups}
-          transport={transportObligation}
-        />
+        {order && isProductsMarketplace && isBuyer && !order.agreedOfferId && (
+          <section className="card order-product-offer-card" id="make-offer" aria-labelledby="make-offer-title">
+            <div className="order-product-offer-kicker">PRODUCT MARKETPLACE</div>
+            <h2 id="make-offer-title">Make Offer</h2>
+            <p className="muted">
+              Enter the amount you want to offer for this product. Your offer enters the seller's competition process; it does not charge you or reserve the product.
+            </p>
+            <form onSubmit={submitProductOffer} className="order-product-offer-form">
+              <label htmlFor="order-product-offer-amount">Offer amount (ETB)</label>
+              <input id="order-product-offer-amount" type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter your offer amount (ETB)" value={offerAmount} onChange={(event) => setOfferAmount(event.target.value)} disabled={submittingOffer} required />
+              <label htmlFor="order-product-offer-message">Message to seller <span>(optional)</span></label>
+              <textarea id="order-product-offer-message" rows="3" placeholder="Add a message to the seller" value={offerMessage} onChange={(event) => setOfferMessage(event.target.value)} disabled={submittingOffer} />
+              <button type="submit" className="btn primary order-product-offer-button" disabled={submittingOffer}>
+                {submittingOffer ? 'Submitting…' : 'Make Offer'}
+              </button>
+            </form>
+          </section>
+        )}
+
+        {/* Payment is hidden while a Product Marketplace order is still in
+         * competition. It becomes visible only after a provisional offer
+         * has been agreed. */}
+        {(!isProductsMarketplace || order?.agreedOfferId) && (
+          <PaymentCenter
+            workflowPayments={workflow?.payments}
+            rawPayments={payments}
+            isBuyer={isBuyer}
+            buyerIdentityMismatch={buyerIdentityMismatch}
+            marketplaceBlockedReason={marketplaceBlockedReason}
+            payMethod={payMethod}
+            setPayMethod={setPayMethod}
+            paymentMethods={PAYMENT_METHODS}
+            busy={busy}
+            marketplace={marketplaceObligation}
+            inspections={inspectionPaymentGroups}
+            transport={transportObligation}
+          />
+        )}
 
         {/* ================================================================== */}
         {/* CONFIRM RECEIPT */}
