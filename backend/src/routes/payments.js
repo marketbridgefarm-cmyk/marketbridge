@@ -392,7 +392,17 @@ router.post(
             });
           }
 
-          // HARD AGRICULTURAL PAYMENT SEQUENCE:
+          // PRODUCT ORDERS MUST COME FROM AN ACCEPTED/NEGOTIATED OFFER.
+          // This closes the legacy/direct-buy path even if an old client calls
+          // the payment API directly. Payment is never the first step.
+          if (order.listing?.category === 'PRODUCT' && !order.agreedOfferId) {
+            return res.status(409).json({
+              code: 'NEGOTIATION_REQUIRED',
+              error: 'This product must first be won through seller bidding and bilateral negotiation before payment.',
+            });
+          }
+
+          // HARD AGRICULTURAL AND PRODUCT PAYMENT SEQUENCE:
           // An agricultural order may have only one active inspection workflow.
           // For legacy orders that contain more than one non-cancelled request,
           // the newest request is the canonical workflow. Goods payment is

@@ -109,104 +109,14 @@ const orderInclude = {
   messages: { orderBy: { createdAt: 'asc' } },
 };
 
-// BUY NOW for normal physical products.
-// Agricultural listings continue to use the offer/negotiation workflow.
+// Direct BUY NOW is intentionally disabled for marketplace goods.
+// Both Agricultural and Products Marketplace listings must go through
+// competition -> seller selection -> bilateral negotiation -> provisional
+// agreement before an order can reach inspection/payment.
 router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req, res) => {
-  try {
-    if (!req.user.roles?.includes('BUYER')) {
-      return res.status(403).json({ error: 'Only buyers can purchase listings' });
-    }
-
-    const listingId = String(req.body?.listingId || '').trim();
-    if (!listingId) return res.status(400).json({ error: 'listingId is required' });
-
-    const result = await prisma.$transaction(async (tx) => {
-      const listing = await tx.listing.findUnique({ where: { id: listingId } });
-      if (!listing) throw Object.assign(new Error('Listing not found'), { status: 404 });
-      if (listing.category !== 'PRODUCT') {
-        throw Object.assign(new Error('Buy Now is available for physical product listings. Agricultural listings use offers.'), { status: 400 });
-      }
-      if (listing.status !== 'ACTIVE') {
-        throw Object.assign(new Error('This product is currently unavailable'), { status: 409 });
-      }
-      if (listing.sellerId === req.user.id) {
-        throw Object.assign(new Error('You cannot purchase your own listing'), { status: 400 });
-      }
-
-      // Lock the listing row for this provisional buy-now order, but do not
-      // mark it SOLD or reduce inventory yet. Payment settlement is the
-      // commercial commitment point, just as it is for negotiated offers.
-      const lock = await tx.listing.updateMany({
-        where: {
-          id: listingId,
-          status: 'ACTIVE',
-        },
-        data: { updatedAt: new Date() },
-      });
-
-      if (lock.count !== 1) {
-        throw Object.assign(new Error('This product is currently unavailable'), { status: 409 });
-      }
-
-      const existing = await tx.order.findFirst({
-        where: {
-          listingId,
-          status: { notIn: ['CANCELLED'] },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-      if (existing) {
-        throw Object.assign(new Error('This product is currently reserved or sold'), { status: 409 });
-      }
-
-      const order = await tx.order.create({
-        data: {
-          listingId: listing.id,
-          buyerId: req.user.id,
-          sellerId: listing.sellerId,
-          finalPrice: Number(listing.askingPrice),
-          quantity: Number(listing.quantity),
-          status: 'PENDING_PAYMENT',
-          paymentDueAt: computePaymentDueAt(),
-        },
-      });
-
-      await syncOrderPaymentObligations(tx, order.id);
-      await recordOrderEvent(tx, {
-        orderId: order.id,
-        actorId: req.user.id,
-        type: 'ORDER_CREATED',
-        toStatus: order.status,
-        metadata: { listingId: listing.id, via: 'buy-now' },
-      });
-
-      await recordAuditEvent(tx, {
-        actorId: req.user.id,
-        action: 'ORDER_CREATED',
-        resourceType: 'Order',
-        resourceId: order.id,
-        metadata: {
-          listingId: listing.id,
-          sellerId: listing.sellerId,
-          finalPrice: order.finalPrice,
-          via: 'buy-now',
-        },
-      });
-
-      return order;
-    }, { maxWait: 10000, timeout: 15000 });
-
-    return res.status(201).json({
-      message: 'Order created provisionally. Complete payment to commit the purchase.',
-      order: result,
-      paymentConfirmed: false,
-    });
-  } catch (error) {
-    req.log.error({ err: error }, 'BUY NOW ERROR:');
-    return res.status(error.status || 500).json({
-      error: error.status ? error.message : 'Could not create order',
-    });
-  }
+  return res.status(400).json({
+    error: 'Direct purchase is not available. Submit a bid first; the seller must select a buyer and complete the negotiation before payment.'
+  });
 });
 
 router.get('/', authenticate, async (req, res) => {
