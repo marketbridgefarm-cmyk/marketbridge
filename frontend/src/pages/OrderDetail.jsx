@@ -309,8 +309,6 @@ export default function OrderDetail() {
 
   const [inspectorId, setInspectorId] = useState('');
   const [inspectionFee, setInspectionFee] = useState('');
-  const [inspectionCounterInputs, setInspectionCounterInputs] = useState({});
-  const [inspectionQuoteBusy, setInspectionQuoteBusy] = useState('');
   const [findingInspector, setFindingInspector] = useState(false);
   const [requestingInspection, setRequestingInspection] = useState(false);
 
@@ -735,14 +733,19 @@ export default function OrderDetail() {
    * PAID before the transporter can mark the load PICKUP (i.e. before the
    * truck is allowed to collect the goods).
    */
+  const acceptedTransportQuote = Array.isArray(transportJob?.quotes)
+    ? transportJob.quotes.find((quote) => quote.status === 'ACCEPTED')
+    : null;
+
   const canStartTransportPayment =
     Boolean(transportJob) &&
     transportJob.method ===
       'HIRE_TRANSPORTER' &&
     Boolean(transportJob.truckOwnerId) &&
+    Boolean(acceptedTransportQuote) &&
     transportJob.agreedAmount != null &&
     Number(transportJob.agreedAmount) > 0 &&
-    transportJob.status === 'ACCEPTED' &&
+    ['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
     !transportPayments.some(
       (payment) =>
         payment.status === 'PENDING' ||
@@ -870,6 +873,21 @@ export default function OrderDetail() {
       await load({ silent: true });
     } catch (err) {
       setError(getError(err, 'Could not select transport bid'));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const releaseTransportAgreement = async (quoteId) => {
+    if (!quoteId) return;
+
+    setBusy(`quote-${quoteId}`);
+    setError('');
+    try {
+      await api.patch(`/transport/quotes/${quoteId}`, { action: 'WITHDRAW' });
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not release the transporter agreement'));
     } finally {
       setBusy('');
     }
@@ -1012,94 +1030,6 @@ export default function OrderDetail() {
       );
     } finally {
       setBusy('');
-    }
-  };
-
-  // ==========================================================================
-  // BUYER <-> INSPECTOR COMPETITIVE NEGOTIATION
-  // ==========================================================================
-
-  const leafInspectionQuote = (quotes) => {
-    const list = Array.isArray(quotes) ? quotes : [];
-    const parentIds = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
-    return list.find((q) => !parentIds.has(q.id)) || null;
-  };
-
-  const inspectionQuoteTurn = (quote) => {
-    if (!quote) return null;
-    if (quote.status === 'SELECTED') return 'REQUESTER';
-    if (quote.status === 'COUNTERED') {
-      return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
-    }
-    return null;
-  };
-
-  const selectInspectionQuote = async (requestId, quoteId) => {
-    if (!requestId || !quoteId) return;
-    setError('');
-    setMsg('');
-    setInspectionQuoteBusy(`select-${quoteId}`);
-    try {
-      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/select`);
-      setMsg('Inspector selected. You can now negotiate the inspection fee with this inspector.');
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not select this inspector quote'));
-    } finally {
-      setInspectionQuoteBusy('');
-    }
-  };
-
-  const acceptInspectionQuote = async (requestId, quoteId) => {
-    if (!requestId || !quoteId) return;
-    setError('');
-    setMsg('');
-    setInspectionQuoteBusy(`accept-${quoteId}`);
-    try {
-      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/accept`);
-      setMsg('Inspection negotiation accepted. The inspector is provisionally assigned; inspection payment is the commitment gate.');
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not accept the inspector negotiation'));
-    } finally {
-      setInspectionQuoteBusy('');
-    }
-  };
-
-  const counterInspectionQuote = async (requestId, quoteId) => {
-    const amount = Number(inspectionCounterInputs[quoteId]);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Enter a valid counter amount before sending.');
-      return;
-    }
-    setError('');
-    setMsg('');
-    setInspectionQuoteBusy(`counter-${quoteId}`);
-    try {
-      await api.post(`/inspections/${requestId}/quotes/${quoteId}/counter`, { counterAmount: amount });
-      setInspectionCounterInputs((values) => ({ ...values, [quoteId]: '' }));
-      setMsg('Counter-offer sent. The inspector must respond next.');
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not send the inspection counter-offer'));
-    } finally {
-      setInspectionQuoteBusy('');
-    }
-  };
-
-  const rejectInspectionQuote = async (requestId, quoteId) => {
-    if (!requestId || !quoteId) return;
-    setError('');
-    setMsg('');
-    setInspectionQuoteBusy(`reject-${quoteId}`);
-    try {
-      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/reject`);
-      setMsg('Inspector negotiation ended. You can select another waiting inspector bid.');
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not reject the inspection negotiation'));
-    } finally {
-      setInspectionQuoteBusy('');
     }
   };
 
@@ -1670,17 +1600,17 @@ export default function OrderDetail() {
   const transportObligation = transportJob
     ? {
         required: transportJob.method === 'HIRE_TRANSPORTER',
-        readyToPay: transportJob.status === 'ACCEPTED' && transportJob.agreedAmount != null,
+        readyToPay: ['QUOTED', 'ACCEPTED'].includes(transportJob.status) && Boolean(acceptedTransportQuote) && transportJob.agreedAmount != null,
         amount: transportJob.agreedAmount,
         paid: transportPaid,
         pending: transportPending,
         processing: transportProcessing,
         note:
           transportJob.method === 'HIRE_TRANSPORTER' &&
-          transportJob.status !== 'ACCEPTED' &&
+          !['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
           !transportPaid &&
           !transportPending
-            ? 'Transporter payment becomes available after the transporter quote is accepted.'
+            ? 'Transporter payment becomes available after a provisional transporter agreement is accepted.'
             : null,
         canStart: canStartTransportPayment,
         canResume: canResumeTransportPayment,
@@ -1934,78 +1864,7 @@ export default function OrderDetail() {
           currentInspectionRequest ? (
             <div className="card">
               <h2>{isProductsMarketplace ? 'Product inspection' : 'Inspection'}</h2>
-              <p className="muted">An inspection already exists for this order. Inspectors compete first; after you select one inspector, only that inspector enters a bilateral fee negotiation with you.</p>
-
-              {isBuyer && currentInspectionRequest.status === 'REQUESTED' && Array.isArray(currentInspectionRequest.quotes) && (
-                <div className="inspection-quote-marketplace">
-                  <div className="inspection-quote-heading">
-                    <div>
-                      <span className="eyebrow">INSPECTOR COMPETITION</span>
-                      <h3>Compare inspector quotes</h3>
-                      <p className="muted">Choose one inspector to enter negotiation. Other inspectors remain waiting and cannot negotiate with you unless selected.</p>
-                    </div>
-                    <span className="status-pill tone-wait"><span className="status-pill-dot" aria-hidden="true" /> {currentInspectionRequest.quotes.filter((q) => q.status === 'PENDING').length} waiting bids</span>
-                  </div>
-
-                  <div className="inspection-quote-list">
-                    {currentInspectionRequest.quotes
-                      .filter((quote) => quote.status !== 'ACCEPTED')
-                      .map((quote) => {
-                        const leaf = leafInspectionQuote(currentInspectionRequest.quotes.filter((q) => q.inspectorId === quote.inspectorId));
-                        const isLeaf = leaf?.id === quote.id;
-                        const selected = quote.status === 'SELECTED' || (leaf?.status === 'COUNTERED' && quote.id === leaf.id);
-                        const turn = inspectionQuoteTurn(quote);
-                        const amount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
-                        return (
-                          <div className={`inspection-quote-card ${selected ? 'is-selected' : ''}`} key={quote.id}>
-                            <div className="inspection-quote-card-top">
-                              <div>
-                                <strong>{quote.inspector?.name || 'Inspector'}</strong>
-                                <span className="muted">{quote.inspector?.location || 'Location not provided'}</span>
-                              </div>
-                              <strong className="inspection-quote-amount">{money(amount)} ETB</strong>
-                            </div>
-                            <div className="inspection-quote-meta">
-                              <span>{quote.status === 'SELECTED' ? 'Selected for negotiation' : quote.status === 'COUNTERED' ? 'Negotiation in progress' : 'Waiting bid'}</span>
-                              {quote.expiresAt && <span>Expires {formatDateTime(quote.expiresAt)}</span>}
-                            </div>
-
-                            {quote.status === 'PENDING' && (
-                              <button type="button" className="btn btn-primary" disabled={Boolean(inspectionQuoteBusy)} onClick={() => selectInspectionQuote(currentInspectionRequest.id, quote.id)}>
-                                {inspectionQuoteBusy === `select-${quote.id}` ? 'Selecting…' : 'Select inspector'}
-                              </button>
-                            )}
-
-                            {isLeaf && ['SELECTED', 'COUNTERED'].includes(quote.status) && (
-                              <div className="inspection-negotiation-panel">
-                                <div>
-                                  <span className="eyebrow">INSPECTOR NEGOTIATION</span>
-                                  <strong>{turn === 'REQUESTER' ? 'Your turn' : 'Waiting for inspector'}</strong>
-                                  <p className="muted">{turn === 'REQUESTER' ? 'Accept the current fee, or send a counter-offer. Acceptance is provisional until the inspection payment is completed.' : 'Your counter-offer has been sent. The selected inspector must accept or counter before you can continue.'}</p>
-                                </div>
-                                {turn === 'REQUESTER' && (
-                                  <div className="inspection-negotiation-actions">
-                                    <button type="button" className="btn btn-primary" disabled={Boolean(inspectionQuoteBusy)} onClick={() => acceptInspectionQuote(currentInspectionRequest.id, quote.id)}>
-                                      {inspectionQuoteBusy === `accept-${quote.id}` ? 'Accepting…' : 'Accept provisional fee'}
-                                    </button>
-                                    <input type="number" min="1" step="0.01" placeholder="Counter fee (ETB)" value={inspectionCounterInputs[quote.id] || ''} onChange={(e) => setInspectionCounterInputs((values) => ({ ...values, [quote.id]: e.target.value }))} />
-                                    <button type="button" className="btn btn-light" disabled={Boolean(inspectionQuoteBusy)} onClick={() => counterInspectionQuote(currentInspectionRequest.id, quote.id)}>
-                                      {inspectionQuoteBusy === `counter-${quote.id}` ? 'Sending…' : 'Counter'}
-                                    </button>
-                                    <button type="button" className="btn btn-light" disabled={Boolean(inspectionQuoteBusy)} onClick={() => rejectInspectionQuote(currentInspectionRequest.id, quote.id)}>
-                                      {inspectionQuoteBusy === `reject-${quote.id}` ? 'Rejecting…' : 'Reject negotiation'}
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                  </div>
-                </div>
-              )}
-
+              <p className="muted">An inspection already exists for this order. Continue with this inspection; a second request is not needed.</p>
               <div className="detail-facts">
                 <div><span>Status</span><strong>{currentInspectionRequest.status}</strong></div>
                 {currentInspectionRequest.inspector?.name && <div><span>Inspector</span><strong>{currentInspectionRequest.inspector.name}</strong></div>}
@@ -2579,7 +2438,7 @@ export default function OrderDetail() {
 
               {transportJob.method ===
                 'HIRE_TRANSPORTER' &&
-                !transportJob.truckOwnerId && (
+                !transportPaid && (
                   <div className="match-box">
                     <h3>
                       Transport quotes
@@ -2725,6 +2584,19 @@ export default function OrderDetail() {
                                     </button>
                                   </div>
                                 )}
+                              {quote.status === 'ACCEPTED' && isTransportArranger && !transportPending && (
+                                <div style={{ marginTop: 8 }}>
+                                  <p className="muted small">Provisional agreement — the truck is not committed until transport payment succeeds.</p>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-light"
+                                    disabled={busy === `quote-${quote.id}`}
+                                    onClick={() => releaseTransportAgreement(quote.id)}
+                                  >
+                                    {busy === `quote-${quote.id}` ? 'Releasing…' : 'Transporter unavailable — choose another'}
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </div>
                           );
