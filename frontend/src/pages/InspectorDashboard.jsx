@@ -238,8 +238,13 @@ export default function InspectorDashboard() {
     try {
       await api.post(`/inspections/${id}/start`);
 
+      const startedRequest = mine.find((request) => request.id === id);
+      const marketplaceLabel = startedRequest?.listing?.category === 'PRODUCT'
+        ? 'product'
+        : 'agricultural';
+
       setMsg(
-        'Inspection started. You can now complete the evidence report.'
+        `Inspection started for this ${marketplaceLabel} order. You can now complete the evidence report.`
       );
 
       await loadAll();
