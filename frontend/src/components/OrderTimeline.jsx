@@ -78,10 +78,12 @@ export default function OrderTimeline({ steps, events = [] }) {
   return (
     <ol className="order-timeline" aria-label="Order milestone progress">
       {milestoneSteps.map((step, index) => {
-        const isCurrent   = !step.completed && index === lastCompletedIndex + 1;
-        const stateClass  = step.completed ? 'is-complete' : isCurrent ? 'is-current' : 'is-pending';
-        const at          = formatDate(step.at);
-        const label       = step.completed
+        const explicitState = String(step.state || '').toUpperCase();
+        const isCurrent = explicitState === 'CURRENT' || (!step.completed && index === lastCompletedIndex + 1);
+        const isComplete = explicitState === 'COMPLETED' || Boolean(step.completed);
+        const stateClass = isComplete ? 'is-complete' : isCurrent ? 'is-current' : 'is-pending';
+        const at = formatDate(step.at);
+        const label = isComplete
           ? 'Completed milestone'
           : isCurrent ? 'Current milestone' : 'Upcoming milestone';
 
@@ -97,6 +99,7 @@ export default function OrderTimeline({ steps, events = [] }) {
             <div>
               <div className="order-timeline-label">{step.label}</div>
               {at && <div className="order-timeline-date muted">{at}</div>}
+              {step.detail && <div className="order-timeline-detail muted">{step.detail}</div>}
             </div>
           </li>
         );
