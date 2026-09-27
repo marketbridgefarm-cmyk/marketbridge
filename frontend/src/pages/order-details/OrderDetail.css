@@ -1668,3 +1668,195 @@
     height: 28px;
   }
 }
+
+/* ==========================================================================\n   Agricultural inspection → purchase decision gate\n   --------------------------------------------------------------------------\n   The inspection report is a commercial stage of the order, not just a\n   service-status card. Keep the report, buyer decision and payment gate\n   visually connected without changing the existing component architecture.\n   ========================================================================== */
+.order-detail-page .inspection-purchase-gate {
+  margin-top: 18px;
+  padding: 20px;
+  border: 1px solid #cfe0d4;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fbfffc 0%, #f5faf6 100%);
+}
+
+.order-detail-page .inspection-report-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #dce7df;
+}
+
+.order-detail-page .inspection-report-header h3 {
+  margin: 3px 0 4px;
+  font-size: 19px;
+}
+
+.order-detail-page .inspection-report-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.order-detail-page .inspection-report-facts > div {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid #e0e8e2;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.order-detail-page .inspection-report-facts span,
+.order-detail-page .inspection-findings span {
+  display: block;
+  margin-bottom: 5px;
+  color: #718077;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .45px;
+  text-transform: uppercase;
+}
+
+.order-detail-page .inspection-report-facts strong {
+  color: #17231b;
+  font-size: 15px;
+}
+
+.order-detail-page .inspection-findings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.order-detail-page .inspection-findings > div {
+  padding: 14px;
+  border-radius: 13px;
+  background: #fff;
+  border: 1px solid #e0e8e2;
+}
+
+.order-detail-page .inspection-findings p {
+  margin: 0;
+  color: #39473e;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.order-detail-page .inspection-decision-panel,
+.order-detail-page .inspection-decision-state,
+.order-detail-page .inspection-waiting-note {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 15px;
+}
+
+.order-detail-page .inspection-decision-panel {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  border: 1px solid #c8dfd1;
+  background: #edf8f0;
+}
+
+.order-detail-page .inspection-decision-panel h3 {
+  margin: 3px 0 5px;
+  font-size: 17px;
+}
+
+.order-detail-page .inspection-decision-panel p {
+  max-width: 680px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.order-detail-page .inspection-decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.order-detail-page .inspection-decision-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid #c8dfd1;
+  background: #edf8f0;
+}
+
+.order-detail-page .inspection-decision-state.is-cancel {
+  border-color: #f0c9c4;
+  background: #fff5f4;
+}
+
+.order-detail-page .inspection-decision-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #d7efde;
+  color: #176b43;
+  font-weight: 900;
+}
+
+.order-detail-page .inspection-decision-state.is-cancel .inspection-decision-icon {
+  background: #fde1dd;
+  color: #b42318;
+}
+
+.order-detail-page .inspection-decision-state strong,
+.order-detail-page .inspection-waiting-note strong {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.order-detail-page .inspection-decision-state p {
+  margin: 0;
+  color: #647168;
+  font-size: 13px;
+}
+
+.order-detail-page .inspection-waiting-note {
+  display: grid;
+  gap: 3px;
+  border: 1px dashed #d5dfd7;
+  background: #f8faf8;
+  color: #536158;
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .order-detail-page .inspection-report-header,
+  .order-detail-page .inspection-decision-panel {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .order-detail-page .inspection-report-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .order-detail-page .inspection-findings {
+    grid-template-columns: 1fr;
+  }
+
+  .order-detail-page .inspection-decision-actions .btn {
+    flex: 1 1 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .order-detail-page .inspection-purchase-gate {
+    padding: 15px;
+  }
+
+  .order-detail-page .inspection-report-facts {
+    grid-template-columns: 1fr;
+  }
+}
