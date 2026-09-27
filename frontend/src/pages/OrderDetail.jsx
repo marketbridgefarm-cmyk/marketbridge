@@ -762,6 +762,8 @@ export default function OrderDetail() {
 
   const agriculturalBuyerDecisionGateMet =
     !isAgricultural || order?.buyerDecision === 'BUY';
+  const negotiatedProductGateMet =
+    !isProductsMarketplace || Boolean(order?.agreedOfferId);
 
   const canPayMarketplace =
     Boolean(order) &&
@@ -770,12 +772,15 @@ export default function OrderDetail() {
     isBuyer &&
     inspectionPurchaseGateMet &&
     agriculturalBuyerDecisionGateMet &&
+    negotiatedProductGateMet &&
     !marketplacePayments.some((payment) =>
       ['PENDING', 'PROCESSING', 'PAID'].includes(payment.status)
     );
 
   const marketplaceBlockedReason =
-    inspectionApplies && !inspectionPurchaseGateMet
+    isProductsMarketplace && !negotiatedProductGateMet
+      ? 'This product must first be won through seller bidding and bilateral negotiation before payment.'
+      : inspectionApplies && !inspectionPurchaseGateMet
       ? (!currentInspectionRequest
         ? 'Request and complete the inspection before paying for the goods.'
         : 'Complete the current inspection and make sure its report is published before paying for the goods.')
@@ -1807,7 +1812,7 @@ export default function OrderDetail() {
         {inspectionApplies && isParticipant && order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
           currentInspectionRequest ? (
             <div className="card">
-              <h2>Inspection</h2>
+              <h2>{isProductsMarketplace ? 'Product inspection' : 'Inspection'}</h2>
               <p className="muted">An inspection already exists for this order. Continue with this inspection; a second request is not needed.</p>
               <div className="detail-facts">
                 <div><span>Status</span><strong>{currentInspectionRequest.status}</strong></div>

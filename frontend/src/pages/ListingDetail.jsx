@@ -25,8 +25,6 @@ export default function ListingDetail() {
   const [counteringQuoteId, setCounteringQuoteId] = useState('');
   const [rejectingQuoteId, setRejectingQuoteId] = useState('');
   const [quoteCounterInputs, setQuoteCounterInputs] = useState({});
-  const [buying, setBuying] = useState(false);
-  const [buyMethod, setBuyMethod] = useState('TELEBIRR');
   const [buyerCounter, setBuyerCounter] = useState('');
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
 
@@ -78,26 +76,6 @@ export default function ListingDetail() {
     }
   }
 
-  async function buyProduct() {
-    setBuying(true);
-    try {
-      const response = await api.post(
-        '/orders/buy-now',
-        { listingId: id },
-        { headers: { 'Idempotency-Key': (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `buy-now-${Date.now()}-${Math.random().toString(36).slice(2)}`) } }
-      );
-      const order = response.data.order;
-      await startChapaPayment({
-        type: 'MARKETPLACE',
-        orderId: order.id,
-        amount: order.finalPrice,
-        method: buyMethod,
-      });
-    } catch (e) {
-      showToast((e.response?.data?.error === 'You cannot purchase your own listing' || e.response?.data?.error === 'You cannot purchase your own product') ? 'You cannot purchase your own product.' : (e.response?.data?.error || e.message || 'Could not start purchase'), 'error');
-      setBuying(false);
-    }
-  }
 
   async function requestInspection(mode) {
     if (inspector && (!feeForInspector || Number(feeForInspector) <= 0)) {
@@ -280,9 +258,10 @@ export default function ListingDetail() {
   const isOwner = user?.id === listing.sellerId;
   const isBuyer = user?.roles?.includes('BUYER') && !isOwner;
   const isAgricultural = listing.category === 'AGRICULTURAL';
-  // Agricultural listings remain open to competing buyers while negotiation is active.
-  // The backend accepts new offers in both ACTIVE and UNDER_NEGOTIATION.
-  const isAvailable = listing.status === 'ACTIVE' || (isAgricultural && listing.status === 'UNDER_NEGOTIATION');
+  const isProduct = listing.category === 'PRODUCT';
+  // Both agricultural and products marketplaces use competition + negotiation.
+  // A selected buyer is only a provisional winner; payment comes later.
+  const isAvailable = listing.status === 'ACTIVE' || ((isAgricultural || isProduct) && listing.status === 'UNDER_NEGOTIATION');
   const listingParentIds = new Set((listing.offers || []).map((offer) => offer.parentOfferId).filter(Boolean));
   const myLatestOffer = (listing.offers || [])
     .filter((offer) => offer.buyerId === user?.id && !listingParentIds.has(offer.id))
@@ -483,7 +462,7 @@ export default function ListingDetail() {
           </section>
 
           <aside>
-            {isBuyer && myLatestOffer && isAgricultural && (
+            {isBuyer && myLatestOffer && (isAgricultural || isProduct) && (
               <div className="card" id="negotiation">
                 <h2>Your negotiation</h2>
                 <p>Current amount: <strong>{money(myLatestOffer.counterAmount ?? myLatestOffer.amount)} ETB</strong></p>
@@ -517,21 +496,21 @@ export default function ListingDetail() {
 
             {isBuyer && (
               <div className="card sticky-card" id="make-offer">
-                <h2>{isAvailable ? (isAgricultural ? 'Make an offer' : 'Buy this product') : 'Listing unavailable'}</h2>
+                <h2>{isAvailable ? 'Bid for this listing' : 'Listing unavailable'}</h2>
                 {!isAvailable ? (
                   <>
                     <p className="muted">This listing has an accepted offer and is temporarily unavailable to new buyers.</p>
                     <Link className="btn btn-light full" to={isAgricultural ? '/agricultural' : '/products'}>Browse available listings</Link>
                   </>
-                ) : isAgricultural ? (
+                ) : (isAgricultural || isProduct) ? (
                   <>
-                    <p className="muted">Your offer does not reserve the listing. Other buyers may also submit offers while the seller decides whether to accept, reject or counter.</p>
+                    <p className="muted">This listing uses competitive bidding. Your first bid enters the competition; it does <strong>not</strong> charge you or reserve the product. If the seller selects your bid, you can negotiate repeatedly with the seller before accepting the provisional deal.</p>
                     <form onSubmit={submitOffer}>
-                      <label>Your offer (ETB)</label>
-                      <input required type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter your offer amount (ETB)" value={offerAmount} onChange={(e) => setOfferAmount(e.target.value)} aria-label="Your offer amount in ETB" />
+                      <label>Your bid / offer (ETB)</label>
+                      <input required type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter your bid amount (ETB)" value={offerAmount} onChange={(e) => setOfferAmount(e.target.value)} aria-label="Your bid amount in ETB" />
                       <label>Message</label>
-                      <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Optional message to the farmer" />
-                      <button type="submit" className="btn btn-primary full" disabled={!offerAmount || Number(offerAmount) <= 0}>Submit offer</button>
+                      <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder={isProduct ? 'Optional message to the seller' : 'Optional message to the farmer'} />
+                      <button type="submit" className="btn btn-primary full" disabled={!offerAmount || Number(offerAmount) <= 0}>Submit bid</button>
                     </form>
                     {isAgricultural && (
                       <>
@@ -553,18 +532,6 @@ export default function ListingDetail() {
                         )}
                       </>
                     )}
-                  </>
-                ) : (
-                  <>
-                    <p className="muted">This product uses Buy Now. Your order is reserved while payment is completed.</p>
-                    <label>Payment method</label>
-                    <select value={buyMethod} onChange={(e) => setBuyMethod(e.target.value)} style={{ width: '100%', marginBottom: 10 }}>
-                      <option value="TELEBIRR">Telebirr</option>
-                      <option value="QR">QR</option>
-                    </select>
-                    <button type="button" className="btn btn-primary full" disabled={buying} onClick={buyProduct}>
-                      {buying ? 'Starting payment…' : `Buy for ${money(listing.askingPrice)} ETB`}
-                    </button>
                   </>
                 )}
               </div>
