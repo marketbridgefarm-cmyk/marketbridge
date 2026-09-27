@@ -496,7 +496,7 @@ export default function ListingDetail() {
 
             {isBuyer && (
               <div className="card sticky-card" id="make-offer">
-                <h2>{isAvailable ? 'Bid for this listing' : 'Listing unavailable'}</h2>
+                <h2>{isAvailable ? (isProduct ? 'Make an Offer' : 'Make an Offer') : 'Listing unavailable'}</h2>
                 {!isAvailable ? (
                   <>
                     <p className="muted">This listing has an accepted offer and is temporarily unavailable to new buyers.</p>
@@ -506,11 +506,11 @@ export default function ListingDetail() {
                   <>
                     <p className="muted">This listing uses competitive bidding. Your first bid enters the competition; it does <strong>not</strong> charge you or reserve the product. If the seller selects your bid, you can negotiate repeatedly with the seller before accepting the provisional deal.</p>
                     <form onSubmit={submitOffer}>
-                      <label>Your bid / offer (ETB)</label>
-                      <input required type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter your bid amount (ETB)" value={offerAmount} onChange={(e) => setOfferAmount(e.target.value)} aria-label="Your bid amount in ETB" />
+                      <label>{isProduct ? 'Offer amount (ETB)' : 'Your bid / offer (ETB)'}</label>
+                      <input required type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={isProduct ? 'Enter the amount you want to offer (ETB)' : 'Enter your bid amount (ETB)'} value={offerAmount} onChange={(e) => setOfferAmount(e.target.value)} aria-label="Your bid amount in ETB" />
                       <label>Message</label>
                       <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder={isProduct ? 'Optional message to the seller' : 'Optional message to the farmer'} />
-                      <button type="submit" className="btn btn-primary full" disabled={!offerAmount || Number(offerAmount) <= 0}>Submit bid</button>
+                      <button type="submit" className="btn btn-primary full" disabled={!offerAmount || Number(offerAmount) <= 0}>{isProduct ? 'Make Offer' : 'Submit bid'}</button>
                     </form>
                     {isAgricultural && (
                       <>
