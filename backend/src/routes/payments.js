@@ -432,13 +432,13 @@ router.post(
               });
             }
 
-            // Agricultural orders have one additional commercial decision: the
-            // buyer must explicitly choose BUY after reviewing the report.
-            // Product orders move directly to goods payment after inspection.
-            if (order.listing?.category === 'AGRICULTURAL' && order.buyerDecision !== 'BUY') {
+            // Both Agricultural and Product orders have the same commercial decision
+            // gate: the buyer must explicitly choose BUY after reviewing the
+            // completed inspection report.
+            if (['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category) && order.buyerDecision !== 'BUY') {
               return res.status(409).json({
                 code: 'BUYER_DECISION_REQUIRED',
-                error: 'The buyer must explicitly choose BUY after reviewing the agricultural inspection report before paying for the goods.',
+                error: 'The buyer must explicitly choose BUY after reviewing the inspection report before paying for the goods.',
                 buyerDecision: order.buyerDecision || null,
               });
             }
