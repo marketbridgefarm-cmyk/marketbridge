@@ -1940,3 +1940,106 @@
 .order-product-offer-form input:focus, .order-product-offer-form textarea:focus { outline: var(--mb-focus-ring, 2px solid #176b3a); outline-offset: 1px; }
 .order-product-offer-button { min-height: 44px; width: fit-content; padding: .75rem 1.25rem; margin-top: .25rem; }
 @media (max-width: 560px) { .order-product-offer-button { width: 100%; } }
+
+/* Inspector competition + buyer ↔ selected inspector negotiation */
+.inspection-quote-marketplace {
+  margin: 18px 0 20px;
+  padding: 18px;
+  border: 1px solid var(--mb-border, #dfe7df);
+  border-radius: var(--mb-radius-md, 14px);
+  background: var(--mb-surface-soft, #f3f7f3);
+}
+
+.inspection-quote-heading,
+.inspection-quote-card-top,
+.inspection-quote-meta,
+.inspection-negotiation-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.inspection-quote-heading,
+.inspection-quote-card-top {
+  justify-content: space-between;
+}
+
+.inspection-quote-heading h3 {
+  margin: 4px 0 3px;
+}
+
+.inspection-quote-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.inspection-quote-card {
+  padding: 15px;
+  border: 1px solid var(--mb-border, #dfe7df);
+  border-radius: 12px;
+  background: var(--mb-card, #fff);
+}
+
+.inspection-quote-card.is-selected {
+  border-color: var(--mb-primary, #176b3a);
+  box-shadow: 0 0 0 2px rgba(23, 107, 58, .08);
+}
+
+.inspection-quote-card-top > div {
+  display: grid;
+  gap: 3px;
+}
+
+.inspection-quote-amount {
+  font-size: 1.05rem;
+}
+
+.inspection-quote-meta {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin: 9px 0;
+  color: var(--mb-text-muted, #667168);
+  font-size: .86rem;
+}
+
+.inspection-negotiation-panel {
+  margin-top: 12px;
+  padding: 13px;
+  border-radius: 10px;
+  background: var(--mb-primary-soft, #eef5ef);
+}
+
+.inspection-negotiation-panel > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.inspection-negotiation-actions {
+  align-items: stretch;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.inspection-negotiation-actions input {
+  min-width: 160px;
+  flex: 1 1 170px;
+}
+
+@media (max-width: 680px) {
+  .inspection-quote-heading,
+  .inspection-quote-card-top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .inspection-quote-card .btn,
+  .inspection-negotiation-actions .btn {
+    width: 100%;
+  }
+
+  .inspection-negotiation-actions input {
+    width: 100%;
+    min-width: 0;
+  }
+}
