@@ -107,9 +107,9 @@ router.post(
         return res.status(409).json({ error: `Inspection cannot be requested for an order that is ${order.status.toLowerCase()}` });
       }
 
-      if (order.listing.category !== 'AGRICULTURAL') {
+      if (!['AGRICULTURAL', 'PRODUCT'].includes(order.listing.category)) {
         return res.status(400).json({
-          error: 'Inspections are only available for agricultural listings',
+          error: 'Inspections are only available for agricultural and product listings',
         });
       }
 
@@ -413,23 +413,18 @@ router.post(
         });
       }
 
-      // Each inspector gets exactly one initial competitive quote for an
-      // inspection request. Once submitted, the inspector cannot create a
-      // second root quote; if selected, they continue only through the
-      // existing negotiation chain with COUNTER actions.
       const existing = await prisma.inspectionQuote.findFirst({
         where: {
           inspectionRequestId: request.id,
           inspectorId: req.user.id,
-          parentQuoteId: null,
+          status: { in: ['PENDING', 'COUNTERED'] },
+          childQuotes: { none: {} },
         },
-        orderBy: { createdAt: 'asc' },
       });
 
       if (existing) {
         return res.status(409).json({
-          error: 'You already submitted an inspection quote. Only the selected inspector may continue through negotiation/counter-offers.',
-          quote: existing,
+          error: 'You already have an active quote or negotiation for this inspection',
         });
       }
 

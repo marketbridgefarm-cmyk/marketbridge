@@ -399,7 +399,7 @@ router.post(
           // allowed only after that inspection has a completed report. This
           // prevents a stale/duplicate historical request from incorrectly
           // blocking an otherwise completed inspection.
-          if (order.listing?.category === 'AGRICULTURAL') {
+          if (['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category)) {
             const inspectionRequests = (order.inspectionRequests || [])
               .filter((request) => request.status !== 'CANCELLED')
               .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -408,25 +408,24 @@ router.post(
             if (!currentInspection) {
               return res.status(409).json({
                 code: 'INSPECTION_REQUIRED_BEFORE_BUYER_DECISION',
-                error: 'An agricultural inspection must be requested and completed before the buyer can pay for the goods.',
+                error: 'An inspection must be requested and completed before the buyer can pay for the goods.',
               });
             }
 
             if (currentInspection.status !== 'COMPLETED' || !currentInspection.report) {
               return res.status(409).json({
                 code: 'INSPECTION_REQUIRED_BEFORE_BUYER_DECISION',
-                error: 'Complete the current agricultural inspection and publish its report before the buyer can decide to buy.',
+                error: 'Complete the current inspection and publish its report before the buyer can pay for the goods.',
                 inspectionRequestId: currentInspection.id,
                 inspectionStatus: currentInspection.status,
                 inspectionReportId: currentInspection.report?.id || null,
               });
             }
 
-            // The inspection report is not the final commercial decision. The
+            // Agricultural orders have one additional commercial decision: the
             // buyer must explicitly choose BUY after reviewing the report.
-            // This is a server-side gate so a stale/malicious client cannot
-            // bypass the agricultural purchase decision.
-            if (order.buyerDecision !== 'BUY') {
+            // Product orders move directly to goods payment after inspection.
+            if (order.listing?.category === 'AGRICULTURAL' && order.buyerDecision !== 'BUY') {
               return res.status(409).json({
                 code: 'BUYER_DECISION_REQUIRED',
                 error: 'The buyer must explicitly choose BUY after reviewing the agricultural inspection report before paying for the goods.',
@@ -435,10 +434,9 @@ router.post(
             }
           }
 
-          // Agricultural purchase payment is therefore unlocked only after the
-          // inspection report and explicit BUY decision. Transport remains a
-          // separate negotiated workflow, but its creation is also gated by
-          // the same BUY decision below.
+          // Purchase payment is unlocked only after the required inspection.
+          // Agricultural orders additionally require the explicit BUY decision.
+          // Transport remains a separate negotiated workflow.
         }
 
         // --------------------------------------------------------------------

@@ -682,10 +682,10 @@ router.post(
         });
       }
 
-      if (isAgricultural) {
+      if (isPhysicalGoods) {
         const goodsPaid = order.payments?.some((p) => p.type === 'MARKETPLACE' && p.status === 'PAID');
         if (!goodsPaid) {
-          return res.status(409).json({ code: 'GOODS_PAYMENT_REQUIRED', error: 'Pay the seller for the agreed produce before arranging transport.' });
+          return res.status(409).json({ code: 'GOODS_PAYMENT_REQUIRED', error: 'Pay for the agreed goods before arranging transport.' });
         }
         const inspections = order.inspectionRequests || [];
         const inspectionPaid = inspections.filter(r => r.fee != null && Number(r.fee) > 0)
@@ -1899,25 +1899,27 @@ router.post(
         }
       }
 
-      // Each transporter competitor gets exactly one initial quote for a
-      // transport job. A transporter who has already quoted cannot submit a
-      // second root quote (even with another truck); if selected, they may
-      // continue only through the existing negotiation chain.
       const existing =
         await prisma.transportQuote.findFirst({
           where: {
             transportJobId: job.id,
-            truckOwnerId: req.user.id,
-            parentQuoteId: null,
+            truckOwnerId:
+              req.user.id,
+            status: {
+              in: [
+                'PENDING',
+                'COUNTERED',
+                'ACCEPTED',
+              ],
+            },
+            childQuotes: { none: {} },
           },
-          orderBy: { createdAt: 'asc' },
         });
 
       if (existing) {
         return res.status(409).json({
           error:
-            'You already submitted a transport quote. Only the selected transporter may continue through negotiation/counter-offers.',
-          quote: existing,
+            'You already have a pending, negotiating, or accepted quote for this job',
         });
       }
 
