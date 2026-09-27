@@ -632,17 +632,18 @@ export default function BuyerDashboard() {
               ) : (
                 <div className="sd-offer-list">
                   {leafOffers.map((offer) => {
-                    // SELECTED: the seller picked this bid out of the competition
-                    // pool to open bilateral price negotiation. It is a distinct
-                    // state from a seller COUNTER and uses its own accept action
-                    // (ACCEPT_SELECTED) — see routes/offers.js.
-                    const selected = offer.status === 'SELECTED';
+                    // SELECTED means the seller has picked this offer for
+                    // one-to-one negotiation at the original offer price.
+                    // It is now the buyer's turn to accept, reject or
+                    // counter — same as a seller counter, but with no
+                    // seller-side price change yet.
+                    const sellerSelected = offer.status === 'SELECTED';
                     const sellerCounter = offer.status === 'COUNTERED' && offer.counteredBy === 'SELLER';
                     const myCounter = offer.status === 'COUNTERED' && offer.counteredBy === 'BUYER';
                     const rejected = offer.status === 'REJECTED';
                     const accepted = offer.status === 'ACCEPTED';
-                    const busySelectAccept = offerBusy === `${offer.id}:ACCEPT_SELECTED`;
-                    const busyAccept = offerBusy === `${offer.id}:ACCEPT_COUNTER`;
+                    const acceptAction = sellerSelected ? 'ACCEPT_SELECTED' : 'ACCEPT_COUNTER';
+                    const busyAccept = offerBusy === `${offer.id}:${acceptAction}`;
                     const busyCounter = offerBusy === `${offer.id}:RE_COUNTER`;
                     return (
                       <article className="sd-offer-card" key={offer.id}>
@@ -660,25 +661,25 @@ export default function BuyerDashboard() {
                           </p>
                         )}
 
-                        {selected && (
+                        {sellerSelected && (
                           <div className="sd-offer-response">
-                            <strong>The seller selected your bid — your turn</strong>
-                            <p className="sd-muted">Competition is complete for this deal. Accept the selected price or send a counter-offer before it becomes provisional.</p>
+                            <strong>Seller selected you — your turn</strong>
+                            <p className="sd-muted">The seller picked your offer for negotiation. Accept it at your offered price, or send a counter-offer.</p>
                             <div className="sd-actions" style={{ marginTop: 8 }}>
-                              <button className="sd-btn sd-btn-primary" disabled={busySelectAccept} onClick={() => respondToOffer(offer, 'ACCEPT_SELECTED')}>
-                                {busySelectAccept ? 'Accepting…' : 'Accept selected price'}
+                              <button className="sd-btn sd-btn-primary" disabled={busyAccept} onClick={() => respondToOffer(offer, 'ACCEPT_SELECTED')}>
+                                {busyAccept ? 'Accepting…' : 'Accept at my offer price'}
                               </button>
                               <input
                                 type="number"
                                 min="0.01"
                                 step="0.01"
-                                placeholder="Counter ETB"
+                                placeholder="New counter ETB"
                                 value={counterDrafts[offer.id] || ''}
                                 onChange={(e) => setCounterDrafts((p) => ({ ...p, [offer.id]: e.target.value }))}
                                 style={{ maxWidth: 180 }}
                               />
                               <button className="sd-btn sd-btn-outline" disabled={busyCounter || !counterDrafts[offer.id]} onClick={() => respondToOffer(offer, 'RE_COUNTER')}>
-                                {busyCounter ? 'Sending…' : 'Counter'}
+                                {busyCounter ? 'Sending…' : 'Counter seller'}
                               </button>
                             </div>
                           </div>
