@@ -260,11 +260,13 @@ function computeStage(order, payments) {
 
   const job = order.transportJob || null;
   const agricultural = order.listing?.category === 'AGRICULTURAL';
+  const inspectionRequired = ['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category);
 
-  // For agricultural orders, an accepted/in-progress inspection is a hard
-  // commercial gate: the buyer must see the inspection result before paying
-  // for the produce. A still-unassigned request remains a negotiation stage.
-  if (agricultural) {
+  // Agricultural and product orders use the same inspection gate. The
+  // completed report must be available before the goods payment becomes a
+  // commercial commitment. Agricultural orders additionally require the
+  // explicit BUY decision after the report is reviewed.
+  if (inspectionRequired) {
     // No active inspection request: inspection must be requested before the
     // buyer can make the commercial decision or pay for the produce.
     if (!payments.inspectionRequestsExist) return 'INSPECTION_REQUEST';
@@ -277,13 +279,12 @@ function computeStage(order, payments) {
       return 'INSPECTION';
     }
 
-    // The inspection report is complete, but the buyer has not yet made the
-    // explicit BUY/CANCEL decision. This is a real business stage, not a
-    // payment stage.
-    if (!order.buyerDecision) return 'BUYER_DECISION';
+    // Agricultural orders require an explicit BUY/CANCEL decision after
+    // report review. Product orders move directly from a completed report
+    // to the goods-payment stage.
+    if (agricultural && !order.buyerDecision) return 'BUYER_DECISION';
 
-    // BUY is the gate that unlocks the seller/goods payment.
-    if (order.buyerDecision === 'BUY' && !payments.marketplace.paid && !job) {
+    if (!payments.marketplace.paid && !job) {
       return 'GOODS_PAYMENT';
     }
   }
@@ -336,7 +337,7 @@ function buildActions(order, payments, viewer) {
 
   const push = (action) => actions.push({ reason: null, ...action, enabled: action.ready && action.viewerCanPerform });
 
-  // 1. Agricultural inspection workflow. Inspection actions are executable
+  // 1. Inspection workflow for agricultural and physical product orders. Inspection actions are executable
   // from the order Action Center so an assigned inspector is never stranded
   // on a generic dashboard link.
   const inspectionRequests = (order.listing?.inspectionRequests || order.inspectionRequests || [])
@@ -393,7 +394,7 @@ function buildActions(order, payments, viewer) {
   // 2. If no inspection exists yet, keep the buyer in the inspection-request
   // stage. The detailed inspection form lives in OrderDetail, so this action
   // is a navigation hint rather than a payment mutation.
-  if (order.listing?.category === 'AGRICULTURAL' && !payments.inspectionRequestsExist && !terminal) {
+  if (['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category) && !payments.inspectionRequestsExist && !terminal) {
     push({
       code: 'REQUEST_INSPECTION',
       label: 'Request inspection',
@@ -449,8 +450,9 @@ function buildActions(order, payments, viewer) {
   // is enforced server-side in /payments.
   if (!payments.marketplace.paid) {
     const agricultural = order.listing?.category === 'AGRICULTURAL';
+    const inspectionRequired = ['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category);
     const ready = !terminal && (!agricultural || order.buyerDecision === 'BUY') &&
-      (!agricultural || payments.allInspectionsCompleted);
+      (!inspectionRequired || payments.allInspectionsCompleted);
     push({
       code: 'PAY_MARKETPLACE',
       label: 'Pay for goods',
@@ -459,8 +461,8 @@ function buildActions(order, payments, viewer) {
       ready,
       reason: terminal
         ? 'Order is no longer active'
-        : agricultural && !payments.allInspectionsCompleted
-          ? 'Complete the agricultural inspection before paying for the goods'
+        : inspectionRequired && !payments.allInspectionsCompleted
+          ? 'Complete the required inspection before paying for the goods'
           : agricultural && order.buyerDecision !== 'BUY'
             ? 'Choose BUY after reviewing the inspection report'
             : null,
