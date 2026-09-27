@@ -142,6 +142,10 @@ export default function Dashboard() {
   const myTurnOffers = allOffers.filter(
     (o) =>
       (o.status === 'PENDING' && o.viewerRole === 'SELLER') ||
+      // SELECTED means the seller has picked this buyer for one-to-one
+      // negotiation. It is now the buyer's turn to accept, reject or
+      // counter the negotiated price (ACCEPT_SELECTED / RE_COUNTER).
+      (o.status === 'SELECTED' && o.viewerRole === 'BUYER') ||
       (o.status === 'COUNTERED' &&
         ((o.counteredBy === 'SELLER' && o.viewerRole === 'BUYER') ||
           (o.counteredBy === 'BUYER' && o.viewerRole === 'SELLER')))
@@ -214,7 +218,7 @@ export default function Dashboard() {
       toast(
         action === 'SELECT'
           ? 'Buyer selected — negotiation opened.'
-          : action === 'ACCEPT' || action === 'ACCEPT_COUNTER'
+          : action === 'ACCEPT' || action === 'ACCEPT_COUNTER' || action === 'ACCEPT_SELECTED'
             ? 'Offer accepted'
             : action === 'REJECT'
               ? 'Offer rejected'
@@ -428,56 +432,69 @@ export default function Dashboard() {
                         <td data-label="Amount">{money(o.amount)}</td>
                         <td data-label="Status">{o.status}{o.status === 'COUNTERED' ? ` (${o.counteredBy === 'SELLER' ? 'seller' : 'buyer'} countered)` : ''}</td>
                         <td data-label="Action">
-                          {myTurn ? (
-                            <div className="sd-actions">
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-primary"
-                                disabled={offerBusy === o.id}
-                                onClick={() => {
-                                  // A counter-offer belongs to the party that
-                                  // made the latest counter. The responding
-                                  // party accepts it with the normal ACCEPT
-                                  // action. ACCEPT_COUNTER is specifically for
-                                  // a buyer accepting a seller counter.
-                                  const acceptAction =
-                                    o.status === 'PENDING' && o.viewerRole === 'SELLER'
-                                      ? 'SELECT'
-                                      : o.status === 'COUNTERED' && o.counteredBy === 'SELLER'
-                                        ? 'ACCEPT_COUNTER'
-                                        : 'ACCEPT';
-                                  respondToOffer(o.id, acceptAction);
-                                }}
-                              >
-                                {o.status === 'PENDING' && o.viewerRole === 'SELLER' ? 'Select buyer' : 'Accept'}
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline"
-                                disabled={offerBusy === o.id}
-                                onClick={() => respondToOffer(o.id, 'REJECT')}
-                              >
-                                Reject
-                              </button>
-                              <input
-                                className="sd-counter-input"
-                                type="number"
-                                placeholder="Counter ETB"
-                                value={counterDrafts[o.id] || ''}
-                                onChange={(e) => setCounterDrafts((d) => ({ ...d, [o.id]: e.target.value }))}
-                              />
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline"
-                                disabled={offerBusy === o.id || !counterDrafts[o.id]}
-                                onClick={() => respondToOffer(o.id, o.status === 'COUNTERED' ? 'RE_COUNTER' : 'COUNTER', counterDrafts[o.id])}
-                              >
-                                Counter
-                              </button>
-                            </div>
-                          ) : (
+                          {myTurn ? (() => {
+                            // Action names must match the offer's exact
+                            // status/role combination — the backend rejects
+                            // ACCEPT/COUNTER from a buyer and only accepts
+                            // them from a seller, and vice versa for
+                            // ACCEPT_SELECTED/ACCEPT_COUNTER/RE_COUNTER.
+                            const isSellerTurn = o.viewerRole === 'SELLER';
+                            const isPendingSelect = o.status === 'PENDING' && isSellerTurn;
+                            const acceptAction = isPendingSelect
+                              ? 'SELECT'
+                              : isSellerTurn
+                                ? 'ACCEPT' // SELECTED, or COUNTERED by BUYER
+                                : o.status === 'SELECTED'
+                                  ? 'ACCEPT_SELECTED'
+                                  : 'ACCEPT_COUNTER'; // COUNTERED by SELLER
+                            const counterAction = isSellerTurn ? 'COUNTER' : 'RE_COUNTER';
+                            // A seller cannot counter a still-PENDING bid —
+                            // it must be selected first.
+                            const canCounter = !isPendingSelect;
+                            return (
+                              <div className="sd-actions">
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-primary"
+                                  disabled={offerBusy === o.id}
+                                  onClick={() => respondToOffer(o.id, acceptAction)}
+                                >
+                                  {isPendingSelect ? 'Select buyer' : 'Accept'}
+                                </button>
+                                {isSellerTurn && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline"
+                                    disabled={offerBusy === o.id}
+                                    onClick={() => respondToOffer(o.id, 'REJECT')}
+                                  >
+                                    Reject
+                                  </button>
+                                )}
+                                {canCounter && (
+                                  <>
+                                    <input
+                                      className="sd-counter-input"
+                                      type="number"
+                                      placeholder="Counter ETB"
+                                      value={counterDrafts[o.id] || ''}
+                                      onChange={(e) => setCounterDrafts((d) => ({ ...d, [o.id]: e.target.value }))}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-outline"
+                                      disabled={offerBusy === o.id || !counterDrafts[o.id]}
+                                      onClick={() => respondToOffer(o.id, counterAction, counterDrafts[o.id])}
+                                    >
+                                      Counter
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })() : (
                             <span className="muted">
-                              {['PENDING', 'COUNTERED'].includes(o.status) ? 'Waiting on the other party' : '—'}
+                              {['PENDING', 'SELECTED', 'COUNTERED'].includes(o.status) ? 'Waiting on the other party' : '—'}
                             </span>
                           )}
                         </td>
