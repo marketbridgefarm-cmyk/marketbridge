@@ -1860,3 +1860,71 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Order workflow timeline — scoped to Order Details.
+   The backend supplies explicit CURRENT/COMPLETED/PENDING state so this UI
+   never guesses the business stage from array position.
+   -------------------------------------------------------------------------- */
+.order-detail-page .order-timeline {
+  margin: 0;
+  padding: 8px 0 2px;
+}
+
+.order-detail-page .order-timeline-step {
+  min-height: 54px;
+  padding-bottom: 18px;
+  align-items: flex-start;
+}
+
+.order-detail-page .order-timeline-step::before {
+  top: 28px;
+  bottom: -2px;
+  background: var(--mb-border);
+}
+
+.order-detail-page .order-timeline-step.is-complete::before {
+  background: var(--mb-primary-light);
+}
+
+.order-detail-page .order-timeline-step.is-current::before {
+  background: linear-gradient(var(--mb-primary), var(--mb-border));
+}
+
+.order-detail-page .order-timeline-dot {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  z-index: 1;
+  background: var(--mb-card);
+}
+
+.order-detail-page .order-timeline-label {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.order-detail-page .order-timeline-step.is-current .order-timeline-label {
+  font-weight: 800;
+}
+
+.order-detail-page .order-timeline-detail {
+  margin-top: 4px;
+  max-width: 560px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.order-detail-page .order-timeline-step.is-pending .order-timeline-detail {
+  color: var(--mb-text-muted);
+}
+
+@media (max-width: 600px) {
+  .order-detail-page .order-timeline-step {
+    padding-bottom: 16px;
+  }
+
+  .order-detail-page .order-timeline-detail {
+    font-size: 11.5px;
+  }
+}
