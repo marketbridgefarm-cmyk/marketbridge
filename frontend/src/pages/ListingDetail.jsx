@@ -33,7 +33,7 @@ export default function ListingDetail() {
     .sort((a, b) => (a?.createdAt ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() : 0));
   const relatedOrder = relatedOrders[0] || null;
 
-  // Agricultural inspections are order-owned. ListingDetail may still show
+  // Inspections (agricultural and product) are order-owned. ListingDetail may still show
   // the listing, but it must never create a free-floating inspection that
   // cannot participate in the exact purchase workflow.
   const activeInspectionRequest = (listing?.inspectionRequests || [])
@@ -84,7 +84,7 @@ export default function ListingDetail() {
     }
     try {
       if (!relatedOrder?.id) {
-        showToast('Complete the agricultural offer/negotiation first. Inspection is attached to the resulting order.', 'error');
+        showToast('Complete the offer/negotiation first. Inspection is attached to the resulting order.', 'error');
         return;
       }
       const body = { orderId: relatedOrder.id, listingId: id, mode };
@@ -331,7 +331,7 @@ export default function ListingDetail() {
                 );
               })()}
             </div>
-            {isAgricultural && (
+            {(isAgricultural || isProduct) && (
               <div className="card">
                 <h2>Inspection evidence</h2>
                 {listing.inspectionRequests?.length ? listing.inspectionRequests.map((request) => (
@@ -512,7 +512,7 @@ export default function ListingDetail() {
                       <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder={isProduct ? 'Optional message to the seller' : 'Optional message to the farmer'} />
                       <button type="submit" className="btn btn-primary full" disabled={!offerAmount || Number(offerAmount) <= 0}>{isProduct ? 'Make Offer' : 'Submit bid'}</button>
                     </form>
-                    {isAgricultural && (
+                    {(isAgricultural || isProduct) && (
                       <>
                         <hr />
                         <h3>Quality check</h3>
@@ -523,7 +523,7 @@ export default function ListingDetail() {
                             <p className="small muted">
                                {relatedOrder
                                  ? 'Request an independent inspection for this agreed order.'
-                                 : 'Inspection becomes available after an agricultural offer is accepted and an order is created.'}
+                                 : 'Inspection becomes available after an offer is accepted and an order is created.'}
                              </p>
                             {inspector && <input type="number" min="1" step="0.01" placeholder="Agreed fee (ETB)" value={feeForInspector} onChange={(e) => setFeeForInspector(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />}
                             <button className="btn btn-light full" onClick={() => requestInspection('BUYER_REQUESTED')}>Request inspection</button>
@@ -533,11 +533,6 @@ export default function ListingDetail() {
                       </>
                     )}
                   </>
-                ) : (
-                  <>
-                    <p className="muted">Digital goods are purchased directly, without bidding or negotiation.</p>
-                    <Link className="btn btn-primary full" to="/digital">Go to Digital Marketplace</Link>
-                  </>
                 )}
               </div>
             )}
@@ -546,7 +541,7 @@ export default function ListingDetail() {
               <div className="card sticky-card">
                 <h2>Seller controls</h2>
                 <p className="small muted">Only the seller can change price or listing status.</p>
-                {isAgricultural && (
+                {(isAgricultural || isProduct) && (
                   <>
                     {activeInspectionRequest ? (
                       <p className="small muted">Inspection already requested: <strong>{activeInspectionRequest.status.replaceAll('_', ' ')}</strong>. Continue with the existing inspection.</p>
