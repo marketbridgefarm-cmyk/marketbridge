@@ -157,10 +157,10 @@ router.post(
         });
       }
 
-      if (listing.category !== 'AGRICULTURAL') {
+      if (!['AGRICULTURAL', 'PRODUCT'].includes(listing.category)) {
         return res.status(400).json({
           error:
-            'Offers are currently available for agricultural listings only',
+            'Offers are available for Agricultural and Products Marketplace listings only',
         });
       }
 
@@ -169,15 +169,17 @@ router.post(
         ? availableQuantity
         : requestedQuantity;
 
-      if (!Number.isFinite(availableQuantity) || availableQuantity <= 0) {
-        return res.status(409).json({ error: 'No agricultural quantity remains available for negotiation' });
-      }
+      if (listing.category === 'AGRICULTURAL') {
+        if (!Number.isFinite(availableQuantity) || availableQuantity <= 0) {
+          return res.status(409).json({ error: 'No agricultural quantity remains available for negotiation' });
+        }
 
-      if (offerQuantity > availableQuantity + 1e-9) {
-        return res.status(409).json({
-          error: 'Requested quantity exceeds the currently available quantity',
-          availableQuantity,
-        });
+        if (offerQuantity > availableQuantity + 1e-9) {
+          return res.status(409).json({
+            error: 'Requested quantity exceeds the currently available quantity',
+            availableQuantity,
+          });
+        }
       }
 
       if (
@@ -207,24 +209,22 @@ router.post(
         return res.status(409).json({ error: 'The agricultural pickup window is too close or has expired.' });
       }
 
-      // A competitor gets exactly one initial offer for a listing.
-      // After that first offer, the same competitor may only continue the
-      // selected negotiation through COUNTER actions on the immutable chain;
-      // they cannot create a new root offer to restart/rebid the competition.
       const existingOffer =
         await prisma.offer.findFirst({
           where: {
             listingId,
             buyerId: req.user.id,
-            parentOfferId: null,
+            status: {
+              in: ['PENDING', 'COUNTERED'],
+            },
+            childOffers: { none: {} },
           },
-          orderBy: { createdAt: 'asc' },
         });
 
       if (existingOffer) {
         return res.status(409).json({
           error:
-            'You already submitted an offer for this listing. Only the selected buyer may continue through negotiation/counter-offers.',
+            'You already have an active negotiation on this listing',
           offer: existingOffer,
         });
       }
