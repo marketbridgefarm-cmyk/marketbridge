@@ -1362,3 +1362,309 @@
     content: none !important;
   }
 }
+
+/* ==========================================================================
+   18. Purchase → inspection → transport workflow presentation
+   --------------------------------------------------------------------------
+   Presentation-only layer. Existing business logic, statuses, actions and
+   component boundaries remain unchanged. The page reads as one commercial
+   journey: purchase commitment first, quality verification second, logistics
+   third, with payment/receipt states visible at each stage.
+   ========================================================================== */
+
+.order-detail-page {
+  --workflow-line: #d9e4dc;
+  --workflow-active: #176b43;
+  --workflow-active-soft: #edf8f0;
+  --workflow-blue: #24648f;
+  --workflow-blue-soft: #edf6fb;
+  --workflow-gold: #a66a09;
+  --workflow-gold-soft: #fff7e7;
+}
+
+/* Keep the vertical rhythm deliberate: the workflow sections feel like
+   stages rather than a collection of unrelated cards. */
+.order-detail-page > .container-narrow > .order-overview-card,
+.order-detail-page > .container-narrow > #inspection-section,
+.order-detail-page > .container-narrow > #transport-section,
+.order-detail-page > .container-narrow > #order-payout-status,
+.order-detail-page > .container-narrow > .payment-action-center,
+.order-detail-page > .container-narrow > #confirm-receipt {
+  position: relative;
+}
+
+/* Timeline becomes the visual spine for the commercial journey. */
+.order-detail-page .card:has(> h2:first-child:only-child) .order-timeline {
+  padding: 8px 4px 2px;
+}
+
+.order-detail-page .order-timeline-step {
+  position: relative;
+  padding: 10px 0 10px 6px;
+}
+
+.order-detail-page .order-timeline-step.is-current {
+  padding: 12px 14px 12px 12px;
+  border: 1px solid #bcdac6;
+  border-radius: 14px;
+  background: linear-gradient(90deg, var(--workflow-active-soft), #fff);
+}
+
+.order-detail-page .order-timeline-step.is-complete .order-timeline-dot {
+  box-shadow: 0 0 0 4px rgba(23,107,67,.09);
+}
+
+/* Inspection stage */
+.order-detail-page #inspection-section {
+  scroll-margin-top: 90px;
+}
+
+.order-detail-page #inspection-section > .card {
+  border-top: 4px solid var(--workflow-gold);
+  background:
+    linear-gradient(180deg, rgba(255,247,231,.7), rgba(255,255,255,0) 115px),
+    #fff;
+}
+
+.order-detail-page #inspection-section > .card h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.order-detail-page #inspection-section > .card h2::before {
+  content: "2";
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: var(--workflow-gold-soft);
+  color: var(--workflow-gold);
+  border: 1px solid #efd9a8;
+  font: 800 12px/1 Manrope, system-ui, sans-serif;
+}
+
+.order-detail-page #inspection-section .detail-facts {
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.order-detail-page #inspection-section .detail-facts > div {
+  padding: 13px 14px;
+  border: 1px solid #eadfc9;
+  border-radius: 12px;
+  background: #fffdf8;
+}
+
+.order-detail-page #inspection-section .detail-facts span {
+  color: #8a7449;
+}
+
+/* Transport stage */
+.order-detail-page #transport-section {
+  scroll-margin-top: 90px;
+  border-top: 4px solid var(--workflow-blue);
+  background:
+    linear-gradient(180deg, rgba(237,246,251,.72), rgba(255,255,255,0) 145px),
+    #fff;
+}
+
+.order-detail-page #transport-section .transport-card-heading {
+  padding-bottom: 22px;
+}
+
+.order-detail-page #transport-section .transport-card-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  background: var(--workflow-blue-soft);
+  color: var(--workflow-blue);
+  border-color: #cfe2ef;
+}
+
+.order-detail-page #transport-section .transport-card-title h2 {
+  margin-top: 2px;
+  letter-spacing: -.35px;
+}
+
+.order-detail-page #transport-section .transport-status-badge {
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: #f1f5f2;
+  border: 1px solid var(--workflow-line);
+  color: #526258;
+  font-weight: 800;
+  letter-spacing: .25px;
+}
+
+.order-detail-page .transport-details-block {
+  margin-top: 22px;
+  padding: 19px;
+  border: 1px solid #dbe5df;
+  border-radius: 16px;
+  background: #fbfdfb;
+}
+
+.order-detail-page .transport-detail-facts > div {
+  min-height: 66px;
+  padding: 12px 13px;
+  border: 1px solid #e0e8e2;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.order-detail-page .transport-info-panel {
+  box-shadow: none;
+}
+
+.order-detail-page .match-box {
+  border-color: #cbded2;
+  background: #f8fbf9;
+}
+
+.order-detail-page .transporter.chosen {
+  background: var(--workflow-active-soft);
+  border-color: #9fcaae;
+  outline: 0;
+  box-shadow: inset 4px 0 0 var(--workflow-active);
+}
+
+/* Payment stage: make the payment center look like the commitment gate. */
+.order-detail-page .payment-action-center {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #bfd8c7;
+  border-top: 4px solid var(--workflow-active);
+  background:
+    linear-gradient(180deg, #f2faf4 0, rgba(242,250,244,.35) 105px, #fff 180px);
+}
+
+.order-detail-page .payment-action-center::before {
+  content: "COMMITMENT GATE";
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #e5f4e9;
+  color: var(--workflow-active);
+  font: 800 9px/1 Manrope, system-ui, sans-serif;
+  letter-spacing: .7px;
+}
+
+.order-detail-page .payment-action-center > .row-between {
+  padding-right: 150px;
+}
+
+.order-detail-page .payment-center-row {
+  position: relative;
+  border-left: 4px solid #d9e4dc;
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+.order-detail-page .payment-center-row:has(.badge-success) {
+  border-left-color: var(--workflow-active);
+  background: #fbfffc;
+}
+
+.order-detail-page .payment-center-row:has(.badge-pending) {
+  border-left-color: var(--workflow-gold);
+  background: #fffdf8;
+}
+
+/* Purchase receipt is the terminal confirmation stage. */
+.order-detail-page #confirm-receipt {
+  border-top: 4px solid var(--workflow-active);
+  background: linear-gradient(180deg, #f3faf5 0, #fff 145px);
+}
+
+.order-detail-page #confirm-receipt h2::before {
+  content: "✓";
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+  margin-right: 8px;
+  border-radius: 10px;
+  background: #e3f4e8;
+  color: var(--workflow-active);
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+/* Payout card sits after the operational stages and reads as settlement,
+   not as another purchase action. */
+.order-detail-page #order-payout-status {
+  border-top: 3px solid #899990;
+}
+
+.order-detail-page #order-payout-status > h2 {
+  letter-spacing: -.25px;
+}
+
+/* Stronger visual grouping for evidence and reports that appear inside the
+   inspection/transport stage without changing their component markup. */
+.order-detail-page #inspection-section .evidence-item,
+.order-detail-page #transport-section .evidence-item {
+  border: 1px solid #dce6df;
+  background: #fff;
+}
+
+.order-detail-page #inspection-section .notice,
+.order-detail-page #transport-section .notice {
+  border-color: #dbe5df;
+  background: #fbfdfb;
+}
+
+.order-detail-page #inspection-section .alert,
+.order-detail-page #transport-section .alert {
+  box-shadow: none;
+}
+
+/* Buttons in workflow sections have a consistent hierarchy. */
+.order-detail-page #inspection-section .btn-primary,
+.order-detail-page #inspection-section .btn-light,
+.order-detail-page #transport-section .btn-primary,
+.order-detail-page #transport-section .btn-light,
+.order-detail-page .payment-action-center .btn-primary,
+.order-detail-page #confirm-receipt .btn-primary {
+  min-height: 42px;
+  border-radius: 11px;
+  font-weight: 800;
+}
+
+@media (max-width: 700px) {
+  .order-detail-page .payment-action-center::before {
+    position: static;
+    display: inline-block;
+    margin-bottom: 12px;
+  }
+
+  .order-detail-page .payment-action-center > .row-between {
+    padding-right: 0;
+  }
+
+  .order-detail-page #inspection-section > .card,
+  .order-detail-page #transport-section,
+  .order-detail-page #confirm-receipt,
+  .order-detail-page .payment-action-center {
+    border-radius: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .order-detail-page #inspection-section > .card,
+  .order-detail-page #transport-section,
+  .order-detail-page #confirm-receipt,
+  .order-detail-page .payment-action-center {
+    border-top-width: 3px;
+  }
+
+  .order-detail-page #inspection-section > .card h2::before,
+  .order-detail-page #confirm-receipt h2::before {
+    width: 28px;
+    height: 28px;
+  }
+}
