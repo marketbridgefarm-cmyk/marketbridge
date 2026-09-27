@@ -1389,12 +1389,46 @@ async function settlePayment({
             throw Object.assign(new Error('Transport job is no longer available for payment commitment'), { status: 409 });
           }
 
-          const truckClaim = await tx.truck.updateMany({
-            where: { id: job.truckId, availability: 'AVAILABLE' },
-            data: { availability: 'BUSY' },
-          });
-          if (truckClaim.count !== 1) {
-            throw Object.assign(new Error('The selected truck is no longer available'), { status: 409 });
+          // New negotiations stay QUOTED until payment. ACCEPTED is retained
+          // here only for compatibility with older orders that were created
+          // before provisional transport acceptance was introduced. In the
+          // new flow, only an AVAILABLE truck is claimed at payment time.
+          if (job.status !== 'ACCEPTED') {
+            const truckClaim = await tx.truck.updateMany({
+              where: { id: job.truckId, availability: 'AVAILABLE' },
+              data: { availability: 'BUSY' },
+            });
+            if (truckClaim.count !== 1) {
+              throw Object.assign(new Error('The selected truck is no longer available'), { status: 409 });
+            }
+          } else {
+            const truck = await tx.truck.findUnique({
+              where: { id: job.truckId },
+              select: { id: true, availability: true },
+            });
+            if (!truck) {
+              throw Object.assign(new Error('The selected truck no longer exists'), { status: 409 });
+            }
+            if (truck.availability === 'AVAILABLE') {
+              await tx.truck.update({ where: { id: truck.id }, data: { availability: 'BUSY' } });
+            } else if (truck.availability === 'BUSY') {
+              // Legacy ACCEPTED jobs already claimed their truck before this
+              // provisional-payment model existed. Make sure BUSY really
+              // belongs to this job before allowing the old payment to settle.
+              const conflictingJob = await tx.transportJob.findFirst({
+                where: {
+                  id: { not: job.id },
+                  truckId: job.truckId,
+                  status: { in: ['ACCEPTED', 'PICKUP', 'IN_TRANSIT'] },
+                },
+                select: { id: true },
+              });
+              if (conflictingJob) {
+                throw Object.assign(new Error('The selected truck is committed to another active transport job'), { status: 409 });
+              }
+            } else {
+              throw Object.assign(new Error('The selected truck is no longer available'), { status: 409 });
+            }
           }
 
           await tx.transportJob.update({
