@@ -533,6 +533,11 @@ export default function ListingDetail() {
                       </>
                     )}
                   </>
+                ) : (
+                  <>
+                    <p className="muted">Digital goods are purchased directly, without bidding or negotiation.</p>
+                    <Link className="btn btn-primary full" to="/digital">Go to Digital Marketplace</Link>
+                  </>
                 )}
               </div>
             )}
