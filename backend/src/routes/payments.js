@@ -473,13 +473,25 @@ router.post(
             });
           }
 
-          if (
-            order.transportJob.status !==
-            'ACCEPTED'
-          ) {
+          if (!['QUOTED', 'ACCEPTED'].includes(order.transportJob.status)) {
             return res.status(400).json({
               error:
-                'Transport must be accepted before payment',
+                'A transporter must be provisionally agreed before payment',
+            });
+          }
+
+          // A provisionally accepted quote is the prerequisite for payment.
+          // The quote/job is committed only after the Chapa payment settles.
+          const acceptedTransportQuote = await prisma.transportQuote.findFirst({
+            where: {
+              transportJobId: order.transportJob.id,
+              status: 'ACCEPTED',
+            },
+            select: { id: true, truckId: true, truckOwnerId: true, amount: true },
+          });
+          if (!acceptedTransportQuote) {
+            return res.status(409).json({
+              error: 'A provisionally accepted transporter quote is required before payment',
             });
           }
 

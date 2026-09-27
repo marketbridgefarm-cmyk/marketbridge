@@ -2246,6 +2246,7 @@ router.patch(
       'ACCEPT',
       'REJECT',
       'COUNTER',
+      'WITHDRAW',
     ]),
 
     body('counterAmount')
@@ -2353,6 +2354,85 @@ router.patch(
       }
 
       // ----------------------------------------------------------------------
+      // WITHDRAW / RELEASE PROVISIONAL TRANSPORT AGREEMENT
+      // ----------------------------------------------------------------------
+      // Negotiation acceptance is provisional. Before transport payment,
+      // either side may release an accepted transporter so the buyer can
+      // continue with another competing quote. No truck is committed here.
+      // This is intentionally blocked once a Chapa transport payment has
+      // started or settled, because payment is the commitment boundary.
+      // ----------------------------------------------------------------------
+
+      if (req.body.action === 'WITHDRAW') {
+        if (quote.status !== 'ACCEPTED') {
+          return res.status(400).json({
+            error: `Only a provisionally accepted quote can be released (current: ${quote.status})`,
+          });
+        }
+
+        const result = await prisma.$transaction(async (tx) => {
+          const freshQuote = await tx.transportQuote.findUnique({
+            where: { id: quote.id },
+            include: { transportJob: { include: { order: true } } },
+          });
+          if (!freshQuote) throw quoteError('Quote not found', 404);
+
+          const activePayment = await tx.payment.findFirst({
+            where: {
+              transportJobId: freshQuote.transportJobId,
+              type: 'TRANSPORT',
+              status: { in: ['PENDING', 'PROCESSING', 'PAID'] },
+            },
+            select: { id: true, status: true },
+          });
+          if (activePayment) {
+            throw quoteError('This transporter cannot be released after transport payment has started or completed', 409);
+          }
+
+          if (freshQuote.transportJob.status !== 'QUOTED') {
+            throw quoteError(`This transport agreement cannot be released while the job is ${freshQuote.transportJob.status}`, 409);
+          }
+
+          const updatedQuote = await tx.transportQuote.update({
+            where: { id: freshQuote.id },
+            data: { status: 'WITHDRAWN' },
+          });
+
+          // Keep all still-pending competition bids available. The buyer can
+          // immediately select another transporter without creating a new
+          // transport job or disturbing seller/inspection payments.
+          await tx.transportJob.update({
+            where: { id: freshQuote.transportJobId },
+            data: {
+              truckOwnerId: null,
+              truckId: null,
+              agreedAmount: null,
+              status: 'QUOTED',
+            },
+          });
+
+          await recordAuditEvent(tx, {
+            actorId: req.user.id,
+            action: 'TRANSPORT_QUOTE_WITHDRAWN',
+            resourceType: 'TransportQuote',
+            resourceId: updatedQuote.id,
+            metadata: {
+              transportJobId: freshQuote.transportJobId,
+              orderId: freshQuote.transportJob.orderId,
+              releasedBy: effectiveRole,
+            },
+          });
+
+          return updatedQuote;
+        }, { maxWait: 10000, timeout: 15000 });
+
+        return res.json({
+          message: 'Provisional transporter agreement released. Other transport bids are available again.',
+          quote: result,
+        });
+      }
+
+      // ----------------------------------------------------------------------
       // REJECT
       // ----------------------------------------------------------------------
 
@@ -2436,12 +2516,11 @@ router.patch(
         // cancelOrderInTransaction cascade-cancels the transport job itself.)
         await lockOrderAndAssertNotClosed(tx, freshJob.orderId, 'a transport quote cannot be accepted until that is resolved');
 
-        // Quote acceptance is provisional. Do NOT claim the truck here.
-        // The transport job keeps the existing ACCEPTED state used by the
-        // payment-intent/Chapa flow, while the actual AVAILABLE -> BUSY truck
-        // commitment is deferred to payment settlement. This prevents an
-        // unpaid negotiated deal from consuming a truck.
-
+        // IMPORTANT: acceptance is provisional. Do NOT claim the truck or
+        // mark the transport job ACCEPTED here. The successful transport
+        // payment is the commercial commitment boundary. Keeping the job in
+        // QUOTED lets the buyer recover if the transporter becomes unavailable
+        // before payment, while payment settlement atomically claims the truck.
         const updatedQuote = await tx.transportQuote.update({
           where: { id: freshQuote.id },
           data: {
@@ -2450,12 +2529,14 @@ router.patch(
           },
         });
 
-        // Close out every other negotiation thread on this job.
+        // Close only other in-progress negotiation threads. Keep PENDING
+        // competition bids available so a failed provisional deal can be
+        // replaced immediately without restarting transport setup.
         await tx.transportQuote.updateMany({
           where: {
             transportJobId: freshJob.id,
             id: { not: freshQuote.id },
-            status: { in: ['PENDING', 'COUNTERED'] },
+            status: { in: ['SELECTED', 'COUNTERED'] },
           },
           data: { status: 'REJECTED' },
         });
@@ -2466,16 +2547,9 @@ router.patch(
             truckOwnerId: freshQuote.truckOwnerId,
             truckId: freshQuote.truckId,
             agreedAmount: finalAmount,
-            status: 'ACCEPTED',
+            status: 'QUOTED',
           },
         });
-
-        if (freshJob.order.status === 'CONFIRMED') {
-          await tx.order.update({
-            where: { id: freshJob.order.id },
-            data: { status: 'TRANSPORT_ARRANGED' },
-          });
-        }
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
