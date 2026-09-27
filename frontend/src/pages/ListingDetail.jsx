@@ -533,7 +533,7 @@ export default function ListingDetail() {
                       </>
                     )}
                   </>
-                )}
+                ) : null}
               </div>
             )}
 
