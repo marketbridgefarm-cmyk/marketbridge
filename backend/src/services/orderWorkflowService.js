@@ -254,6 +254,10 @@ function buildTimeline(order, payments) {
 // ----------------------------------------------------------------------------
 
 function computeStage(order, payments) {
+  // Defensive guard for legacy/direct product orders.
+  if (order.listing?.category === 'PRODUCT' && !order.agreedOfferId) {
+    return 'NEGOTIATION_REQUIRED';
+  }
   if (order.status === 'CANCELLED') return 'CANCELLED';
   if (order.status === 'DISPUTED') return 'DISPUTED';
   if (order.status === 'COMPLETED') return 'COMPLETED';
@@ -330,6 +334,15 @@ function cancelEligibility(order, isBuyer, isSeller, isAdmin) {
 // ----------------------------------------------------------------------------
 
 function buildActions(order, payments, viewer) {
+  if (order.listing?.category === 'PRODUCT' && !order.agreedOfferId) {
+    return [{
+      code: 'NEGOTIATION_REQUIRED',
+      label: 'Continue bidding & negotiation',
+      actorRole: 'BUYER',
+      reason: 'This product must be won through seller bidding and negotiation before payment.',
+      route: { method: 'GET', path: `/listings/${order.listingId}` },
+    }];
+  }
   const { isBuyer, isSeller, isTruckOwner, isInspector, isAdmin } = viewer;
   const job = order.transportJob || null;
   const terminal = TERMINAL_ORDER_STATUSES.includes(order.status);
