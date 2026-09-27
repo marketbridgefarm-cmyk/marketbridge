@@ -1385,7 +1385,7 @@ async function settlePayment({
             select: { id: true, status: true, truckId: true, truckOwnerId: true, orderId: true },
           });
 
-          if (!job || !['REQUESTED', 'QUOTED'].includes(job.status)) {
+          if (!job || !['REQUESTED', 'QUOTED', 'ACCEPTED'].includes(job.status)) {
             throw Object.assign(new Error('Transport job is no longer available for payment commitment'), { status: 409 });
           }
 
