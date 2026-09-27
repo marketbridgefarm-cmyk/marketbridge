@@ -130,10 +130,12 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
   return (
     <article className={`neg-card${myTurn ? ' neg-card--my-turn' : ''}`}>
       {myTurn && <span className="neg-turn-label" aria-label="Your turn">⚡ Your turn</span>}
-      <div className="row-between">
+      <div className="neg-card-top">
         <div>
-          <span className="role-chip">{humanStatus(item.status)}</span>{' '}
-          <span className="role-chip" style={{ marginLeft: 6 }}>{item.subtitle}</span>
+          <div className="neg-deal-status" style={{ justifyContent: 'flex-start' }}>
+            <span className="role-chip">{humanStatus(item.status)}</span>
+            <span className="role-chip">{item.subtitle}</span>
+          </div>
           <h3 className="neg-title">{item.title}</h3>
           <p className="neg-amount">
             {Number.isFinite(amount) ? amount.toLocaleString() : '—'}
@@ -143,14 +145,14 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
         {item.linkTo && <Link className="btn btn-outline" to={item.linkTo}>Open</Link>}
       </div>
 
-      {item.message && <p className="muted">{item.message}</p>}
-      {waitingMessage && <p className="muted" style={{ marginTop: 8 }}>{waitingMessage}</p>}
+      {item.message && <p className="neg-deal-context">{item.message}</p>}
+      {waitingMessage && <p className="neg-waiting">{waitingMessage}</p>}
       {item.status === 'REJECTED' && (
-        <p className="muted" style={{ marginTop: 8 }}>This negotiation was rejected.</p>
+        <p className="neg-waiting">This negotiation was rejected.</p>
       )}
       {item.status === 'ACCEPTED' && (
-        <p className="muted" style={{ marginTop: 8 }}>
-          Agreed at <strong>{Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB</strong>.
+        <p className="neg-deal-context">
+          Provisional agreement at <strong>{Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB</strong>.
         </p>
       )}
 
@@ -160,7 +162,7 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
             onClick={() => onRespond(item, acceptAction)}>
             {busy(acceptAction)
               ? (acceptAction === 'SELECT' ? 'Selecting…' : 'Accepting…')
-              : (acceptAction === 'SELECT' ? 'Select buyer for negotiation' : 'Accept')}
+              : (acceptAction === 'SELECT' ? 'Select buyer for negotiation' : 'Accept provisional deal')}
           </button>
 
           {!(item.type === 'LISTING_OFFER' && item.viewerRole === 'BUYER') && (
@@ -507,18 +509,27 @@ export default function Negotiations() {
                 <h2 className="neg-section-title" id="comp-heading">
                   Select a service provider
                   <span className="neg-section-sub">
-                    Compare all competing bids and select the best — or negotiate a price before committing.
+                    Review every competing quote, select one provider for bilateral negotiation, then confirm payment when you are ready to commit.
                   </span>
                 </h2>
 
                 {visibleGroups.map((group) => (
                   <div key={group.key} className="neg-group">
                     <div className="neg-group-header">
-                      <strong>{group.label}</strong>
+                      <div className="neg-group-heading">
+                        <div>
+                          <div className="neg-group-title">{group.label}</div>
+                          <div className="neg-group-meta">
+                            <span>{group.quotes.filter((q) => ['PENDING','SELECTED','COUNTERED'].includes(q.status)).length} active quotes</span>
+                            <span>•</span><span>competition stays open until commitment</span>
+                          </div>
+                        </div>
+                      </div>
                       {group.orderLink && (
                         <Link className="neg-group-link" to={group.orderLink}>View order →</Link>
                       )}
                     </div>
+                    <p className="neg-commit-note"><strong>Selection is not commitment.</strong> Selecting a provider opens negotiation. Payment is the commercial commitment.</p>
                     <BidBoard
                       quotes={group.quotes}
                       type={group.type}
@@ -539,10 +550,11 @@ export default function Negotiations() {
               <section className="neg-section" aria-labelledby="bilat-heading">
                 {visibleGroups.length > 0 && (
                   <h2 className="neg-section-title" id="bilat-heading">
-                    Listing offer negotiations
+                    Active deals & negotiations
+                    <span className="neg-section-sub">Offers and counters are provisional. Payment is what commits the agreed transaction or service.</span>
                   </h2>
                 )}
-                <div style={{ display: 'grid', gap: 12 }}>
+                <div className="neg-deal-list">
                   {visible.map((item) => (
                     <NegotiationRow
                       key={`${item.type}:${item.id}`}
