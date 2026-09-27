@@ -1366,6 +1366,38 @@ export default function OrderDetail() {
   };
 
   // ==========================================================================
+  // AGRICULTURAL INSPECTION PURCHASE DECISION
+  // ==========================================================================
+
+  const makeBuyerDecision = async (decision) => {
+    if (!order || !isBuyer || !isAgricultural) return;
+
+    if (decision === 'BUY' && (!currentInspectionRequest?.report || currentInspectionRequest?.status !== 'COMPLETED')) {
+      setError('Review the completed agricultural inspection report before choosing BUY.');
+      return;
+    }
+
+    if (decision === 'CANCEL') {
+      const confirmed = window.confirm('Cancel this agricultural purchase after reviewing the inspection report? This cannot be undone.');
+      if (!confirmed) return;
+    }
+
+    setBusy(`buyer-decision-${decision.toLowerCase()}`);
+    setError('');
+    try {
+      await api.patch(`/orders/${order.id}/buyer-decision`, { decision });
+      await load({ silent: true });
+      window.setTimeout(() => {
+        document.getElementById(decision === 'BUY' ? 'payment-center' : 'inspection-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120);
+    } catch (err) {
+      setError(getError(err, `Could not record ${decision === 'BUY' ? 'BUY' : 'cancellation'} decision`));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  // ==========================================================================
   // CONFIRM RECEIPT
   // ==========================================================================
 
@@ -1772,7 +1804,60 @@ export default function OrderDetail() {
                 {currentInspectionRequest.fee != null && <div><span>Fee</span><strong>{money(currentInspectionRequest.fee)} ETB</strong></div>}
               </div>
               {currentInspectionRequest.status === 'COMPLETED' && currentInspectionRequest.report && (
-                <p className="muted" style={{ marginTop: 10 }}>Inspection report is available. The buyer can now proceed to the goods payment.</p>
+                <div className="inspection-purchase-gate">
+                  <div className="inspection-report-header">
+                    <div>
+                      <span className="eyebrow">QUALITY REPORT</span>
+                      <h3>Agricultural inspection completed</h3>
+                      <p className="muted">Review the published findings before making the purchase decision.</p>
+                    </div>
+                    <span className="status-pill tone-good"><span className="status-pill-dot" aria-hidden="true" /> Report published</span>
+                  </div>
+
+                  <div className="inspection-report-facts">
+                    <div><span>Inspected quantity</span><strong>{currentInspectionRequest.report.quantity ?? '—'}</strong></div>
+                    <div><span>Grade</span><strong>{currentInspectionRequest.report.grade || 'Not specified'}</strong></div>
+                    <div><span>Moisture</span><strong>{currentInspectionRequest.report.moisture != null ? `${currentInspectionRequest.report.moisture}%` : 'Not recorded'}</strong></div>
+                    <div><span>Inspection status</span><strong>Completed</strong></div>
+                  </div>
+
+                  <div className="inspection-findings">
+                    <div><span>Visible defects</span><p>{currentInspectionRequest.report.visibleDefects || 'No visible defects recorded.'}</p></div>
+                    <div><span>Damage notes</span><p>{currentInspectionRequest.report.damageNotes || 'No damage notes recorded.'}</p></div>
+                    <div><span>Packaging notes</span><p>{currentInspectionRequest.report.packagingNotes || 'No packaging notes recorded.'}</p></div>
+                  </div>
+
+                  {order.buyerDecision ? (
+                    <div className={`inspection-decision-state ${order.buyerDecision === 'BUY' ? 'is-buy' : 'is-cancel'}`}>
+                      <span className="inspection-decision-icon" aria-hidden="true">{order.buyerDecision === 'BUY' ? '✓' : '×'}</span>
+                      <div>
+                        <strong>{order.buyerDecision === 'BUY' ? 'BUY decision recorded' : 'Purchase cancelled after inspection'}</strong>
+                        <p>{order.buyerDecision === 'BUY' ? 'The seller payment is now unlocked. Transport can proceed only after the required payment gates are satisfied.' : 'The agricultural purchase decision is closed.'}</p>
+                      </div>
+                    </div>
+                  ) : isBuyer ? (
+                    <div className="inspection-decision-panel">
+                      <div>
+                        <span className="eyebrow">PURCHASE DECISION</span>
+                        <h3>What do you want to do with the inspected goods?</h3>
+                        <p className="muted">Choose <strong>BUY</strong> only after reviewing the report. BUY unlocks the seller payment; it does not by itself complete payment or arrange transport.</p>
+                      </div>
+                      <div className="inspection-decision-actions">
+                        <button type="button" className="btn btn-primary" disabled={Boolean(busy)} onClick={() => makeBuyerDecision('BUY')}>
+                          {busy === 'buyer-decision-buy' ? 'Recording…' : 'BUY — continue purchase'}
+                        </button>
+                        <button type="button" className="btn btn-light" disabled={Boolean(busy)} onClick={() => makeBuyerDecision('CANCEL')}>
+                          {busy === 'buyer-decision-cancel' ? 'Cancelling…' : 'Cancel after inspection'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="inspection-waiting-note">
+                      <strong>Awaiting buyer decision</strong>
+                      <span>The buyer must review this report and choose BUY or cancel before the purchase can move to the payment stage.</span>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           ) : (
