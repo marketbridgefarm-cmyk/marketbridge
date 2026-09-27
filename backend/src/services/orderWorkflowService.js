@@ -170,8 +170,9 @@ function buildTimeline(order, payments) {
   const currentInspection = inspection[inspection.length - 1] || null;
   const reportCompleted = payments.allInspectionsCompleted;
   const inspectionPaid = payments.allInspectionsPaid;
-  const buyerDecisionMade = category !== 'AGRICULTURAL' || Boolean(order.buyerDecision);
-  const buyerApproved = category !== 'AGRICULTURAL' || order.buyerDecision === 'BUY';
+  const buyerDecisionRequired = ['AGRICULTURAL', 'PRODUCT'].includes(category);
+  const buyerDecisionMade = !buyerDecisionRequired || Boolean(order.buyerDecision);
+  const buyerApproved = !buyerDecisionRequired || order.buyerDecision === 'BUY';
   const goodsPaid = payments.marketplace.paid;
   const transportExists = Boolean(job);
   const transportAccepted = transportExists && !['REQUESTED', 'QUOTED', 'CANCELLED'].includes(job.status);
@@ -242,7 +243,7 @@ function buildTimeline(order, payments) {
       detail: reportCompleted ? 'The inspection report is available for review.' : inspectionInProgress ? 'The inspector is completing the report.' : 'Waiting for the inspection to be completed.',
     });
 
-    if (category === 'AGRICULTURAL') {
+    if (buyerDecisionRequired) {
       steps.push({
         code: 'BUYER_DECISION',
         label: 'Buyer BUY / Cancel decision',
@@ -381,10 +382,10 @@ function computeStage(order, payments) {
       return 'INSPECTION';
     }
 
-    // Agricultural orders require an explicit BUY/CANCEL decision after
-    // report review. Product orders move directly from a completed report
-    // to the goods-payment stage.
-    if (agricultural && !order.buyerDecision) return 'BUYER_DECISION';
+    // Both Agricultural and Product orders require an explicit BUY/CANCEL
+    // decision after the inspection report is reviewed. BUY unlocks goods
+    // payment; CANCEL closes the provisional purchase.
+    if (inspectionRequired && !order.buyerDecision) return 'BUYER_DECISION';
 
     if (!payments.marketplace.paid && !job) {
       return 'GOODS_PAYMENT';
@@ -516,15 +517,15 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 3. Agricultural buyer decision. This must be a real server-side
-  // mutation. The old UI only scrolled to the payment center, leaving
-  // buyerDecision=null and causing /payments to reject the seller payment.
-  if (order.listing?.category === 'AGRICULTURAL' && !order.buyerDecision && !terminal) {
+  // 3. Buyer purchase decision for both marketplaces. This is a real
+  // server-side mutation: the buyer must review the completed inspection
+  // report and explicitly choose BUY or CANCEL before goods payment.
+  if (['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category) && !order.buyerDecision && !terminal) {
     const decisionReady = payments.inspectionRequestsExist && payments.allInspectionsCompleted;
     const decisionReason = !payments.inspectionRequestsExist
-      ? 'Complete an agricultural inspection before choosing BUY or CANCEL'
+      ? 'Complete the inspection before choosing BUY or CANCEL'
       : !payments.allInspectionsCompleted
-        ? 'Review the published agricultural inspection report before choosing BUY or CANCEL'
+        ? 'Review the published inspection report before choosing BUY or CANCEL'
         : null;
 
     push({
@@ -556,13 +557,13 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 3. Pay for the goods. For agricultural orders the explicit BUY decision
-  // is required in addition to a completed inspection report. The same rule
-  // is enforced server-side in /payments.
+  // 3. Pay for the goods. Both marketplaces require the explicit BUY
+  // decision after a completed inspection report. The same rule is enforced
+  // server-side in /payments.
   if (!payments.marketplace.paid) {
-    const agricultural = order.listing?.category === 'AGRICULTURAL';
-    const inspectionRequired = ['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category);
-    const ready = !terminal && (!agricultural || order.buyerDecision === 'BUY') &&
+    const decisionRequired = ['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category);
+    const inspectionRequired = decisionRequired;
+    const ready = !terminal && (!decisionRequired || order.buyerDecision === 'BUY') &&
       (!inspectionRequired || payments.allInspectionsCompleted);
     push({
       code: 'PAY_MARKETPLACE',
@@ -574,7 +575,7 @@ function buildActions(order, payments, viewer) {
         ? 'Order is no longer active'
         : inspectionRequired && !payments.allInspectionsCompleted
           ? 'Complete the required inspection before paying for the goods'
-          : agricultural && order.buyerDecision !== 'BUY'
+          : decisionRequired && order.buyerDecision !== 'BUY'
             ? 'Choose BUY after reviewing the inspection report'
             : null,
       route: {
@@ -607,15 +608,15 @@ function buildActions(order, payments, viewer) {
 
   // 3. Arrange transport if nothing has been set up yet.
   if (!job) {
-    const agriculturalReady = order.listing?.category !== 'AGRICULTURAL' || order.buyerDecision === 'BUY';
-    const ready = !terminal && agriculturalReady && payments.marketplace.paid && ['CONFIRMED', 'PENDING_PAYMENT'].includes(order.status);
+    const buyerDecisionReady = !['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category) || order.buyerDecision === 'BUY';
+    const ready = !terminal && buyerDecisionReady && payments.marketplace.paid && ['CONFIRMED', 'PENDING_PAYMENT'].includes(order.status);
     push({
       code: 'ARRANGE_TRANSPORT',
       label: 'Arrange transport',
       actorRole: 'BUYER_OR_SELLER',
       viewerCanPerform: isBuyer || isSeller,
       ready,
-      reason: ready ? null : (!agriculturalReady ? 'Choose BUY before arranging transport' : !payments.marketplace.paid ? 'Pay the seller for the agreed produce before arranging transport' : `Transport cannot be arranged while order is ${order.status}`),
+      reason: ready ? null : (!buyerDecisionReady ? 'Choose BUY before arranging transport' : !payments.marketplace.paid ? 'Pay the seller for the agreed produce before arranging transport' : `Transport cannot be arranged while order is ${order.status}`),
       route: { method: 'POST', path: '/transport', body: { orderId: order.id } },
     });
   }
