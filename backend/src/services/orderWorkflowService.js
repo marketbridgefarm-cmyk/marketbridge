@@ -162,80 +162,178 @@ function buildPaymentSnapshot(order) {
 
 function buildTimeline(order, payments) {
   const job = order.transportJob || null;
+  const category = order.listing?.category;
+  const inspectionRequired = ['AGRICULTURAL', 'PRODUCT'].includes(category);
+  const inspection = (order.inspectionRequests || order.listing?.inspectionRequests || [])
+    .filter((r) => r.status !== 'CANCELLED')
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const currentInspection = inspection[inspection.length - 1] || null;
+  const reportCompleted = payments.allInspectionsCompleted;
+  const inspectionPaid = payments.allInspectionsPaid;
+  const buyerDecisionMade = category !== 'AGRICULTURAL' || Boolean(order.buyerDecision);
+  const buyerApproved = category !== 'AGRICULTURAL' || order.buyerDecision === 'BUY';
+  const goodsPaid = payments.marketplace.paid;
+  const transportExists = Boolean(job);
+  const transportAccepted = transportExists && !['REQUESTED', 'QUOTED', 'CANCELLED'].includes(job.status);
+  const transportPaid = payments.transport ? payments.transport.paid : true;
+  const pickupStarted = transportExists && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status);
+  const inTransit = transportExists && ['IN_TRANSIT', 'DELIVERED'].includes(job.status);
+  const delivered = transportExists && job.status === 'DELIVERED';
+  const completed = order.status === 'COMPLETED';
+
+  // Explicit state prevents the frontend from guessing the current step from
+  // array position. This matters when a later business gate is already
+  // satisfied, or when a stage has been created but is waiting on another
+  // party (e.g. an inspection quote or transport provider).
+  const state = (completed, current = false) =>
+    completed ? 'COMPLETED' : current ? 'CURRENT' : 'PENDING';
+
   const steps = [];
 
   steps.push({
     code: 'ORDER_CREATED',
-    label: 'Order created',
+    label: 'Negotiated deal / order created',
     completed: true,
-    at: order.createdAt,
+    state: 'COMPLETED',
+    at: order.agreedAt || order.createdAt,
+    detail: 'Seller and buyer have a provisional negotiated agreement.',
   });
 
-  if (payments.inspectionRequestsExist) {
+  if (inspectionRequired) {
+    const requestCreated = Boolean(currentInspection);
+    const inspectionAccepted = currentInspection?.status === 'ACCEPTED' ||
+      currentInspection?.status === 'IN_PROGRESS' ||
+      currentInspection?.status === 'COMPLETED';
+    const inspectionInProgress = currentInspection?.status === 'IN_PROGRESS';
+
     steps.push({
-      code: 'INSPECTION_COMPLETED',
-      label: 'Inspection completed',
-      completed: payments.allInspectionsCompleted,
-      at: null,
+      code: 'INSPECTION_REQUESTED',
+      label: 'Inspection requested',
+      completed: requestCreated,
+      state: state(requestCreated, !requestCreated),
+      at: currentInspection?.createdAt || null,
+      detail: requestCreated ? 'An order inspection request exists.' : 'Create the inspection request to continue.',
     });
+
+    steps.push({
+      code: 'INSPECTION_ACCEPTED',
+      label: 'Inspector selected / accepted',
+      completed: inspectionAccepted,
+      state: state(inspectionAccepted, requestCreated && !inspectionAccepted),
+      at: currentInspection?.updatedAt || null,
+      detail: inspectionAccepted ? 'An inspector has accepted the inspection.' : 'Waiting for an inspector to be selected and accepted.',
+    });
+
+    steps.push({
+      code: 'INSPECTION_PAYMENT',
+      label: 'Inspection payment',
+      completed: inspectionPaid,
+      state: state(inspectionPaid, inspectionAccepted && !inspectionPaid),
+      at: null,
+      detail: inspectionPaid ? 'Required inspection fee is paid.' : 'Inspection payment is required before the inspection can proceed.',
+    });
+
+    steps.push({
+      code: 'INSPECTION_REPORT',
+      label: 'Inspection report published',
+      completed: reportCompleted,
+      state: state(reportCompleted, inspectionPaid && !reportCompleted),
+      at: currentInspection?.report?.inspectedAt || null,
+      detail: reportCompleted ? 'The inspection report is available for review.' : inspectionInProgress ? 'The inspector is completing the report.' : 'Waiting for the inspection to be completed.',
+    });
+
+    if (category === 'AGRICULTURAL') {
+      steps.push({
+        code: 'BUYER_DECISION',
+        label: 'Buyer BUY / Cancel decision',
+        completed: buyerDecisionMade,
+        state: state(buyerDecisionMade, reportCompleted && !buyerDecisionMade),
+        at: order.buyerDecisionAt || null,
+        detail: order.buyerDecision === 'BUY'
+          ? 'BUY recorded; seller payment is unlocked.'
+          : order.buyerDecision === 'CANCEL'
+            ? 'Buyer cancelled after reviewing the inspection.'
+            : 'Buyer must review the report before choosing BUY or Cancel.',
+      });
+    }
   }
 
   steps.push({
-    code: 'GOODS_PAID',
-    label: 'Goods payment received',
-    completed: payments.marketplace.paid,
+    code: 'GOODS_PAYMENT',
+    label: 'Goods payment',
+    completed: goodsPaid,
+    state: state(goodsPaid, buyerApproved && (!inspectionRequired || reportCompleted) && !goodsPaid),
     at: null,
+    detail: goodsPaid ? 'Commercial payment for the negotiated goods is recorded.' : 'Goods payment is the commercial commitment that unlocks fulfillment.',
+  });
+
+  steps.push({
+    code: 'TRANSPORT_ARRANGEMENT',
+    label: 'Transport arranged',
+    completed: transportExists,
+    state: state(transportExists, goodsPaid && !transportExists),
+    at: job?.createdAt || null,
+    detail: transportExists ? 'A transport job has been created.' : 'Transport can be arranged after the goods payment gate.',
   });
 
   if (job) {
     steps.push({
       code: 'TRANSPORT_ACCEPTED',
       label: 'Transport accepted',
-      completed: !['REQUESTED', 'QUOTED', 'CANCELLED'].includes(job.status),
+      completed: transportAccepted,
+      state: state(transportAccepted, ['REQUESTED', 'QUOTED'].includes(job.status)),
       at: null,
+      detail: transportAccepted ? 'The selected transport arrangement is accepted.' : 'Waiting for transport selection / acceptance.',
     });
 
     if (payments.transport?.required) {
       steps.push({
-        code: 'TRANSPORT_PAID',
-        label: 'Transport payment received',
-        completed: payments.transport.paid,
+        code: 'TRANSPORT_PAYMENT',
+        label: 'Transport payment',
+        completed: transportPaid,
+        state: state(transportPaid, transportAccepted && !transportPaid),
         at: null,
+        detail: transportPaid ? 'Transport payment is recorded.' : 'Transport payment is required before pickup.',
       });
     }
 
     steps.push({
       code: 'PICKUP',
-      label: 'Pickup',
-      completed: ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status),
-      at: job.pickupConfirmedAt,
+      label: 'Pickup confirmed',
+      completed: pickupStarted,
+      state: state(pickupStarted, transportAccepted && transportPaid && !pickupStarted),
+      at: job.pickupConfirmedAt || null,
+      detail: pickupStarted ? 'The goods have been picked up.' : 'Waiting for pickup and required evidence.',
     });
 
     steps.push({
       code: 'IN_TRANSIT',
       label: 'In transit',
-      completed: ['IN_TRANSIT', 'DELIVERED'].includes(job.status),
+      completed: inTransit,
+      state: state(inTransit, pickupStarted && !inTransit),
       at: null,
+      detail: inTransit ? 'The goods are moving to the buyer.' : 'Transport has not yet entered transit.',
     });
 
     steps.push({
       code: 'DELIVERED',
       label: 'Delivered',
-      completed: job.status === 'DELIVERED',
-      at: job.deliveredConfirmedAt,
+      completed: delivered,
+      state: state(delivered, inTransit && !delivered),
+      at: job.deliveredConfirmedAt || null,
+      detail: delivered ? 'Delivery has been confirmed.' : 'Waiting for delivery confirmation.',
     });
   }
 
   steps.push({
     code: 'COMPLETED',
-    label: 'Receipt confirmed / order completed',
-    completed: order.status === 'COMPLETED',
+    label: 'Buyer receipt confirmed / order completed',
+    completed,
+    state: state(completed, delivered && !completed),
     at: null,
+    detail: completed ? 'The order lifecycle is complete.' : 'Buyer confirmation of receipt is the final completion gate.',
   });
 
-  // Durable events are appended to the canonical milestone steps. The
-  // frontend can show both progress milestones and the actual recorded
-  // business mutations.
   const events = (order.events || []).map((event) => ({
     id: event.id,
     type: event.type,
