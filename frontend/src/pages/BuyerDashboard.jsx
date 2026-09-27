@@ -180,6 +180,7 @@ export default function BuyerDashboard() {
   const pendingOffers = leafOffers.filter(
     (offer) =>
       offer.status === 'PENDING' ||
+      offer.status === 'SELECTED' ||
       offer.status === 'COUNTERED'
   );
 
@@ -631,10 +632,16 @@ export default function BuyerDashboard() {
               ) : (
                 <div className="sd-offer-list">
                   {leafOffers.map((offer) => {
+                    // SELECTED: the seller picked this bid out of the competition
+                    // pool to open bilateral price negotiation. It is a distinct
+                    // state from a seller COUNTER and uses its own accept action
+                    // (ACCEPT_SELECTED) — see routes/offers.js.
+                    const selected = offer.status === 'SELECTED';
                     const sellerCounter = offer.status === 'COUNTERED' && offer.counteredBy === 'SELLER';
                     const myCounter = offer.status === 'COUNTERED' && offer.counteredBy === 'BUYER';
                     const rejected = offer.status === 'REJECTED';
                     const accepted = offer.status === 'ACCEPTED';
+                    const busySelectAccept = offerBusy === `${offer.id}:ACCEPT_SELECTED`;
                     const busyAccept = offerBusy === `${offer.id}:ACCEPT_COUNTER`;
                     const busyCounter = offerBusy === `${offer.id}:RE_COUNTER`;
                     return (
@@ -651,6 +658,30 @@ export default function BuyerDashboard() {
                           <p style={{ margin: '10px 0' }}>
                             Seller counter: <strong>{formatETB(offer.counterAmount)}</strong>
                           </p>
+                        )}
+
+                        {selected && (
+                          <div className="sd-offer-response">
+                            <strong>The seller selected your bid — your turn</strong>
+                            <p className="sd-muted">Competition is complete for this deal. Accept the selected price or send a counter-offer before it becomes provisional.</p>
+                            <div className="sd-actions" style={{ marginTop: 8 }}>
+                              <button className="sd-btn sd-btn-primary" disabled={busySelectAccept} onClick={() => respondToOffer(offer, 'ACCEPT_SELECTED')}>
+                                {busySelectAccept ? 'Accepting…' : 'Accept selected price'}
+                              </button>
+                              <input
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                placeholder="Counter ETB"
+                                value={counterDrafts[offer.id] || ''}
+                                onChange={(e) => setCounterDrafts((p) => ({ ...p, [offer.id]: e.target.value }))}
+                                style={{ maxWidth: 180 }}
+                              />
+                              <button className="sd-btn sd-btn-outline" disabled={busyCounter || !counterDrafts[offer.id]} onClick={() => respondToOffer(offer, 'RE_COUNTER')}>
+                                {busyCounter ? 'Sending…' : 'Counter'}
+                              </button>
+                            </div>
+                          </div>
                         )}
 
                         {sellerCounter && (
