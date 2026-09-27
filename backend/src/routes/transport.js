@@ -1543,68 +1543,6 @@ router.patch(
       const current = job.status;
       const next = req.body.status;
 
-      // HARD COMPETITION GATE:
-      // Transport movement can only begin from a transporter quote that has
-      // completed selection + bilateral negotiation. The status endpoint must
-      // not allow an arranging party to bypass the quote workflow by manually
-      // changing REQUESTED/QUOTED to ACCEPTED.
-      if (next === 'ACCEPTED' && !isAdmin(req.user)) {
-        if (!job.truckOwnerId) {
-          return res.status(409).json({
-            code: 'TRANSPORT_COMPETITION_NOT_FINISHED',
-            error: 'A transporter must be selected through the competition and negotiation before transport can start.',
-          });
-        }
-
-        const acceptedQuote = await prisma.transportQuote.findFirst({
-          where: {
-            transportJobId: job.id,
-            truckOwnerId: job.truckOwnerId,
-            status: 'ACCEPTED',
-          },
-          select: { id: true },
-        });
-
-        if (!acceptedQuote) {
-          return res.status(409).json({
-            code: 'TRANSPORT_COMPETITION_NOT_FINISHED',
-            error: 'The transporter competition and negotiation must be completed before transport can start.',
-          });
-        }
-      }
-
-      if (['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(next)) {
-        if (job.status !== 'ACCEPTED' && !['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status)) {
-          return res.status(409).json({
-            code: 'TRANSPORT_COMPETITION_NOT_FINISHED',
-            error: 'Transport cannot start until a transporter has been selected and the quote negotiation has been completed.',
-          });
-        }
-
-        if (!job.truckOwnerId) {
-          return res.status(409).json({
-            code: 'TRANSPORT_COMPETITION_NOT_FINISHED',
-            error: 'Transport cannot start until a transporter has been selected through the competition and negotiation.',
-          });
-        }
-
-        const acceptedQuote = await prisma.transportQuote.findFirst({
-          where: {
-            transportJobId: job.id,
-            truckOwnerId: job.truckOwnerId,
-            status: 'ACCEPTED',
-          },
-          select: { id: true },
-        });
-
-        if (!acceptedQuote) {
-          return res.status(409).json({
-            code: 'TRANSPORT_COMPETITION_NOT_FINISHED',
-            error: 'Transport cannot start until the transporter competition and negotiation are completed.',
-          });
-        }
-      }
-
       if (job.order?.status === 'DISPUTED') {
         return res.status(409).json({
           code: 'ORDER_DISPUTED',
@@ -2498,12 +2436,11 @@ router.patch(
         // cancelOrderInTransaction cascade-cancels the transport job itself.)
         await lockOrderAndAssertNotClosed(tx, freshJob.orderId, 'a transport quote cannot be accepted until that is resolved');
 
-        // CRITICAL:
-        //
-        // Claim the selected truck before accepting the quote.
-        // If another active job has already claimed it, this transaction
-        // receives a 409 and nothing else is committed.
-        await claimAvailableTruck(tx, freshQuote.truckId);
+        // Quote acceptance is provisional. Do NOT claim the truck here.
+        // The transport job keeps the existing ACCEPTED state used by the
+        // payment-intent/Chapa flow, while the actual AVAILABLE -> BUSY truck
+        // commitment is deferred to payment settlement. This prevents an
+        // unpaid negotiated deal from consuming a truck.
 
         const updatedQuote = await tx.transportQuote.update({
           where: { id: freshQuote.id },

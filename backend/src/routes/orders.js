@@ -56,13 +56,10 @@ const orderInclude = {
           inspector: { select: { id: true, name: true, phone: true } },
           payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
           quotes: {
-            // The requester needs the complete live negotiation chain: all
-            // competing bids, the selected bid, every counter, and the final
-            // accepted quote. Rejected historical branches are intentionally
-            // omitted from the order page.
-            where: { status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } },
-            include: {
-              inspector: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
+            where: { status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'] } },
+            select: {
+              id: true, inspectorId: true, amount: true, status: true,
+              parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true,
             },
             orderBy: { createdAt: 'asc' },
           },
@@ -79,10 +76,8 @@ const orderInclude = {
       inspector: { select: { id: true, name: true, phone: true } },
       payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
       quotes: {
-        where: { status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } },
-        include: {
-          inspector: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
-        },
+        where: { status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'] } },
+        select: { id: true, inspectorId: true, amount: true, status: true, parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true },
         orderBy: { createdAt: 'asc' },
       },
     },
