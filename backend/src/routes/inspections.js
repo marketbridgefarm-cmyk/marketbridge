@@ -991,6 +991,27 @@ router.post(
         });
       }
 
+      // HARD COMPETITION GATE:
+      // An inspector may start only after the requester has finished the
+      // inspector competition and the negotiated quote has actually been
+      // accepted. A quoted/selected/countered inspector must never be able
+      // to start the inspection prematurely.
+      const acceptedQuote = await prisma.inspectionQuote.findFirst({
+        where: {
+          inspectionRequestId: request.id,
+          inspectorId: request.inspectorId,
+          status: 'ACCEPTED',
+        },
+        select: { id: true, amount: true },
+      });
+
+      if (!acceptedQuote) {
+        return res.status(409).json({
+          code: 'INSPECTION_COMPETITION_NOT_FINISHED',
+          error: 'The inspector competition and negotiation must be completed before the inspection can start.',
+        });
+      }
+
       // Fast, friendly pre-check outside the transaction — not itself the
       // guard against the race (see lockOrderAndAssertNotClosed below), just
       // avoids starting a transaction for the common, non-racy case.
