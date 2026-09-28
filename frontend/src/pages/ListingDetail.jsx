@@ -15,8 +15,6 @@ export default function ListingDetail() {
   const [listing, setListing] = useState(null);
   const [offerAmount, setOfferAmount] = useState('');
   const [message, setMessage] = useState('');
-  const [inspector, setInspector] = useState('');
-  const [feeForInspector, setFeeForInspector] = useState('');
   const [inspectionPayMethod, setInspectionPayMethod] = useState('TELEBIRR');
   const [payingInspectionId, setPayingInspectionId] = useState('');
   const [quotesByRequest, setQuotesByRequest] = useState({});
@@ -78,28 +76,18 @@ export default function ListingDetail() {
 
 
   async function requestInspection(mode) {
-    if (inspector && (!feeForInspector || Number(feeForInspector) <= 0)) {
-      showToast('Enter the agreed inspection fee before requesting this inspector.', 'error');
-      return;
-    }
     try {
       if (!relatedOrder?.id) {
         showToast('Complete the offer/negotiation first. Inspection is attached to the resulting order.', 'error');
         return;
       }
       const body = { orderId: relatedOrder.id, listingId: id, mode };
-      if (inspector) {
-        body.inspectorId = inspector;
-        body.fee = Number(feeForInspector);
-      }
       await api.post(
         '/inspections',
         body,
         { headers: { 'Idempotency-Key': `inspection:${relatedOrder.id}:${mode}` } }
       );
       showToast('Inspection request created.', 'success');
-      setInspector('');
-      setFeeForInspector('');
       load();
     } catch (e) {
       showToast(e.response?.data?.error || 'Could not request inspection', 'error');
@@ -116,18 +104,6 @@ export default function ListingDetail() {
       await load();
     } catch (e) {
       showToast(e.response?.data?.error || 'Action failed', 'error');
-    }
-  }
-
-  async function chooseInspector() {
-    try {
-      const response = await api.get('/inspections/inspectors', { params: { location: listing.location } });
-      const options = response.data.inspectors || [];
-      if (!options.length) { showToast('No inspectors were found in this area.', 'error'); return; }
-      setInspector(options[0].id);
-      showToast(`Inspector selected: ${options[0].name}`, 'success');
-    } catch (e) {
-      showToast(e.response?.data?.error || 'Could not load inspectors', 'error');
     }
   }
 
@@ -550,7 +526,6 @@ export default function ListingDetail() {
                                  ? 'Request an independent inspection for this agreed order.'
                                  : 'Inspection becomes available after an offer is accepted and an order is created.'}
                              </p>
-                            {inspector && <input type="number" min="1" step="0.01" placeholder="Agreed fee (ETB)" value={feeForInspector} onChange={(e) => setFeeForInspector(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />}
                             <button className="btn btn-light full" onClick={() => requestInspection('BUYER_REQUESTED')}>Request inspection</button>
                             
                           </>
@@ -572,7 +547,6 @@ export default function ListingDetail() {
                       <p className="small muted">Inspection already requested: <strong>{activeInspectionRequest.status.replaceAll('_', ' ')}</strong>. Continue with the existing inspection.</p>
                     ) : (
                       <>
-                        {inspector && <input type="number" min="1" step="0.01" placeholder="Agreed fee (ETB)" value={feeForInspector} onChange={(e) => setFeeForInspector(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />}
                         <button className="btn btn-light full" onClick={() => requestInspection('SELLER_REQUESTED')}>Request inspection</button>
                         
                       </>

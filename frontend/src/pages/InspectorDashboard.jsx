@@ -144,7 +144,7 @@ export default function InspectorDashboard() {
       });
 
       setMsg(
-        'Quote submitted. The requester will pick one inspector, or someone may claim the job outright before then.'
+        'Quote submitted. The requester will compare competing inspector quotes and select one for negotiation.'
       );
 
       setQuotedRequestIds((s) => new Set(s).add(id));
