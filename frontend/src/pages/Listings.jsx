@@ -4,6 +4,7 @@ import ListingCard from '../components/ListingCard.jsx';
 import AdvertisementBanner from '../components/AdvertisementBanner.jsx';
 import { Link } from 'react-router-dom';
 import { REGIONS as FALLBACK_REGIONS } from '../utils/ethiopianRegions';
+import './listings/Listings.css';
 
 export default function Listings({ category = 'AGRICULTURAL' }) {
   const agriculture = category === 'AGRICULTURAL';
@@ -162,10 +163,10 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
   }
 
   return (
-    <main className="section">
+    <main className="section listings-page">
       <div className="container-wide">
         {/* Page header */}
-        <div className="page-header">
+        <div className="page-header listings-page-header">
           <div>
             <span className="eyebrow">
               {agriculture ? 'AGRICULTURAL MARKETPLACE' : 'PRODUCT MARKETPLACE'}
@@ -186,7 +187,7 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
         </div>
 
         {/* ---- Filter bar ---- */}
-        <div className="filter-bar-wrap">
+        <div className="filter-bar-wrap listings-filter-bar">
           {/* Main search with debounce */}
           <div className="filter-bar-search">
             <input
@@ -337,7 +338,7 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
         <AdvertisementBanner />
 
         {/* Toolbar: result count + context */}
-        <div className="market-toolbar--stitch">
+        <div className="market-toolbar--stitch listings-toolbar">
           <strong>
             {loading ? 'Loading…' : `${listings.length} listing${listings.length === 1 ? '' : 's'}`}
           </strong>
@@ -354,7 +355,7 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
         {loading ? (
           <div className="loading">Loading marketplace…</div>
         ) : (
-          <div className="listing-grid">
+          <div className="listing-grid listings-grid">
             {listings.map((l) => (
               <div key={l.id}>
                 <ListingCard listing={l} />
