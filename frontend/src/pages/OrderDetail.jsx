@@ -1686,6 +1686,13 @@ export default function OrderDetail() {
   // this is purely so the render below passes one prop instead of wiring
   // ~15 individual flags/handlers by hand in JSX.
 
+  const installmentStartEligible =
+    Boolean(order) &&
+    isBuyer &&
+    !marketplacePaid &&
+    !marketplaceBlockedReason &&
+    Number(order.finalPrice) > Number(workflow?.payments?.marketplace?.maxOnlineAmount || 0);
+
   const marketplaceObligation = {
     amount: order?.finalPrice,
     paid: marketplacePaid,
@@ -1699,7 +1706,7 @@ export default function OrderDetail() {
     onCheck: checkMarketplacePayment,
     installmentPlan,
     installments: installmentPayments,
-    canStartInstallments: canPayMarketplace,
+    canStartInstallments: installmentStartEligible,
     onStartInstallments: startInstallments,
     onPayInstallment: payInstallment,
     onCheckInstallment: checkInstallment,
