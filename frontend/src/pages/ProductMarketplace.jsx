@@ -15,6 +15,7 @@ export default function ProductMarketplace() {
     <>
       <section className="product-marketplace-actions" aria-label="Product marketplace actions">
         <div className="container-wide">
+          <div className="product-marketplace-actions__card">
           <div className="product-marketplace-actions__grid">
             <button
               type="button"
@@ -23,8 +24,8 @@ export default function ProductMarketplace() {
             >
               <span className="product-marketplace-action__icon" aria-hidden="true">⌕</span>
               <span className="product-marketplace-action__body">
-                <strong>Buy here</strong>
-                <span>Browse products, compare listings and make an offer.</span>
+                <strong>Buy</strong>
+                <span>Browse, compare listings, and make an offer.</span>
               </span>
               <span className="product-marketplace-action__arrow" aria-hidden="true">→</span>
             </button>
@@ -35,11 +36,12 @@ export default function ProductMarketplace() {
             >
               <span className="product-marketplace-action__icon" aria-hidden="true">＋</span>
               <span className="product-marketplace-action__body">
-                <strong>Sell here</strong>
-                <span>Publish a product listing and receive competing offers.</span>
+                <strong>Sell</strong>
+                <span>List a product and receive competing offers.</span>
               </span>
               <span className="product-marketplace-action__arrow" aria-hidden="true">→</span>
             </Link>
+          </div>
           </div>
         </div>
       </section>
