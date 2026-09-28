@@ -213,3 +213,132 @@
 @media (prefers-reduced-motion: reduce) {
   .listings-page .lc { transition: none; }
 }
+
+/* ---- Clean, flat restyle: filter bar matches the Buy/Sell card ---- */
+.listings-page-header { margin-bottom: 20px; }
+
+.listings-filter-bar {
+  padding: 16px;
+  background: var(--listings-card);
+  box-shadow: none;
+  border-radius: var(--mb-radius-lg, 20px);
+}
+
+.listings-filter-bar .filter-bar-search { gap: 10px; margin-bottom: 14px; }
+
+.listings-filter-bar .filter-bar-search input {
+  height: 48px;
+  padding: 0 16px;
+  border: 1px solid var(--listings-line);
+  border-radius: 14px;
+  background: var(--listings-card);
+  box-shadow: none;
+}
+
+.listings-filter-bar .filter-bar-search input:focus {
+  border-color: var(--listings-green);
+  outline: none;
+}
+
+.listings-filter-bar .filter-bar-search .btn {
+  min-height: 48px;
+  padding-inline: 22px;
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+.listings-filter-bar .filter-chip {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid var(--listings-line);
+  border-radius: 999px;
+  background: var(--listings-card);
+  color: var(--mb-ink, #17231b);
+  font-size: 14px;
+  box-shadow: none;
+}
+
+.listings-filter-bar .filter-chip:hover { background: var(--listings-soft); }
+
+.listings-filter-bar .filter-chip.active {
+  border-color: var(--listings-green);
+  background: #e8f7ee;
+  color: var(--listings-dark);
+  box-shadow: none;
+}
+
+.listings-filter-bar .filter-chip input,
+.listings-filter-bar .filter-chip select {
+  height: auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  appearance: none;
+}
+
+.listings-filter-bar .filter-chip-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--listings-green);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.listings-filter-bar .filter-more-panel {
+  border: 1px solid var(--listings-line);
+  background: var(--listings-card);
+  box-shadow: none;
+}
+
+/* Spacing polish: header -> actions -> filters, and search -> chips */
+.listings-page-header { margin-bottom: 20px; padding-bottom: 0; }
+.listings-page-header p { margin-bottom: 0; }
+
+.listings-filter-bar { padding: 16px; }
+.listings-filter-bar .filter-bar-search { gap: 10px; margin-bottom: 18px; }
+
+.listings-filter-bar .filter-bar-scroll {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 2px 4px;
+}
+
+.listings-filter-bar .filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  flex: 0 0 auto;
+}
+
+.listings-filter-bar .filter-chip input,
+.listings-filter-bar .filter-chip select {
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+.listings-filter-bar .filter-chip input { width: 90px; }
+
+@media (max-width: 620px) {
+  .listings-page-header { margin-bottom: 16px; }
+  .listings-filter-bar { padding: 14px; }
+  .listings-filter-bar .filter-bar-search { margin-bottom: 14px; }
+}
