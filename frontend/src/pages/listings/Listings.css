@@ -430,3 +430,19 @@
   background: #fdf3e3;
   color: #a5680f;
 }
+
+/* Toolbar: force a left-aligned row even if a global .market-toolbar--stitch rule says otherwise */
+.listings-page .listings-toolbar {
+  margin-bottom: 16px;
+  border: 0;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  text-align: left;
+}
+
+.listings-page .listings-toolbar strong,
+.listings-page .listings-toolbar > span {
+  width: auto;
+  flex: 0 0 auto;
+}
