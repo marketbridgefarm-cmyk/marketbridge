@@ -10,7 +10,6 @@ const {
   ensureInstallmentChildren,
   finalizeInstallmentPlan,
   markParentRefundedIfComplete,
-  MAX_INSTALLMENTS,
 } = require('../src/services/installmentService');
 
 const sum = (parts) => Math.round(parts.reduce((a, b) => a + b, 0) * 100) / 100;
@@ -29,13 +28,17 @@ test('splitAmount parts always sum exactly to the total', () => {
   }
 });
 
-test('splitAmount rejects invalid input and plans that are too large', () => {
+test('splitAmount rejects invalid input and scales to any practical order amount', () => {
   assert.throws(() => splitAmount(0, 1000000), /Invalid amount/);
   assert.throws(() => splitAmount(100, 0), /Invalid installment limit/);
-  assert.throws(
-    () => splitAmount(MAX_INSTALLMENTS * 1000000 + 1, 1000000),
-    (error) => error.code === 'TOO_MANY_INSTALLMENTS'
-  );
+
+  assert.deepEqual(splitAmount(4000000, 1000000), [1000000, 1000000, 1000000, 1000000]);
+  assert.deepEqual(splitAmount(4500000, 1000000), [900000, 900000, 900000, 900000, 900000]);
+
+  const large = splitAmount(20000000, 1000000);
+  assert.equal(large.length, 20);
+  assert.equal(sum(large), 20000000);
+  assert.ok(large.every((part) => part <= 1000000));
 });
 
 test('splitInto spreads spare cents over the first installments', () => {
