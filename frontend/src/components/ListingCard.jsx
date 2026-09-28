@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
+import './ListingCardOverlay.css';
 
 // Derive an ECX-style grade label from the most-recent inspection report.
 function gradeFromListing(listing) {
@@ -10,12 +11,22 @@ function gradeFromListing(listing) {
   return reports[0]?.report?.grade || null;
 }
 
+// Harvest date comes from the listing's `harvestedDate` field (see Prisma schema).
+function formatHarvestDate(listing) {
+  const raw = listing.harvestedDate;
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export default function ListingCard({ listing }) {
   const isProduct = listing.category === 'PRODUCT';
   const title = listing.title || listing.cropType || 'Listing';
   const cardRef = useRef(null);
   const recorded = useRef(false);
   const grade = gradeFromListing(listing);
+  const harvestDate = isProduct ? null : formatHarvestDate(listing);
   const isVerifiedSeller = listing.seller?.verificationStatus === 'VERIFIED';
 
   // Sponsored impression tracking via IntersectionObserver.
@@ -60,15 +71,25 @@ export default function ListingCard({ listing }) {
         {(listing.status === 'ACTIVE' || listing.status === 'UNDER_NEGOTIATION') && (
           <span className="lc-badge lc-badge--active" aria-label="Active listing" />
         )}
-      </Link>
-
-      {/* Card body */}
-      <div className="lc-body">
-        <div className="lc-tags">
+        <div className="lc-photo-tags">
           <span className="lc-tag">{isProduct ? 'Product' : listing.cropType || 'Produce'}</span>
           {!isProduct && <span className="lc-tag lc-tag--neg">Negotiable</span>}
           {isVerifiedSeller && <span className="lc-tag lc-tag--verified">✓ Verified</span>}
         </div>
+      </Link>
+
+      {/* Card body */}
+      <div className="lc-body">
+        {harvestDate && (
+          <p className="lc-harvest">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="16" rx="3" />
+              <path d="M3 10h18M8 3v4M16 3v4" />
+            </svg>
+            Harvest date: <strong>{harvestDate}</strong>
+          </p>
+        )}
 
         <h3 className="lc-title">
           <Link to={`/listings/${listing.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>

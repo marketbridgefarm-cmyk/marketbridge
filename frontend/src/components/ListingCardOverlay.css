@@ -1,0 +1,50 @@
+/* Listing card: tags overlaid on the photo, harvest date row in the body. */
+.lc .lc-photo {
+  position: relative;
+}
+
+.lc .lc-photo-tags {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.lc .lc-photo-tags .lc-tag {
+  margin: 0;
+  background-color: rgba(255, 255, 255, .94);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
+}
+
+.lc .lc-photo-tags .lc-tag--neg {
+  background-color: #fff6e6;
+}
+
+.lc .lc-harvest {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--mb-text-muted, #667168);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.lc .lc-harvest strong {
+  color: var(--mb-ink, #17231b);
+  font-weight: 600;
+}
+
+/* The ECX grade badge sits bottom-left in styles.css; move it right so the tags own the left. */
+.lc .lc-badge--grade {
+  left: auto;
+  right: 10px;
+}
+
+.lc .lc-photo:has(.lc-badge--grade) .lc-photo-tags {
+  right: 56px;
+}
