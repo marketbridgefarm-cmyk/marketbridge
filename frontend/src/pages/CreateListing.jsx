@@ -10,8 +10,12 @@ export default function CreateListing() {
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedCategory = searchParams.get('category');
-  const initialCategory =
-    requestedCategory === 'PRODUCT' ? 'PRODUCT' : 'AGRICULTURAL';
+  // The market is fixed by the link the user came from. There is no switching
+  // inside the form, so a farmer can't end up in the wrong marketplace.
+  const category =
+    requestedCategory === 'PRODUCT' || requestedCategory === 'AGRICULTURAL'
+      ? requestedCategory
+      : null;
 
   // Below the tablet breakpoint this page renders as a popup (bottom sheet on
   // phones, centered dialog on tablets) over whatever the user was looking
@@ -32,7 +36,6 @@ export default function CreateListing() {
     };
   }, [closeModal]);
 
-  const [category, setCategory] = useState(initialCategory);
   const [form, setForm] = useState({
     sellerId: user?.id || '',
     title: '',
@@ -165,6 +168,31 @@ export default function CreateListing() {
     }
   }
 
+  if (!category) {
+    return (
+      <div className="listing-modal-overlay" onClick={closeModal}>
+        <main className="section listing-modal-panel" onClick={e => e.stopPropagation()}>
+          <div className="container-narrow">
+            <div className="listing-modal-drag-handle" aria-hidden="true" />
+            <div className="listing-modal-header">
+              <Link to="/" className="back-link">← Home</Link>
+              <button type="button" className="listing-modal-close" aria-label="Close" onClick={closeModal}>×</button>
+            </div>
+            <h1>What do you want to sell?</h1>
+            <div className="choice-grid">
+              <Link to="/create-listing?category=AGRICULTURAL" className="choice" style={{ textDecoration: 'none' }}>
+                <b>Farm produce</b><span>Crops and bulk produce from the farm.</span>
+              </Link>
+              <Link to="/create-listing?category=PRODUCT" className="choice" style={{ textDecoration: 'none' }}>
+                <b>Other products</b><span>Goods such as tools, household items and more.</span>
+              </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="listing-modal-overlay" onClick={closeModal}>
       <main className="section listing-modal-panel" onClick={e => e.stopPropagation()}>
@@ -174,23 +202,17 @@ export default function CreateListing() {
             <Link to="/" className="back-link">← Home</Link>
             <button type="button" className="listing-modal-close" aria-label="Close" onClick={closeModal}>×</button>
           </div>
-        <span className="eyebrow">SELL ON MARKETBRIDGE</span>
+        <span className="eyebrow">{category === 'AGRICULTURAL' ? 'AGRICULTURAL MARKETPLACE' : 'PRODUCT MARKETPLACE'}</span>
         <h1>{category === 'AGRICULTURAL' ? 'List agricultural produce' : 'List a physical product'}</h1>
-        <p className="muted">Your account can buy and sell. Agricultural listings keep the farmer as the price authority.</p>
+        <p className="muted">
+          {category === 'AGRICULTURAL'
+            ? 'You set the price. Buyers make offers.'
+            : 'Your account can buy and sell.'}
+        </p>
         <form className="card form-card" onSubmit={submit}>
           {error && <div className="alert error">{error}</div>}
-          <label>Marketplace</label>
-          <div className="choice-grid">
-            <button type="button" className={`choice ${category === 'AGRICULTURAL' ? 'selected' : ''}`} onClick={() => setCategory('AGRICULTURAL')}>
-              <b>Agricultural</b><span>Bulk produce, farm lots, inspection and transport workflows.</span>
-            </button>
-            <button type="button" className={`choice ${category === 'PRODUCT' ? 'selected' : ''}`} onClick={() => setCategory('PRODUCT')}>
-              <b>Product</b><span>General physical goods sold by MarketBridge members.</span>
-            </button>
-          </div>
-
           <div className="cl-section">
-            <p className="cl-section-title">Produce details</p>
+            <p className="cl-section-title">{category === 'AGRICULTURAL' ? 'Produce details' : 'Product details'}</p>
             {category === 'AGRICULTURAL' ? (
               <div className="form-grid">
                 <div><label>Produce</label><input required value={form.cropType} onChange={set('cropType')} placeholder="Potatoes, wheat, barley..." /></div>
