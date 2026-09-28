@@ -15,11 +15,15 @@
 
 ### Physical Product
 1. Active `PRODUCT` listing.
-2. Buyer `POST /orders/buy-now`.
-3. Server atomically claims the listing and creates a pending order.
-4. Buyer pays `MARKETPLACE`.
-5. Payment settlement confirms the order.
-6. Transport, if required, remains independent of the agricultural inspection/decision gate.
+2. Buyers submit competing offers; each buyer has one active root negotiation.
+3. Seller selects one buyer for bilateral negotiation; only that selected thread may counter.
+4. Negotiation acceptance creates one provisional `PENDING_PAYMENT` order; inventory is not committed yet.
+5. Buyer requests an inspection; inspectors submit competing quotes.
+6. Buyer selects one inspector, negotiates if needed, and pays the inspection fee. Payment commits the inspector.
+7. Inspector completes a product-specific inspection report.
+8. Buyer explicitly chooses `BUY` or `CANCEL`. `BUY` unlocks goods payment; `CANCEL` releases the provisional order and promotes the next waiting buyer.
+9. Buyer pays `MARKETPLACE`; settlement commits product inventory.
+10. Transport uses the same competitive quote/selection/negotiation/payment model.
 
 ### Digital
 1. Active private `DigitalProduct` with a secure `fileKey`.
