@@ -289,7 +289,7 @@ export default function ListingDetail() {
   const activeMedia = media[activeMediaIndexSafe];
 
   return (
-    <main className="section listing-detail-page">
+    <main className="section">
       <div className="container-wide">
         <Link className="back-link" to={isAgricultural ? '/agricultural' : '/products'}>← Back to marketplace</Link>
         <div className="detail-grid">
