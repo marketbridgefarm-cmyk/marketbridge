@@ -4,6 +4,7 @@ const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('./orderEventService');
 const { releaseListingQuantity } = require('./inventoryService');
 const { requestRefund } = require('./paymentRefundService');
+const { isInstallmentParent } = require('./installmentService');
 const { cancelPayoutsForOrder } = require('./payoutService');
 const { transitionOrderStatus } = require('./orderStateMachine');
 
@@ -142,7 +143,40 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
   // Create durable refund requests for paid funds. A refund is only marked
   // REFUNDED after the payment provider (or an authorized admin settlement
   // flow) confirms completion.
-  const paidOrderPayments = (order.payments || []).filter((p) => p.status === 'PAID');
+  //
+  // The order's payments are re-read inside the transaction so installment
+  // fields are always present, whatever the caller selected.
+  const allPaidOrderPayments = await tx.payment.findMany({
+    where: { orderId: order.id, status: 'PAID' },
+  });
+
+  // Installment plans (goods paid in installments): the full-price parent has
+  // no provider transaction, so it is never refunded directly. Each paid
+  // installment is refunded on its own, and the parent is marked REFUNDED once
+  // the last of them completes (see refund completion). Unpaid installments
+  // and an unsettled parent are closed so they can no longer be paid.
+  const planParents = allPaidOrderPayments.filter(isInstallmentParent);
+  const paidOrderPayments = allPaidOrderPayments.filter((p) => !isInstallmentParent(p));
+
+  for (const parent of planParents) {
+    await tx.payment.updateMany({
+      where: { id: parent.id, status: 'PAID' },
+      data: { status: 'REFUND_PENDING' },
+    });
+  }
+
+  await tx.payment.updateMany({
+    where: {
+      orderId: order.id,
+      status: 'PENDING',
+      OR: [
+        { installmentCount: { not: null } },
+        { type: 'MARKETPLACE_INSTALLMENT' },
+      ],
+    },
+    data: { status: 'FAILED' },
+  });
+
   const paidTransportPayments = order.transportJob
     ? await tx.payment.findMany({ where: { transportJobId: order.transportJob.id, status: 'PAID' } })
     : [];

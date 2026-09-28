@@ -665,7 +665,7 @@ async function writeLedger(
 // SETTLE PAYMENT
 // ============================================================================
 
-async function settlePayment({
+async function settlePaymentCore({
   paymentId,
   status,
   provider,
@@ -1653,6 +1653,45 @@ async function settlePayment({
 // EXPORTS
 // ============================================================================
 
+// ============================================================================
+// SETTLE PAYMENT (public entry point)
+// ============================================================================
+//
+// Every provider path (callback, webhook, verify, admin confirm) calls this.
+// It runs the normal settlement, then - for an installment of a large goods
+// payment - settles the parent goods payment once every installment is PAID.
+// See installmentService.js.
+
+async function settlePayment(args) {
+  const result = await settlePaymentCore(args);
+
+  if (
+    result &&
+    result.type === 'MARKETPLACE_INSTALLMENT' &&
+    result.status === 'PAID' &&
+    result.parentPaymentId
+  ) {
+    try {
+      await require('./installmentService').finalizeInstallmentPlan(
+        result.parentPaymentId
+      );
+    } catch (error) {
+      // The installment itself is safely PAID. The parent is settled again by
+      // the next verify/callback/webhook or when the buyer opens the order.
+      logger.error(
+        {
+          err: error,
+          paymentId: result.id,
+          parentPaymentId: result.parentPaymentId,
+        },
+        'settlePayment: could not settle the goods payment after the last installment; will retry'
+      );
+    }
+  }
+
+  return result;
+}
+
 module.exports = {
   ACTIVE_STATUSES,
   TERMINAL_STATUSES,
@@ -1660,4 +1699,5 @@ module.exports = {
   commissionRateFor,
   createPayment,
   settlePayment,
+  settlePaymentCore,
 };

@@ -24,6 +24,8 @@ const TERMINAL_ORDER_STATUSES = ['COMPLETED', 'CANCELLED', 'DISPUTED'];
 const NON_CANCELLABLE_STATUSES = ['COMPLETED', 'CANCELLED'];
 const TRANSPORT_IN_MOTION_STATUSES = ['PICKUP', 'IN_TRANSIT', 'DELIVERED'];
 
+const chapaConfig = require('../config/chapa');
+
 function isPaid(payments, type) {
   return (payments || []).some((p) => p.type === type && p.status === 'PAID');
 }
@@ -59,6 +61,9 @@ function buildPaymentSnapshot(order) {
     beneficiaryRole: 'SELLER',
     beneficiaryId: marketplaceObligation?.beneficiaryId || order.sellerId,
     obligationId: marketplaceObligation?.id || null,
+    // Largest single amount the payment provider accepts. The UI shows this
+    // before the buyer tries to pay an amount above it.
+    maxOnlineAmount: chapaConfig.getMaxTransactionAmount(),
   };
 
   const inspectionRequests = (order.listing?.inspectionRequests || order.inspectionRequests || [])

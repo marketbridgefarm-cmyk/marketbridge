@@ -273,6 +273,15 @@ async function finalizeRefund({ refundId, actorId, note, providerStatus }) {
 
     await tx.payment.update({ where: { id: fresh.payment.id }, data: { status: 'REFUNDED' } });
 
+    // An installment of a large goods payment: once the last paid installment
+    // is refunded, the parent goods payment is refunded as well.
+    if (fresh.payment.parentPaymentId) {
+      await require('./installmentService').markParentRefundedIfComplete(
+        tx,
+        fresh.payment.parentPaymentId
+      );
+    }
+
     if (fresh.payment.orderId) {
       await recordOrderEvent(tx, {
         orderId: fresh.payment.orderId,
