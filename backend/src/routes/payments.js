@@ -36,6 +36,9 @@ const {
 const paymentService =
   require('../services/paymentService');
 
+const installmentService =
+  require('../services/installmentService');
+
 const router = express.Router();
 
 // ============================================================================
@@ -190,6 +193,10 @@ router.post(
         'OTHER',
       ]),
 
+    body('installments')
+      .optional()
+      .isBoolean(),
+
     body('orderId')
       .optional()
       .isUUID(),
@@ -229,6 +236,72 @@ router.post(
 
       const amount =
         Number(req.body.amount);
+
+      // Amounts above the provider's per-transaction limit cannot be paid in
+      // one checkout. Goods payments may instead be paid in installments
+      // (opt-in with installments: true); anything else is rejected up front
+      // rather than creating an unpayable intent.
+      const wantsInstallments =
+        req.body.installments === true ||
+        req.body.installments === 'true';
+
+      const usesChapa = method === 'TELEBIRR' || method === 'QR';
+      const overProviderLimit =
+        usesChapa && amount > chapa.getMaxTransactionAmount();
+
+      let installmentMax = null;
+
+      if (overProviderLimit) {
+        installmentMax = chapa.getMaxTransactionAmount();
+
+        if (type !== 'MARKETPLACE') {
+          return res.status(400).json({
+            error:
+              `Online payments are limited to ${installmentMax.toLocaleString('en-US')} ETB per transaction. ` +
+              'Please contact MarketBridge support to arrange this payment.',
+            code: 'PAYMENT_AMOUNT_EXCEEDS_LIMIT',
+            maxAmount: installmentMax,
+          });
+        }
+
+        if (!wantsInstallments) {
+          let installmentCount = null;
+          try {
+            installmentCount =
+              installmentService.splitAmount(amount, installmentMax).length;
+          } catch (_) {
+            installmentCount = null;
+          }
+
+          return res.status(400).json({
+            error:
+              `Online payments are limited to ${installmentMax.toLocaleString('en-US')} ETB per transaction. ` +
+              (installmentCount
+                ? `This order can be paid in ${installmentCount} installments.`
+                : 'Please contact MarketBridge support to arrange this payment.'),
+            code: 'PAYMENT_AMOUNT_EXCEEDS_LIMIT',
+            maxAmount: installmentMax,
+            installmentsAvailable: Boolean(installmentCount),
+            installmentCount,
+          });
+        }
+
+        // Fail early (before any gate checks) if the plan itself is not possible.
+        try {
+          installmentService.splitAmount(amount, installmentMax);
+        } catch (planError) {
+          return res.status(planError.status || 400).json({
+            error: planError.message,
+            code: planError.code,
+            maxAmount: installmentMax,
+          });
+        }
+      } else if (wantsInstallments) {
+        return res.status(400).json({
+          error: 'Installments are only available for amounts above the online payment limit',
+          code: 'INSTALLMENTS_NOT_NEEDED',
+        });
+      }
 
       let transportJobId = null;
 
@@ -790,6 +863,27 @@ router.post(
         });
 
       if (duplicate) {
+        // Retrying installment creation (for example after a dropped
+        // connection): return the existing plan instead of failing.
+        if (
+          wantsInstallments &&
+          installmentService.isInstallmentParent(duplicate)
+        ) {
+          const installments =
+            await installmentService.ensureInstallmentChildren(
+              duplicate,
+              installmentMax
+            );
+
+          return res.status(200).json({
+            message: 'Installment plan already exists.',
+            payment: duplicate,
+            installments,
+            paymentConfirmed: false,
+            replayed: true,
+          });
+        }
+
         return res.status(409).json({
           error:
             'Active payment already exists',
@@ -831,9 +925,34 @@ router.post(
 
           transportJobId,
 
+          ...(wantsInstallments && {
+            installmentCount:
+              installmentService.splitAmount(amount, installmentMax).length,
+          }),
+
           idempotencyKey:
             idempotencyKey ? String(idempotencyKey) : null,
         });
+
+      if (wantsInstallments) {
+        const installments =
+          await installmentService.ensureInstallmentChildren(
+            payment,
+            installmentMax
+          );
+
+        return res.status(201).json({
+          message:
+            'Installment plan created. Pay each installment with /payments/:id/chapa/initialize.',
+
+          payment,
+
+          installments,
+
+          paymentConfirmed:
+            false,
+        });
+      }
 
       return res.status(201).json({
         message:
@@ -929,6 +1048,23 @@ router.post(
         });
       }
 
+      // The full-price parent of an installment plan is never sent to the
+      // provider; each installment is paid on its own.
+      if (installmentService.isInstallmentParent(payment)) {
+        return res.status(409).json({
+          error:
+            'This payment is paid in installments. Pay each installment separately.',
+          code: 'PAYMENT_IS_INSTALLMENT_PLAN',
+        });
+      }
+
+      // Existing PENDING intents created before the limit check land here.
+      // Checked before the PROCESSING claim so the payment stays PENDING.
+      chapa.assertWithinTransactionLimit(
+        payment.amount,
+        payment.currency || 'ETB'
+      );
+
       const appUrl =
         appBaseUrl();
 
@@ -1013,11 +1149,16 @@ router.post(
           returnUrl:
             `${appUrl}/payments/${payment.id}/return`,
 
+          // Chapa limits the checkout title to 16 characters.
           title:
-            payment.type,
+            payment.type === 'MARKETPLACE_INSTALLMENT'
+              ? 'Installment'
+              : payment.type,
 
           description:
-            `MarketBridge ${payment.type} payment`,
+            payment.type === 'MARKETPLACE_INSTALLMENT'
+              ? `MarketBridge order payment, installment ${payment.installmentSequence}`
+              : `MarketBridge ${payment.type} payment`,
         });
       } catch (providerError) {
         await prisma.payment.updateMany({
@@ -1062,6 +1203,45 @@ router.post(
         error:
           error.message ||
           'Could not start Chapa checkout',
+      });
+    }
+  }
+);
+
+// ============================================================================
+// RETRY A FAILED INSTALLMENT
+// ============================================================================
+//
+// A failed installment cannot be reopened, so the buyer gets a fresh one for
+// the same sequence and amount. See installmentService.replaceFailedInstallment.
+
+router.post(
+  '/:id/retry-installment',
+  authenticate,
+  paymentLimiter,
+
+  [
+    param('id').isUUID(),
+  ],
+
+  validate,
+
+  async (req, res) => {
+    try {
+      const installment =
+        await installmentService.replaceFailedInstallment(
+          req.params.id,
+          req.user.id,
+          { isAdmin: isAdmin(req.user) }
+        );
+
+      return res.status(201).json({ installment });
+    } catch (error) {
+      req.log.error({ err: error }, 'RETRY INSTALLMENT ERROR:');
+
+      return res.status(error.status || 500).json({
+        error: error.message || 'Could not retry installment',
+        code: error.code,
       });
     }
   }
@@ -1276,6 +1456,19 @@ router.get(
         return res.status(403).json({
           error:
             'Not authorized',
+        });
+      }
+
+      // The parent of an installment plan has no provider transaction of its
+      // own. Re-check whether every installment is paid and settle it if so.
+      if (installmentService.isInstallmentParent(payment)) {
+        const parent =
+          await installmentService.finalizeInstallmentPlan(payment.id);
+
+        return res.json({
+          ok: true,
+          status: parent?.status || payment.status,
+          payment: parent || payment,
         });
       }
 
@@ -2165,6 +2358,25 @@ router.get(
           error:
             'Not authorized',
         });
+      }
+
+      // Self-heal: if every installment is paid but the goods payment was not
+      // settled (for example the server stopped right after the last
+      // installment), settle it now. Idempotent.
+      try {
+        const plans = await prisma.payment.findMany({
+          where: {
+            orderId: order.id,
+            installmentCount: { not: null },
+            status: { in: ['PENDING', 'PROCESSING'] },
+          },
+          select: { id: true },
+        });
+        for (const plan of plans) {
+          await installmentService.finalizeInstallmentPlan(plan.id);
+        }
+      } catch (healError) {
+        req.log.error({ err: healError }, 'INSTALLMENT SELF-HEAL ERROR:');
       }
 
       const payments =
