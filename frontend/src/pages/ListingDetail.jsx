@@ -9,6 +9,30 @@ import './listing-detail/ListingDetail.css';
 
 const money = (n) => Number(n || 0).toLocaleString();
 
+const ICONS = {
+  inspection: <><path d="M9 3h6l1 2h3v16H5V5h3l1-2Z"/><path d="m9 13 2 2 4-5"/></>,
+  negotiation: <><path d="M4 5h16v11H8l-4 4V5Z"/><path d="M8 9h8M8 12h5"/></>,
+  offer: <><path d="M3 7h18v14H3z"/><path d="M7 7V5h10v2M8 14h8M12 11v6"/></>,
+  quality: <><path d="m12 3 7 3v5c0 4.7-3 8.3-7 10-4-1.7-7-5.3-7-10V6l7-3Z"/><path d="m9 12 2 2 4-4"/></>,
+  seller: <><path d="M4 20v-9l8-6 8 6v9"/><path d="M9 20v-5h6v5"/></>,
+  ready: <><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></>,
+  list: <><path d="M6 5h12M6 12h12M6 19h12"/><circle cx="3.5" cy="5" r=".8"/><circle cx="3.5" cy="12" r=".8"/><circle cx="3.5" cy="19" r=".8"/></>,
+};
+
+function SectionTitle({ icon, children, level = 2, className = '' }) {
+  const Tag = level === 3 ? 'h3' : 'h2';
+  return (
+    <Tag className={`ld-section-title ${className}`.trim()}>
+      <span className="ld-section-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          {ICONS[icon] || ICONS.list}
+        </svg>
+      </span>
+      <span>{children}</span>
+    </Tag>
+  );
+}
+
 export default function ListingDetail() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -321,7 +345,7 @@ export default function ListingDetail() {
             </div>
             {(isAgricultural || isProduct) && (
               <div className="card">
-                <h2>Inspection evidence</h2>
+                <SectionTitle icon="inspection">Inspection evidence</SectionTitle>
                 {listing.inspectionRequests?.length ? listing.inspectionRequests.map((request) => (
                   <div className="evidence" key={request.id}>
                     <div><strong>{request.mode.replaceAll('_', ' ')}</strong><span className="badge" style={{ marginLeft: 8 }}>{request.status}</span></div>
@@ -461,7 +485,7 @@ export default function ListingDetail() {
           <aside>
             {isBuyer && myLatestOffer && (isAgricultural || isProduct) && (
               <div className="card" id="negotiation">
-                <h2>Your negotiation</h2>
+                <SectionTitle icon="negotiation">Your negotiation</SectionTitle>
                 <p>Current amount: <strong>{money(myLatestOffer.counterAmount ?? myLatestOffer.amount)} ETB</strong></p>
                 <span className="badge">{myLatestOffer.status}</span>
                 {myLatestOffer.status === 'SELECTED' && (
@@ -493,7 +517,7 @@ export default function ListingDetail() {
 
             {isBuyer && (
               <div className="card sticky-card" id="make-offer">
-                <h2>{!isAvailable || buyerHasActiveOfferDeal ? 'Offer unavailable' : 'Make an Offer'}</h2>
+                <SectionTitle icon="offer">{!isAvailable || buyerHasActiveOfferDeal ? 'Offer unavailable' : 'Make an Offer'}</SectionTitle>
                 {buyerHasActiveOfferDeal ? (
                   <div>
                     <p className="muted">You already have an active buyer offer on this listing. Continue the existing negotiation below instead of submitting another root bid.</p>
@@ -517,7 +541,7 @@ export default function ListingDetail() {
                     {(isAgricultural || isProduct) && (
                       <>
                         <hr />
-                        <h3>Quality check</h3>
+                        <SectionTitle icon="quality" level={3}>Quality check</SectionTitle>
                         {activeInspectionRequest ? (
                           <p className="small muted">Inspection already requested: <strong>{activeInspectionRequest.status.replaceAll('_', ' ')}</strong>. Continue with the existing inspection rather than creating another request.</p>
                         ) : (
@@ -540,7 +564,7 @@ export default function ListingDetail() {
 
             {isOwner && (
               <div className="card sticky-card">
-                <h2>Seller controls</h2>
+                <SectionTitle icon="seller">Seller controls</SectionTitle>
                 <p className="small muted">Only the seller can change price or listing status.</p>
                 {(isAgricultural || isProduct) && (
                   <>
@@ -554,7 +578,7 @@ export default function ListingDetail() {
                     )}
                   </>
                 )}
-                <h3 className="mt">Negotiations</h3>
+                <SectionTitle icon="negotiation" level={3} className="mt">Negotiations</SectionTitle>
                 {(() => {
                   const offers = Array.isArray(listing.offers) ? listing.offers : [];
                   const byBuyer = new Map();
@@ -589,7 +613,7 @@ export default function ListingDetail() {
 
             {!user && (
               <div className="card">
-                <h2>Ready to participate?</h2>
+                <SectionTitle icon="ready">Ready to participate?</SectionTitle>
                 <p>Register to buy and sell across MarketBridge.</p>
                 <Link className="btn btn-primary full" to="/register">Create account</Link>
               </div>
