@@ -2894,6 +2894,97 @@ router.get('/payouts', async (req, res) => {
   }
 });
 
+
+// ============================================================================
+// INSTALLMENT PLANS
+// ============================================================================
+// Admin read-only view of large marketplace payment plans. This is deliberately
+// separate from the flat payment queue so ops can see the buyer, seller,
+// installment progress, and the single seller payout in one place.
+
+router.get('/installment-plans', async (req, res) => {
+  try {
+    const status = req.query.status ? String(req.query.status).toUpperCase() : null;
+    const where = {
+      installmentCount: { not: null },
+    };
+
+    if (status && status !== 'ALL') {
+      if (!['PENDING', 'PROCESSING', 'PAID', 'REFUND_PENDING', 'REFUNDED', 'FAILED'].includes(status)) {
+        return res.status(400).json({ error: 'Invalid installment plan status filter' });
+      }
+      where.status = status;
+    }
+
+    const rawLimit = Number(req.query.limit || 200);
+    const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 200, 1), 500);
+
+    const plans = await prisma.payment.findMany({
+      where,
+      include: {
+        createdBy: { select: { id: true, name: true, email: true, phone: true } },
+        order: {
+          select: {
+            id: true,
+            status: true,
+            finalPrice: true,
+            seller: { select: { id: true, name: true, email: true, phone: true } },
+            buyer: { select: { id: true, name: true, email: true, phone: true } },
+            listing: { select: { id: true, title: true, cropType: true } },
+          },
+        },
+        installments: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            amount: true,
+            currency: true,
+            status: true,
+            installmentSequence: true,
+            method: true,
+            provider: true,
+            chapaTxRef: true,
+            providerTransactionId: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+        payout: {
+          select: {
+            id: true,
+            amount: true,
+            currency: true,
+            status: true,
+            releaseAt: true,
+            releasedAt: true,
+            paidOutAt: true,
+            payoutReference: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    const normalized = plans.map((plan) => {
+      const live = plan.installments.filter((item) => item.installmentSequence != null);
+      const paidCount = live.filter((item) => item.status === 'PAID').length;
+      return {
+        ...plan,
+        installmentProgress: {
+          paid: paidCount,
+          total: plan.installmentCount,
+        },
+      };
+    });
+
+    return res.json({ plans: normalized, count: normalized.length });
+  } catch (error) {
+    req.log.error({ err: error }, 'ADMIN LIST INSTALLMENT PLANS ERROR');
+    return res.status(500).json({ error: 'Could not load installment plans' });
+  }
+});
+
 router.patch('/payouts/:id/pay-out', async (req, res) => {
   try {
     const payoutReference = typeof req.body?.payoutReference === 'string' ? req.body.payoutReference.trim().slice(0, 255) : null;
