@@ -1,738 +1,247 @@
-/* MarketBridge Listing Detail — page-scoped visual layer.
-   This file styles the existing ListingDetail structure without changing
-   marketplace, competition, negotiation, inspection, or payment behavior. */
+/* MarketBridge Listing Detail — restyle.
+   Direction: a trader's ledger. Cool stone page, deep forest ink, and one
+   saffron accent reserved for the price. Structure and behavior are untouched. */
 
 .listing-detail-page {
-  --ld-green: var(--mb-primary, var(--green, #176b3a));
-  --ld-dark: var(--mb-primary-dark, var(--green-dark, #0e4b29));
-  --ld-soft: var(--mb-primary-soft, var(--soft, #eef5ef));
-  --ld-line: var(--mb-border, var(--line, #dfe7df));
-  --ld-muted: var(--mb-text-muted, var(--muted, #667168));
-  --ld-paper: var(--mb-card, #fff);
-  --ld-gold: var(--gold, #b77b1b);
-  --ld-danger: var(--danger, #b42318);
-  --ld-shadow: 0 8px 28px rgba(20, 45, 28, .055);
-  --ld-shadow-lift: 0 16px 38px rgba(20, 45, 28, .10);
+  --ld-page: #eef1ec;
+  --ld-paper: #ffffff;
+  --ld-ink: #14221b;
+  --ld-forest: #0f3d2e;
+  --ld-forest-2: #1b5a44;
+  --ld-saffron: #e3a72f;
+  --ld-mute: #5d6b62;
+  --ld-line: #d5dcd3;
+  --ld-wash: #f6f8f4;
+  --ld-danger: #a8321f;
+  --ld-head: 'Bricolage Grotesque', 'Familjen Grotesk', 'Segoe UI', system-ui, sans-serif;
+
   min-height: calc(100vh - 72px);
-  padding-bottom: clamp(42px, 7vw, 76px);
+  padding-bottom: clamp(40px, 7vw, 76px);
+  background: var(--ld-page);
+  color: var(--ld-ink);
 }
 
-.listing-detail-page .container-wide {
-  max-width: 1240px;
-}
+.listing-detail-page .container-wide { max-width: 1240px; }
 
 .listing-detail-page .back-link {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  margin: 0 0 18px;
-  min-height: 34px;
-  padding: 0 11px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  transition: background .18s ease, border-color .18s ease, transform .18s ease;
-}
-
-.listing-detail-page .back-link:hover {
-  background: var(--ld-soft);
-  border-color: rgba(23,107,58,.12);
-  transform: translateX(-2px);
+  min-height: 36px;
+  margin-bottom: 16px;
+  color: var(--ld-forest);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 2px solid var(--ld-saffron);
 }
 
 .listing-detail-page .detail-grid {
-  grid-template-columns: minmax(0, 1.42fr) minmax(330px, .78fr);
-  gap: clamp(20px, 3vw, 30px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, .75fr);
+  gap: clamp(20px, 3vw, 32px);
   align-items: start;
 }
-
 .listing-detail-page .detail-grid > section,
-.listing-detail-page .detail-grid > aside {
-  min-width: 0;
-}
+.listing-detail-page .detail-grid > aside { min-width: 0; }
 
-/* -------------------------------------------------------------------------- */
-/* Media                                                                     */
-/* -------------------------------------------------------------------------- */
-
+/* ---------- Media ---------- */
 .listing-detail-page .detail-media {
-  height: clamp(300px, 45vw, 520px);
-  margin-bottom: 12px;
-  border: 1px solid var(--ld-line);
-  border-radius: 22px;
-  background:
-    radial-gradient(circle at 20% 15%, rgba(47,145,89,.12), transparent 35%),
-    linear-gradient(145deg, #eef5ef, #e3ece4);
-  box-shadow: var(--ld-shadow);
+  height: clamp(280px, 44vw, 520px);
+  margin-bottom: 10px;
+  overflow: hidden;
+  border-radius: 6px 28px 6px 6px;
+  background: var(--ld-forest);
 }
-
 .listing-detail-page .detail-media img,
 .listing-detail-page .detail-media video {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  display: block; width: 100%; height: 100%; object-fit: cover;
 }
-
-.listing-detail-page .detail-media video {
-  background: #152019;
-}
-
 .listing-detail-page .media-placeholder {
-  padding: 28px;
-  text-align: center;
-  color: var(--ld-green);
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: clamp(30px, 5vw, 58px);
-  line-height: 1.05;
-  letter-spacing: -1.6px;
-}
-
-.listing-detail-page .detail-media-thumbs {
-  gap: 9px;
-  margin: 0 0 18px;
-  padding: 2px 1px 6px;
-  scrollbar-width: thin;
-}
-
-.listing-detail-page .detail-media-thumb {
-  width: 72px;
-  height: 72px;
-  border: 2px solid transparent;
-  border-radius: 12px;
-  background: #e8efe8;
-  box-shadow: 0 2px 8px rgba(20,45,28,.04);
-  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
-}
-
-.listing-detail-page .detail-media-thumb:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 7px 16px rgba(20,45,28,.09);
-}
-
-.listing-detail-page .detail-media-thumb.active {
-  border-color: var(--ld-green);
-  box-shadow: 0 0 0 2px rgba(23,107,58,.10);
-}
-
-.listing-detail-page .detail-media-thumb-play {
-  background: rgba(14,75,41,.46);
-}
-
-/* -------------------------------------------------------------------------- */
-/* Main listing summary                                                       */
-/* -------------------------------------------------------------------------- */
-
-.listing-detail-page .card {
-  border-color: var(--ld-line);
-  border-radius: 18px;
-  box-shadow: var(--ld-shadow);
-}
-
-.listing-detail-page .detail-content {
-  padding: clamp(20px, 3vw, 30px);
-  margin-bottom: 18px;
-}
-
-.listing-detail-page .listing-meta {
-  gap: 8px;
-  margin-bottom: 13px;
-}
-
-.listing-detail-page .listing-meta .tag {
-  padding: 6px 9px;
-  border-radius: 7px;
-  background: var(--ld-soft);
-  color: var(--ld-green);
-  font-size: 10px;
-  letter-spacing: .09em;
-}
-
-.listing-detail-page .listing-meta .badge {
-  padding: 5px 9px;
-  border: 1px solid rgba(23,107,58,.12);
-  background: #f7faf7;
-  text-transform: uppercase;
-  letter-spacing: .04em;
-}
-
-.listing-detail-page .detail-content h1 {
-  margin: 0;
-  max-width: 850px;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: clamp(24px, 3.4vw, 38px);
+  display: grid; place-items: center; height: 100%; padding: 28px;
+  color: var(--ld-saffron);
+  font-family: var(--ld-head);
+  font-size: clamp(30px, 5vw, 56px);
   font-weight: 800;
-  line-height: 1.04;
-  letter-spacing: -1.8px;
+  letter-spacing: -1.5px;
+  line-height: 1.05;
+  text-align: center;
+}
+.listing-detail-page .detail-media-thumbs {
+  display: flex; gap: 8px; margin-bottom: 18px; padding: 2px 1px 6px; overflow-x: auto;
+}
+.listing-detail-page .detail-media-thumb {
+  position: relative; flex: none; width: 70px; height: 70px; padding: 0;
+  overflow: hidden; cursor: pointer;
+  border: 2px solid transparent; border-radius: 6px; background: #d9e0d7;
+  opacity: .72;
+}
+.listing-detail-page .detail-media-thumb img,
+.listing-detail-page .detail-media-thumb video { width: 100%; height: 100%; object-fit: cover; }
+.listing-detail-page .detail-media-thumb.active { opacity: 1; border-color: var(--ld-saffron); }
+.listing-detail-page .detail-media-thumb-play {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  color: #fff; background: rgba(15,61,46,.5);
 }
 
-.listing-detail-page .detail-content .lead {
-  max-width: 760px;
-  margin: 12px 0 0;
-  color: var(--ld-muted);
+/* ---------- Cards ---------- */
+.listing-detail-page .card {
+  margin-bottom: 16px;
+  padding: clamp(18px, 2.5vw, 26px);
+  border: 1px solid var(--ld-line);
+  border-radius: 6px;
+  background: var(--ld-paper);
+  box-shadow: none;
+}
+.listing-detail-page .card h2 {
+  margin: 0 0 12px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--ld-forest);
+  font-family: var(--ld-head);
+  font-size: 19px;
+  letter-spacing: -.3px;
+}
+.listing-detail-page .card h3 {
+  margin: 16px 0 6px;
+  font-family: var(--ld-head);
   font-size: 15px;
 }
+.listing-detail-page .card hr { margin: 20px 0; border: 0; border-top: 1px solid var(--ld-line); }
 
+/* ---------- Summary ---------- */
+.listing-detail-page .detail-content { padding: 0; overflow: hidden; }
+.listing-detail-page .detail-content > *:not(.detail-facts) { margin-left: clamp(18px, 3vw, 30px); margin-right: clamp(18px, 3vw, 30px); }
+.listing-detail-page .listing-meta { display: flex; gap: 8px; margin-top: clamp(18px, 3vw, 28px); margin-bottom: 12px; }
+.listing-detail-page .listing-meta .tag {
+  padding: 4px 10px; border-radius: 999px;
+  background: var(--ld-forest); color: #fff; font-size: 12px; font-weight: 700;
+}
+.listing-detail-page .badge {
+  display: inline-block; padding: 3px 10px;
+  border: 1px solid var(--ld-forest-2); border-radius: 999px;
+  color: var(--ld-forest); background: transparent; font-size: 12px; font-weight: 700;
+}
+.listing-detail-page .detail-content h1 {
+  margin-top: 0; margin-bottom: 0; max-width: 820px;
+  font-family: var(--ld-head);
+  font-size: clamp(30px, 4.6vw, 52px);
+  font-weight: 800; line-height: 1.02; letter-spacing: -1.8px;
+}
+.listing-detail-page .detail-content .lead {
+  max-width: 62ch; margin-top: 12px; margin-bottom: 0; color: var(--ld-mute); font-size: 15px; line-height: 1.5;
+}
+
+/* The one memorable element: the price band. */
 .listing-detail-page .detail-facts {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  margin: 24px 0 18px;
-  padding: 0;
-  border-top: 1px solid var(--ld-line);
-  border-bottom: 1px solid var(--ld-line);
-}
-
-.listing-detail-page .detail-facts > div {
-  min-width: 0;
-  padding: 15px 16px;
-  border-right: 1px solid var(--ld-line);
-}
-
-.listing-detail-page .detail-facts > div:first-child {
-  padding-left: 0;
-}
-
-.listing-detail-page .detail-facts > div:last-child {
-  padding-right: 0;
-  border-right: 0;
-}
-
-.listing-detail-page .detail-facts span {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  color: var(--ld-muted);
-}
-
-.listing-detail-page .detail-facts strong {
-  overflow-wrap: anywhere;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--ink);
-}
-
-.listing-detail-page .detail-content > .muted {
-  max-width: 820px;
-  margin: 0;
-  padding: 11px 13px;
-  border: 1px solid rgba(23,107,58,.10);
-  border-radius: 10px;
-  background: #f8fbf8;
-  color: var(--ld-muted);
-  font-size: 12px;
-}
-
-/* -------------------------------------------------------------------------- */
-/* Inspection evidence                                                       */
-/* -------------------------------------------------------------------------- */
-
-.listing-detail-page .detail-grid > section > .card:not(.detail-content) {
-  --ld-card-pad: clamp(19px, 2.5vw, 26px);
-  padding: var(--ld-card-pad);
-}
-
-.listing-detail-page .detail-grid > section > .card:not(.detail-content) > h2,
-.listing-detail-page aside .card > h2 {
-  margin: 0 0 14px;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 16px;
-  letter-spacing: -.2px;
-}
-
-.listing-detail-page .evidence {
-  margin-top: 0;
-  padding: 16px 0;
-  border-top: 1px solid #edf0ec;
-}
-
-.listing-detail-page .evidence:first-of-type {
-  padding-top: 4px;
-  border-top: 0;
-}
-
-.listing-detail-page .evidence > div:first-child {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-wrap: wrap;
-}
-
-.listing-detail-page .evidence > div:first-child strong {
-  color: var(--ink);
-  font-size: 13px;
-}
-
-.listing-detail-page .evidence .badge {
-  margin-left: 0 !important;
-}
-
-.listing-detail-page .evidence p {
-  margin: 6px 0 0;
-  font-size: 12px;
-}
-
-.listing-detail-page .evidence input {
-  width: 130px !important;
-  min-height: 38px;
-  margin: 0;
-}
-
-.listing-detail-page .evidence select {
-  width: auto;
-  min-width: 126px;
-}
-
-.listing-detail-page .evidence .btn {
-  min-height: 38px;
-}
-
-.listing-detail-page .evidence > .evidence {
-  margin-top: 9px;
-  padding: 12px;
-  border: 1px solid var(--ld-line);
-  border-radius: 12px;
-  background: #fbfdfb;
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* Right rail / negotiation                                                   */
-/* -------------------------------------------------------------------------- */
-
-.listing-detail-page aside {
   display: grid;
-  gap: 16px;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  margin: 22px 0 0;
+  background: var(--ld-forest);
+  color: #fff;
 }
+.listing-detail-page .detail-facts > div {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  padding: 18px clamp(18px, 3vw, 30px);
+  border-left: 1px solid rgba(255,255,255,.16);
+}
+.listing-detail-page .detail-facts > div:first-child { border-left: 0; }
+.listing-detail-page .detail-facts span { color: #b9cfc4; font-size: 13px; }
+.listing-detail-page .detail-facts strong {
+  overflow-wrap: anywhere; font-family: var(--ld-head); font-size: 16px; font-weight: 700;
+}
+.listing-detail-page .detail-facts > div:first-child strong {
+  color: var(--ld-saffron); font-size: clamp(26px, 3.4vw, 38px); letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+}
+.listing-detail-page .detail-content > .muted {
+  margin-top: 16px; margin-bottom: 0; padding-bottom: clamp(18px, 3vw, 26px);
+  max-width: 68ch; font-size: 13px; line-height: 1.55;
+}
+.listing-detail-page .detail-content > p:last-child { padding-bottom: clamp(18px, 3vw, 26px); }
 
-.listing-detail-page aside .card {
-  --ld-card-pad: clamp(18px, 2.5vw, 24px);
-  padding: var(--ld-card-pad);
+/* ---------- Inspection evidence ---------- */
+.listing-detail-page .evidence { padding: 16px 0; border-top: 1px solid var(--ld-line); }
+.listing-detail-page .evidence:first-of-type { padding-top: 2px; border-top: 0; }
+.listing-detail-page .evidence p { margin: 6px 0 0; font-size: 13px; }
+.listing-detail-page .evidence > .evidence {
+  margin-top: 10px; padding: 12px 14px;
+  border: 1px solid var(--ld-line); border-left: 4px solid var(--ld-saffron);
+  border-radius: 4px; background: var(--ld-wash);
 }
+.listing-detail-page .evidence input { width: 130px !important; }
 
-.listing-detail-page .sticky-card {
-  top: 88px;
-  box-shadow: 0 10px 30px rgba(20,45,28,.075);
-}
+/* ---------- Right rail ---------- */
+.listing-detail-page aside { display: grid; gap: 0; }
+.listing-detail-page .sticky-card { position: sticky; top: 88px; }
+.listing-detail-page #make-offer { border-top: 4px solid var(--ld-saffron); }
+.listing-detail-page #negotiation { border-top: 4px solid var(--ld-forest); }
+.listing-detail-page aside .card > p { font-size: 13px; line-height: 1.55; }
 
-.listing-detail-page aside .card > p {
-  font-size: 13px;
+.listing-detail-page label { display: block; margin: 14px 0 5px; font-size: 13px; font-weight: 700; }
+.listing-detail-page label:first-child { margin-top: 0; }
+.listing-detail-page input,
+.listing-detail-page select,
+.listing-detail-page textarea {
+  width: 100%; min-height: 42px; padding: 9px 12px; box-sizing: border-box;
+  border: 1px solid #b7c2b5; border-radius: 4px;
+  background: #fff; color: var(--ld-ink); font: inherit; font-size: 14px;
 }
-
-.listing-detail-page #negotiation {
-  border-color: rgba(23,107,58,.18);
-  background: linear-gradient(180deg, #ffffff 0%, #fbfdfb 100%);
-}
-
-.listing-detail-page #negotiation > p:first-of-type {
-  margin-top: 0;
-  font-size: 13px;
-}
-
-.listing-detail-page #negotiation .badge {
-  margin-top: 2px;
-}
-
-.listing-detail-page #make-offer {
-  border-color: rgba(23,107,58,.20);
-}
-
-.listing-detail-page  #make-offer > h2 {
-  font-size: 17px;
-}
-
-.listing-detail-page #make-offer form {
-  margin-top: 14px;
-}
-
-.listing-detail-page #make-offer form label {
-  margin-top: 13px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.listing-detail-page #make-offer form label:first-of-type {
-  margin-top: 0;
-}
-
-.listing-detail-page #make-offer form input,
-.listing-detail-page #make-offer form textarea {
-  border-radius: 10px;
-  background: #fcfefc;
-}
-
-.listing-detail-page #make-offer form textarea {
-  min-height: 92px;
-  resize: vertical;
-}
-
-.listing-detail-page #make-offer > p.muted {
-  margin-top: 0;
-}
-
-.listing-detail-page #make-offer hr {
-  margin: 22px 0;
-}
-
-.listing-detail-page #make-offer h3,
-.listing-detail-page aside .card h3.mt {
-  margin-bottom: 8px;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 13px;
-}
+.listing-detail-page textarea { min-height: 92px; resize: vertical; }
+.listing-detail-page input::placeholder,
+.listing-detail-page textarea::placeholder { color: #8a968d; }
 
 .listing-detail-page .offer-row {
-  padding: 14px;
+  padding: 12px 14px !important;
   border: 1px solid var(--ld-line);
-  border-radius: 13px;
-  background: #fbfdfb;
+  border-left: 4px solid var(--ld-forest-2);
+  border-radius: 4px !important;
+  background: var(--ld-wash);
 }
-
-.listing-detail-page .offer-row + .offer-row {
-  margin-top: 10px;
-}
-
-.listing-detail-page .offer-row > div:first-child {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .listing-detail-page .offer-row > div:first-child strong {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 17px;
+  font-family: var(--ld-head); font-size: 18px; font-variant-numeric: tabular-nums;
 }
+.listing-detail-page .offer-row small { display: block; margin-top: 4px; color: var(--ld-mute); }
+.listing-detail-page .offer-row input { width: auto; flex: 1 1 140px; min-height: 38px; margin: 0; }
+.listing-detail-page .row-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 
-.listing-detail-page .offer-row > div:first-child .badge {
-  margin-left: auto;
-}
-
-.listing-detail-page .offer-row small {
-  margin-top: 5px;
-  color: var(--ld-muted);
-}
-
-.listing-detail-page .offer-row input {
-  width: 150px;
-  min-height: 38px;
-  margin: 0;
-}
-
-.listing-detail-page .row-actions {
-  gap: 7px;
-}
-
-.listing-detail-page .row-actions .btn {
-  min-height: 38px;
-}
-
-.listing-detail-page .row-actions input {
-  flex: 1 1 150px;
-}
-
-/* -------------------------------------------------------------------------- */
-/* Shared action treatment, scoped to this page                               */
-/* -------------------------------------------------------------------------- */
-
+/* ---------- Buttons ---------- */
 .listing-detail-page .btn {
-  border-radius: 10px;
-  font-weight: 700;
-  transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 42px; padding: 0 16px;
+  border: 2px solid var(--ld-forest); border-radius: 4px;
+  background: transparent; color: var(--ld-forest);
+  font: inherit; font-size: 14px; font-weight: 700; text-decoration: none; cursor: pointer;
+}
+.listing-detail-page .btn-primary { background: var(--ld-forest); color: #fff; }
+.listing-detail-page .btn-primary:not(:disabled):hover { background: var(--ld-forest-2); border-color: var(--ld-forest-2); }
+.listing-detail-page .btn-light { background: #fff; }
+.listing-detail-page .btn-light:not(:disabled):hover { background: var(--ld-wash); }
+.listing-detail-page .btn-sm { min-height: 36px; padding: 0 12px; font-size: 13px; }
+.listing-detail-page .btn:disabled { opacity: .5; cursor: not-allowed; }
+.listing-detail-page .full { width: 100%; }
+.listing-detail-page .small { font-size: 12px; }
+.listing-detail-page .muted { color: var(--ld-mute); }
+
+/* ---------- Keyboard focus ---------- */
+.listing-detail-page a:focus-visible,
+.listing-detail-page button:focus-visible,
+.listing-detail-page input:focus-visible,
+.listing-detail-page select:focus-visible,
+.listing-detail-page textarea:focus-visible {
+  outline: 3px solid var(--ld-saffron); outline-offset: 2px;
 }
 
-.listing-detail-page .btn:not(:disabled):hover {
-  transform: translateY(-1px);
-}
-
-.listing-detail-page .btn-primary:not(:disabled):hover {
-  box-shadow: 0 8px 18px rgba(23,107,58,.14);
-}
-
-.listing-detail-page .btn-sm {
-  min-height: 36px;
-}
-
-.listing-detail-page .full {
-  width: 100%;
-}
-
-.listing-detail-page .small {
-  font-size: 11px;
-}
-
-.listing-detail-page .muted {
-  color: var(--ld-muted);
-}
-
-.listing-detail-page .card > p:last-child {
-  margin-bottom: 0;
-}
-
-/* Give the page a subtle visual hierarchy without altering the global card system. */
-.listing-detail-page .detail-grid > section > .card,
-.listing-detail-page aside .card {
-  transition: border-color .18s ease, box-shadow .18s ease;
-}
-
-.listing-detail-page .detail-grid > section > .card:hover,
-.listing-detail-page aside .card:hover {
-  border-color: rgba(23,107,58,.15);
-  box-shadow: var(--ld-shadow-lift);
-}
-
-/* -------------------------------------------------------------------------- */
-/* Responsive                                                                 */
-/* -------------------------------------------------------------------------- */
-
+/* ---------- Responsive ---------- */
 @media (max-width: 980px) {
-  .listing-detail-page .detail-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .listing-detail-page aside {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
-  }
-
-  .listing-detail-page aside .card {
-    position: static;
-  }
-
-  .listing-detail-page #make-offer {
-    grid-column: 1 / -1;
-  }
+  .listing-detail-page .detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .listing-detail-page .sticky-card { position: static; }
 }
-
-@media (max-width: 700px) {
-  .listing-detail-page {
-    padding-top: 26px;
-  }
-
-  .listing-detail-page .detail-media {
-    height: clamp(240px, 68vw, 390px);
-    border-radius: 17px;
-  }
-
-  .listing-detail-page .detail-content {
-    padding: 19px;
-  }
-
-  .listing-detail-page .detail-content h1 {
-    font-size: clamp(23px, 7vw, 32px);
-    letter-spacing: -1px;
-  }
-
-  .listing-detail-page .detail-facts {
-    grid-template-columns: 1fr;
-  }
-
-  .listing-detail-page .detail-facts > div,
-  .listing-detail-page .detail-facts > div:first-child,
-  .listing-detail-page .detail-facts > div:last-child {
-    padding: 12px 0;
-    border-right: 0;
-    border-bottom: 1px solid var(--ld-line);
-  }
-
-  .listing-detail-page .detail-facts > div:last-child {
-    border-bottom: 0;
-  }
-
-  .listing-detail-page aside {
-    grid-template-columns: 1fr;
-  }
-
-  .listing-detail-page aside .card {
-    --ld-card-pad: 18px;
-    padding: var(--ld-card-pad);
-  }
-
-  .listing-detail-page .detail-media-thumb {
-    width: 62px;
-    height: 62px;
-  }
-}
-
-@media (max-width: 480px) {
-  .listing-detail-page .back-link {
-    margin-bottom: 12px;
-  }
-
-  .listing-detail-page .detail-media {
-    margin-bottom: 9px;
-    border-radius: 14px;
-  }
-
-  .listing-detail-page .detail-content {
-    padding: 16px;
-    border-radius: 14px;
-  }
-
-  .listing-detail-page .detail-content .lead {
-    font-size: 13px;
-  }
-
-  .listing-detail-page .detail-grid > section > .card:not(.detail-content) {
-    --ld-card-pad: 16px;
-    padding: var(--ld-card-pad);
-    border-radius: 14px;
-  }
-
-  .listing-detail-page .evidence > div[style] {
-    align-items: stretch !important;
-  }
-
-  .listing-detail-page .evidence > div[style] .btn {
-    flex: 1 1 auto;
-  }
-
-  .listing-detail-page .evidence input {
-    width: 100% !important;
-    flex: 1 1 100%;
-  }
-
-  .listing-detail-page .row-actions {
-    align-items: stretch;
-  }
-
+@media (max-width: 640px) {
+  .listing-detail-page .detail-media { border-radius: 6px 18px 6px 6px; }
+  .listing-detail-page .detail-facts { grid-template-columns: 1fr; }
+  .listing-detail-page .detail-facts > div { border-left: 0; border-top: 1px solid rgba(255,255,255,.16); padding-top: 14px; padding-bottom: 14px; }
+  .listing-detail-page .detail-facts > div:first-child { border-top: 0; }
   .listing-detail-page .row-actions .btn,
-  .listing-detail-page .row-actions input {
-    width: 100%;
-    flex: 1 1 100%;
-  }
-
+  .listing-detail-page .row-actions input,
   .listing-detail-page #negotiation .btn,
-  .listing-detail-page #negotiation input {
-    width: 100%;
-    flex: 1 1 100%;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .listing-detail-page .btn,
-  .listing-detail-page .back-link,
-  .listing-detail-page .detail-media-thumb,
-  .listing-detail-page .detail-grid > section > .card,
-  .listing-detail-page aside .card {
-    transition: none;
-  }
-}
-
-
-
-/* -------------------------------------------------------------------------- */
-/* Card section titles                                                        */
-/* -------------------------------------------------------------------------- */
-
-.listing-detail-page .ld-section-title {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  margin: 0 0 17px;
-  padding: 0 0 11px;
-  border: 0;
-  color: var(--ink);
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: -.15px;
-}
-
-.listing-detail-page .ld-section-title::after {
-  content: "";
-  position: absolute;
-  left: calc(-1 * var(--ld-card-pad, 20px));
-  right: calc(-1 * var(--ld-card-pad, 20px));
-  bottom: 0;
-  height: 1px;
-  background: var(--ld-line);
-  pointer-events: none;
-}
-
-.listing-detail-page .ld-section-title .ld-section-icon {
-  display: inline-flex;
-  flex: 0 0 24px;
-  width: 24px;
-  height: 24px;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  border: 1px solid rgba(23,107,58,.16);
-  border-radius: 7px;
-  background: #f3f8f4;
-  color: var(--ld-green);
-  line-height: 0;
-}
-
-.listing-detail-page .ld-section-title .ld-section-icon svg {
-  display: block;
-  width: 14px;
-  height: 14px;
-  max-width: 14px;
-  max-height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.listing-detail-page .ld-section-title > span:last-child {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-/* Keep nested subsection headings smaller than card headings. */
-.listing-detail-page .ld-section-title:where(h3) {
-  font-size: 13px;
-  font-weight: 800;
-}
-
-/* The main listing title is deliberately stronger than card titles, but compact. */
-.listing-detail-page .detail-content > h1 {
-  font-size: clamp(22px, 2.7vw, 31px);
-  letter-spacing: -1.1px;
-}
-
-@media (max-width: 700px) {
-  .listing-detail-page .detail-grid > section > .card:not(.detail-content) {
-    --ld-card-pad: 16px;
-  }
-
-  .listing-detail-page aside .card {
-    --ld-card-pad: 18px;
-  }
-
-  .listing-detail-page .ld-section-title {
-    font-size: 14px;
-    gap: 7px;
-    padding-bottom: 10px;
-  }
-
-  .listing-detail-page .ld-section-title .ld-section-icon {
-    flex-basis: 22px;
-    width: 22px;
-    height: 22px;
-    border-radius: 6px;
-  }
-
-  .listing-detail-page .ld-section-title .ld-section-icon svg {
-    width: 13px;
-    height: 13px;
-    max-width: 13px;
-    max-height: 13px;
-  }
-
-  .listing-detail-page .detail-content > h1 {
-    font-size: 22px;
-  }
-}
-
-@media (max-width: 480px) {
-  .listing-detail-page .detail-grid > section > .card:not(.detail-content),
-  .listing-detail-page aside .card {
-    --ld-card-pad: 16px;
-  }
+  .listing-detail-page #negotiation input { width: 100%; flex: 1 1 100%; }
+  .listing-detail-page .evidence input { width: 100% !important; }
 }
