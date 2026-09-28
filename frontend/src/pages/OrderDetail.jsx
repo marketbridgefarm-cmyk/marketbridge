@@ -632,6 +632,54 @@ export default function OrderDetail() {
     );
   }, [marketplacePayments]);
 
+  // Goods paid in installments: the full-price MARKETPLACE payment is the
+  // plan (never sent to the provider) and each MARKETPLACE_INSTALLMENT is one
+  // checkout. The plan settles only once every installment is paid.
+  const installmentPlan = useMemo(
+    () =>
+      marketplacePayments.find(
+        (payment) =>
+          payment.installmentCount != null &&
+          ['PENDING', 'PROCESSING', 'PAID'].includes(payment.status)
+      ) || null,
+    [marketplacePayments]
+  );
+
+  const installmentPayments = useMemo(
+    () =>
+      payments
+        .filter(
+          (payment) =>
+            payment.type === 'MARKETPLACE_INSTALLMENT' &&
+            payment.installmentSequence != null &&
+            (!installmentPlan || payment.parentPaymentId === installmentPlan.id)
+        )
+        .sort((a, b) => (a.installmentSequence || 0) - (b.installmentSequence || 0)),
+    [payments, installmentPlan]
+  );
+
+  // Self-heal: every installment is paid but the plan itself was not settled
+  // (for example the server stopped right after the last installment). Asking
+  // the server to verify the plan settles it; it is idempotent.
+  const planHealRef = useRef(null);
+  useEffect(() => {
+    if (
+      !installmentPlan ||
+      installmentPlan.status !== 'PENDING' ||
+      installmentPayments.length !== installmentPlan.installmentCount ||
+      !installmentPayments.every((payment) => payment.status === 'PAID') ||
+      planHealRef.current === installmentPlan.id
+    ) {
+      return;
+    }
+
+    planHealRef.current = installmentPlan.id;
+    api
+      .get(`/payments/${installmentPlan.id}/chapa/verify`)
+      .then(() => load({ silent: true }))
+      .catch(() => {});
+  }, [installmentPlan, installmentPayments]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const transportPayment = useMemo(() => {
     return (
       transportPayments.find(
@@ -828,11 +876,13 @@ export default function OrderDetail() {
    */
   const canResumeMarketplacePayment =
     Boolean(marketplacePayment) &&
+    !installmentPlan &&
     marketplacePayment.status === 'PENDING' &&
     isBuyer;
 
   const canCheckMarketplacePayment =
     Boolean(marketplacePayment) &&
+    !installmentPlan &&
     marketplacePayment.status === 'PROCESSING' &&
     isBuyer;
 
@@ -1295,6 +1345,59 @@ export default function OrderDetail() {
   };
 
   // ==========================================================================
+  // INSTALLMENTS (goods payment above the online payment limit)
+  // ==========================================================================
+
+  const startInstallments = async () => {
+    if (!order) return;
+
+    if (!isBuyer) {
+      setError('Only the buyer can make the marketplace payment');
+      return;
+    }
+
+    setBusy('start-installments');
+    setError('');
+
+    try {
+      await api.post('/payments', {
+        type: 'MARKETPLACE',
+        orderId: order.id,
+        amount: Number(order.finalPrice),
+        method: payMethod,
+        installments: true,
+      });
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not set up installments'));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const retryInstallment = async (installment) => {
+    if (!installment?.id) return;
+
+    setBusy(`installment-${installment.id}`);
+    setError('');
+
+    try {
+      await api.post(`/payments/${installment.id}/retry-installment`);
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not retry this installment'));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const payInstallment = (installment) =>
+    resumePayment(installment?.id, `installment-${installment?.id}`);
+
+  const checkInstallment = (installment) =>
+    checkPaymentStatus(installment?.id, `installment-${installment?.id}`);
+
+  // ==========================================================================
   // ADMIN: SETTLE A REFUND
   // ==========================================================================
   // Refunds are durable requests; only an admin can confirm the money went
@@ -1594,6 +1697,13 @@ export default function OrderDetail() {
     onPay: payMarketplace,
     onResume: () => resumePayment(marketplacePayment?.id, 'resume-marketplace'),
     onCheck: checkMarketplacePayment,
+    installmentPlan,
+    installments: installmentPayments,
+    canStartInstallments: canPayMarketplace,
+    onStartInstallments: startInstallments,
+    onPayInstallment: payInstallment,
+    onCheckInstallment: checkInstallment,
+    onRetryInstallment: retryInstallment,
   };
 
   const transportObligation = transportJob
