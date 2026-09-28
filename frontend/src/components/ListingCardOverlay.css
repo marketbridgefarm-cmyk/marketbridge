@@ -68,3 +68,31 @@
 .lc .lc-photo:has(.lc-badge--grade) .lc-photo-tags {
   right: 56px;
 }
+
+/* Card buttons: soft colors, no solid green fills. */
+.lc .lc-cta {
+  border: 1px solid transparent;
+}
+
+.lc .lc-cta--view {
+  background: #eef5ef;
+  border-color: rgba(23, 107, 58, .22);
+  color: #176b3a;
+}
+
+.lc .lc-cta--view:hover {
+  background: #dfeee3;
+  border-color: rgba(23, 107, 58, .4);
+  color: #0e4b29;
+}
+
+.lc .lc-cta--offer {
+  background: #fff;
+  border-color: #dfe7df;
+  color: #176b3a;
+}
+
+.lc .lc-cta--offer:hover {
+  background: #eef5ef;
+  border-color: #b8cdbd;
+}

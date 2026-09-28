@@ -127,8 +127,8 @@ export default function ListingCard({ listing }) {
           </span>
 
           <div className="lc-ctas">
-            {/* Agricultural listings remain offerable while competition is open. */}
-            {!isProduct && ['ACTIVE', 'UNDER_NEGOTIATION'].includes(listing.status) && (
+            {/* Both markets accept offers while the listing is open. */}
+            {['ACTIVE', 'UNDER_NEGOTIATION'].includes(listing.status) && (
               <Link
                 className="lc-cta lc-cta--offer"
                 to={`/listings/${listing.id}#make-offer`}
