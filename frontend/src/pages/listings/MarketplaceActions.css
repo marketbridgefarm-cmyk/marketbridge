@@ -24,10 +24,10 @@
   align-items: center;
   gap: 16px;
   padding: 18px 20px;
-  border: 1px solid var(--mb-border, #e3e8e3);
-  border-radius: 18px;
-  background: var(--mb-card, #fff);
-  color: var(--mb-ink, #17231b);
+  border: 1px solid var(--listings-line, #dfe7df);
+  border-radius: 16px;
+  background: #fff;
+  color: var(--listings-ink, #17231b);
   text-decoration: none;
   text-align: left;
   font: inherit;
@@ -36,8 +36,8 @@
 }
 
 .product-marketplace-action:hover {
-  background: var(--mb-primary-soft, #f3f8f4);
-  border-color: rgba(23,107,58,.3);
+  background: var(--listings-soft, #eef5ef);
+  border-color: #b8cdbd;
 }
 
 .product-marketplace-action:focus-visible {
@@ -52,8 +52,8 @@
   display: grid;
   place-items: center;
   border-radius: 16px;
-  background: #e8f7ee;
-  color: var(--mb-primary, #176b3a);
+  background: var(--listings-soft, #eef5ef);
+  color: var(--listings-green, #176b3a);
 }
 
 .product-marketplace-action__icon svg {
@@ -85,7 +85,7 @@
 .product-marketplace-action__body span {
   display: block;
   margin: 0;
-  color: var(--mb-text-muted, #667168);
+  color: var(--listings-muted, #667168);
   font-size: 14px;
   line-height: 1.4;
 }

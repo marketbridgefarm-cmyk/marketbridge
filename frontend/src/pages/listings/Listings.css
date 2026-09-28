@@ -446,3 +446,117 @@
   width: auto;
   flex: 0 0 auto;
 }
+
+/* ==========================================================================
+   Palette alignment with the Home "Choose a marketplace" card.
+   Green #176b3a / dark #0e4b29, mint #eef5ef and #effdf0, ink #17231b,
+   muted #667168, line #dfe7df, page #f7f9f6, gold #b77b1b.
+   ========================================================================== */
+.listings-page {
+  --listings-green: #176b3a;
+  --listings-dark: #0e4b29;
+  --listings-soft: #eef5ef;
+  --listings-mint: #effdf0;
+  --listings-ink: #17231b;
+  --listings-muted: #667168;
+  --listings-line: #dfe7df;
+  --listings-card: #fff;
+  --listings-gold: #b77b1b;
+  --listings-gold-soft: #fbf3e2;
+  --listings-radius: 20px;
+  --listings-shadow: 0 8px 24px rgba(20, 45, 28, .08);
+  color: var(--listings-ink);
+  background:
+    radial-gradient(circle at 85% 0%, rgba(47, 145, 89, .12), transparent 32%),
+    linear-gradient(180deg, #edf7ef 0, #f7f9f6 360px);
+}
+
+/* Header */
+.listings-page-header .eyebrow { color: var(--listings-green); }
+.listings-page-header h1 { color: var(--listings-ink); }
+.listings-page-header p { color: var(--listings-muted); }
+
+/* Filter bar: same card as the Home platform card */
+.listings-filter-bar {
+  background: rgba(255, 255, 255, .92);
+  border: 1px solid var(--listings-line);
+  border-radius: var(--listings-radius);
+  box-shadow: var(--listings-shadow);
+}
+
+.listings-filter-bar .filter-bar-search input {
+  border: 1px solid var(--listings-line);
+  background: #fff;
+  color: var(--listings-ink);
+}
+
+.listings-filter-bar .filter-bar-search input:focus {
+  border-color: var(--listings-green);
+  box-shadow: 0 0 0 3px rgba(23, 107, 58, .14);
+}
+
+.listings-filter-bar .filter-bar-search .btn {
+  background: var(--listings-green);
+  border-color: var(--listings-green);
+  color: #fff;
+}
+
+.listings-filter-bar .filter-bar-search .btn:hover {
+  background: var(--listings-dark);
+  border-color: var(--listings-dark);
+}
+
+.listings-filter-bar .filter-chip {
+  background: #fff;
+  border: 1px solid var(--listings-line);
+  color: var(--listings-ink);
+}
+
+.listings-filter-bar .filter-chip:hover { background: var(--listings-soft); }
+
+.listings-filter-bar .filter-chip.active {
+  background: var(--listings-soft);
+  border-color: rgba(23, 107, 58, .35);
+  color: var(--listings-green);
+}
+
+/* Toolbar chips: count = "Connected" pill, note = gold tag */
+.listings-toolbar strong {
+  background: var(--listings-mint);
+  color: var(--listings-green);
+}
+
+.listings-toolbar > span {
+  background: var(--listings-gold-soft);
+  color: var(--listings-gold);
+}
+
+/* Listing cards */
+.listings-page .lc {
+  background: #fff;
+  border: 1px solid var(--listings-line);
+  border-radius: var(--listings-radius);
+  box-shadow: var(--listings-shadow);
+}
+
+.listings-page .lc-title { color: var(--listings-ink); }
+.listings-page .lc-location { color: var(--listings-muted); }
+.listings-page .lc-tag { background: var(--listings-soft); color: var(--listings-green); }
+.listings-page .lc-tag--neg { background: var(--listings-gold-soft); color: var(--listings-gold); }
+.listings-page .lc-tag--verified { background: var(--listings-mint); color: var(--listings-green); }
+
+.listings-page .lc-cta {
+  border-color: var(--listings-green);
+  color: var(--listings-green);
+}
+
+.listings-page .lc-cta.primary,
+.listings-page .lc-cta.btn-primary {
+  background: var(--listings-green);
+  color: #fff;
+}
+
+.listings-page .lc-cta.primary:hover,
+.listings-page .lc-cta.btn-primary:hover {
+  background: var(--listings-dark);
+}
