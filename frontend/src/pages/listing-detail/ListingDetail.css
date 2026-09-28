@@ -227,7 +227,8 @@
 /* -------------------------------------------------------------------------- */
 
 .listing-detail-page .detail-grid > section > .card:not(.detail-content) {
-  padding: clamp(19px, 2.5vw, 26px);
+  --ld-card-pad: clamp(19px, 2.5vw, 26px);
+  padding: var(--ld-card-pad);
 }
 
 .listing-detail-page .detail-grid > section > .card:not(.detail-content) > h2,
@@ -294,17 +295,6 @@
 }
 
 
-/* Full-width divider directly beneath every card title. */
-.listing-detail-page .detail-grid > section > .card:not(.detail-content) > h2,
-.listing-detail-page aside .card > h2,
-.listing-detail-page #make-offer > h2 {
-  display: block;
-  width: 100%;
-  margin-bottom: 16px;
-  padding-bottom: 11px;
-  border-bottom: 1px solid var(--ld-line);
-}
-
 /* -------------------------------------------------------------------------- */
 /* Right rail / negotiation                                                   */
 /* -------------------------------------------------------------------------- */
@@ -315,7 +305,8 @@
 }
 
 .listing-detail-page aside .card {
-  padding: clamp(18px, 2.5vw, 24px);
+  --ld-card-pad: clamp(18px, 2.5vw, 24px);
+  padding: var(--ld-card-pad);
 }
 
 .listing-detail-page .sticky-card {
@@ -551,7 +542,8 @@
   }
 
   .listing-detail-page aside .card {
-    padding: 18px;
+    --ld-card-pad: 18px;
+    padding: var(--ld-card-pad);
   }
 
   .listing-detail-page .detail-media-thumb {
@@ -580,7 +572,8 @@
   }
 
   .listing-detail-page .detail-grid > section > .card:not(.detail-content) {
-    padding: 16px;
+    --ld-card-pad: 16px;
+    padding: var(--ld-card-pad);
     border-radius: 14px;
   }
 
@@ -624,57 +617,122 @@
   }
 }
 
-/* Section icons */
+
+
+/* -------------------------------------------------------------------------- */
+/* Card section titles                                                        */
+/* -------------------------------------------------------------------------- */
+
 .listing-detail-page .ld-section-title {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 9px;
-  position: relative;
-  margin-bottom: 14px;
-  padding-bottom: 11px;
-  border-bottom: 1px solid var(--ld-line);
+  gap: 8px;
+  min-width: 0;
+  margin: 0 0 17px;
+  padding: 0 0 11px;
+  border: 0;
+  color: var(--ink);
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -.15px;
+}
+
+.listing-detail-page .ld-section-title::after {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--ld-card-pad, 20px));
+  right: calc(-1 * var(--ld-card-pad, 20px));
+  bottom: 0;
+  height: 1px;
+  background: var(--ld-line);
+  pointer-events: none;
 }
 
 .listing-detail-page .ld-section-title .ld-section-icon {
   display: inline-flex;
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(23,107,58,.14);
-  border-radius: 8px;
-  background: #f5faf6;
-  color: var(--brand, #176b3a);
+  box-sizing: border-box;
+  border: 1px solid rgba(23,107,58,.16);
+  border-radius: 7px;
+  background: #f3f8f4;
+  color: var(--ld-green);
+  line-height: 0;
 }
 
 .listing-detail-page .ld-section-title .ld-section-icon svg {
-  width: 16px;
-  height: 16px;
+  display: block;
+  width: 14px;
+  height: 14px;
+  max-width: 14px;
+  max-height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .listing-detail-page .ld-section-title > span:last-child {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
+/* Keep nested subsection headings smaller than card headings. */
+.listing-detail-page .ld-section-title:where(h3) {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* The main listing title is deliberately stronger than card titles, but compact. */
 .listing-detail-page .detail-content > h1 {
   font-size: clamp(22px, 2.7vw, 31px);
   letter-spacing: -1.1px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
+  .listing-detail-page .detail-grid > section > .card:not(.detail-content) {
+    --ld-card-pad: 16px;
+  }
+
+  .listing-detail-page aside .card {
+    --ld-card-pad: 18px;
+  }
+
   .listing-detail-page .ld-section-title {
-    gap: 8px;
-    padding-bottom: 9px;
+    font-size: 14px;
+    gap: 7px;
+    padding-bottom: 10px;
   }
 
   .listing-detail-page .ld-section-title .ld-section-icon {
-    flex-basis: 26px;
-    width: 26px;
-    height: 26px;
+    flex-basis: 22px;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+  }
+
+  .listing-detail-page .ld-section-title .ld-section-icon svg {
+    width: 13px;
+    height: 13px;
+    max-width: 13px;
+    max-height: 13px;
   }
 
   .listing-detail-page .detail-content > h1 {
     font-size: 22px;
+  }
+}
+
+@media (max-width: 480px) {
+  .listing-detail-page .detail-grid > section > .card:not(.detail-content),
+  .listing-detail-page aside .card {
+    --ld-card-pad: 16px;
   }
 }
