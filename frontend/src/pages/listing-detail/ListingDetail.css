@@ -917,3 +917,122 @@
     font-size: 14px !important;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Mobile polish — compact section headers and safe space above bottom nav   */
+/* -------------------------------------------------------------------------- */
+.listing-detail-page {
+  padding-bottom: 88px;
+}
+
+.listing-detail-page .ld-section-title,
+.listing-detail-page .ld-section-title.ld-section-title {
+  display: flex !important;
+  align-items: center !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  gap: 8px !important;
+  width: calc(100% + (2 * var(--ld-card-pad, 16px))) !important;
+  min-height: 0 !important;
+  margin: 0 0 14px calc(-1 * var(--ld-card-pad, 16px)) !important;
+  padding: 0 var(--ld-card-pad, 16px) 9px !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--ld-line) !important;
+  box-sizing: border-box !important;
+  font-family: var(--mb-font-head, Manrope, sans-serif) !important;
+  font-size: 14px !important;
+  font-weight: 750 !important;
+  line-height: 20px !important;
+  letter-spacing: -.1px !important;
+  color: var(--ink) !important;
+}
+
+.listing-detail-page .ld-section-title .ld-section-icon {
+  flex: 0 0 20px !important;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  max-width: 20px !important;
+  min-height: 20px !important;
+  max-height: 20px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 6px !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 0 !important;
+}
+
+.listing-detail-page .ld-section-title .ld-section-icon svg,
+.listing-detail-page .ld-section-title .ld-section-icon > svg {
+  display: block !important;
+  flex: 0 0 12px !important;
+  width: 12px !important;
+  height: 12px !important;
+  min-width: 12px !important;
+  max-width: 12px !important;
+  min-height: 12px !important;
+  max-height: 12px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.listing-detail-page .ld-section-title > span:last-child {
+  display: block !important;
+  min-width: 0 !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+
+/* h3 subsection titles need breathing room when they follow controls. */
+.listing-detail-page .ld-section-title:where(h3) {
+  margin-top: 18px !important;
+  margin-bottom: 13px !important;
+  font-size: 13px !important;
+  line-height: 19px !important;
+}
+
+.listing-detail-page #make-offer .ld-section-title:where(h3) {
+  margin-top: 18px !important;
+}
+
+.listing-detail-page .detail-content > h1 {
+  font-size: 22px !important;
+  line-height: 1.12 !important;
+  letter-spacing: -.8px !important;
+}
+
+@media (max-width: 700px) {
+  .listing-detail-page {
+    padding-bottom: 112px;
+  }
+
+  .listing-detail-page .detail-content > h1 {
+    font-size: 21px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .listing-detail-page {
+    padding-bottom: 118px;
+  }
+
+  .listing-detail-page .ld-section-title,
+  .listing-detail-page .ld-section-title.ld-section-title,
+  .listing-detail-page aside .ld-section-title {
+    font-size: 14px !important;
+    line-height: 19px !important;
+    padding-bottom: 8px !important;
+    margin-bottom: 13px !important;
+  }
+
+  .listing-detail-page .ld-section-title:where(h3) {
+    font-size: 12.5px !important;
+    margin-top: 18px !important;
+    margin-bottom: 12px !important;
+  }
+}
