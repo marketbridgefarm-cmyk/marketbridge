@@ -20,8 +20,6 @@
  * amount has been received. No business effect runs for a child.
  */
 
-const MAX_INSTALLMENTS = 12;
-
 function toCents(value) {
   return Math.round(Number(value) * 100);
 }
@@ -53,17 +51,12 @@ function splitAmount(total, max) {
     throw Object.assign(new Error('Invalid installment limit'), { status: 400 });
   }
 
+  // Always use the fewest installments needed to keep every Chapa checkout
+  // at or below the configured provider limit. There is intentionally no
+  // fixed installment-count cap here: a 4M ETB order becomes 4 x 1M, a 20M
+  // order becomes 20 x 1M, etc. Any provider/business limit can be enforced
+  // separately without making the amount-splitting rule incorrect.
   const count = Math.max(1, Math.ceil(totalCents / maxCents));
-  if (count > MAX_INSTALLMENTS) {
-    throw Object.assign(
-      new Error(
-        `This amount would need ${count} installments; the maximum is ${MAX_INSTALLMENTS}. ` +
-        'Please contact MarketBridge support to arrange this payment.'
-      ),
-      { status: 400, code: 'TOO_MANY_INSTALLMENTS' }
-    );
-  }
-
   return splitInto(total, count);
 }
 
@@ -285,7 +278,6 @@ async function markParentRefundedIfComplete(tx, parentPaymentId) {
 }
 
 module.exports = {
-  MAX_INSTALLMENTS,
   splitAmount,
   splitInto,
   isInstallmentParent,
