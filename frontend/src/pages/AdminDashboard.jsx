@@ -877,6 +877,7 @@ export default function AdminDashboard() {
   const [orderEvents, setOrderEvents] = useState([]);
   const [auditEvents, setAuditEvents] = useState([]);
   const [refunds, setRefunds] = useState([]);
+  const [installmentPlans, setInstallmentPlans] = useState([]);
 
   const [disputeDecision, setDisputeDecision] = useState(null);
   const [userSearch, setUserSearch] = useState('');
@@ -907,6 +908,7 @@ export default function AdminDashboard() {
         orderEventsRes,
         auditEventsRes,
         refundsRes,
+        installmentPlansRes,
       ] = await Promise.all([
         api.get('/admin/overview'),
         api.get('/admin/users'),
@@ -938,6 +940,7 @@ export default function AdminDashboard() {
       setOrderEvents(orderEventsRes.data?.events || []);
       setAuditEvents(auditEventsRes.data?.events || []);
       setRefunds(refundsRes.data?.refunds || []);
+      setInstallmentPlans(installmentPlansRes.data?.plans || []);
     } catch (err) {
       if (err.response?.data?.code === 'MFA_SETUP_REQUIRED') {
         setMfaRequired(true);
@@ -1655,6 +1658,11 @@ export default function AdminDashboard() {
       key: 'refunds',
       label: 'Refunds',
       count: pendingRefunds.length,
+    },
+    {
+      key: 'installments',
+      label: 'Installments',
+      count: installmentPlans.filter((plan) => ['PENDING', 'PROCESSING'].includes(plan.status)).length,
     },
     {
       key: 'operations',
@@ -3597,6 +3605,146 @@ export default function AdminDashboard() {
                       ))}
                       {refunds.length === 0 && (
                         <tr><td colSpan="8" className="sd-muted">No refunds recorded.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tab === 'installments' && (
+            <div>
+              <div className="ac-panel">
+                <div className="ac-toolbar">
+                  <div>
+                    <span className="ac-section-label">LARGE ORDER PAYMENTS</span>
+                    <h2>Installment plans</h2>
+                    <p>
+                      Each plan represents one full marketplace payment. The seller payout is
+                      created only when every live installment is PAID.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="sd-btn sd-btn-outline"
+                    onClick={loadAll}
+                    disabled={loading}
+                  >
+                    {loading ? 'Refreshing…' : 'Refresh'}
+                  </button>
+                </div>
+
+                <div className="ac-stat-strip">
+                  {[
+                    ['Open plans', installmentPlans.filter((plan) => ['PENDING', 'PROCESSING'].includes(plan.status)).length],
+                    ['Paid plans', installmentPlans.filter((plan) => plan.status === 'PAID').length],
+                    ['Refund pending', installmentPlans.filter((plan) => plan.status === 'REFUND_PENDING').length],
+                    ['Refunded', installmentPlans.filter((plan) => plan.status === 'REFUNDED').length],
+                  ].map(([label, value]) => (
+                    <div className="ac-small-stat" key={label}>
+                      <span>{label}</span>
+                      <strong>{value}</strong>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="ac-table-wrap">
+                  <table className="ac-table">
+                    <thead>
+                      <tr>
+                        <th>Order / plan</th>
+                        <th>Buyer</th>
+                        <th>Seller</th>
+                        <th>Progress</th>
+                        <th>Installments</th>
+                        <th>Seller payout</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {installmentPlans.map((plan) => {
+                        const live = (plan.installments || [])
+                          .filter((item) => item.installmentSequence != null)
+                          .sort((a, b) => a.installmentSequence - b.installmentSequence);
+                        const progress = plan.installmentProgress || {
+                          paid: live.filter((item) => item.status === 'PAID').length,
+                          total: plan.installmentCount,
+                        };
+                        return (
+                          <tr key={plan.id}>
+                            <td data-label="Order / plan">
+                              {plan.order?.id ? (
+                                <Link to={`/orders/${plan.order.id}`} className="ac-code">
+                                  {plan.order.id.slice(0, 8)}
+                                </Link>
+                              ) : (
+                                <span className="ac-code">{plan.id.slice(0, 8)}</span>
+                              )}
+                              <div className="sd-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                                {Number(plan.amount).toLocaleString()} {plan.currency || 'ETB'}
+                              </div>
+                            </td>
+                            <td data-label="Buyer">
+                              {plan.order?.buyer?.name || plan.createdBy?.name || '—'}
+                            </td>
+                            <td data-label="Seller">
+                              {plan.order?.seller?.name || '—'}
+                            </td>
+                            <td data-label="Progress">
+                              <strong>{progress.paid} / {progress.total}</strong>
+                            </td>
+                            <td data-label="Installments">
+                              <div style={{ display: 'grid', gap: 5, minWidth: 220 }}>
+                                {live.map((item) => (
+                                  <div
+                                    key={item.id}
+                                    style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      gap: 8,
+                                      alignItems: 'center',
+                                    }}
+                                  >
+                                    <span>
+                                      #{item.installmentSequence} · {Number(item.amount).toLocaleString()} {item.currency || 'ETB'}
+                                    </span>
+                                    <span className={statusBadgeClass(item.status)}>{item.status}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                            <td data-label="Seller payout">
+                              {plan.payout ? (
+                                <>
+                                  <span className={statusBadgeClass(plan.payout.status)}>
+                                    {plan.payout.status}
+                                  </span>
+                                  <div className="sd-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                                    {Number(plan.payout.amount).toLocaleString()} {plan.payout.currency || 'ETB'}
+                                  </div>
+                                </>
+                              ) : (
+                                <span className="sd-muted">Not created yet</span>
+                              )}
+                            </td>
+                            <td data-label="Status">
+                              <span className={statusBadgeClass(plan.status)}>{plan.status}</span>
+                              {plan.order?.status && (
+                                <div className="sd-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                                  Order: {plan.order.status}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {installmentPlans.length === 0 && (
+                        <tr>
+                          <td colSpan="7" className="sd-muted">
+                            No installment plans recorded.
+                          </td>
+                        </tr>
                       )}
                     </tbody>
                   </table>
