@@ -174,6 +174,14 @@ async function initializeTransaction({
     );
   }
 
+  // Chapa accepts only letters, numbers, hyphens, underscores, spaces,
+  // and dots in customization.description. Keep this normalization here so
+  // every checkout path (including installments) is protected.
+  const safeDescription = String(description || 'MarketBridge payment')
+    .replace(/[^A-Za-z0-9._\- ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || 'MarketBridge payment';
+
   const payload = {
     amount: Number(amount).toFixed(2),
 
@@ -194,8 +202,7 @@ async function initializeTransaction({
     customization: {
       title: title || 'MarketBridge',
 
-      description:
-        description || 'MarketBridge payment',
+      description: safeDescription,
     },
   };
 
