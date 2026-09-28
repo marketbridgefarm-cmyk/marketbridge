@@ -3,6 +3,7 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import { REGIONS as FALLBACK_REGIONS } from '../utils/ethiopianRegions';
+import './create-listing/CreateListing.css';
 
 export default function CreateListing() {
   const { user } = useAuth();
