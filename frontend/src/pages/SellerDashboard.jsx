@@ -121,6 +121,7 @@ export default function SellerDashboard() {
         askingPrice: Number(d.get('price')),
         minAcceptablePrice: d.get('minimum') ? Number(d.get('minimum')) : undefined,
         location: d.get('location'),
+        harvestedDate: d.get('harvest') || undefined,
         readinessDate: d.get('date') || undefined,
       });
       listingModalRef.current.close();
@@ -213,6 +214,7 @@ export default function SellerDashboard() {
         askingPrice: Number(d.get('price')),
         minAcceptablePrice: d.get('minimum') ? Number(d.get('minimum')) : null,
         quantity: Number(d.get('quantity')),
+        harvestedDate: d.get('harvest') || null,
         readinessDate: d.get('date') || undefined,
         photos: [...editKeepPhotos.map(p => p.key), ...editNewPhotos.map(p => p.key)],
         videos: [...editKeepVideos.map(v => v.key), ...editNewVideos.map(v => v.key)],
@@ -476,6 +478,7 @@ export default function SellerDashboard() {
               <div><label>Asking price (ETB)</label><input name="price" type="number" required /></div>
               <div><label>Minimum acceptable price</label><input name="minimum" type="number" /></div>
               <div><label>Farm / pickup location</label><input name="location" required /></div>
+              <div><label>Harvest date</label><input name="harvest" type="date" /></div>
               <div><label>Readiness date</label><input name="date" type="date" /></div>
             </div>
             <div className="sd-modal-actions" style={{ marginTop: 20 }}>
@@ -497,6 +500,7 @@ export default function SellerDashboard() {
                 <div><label>Quantity ({editingListing.unit})</label><input name="quantity" type="number" defaultValue={editingListing.quantity} required /></div>
                 <div><label>Asking price (ETB)</label><input name="price" type="number" defaultValue={editingListing.askingPrice} required /></div>
                 <div><label>Minimum acceptable price</label><input name="minimum" type="number" defaultValue={editingListing.minAcceptablePrice ?? ''} /></div>
+                <div><label>Harvest date</label><input name="harvest" type="date" defaultValue={editingListing.harvestedDate ? editingListing.harvestedDate.slice(0, 10) : ''} /></div>
                 <div><label>Readiness date</label><input name="date" type="date" defaultValue={editingListing.readinessDate ? editingListing.readinessDate.slice(0, 10) : ''} /></div>
               </div>
               <div className="sd-notice" style={{ marginTop: 12 }}>Buyers who already made an offer will still see their original offer amount — this only changes your public asking price going forward.</div>

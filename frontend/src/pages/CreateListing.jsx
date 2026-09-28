@@ -149,6 +149,8 @@ export default function CreateListing() {
         kebele: form.kebele || undefined,
         latitude: form.latitude !== '' ? Number(form.latitude) : undefined,
         longitude: form.longitude !== '' ? Number(form.longitude) : undefined,
+        harvestedDate: category === 'AGRICULTURAL' && form.harvestedDate ? form.harvestedDate : undefined,
+        readinessDate: category === 'AGRICULTURAL' && form.readinessDate ? form.readinessDate : undefined,
         description: form.description || undefined,
         photos: form.photos.map(p => p.key),
         videos: form.videos.map(v => v.key)
