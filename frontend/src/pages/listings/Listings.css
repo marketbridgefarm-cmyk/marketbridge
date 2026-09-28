@@ -496,14 +496,15 @@
 }
 
 .listings-filter-bar .filter-bar-search .btn {
-  background: var(--listings-green);
-  border-color: var(--listings-green);
-  color: #fff;
+  background: var(--listings-soft);
+  border: 1px solid rgba(23, 107, 58, .25);
+  color: var(--listings-green);
+  box-shadow: none;
 }
 
 .listings-filter-bar .filter-bar-search .btn:hover {
-  background: var(--listings-dark);
-  border-color: var(--listings-dark);
+  background: #dfeee3;
+  border-color: rgba(23, 107, 58, .4);
 }
 
 .listings-filter-bar .filter-chip {
@@ -544,19 +545,3 @@
 .listings-page .lc-tag { background: var(--listings-soft); color: var(--listings-green); }
 .listings-page .lc-tag--neg { background: var(--listings-gold-soft); color: var(--listings-gold); }
 .listings-page .lc-tag--verified { background: var(--listings-mint); color: var(--listings-green); }
-
-.listings-page .lc-cta {
-  border-color: var(--listings-green);
-  color: var(--listings-green);
-}
-
-.listings-page .lc-cta.primary,
-.listings-page .lc-cta.btn-primary {
-  background: var(--listings-green);
-  color: #fff;
-}
-
-.listings-page .lc-cta.primary:hover,
-.listings-page .lc-cta.btn-primary:hover {
-  background: var(--listings-dark);
-}
