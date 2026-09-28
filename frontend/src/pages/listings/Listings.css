@@ -342,3 +342,54 @@
   .listings-filter-bar { padding: 14px; }
   .listings-filter-bar .filter-bar-search { margin-bottom: 14px; }
 }
+
+/* Header redesign: compact, text-first */
+.listings-page-header {
+  display: block;
+  padding: 4px 0 0;
+  margin-bottom: 18px;
+}
+
+.listings-page-header .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
+  padding: 0;
+  margin-bottom: 10px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--listings-green, #176b3a);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .12em;
+}
+
+.listings-page-header .eyebrow::before {
+  content: '';
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.listings-page-header h1 {
+  max-width: 640px;
+  margin: 0 0 8px;
+  font-size: clamp(28px, 4.4vw, 40px);
+  line-height: 1.12;
+  letter-spacing: -.8px;
+}
+
+.listings-page-header p {
+  max-width: 520px;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+@media (max-width: 620px) {
+  .listings-page-header { margin-bottom: 16px; }
+  .listings-page-header h1 { font-size: 28px; letter-spacing: -.6px; }
+}
