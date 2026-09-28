@@ -21,7 +21,7 @@ export default function MarketplaceActions({ category = 'PRODUCT' }) {
             className="product-marketplace-action product-marketplace-action--buy"
             onClick={browse}
           >
-            <span className="product-marketplace-action__icon" aria-hidden="true">⌕</span>
+            <span className="product-marketplace-action__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg></span>
             <span className="product-marketplace-action__body">
               <strong>Buy</strong>
               <span>
@@ -30,14 +30,13 @@ export default function MarketplaceActions({ category = 'PRODUCT' }) {
                   : 'Browse, compare listings, and make an offer.'}
               </span>
             </span>
-            <span className="product-marketplace-action__arrow" aria-hidden="true">→</span>
           </button>
 
           <Link
             to={`/create-listing?category=${category}`}
             className="product-marketplace-action product-marketplace-action--sell"
           >
-            <span className="product-marketplace-action__icon" aria-hidden="true">＋</span>
+            <span className="product-marketplace-action__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg></span>
             <span className="product-marketplace-action__body">
               <strong>Sell</strong>
               <span>
@@ -46,7 +45,6 @@ export default function MarketplaceActions({ category = 'PRODUCT' }) {
                   : 'List a product and receive competing offers.'}
               </span>
             </span>
-            <span className="product-marketplace-action__arrow" aria-hidden="true">→</span>
           </Link>
         </div>
       </div>
