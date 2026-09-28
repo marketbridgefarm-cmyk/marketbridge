@@ -393,3 +393,40 @@
   .listings-page-header { margin-bottom: 16px; }
   .listings-page-header h1 { font-size: 28px; letter-spacing: -.6px; }
 }
+
+/* Toolbar redesign: count and note as tag chips */
+.listings-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 0;
+  border: 0;
+}
+
+.listings-toolbar strong,
+.listings-toolbar > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.listings-toolbar strong {
+  background: #eaf5ee;
+  color: var(--listings-green, #176b3a);
+}
+
+.listings-toolbar > span {
+  background: #fdf3e3;
+  color: #a5680f;
+}
