@@ -4,6 +4,14 @@
   background: var(--mb-bg, #f7f9f6);
 }
 
+.product-marketplace-actions__card {
+  padding: 14px;
+  background: var(--mb-card, #fff);
+  border: 1px solid var(--mb-border, #dfe7df);
+  border-radius: var(--mb-radius-lg, 20px);
+  box-shadow: var(--mb-shadow-card, 0 2px 8px rgba(23,107,58,.04));
+}
+
 .product-marketplace-actions__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -19,8 +27,7 @@
   gap: 16px;
   padding: 20px 22px;
   border: 1px solid var(--mb-border, #dfe7df);
-  border-radius: var(--mb-radius-lg, 20px);
-  box-shadow: var(--mb-shadow-card, 0 2px 8px rgba(23,107,58,.04));
+  border-radius: 16px;
   text-decoration: none;
   text-align: left;
   cursor: pointer;
@@ -39,23 +46,23 @@
 }
 
 .product-marketplace-action--buy {
-  color: var(--mb-ink, #17231b);
-  background: var(--mb-card, #fff);
-}
-
-.product-marketplace-action--buy:hover {
-  border-color: var(--mb-primary, #176b3a);
-}
-
-.product-marketplace-action--sell {
   color: #fff;
   background: var(--mb-primary, #176b3a);
   border-color: var(--mb-primary, #176b3a);
 }
 
-.product-marketplace-action--sell:hover {
+.product-marketplace-action--buy:hover {
   background: var(--mb-primary-dark, #0e4b29);
   border-color: var(--mb-primary-dark, #0e4b29);
+}
+
+.product-marketplace-action--sell {
+  color: var(--mb-ink, #17231b);
+  background: var(--mb-card, #fff);
+}
+
+.product-marketplace-action--sell:hover {
+  border-color: var(--mb-primary, #176b3a);
 }
 
 .product-marketplace-action__icon {
@@ -71,7 +78,7 @@
   font-weight: 700;
 }
 
-.product-marketplace-action--sell .product-marketplace-action__icon {
+.product-marketplace-action--buy .product-marketplace-action__icon {
   background: rgba(255,255,255,.15);
   color: #fff;
 }
@@ -97,7 +104,7 @@
   line-height: 1.45;
 }
 
-.product-marketplace-action--sell .product-marketplace-action__body span {
+.product-marketplace-action--buy .product-marketplace-action__body span {
   color: rgba(255,255,255,.82);
 }
 
@@ -115,6 +122,10 @@
 @media (max-width: 720px) {
   .product-marketplace-actions {
     padding: 14px 0 2px;
+  }
+
+  .product-marketplace-actions__card {
+    padding: 10px;
   }
 
   .product-marketplace-actions__grid {
