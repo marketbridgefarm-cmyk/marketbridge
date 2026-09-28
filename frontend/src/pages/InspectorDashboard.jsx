@@ -21,6 +21,10 @@ function modeLabel(mode) {
   return (mode || '').replaceAll('_', ' ');
 }
 
+function isProductInspection(request) {
+  return request?.listing?.category === 'PRODUCT';
+}
+
 export default function InspectorDashboard() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
@@ -185,8 +189,8 @@ export default function InspectorDashboard() {
     setMsg('');
     setRespondingQuoteId(quoteId);
     try {
-      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/reject`);
-      setMsg('Provisional inspection deal cancelled. The buyer can select another inspector bid.');
+      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/withdraw`);
+      setMsg('Provisional inspection deal released. The buyer can select another inspector bid.');
       await loadAll();
     } catch (err) {
       setError(err.response?.data?.error || 'Could not cancel the provisional inspection deal.');
@@ -238,13 +242,8 @@ export default function InspectorDashboard() {
     try {
       await api.post(`/inspections/${id}/start`);
 
-      const startedRequest = mine.find((request) => request.id === id);
-      const marketplaceLabel = startedRequest?.listing?.category === 'PRODUCT'
-        ? 'product'
-        : 'agricultural';
-
       setMsg(
-        `Inspection started for this ${marketplaceLabel} order. You can now complete the evidence report.`
+        'Inspection started. You can now complete the evidence report.'
       );
 
       await loadAll();
@@ -940,13 +939,13 @@ export default function InspectorDashboard() {
                       </span>
 
                       <h2 id="inspection-report-title">
-                        Inspection report
+                        {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Product inspection report' : 'Agricultural inspection report'}
                       </h2>
 
                       <p className="sd-muted">
-                        Record the verified condition
-                        of the produce and supporting
-                        evidence.
+                        {isProductInspection(mine.find((r) => r.id === activeRequestId))
+                          ? 'Verify identity, physical condition, functionality and included items for the product.'
+                          : 'Record the verified condition, quantity, quality and supporting evidence for the produce.'}
                       </p>
                     </div>
 
@@ -968,7 +967,7 @@ export default function InspectorDashboard() {
                     <div className="sd-form-grid">
                       <div>
                         <label>
-                          Verified quantity
+                          {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Verified units / quantity' : 'Verified quantity'}
                         </label>
 
                         <input
@@ -992,7 +991,7 @@ export default function InspectorDashboard() {
 
                       <div>
                         <label>
-                          Grade
+                          {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Condition / quality grade' : 'Grade'}
                         </label>
 
                         <input
@@ -1010,39 +1009,29 @@ export default function InspectorDashboard() {
                         />
                       </div>
 
-                      <div>
-                        <label>
-                          Moisture (%)
-                        </label>
-
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={
-                            report.moisture
-                          }
-                          onChange={(e) =>
-                            setReport({
-                              ...report,
-                              moisture:
-                                e.target
-                                  .value,
-                            })
-                          }
-                        />
-                      </div>
+                      {!isProductInspection(mine.find((r) => r.id === activeRequestId)) && (
+                        <div>
+                          <label>Moisture (%)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={report.moisture}
+                            onChange={(e) => setReport({ ...report, moisture: e.target.value })}
+                          />
+                        </div>
+                      )}
 
                       <div>
                         <label>
-                          GPS / location evidence
+                          {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Product identifier / model / serial' : 'GPS / location evidence'}
                         </label>
 
                         <input
                           value={
                             report.gpsLocation
                           }
-                          placeholder="e.g. 8.9806, 38.7578"
+                          placeholder={isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Model, serial number, SKU or identifying marks' : 'e.g. 8.9806, 38.7578'}
                           onChange={(e) =>
                             setReport({
                               ...report,
@@ -1056,14 +1045,14 @@ export default function InspectorDashboard() {
 
                       <div className="sd-full">
                         <label>
-                          Visible defects
+                          {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Functional / visible condition' : 'Visible defects'}
                         </label>
 
                         <textarea
                           value={
                             report.visibleDefects
                           }
-                          placeholder="Describe visible defects, quality issues or contamination."
+                          placeholder={isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Describe operation/function test, visible condition, faults or defects.' : 'Describe visible defects, quality issues or contamination.'}
                           onChange={(e) =>
                             setReport({
                               ...report,
@@ -1077,14 +1066,14 @@ export default function InspectorDashboard() {
 
                       <div className="sd-full">
                         <label>
-                          Damage notes
+                          {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Physical damage / wear' : 'Damage notes'}
                         </label>
 
                         <textarea
                           value={
                             report.damageNotes
                           }
-                          placeholder="Describe physical damage, bruising, broken packaging, etc."
+                          placeholder={isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Describe scratches, dents, wear, missing parts or other physical damage.' : 'Describe physical damage, bruising, broken packaging, etc.'}
                           onChange={(e) =>
                             setReport({
                               ...report,
@@ -1098,14 +1087,14 @@ export default function InspectorDashboard() {
 
                       <div className="sd-full">
                         <label>
-                          Packaging notes
+                          {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Included items / packaging / accessories' : 'Packaging notes'}
                         </label>
 
                         <textarea
                           value={
                             report.packagingNotes
                           }
-                          placeholder="Describe packaging condition and quantity of packages inspected."
+                          placeholder={isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'List accessories, documents, packaging and included components verified.' : 'Describe packaging condition and quantity of packages inspected.'}
                           onChange={(e) =>
                             setReport({
                               ...report,

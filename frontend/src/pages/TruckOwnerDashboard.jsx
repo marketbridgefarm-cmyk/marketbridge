@@ -876,9 +876,11 @@ export default function TruckOwnerDashboard() {
 
                     {hasActiveThread && (
                       <p className="sd-muted" style={{ marginTop: 10 }}>
-                        {isMyTurn
-                          ? `The requester countered at ${Number(myLeaf.counterAmount ?? myLeaf.amount).toLocaleString()} ETB.`
-                          : `You quoted ${Number(myLeaf.status === 'COUNTERED' ? (myLeaf.counterAmount ?? myLeaf.amount) : myLeaf.amount).toLocaleString()} ETB — waiting on the requester's decision.`}
+                        {myLeaf.status === 'ACCEPTED'
+                          ? `Your transport quote was accepted provisionally at ${Number(myLeaf.amount).toLocaleString()} ETB — waiting for transport payment.`
+                          : isMyTurn
+                            ? `The requester countered at ${Number(myLeaf.counterAmount ?? myLeaf.amount).toLocaleString()} ETB.`
+                            : `You quoted ${Number(myLeaf.status === 'COUNTERED' ? (myLeaf.counterAmount ?? myLeaf.amount) : myLeaf.amount).toLocaleString()} ETB — waiting on the requester's decision.`}
                       </p>
                     )}
 

@@ -200,17 +200,27 @@ export default function ListingDetail() {
     setAcceptingQuoteId(quoteId);
     try {
       await api.patch(`/inspections/${requestId}/quotes/${quoteId}/accept`);
-      showToast('Quote accepted. The inspector has been assigned.', 'success');
-      setQuotesByRequest((q) => {
-        const next = { ...q };
-        delete next[requestId];
-        return next;
-      });
+      showToast('Quote accepted provisionally. The inspector is assigned after the inspection payment gate.', 'success');
+      await loadQuotes(requestId);
       await load();
     } catch (e) {
       showToast(e.response?.data?.error || 'Could not accept this quote — it may no longer be available.', 'error');
     } finally {
       setAcceptingQuoteId('');
+    }
+  }
+
+  async function releaseInspectionAgreement(requestId, quoteId) {
+    setRejectingQuoteId(quoteId);
+    try {
+      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/withdraw`);
+      showToast('Provisional inspector deal released. Other inspector bids are available again.', 'success');
+      await loadQuotes(requestId);
+      await load();
+    } catch (e) {
+      showToast(e.response?.data?.error || 'Could not release the inspector agreement.', 'error');
+    } finally {
+      setRejectingQuoteId('');
     }
   }
 
@@ -268,6 +278,7 @@ export default function ListingDetail() {
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0] || null;
   const sellerCounterWaitingForBuyer = myLatestOffer?.status === 'COUNTERED' && myLatestOffer.counteredBy === 'SELLER';
   const buyerCounterWaitingForSeller = myLatestOffer?.status === 'COUNTERED' && myLatestOffer.counteredBy === 'BUYER';
+  const buyerHasActiveOfferDeal = Boolean(myLatestOffer && ['SELECTED', 'COUNTERED', 'ACCEPTED'].includes(myLatestOffer.status));
 
   const media = [
     ...(listing.photos || []).map((url) => ({ type: 'photo', url })),
@@ -338,7 +349,7 @@ export default function ListingDetail() {
                   <div className="evidence" key={request.id}>
                     <div><strong>{request.mode.replaceAll('_', ' ')}</strong><span className="badge" style={{ marginLeft: 8 }}>{request.status}</span></div>
                     {request.inspector && <p>Inspector: {request.inspector.name}</p>}
-                    {request.requestedById === user?.id && request.status === 'REQUESTED' && !request.inspectorId && (
+                    {request.requestedById === user?.id && ['REQUESTED', 'ACCEPTED'].includes(request.status) && (
                       <div style={{ marginTop: 8 }}>
                         {!quotesByRequest[request.id] ? (
                           <button
@@ -352,8 +363,9 @@ export default function ListingDetail() {
                         ) : (
                           <div>
                             <p className="muted" style={{ marginBottom: 6 }}>
-                              {quotesByRequest[request.id].filter((q) => ['PENDING', 'COUNTERED'].includes(q.status)).length} open quote(s).
-                              {' '}This is a competitive inspection request. Inspectors submit their own sealed quotes; you compare them and select one bid to negotiate.
+                              {quotesByRequest[request.id].filter((q) => ['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status)).length} available quote(s).
+                              {' '}This is a competitive inspection request. Inspectors submit sealed quotes; you select one for bilateral negotiation.
+                              {request.status === 'ACCEPTED' && ' The current inspector agreement is provisional until the inspection payment settles.'}
                             </p>
                             {quotesByRequest[request.id].length === 0 && (
                               <p className="muted">No quotes submitted yet.</p>
@@ -379,12 +391,20 @@ export default function ListingDetail() {
                                   {isWaitingOnInspector && (
                                     <p className="muted">You countered {Number(displayAmount).toLocaleString()} ETB — waiting for the inspector to respond.</p>
                                   )}
-                                  {isCompetitionBid && request.requestedById === user?.id && (
+                                  {isCompetitionBid && request.requestedById === user?.id && request.status === 'REQUESTED' && (
                                     <button type="button" className="btn btn-primary btn-sm" disabled={acceptingQuoteId === quote.id} onClick={() => selectInspectionQuote(request.id, quote.id)}>
                                       {acceptingQuoteId === quote.id ? 'Selecting…' : 'Select bid for deal'}
                                     </button>
                                   )}
-                                  {isRequesterTurn && (
+                                  {quote.status === 'ACCEPTED' && request.requestedById === user?.id && (
+                                    <div style={{ marginTop: 6 }}>
+                                      <span className="muted small">Provisional inspector agreement. Release it if the inspector drops out before payment.</span>
+                                      <button type="button" className="btn btn-light btn-sm" disabled={rejectingQuoteId === quote.id} onClick={() => releaseInspectionAgreement(request.id, quote.id)}>
+                                        {rejectingQuoteId === quote.id ? 'Releasing…' : 'Release inspector agreement'}
+                                      </button>
+                                    </div>
+                                  )}
+                                  {isRequesterTurn && request.status === 'REQUESTED' && (
                                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
                                       <button
                                         type="button"
@@ -496,8 +516,13 @@ export default function ListingDetail() {
 
             {isBuyer && (
               <div className="card sticky-card" id="make-offer">
-                <h2>{isAvailable ? (isProduct ? 'Make an Offer' : 'Make an Offer') : 'Listing unavailable'}</h2>
-                {!isAvailable ? (
+                <h2>{!isAvailable || buyerHasActiveOfferDeal ? 'Offer unavailable' : 'Make an Offer'}</h2>
+                {buyerHasActiveOfferDeal ? (
+                  <div>
+                    <p className="muted">You already have an active buyer offer on this listing. Continue the existing negotiation below instead of submitting another root bid.</p>
+                    <button type="button" className="btn btn-light full" onClick={() => document.getElementById('negotiation')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Open negotiation</button>
+                  </div>
+                ) : !isAvailable ? (
                   <>
                     <p className="muted">This listing has an accepted offer and is temporarily unavailable to new buyers.</p>
                     <Link className="btn btn-light full" to={isAgricultural ? '/agricultural' : '/products'}>Browse available listings</Link>

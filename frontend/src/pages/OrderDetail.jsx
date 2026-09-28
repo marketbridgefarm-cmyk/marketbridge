@@ -721,8 +721,7 @@ export default function OrderDetail() {
     isTransportArranger &&
     ['REQUESTED', 'QUOTED'].includes(
       transportJob.status
-    ) &&
-    !transportJob.truckOwnerId;
+    );
 
   /*
    * Transport payment is ONLY for hired transport.
@@ -1883,8 +1882,10 @@ export default function OrderDetail() {
 
                   <div className="inspection-report-facts">
                     <div><span>Inspected quantity</span><strong>{currentInspectionRequest.report.quantity ?? '—'}</strong></div>
-                    <div><span>Grade</span><strong>{currentInspectionRequest.report.grade || 'Not specified'}</strong></div>
-                    <div><span>Moisture</span><strong>{currentInspectionRequest.report.moisture != null ? `${currentInspectionRequest.report.moisture}%` : 'Not recorded'}</strong></div>
+                    <div><span>{isProductsMarketplace ? 'Condition / quality' : 'Grade'}</span><strong>{currentInspectionRequest.report.grade || 'Not specified'}</strong></div>
+                    {!isProductsMarketplace && (
+                      <div><span>Moisture</span><strong>{currentInspectionRequest.report.moisture != null ? `${currentInspectionRequest.report.moisture}%` : 'Not recorded'}</strong></div>
+                    )}
                     <div><span>Inspection status</span><strong>Completed</strong></div>
                   </div>
 
@@ -2519,6 +2520,14 @@ export default function OrderDetail() {
                                 ETB
                               </strong>
 
+                              {canChooseQuote && quote.status === 'ACCEPTED' && (
+                                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                  <span className="muted small">Provisional transporter agreement. Release it if this transporter becomes unavailable before payment.</span>
+                                  <button type="button" className="btn btn-light btn-sm" disabled={busy === `quote-${quote.id}`} onClick={() => releaseTransportAgreement(quote.id)}>
+                                    {busy === `quote-${quote.id}` ? 'Releasing…' : 'Release transporter'}
+                                  </button>
+                                </div>
+                              )}
                               {canChooseQuote && isCompetitionBid && (
                                 <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                                   <button type="button" className="btn btn-primary btn-sm" disabled={busy === `quote-${quote.id}`} onClick={() => selectTransportQuote(quote.id)}>
