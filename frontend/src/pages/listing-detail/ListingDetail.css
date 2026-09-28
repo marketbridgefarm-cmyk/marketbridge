@@ -159,7 +159,7 @@
   margin: 0;
   max-width: 850px;
   font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: clamp(30px, 4.5vw, 50px);
+  font-size: clamp(24px, 3.4vw, 38px);
   font-weight: 800;
   line-height: 1.04;
   letter-spacing: -1.8px;
@@ -234,8 +234,8 @@
 .listing-detail-page aside .card > h2 {
   margin: 0 0 14px;
   font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 18px;
-  letter-spacing: -.35px;
+  font-size: 16px;
+  letter-spacing: -.2px;
 }
 
 .listing-detail-page .evidence {
@@ -293,6 +293,18 @@
   background: #fbfdfb;
 }
 
+
+/* Full-width divider directly beneath every card title. */
+.listing-detail-page .detail-grid > section > .card:not(.detail-content) > h2,
+.listing-detail-page aside .card > h2,
+.listing-detail-page #make-offer > h2 {
+  display: block;
+  width: 100%;
+  margin-bottom: 16px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--ld-line);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Right rail / negotiation                                                   */
 /* -------------------------------------------------------------------------- */
@@ -333,8 +345,8 @@
   border-color: rgba(23,107,58,.20);
 }
 
-.listing-detail-page #make-offer > h2 {
-  font-size: 20px;
+.listing-detail-page  #make-offer > h2 {
+  font-size: 17px;
 }
 
 .listing-detail-page #make-offer form {
@@ -374,7 +386,7 @@
 .listing-detail-page aside .card h3.mt {
   margin-bottom: 8px;
   font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .listing-detail-page .offer-row {
@@ -514,7 +526,7 @@
   }
 
   .listing-detail-page .detail-content h1 {
-    font-size: clamp(28px, 8vw, 38px);
+    font-size: clamp(23px, 7vw, 32px);
     letter-spacing: -1px;
   }
 
@@ -609,5 +621,60 @@
   .listing-detail-page .detail-grid > section > .card,
   .listing-detail-page aside .card {
     transition: none;
+  }
+}
+
+/* Section icons */
+.listing-detail-page .ld-section-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  position: relative;
+  margin-bottom: 14px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--ld-line);
+}
+
+.listing-detail-page .ld-section-title .ld-section-icon {
+  display: inline-flex;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(23,107,58,.14);
+  border-radius: 8px;
+  background: #f5faf6;
+  color: var(--brand, #176b3a);
+}
+
+.listing-detail-page .ld-section-title .ld-section-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.listing-detail-page .ld-section-title > span:last-child {
+  min-width: 0;
+}
+
+.listing-detail-page .detail-content > h1 {
+  font-size: clamp(22px, 2.7vw, 31px);
+  letter-spacing: -1.1px;
+}
+
+@media (max-width: 640px) {
+  .listing-detail-page .ld-section-title {
+    gap: 8px;
+    padding-bottom: 9px;
+  }
+
+  .listing-detail-page .ld-section-title .ld-section-icon {
+    flex-basis: 26px;
+    width: 26px;
+    height: 26px;
+  }
+
+  .listing-detail-page .detail-content > h1 {
+    font-size: 22px;
   }
 }
