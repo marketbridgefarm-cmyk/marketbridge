@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import api from '../api/client';
 import ListingCard from '../components/ListingCard.jsx';
 import AdvertisementBanner from '../components/AdvertisementBanner.jsx';
-import { Link } from 'react-router-dom';
+import MarketplaceActions from './listings/MarketplaceActions.jsx';
 import { REGIONS as FALLBACK_REGIONS } from '../utils/ethiopianRegions';
 import './listings/Listings.css';
 
@@ -174,20 +174,16 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
             <h1>{agriculture ? 'Find produce at the source.' : 'Buy and sell physical products.'}</h1>
             <p>
               {agriculture
-                ? 'Compare bulk farm listings, quantities, locations and asking prices.'
-                : 'A general marketplace for physical goods. Any member can buy and sell.'}
+                ? 'Compare bulk farm listings and prices.'
+                : 'Any member can buy and sell.'}
             </p>
           </div>
-          <Link
-            to={agriculture ? '/create-listing?category=AGRICULTURAL' : '/create-listing?category=PRODUCT'}
-            className="btn btn-primary"
-          >
-            + {agriculture ? 'List produce' : 'List product'}
-          </Link>
         </div>
 
+        <MarketplaceActions category={category} />
+
         {/* ---- Filter bar ---- */}
-        <div className="filter-bar-wrap listings-filter-bar">
+        <div id="listings-results" className="filter-bar-wrap listings-filter-bar">
           {/* Main search with debounce */}
           <div className="filter-bar-search">
             <input
