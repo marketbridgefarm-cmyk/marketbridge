@@ -72,11 +72,10 @@ router.post(
     body('mode')
       .isIn(['SELLER_REQUESTED', 'BUYER_REQUESTED', 'JOINT'])
       .withMessage('Invalid inspection mode'),
-    body('inspectorId').optional({ nullable: true }).isString(),
-    body('fee')
-      .if(body('inspectorId').notEmpty())
-      .isFloat({ gt: 0 })
-      .withMessage('A fee is required when pre-selecting an inspector'),
+    // Inspection provider selection is competitive. A requester may open
+    // the inspection request, but cannot bypass sealed quotes by naming an
+    // inspector and fee directly. The selected quote becomes the provisional
+    // agreement; payment is the commitment boundary.
   ],
   async (req, res) => {
     try {
@@ -89,8 +88,6 @@ router.post(
         orderId,
         listingId,
         mode,
-        inspectorId,
-        fee,
       } = req.body;
 
       const order = await prisma.order.findUnique({
@@ -115,25 +112,11 @@ router.post(
 
       const resolvedListingId = order.listingId;
 
-      if (inspectorId) {
-        const inspector = await prisma.user.findUnique({
-          where: { id: inspectorId },
+      if (req.body?.inspectorId || req.body?.fee) {
+        return res.status(400).json({
+          code: 'COMPETITIVE_INSPECTION_REQUIRED',
+          error: 'Choose an inspector from the submitted competitive quotes. Direct inspector selection is not available.',
         });
-
-        if (
-          !inspector ||
-          !inspector.roles.includes('INSPECTOR')
-        ) {
-          return res.status(400).json({
-            error: 'inspectorId does not belong to a registered inspector',
-          });
-        }
-
-        if (inspector.id === req.user.id) {
-          return res.status(400).json({
-            error: 'You cannot select yourself as the inspector',
-          });
-        }
       }
 
       const request = await prisma.$transaction(async (tx) => {
@@ -166,9 +149,9 @@ router.post(
             mode,
             // Preserve the location at the time the inspection was requested.
             location: order.listing.location || null,
-            inspectorId: inspectorId || null,
-            status: inspectorId ? 'ACCEPTED' : 'REQUESTED',
-            fee: inspectorId ? Number(fee) : null,
+            inspectorId: null,
+            status: 'REQUESTED',
+            fee: null,
           },
           include: {
             listing: {
@@ -188,7 +171,7 @@ router.post(
           action: 'INSPECTION_REQUEST_CREATED',
           resourceType: 'InspectionRequest',
           resourceId: created.id,
-          metadata: { orderId: order.id, listingId: resolvedListingId, mode, inspectorId: inspectorId || null },
+          metadata: { orderId: order.id, listingId: resolvedListingId, mode, competitiveSelection: true },
         });
 
         return created;

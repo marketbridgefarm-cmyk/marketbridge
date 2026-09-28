@@ -1847,6 +1847,26 @@ router.post(
         });
       }
 
+      // Once the arranging party selects a transporter bid, the competition
+      // phase is frozen: only that selected negotiation thread may counter.
+      // Other already-submitted PENDING bids remain available as waiting
+      // alternatives and can be selected if the provisional agreement is
+      // released before payment. This prevents a new provider from entering
+      // midway through an active bilateral negotiation.
+      const activeNegotiation = await prisma.transportQuote.findFirst({
+        where: {
+          transportJobId: job.id,
+          status: { in: ['SELECTED', 'COUNTERED', 'ACCEPTED'] },
+        },
+        select: { id: true, truckOwnerId: true, status: true },
+      });
+      if (activeNegotiation) {
+        return res.status(409).json({
+          code: 'TRANSPORT_COMPETITION_FROZEN',
+          error: 'A transporter has already been selected for negotiation. Existing waiting bids remain available; new bids cannot join this negotiation.',
+        });
+      }
+
       let truckId =
         req.body.truckId;
 

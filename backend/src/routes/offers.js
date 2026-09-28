@@ -462,6 +462,26 @@ async function acceptOfferAndCreateOrder(
     where: { id: offer.id },
   });
 
+  // There can be only one live provisional buyer/order for a listing at a
+  // time. Competition remains visible while that provisional deal is active,
+  // but the seller must release/cancel it before another waiting buyer can be
+  // promoted. Without this guard, two buyers could both reach PENDING_PAYMENT
+  // and race for the same inventory at payment time.
+  const existingProvisionalOrder = await tx.order.findFirst({
+    where: {
+      listingId: offer.listingId,
+      status: { notIn: ['CANCELLED', 'COMPLETED'] },
+    },
+    select: { id: true, buyerId: true, status: true },
+  });
+
+  if (existingProvisionalOrder) {
+    throw offerError(
+      'This listing already has a provisional buyer agreement. Cancel or release that order before accepting another buyer.',
+      409
+    );
+  }
+
   // IMPORTANT: acceptance creates a provisional winner/order only. It must
   // not consume inventory or reject the other competing buyers yet. The
   // goods are committed atomically only when the MARKETPLACE payment settles
