@@ -185,6 +185,8 @@ enum PaymentType {
   INSPECTOR
   ADVERTISING
   DIGITAL
+  // One installment of a large MARKETPLACE payment (see installmentService).
+  MARKETPLACE_INSTALLMENT
 }
 
 enum DigitalPurchaseStatus {
@@ -1391,6 +1393,25 @@ model Payment {
   obligationId String? @unique
 
   // --------------------------------------------------------------------------
+  // INSTALLMENTS
+  // --------------------------------------------------------------------------
+  //
+  // A goods payment above the provider's per-transaction limit is paid in
+  // installments. The MARKETPLACE payment for the full price is the PARENT
+  // (installmentCount set, never sent to the provider). Each installment is a
+  // child MARKETPLACE_INSTALLMENT payment (parentPaymentId + installmentSequence)
+  // with its own provider checkout. The parent settles PAID only when every
+  // child is PAID, so the order is confirmed and the seller payout is created
+  // only after the full amount has been received.
+
+  installmentCount    Int?
+  installmentSequence Int?
+
+  parentPayment   Payment?  @relation("PaymentInstallments", fields: [parentPaymentId], references: [id])
+  parentPaymentId String?
+  installments    Payment[] @relation("PaymentInstallments")
+
+  // --------------------------------------------------------------------------
   // PAYMENT DATA
   // --------------------------------------------------------------------------
 
@@ -1461,6 +1482,8 @@ model Payment {
   @@index([type])
   @@index([status])
   @@index([reference])
+  @@index([parentPaymentId])
+  @@unique([parentPaymentId, installmentSequence])
 
   // Allows providerTransactionId to be unique when present.
   // PostgreSQL permits multiple NULL values.
