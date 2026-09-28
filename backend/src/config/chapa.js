@@ -69,11 +69,17 @@ async function chapaRequest(endpoint, options = {}) {
   }
 
   if (!response.ok) {
-    const error = new Error(
-      data?.message ||
-      data?.error ||
-      `Chapa request failed with HTTP ${response.status}`
-    );
+    const raw = data?.message ?? data?.error;
+    const text =
+      typeof raw === 'string'
+        ? raw
+        : raw
+        ? Object.entries(raw)
+            .map(([k, v]) => `${k}: ${[].concat(v).join(', ')}`)
+            .join('; ')
+        : `Chapa request failed with HTTP ${response.status}`;
+
+    const error = new Error(text);
 
     error.status = response.status;
     error.chapa = data;
