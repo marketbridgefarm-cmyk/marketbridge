@@ -863,6 +863,40 @@ router.post(
         });
 
       if (duplicate) {
+        // If an older UI already created a normal pending marketplace payment
+        // for an amount above Chapa's limit, allow the buyer to upgrade that
+        // pending payment into the installment parent instead of trapping the
+        // order behind the old "contact support" message. This is safe only
+        // while the payment is still PENDING; PROCESSING/PAID payments are never
+        // reshaped.
+        if (
+          wantsInstallments &&
+          type === 'MARKETPLACE' &&
+          duplicate.status === 'PENDING' &&
+          installmentMax &&
+          Number(duplicate.amount) > Number(installmentMax)
+        ) {
+          const parts = installmentService.splitAmount(duplicate.amount, installmentMax);
+          const updatedParent = await prisma.payment.update({
+            where: { id: duplicate.id },
+            data: { installmentCount: parts.length },
+          });
+          const installments =
+            await installmentService.ensureInstallmentChildren(
+              updatedParent,
+              installmentMax
+            );
+
+          return res.status(200).json({
+            message: 'Pending payment converted to installment plan.',
+            payment: updatedParent,
+            installments,
+            paymentConfirmed: false,
+            replayed: true,
+            convertedToInstallments: true,
+          });
+        }
+
         // Retrying installment creation (for example after a dropped
         // connection): return the existing plan instead of failing.
         if (
