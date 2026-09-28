@@ -340,10 +340,10 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
           </strong>
           <span className="muted">
             {nearMode
-              ? 'Sorted by distance from your current location.'
+              ? 'Sorted by distance'
               : agriculture
-                ? 'Independent inspection can support bulk transactions.'
-                : 'Buyers and sellers transact directly through MarketBridge workflows.'}
+                ? 'Independent inspection supported'
+                : 'Direct buyer and seller deals'}
           </span>
         </div>
 
