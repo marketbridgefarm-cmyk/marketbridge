@@ -871,3 +871,49 @@
     max-height: 11px !important;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Correct page scope + final card-heading contract                          */
+/* -------------------------------------------------------------------------- */
+.listing-detail-page .ld-section-title {
+  font-size: 15px !important;
+  font-weight: 800 !important;
+  line-height: 1.25 !important;
+  min-height: 22px !important;
+}
+
+.listing-detail-page .ld-section-title .ld-section-icon {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  max-width: 22px !important;
+  min-height: 22px !important;
+  max-height: 22px !important;
+  flex: 0 0 22px !important;
+  overflow: hidden !important;
+}
+
+.listing-detail-page .ld-section-title .ld-section-icon > svg {
+  width: 13px !important;
+  height: 13px !important;
+  min-width: 13px !important;
+  max-width: 13px !important;
+  min-height: 13px !important;
+  max-height: 13px !important;
+}
+
+/* The rule belongs to the heading row and reaches both card edges. */
+.listing-detail-page .ld-section-title::after {
+  display: none !important;
+}
+
+.listing-detail-page .ld-section-title {
+  border-bottom: 1px solid var(--ld-line) !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 700px) {
+  .listing-detail-page .ld-section-title {
+    font-size: 14px !important;
+  }
+}
