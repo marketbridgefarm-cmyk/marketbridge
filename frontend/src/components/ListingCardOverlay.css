@@ -21,7 +21,7 @@
 }
 
 .lc .lc-photo-tags .lc-tag--neg {
-  background-color: #fff6e6;
+  background-color: #fbf3e2;
 }
 
 .lc .lc-head {
@@ -47,7 +47,7 @@
 }
 
 .lc .lc-harvest span {
-  color: var(--mb-text-muted, #667168);
+  color: #667168;
   font: 700 10px/1 'DM Sans', system-ui, sans-serif;
   letter-spacing: .4px;
   text-transform: uppercase;
