@@ -736,3 +736,138 @@
     --ld-card-pad: 16px;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Final mobile-safe section heading correction                              */
+/* Keep icons compact, keep headings small, and make the rule truly full     */
+/* width of the card.                                                        */
+/* -------------------------------------------------------------------------- */
+.listing-detail-page .ld-section-title {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  width: calc(100% + (2 * var(--ld-card-pad, 16px))) !important;
+  box-sizing: border-box !important;
+  margin: 0 0 15px calc(-1 * var(--ld-card-pad, 16px)) !important;
+  padding: 0 var(--ld-card-pad, 16px) 10px !important;
+  border-bottom: 1px solid var(--ld-line) !important;
+  font-size: 16px !important;
+  line-height: 1.25 !important;
+  letter-spacing: -.15px !important;
+  overflow: visible !important;
+}
+
+.listing-detail-page .ld-section-title.ld-section-title,
+.listing-detail-page aside .ld-section-title {
+  font-size: 16px !important;
+}
+
+.listing-detail-page .ld-section-title .ld-section-icon {
+  position: relative !important;
+  display: inline-flex !important;
+  flex: 0 0 22px !important;
+  width: 22px !important;
+  min-width: 22px !important;
+  max-width: 22px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  max-height: 22px !important;
+  box-sizing: border-box !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(23,107,58,.18) !important;
+  border-radius: 6px !important;
+  background: #f2f7f3 !important;
+  color: var(--ld-green) !important;
+}
+
+.listing-detail-page .ld-section-title .ld-section-icon svg {
+  display: block !important;
+  position: static !important;
+  flex: none !important;
+  width: 13px !important;
+  min-width: 13px !important;
+  max-width: 13px !important;
+  height: 13px !important;
+  min-height: 13px !important;
+  max-height: 13px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.9 !important;
+  transform: none !important;
+}
+
+.listing-detail-page .ld-section-title:where(h3) {
+  font-size: 13px !important;
+}
+
+.listing-detail-page .detail-content > h1 {
+  font-size: clamp(22px, 2.7vw, 31px) !important;
+  line-height: 1.1 !important;
+}
+
+@media (max-width: 700px) {
+  .listing-detail-page .ld-section-title,
+  .listing-detail-page .ld-section-title.ld-section-title,
+  .listing-detail-page aside .ld-section-title {
+    font-size: 15px !important;
+    gap: 7px !important;
+    padding-top: 0 !important;
+    padding-bottom: 9px !important;
+  }
+
+  .listing-detail-page .ld-section-title .ld-section-icon {
+    flex-basis: 21px !important;
+    width: 21px !important;
+    min-width: 21px !important;
+    max-width: 21px !important;
+    height: 21px !important;
+    min-height: 21px !important;
+    max-height: 21px !important;
+  }
+
+  .listing-detail-page .ld-section-title .ld-section-icon svg {
+    width: 12px !important;
+    min-width: 12px !important;
+    max-width: 12px !important;
+    height: 12px !important;
+    min-height: 12px !important;
+    max-height: 12px !important;
+  }
+
+  .listing-detail-page .detail-content > h1 {
+    font-size: 22px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .listing-detail-page .ld-section-title,
+  .listing-detail-page .ld-section-title.ld-section-title,
+  .listing-detail-page aside .ld-section-title {
+    font-size: 14px !important;
+  }
+
+  .listing-detail-page .ld-section-title .ld-section-icon {
+    flex-basis: 20px !important;
+    width: 20px !important;
+    min-width: 20px !important;
+    max-width: 20px !important;
+    height: 20px !important;
+    min-height: 20px !important;
+    max-height: 20px !important;
+  }
+
+  .listing-detail-page .ld-section-title .ld-section-icon svg {
+    width: 11px !important;
+    min-width: 11px !important;
+    max-width: 11px !important;
+    height: 11px !important;
+    min-height: 11px !important;
+    max-height: 11px !important;
+  }
+}
