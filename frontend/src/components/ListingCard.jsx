@@ -17,7 +17,7 @@ function formatHarvestDate(listing) {
   if (!raw) return null;
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
 export default function ListingCard({ listing }) {
@@ -80,22 +80,19 @@ export default function ListingCard({ listing }) {
 
       {/* Card body */}
       <div className="lc-body">
-        {harvestDate && (
-          <p className="lc-harvest">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="3" y="5" width="18" height="16" rx="3" />
-              <path d="M3 10h18M8 3v4M16 3v4" />
-            </svg>
-            Harvest date: <strong>{harvestDate}</strong>
-          </p>
-        )}
-
-        <h3 className="lc-title">
-          <Link to={`/listings/${listing.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>
-            {title}
-          </Link>
-        </h3>
+        <div className="lc-head">
+          <h3 className="lc-title">
+            <Link to={`/listings/${listing.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+              {title}
+            </Link>
+          </h3>
+          {!isProduct && (
+            <div className="lc-harvest">
+              <span>Harvest date</span>
+              <strong>{harvestDate || '—'}</strong>
+            </div>
+          )}
+        </div>
 
         <p className="lc-location">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"

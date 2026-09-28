@@ -24,19 +24,39 @@
   background-color: #fff6e6;
 }
 
-.lc .lc-harvest {
+.lc .lc-head {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lc .lc-head .lc-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.lc .lc-harvest {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  margin-top: 4px;
+  text-align: right;
+}
+
+.lc .lc-harvest span {
   color: var(--mb-text-muted, #667168);
-  font-size: 13px;
-  line-height: 1.4;
+  font: 700 10px/1 'DM Sans', system-ui, sans-serif;
+  letter-spacing: .4px;
+  text-transform: uppercase;
 }
 
 .lc .lc-harvest strong {
   color: var(--mb-ink, #17231b);
-  font-weight: 600;
+  font: 700 13px/1.2 Manrope, sans-serif;
+  white-space: nowrap;
 }
 
 /* The ECX grade badge sits bottom-left in styles.css; move it right so the tags own the left. */
