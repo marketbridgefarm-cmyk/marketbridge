@@ -88,7 +88,7 @@ async function activateScheduledAdvertisements(now = new Date()) {
 }
 
 /**
- * Automatic inventory release for abandoned orders. An order sits in PENDING_PAYMENT after buy-now or offer acceptance, but
+ * Automatic inventory release for abandoned orders. An order sits in PENDING_PAYMENT after offer acceptance, but
  * inventory is intentionally NOT committed yet. If the buyer never completes
  * payment, the order is cancelled so the provisional winner is removed and
  * the next waiting buyer can be promoted without any inventory restoration. This finds every such order past its paymentDueAt
