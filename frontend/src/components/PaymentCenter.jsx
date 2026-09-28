@@ -98,6 +98,18 @@ export default function PaymentCenter({
 }) {
   const [showHistory, setShowHistory] = useState(false);
 
+  // Largest single online payment the provider accepts (from the backend).
+  const maxOnlineAmount = Number(workflowPayments?.marketplace?.maxOnlineAmount) || 0;
+  const marketplaceOverLimit =
+    maxOnlineAmount > 0 && Number(marketplace?.amount) > maxOnlineAmount;
+
+  // Installment plan for a goods payment above the limit (parent + children).
+  const plan = marketplace?.installmentPlan || null;
+  const installmentRows = marketplace?.installments || [];
+  const paidInstallments = installmentRows.filter((row) => row.status === 'PAID').length;
+  const installmentCountNeeded =
+    maxOnlineAmount > 0 ? Math.ceil(Number(marketplace?.amount) / maxOnlineAmount) : 0;
+
   const outstanding =
     (marketplace?.paid ? 0 : 1) +
     (inspections || []).filter((row) => !row.paid).length +
@@ -144,8 +156,102 @@ export default function PaymentCenter({
             paid={marketplace.paid}
             pending={marketplace.pending}
             processing={marketplace.processing}
+            note={
+              plan && !marketplace.paid
+                ? `${paidInstallments} of ${installmentRows.length} installments paid. The seller is paid only after every installment is received.`
+                : null
+            }
           >
-            {isBuyer && !marketplace.paid && (
+            {isBuyer && !marketplace.paid && plan && (
+              <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                {installmentRows.map((row) => {
+                  const rowBusy = busy === `installment-${row.id}`;
+                  return (
+                    <div
+                      key={row.id}
+                      className="row-between"
+                      style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}
+                    >
+                      <span>
+                        <strong>
+                          Installment {row.installmentSequence} of {plan.installmentCount}
+                        </strong>
+                        <span className="muted"> — {money(row.amount)} ETB</span>
+                      </span>
+                      {row.status === 'PAID' ? (
+                        <span className="badge badge-success">PAID</span>
+                      ) : row.status === 'PROCESSING' ? (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={rowBusy}
+                          onClick={() => marketplace.onCheckInstallment(row)}
+                        >
+                          {rowBusy ? 'Checking…' : 'Check payment'}
+                        </button>
+                      ) : row.status === 'PENDING' ? (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={rowBusy}
+                          onClick={() => marketplace.onPayInstallment(row)}
+                        >
+                          {rowBusy ? 'Redirecting…' : 'Pay installment'}
+                        </button>
+                      ) : row.status === 'FAILED' ? (
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          disabled={rowBusy}
+                          onClick={() => marketplace.onRetryInstallment(row)}
+                        >
+                          {rowBusy ? 'Preparing…' : 'Payment failed — try again'}
+                        </button>
+                      ) : (
+                        <span className="badge">{row.status}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {isBuyer && !marketplace.paid && !plan && marketplaceOverLimit && (
+              <div className="alert" style={{ marginTop: 10 }}>
+                <strong>Too large for one online payment.</strong>
+                <p style={{ margin: '6px 0 0' }}>
+                  Online payments are limited to {money(maxOnlineAmount)} ETB per transaction, and
+                  this order is {money(marketplace.amount)} ETB.
+                  {marketplace.canStartInstallments
+                    ? ` You can pay it in ${installmentCountNeeded} installments of about ${money(
+                        Math.ceil((Number(marketplace.amount) * 100) / installmentCountNeeded) / 100
+                      )} ETB each. The seller is paid only after every installment is received.`
+                    : ' Please contact MarketBridge support to arrange this payment.'}
+                </p>
+                {marketplace.canStartInstallments && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+                    <PaymentMethodPicker
+                      methods={paymentMethods}
+                      value={payMethod}
+                      onChange={setPayMethod}
+                      disabled={busy === 'start-installments'}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={busy === 'start-installments'}
+                      onClick={marketplace.onStartInstallments}
+                    >
+                      {busy === 'start-installments'
+                        ? 'Setting up…'
+                        : `Pay in ${installmentCountNeeded} installments`}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isBuyer && !marketplace.paid && !plan && !marketplaceOverLimit && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
                 {marketplace.canCheck ? (
                   <button
@@ -325,7 +431,11 @@ export default function PaymentCenter({
               {rawPayments.map((payment) => (
                 <div className="payment-row" key={payment.id}>
                   <span>
-                    <strong>{payment.type}</strong>
+                    <strong>
+                      {payment.type === 'MARKETPLACE_INSTALLMENT'
+                        ? `INSTALLMENT ${payment.installmentSequence || ''}`.trim()
+                        : payment.type}
+                    </strong>
                   </span>
                   <strong>{money(payment.amount)} ETB</strong>
                   <span>{payment.method || '—'}</span>
