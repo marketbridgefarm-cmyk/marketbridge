@@ -5,6 +5,7 @@ import { startChapaPayment, chapaInitializeAndRedirect } from '../utils/chapaChe
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
+import './listing-detail/ListingDetail.css';
 
 const money = (n) => Number(n || 0).toLocaleString();
 
@@ -239,7 +240,7 @@ export default function ListingDetail() {
     return (list || []).filter((q) => !parentIds.has(q.id));
   }
 
-  if (!listing) return <main className="section"><div className="container-wide loading">Loading listing…</div></main>;
+  if (!listing) return <main className="section listing-detail-page"><div className="container-wide loading">Loading listing…</div></main>;
 
   const isOwner = user?.id === listing.sellerId;
   const isBuyer = user?.roles?.includes('BUYER') && !isOwner;
