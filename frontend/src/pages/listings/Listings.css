@@ -1,0 +1,215 @@
+/* MarketBridge Listings — page-scoped visual layer.
+   Functionality and shared component styles remain unchanged. */
+.listings-page {
+  --listings-green: var(--mb-primary, #176b3a);
+  --listings-dark: var(--mb-primary-dark, #0e4b29);
+  --listings-soft: var(--mb-primary-soft, #eef5ef);
+  --listings-card: var(--mb-card, #fff);
+  --listings-line: var(--mb-border, #dfe7df);
+  --listings-muted: var(--mb-text-muted, #667168);
+  --listings-shadow: 0 8px 26px rgba(20, 45, 28, .055);
+  min-height: calc(100vh - 72px);
+}
+
+.listings-page .container-wide { max-width: 1220px; }
+
+.listings-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+  padding: 8px 0 4px;
+}
+
+.listings-page-header > div:first-child { max-width: 760px; }
+.listings-page-header .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(23,107,58,.16);
+  border-radius: 999px;
+  background: var(--listings-soft);
+  color: var(--listings-green);
+  font: 800 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .11em;
+}
+
+.listings-page-header h1 {
+  max-width: 760px;
+  margin-bottom: 10px;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: clamp(32px, 5vw, 54px);
+  font-weight: 800;
+  letter-spacing: -1.8px;
+}
+
+.listings-page-header p {
+  max-width: 650px;
+  color: var(--listings-muted);
+  font-size: 15px;
+}
+
+.listings-page-header .btn-primary {
+  flex: 0 0 auto;
+  min-height: 46px;
+  padding-inline: 18px;
+  border-radius: 12px;
+  box-shadow: 0 5px 16px rgba(23,107,58,.12);
+}
+
+.listings-filter-bar {
+  padding: 14px;
+  border: 1px solid var(--listings-line);
+  border-radius: 18px;
+  background: rgba(255,255,255,.9);
+  box-shadow: var(--listings-shadow);
+}
+
+.listings-filter-bar .filter-bar-search {
+  margin-bottom: 12px;
+}
+
+.listings-filter-bar .filter-bar-search input {
+  height: 48px;
+  border-radius: 12px;
+  background: #fbfdfb;
+}
+
+.listings-filter-bar .filter-bar-search .btn {
+  min-height: 48px;
+  padding-inline: 18px;
+  border-radius: 12px;
+}
+
+.listings-filter-bar .filter-chip {
+  height: 38px;
+  background: #fff;
+  border-radius: 999px;
+}
+
+.listings-filter-bar .filter-chip.active {
+  box-shadow: inset 0 0 0 1px rgba(23,107,58,.04);
+}
+
+.listings-filter-bar .filter-more-panel {
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  background: #fbfdfb;
+  box-shadow: inset 0 1px 0 rgba(23,107,58,.025);
+}
+
+.listings-filter-bar .filter-more-panel input {
+  height: 40px;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.listings-toolbar {
+  margin-top: 22px;
+  padding: 13px 2px;
+  border-top: 1px solid var(--listings-line);
+  border-bottom: 1px solid var(--listings-line);
+}
+
+.listings-toolbar strong {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--listings-soft);
+  color: var(--listings-green);
+}
+
+.listings-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 4px;
+}
+
+.listings-grid > div { min-width: 0; }
+
+/* ListingCard is shared elsewhere, so these rules are deliberately scoped. */
+.listings-page .lc {
+  border-radius: 18px;
+  box-shadow: 0 3px 14px rgba(20,45,28,.045);
+  transition: transform .2s var(--ease), box-shadow .2s var(--ease), border-color .2s ease;
+}
+
+.listings-page .lc:hover {
+  transform: translateY(-3px);
+  border-color: rgba(23,107,58,.2);
+  box-shadow: 0 14px 34px rgba(20,45,28,.10);
+}
+
+.listings-page .lc-photo { aspect-ratio: 16 / 10; }
+.listings-page .lc-body { padding: 17px; gap: 7px; }
+.listings-page .lc-title { font-size: 16px; }
+.listings-page .lc-stats { padding: 11px 0; margin-top: 6px; }
+.listings-page .lc-cta { min-height: 34px; height: 34px; border-radius: 9px; }
+
+.listings-page .lc-location { min-height: 20px; }
+.listings-page .lc-offer-count {
+  margin: 2px 0;
+  padding: 7px 9px;
+  border: 1px solid rgba(183,123,27,.18);
+  border-radius: 9px;
+  background: #fffaf2;
+  color: #8a5d13;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.listings-page .empty.card {
+  grid-column: 1 / -1;
+  min-height: 190px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  border: 1px dashed var(--listings-line);
+  border-radius: 18px;
+  background: rgba(255,255,255,.72);
+}
+
+.listings-page .empty.card h3 { margin-bottom: 6px; }
+.listings-page .empty.card p { color: var(--listings-muted); }
+
+.listings-page .loading {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--listings-line);
+  border-radius: 18px;
+  color: var(--listings-muted);
+  background: rgba(255,255,255,.68);
+}
+
+@media (max-width: 900px) {
+  .listings-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .listings-page-header .btn-primary { width: 100%; }
+  .listings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .listings-page { padding-top: 28px; }
+  .listings-page-header { margin-bottom: 20px; }
+  .listings-page-header h1 { font-size: 34px; letter-spacing: -1px; }
+  .listings-filter-bar { padding: 10px; border-radius: 15px; }
+  .listings-filter-bar .filter-bar-search { gap: 7px; }
+  .listings-filter-bar .filter-bar-search input { min-width: 0; }
+  .listings-filter-bar .filter-bar-search .btn { padding-inline: 13px; }
+  .listings-grid { grid-template-columns: 1fr; gap: 14px; }
+  .listings-toolbar { align-items: flex-start; flex-direction: column; }
+  .listings-page .lc-body { padding: 15px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .listings-page .lc { transition: none; }
+}
