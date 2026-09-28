@@ -91,6 +91,33 @@ async function chapaRequest(endpoint, options = {}) {
 }
 
 // ============================================================================
+// TRANSACTION LIMIT
+// ============================================================================
+// Chapa rejects any single transaction above the merchant's per-transaction
+// cap (1,000,000 ETB by default). Checking up front lets us show a clear
+// message instead of a provider error after the buyer taps Pay.
+// Override with CHAPA_MAX_TRANSACTION_AMOUNT if Chapa raises your limit.
+
+function getMaxTransactionAmount() {
+  const value = Number(process.env.CHAPA_MAX_TRANSACTION_AMOUNT);
+  return Number.isFinite(value) && value > 0 ? value : 1000000;
+}
+
+function assertWithinTransactionLimit(amount, currency = 'ETB') {
+  const max = getMaxTransactionAmount();
+
+  if (Number(amount) > max) {
+    throw Object.assign(
+      new Error(
+        `Online payments are limited to ${max.toLocaleString('en-US')} ${currency} per transaction. ` +
+        'This amount is too large to pay online. Please contact MarketBridge support to arrange payment.'
+      ),
+      { status: 400, code: 'PAYMENT_AMOUNT_EXCEEDS_LIMIT' }
+    );
+  }
+}
+
+// ============================================================================
 // INITIALIZE TRANSACTION
 // ============================================================================
 
@@ -123,6 +150,8 @@ async function initializeTransaction({
       { status: 400 }
     );
   }
+
+  assertWithinTransactionLimit(amount, currency);
 
   if (!email) {
     throw Object.assign(
@@ -388,6 +417,8 @@ function verifyWebhookSignature(
 // ============================================================================
 
 module.exports = {
+  getMaxTransactionAmount,
+  assertWithinTransactionLimit,
   initializeTransaction,
   verifyTransaction,
   refundTransaction,
