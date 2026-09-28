@@ -1432,6 +1432,7 @@ router.patch(
         minAcceptablePrice,
         quantity,
         status,
+        harvestedDate,
         readinessDate,
         pickupWindowStart,
         pickupWindowEnd,
@@ -1555,42 +1556,67 @@ router.patch(
       }
 
       // ----------------------------------------------------------------------
-      // Validate readinessDate
+      // Validate harvestedDate and readinessDate
       // ----------------------------------------------------------------------
 
+      let parsedHarvestedDate;
       let parsedReadinessDate;
 
-      if (
-        readinessDate !== undefined
-      ) {
-        if (
-          readinessDate === null ||
-          readinessDate === ''
-        ) {
-          parsedReadinessDate = null;
+      if (harvestedDate !== undefined) {
+        if (harvestedDate === null || harvestedDate === '') {
+          parsedHarvestedDate = null;
         } else {
-          parsedReadinessDate =
-            parseDate(
-              readinessDate
-            );
-
-          if (!parsedReadinessDate) {
+          if (listing.category !== 'AGRICULTURAL') {
             return res.status(400).json({
               error:
-                'readinessDate must be a valid date',
+                'harvestedDate is only allowed for agricultural listings',
+            });
+          }
+
+          parsedHarvestedDate = parseDate(harvestedDate);
+
+          if (!parsedHarvestedDate) {
+            return res.status(400).json({
+              error: 'harvestedDate must be a valid date',
             });
           }
         }
+      }
+
+      if (readinessDate !== undefined) {
+        if (readinessDate === null || readinessDate === '') {
+          parsedReadinessDate = null;
+        } else {
+          parsedReadinessDate = parseDate(readinessDate);
+
+          if (!parsedReadinessDate) {
+            return res.status(400).json({
+              error: 'readinessDate must be a valid date',
+            });
+          }
+        }
+      }
+
+      if (harvestedDate !== undefined || readinessDate !== undefined) {
+        const effectiveHarvestedDate =
+          harvestedDate !== undefined
+            ? parsedHarvestedDate
+            : listing.harvestedDate;
+        const effectiveReadinessDate =
+          readinessDate !== undefined
+            ? parsedReadinessDate
+            : listing.readinessDate;
 
         if (
-          listing.harvestedDate &&
-          parsedReadinessDate &&
-          listing.harvestedDate >
-            parsedReadinessDate
+          effectiveHarvestedDate &&
+          effectiveReadinessDate &&
+          effectiveHarvestedDate > effectiveReadinessDate
         ) {
           return res.status(400).json({
             error:
-              'readinessDate cannot be earlier than harvestedDate',
+              harvestedDate !== undefined
+                ? 'harvestedDate cannot be later than readinessDate'
+                : 'readinessDate cannot be earlier than harvestedDate',
           });
         }
       }
@@ -1742,6 +1768,12 @@ router.patch(
             ...(status !==
               undefined && {
               status,
+            }),
+
+            ...(harvestedDate !==
+              undefined && {
+              harvestedDate:
+                parsedHarvestedDate,
             }),
 
             ...(readinessDate !==
