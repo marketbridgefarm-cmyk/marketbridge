@@ -6,6 +6,9 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
 
+// Import the page-specific stylesheet
+import './listing-detail/ListingDetail.css';
+
 const money = (n) => Number(n || 0).toLocaleString();
 
 export default function ListingDetail() {
