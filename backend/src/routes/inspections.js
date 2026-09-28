@@ -697,11 +697,13 @@ router.patch(
           throw new Error('INSPECTION_ALREADY_CLAIMED');
         }
 
-        // Close out every other negotiation thread on this request.
+        // The accepted negotiation becomes provisional. Keep independent PENDING
+        // competition bids alive so that, if this inspector drops before payment,
+        // the requester can release this deal and select another inspector.
         await tx.inspectionQuote.updateMany({
           where: {
             inspectionRequestId: request.id,
-            status: { in: ['PENDING', 'COUNTERED'] },
+            status: { in: ['SELECTED', 'COUNTERED'] },
             id: { not: quote.id },
           },
           data: { status: 'REJECTED' },
@@ -893,6 +895,76 @@ router.post(
 );
 
 // ============================================================================
+// RELEASE PROVISIONAL INSPECTION AGREEMENT
+// Acceptance is provisional until the inspector payment settles. Releasing
+// the accepted quote reopens the request and preserves independent PENDING
+// inspector bids.
+// ============================================================================
+
+router.patch(
+  '/:id/quotes/:quoteId/withdraw',
+  authenticate,
+  async (req, res) => {
+    try {
+      const loaded = await loadQuoteForNegotiation(req, res);
+      if (!loaded) return;
+      const { request, quote, actorRole } = loaded;
+
+      if (quote.status !== 'ACCEPTED') {
+        return res.status(400).json({ error: `Only a provisionally accepted quote can be released (current: ${quote.status})` });
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection agreement cannot be released until the order dispute is resolved');
+
+        const activePayment = await tx.payment.findFirst({
+          where: {
+            inspectionRequestId: request.id,
+            type: 'INSPECTOR',
+            status: { in: ['PENDING', 'PROCESSING', 'PAID'] },
+          },
+          select: { id: true, status: true },
+        });
+        if (activePayment) {
+          throw quoteError('This inspector cannot be released after inspection payment has started or completed', 409);
+        }
+
+        const freshRequest = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
+        if (!freshRequest || freshRequest.status !== 'ACCEPTED' || freshRequest.inspectorId !== quote.inspectorId) {
+          throw quoteError('This provisional inspection agreement is no longer active', 409);
+        }
+
+        const updatedQuote = await tx.inspectionQuote.update({
+          where: { id: quote.id },
+          data: { status: 'WITHDRAWN' },
+        });
+
+        await tx.inspectionRequest.update({
+          where: { id: request.id },
+          data: { inspectorId: null, fee: null, status: 'REQUESTED' },
+        });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'INSPECTION_QUOTE_WITHDRAWN',
+          resourceType: 'InspectionQuote',
+          resourceId: updatedQuote.id,
+          metadata: { inspectionRequestId: request.id, inspectorId: quote.inspectorId, releasedBy: actorRole },
+        });
+
+        return updatedQuote;
+      }, { maxWait: 10000, timeout: 15000 });
+
+      return res.json({ message: 'Provisional inspector agreement released. Other inspector bids are available again.', quote: result });
+    } catch (error) {
+      if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+      req.log.error({ err: error }, 'WITHDRAW INSPECTION QUOTE ERROR:');
+      return res.status(500).json({ error: 'Could not release inspection agreement' });
+    }
+  }
+);
+
+// ============================================================================
 // REJECT INSPECTION QUOTE
 // Either party can end a negotiation thread when it's their turn to respond.
 // ============================================================================
@@ -988,27 +1060,6 @@ router.post(
       if (request.status !== 'ACCEPTED') {
         return res.status(400).json({
           error: `Only an accepted inspection can be started. Current status: ${request.status}`,
-        });
-      }
-
-      // HARD COMPETITION GATE:
-      // An inspector may start only after the requester has finished the
-      // inspector competition and the negotiated quote has actually been
-      // accepted. A quoted/selected/countered inspector must never be able
-      // to start the inspection prematurely.
-      const acceptedQuote = await prisma.inspectionQuote.findFirst({
-        where: {
-          inspectionRequestId: request.id,
-          inspectorId: request.inspectorId,
-          status: 'ACCEPTED',
-        },
-        select: { id: true, amount: true },
-      });
-
-      if (!acceptedQuote) {
-        return res.status(409).json({
-          code: 'INSPECTION_COMPETITION_NOT_FINISHED',
-          error: 'The inspector competition and negotiation must be completed before the inspection can start.',
         });
       }
 
@@ -1181,6 +1232,15 @@ router.get(
           },
 
           report: true,
+          payments: { select: { id: true, type: true, status: true, amount: true } },
+          quotes: {
+            where: { status: { not: 'REJECTED' } },
+            select: {
+              id: true, inspectorId: true, amount: true, status: true, message: true,
+              parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
+            },
+            orderBy: { createdAt: 'asc' },
+          },
         },
 
         orderBy: {

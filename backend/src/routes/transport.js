@@ -417,9 +417,14 @@ router.get(
         await prisma.transportJob.findMany({
           where: {
             method: 'HIRE_TRANSPORTER',
-            truckOwnerId: null,
             status: {
               in: ['REQUESTED', 'QUOTED'],
+            },
+            payments: {
+              none: {
+                type: 'TRANSPORT',
+                status: { in: ['PENDING', 'PROCESSING', 'PAID'] },
+              },
             },
           },
           include: {
@@ -2214,11 +2219,23 @@ router.patch(
       const selected = await prisma.$transaction(async (tx) => {
         const fresh = await tx.transportQuote.findUnique({ where: { id: quote.id } });
         if (!fresh || fresh.status !== 'PENDING') throw quoteError('This bid is no longer available', 409);
+        // A previously ACCEPTED quote is only provisional until transport
+        // payment. Selecting another pending bid therefore releases the old
+        // provisional transporter rather than consuming/closing the order.
+        await tx.transportQuote.updateMany({
+          where: { transportJobId: job.id, id: { not: fresh.id }, status: 'ACCEPTED' },
+          data: { status: 'WITHDRAWN' },
+        });
         await tx.transportQuote.updateMany({
           where: { transportJobId: job.id, id: { not: fresh.id }, status: 'SELECTED' },
           data: { status: 'PENDING' },
         });
-        return tx.transportQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
+        const selected = await tx.transportQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
+        await tx.transportJob.update({
+          where: { id: job.id },
+          data: { truckOwnerId: null, truckId: null, agreedAmount: null, status: 'QUOTED' },
+        });
+        return selected;
       }, { maxWait: 10000, timeout: 15000 });
       return res.json({ message: 'Transporter bid selected for price negotiation', quote: selected });
     } catch (error) {

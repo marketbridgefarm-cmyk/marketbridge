@@ -56,7 +56,7 @@ const orderInclude = {
           inspector: { select: { id: true, name: true, phone: true } },
           payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
           quotes: {
-            where: { status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'] } },
+            where: { status: { not: 'REJECTED' } },
             select: {
               id: true, inspectorId: true, amount: true, status: true,
               parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true,
@@ -76,7 +76,7 @@ const orderInclude = {
       inspector: { select: { id: true, name: true, phone: true } },
       payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
       quotes: {
-        where: { status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'] } },
+        where: { status: { not: 'REJECTED' } },
         select: { id: true, inspectorId: true, amount: true, status: true, parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true },
         orderBy: { createdAt: 'asc' },
       },

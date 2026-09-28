@@ -215,7 +215,7 @@ router.post(
             listingId,
             buyerId: req.user.id,
             status: {
-              in: ['PENDING', 'COUNTERED'],
+              in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'],
             },
             childOffers: { none: {} },
           },
