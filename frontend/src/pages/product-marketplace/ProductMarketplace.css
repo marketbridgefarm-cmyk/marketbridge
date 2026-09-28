@@ -1,0 +1,151 @@
+/* Product Marketplace — action area only. Kept page-scoped to avoid changing shared cards/buttons. */
+.product-marketplace-actions {
+  padding: 20px 0 4px;
+  background: var(--mb-bg, #f7f9f6);
+}
+
+.product-marketplace-actions__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.product-marketplace-action {
+  min-height: 118px;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 22px;
+  border: 1px solid var(--mb-border, #dfe7df);
+  border-radius: var(--mb-radius-lg, 20px);
+  box-shadow: var(--mb-shadow-card, 0 2px 8px rgba(23,107,58,.04));
+  text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.product-marketplace-action:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--mb-shadow-elevated, 0 4px 16px rgba(14,75,41,.08));
+}
+
+.product-marketplace-action:focus-visible {
+  outline: var(--mb-focus-ring, 2px solid #176b3a);
+  outline-offset: 3px;
+}
+
+.product-marketplace-action--buy {
+  color: var(--mb-ink, #17231b);
+  background: var(--mb-card, #fff);
+}
+
+.product-marketplace-action--buy:hover {
+  border-color: var(--mb-primary, #176b3a);
+}
+
+.product-marketplace-action--sell {
+  color: #fff;
+  background: var(--mb-primary, #176b3a);
+  border-color: var(--mb-primary, #176b3a);
+}
+
+.product-marketplace-action--sell:hover {
+  background: var(--mb-primary-dark, #0e4b29);
+  border-color: var(--mb-primary-dark, #0e4b29);
+}
+
+.product-marketplace-action__icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--mb-primary-soft, #eef5ef);
+  color: var(--mb-primary, #176b3a);
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.product-marketplace-action--sell .product-marketplace-action__icon {
+  background: rgba(255,255,255,.15);
+  color: #fff;
+}
+
+.product-marketplace-action__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.product-marketplace-action__body strong {
+  font-family: var(--mb-font-head, system-ui, sans-serif);
+  font-size: 20px;
+  line-height: 1.15;
+  letter-spacing: -.02em;
+}
+
+.product-marketplace-action__body span {
+  max-width: 34rem;
+  color: var(--mb-text-muted, #667168);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.product-marketplace-action--sell .product-marketplace-action__body span {
+  color: rgba(255,255,255,.82);
+}
+
+.product-marketplace-action__arrow {
+  align-self: center;
+  font-size: 24px;
+  line-height: 1;
+  opacity: .8;
+}
+
+#product-marketplace-listings {
+  scroll-margin-top: 18px;
+}
+
+@media (max-width: 720px) {
+  .product-marketplace-actions {
+    padding: 14px 0 2px;
+  }
+
+  .product-marketplace-actions__grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .product-marketplace-action {
+    min-height: 94px;
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    gap: 12px;
+    padding: 15px 16px;
+    border-radius: 18px;
+  }
+
+  .product-marketplace-action__icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    font-size: 26px;
+  }
+
+  .product-marketplace-action__body strong {
+    font-size: 18px;
+  }
+
+  .product-marketplace-action__body span {
+    font-size: 13px;
+  }
+
+  .product-marketplace-action__arrow {
+    font-size: 21px;
+  }
+}
