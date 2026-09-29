@@ -935,7 +935,7 @@ export default function TruckOwnerDashboard() {
                     </div>
 
                     <div className="sd-card-body">
-                      {/* Block 1 — Route */}
+                      {/* Block 1 — Route (No box) */}
                       <section className="sd-card-block">
                         <div className="sd-card-block-title">
                           <h4>Route</h4>
@@ -948,7 +948,7 @@ export default function TruckOwnerDashboard() {
                         </div>
                       </section>
 
-                      {/* Block 2 — Load details (Horizontal) */}
+                      {/* Block 2 — Load details (Horizontal, no box) */}
                       <section className="sd-card-block">
                         <div className="sd-card-block-title">
                           <h4>Load details</h4>
@@ -1147,7 +1147,7 @@ export default function TruckOwnerDashboard() {
                             </div>
                           </section>
 
-                          {/* Block 2 — Route */}
+                          {/* Block 2 — Route (No box) */}
                           <section className="sd-card-block">
                             <div className="sd-card-block-title">
                               <h4>Route</h4>
@@ -1161,7 +1161,7 @@ export default function TruckOwnerDashboard() {
                             </div>
                           </section>
 
-                          {/* Block 3 — Details (Horizontal) */}
+                          {/* Block 3 — Details (Horizontal, no box) */}
                           <section className="sd-card-block">
                             <div className="sd-card-block-title">
                               <h4>Trip details</h4>
