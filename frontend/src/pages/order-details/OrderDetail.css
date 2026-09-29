@@ -345,9 +345,10 @@
 }
 
 /* ─── 1. Card header ──────────────────────────────────── */
-/* Wrapper around eyebrow + card title. Always renders with
-   a hairline divider underneath so every card on the page
-   starts with the same visual anchor. */
+/* Wrapper around eyebrow + card title. Stacks vertically
+   (eyebrow above title), left-aligned, with a hairline
+   divider underneath so every card on the page starts
+   with the same visual anchor. */
 
 .order-detail-page .card-head {
   display: flex;
@@ -362,11 +363,17 @@
 }
 
 .order-detail-page .card-head-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   min-width: 0;
   flex: 1 1 auto;
+  text-align: left;
 }
 
-.order-detail-page .card-head .eyebrow { margin-bottom: 6px; }
+.order-detail-page .card-head .eyebrow {
+  margin-bottom: 6px;
+}
 
 .order-detail-page .card-head h2 {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif) !important;
@@ -388,9 +395,12 @@
   flex: 0 0 auto;
 }
 
-/* Transport card header carries an icon next to the text */
-.order-detail-page .card-head > .card-head-text {
-  display: flex;
+/* ── Transport card header only ── */
+/* The Transport card lays out its icon next to the text, so
+   only that card's header gets the inline row layout. Every
+   other card keeps the default stacked header. */
+.order-detail-page .transport-overview-card .card-head > .card-head-text {
+  flex-direction: row;
   align-items: center;
   gap: 14px;
 }
@@ -1440,10 +1450,9 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .order-detail-page .card-head > .card-head-text {
-    flex-direction: column;
+  /* Transport card header: keep icon+text row but allow wrap */
+  .order-detail-page .transport-overview-card .card-head > .card-head-text {
     align-items: flex-start;
-    gap: 10px;
   }
 
   .order-detail-page .transporter {
