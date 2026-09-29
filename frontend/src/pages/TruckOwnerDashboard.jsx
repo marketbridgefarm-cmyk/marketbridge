@@ -1336,6 +1336,7 @@ export default function TruckOwnerDashboard() {
                               className="sd-mobile-action"
                             >
                               View order
+                              <ArrowIcon />
                             </Link>
                           </td>
                         </tr>
