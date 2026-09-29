@@ -1,0 +1,189 @@
+/* ============================================================
+   MarketBridge — MessageThread  (components/MessageThread.css)
+   ============================================================ */
+
+.message-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.message-thread::-webkit-scrollbar { width: 6px; }
+.message-thread::-webkit-scrollbar-thumb {
+  background: #e5e9ef;
+  border-radius: 3px;
+}
+
+/* ── Bubbles ────────────────────────────────────────────── */
+
+.message-bubble {
+  max-width: min(78%, 480px);
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 1px 2px rgba(15, 30, 45, .05);
+}
+
+.message-bubble p {
+  margin: 0;
+  color: inherit;
+}
+
+.message-bubble .message-time {
+  font-size: 11px;
+  opacity: .7;
+  font-variant-numeric: tabular-nums;
+  align-self: flex-end;
+}
+
+/* Mine — right-aligned, accent green */
+.message-bubble.message-mine {
+  align-self: flex-end;
+  background: linear-gradient(150deg, #1e9e5a 0%, #0f7a44 100%);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.message-bubble.message-mine .message-time { color: rgba(255, 255, 255, .82); }
+
+/* Theirs — left-aligned, neutral */
+.message-bubble.message-theirs {
+  align-self: flex-start;
+  background: #f1f5f9;
+  color: #0d1b2a;
+  border-bottom-left-radius: 4px;
+}
+
+.message-bubble.message-theirs .message-time { color: #64748b; }
+
+/* ── Composer ───────────────────────────────────────────── */
+
+.message-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 14px;
+  border-top: 1px solid #eef1f5;
+}
+
+.message-composer textarea {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 68px;
+  max-height: 180px;
+  padding: 11px 13px;
+  border: 1px solid #e5e9ef;
+  border-radius: 12px;
+  background: #fff;
+  color: #0d1b2a;
+  font: 400 14.5px/1.5 var(--mb-font-body, 'DM Sans', sans-serif);
+  resize: vertical;
+  transition: border-color .18s cubic-bezier(.2, .7, .3, 1),
+              box-shadow .18s cubic-bezier(.2, .7, .3, 1);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.message-composer textarea::placeholder { color: #94a3b8; }
+
+.message-composer textarea:hover { border-color: #cfd6df; }
+
+.message-composer textarea:focus {
+  outline: none;
+  border-color: #1e9e5a;
+  box-shadow: 0 0 0 3px rgba(30, 158, 90, .16);
+}
+
+.message-composer .btn,
+.message-composer .btn-primary {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 10px;
+  border: none;
+  color: #fff;
+  background: linear-gradient(150deg, #1e9e5a 0%, #0f7a44 100%);
+  font: 700 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(30, 158, 90, .22);
+  transition: transform .12s cubic-bezier(.2, .7, .3, 1),
+              box-shadow .12s cubic-bezier(.2, .7, .3, 1),
+              filter .12s cubic-bezier(.2, .7, .3, 1);
+}
+
+.message-composer .btn:hover:not(:disabled),
+.message-composer .btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(30, 158, 90, .28);
+  filter: brightness(1.03);
+}
+
+.message-composer .btn:disabled,
+.message-composer .btn-primary:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.message-composer .btn:focus-visible,
+.message-composer .btn-primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(30, 158, 90, .18),
+              0 4px 12px rgba(30, 158, 90, .22);
+}
+
+/* ── Empty + error ──────────────────────────────────────── */
+
+.message-thread > .muted {
+  color: #64748b;
+  font-size: 14px;
+  text-align: center;
+  padding: 24px 12px;
+  margin: 0;
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .message-bubble {
+    max-width: 88%;
+    font-size: 13.5px;
+    padding: 9px 12px;
+  }
+
+  .message-composer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .message-composer .btn,
+  .message-composer .btn-primary {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-composer textarea,
+  .message-composer .btn,
+  .message-composer .btn-primary {
+    transition: none;
+  }
+
+  .message-composer .btn:hover:not(:disabled),
+  .message-composer .btn-primary:hover:not(:disabled) {
+    transform: none;
+  }
+}
