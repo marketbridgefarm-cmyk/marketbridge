@@ -1,0 +1,325 @@
+/* ============================================================
+   MarketBridge — OrderTimeline  (components/OrderTimeline.css)
+   Vertical milestone rail. Fits inside a card-block-body in the
+   order detail page, but is self-contained so it also works
+   wherever else it's used.
+   ============================================================ */
+
+.order-timeline {
+  --ot-accent:      #1e9e5a;
+  --ot-accent-2:    #0f7a44;
+  --ot-accent-soft: #ecfdf3;
+  --ot-accent-line: #c6eccf;
+
+  --ot-ink:         #0d1b2a;
+  --ot-ink-soft:    #2c3a4a;
+  --ot-muted:       #64748b;
+  --ot-muted-2:     #94a3b8;
+
+  --ot-line:        #e5e9ef;
+  --ot-line-soft:   #eef1f5;
+
+  --ot-info:        #1e5fa8;
+  --ot-info-soft:   #eff5fd;
+
+  --ot-dot-bg:      #ffffff;
+  --ot-dot-mark:    #ffffff;
+
+  --ot-ease:        cubic-bezier(.2, .7, .3, 1);
+
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Each step ─────────────────────────────────────────── */
+
+.order-timeline-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 14px;
+  padding: 0 0 22px;
+
+  /* Rail: a hairline that runs the full height of the row,
+     centered on the dot column. The `:last-child` rule below
+     clips it so the final step ends at its dot. */
+}
+.order-timeline-step::before {
+  content: '';
+  position: absolute;
+  left: 12px; /* center of the 26px dot column */
+  top: 26px;  /* below the dot */
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--ot-line);
+}
+
+.order-timeline-step:last-child {
+  padding-bottom: 0;
+}
+.order-timeline-step:last-child::before {
+  display: none;
+}
+
+/* Completed rows use the accent color for the rail segment that
+   connects them to the next step. */
+.order-timeline-step.is-complete::before {
+  background: var(--ot-accent);
+}
+
+/* ── Dot column ────────────────────────────────────────── */
+
+.order-timeline-dot {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  line-height: 0;
+}
+.order-timeline-dot svg { display: block; }
+
+/* Color per state — the SVGs use currentColor so this is the
+   only place we have to change them. */
+.order-timeline-step.is-complete .order-timeline-dot {
+  color: var(--ot-accent);
+}
+.order-timeline-step.is-current .order-timeline-dot {
+  color: var(--ot-accent);
+}
+.order-timeline-step.is-pending .order-timeline-dot {
+  color: var(--ot-line);
+}
+.order-timeline-step.is-recorded .order-timeline-dot {
+  color: var(--ot-info);
+  --ot-dot-bg: var(--ot-info-soft);
+}
+
+/* Gentle pulse on the current step's dot so it stands out
+   without relying on color alone. */
+.order-timeline-step.is-current .order-timeline-dot svg {
+  animation: order-timeline-pulse 2s ease-in-out infinite;
+}
+@keyframes order-timeline-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+
+/* ── Content column ────────────────────────────────────── */
+
+.order-timeline-content {
+  min-width: 0;
+  padding-top: 2px;
+}
+.order-timeline-content--wide { width: 100%; }
+
+.order-timeline-label {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -.15px;
+  line-height: 1.3;
+  color: var(--ot-ink);
+  margin: 0 0 3px;
+}
+
+.order-timeline-step.is-pending .order-timeline-label {
+  color: var(--ot-muted);
+  font-weight: 700;
+}
+
+.order-timeline-date {
+  font: 600 12px/1.4 var(--mb-font-body, 'DM Sans', sans-serif);
+  color: var(--ot-muted);
+  letter-spacing: .01em;
+  margin-bottom: 2px;
+}
+
+.order-timeline-detail {
+  font: 400 13px/1.5 var(--mb-font-body, 'DM Sans', sans-serif);
+  color: var(--ot-muted);
+  margin-top: 2px;
+}
+
+/* ── Activity history (native <details>) ───────────────── */
+
+.order-timeline-events {
+  margin: 0;
+}
+
+.order-timeline-events-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--ot-line);
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  font-family: var(--mb-font-body, 'DM Sans', sans-serif);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ot-ink);
+  transition: border-color .15s var(--ot-ease),
+              background .15s var(--ot-ease);
+}
+.order-timeline-events-summary::-webkit-details-marker {
+  display: none;
+}
+.order-timeline-events-summary:hover {
+  border-color: rgba(30, 158, 90, .35);
+  background: var(--ot-accent-soft);
+}
+.order-timeline-events-summary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(30, 158, 90, .18);
+}
+
+.order-timeline-events-label { flex: 1 1 auto; }
+
+.order-timeline-events-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--ot-info-soft);
+  color: var(--ot-info);
+  font: 800 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.order-timeline-events-chevron {
+  color: var(--ot-muted);
+  font-size: 12px;
+  line-height: 1;
+  transition: transform .22s var(--ot-ease);
+}
+.order-timeline-events[open] .order-timeline-events-chevron {
+  transform: rotate(180deg);
+}
+
+.order-timeline-events-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.order-timeline-events-list::-webkit-scrollbar { width: 6px; }
+.order-timeline-events-list::-webkit-scrollbar-thumb {
+  background: var(--ot-line);
+  border-radius: 3px;
+}
+
+.order-timeline-event {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fbfcfd;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ot-ink-soft);
+}
+
+.order-timeline-event-type {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-weight: 800;
+  font-size: 11.5px;
+  letter-spacing: .02em;
+  color: var(--ot-ink);
+  text-transform: uppercase;
+}
+
+.order-timeline-event-actor {
+  color: var(--ot-muted);
+}
+
+.order-timeline-event-actor::before {
+  content: '—';
+  margin-right: 6px;
+  color: var(--ot-muted-2);
+}
+
+.order-timeline-event-time {
+  margin-left: auto;
+  font: 600 11.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  color: var(--ot-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── Responsive ────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .order-timeline-step {
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 12px;
+    padding-bottom: 18px;
+  }
+  .order-timeline-step::before {
+    left: 10px;
+    top: 22px;
+    width: 2px;
+  }
+
+  .order-timeline-dot {
+    width: 22px;
+    height: 22px;
+  }
+  .order-timeline-dot svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .order-timeline-label { font-size: 13.5px; }
+  .order-timeline-date  { font-size: 11.5px; }
+  .order-timeline-detail { font-size: 12.5px; }
+
+  .order-timeline-events-summary {
+    font-size: 12.5px;
+    padding: 8px 10px;
+  }
+  .order-timeline-event {
+    font-size: 12px;
+    padding: 7px 10px;
+  }
+  .order-timeline-event-time {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}
+
+/* ── Reduced motion ────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .order-timeline-step.is-current .order-timeline-dot svg {
+    animation: none;
+  }
+  .order-timeline-events-summary,
+  .order-timeline-events-chevron {
+    transition: none;
+  }
+}
