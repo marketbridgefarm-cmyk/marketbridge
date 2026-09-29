@@ -6,33 +6,38 @@
 
 .auth-section {
   /* ── Local tokens ─────────────────────────────────── */
-  --a-green:      #176b3a;
-  --a-green-600:  #1a7a42;
-  --a-dark:       #0e4b29;
-  --a-light:      #2f9159;
-  --a-soft:       #eef5ef;
-  --a-mint:       #effdf0;
-  --a-mint-line:  #cfe8d8;
-  --a-card:       #ffffff;
-  --a-ink:        #17231b;
-  --a-ink-soft:   #2b3a30;
-  --a-muted:      #6a756c;
-  --a-line:       #e3eae4;
-  --a-line-soft:  #eef2ee;
+  --a-accent:      #1e9e5a;        /* gradient anchor — used only on the
+                                      brand mark, eyebrow, and links */
+  --a-accent-2:    #0f7a44;        /* gradient endpoint */
+  --a-accent-ink:  #12734a;        /* readable accent text */
 
-  --a-radius:     20px;
-  --a-radius-sm:  12px;
-  --a-shadow:     0 24px 64px rgba(14, 75, 41, .14);
-  --a-shadow-sm:  0 4px 14px rgba(14, 75, 41, .06);
-  --a-ring:       0 0 0 3px rgba(23, 107, 58, .15);
-  --a-ease:       cubic-bezier(.2, .7, .3, 1);
+  --a-ink:         #0d1b2a;        /* deep navy — headings */
+  --a-ink-soft:    #2c3a4a;        /* labels */
+  --a-muted:       #64748b;        /* supporting copy */
 
-  /* Same gradient vocabulary as Listings — the radial comes
-     from the bottom-right corner here to vary the composition. */
+  --a-card:        #ffffff;
+  --a-card-tint-a: #e8f4ec;        /* top-left mint wash */
+  --a-card-tint-b: #e7ebf5;        /* bottom-left lavender wash */
+  --a-card-tint-c: #e6f5ec;        /* bottom-right mint wash */
+
+  --a-line:        #e5e9ef;        /* input border */
+  --a-line-soft:   #eef1f5;
+  --a-surface:     #fbfcfd;        /* input bg */
+
+  --a-radius:      24px;
+  --a-radius-sm:   12px;
+
+  --a-shadow:      0 24px 64px rgba(15, 30, 45, .10),
+                   0 2px 6px rgba(15, 30, 45, .04);
+  --a-shadow-sm:   0 4px 14px rgba(15, 30, 45, .06);
+  --a-ring:        0 0 0 3px rgba(30, 158, 90, .18);
+  --a-ease:        cubic-bezier(.2, .7, .3, 1);
+
+  /* Page background — cool neutral, no green dominance */
   background:
-    radial-gradient(circle at 92% 95%, rgba(47, 145, 89, .13), transparent 38%),
-    radial-gradient(circle at 8% 5%, rgba(183, 123, 27, .05), transparent 40%),
-    linear-gradient(160deg, #edf7ef 0px, #f4f8f4 100%);
+    radial-gradient(circle at 90% 95%, rgba(230, 245, 236, .9), transparent 42%),
+    radial-gradient(circle at 8% 4%,   rgba(231, 235, 245, .8), transparent 42%),
+    linear-gradient(160deg, #f6f8fa 0%, #eef2f5 100%);
 
   padding: clamp(20px, 5vw, 44px) clamp(12px, 4vw, 20px);
   min-height: calc(100vh - 72px);
@@ -51,6 +56,17 @@
   box-shadow: var(--a-shadow);
   overflow: hidden;
   background: var(--a-card);
+  position: relative;
+
+  /* The soft gradient wash from the reference image: mint top-left,
+     lavender bottom-left, mint bottom-right. Applied to the shell
+     itself so both panels share one cohesive light surface. */
+  background-color: var(--a-card);
+  background-image:
+    radial-gradient(120% 90% at 0% 0%,   var(--a-card-tint-a) 0%, transparent 55%),
+    radial-gradient(90%  80% at 0% 100%, var(--a-card-tint-b) 0%, transparent 60%),
+    radial-gradient(80%  80% at 100% 100%, var(--a-card-tint-c) 0%, transparent 55%);
+  background-repeat: no-repeat;
 
   /* Explicit two-column grid — no reliance on globals */
   display: grid;
@@ -64,6 +80,9 @@
 .auth-section .auth-side::before,
 .auth-section .auth-side::after { display: none; }
 
+/* The left panel now shares the shell's light surface instead of
+   painting a dark green block. A very subtle diagonal texture keeps
+   it from feeling flat. */
 .auth-section .auth-side {
   position: relative;
   overflow: hidden;
@@ -72,22 +91,19 @@
   flex-direction: column;
   justify-content: space-between;
   gap: 32px;
-  color: #fff;
+  color: var(--a-ink);
 
-  /* Diagonal hatching over the dark green — a land-survey /
-     topographic-map texture fitting for an agricultural platform. */
   background:
     repeating-linear-gradient(
       -52deg,
-      rgba(255, 255, 255, .04) 0px,
-      rgba(255, 255, 255, .04) 1px,
+      rgba(15, 30, 45, .025) 0px,
+      rgba(15, 30, 45, .025) 1px,
       transparent 1px,
       transparent 22px
-    ),
-    linear-gradient(160deg, #1e7d43 0%, var(--a-dark) 100%);
+    );
 }
 
-/* Subtle arc in the bottom-right of the panel — replaces circles */
+/* Decorative arc — kept, but toned way down */
 .auth-section .auth-side::after {
   display: block;
   content: '';
@@ -96,45 +112,47 @@
   right: -80px;
   width: 240px;
   height: 240px;
-  border: 40px solid rgba(255, 255, 255, .06);
+  border: 40px solid rgba(30, 158, 90, .06);
   border-radius: 50%;
   pointer-events: none;
 }
 
 .auth-section .auth-side-top { position: relative; z-index: 1; }
 
-/* Brand mark: enlarged, bordered, prominent */
+/* Brand mark: gradient green tile — the single strongest visual
+   accent in the composition, matching the shield icon in the ref. */
 .auth-section .auth-side .brand-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, .14);
-  border: 1px solid rgba(255, 255, 255, .22);
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: linear-gradient(150deg, var(--a-accent) 0%, var(--a-accent-2) 100%);
+  border: none;
   color: #fff;
   font: 800 16px/1 var(--mb-font-head, Manrope, sans-serif);
   letter-spacing: -.3px;
-  margin-bottom: 22px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 20px rgba(30, 158, 90, .28);
 }
 
-/* Panel headline: heavier, tighter tracking */
+/* Panel headline — dark navy, tight tracking */
 .auth-section .auth-side h2 {
-  font: 800 clamp(22px, 3vw, 28px)/1.2 var(--mb-font-head, Manrope, sans-serif);
+  font: 800 clamp(22px, 3vw, 28px)/1.15 var(--mb-font-head, Manrope, sans-serif);
   letter-spacing: -.5px;
   margin: 0 0 12px;
-  color: #fff;
+  color: var(--a-ink);
 }
 
 .auth-section .auth-side p {
   font-size: 14px;
   line-height: 1.55;
-  color: rgba(255, 255, 255, .78);
+  color: var(--a-muted);
   margin: 0;
 }
 
-/* Feature list — clean markers, no icon boxes */
+/* Feature list */
 .auth-section .auth-points {
   position: relative;
   z-index: 1;
@@ -151,11 +169,11 @@
   align-items: flex-start;
   font-size: 14px;
   line-height: 1.45;
-  color: rgba(255, 255, 255, .88);
+  color: var(--a-ink-soft);
   gap: 12px;
 }
 
-/* Icon badge: smaller, softer */
+/* Icon badge — light chip with accent check */
 .auth-section .auth-points li b {
   flex: 0 0 24px;
   width: 24px;
@@ -164,17 +182,19 @@
   align-items: center;
   justify-content: center;
   border-radius: 7px;
-  background: rgba(255, 255, 255, .15);
+  background: rgba(30, 158, 90, .12);
+  color: var(--a-accent-2);
   font-size: 12px;
   font-weight: 700;
   line-height: 1;
-  color: #fff;
 }
 
 /* ── Right form panel ───────────────────────────────── */
 
+/* The card is transparent so the shell's gradient shows through —
+   that's what gives the seamless light surface in the reference. */
 .auth-section .auth-card {
-  background: var(--a-card);
+  background: transparent;
   padding: clamp(32px, 5vw, 52px) clamp(24px, 5vw, 48px);
   display: flex;
   flex-direction: column;
@@ -183,15 +203,14 @@
   min-height: 100%;
 }
 
-/* Eyebrow: match the Listings page label treatment —
-   a short green rule leading into uppercase text. */
+/* Eyebrow */
 .auth-section .auth-card .eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--a-green);
+  color: var(--a-accent-ink);
   font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .12em;
+  letter-spacing: .14em;
   text-transform: uppercase;
   margin-bottom: 10px;
 }
@@ -204,19 +223,19 @@
   background: currentColor;
 }
 
-/* Form heading */
+/* Form heading — matches the "Secure your control center" weight */
 .auth-section .auth-card h1 {
   font: 800 clamp(24px, 3.8vw, 30px)/1.15 var(--mb-font-head, Manrope, sans-serif);
-  letter-spacing: -.5px;
+  letter-spacing: -.6px;
   color: var(--a-ink);
   margin: 0 0 20px;
 }
 
-/* Supporting line under heading (e.g. MFA step) */
+/* Supporting line under heading */
 .auth-section .auth-card > p.muted {
   color: var(--a-muted);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.55;
   margin: -12px 0 18px;
 }
 
@@ -225,7 +244,7 @@
 .auth-section .auth-card label {
   display: block;
   font: 600 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--a-ink);
+  color: var(--a-ink-soft);
   margin-bottom: 6px;
   margin-top: 14px;
 }
@@ -243,7 +262,7 @@
   padding: 0 14px;
   border: 1px solid var(--a-line);
   border-radius: 12px;
-  background: #fdfdfd;
+  background: #ffffff;
   color: var(--a-ink);
   font: 400 15px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   transition: border-color .15s var(--a-ease),
@@ -251,46 +270,53 @@
               background .15s var(--a-ease);
   -webkit-appearance: none;
   box-sizing: border-box;
+  box-shadow: 0 1px 2px rgba(15, 30, 45, .03);
 }
 
-.auth-section .auth-card input:hover { border-color: #cdd9d0; }
+.auth-section .auth-card input:hover { border-color: #cfd6df; }
 
 .auth-section .auth-card input:focus {
   outline: none;
-  border-color: var(--a-green);
-  box-shadow: var(--a-ring);
+  border-color: var(--a-accent);
+  box-shadow: var(--a-ring), 0 1px 2px rgba(15, 30, 45, .04);
   background: #fff;
 }
 
-.auth-section .auth-card input::placeholder { color: #b0bab3; }
+.auth-section .auth-card input::placeholder { color: #9aa5b4; }
 
 /* ── Primary button ─────────────────────────────────── */
 
+/* Solid accent button — the only filled accent surface besides
+   the brand mark, mirroring how the reference uses green sparingly. */
 .auth-section .auth-card .btn-primary.full {
   width: 100%;
   min-height: 50px;
   border-radius: 12px;
+  border: none;
+  color: #fff;
+  background: linear-gradient(150deg, var(--a-accent) 0%, var(--a-accent-2) 100%);
   font: 700 15px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .01em;
-  box-shadow: 0 4px 14px rgba(23, 107, 58, .22);
+  box-shadow: 0 8px 20px rgba(30, 158, 90, .26);
   transition: transform .12s var(--a-ease),
               box-shadow .12s var(--a-ease),
-              background .12s var(--a-ease);
+              filter .12s var(--a-ease);
 }
 
 .auth-section .auth-card .btn-primary.full:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(23, 107, 58, .28);
+  box-shadow: 0 10px 26px rgba(30, 158, 90, .32);
+  filter: brightness(1.03);
 }
 
 .auth-section .auth-card .btn-primary.full:active {
   transform: none;
-  box-shadow: 0 2px 8px rgba(23, 107, 58, .18);
+  box-shadow: 0 4px 12px rgba(30, 158, 90, .22);
 }
 
 .auth-section .auth-card .btn-primary.full:focus-visible {
   outline: none;
-  box-shadow: var(--a-ring), 0 4px 14px rgba(23, 107, 58, .22);
+  box-shadow: var(--a-ring), 0 8px 20px rgba(30, 158, 90, .26);
 }
 
 /* Spacing helpers used in JSX */
@@ -305,13 +331,11 @@
   margin: 16px 0 0;
 }
 
-.auth-section .auth-card p.muted.mt:last-child {
-  margin-bottom: 0;
-}
+.auth-section .auth-card p.muted.mt:last-child { margin-bottom: 0; }
 
 .auth-section .auth-card p.muted.mt a,
 .auth-section .auth-card .link-button {
-  color: var(--a-green);
+  color: var(--a-accent-ink);
   font-weight: 600;
   text-decoration: none;
   background: none;
@@ -326,7 +350,7 @@
 .auth-section .auth-card p.muted.mt a:hover,
 .auth-section .auth-card .link-button:hover {
   text-decoration: underline;
-  color: var(--a-green-600);
+  color: var(--a-accent-2);
 }
 
 .auth-section .auth-card p.muted.mt a:focus-visible,
@@ -347,15 +371,15 @@
 }
 
 .auth-section .alert.error {
-  background: #fff0f0;
-  border: 1px solid #fecdca;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
   color: #b42318;
 }
 
 .auth-section .alert.success {
-  background: var(--a-mint);
-  border: 1px solid var(--a-line);
-  color: var(--a-dark);
+  background: #ecfdf3;
+  border: 1px solid #c6eccf;
+  color: #0e6b3a;
 }
 
 /* ── Role selector (Register only) ─────────────────── */
@@ -368,13 +392,14 @@
 
 .auth-section .role-option {
   border: 1px solid var(--a-line);
-  background: #fdfdfd;
+  background: #ffffff;
   border-radius: 12px;
   padding: 13px 16px;
   text-align: left;
-  color: var(--a-ink);
+  color: var(--a-ink-soft);
   font: 500 14px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
   cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 30, 45, .03);
   transition: border-color .15s var(--a-ease),
               background .15s var(--a-ease),
               color .15s var(--a-ease),
@@ -382,16 +407,16 @@
 }
 
 .auth-section .role-option:hover {
-  border-color: rgba(23, 107, 58, .3);
-  background: var(--a-soft);
+  border-color: rgba(30, 158, 90, .35);
+  background: #f4fbf6;
 }
 
 .auth-section .role-option.selected {
-  border-color: var(--a-green);
-  background: var(--a-soft);
-  color: var(--a-dark);
+  border-color: var(--a-accent);
+  background: #ecfdf3;
+  color: var(--a-accent-2);
   font-weight: 700;
-  box-shadow: 0 0 0 2px rgba(23, 107, 58, .12);
+  box-shadow: 0 0 0 2px rgba(30, 158, 90, .14);
 }
 
 .auth-section .role-option:focus-visible {
@@ -408,13 +433,8 @@
     max-width: 100%;
   }
 
-  .auth-section .auth-side {
-    padding: 32px 24px;
-  }
-
-  .auth-section .auth-card {
-    padding: 32px 28px;
-  }
+  .auth-section .auth-side { padding: 32px 24px; }
+  .auth-section .auth-card { padding: 32px 28px; }
 }
 
 /* Phone: stack — compact brand banner above the form */
@@ -427,19 +447,19 @@
   .auth-section .auth-shell {
     grid-template-columns: minmax(0, 1fr);
     max-width: 100%;
-    border-radius: 16px;
+    border-radius: 20px;
   }
 
   /* Brand panel becomes a compact banner */
   .auth-section .auth-side {
-    padding: 22px 20px;
+    padding: 24px 22px 20px;
     gap: 0;
   }
 
   .auth-section .auth-side .brand-mark {
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
     font-size: 14px;
     margin-bottom: 14px;
   }
@@ -454,10 +474,9 @@
     line-height: 1.5;
   }
 
-  /* On mobile hide the feature list — keep the panel compact */
   .auth-section .auth-points { display: none; }
 
-  /* Slightly smaller decorative arc so it doesn't dominate */
+  /* Toned-down decorative arc */
   .auth-section .auth-side::after {
     width: 180px;
     height: 180px;
@@ -483,16 +502,12 @@
     font-size: 15px;
   }
 
-  .auth-section .auth-card .btn-primary.full {
-    min-height: 48px;
-  }
+  .auth-section .auth-card .btn-primary.full { min-height: 48px; }
 }
 
 @media (max-width: 420px) {
   .auth-section { padding: 12px 10px; }
-
   .auth-section .auth-card { padding: 24px 18px 28px; }
-
   .auth-section .auth-side { padding: 20px 18px; }
 }
 
