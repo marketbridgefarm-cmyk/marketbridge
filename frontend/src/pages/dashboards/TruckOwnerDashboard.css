@@ -189,7 +189,7 @@
   box-shadow: var(--sd-ring);
 }
 
-/* Changed: Primary buttons now use dark slate (Ink) instead of large green */
+/* Primary buttons use dark slate (Ink) for consistency */
 .sd-dashboard .sd-btn-primary,
 .sd-dashboard .btn-primary {
   border: none;
@@ -252,7 +252,7 @@
 
 .sd-dashboard .sd-stat {
   display: flex;
-  flex-direction: row; /* Changed to horizontal */
+  flex-direction: row; /* Horizontal */
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
@@ -273,7 +273,7 @@
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--sd-muted);
-  margin-bottom: 0; /* Reset margin */
+  margin-bottom: 0;
 }
 .sd-dashboard .sd-stat b {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
@@ -333,7 +333,7 @@
   box-shadow: var(--sd-ring);
 }
 
-/* Changed: Active tab now uses dark slate (Ink) instead of green */
+/* Active tab uses dark slate (Ink) */
 .sd-dashboard .sd-tab.sd-active {
   background: var(--sd-ink);
   color: #fff;
@@ -882,7 +882,7 @@
    TRUCK CARD CONTENT
    ══════════════════════════════════════════════════════════ */
 
-/* Changed: Removed internal card. Contents are now typed horizontally. */
+/* Removed internal card. Contents are now typed horizontally. */
 .sd-dashboard .sd-facts-row {
   display: flex;
   flex-wrap: wrap;
@@ -933,19 +933,21 @@
    JOB CARD CONTENT
    ══════════════════════════════════════════════════════════ */
 
-/* Route strip: pickup → destination. Changed to remove box styling. */
+/* Route strip: pickup → destination. Typed horizontally. */
 .sd-dashboard .sd-job-route {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 12px;
   align-items: center;
-  /* Box styling removed (border, background, padding, border-radius) */
+  /* No box styling (border, background, padding, border-radius) */
 }
 
+/* Changed to horizontal layout */
 .sd-dashboard .sd-job-endpoint {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row; /* Changed from column */
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 .sd-dashboard .sd-job-endpoint-label {
@@ -973,7 +975,7 @@
   opacity: .8;
 }
 
-/* Changed: Job meta items are now typed horizontally instead of a grid */
+/* Job meta items are typed horizontally */
 .sd-dashboard .sd-job-meta {
   display: flex;
   flex-wrap: wrap;
@@ -981,7 +983,7 @@
 }
 .sd-dashboard .sd-job-meta-item {
   display: flex;
-  flex-direction: row; /* Changed from column to row */
+  flex-direction: row;
   align-items: center;
   gap: 8px;
 }
@@ -1069,7 +1071,7 @@
 }
 .sd-dashboard .sd-jobs-section:last-child { margin-bottom: 0; }
 
-/* Changed: Corrected header and title alignment */
+/* Corrected header and title alignment */
 .sd-dashboard .sd-jobs-section-head {
   display: flex;
   align-items: center;
@@ -1381,17 +1383,30 @@
     gap: 10px;
   }
 
+  /* Keep Route contents horizontal on mobile */
   .sd-dashboard .sd-job-route {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 8px;
     text-align: left;
   }
   .sd-dashboard .sd-job-route-arrow {
-    justify-content: flex-start;
-    transform: rotate(90deg);
-    transform-origin: left center;
-    margin: 2px 0;
+    justify-content: center;
+    transform: none; /* Keep arrow horizontal */
+    margin: 0;
   }
+  .sd-dashboard .sd-job-endpoint {
+    flex-direction: column; /* Stack label and value vertically on tiny screens if needed */
+    align-items: flex-start;
+    gap: 2px;
+  }
+  /* Alternative: Keep horizontal on mobile too if it fits */
+  /* 
+  .sd-dashboard .sd-job-endpoint {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+  }
+  */
 
   .sd-dashboard .sd-job-meta {
     flex-direction: column;
