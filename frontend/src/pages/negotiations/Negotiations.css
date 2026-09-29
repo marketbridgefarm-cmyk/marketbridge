@@ -1,7 +1,7 @@
 /* ============================================================
    MarketBridge — Negotiations  (pages/negotiations/Negotiations.css)
-   Redesigned: light-only surfaces, consistent eyebrow headings,
-   horizontally-scrollable filters, tighter cards.
+   Redesigned: light surfaces, consistent headings, scrollable
+   filters, wide 2-column desktop grid.
    ============================================================ */
 
 .neg-page {
@@ -55,10 +55,12 @@
   background-attachment: fixed;
 }
 
+/* Wider container than the mobile-first default so desktop
+   doesn't strand the content in a narrow ribbon. */
 .neg-page .container-narrow {
-  max-width: 940px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 40px 20px 96px;
+  padding: 40px 24px 96px;
 }
 
 /* ── Page header ──────────────────────────────────────── */
@@ -101,7 +103,6 @@
 
 /* ── Filters ──────────────────────────────────────────── */
 
-/* Row 1 — compact segmented control for Active / All */
 .neg-page .sd-tabs {
   display: inline-flex;
   align-items: center;
@@ -132,9 +133,7 @@
   box-shadow: 0 4px 12px rgba(30, 158, 90, .24);
 }
 
-/* Row 2 — horizontal scrollable chips. The second .sd-tabs in the
-   JSX (type filter) gets its own scroll behaviour so it never
-   wraps to a second line on mobile. */
+/* Horizontal scroll chip row (if JSX uses .neg-filter-row) */
 .neg-page .neg-filter-row {
   display: flex;
   align-items: center;
@@ -170,10 +169,7 @@
   background: var(--n-accent-soft);
   color: var(--n-accent-2);
 }
-.neg-page .neg-filter-chip:focus-visible {
-  outline: none;
-  box-shadow: var(--n-ring);
-}
+.neg-page .neg-filter-chip:focus-visible { outline: none; box-shadow: var(--n-ring); }
 .neg-page .neg-filter-chip.is-active {
   background: var(--n-accent-soft);
   border-color: var(--n-accent-line);
@@ -181,10 +177,10 @@
   font-weight: 700;
 }
 
-/* ── Section headings (eyebrow pattern via ::before) ──── */
+/* ── Sections ─────────────────────────────────────────── */
 
 .neg-page .neg-section {
-  margin-bottom: 32px;
+  margin-bottom: 36px;
 }
 .neg-page .neg-section:last-child { margin-bottom: 0; }
 
@@ -201,8 +197,6 @@
   padding: 0 0 12px 28px;
   border-bottom: 1px solid var(--n-line-soft);
 }
-
-/* Green dash leading the title */
 .neg-page .neg-section-title::before {
   content: '';
   position: absolute;
@@ -244,12 +238,12 @@
   border-color: rgba(30, 158, 90, .22);
   box-shadow: var(--n-shadow-hi);
 }
-.neg-page .neg-group:last-child { margin-bottom: 0; }
 
-/* ── Group header — KILL any solid green surface ──────── */
-/* The BidBoard or a global rule was painting a dark-green banner
-   behind the group title. Force every header/wrapper/bid-board
-   variant back to a light, transparent surface. */
+/* In the desktop grid, the last-child margin reset causes double gaps — let
+   the grid gap do the spacing instead. */
+.neg-page .neg-group:last-child { margin-bottom: 14px; }
+
+/* Kill any solid green header surfaces */
 .neg-page .neg-group-header,
 .neg-page [class*="bid-board"],
 .neg-page [class*="bidboard"],
@@ -265,7 +259,6 @@
   margin: 0 0 12px !important;
 }
 
-/* But re-add the flex layout on our own header wrapper */
 .neg-page .neg-group-header {
   display: flex !important;
   align-items: flex-start !important;
@@ -274,7 +267,6 @@
   flex-wrap: wrap !important;
 }
 
-/* Force the title/meta/link text back to light-mode colors */
 .neg-page .neg-group-title,
 .neg-page .neg-group-header h2,
 .neg-page .neg-group-header h3 {
@@ -406,7 +398,6 @@
 .neg-page .neg-card-top > .btn-outline,
 .neg-page .neg-card-top > .btn { flex: 0 0 auto; align-self: flex-start; }
 
-/* Single-line chip row on desktop, wrap only when necessary */
 .neg-page .neg-deal-status {
   display: flex;
   align-items: center;
@@ -429,10 +420,6 @@
   text-transform: uppercase;
   white-space: nowrap;
 }
-
-/* First chip = status pill: assign tones based on its content.
-   `:has()` isn't universally supported yet, so we tone by class
-   if the JSX ever adds one; otherwise it stays muted grey. */
 
 .neg-page .neg-title {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
@@ -556,10 +543,7 @@
   text-decoration: none;
 }
 .neg-page .btn:focus-visible,
-.neg-page .btn-outline:focus-visible {
-  outline: none;
-  box-shadow: var(--n-ring);
-}
+.neg-page .btn-outline:focus-visible { outline: none; box-shadow: var(--n-ring); }
 
 .neg-page .sd-btn {
   display: inline-flex;
@@ -675,7 +659,59 @@
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* ── Responsive ───────────────────────────────────────── */
+/* ============================================================
+   DESKTOP GRID — 2 columns above 1024px
+   ============================================================ */
+
+@media (min-width: 1024px) {
+  /* Section becomes a 2-column grid. Items with fewer than 2
+     cards will stretch to fill the row (auto-fit). */
+  .neg-page .neg-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+    gap: 16px;
+    align-items: start;
+    margin-bottom: 40px;
+  }
+
+  /* Section title spans both columns */
+  .neg-page .neg-section-title {
+    grid-column: 1 / -1;
+    margin-bottom: 4px; /* gap handles the rest */
+  }
+
+  /* The bilateral list wrapper also spans, then lays out
+     internally as its own 2-column grid. */
+  .neg-page .neg-section > .neg-deal-list {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+    gap: 16px;
+  }
+
+  /* Remove per-item bottom margins — gap handles spacing */
+  .neg-page .neg-section .neg-group {
+    margin-bottom: 0;
+  }
+  .neg-page .neg-section .neg-group:last-child {
+    margin-bottom: 0;
+  }
+}
+
+/* ============================================================
+   TABLET — 721 to 1023px, single column but wider
+   ============================================================ */
+
+@media (min-width: 721px) and (max-width: 1023px) {
+  .neg-page .container-narrow {
+    max-width: 880px;
+    padding: 32px 24px 80px;
+  }
+}
+
+/* ============================================================
+   MOBILE — up to 720px
+   ============================================================ */
 
 @media (max-width: 720px) {
   .neg-page .container-narrow { padding: 24px 16px 72px; }
