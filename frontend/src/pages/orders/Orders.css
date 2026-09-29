@@ -47,7 +47,7 @@
 
   min-height: calc(100vh - 72px);
   color: var(--o-ink);
-  font-family: var(--mb-font-body, 'DM Sans', sans-serif);
+  font-family: var(--mb-font-body, 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif);
   -webkit-font-smoothing: antialiased;
 
   background:
@@ -569,8 +569,7 @@
   border: 1px solid var(--o-line);
   background: #fff;
   color: var(--o-ink);
-  font-size: 13px;
-  font-weight: 700;
+  font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .01em;
   cursor: pointer;
   text-decoration: none;
