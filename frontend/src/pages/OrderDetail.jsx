@@ -324,44 +324,31 @@ export default function OrderDetail() {
       window.clearTimeout(errorToastTimer.current);
       errorToastTimer.current = null;
     }
-
     if (error) {
       errorToastTimer.current = window.setTimeout(() => {
         setError('');
       }, 3000);
     }
-
     return () => {
-      if (errorToastTimer.current) {
-        window.clearTimeout(errorToastTimer.current);
-      }
+      if (errorToastTimer.current) window.clearTimeout(errorToastTimer.current);
     };
   }, [error]);
 
   const load = useCallback(
     async ({ silent = false } = {}) => {
       if (!orderId) return;
-
-      if (silent) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
+      if (silent) setRefreshing(true); else setLoading(true);
       setError('');
-
       try {
         const [orderResponse, workflowResponse] = await Promise.allSettled([
           api.get(`/orders/${orderId}`),
           api.get(`/orders/${orderId}/workflow`),
         ]);
-
         if (orderResponse.status === 'fulfilled') {
           setOrder(orderResponse.value.data?.order || null);
         } else {
           throw orderResponse.reason;
         }
-
         setWorkflow(
           workflowResponse.status === 'fulfilled'
             ? workflowResponse.value.data?.workflow || null
@@ -370,19 +357,13 @@ export default function OrderDetail() {
       } catch (err) {
         setError(getError(err, 'Could not load order'));
       } finally {
-        if (silent) {
-          setRefreshing(false);
-        } else {
-          setLoading(false);
-        }
+        if (silent) setRefreshing(false); else setLoading(false);
       }
     },
     [orderId]
   );
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   async function submitProductOffer(event) {
     event.preventDefault();
@@ -466,13 +447,6 @@ export default function OrderDetail() {
     [currentInspectionRequest]
   );
 
-  const inspectionPaymentsComplete = inspectionPaymentRows.every(
-    (request) =>
-      (request.payments || []).some(
-        (payment) => payment.type === 'INSPECTOR' && payment.status === 'PAID'
-      )
-  );
-
   const inspectionPaymentGroups = useMemo(
     () =>
       inspectionApplies
@@ -487,7 +461,6 @@ export default function OrderDetail() {
               (payment) => payment.type === 'INSPECTOR' && payment.status === 'PAID'
             );
             const busyKey = `${requestPayment?.status === 'PROCESSING' ? 'check' : requestPayment ? 'resume' : 'pay'}-inspection-${request.id}`;
-
             return {
               id: request.id,
               label: `${request.inspector?.name || 'Inspector'} — inspection fee`,
@@ -495,10 +468,7 @@ export default function OrderDetail() {
               paid,
               pending: Boolean(requestPayment),
               processing: requestPayment?.status === 'PROCESSING',
-              note:
-                request.status !== 'COMPLETED'
-                  ? `Inspection status: ${request.status}`
-                  : null,
+              note: request.status !== 'COMPLETED' ? `Inspection status: ${request.status}` : null,
               busyKey,
               canCheck: requestPayment?.status === 'PROCESSING',
               canResume: Boolean(requestPayment) && requestPayment.status !== 'PROCESSING',
@@ -571,13 +541,10 @@ export default function OrderDetail() {
       installmentPayments.length !== installmentPlan.installmentCount ||
       !installmentPayments.every((payment) => payment.status === 'PAID') ||
       planHealRef.current === installmentPlan.id
-    ) {
-      return;
-    }
+    ) return;
 
     planHealRef.current = installmentPlan.id;
-    api
-      .get(`/payments/${installmentPlan.id}/chapa/verify`)
+    api.get(`/payments/${installmentPlan.id}/chapa/verify`)
       .then(() => load({ silent: true }))
       .catch(() => {});
   }, [installmentPlan, installmentPayments]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -730,13 +697,7 @@ export default function OrderDetail() {
     try {
       await api.patch(`/transport/quotes/${quoteId}`, { action: 'ACCEPT' });
       await load({ silent: true });
-      window.setTimeout(
-        () =>
-          document
-            .getElementById('payment-center')
-            ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-        150
-      );
+      window.setTimeout(() => document.getElementById('payment-center')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
     } catch (err) {
       setError(getError(err, 'Could not accept transport quote'));
     } finally {
@@ -786,15 +747,9 @@ export default function OrderDetail() {
 
   const payMarketplace = async () => {
     if (!order) return;
-    if (!isBuyer) {
-      setError('Only the buyer can make the marketplace payment');
-      return;
-    }
+    if (!isBuyer) { setError('Only the buyer can make the marketplace payment'); return; }
     const amount = Number(order.finalPrice);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Invalid marketplace payment amount');
-      return;
-    }
+    if (!Number.isFinite(amount) || amount <= 0) { setError('Invalid marketplace payment amount'); return; }
     setBusy('pay-marketplace');
     setError('');
     try {
@@ -821,10 +776,7 @@ export default function OrderDetail() {
         params: { location: order.listing.location },
       });
       const options = response.data?.inspectors || [];
-      if (!options.length) {
-        setError('No inspectors were found in this area.');
-        return;
-      }
+      if (!options.length) { setError('No inspectors were found in this area.'); return; }
       setInspectorId(options[0].id);
     } catch (err) {
       setError(getError(err, 'Could not load inspectors'));
@@ -881,23 +833,11 @@ export default function OrderDetail() {
 
   const payTransport = async () => {
     if (!order || !transportJob) return;
-    if (!isParticipant) {
-      setError('You are not authorized to pay for this transport');
-      return;
-    }
-    if (transportJob.method !== 'HIRE_TRANSPORTER') {
-      setError('Transport payment is only required for hired transport');
-      return;
-    }
-    if (!transportJob.truckOwnerId) {
-      setError('A transporter must be selected before transport payment');
-      return;
-    }
+    if (!isParticipant) { setError('You are not authorized to pay for this transport'); return; }
+    if (transportJob.method !== 'HIRE_TRANSPORTER') { setError('Transport payment is only required for hired transport'); return; }
+    if (!transportJob.truckOwnerId) { setError('A transporter must be selected before transport payment'); return; }
     const amount = Number(transportJob.agreedAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Invalid transport payment amount');
-      return;
-    }
+    if (!Number.isFinite(amount) || amount <= 0) { setError('Invalid transport payment amount'); return; }
     setBusy('pay-transport');
     setError('');
     try {
@@ -944,9 +884,7 @@ export default function OrderDetail() {
       await load({ silent: true });
       const status = response.data?.status;
       if (status === 'PENDING') {
-        setError(
-          'Chapa has not confirmed the seller payment yet. If you cancelled or the checkout failed, return to the order and retry once the payment shows FAILED.'
-        );
+        setError('Chapa has not confirmed the seller payment yet. If you cancelled or the checkout failed, return to the order and retry once the payment shows FAILED.');
       }
     } catch (err) {
       setError(getError(err, 'Could not check seller payment status'));
@@ -964,9 +902,7 @@ export default function OrderDetail() {
       await load({ silent: true });
       const status = response.data?.status;
       if (status === 'PENDING') {
-        setError(
-          'Chapa has not confirmed this payment yet. If you cancelled or the checkout failed, return to the order and retry once the payment shows FAILED.'
-        );
+        setError('Chapa has not confirmed this payment yet. If you cancelled or the checkout failed, return to the order and retry once the payment shows FAILED.');
       }
     } catch (err) {
       setError(getError(err, 'Could not check payment status'));
@@ -991,10 +927,7 @@ export default function OrderDetail() {
 
   const startInstallments = async () => {
     if (!order) return;
-    if (!isBuyer) {
-      setError('Only the buyer can make the marketplace payment');
-      return;
-    }
+    if (!isBuyer) { setError('Only the buyer can make the marketplace payment'); return; }
     setBusy('start-installments');
     setError('');
     try {
@@ -1104,14 +1037,8 @@ export default function OrderDetail() {
   const raiseDispute = async (event) => {
     event.preventDefault();
     if (!order || !canRaiseDispute) return;
-    if (!disputeAgainstId) {
-      setError('Choose who the dispute is against');
-      return;
-    }
-    if (!disputeDescription.trim()) {
-      setError('Describe what went wrong');
-      return;
-    }
+    if (!disputeAgainstId) { setError('Choose who the dispute is against'); return; }
+    if (!disputeDescription.trim()) { setError('Describe what went wrong'); return; }
     setSubmittingDispute(true);
     setError('');
     try {
@@ -1127,9 +1054,7 @@ export default function OrderDetail() {
     } catch (err) {
       const message = getError(err, 'Could not raise dispute');
       if (/cannot be disputed/i.test(message) || /already has an open dispute/i.test(message)) {
-        setError(
-          `${message} If the order was cancelled, any payments already made (including an inspection fee) are refunded automatically as part of that cancellation — check the Payment Center below for its status instead of disputing.`
-        );
+        setError(`${message} If the order was cancelled, any payments already made (including an inspection fee) are refunded automatically as part of that cancellation — check the Payment Center below for its status instead of disputing.`);
         await load({ silent: true });
       } else {
         setError(message);
@@ -1146,9 +1071,7 @@ export default function OrderDetail() {
       return;
     }
     if (decision === 'CANCEL') {
-      const confirmed = window.confirm(
-        'Cancel this purchase after reviewing the inspection report? This cannot be undone.'
-      );
+      const confirmed = window.confirm('Cancel this purchase after reviewing the inspection report? This cannot be undone.');
       if (!confirmed) return;
     }
     setBusy(`buyer-decision-${decision.toLowerCase()}`);
@@ -1157,9 +1080,7 @@ export default function OrderDetail() {
       await api.patch(`/orders/${order.id}/buyer-decision`, { decision });
       await load({ silent: true });
       window.setTimeout(() => {
-        document
-          .getElementById(decision === 'BUY' ? 'payment-center' : 'inspection-section')
-          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById(decision === 'BUY' ? 'payment-center' : 'inspection-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 120);
     } catch (err) {
       setError(getError(err, `Could not record ${decision === 'BUY' ? 'BUY' : 'cancellation'} decision`));
@@ -1170,14 +1091,8 @@ export default function OrderDetail() {
 
   const confirmReceipt = async () => {
     if (!order) return;
-    if (!isBuyer) {
-      setError('Only the buyer can confirm receipt');
-      return;
-    }
-    if (!marketplacePaid) {
-      setError('Marketplace payment must be confirmed before receipt');
-      return;
-    }
+    if (!isBuyer) { setError('Only the buyer can confirm receipt'); return; }
+    if (!marketplacePaid) { setError('Marketplace payment must be confirmed before receipt'); return; }
     if (transportJob?.method === 'HIRE_TRANSPORTER' && !transportPaid) {
       setError('Transport payment must be confirmed before receipt');
       return;
@@ -1212,13 +1127,9 @@ export default function OrderDetail() {
 
   const cancelOrder = async () => {
     if (!order || !canCancelOrder) return;
-    const confirmed = window.confirm(
-      'Cancel this order? This cannot be undone. The listing will become available again and any completed payments will be flagged for refund.'
-    );
+    const confirmed = window.confirm('Cancel this order? This cannot be undone. The listing will become available again and any completed payments will be flagged for refund.');
     if (!confirmed) return;
-    const reason =
-      window.prompt('Optional: add a reason for cancelling (shown in the order history).') ||
-      undefined;
+    const reason = window.prompt('Optional: add a reason for cancelling (shown in the order history).') || undefined;
     setBusy('cancel');
     setError('');
     try {
@@ -1261,10 +1172,7 @@ export default function OrderDetail() {
   const transportObligation = transportJob
     ? {
         required: transportJob.method === 'HIRE_TRANSPORTER',
-        readyToPay:
-          ['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
-          Boolean(acceptedTransportQuote) &&
-          transportJob.agreedAmount != null,
+        readyToPay: ['QUOTED', 'ACCEPTED'].includes(transportJob.status) && Boolean(acceptedTransportQuote) && transportJob.agreedAmount != null,
         amount: transportJob.agreedAmount,
         paid: transportPaid,
         pending: transportPending,
@@ -1301,9 +1209,7 @@ export default function OrderDetail() {
     return (
       <main className="section order-detail-page">
         <div className="container-narrow">
-          <button type="button" className="back-link" onClick={() => navigate(-1)}>
-            ← Back
-          </button>
+          <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
           <div className="alert error">{error || 'Order not found'}</div>
         </div>
       </main>
@@ -1314,20 +1220,9 @@ export default function OrderDetail() {
     <main className="section order-detail-page">
       <div className="container-narrow">
 
-        {/* ══════════════════════════════════════════════════════
-            HEADER
-            ══════════════════════════════════════════════════════ */}
-
         <div className="row-between" style={{ marginBottom: 16 }}>
-          <button type="button" className="back-link" onClick={() => navigate(-1)}>
-            ← Back
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm"
-            disabled={refreshing}
-            onClick={() => load({ silent: true })}
-          >
+          <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
+          <button type="button" className="btn btn-sm" disabled={refreshing} onClick={() => load({ silent: true })}>
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
@@ -1341,36 +1236,20 @@ export default function OrderDetail() {
                 <span className="status-pill-dot" aria-hidden="true" />
                 {String(order.status || '').replace(/_/g, ' ')}
               </span>
-              {order.listing?.cropType && (
-                <span className="order-hero-chip">{order.listing.cropType}</span>
-              )}
-              {order.listing?.quantity != null && (
-                <span className="order-hero-chip">{order.listing.quantity} units</span>
-              )}
+              {order.listing?.cropType && <span className="order-hero-chip">{order.listing.cropType}</span>}
+              {order.listing?.quantity != null && <span className="order-hero-chip">{order.listing.quantity} units</span>}
             </div>
           </div>
-
           <div className="order-hero-side">
             <span className="order-hero-price-label">Order total</span>
-            <span className="order-hero-price">
-              {money(order.finalPrice)} <small>ETB</small>
-            </span>
+            <span className="order-hero-price">{money(order.finalPrice)} <small>ETB</small></span>
             {canCancelOrder && (
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                disabled={busy === 'cancel'}
-                onClick={cancelOrder}
-              >
+              <button type="button" className="btn btn-outline btn-sm" disabled={busy === 'cancel'} onClick={cancelOrder}>
                 {busy === 'cancel' ? 'Cancelling…' : 'Cancel order'}
               </button>
             )}
           </div>
         </div>
-
-        {/* ══════════════════════════════════════════════════════
-            NEXT ACTION CENTER
-            ══════════════════════════════════════════════════════ */}
 
         {workflow ? (
           <ActionCenter
@@ -1387,41 +1266,22 @@ export default function OrderDetail() {
                   <h2>Inspector action</h2>
                 </div>
               </header>
-
               <div className="card-body">
                 <section className="card-block">
-                  <div className="card-block-title">
-                    <h3>What to do</h3>
-                  </div>
+                  <div className="card-block-title"><h3>What to do</h3></div>
                   <div className="card-block-body">
-                    {assignedInspection.status === 'ACCEPTED' && (
-                      <p>Start the accepted inspection.</p>
-                    )}
-                    {assignedInspection.status === 'IN_PROGRESS' && (
-                      <p>Complete the inspection and publish the evidence report.</p>
-                    )}
-                    {assignedInspection.status === 'COMPLETED' && (
-                      <p>
-                        Inspection report is published. The buyer can now complete any
-                        required inspection payment and continue the order.
-                      </p>
-                    )}
+                    {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
+                    {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
+                    {assignedInspection.status === 'COMPLETED' && <p>Inspection report is published. The buyer can now complete any required inspection payment and continue the order.</p>}
                   </div>
                 </section>
-
                 <div className="next-action-buttons">
-                  <Link className="btn btn-primary" to="/dashboard/inspector">
-                    Open inspection dashboard
-                  </Link>
+                  <Link className="btn btn-primary" to="/dashboard/inspector">Open inspection dashboard</Link>
                 </div>
               </div>
             </div>
           )
         )}
-
-        {/* ══════════════════════════════════════════════════════
-            TIMELINE
-            ══════════════════════════════════════════════════════ */}
 
         {workflow && (
           <div className="card">
@@ -1431,26 +1291,16 @@ export default function OrderDetail() {
                 <h2>Order timeline</h2>
               </div>
             </header>
-
             <div className="card-body">
               <section className="card-block">
-                <div className="card-block-title">
-                  <h3>Steps and events</h3>
-                </div>
+                <div className="card-block-title"><h3>Steps and events</h3></div>
                 <div className="card-block-body">
-                  <OrderTimeline
-                    steps={workflow.timeline?.steps}
-                    events={workflow.timeline?.events}
-                  />
+                  <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
                 </div>
               </section>
             </div>
           </div>
         )}
-
-        {/* ══════════════════════════════════════════════════════
-            ORDER DETAILS
-            ══════════════════════════════════════════════════════ */}
 
         <div className="card order-overview-card">
           <header className="card-head">
@@ -1463,38 +1313,22 @@ export default function OrderDetail() {
               {String(order.status || '').replace(/_/g, ' ')}
             </span>
           </header>
-
           <div className="card-body">
             <section className="card-block">
-              <div className="card-block-title">
-                <h3>Order facts</h3>
-              </div>
+              <div className="card-block-title"><h3>Order facts</h3></div>
               <div className="card-block-body">
                 <div className="order-overview-facts">
-                  <div className="order-overview-fact">
-                    <span>Order</span>
-                    <strong>{shortId(order.id)}</strong>
-                  </div>
-                  <div className="order-overview-fact">
-                    <span>Amount</span>
-                    <strong>{money(order.finalPrice)} ETB</strong>
-                  </div>
+                  <div className="order-overview-fact"><span>Order</span><strong>{shortId(order.id)}</strong></div>
+                  <div className="order-overview-fact"><span>Amount</span><strong>{money(order.finalPrice)} ETB</strong></div>
                   {order.listing?.cropType && (
-                    <div className="order-overview-fact">
-                      <span>Product</span>
-                      <strong>{order.listing.cropType}</strong>
-                    </div>
+                    <div className="order-overview-fact"><span>Product</span><strong>{order.listing.cropType}</strong></div>
                   )}
                   {order.listing?.quantity != null && (
-                    <div className="order-overview-fact">
-                      <span>Quantity</span>
-                      <strong>{order.listing.quantity}</strong>
-                    </div>
+                    <div className="order-overview-fact"><span>Quantity</span><strong>{order.listing.quantity}</strong></div>
                   )}
                 </div>
               </div>
             </section>
-
             <section className="card-block">
               <div className="card-block-title">
                 <h3>Participants</h3>
@@ -1503,20 +1337,15 @@ export default function OrderDetail() {
               <div className="card-block-body">
                 <div className="party-list party-list-inline">
                   <div className="party-row">
-                    <span className="party-avatar" aria-hidden="true">
-                      {initials(order.buyer?.name)}
-                    </span>
+                    <span className="party-avatar" aria-hidden="true">{initials(order.buyer?.name)}</span>
                     <div>
                       <span className="party-role">Buyer</span>
                       <strong className="party-name">{order.buyer?.name || '—'}</strong>
                     </div>
                     {isBuyer && <span className="party-you">You</span>}
                   </div>
-
                   <div className="party-row">
-                    <span className="party-avatar party-avatar-seller" aria-hidden="true">
-                      {initials(order.seller?.name)}
-                    </span>
+                    <span className="party-avatar party-avatar-seller" aria-hidden="true">{initials(order.seller?.name)}</span>
                     <div>
                       <span className="party-role">Seller</span>
                       <strong className="party-name">{order.seller?.name || '—'}</strong>
@@ -1529,16 +1358,11 @@ export default function OrderDetail() {
           </div>
         </div>
 
-        {/* ══════════════════════════════════════════════════════
-            INSPECTION
-            ══════════════════════════════════════════════════════ */}
-
         <div id="inspection-section">
-          {inspectionApplies &&
-            isParticipant &&
-            order.status !== 'COMPLETED' &&
-            order.status !== 'CANCELLED' &&
-            (currentInspectionRequest ? (
+          {/* Note: inspection now renders for COMPLETED orders too — the
+              quarterly report needs the published report to stay visible. */}
+          {inspectionApplies && isParticipant && order.status !== 'CANCELLED' && (
+            currentInspectionRequest ? (
               <div className="card">
                 <header className="card-head">
                   <div className="card-head-text">
@@ -1553,171 +1377,83 @@ export default function OrderDetail() {
 
                 <div className="card-body">
                   <section className="card-block">
-                    <div className="card-block-title">
-                      <h3>Inspection request</h3>
-                    </div>
+                    <div className="card-block-title"><h3>Inspection request</h3></div>
                     <div className="card-block-body">
                       <p className="muted">
-                        An inspection already exists for this order. Continue with this
-                        inspection; a second request is not needed.
+                        An inspection already exists for this order. Continue with this inspection; a second request is not needed.
                       </p>
                       <div className="detail-facts">
-                        <div>
-                          <span>Status</span>
-                          <strong>{currentInspectionRequest.status}</strong>
-                        </div>
+                        <div><span>Status</span><strong>{currentInspectionRequest.status}</strong></div>
                         {currentInspectionRequest.inspector?.name && (
-                          <div>
-                            <span>Inspector</span>
-                            <strong>{currentInspectionRequest.inspector.name}</strong>
-                          </div>
+                          <div><span>Inspector</span><strong>{currentInspectionRequest.inspector.name}</strong></div>
                         )}
                         {currentInspectionRequest.fee != null && (
-                          <div>
-                            <span>Fee</span>
-                            <strong>{money(currentInspectionRequest.fee)} ETB</strong>
-                          </div>
+                          <div><span>Fee</span><strong>{money(currentInspectionRequest.fee)} ETB</strong></div>
                         )}
                       </div>
                     </div>
                   </section>
 
-                  {currentInspectionRequest.status === 'COMPLETED' &&
-                    currentInspectionRequest.report && (
-                      <section className="card-block">
-                        <div className="card-block-title">
-                          <h3>
-                            {isAgricultural
-                              ? 'Agricultural inspection report'
-                              : 'Product inspection report'}
-                          </h3>
-                          <span className="card-block-note">Report published</span>
-                        </div>
-                        <div className="card-block-body">
-                          <div className="inspection-purchase-gate">
-                            <div className="inspection-report-facts">
-                              <div>
-                                <span>Inspected quantity</span>
-                                <strong>{currentInspectionRequest.report.quantity ?? '—'}</strong>
-                              </div>
-                              <div>
-                                <span>
-                                  {isProductsMarketplace ? 'Condition / quality' : 'Grade'}
-                                </span>
-                                <strong>
-                                  {currentInspectionRequest.report.grade || 'Not specified'}
-                                </strong>
-                              </div>
-                              {!isProductsMarketplace && (
-                                <div>
-                                  <span>Moisture</span>
-                                  <strong>
-                                    {currentInspectionRequest.report.moisture != null
-                                      ? `${currentInspectionRequest.report.moisture}%`
-                                      : 'Not recorded'}
-                                  </strong>
-                                </div>
-                              )}
-                              <div>
-                                <span>Inspection status</span>
-                                <strong>Completed</strong>
-                              </div>
-                            </div>
-
-                            <div className="inspection-findings">
-                              <div>
-                                <span>Visible defects</span>
-                                <p>
-                                  {currentInspectionRequest.report.visibleDefects ||
-                                    'No visible defects recorded.'}
-                                </p>
-                              </div>
-                              <div>
-                                <span>Damage notes</span>
-                                <p>
-                                  {currentInspectionRequest.report.damageNotes ||
-                                    'No damage notes recorded.'}
-                                </p>
-                              </div>
-                              <div>
-                                <span>Packaging notes</span>
-                                <p>
-                                  {currentInspectionRequest.report.packagingNotes ||
-                                    'No packaging notes recorded.'}
-                                </p>
-                              </div>
-                            </div>
-
-                            {buyerDecisionRequired && order.buyerDecision ? (
-                              <div
-                                className={`inspection-decision-state ${
-                                  order.buyerDecision === 'BUY' ? 'is-buy' : 'is-cancel'
-                                }`}
-                              >
-                                <span className="inspection-decision-icon" aria-hidden="true">
-                                  {order.buyerDecision === 'BUY' ? '✓' : '×'}
-                                </span>
-                                <div>
-                                  <strong>
-                                    {order.buyerDecision === 'BUY'
-                                      ? 'BUY decision recorded'
-                                      : 'Purchase cancelled after inspection'}
-                                  </strong>
-                                  <p>
-                                    {order.buyerDecision === 'BUY'
-                                      ? 'Goods payment is now unlocked. Transport can proceed only after the required payment gates are satisfied.'
-                                      : 'The purchase decision is closed.'}
-                                  </p>
-                                </div>
-                              </div>
-                            ) : buyerDecisionRequired && isBuyer ? (
-                              <div className="inspection-decision-panel">
-                                <div>
-                                  <span className="eyebrow">PURCHASE DECISION</span>
-                                  <h3>What do you want to do with the inspected goods?</h3>
-                                  <p className="muted">
-                                    Choose <strong>BUY</strong> only after reviewing the
-                                    report. BUY unlocks goods payment; it does not by
-                                    itself complete payment or arrange transport.
-                                  </p>
-                                </div>
-                                <div className="inspection-decision-actions">
-                                  <button
-                                    type="button"
-                                    className="btn btn-primary"
-                                    disabled={Boolean(busy)}
-                                    onClick={() => makeBuyerDecision('BUY')}
-                                  >
-                                    {busy === 'buyer-decision-buy'
-                                      ? 'Recording…'
-                                      : 'BUY — continue purchase'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="btn btn-light"
-                                    disabled={Boolean(busy)}
-                                    onClick={() => makeBuyerDecision('CANCEL')}
-                                  >
-                                    {busy === 'buyer-decision-cancel'
-                                      ? 'Cancelling…'
-                                      : 'Cancel after inspection'}
-                                  </button>
-                                </div>
-                              </div>
-                            ) : buyerDecisionRequired ? (
-                              <div className="inspection-waiting-note">
-                                <strong>Awaiting buyer decision</strong>
-                                <span>
-                                  The buyer must review this report and choose BUY or
-                                  cancel before the purchase can move to the payment
-                                  stage.
-                                </span>
-                              </div>
-                            ) : null}
+                  {currentInspectionRequest.status === 'COMPLETED' && currentInspectionRequest.report && (
+                    <section className="card-block">
+                      <div className="card-block-title">
+                        <h3>{isAgricultural ? 'Agricultural inspection report' : 'Product inspection report'}</h3>
+                        <span className="status-pill tone-good">
+                          <span className="status-pill-dot" aria-hidden="true" />
+                          Report published
+                        </span>
+                      </div>
+                      <div className="card-block-body">
+                        <div className="inspection-purchase-gate">
+                          <div className="inspection-report-facts">
+                            <div><span>Inspected quantity</span><strong>{currentInspectionRequest.report.quantity ?? '—'}</strong></div>
+                            <div><span>{isProductsMarketplace ? 'Condition / quality' : 'Grade'}</span><strong>{currentInspectionRequest.report.grade || 'Not specified'}</strong></div>
+                            {!isProductsMarketplace && (
+                              <div><span>Moisture</span><strong>{currentInspectionRequest.report.moisture != null ? `${currentInspectionRequest.report.moisture}%` : 'Not recorded'}</strong></div>
+                            )}
+                            <div><span>Inspection status</span><strong>Completed</strong></div>
                           </div>
+
+                          <div className="inspection-findings">
+                            <div><span>Visible defects</span><p>{currentInspectionRequest.report.visibleDefects || 'No visible defects recorded.'}</p></div>
+                            <div><span>Damage notes</span><p>{currentInspectionRequest.report.damageNotes || 'No damage notes recorded.'}</p></div>
+                            <div><span>Packaging notes</span><p>{currentInspectionRequest.report.packagingNotes || 'No packaging notes recorded.'}</p></div>
+                          </div>
+
+                          {buyerDecisionRequired && order.buyerDecision ? (
+                            <div className={`inspection-decision-state ${order.buyerDecision === 'BUY' ? 'is-buy' : 'is-cancel'}`}>
+                              <span className="inspection-decision-icon" aria-hidden="true">{order.buyerDecision === 'BUY' ? '✓' : '×'}</span>
+                              <div>
+                                <strong>{order.buyerDecision === 'BUY' ? 'BUY decision recorded' : 'Purchase cancelled after inspection'}</strong>
+                                <p>{order.buyerDecision === 'BUY' ? 'Goods payment is now unlocked. Transport can proceed only after the required payment gates are satisfied.' : 'The purchase decision is closed.'}</p>
+                              </div>
+                            </div>
+                          ) : buyerDecisionRequired && isBuyer ? (
+                            <div className="inspection-decision-panel">
+                              <div>
+                                <span className="eyebrow">PURCHASE DECISION</span>
+                                <h3>What do you want to do with the inspected goods?</h3>
+                                <p className="muted">Choose <strong>BUY</strong> only after reviewing the report. BUY unlocks goods payment; it does not by itself complete payment or arrange transport.</p>
+                              </div>
+                              <div className="inspection-decision-actions">
+                                <button type="button" className="btn btn-primary" disabled={Boolean(busy)} onClick={() => makeBuyerDecision('BUY')}>
+                                  {busy === 'buyer-decision-buy' ? 'Recording…' : 'BUY — continue purchase'}
+                                </button>
+                                <button type="button" className="btn btn-light" disabled={Boolean(busy)} onClick={() => makeBuyerDecision('CANCEL')}>
+                                  {busy === 'buyer-decision-cancel' ? 'Cancelling…' : 'Cancel after inspection'}
+                                </button>
+                              </div>
+                            </div>
+                          ) : buyerDecisionRequired ? (
+                            <div className="inspection-waiting-note">
+                              <strong>Awaiting buyer decision</strong>
+                              <span>The buyer must review this report and choose BUY or cancel before the purchase can move to the payment stage.</span>
+                            </div>
+                          ) : null}
                         </div>
-                      </section>
-                    )}
+                      </div>
+                    </section>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1728,86 +1464,44 @@ export default function OrderDetail() {
                     <h2>Request inspection</h2>
                   </div>
                 </header>
-
                 <div className="card-body">
                   <section className="card-block">
-                    <div className="card-block-title">
-                      <h3>How it works</h3>
-                    </div>
+                    <div className="card-block-title"><h3>How it works</h3></div>
                     <div className="card-block-body">
-                      <p className="muted">
-                        Request an independent quality check for this order before the
-                        purchase is finally committed.
-                      </p>
-                      <p className="muted">
-                        All registered inspectors can compete for this request by
-                        submitting a sealed fee quote. You compare the bids, select one
-                        for negotiation, and only the accepted negotiated quote assigns
-                        the inspector. The inspection fee commits the inspector; the
-                        completed report is then reviewed before goods payment.
-                      </p>
+                      <p className="muted">Request an independent quality check for this order before the purchase is finally committed.</p>
+                      <p className="muted">All registered inspectors can compete for this request by submitting a sealed fee quote. You compare the bids, select one for negotiation, and only the accepted negotiated quote assigns the inspector. The inspection fee commits the inspector; the completed report is then reviewed before goods payment.</p>
                     </div>
                   </section>
-
-                  <div className="sd-actions" style={{ marginTop: 0 }}>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      disabled={requestingInspection}
-                      onClick={() =>
-                        requestInspection(isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')
-                      }
-                    >
-                      {requestingInspection
-                        ? 'Requesting…'
-                        : 'Open competitive inspection request'}
+                  <div className="sd-actions">
+                    <button type="button" className="btn btn-primary" disabled={requestingInspection} onClick={() => requestInspection(isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}>
+                      {requestingInspection ? 'Requesting…' : 'Open competitive inspection request'}
                     </button>
                   </div>
                 </div>
               </div>
-            ))}
+            )
+          )}
         </div>
-
-        {/* ══════════════════════════════════════════════════════
-            TRANSPORT
-            ══════════════════════════════════════════════════════ */}
 
         <div className="card transport-overview-card" id="transport-section">
           <header className="card-head">
             <div className="card-head-text">
               <div className="transport-card-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" role="presentation">
-                  <path
-                    d="M3 6.5h11v9H3zM14 9h3.2l3 3.2V15H14z"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinejoin="round"
-                  />
+                  <path d="M3 6.5h11v9H3zM14 9h3.2l3 3.2V15H14z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
                   <circle cx="7" cy="17" r="1.7" fill="currentColor" />
                   <circle cx="18" cy="17" r="1.7" fill="currentColor" />
-                  <path
-                    d="M3 15h2M20 15h1"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                  />
+                  <path d="M3 15h2M20 15h1" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
                 </svg>
               </div>
               <div>
                 <span className="eyebrow">LOGISTICS</span>
                 <h2>Transport</h2>
-                <p className="muted">
-                  The buyer or seller arranges transport. MarketBridge does not
-                  automatically assign a transporter.
-                </p>
+                <p className="muted">The buyer or seller arranges transport. MarketBridge does not automatically assign a transporter.</p>
               </div>
             </div>
             {transportJob?.status && (
-              <span className="badge transport-status-badge">
-                {String(transportJob.status).replace(/_/g, ' ')}
-              </span>
+              <span className="badge transport-status-badge">{String(transportJob.status).replace(/_/g, ' ')}</span>
             )}
           </header>
 
@@ -1828,44 +1522,17 @@ export default function OrderDetail() {
             ) : (
               <>
                 <section className="card-block">
-                  <div className="card-block-title">
-                    <h3>Trip details</h3>
-                  </div>
+                  <div className="card-block-title"><h3>Trip details</h3></div>
                   <div className="card-block-body">
                     <div className="detail-facts transport-detail-facts">
-                      <div>
-                        <span>Arranged by</span>
-                        <strong>{transportJob.arrangingParty || '—'}</strong>
-                      </div>
-                      <div>
-                        <span>Method</span>
-                        <strong>{transportJob.method || '—'}</strong>
-                      </div>
-                      <div>
-                        <span>Status</span>
-                        <strong>
-                          <span className="badge">{transportJob.status}</span>
-                        </strong>
-                      </div>
-                      <div>
-                        <span>Pickup</span>
-                        <strong>{transportJob.pickupLocation || '—'}</strong>
-                      </div>
-                      <div>
-                        <span>Destination</span>
-                        <strong>{transportJob.destination || '—'}</strong>
-                      </div>
-                      {transportJob.load && (
-                        <div>
-                          <span>Load</span>
-                          <strong>{transportJob.load}</strong>
-                        </div>
-                      )}
+                      <div><span>Arranged by</span><strong>{transportJob.arrangingParty || '—'}</strong></div>
+                      <div><span>Method</span><strong>{transportJob.method || '—'}</strong></div>
+                      <div><span>Status</span><strong><span className="badge">{transportJob.status}</span></strong></div>
+                      <div><span>Pickup</span><strong>{transportJob.pickupLocation || '—'}</strong></div>
+                      <div><span>Destination</span><strong>{transportJob.destination || '—'}</strong></div>
+                      {transportJob.load && <div><span>Load</span><strong>{transportJob.load}</strong></div>}
                       {transportJob.requiredCapacity != null && (
-                        <div>
-                          <span>Required capacity</span>
-                          <strong>{transportJob.requiredCapacity}</strong>
-                        </div>
+                        <div><span>Required capacity</span><strong>{transportJob.requiredCapacity}</strong></div>
                       )}
                     </div>
                   </div>
@@ -1873,32 +1540,20 @@ export default function OrderDetail() {
 
                 {transportJob.truckOwner && (
                   <section className="card-block">
-                    <div className="card-block-title">
-                      <h3>Assigned transporter</h3>
-                    </div>
+                    <div className="card-block-title"><h3>Assigned transporter</h3></div>
                     <div className="card-block-body">
                       <div className="notice transport-info-panel">
-                        <p>
-                          <strong>{transportJob.truckOwner.name || '—'}</strong>
-                        </p>
-                        {transportJob.truckOwner.phone && (
-                          <p className="muted">Phone: {transportJob.truckOwner.phone}</p>
-                        )}
+                        <div className="transport-panel-heading">
+                          <span className="transport-panel-icon" aria-hidden="true">👤</span>
+                          <h3>Transporter</h3>
+                        </div>
+                        <p><strong>{transportJob.truckOwner.name || '—'}</strong></p>
+                        {transportJob.truckOwner.phone && <p className="muted">Phone: {transportJob.truckOwner.phone}</p>}
                         {transportJob.truck && (
-                          <p>
-                            Truck:{' '}
-                            <strong>{transportJob.truck.registration || '—'}</strong>
-                            {' · '}
-                            {transportJob.truck.truckType || 'Truck'}
-                            {transportJob.truck.capacity != null &&
-                              ` · ${transportJob.truck.capacity}t`}
-                          </p>
+                          <p>Truck: <strong>{transportJob.truck.registration || '—'}</strong>{' · '}{transportJob.truck.truckType || 'Truck'}{transportJob.truck.capacity != null && ` · ${transportJob.truck.capacity}t`}</p>
                         )}
                         {transportJob.agreedAmount != null && (
-                          <p>
-                            Agreed transport fee:{' '}
-                            <strong>{money(transportJob.agreedAmount)} ETB</strong>
-                          </p>
+                          <p>Agreed transport fee: <strong>{money(transportJob.agreedAmount)} ETB</strong></p>
                         )}
                       </div>
                     </div>
@@ -1906,16 +1561,15 @@ export default function OrderDetail() {
                 )}
 
                 <section className="card-block">
-                  <div className="card-block-title">
-                    <h3>Pickup / delivery evidence</h3>
-                  </div>
+                  <div className="card-block-title"><h3>Pickup / delivery evidence</h3></div>
                   <div className="card-block-body">
                     <div className="notice transport-info-panel">
+                      <div className="transport-panel-heading">
+                        <span className="transport-panel-icon" aria-hidden="true">📍</span>
+                        <h3>Evidence gallery</h3>
+                      </div>
                       <p className="muted">
-                        Pickup evidence is required before the transporter can move this
-                        trip from <strong>PICKUP</strong> to <strong>IN TRANSIT</strong>.
-                        Upload a photo or video here, then submit it with the status
-                        change.
+                        Pickup evidence is required before the transporter can move this trip from <strong>PICKUP</strong> to <strong>IN TRANSIT</strong>. Upload a photo or video here, then submit it with the status change.
                       </p>
 
                       {isTransporter && transportJob.status === 'PICKUP' && (
@@ -1931,11 +1585,9 @@ export default function OrderDetail() {
                               }))
                             }
                           />
-                          {(transportEvidence.photoKeys.length > 0 ||
-                            transportEvidence.videoKeys.length > 0) && (
+                          {(transportEvidence.photoKeys.length > 0 || transportEvidence.videoKeys.length > 0) && (
                             <p className="muted small">
-                              {transportEvidence.photoKeys.length} photo(s),{' '}
-                              {transportEvidence.videoKeys.length} video(s) ready.
+                              {transportEvidence.photoKeys.length} photo(s), {transportEvidence.videoKeys.length} video(s) ready.
                             </p>
                           )}
                           <textarea
@@ -1949,18 +1601,11 @@ export default function OrderDetail() {
                           <button
                             type="button"
                             className="btn btn-primary"
-                            disabled={
-                              transportEvidenceBusy ||
-                              (!transportEvidence.photoKeys.length &&
-                                !transportEvidence.videoKeys.length &&
-                                !transportEvidenceNotes.trim())
-                            }
+                            disabled={transportEvidenceBusy || (!transportEvidence.photoKeys.length && !transportEvidence.videoKeys.length && !transportEvidenceNotes.trim())}
                             onClick={() => submitTransportEvidence('PICKUP', 'IN_TRANSIT')}
                             style={{ marginTop: 8 }}
                           >
-                            {transportEvidenceBusy
-                              ? 'Submitting…'
-                              : 'Submit pickup evidence & mark in transit'}
+                            {transportEvidenceBusy ? 'Submitting…' : 'Submit pickup evidence & mark in transit'}
                           </button>
                         </div>
                       )}
@@ -1968,9 +1613,7 @@ export default function OrderDetail() {
                       {isTransporter && transportJob.status === 'IN_TRANSIT' && (
                         <div className="notice" style={{ marginTop: 10 }}>
                           <strong>Delivery evidence</strong>
-                          <p className="muted">
-                            Upload delivery evidence before marking the trip DELIVERED.
-                          </p>
+                          <p className="muted">Upload delivery evidence before marking the trip DELIVERED.</p>
                           <EvidenceUploader
                             uploadUrl={`/transport/${transportJob.id}/evidence/media`}
                             disabled={transportEvidenceBusy}
@@ -1981,11 +1624,9 @@ export default function OrderDetail() {
                               }))
                             }
                           />
-                          {(transportEvidence.photoKeys.length > 0 ||
-                            transportEvidence.videoKeys.length > 0) && (
+                          {(transportEvidence.photoKeys.length > 0 || transportEvidence.videoKeys.length > 0) && (
                             <p className="muted small">
-                              {transportEvidence.photoKeys.length} photo(s),{' '}
-                              {transportEvidence.videoKeys.length} video(s) ready.
+                              {transportEvidence.photoKeys.length} photo(s), {transportEvidence.videoKeys.length} video(s) ready.
                             </p>
                           )}
                           <textarea
@@ -1999,27 +1640,18 @@ export default function OrderDetail() {
                           <button
                             type="button"
                             className="btn btn-primary"
-                            disabled={
-                              transportEvidenceBusy ||
-                              (!transportEvidence.photoKeys.length &&
-                                !transportEvidence.videoKeys.length &&
-                                !transportEvidenceNotes.trim())
-                            }
+                            disabled={transportEvidenceBusy || (!transportEvidence.photoKeys.length && !transportEvidence.videoKeys.length && !transportEvidenceNotes.trim())}
                             onClick={() => submitTransportEvidence('DELIVERY', 'DELIVERED')}
                             style={{ marginTop: 8 }}
                           >
-                            {transportEvidenceBusy
-                              ? 'Submitting…'
-                              : 'Submit delivery evidence & mark delivered'}
+                            {transportEvidenceBusy ? 'Submitting…' : 'Submit delivery evidence & mark delivered'}
                           </button>
                         </div>
                       )}
 
                       <EvidenceGallery
                         listUrl={`/transport/${transportJob.id}/evidence`}
-                        mediaUrl={(evidenceId) =>
-                          `/transport/${transportJob.id}/evidence/${evidenceId}/media`
-                        }
+                        mediaUrl={(evidenceId) => `/transport/${transportJob.id}/evidence/${evidenceId}/media`}
                       />
                     </div>
                   </div>
@@ -2027,139 +1659,54 @@ export default function OrderDetail() {
 
                 {transportJob.method === 'HIRE_TRANSPORTER' && !transportPaid && (
                   <section className="card-block">
-                    <div className="card-block-title">
-                      <h3>Transport quotes</h3>
-                    </div>
+                    <div className="card-block-title"><h3>Transport quotes</h3></div>
                     <div className="card-block-body">
                       <div className="match-box">
                         {leafTransportQuotes(transportJob.quotes)?.length ? (
                           leafTransportQuotes(transportJob.quotes).map((quote) => {
-                            const displayAmount =
-                              quote.status === 'COUNTERED'
-                                ? quote.counterAmount ?? quote.amount
-                                : quote.amount;
-                            const isArrangerTurn =
-                              quote.status === 'SELECTED' ||
-                              (quote.status === 'COUNTERED' &&
-                                quote.counteredBy === 'PROVIDER');
+                            const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
+                            const isArrangerTurn = quote.status === 'SELECTED' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
                             const isCompetitionBid = quote.status === 'PENDING';
-                            const isWaitingOnTransporter =
-                              quote.status === 'COUNTERED' &&
-                              quote.counteredBy === 'REQUESTER';
+                            const isWaitingOnTransporter = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
                             return (
                               <div className="transporter" key={quote.id}>
                                 <div>
                                   <strong>{quote.truckOwner?.name || 'Truck owner'}</strong>
                                   <p>
-                                    {quote.truck?.truckType || 'Truck'}
-                                    {' · '}
-                                    {quote.truck?.capacity != null
-                                      ? `${quote.truck.capacity}t`
-                                      : 'Capacity —'}
-                                    {' · '}
-                                    {quote.truck?.registration || 'Registration —'}
-                                    {' · '}
-                                    ★{' '}
-                                    {typeof quote.truckOwner?.rating === 'number'
-                                      ? quote.truckOwner.rating.toFixed(1)
-                                      : '—'}
+                                    {quote.truck?.truckType || 'Truck'}{' · '}
+                                    {quote.truck?.capacity != null ? `${quote.truck.capacity}t` : 'Capacity —'}{' · '}
+                                    {quote.truck?.registration || 'Registration —'}{' · '}
+                                    ★ {typeof quote.truckOwner?.rating === 'number' ? quote.truckOwner.rating.toFixed(1) : '—'}
                                   </p>
-                                  {quote.message && (
-                                    <p className="muted">{quote.message}</p>
-                                  )}
-                                  <p>
-                                    Status:{' '}
-                                    <span className="badge">
-                                      {quote.status || 'PENDING'}
-                                    </span>
-                                  </p>
+                                  {quote.message && <p className="muted">{quote.message}</p>}
+                                  <p>Status: <span className="badge">{quote.status || 'PENDING'}</span></p>
                                   {isWaitingOnTransporter && (
-                                    <p className="muted">
-                                      You countered {money(displayAmount)} ETB — waiting
-                                      for the transporter to respond.
-                                    </p>
+                                    <p className="muted">You countered {money(displayAmount)} ETB — waiting for the transporter to respond.</p>
                                   )}
                                 </div>
-
                                 <div>
-                                  <strong>
-                                    {money(displayAmount)} ETB
-                                  </strong>
+                                  <strong>{money(displayAmount)} ETB</strong>
 
                                   {canChooseQuote && quote.status === 'ACCEPTED' && (
-                                    <div
-                                      style={{
-                                        marginTop: 8,
-                                        display: 'flex',
-                                        gap: 8,
-                                        alignItems: 'center',
-                                        flexWrap: 'wrap',
-                                      }}
-                                    >
-                                      <span className="muted small">
-                                        Provisional transporter agreement. Release it if
-                                        this transporter becomes unavailable before
-                                        payment.
-                                      </span>
-                                      <button
-                                        type="button"
-                                        className="btn btn-light btn-sm"
-                                        disabled={busy === `quote-${quote.id}`}
-                                        onClick={() => releaseTransportAgreement(quote.id)}
-                                      >
-                                        {busy === `quote-${quote.id}`
-                                          ? 'Releasing…'
-                                          : 'Release transporter'}
+                                    <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                      <span className="muted small">Provisional transporter agreement. Release it if this transporter becomes unavailable before payment.</span>
+                                      <button type="button" className="btn btn-light btn-sm" disabled={busy === `quote-${quote.id}`} onClick={() => releaseTransportAgreement(quote.id)}>
+                                        {busy === `quote-${quote.id}` ? 'Releasing…' : 'Release transporter'}
                                       </button>
                                     </div>
                                   )}
-
                                   {canChooseQuote && isCompetitionBid && (
-                                    <div
-                                      style={{
-                                        marginTop: 8,
-                                        display: 'flex',
-                                        gap: 8,
-                                        alignItems: 'center',
-                                        flexWrap: 'wrap',
-                                      }}
-                                    >
-                                      <button
-                                        type="button"
-                                        className="btn btn-primary btn-sm"
-                                        disabled={busy === `quote-${quote.id}`}
-                                        onClick={() => selectTransportQuote(quote.id)}
-                                      >
-                                        {busy === `quote-${quote.id}`
-                                          ? 'Selecting…'
-                                          : 'Select bid for deal'}
+                                    <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                      <button type="button" className="btn btn-primary btn-sm" disabled={busy === `quote-${quote.id}`} onClick={() => selectTransportQuote(quote.id)}>
+                                        {busy === `quote-${quote.id}` ? 'Selecting…' : 'Select bid for deal'}
                                       </button>
-                                      <span className="muted small">
-                                        Competition bid — selecting opens price
-                                        negotiation.
-                                      </span>
+                                      <span className="muted small">Competition bid — selecting opens price negotiation.</span>
                                     </div>
                                   )}
-
                                   {canChooseQuote && isArrangerTurn && (
-                                    <div
-                                      style={{
-                                        marginTop: 8,
-                                        display: 'flex',
-                                        gap: 6,
-                                        flexWrap: 'wrap',
-                                        alignItems: 'center',
-                                      }}
-                                    >
-                                      <button
-                                        type="button"
-                                        className="btn btn-sm"
-                                        disabled={busy === `quote-${quote.id}`}
-                                        onClick={() => acceptQuote(quote.id)}
-                                      >
-                                        {busy === `quote-${quote.id}`
-                                          ? 'Accepting…'
-                                          : 'Accept quote'}
+                                    <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                      <button type="button" className="btn btn-sm" disabled={busy === `quote-${quote.id}`} onClick={() => acceptQuote(quote.id)}>
+                                        {busy === `quote-${quote.id}` ? 'Accepting…' : 'Accept quote'}
                                       </button>
                                       <input
                                         type="number"
@@ -2167,62 +1714,30 @@ export default function OrderDetail() {
                                         placeholder="Counter (ETB)"
                                         style={{ width: 120 }}
                                         value={transportCounterInputs[quote.id] || ''}
-                                        onChange={(e) =>
-                                          setTransportCounterInputs((q) => ({
-                                            ...q,
-                                            [quote.id]: e.target.value,
-                                          }))
-                                        }
+                                        onChange={(e) => setTransportCounterInputs((q) => ({ ...q, [quote.id]: e.target.value }))}
                                       />
-                                      <button
-                                        type="button"
-                                        className="btn btn-sm btn-light"
-                                        disabled={busy === `quote-${quote.id}`}
-                                        onClick={() => counterQuote(quote.id)}
-                                      >
+                                      <button type="button" className="btn btn-sm btn-light" disabled={busy === `quote-${quote.id}`} onClick={() => counterQuote(quote.id)}>
                                         {busy === `quote-${quote.id}` ? 'Sending…' : 'Counter'}
                                       </button>
-                                      <button
-                                        type="button"
-                                        className="btn btn-sm btn-light"
-                                        disabled={busy === `quote-${quote.id}`}
-                                        onClick={() => rejectQuote(quote.id)}
-                                      >
-                                        {busy === `quote-${quote.id}`
-                                          ? 'Rejecting…'
-                                          : 'Reject'}
+                                      <button type="button" className="btn btn-sm btn-light" disabled={busy === `quote-${quote.id}`} onClick={() => rejectQuote(quote.id)}>
+                                        {busy === `quote-${quote.id}` ? 'Rejecting…' : 'Reject'}
                                       </button>
                                     </div>
                                   )}
-
-                                  {quote.status === 'ACCEPTED' &&
-                                    isTransportArranger &&
-                                    !transportPending && (
-                                      <div style={{ marginTop: 8 }}>
-                                        <p className="muted small">
-                                          Provisional agreement — the truck is not
-                                          committed until transport payment succeeds.
-                                        </p>
-                                        <button
-                                          type="button"
-                                          className="btn btn-sm btn-light"
-                                          disabled={busy === `quote-${quote.id}`}
-                                          onClick={() => releaseTransportAgreement(quote.id)}
-                                        >
-                                          {busy === `quote-${quote.id}`
-                                            ? 'Releasing…'
-                                            : 'Transporter unavailable — choose another'}
-                                        </button>
-                                      </div>
-                                    )}
+                                  {quote.status === 'ACCEPTED' && isTransportArranger && !transportPending && (
+                                    <div style={{ marginTop: 8 }}>
+                                      <p className="muted small">Provisional agreement — the truck is not committed until transport payment succeeds.</p>
+                                      <button type="button" className="btn btn-sm btn-light" disabled={busy === `quote-${quote.id}`} onClick={() => releaseTransportAgreement(quote.id)}>
+                                        {busy === `quote-${quote.id}` ? 'Releasing…' : 'Transporter unavailable — choose another'}
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             );
                           })
                         ) : (
-                          <p className="muted">
-                            Waiting for registered truck owners to submit quotes.
-                          </p>
+                          <p className="muted">Waiting for registered truck owners to submit quotes.</p>
                         )}
                       </div>
                     </div>
@@ -2231,17 +1746,11 @@ export default function OrderDetail() {
 
                 {transportJob.status === 'DELIVERED' && (
                   <section className="card-block">
-                    <div className="card-block-title">
-                      <h3>Delivery</h3>
-                    </div>
+                    <div className="card-block-title"><h3>Delivery</h3></div>
                     <div className="card-block-body">
                       <div className="notice">
-                        <p>
-                          <strong>✓ Transport marked as delivered.</strong>
-                        </p>
-                        {transportJob.deliveredConfirmedAt && (
-                          <p className="muted">Delivery confirmed.</p>
-                        )}
+                        <p><strong>✓ Transport marked as delivered.</strong></p>
+                        {transportJob.deliveredConfirmedAt && <p className="muted">Delivery confirmed.</p>}
                       </div>
                     </div>
                   </section>
@@ -2257,10 +1766,6 @@ export default function OrderDetail() {
           </div>
         </div>
 
-        {/* ══════════════════════════════════════════════════════
-            PAYOUT STATUS
-            ══════════════════════════════════════════════════════ */}
-
         {order && (
           <PayoutStatusCard
             sellerPayout={sellerPayout}
@@ -2268,8 +1773,7 @@ export default function OrderDetail() {
             transporterPayout={transporterPayout}
             sellerName={order.seller?.name || null}
             inspectorName={
-              (order.inspectionRequests || inspectionRequests).find((r) => r?.inspector?.name)
-                ?.inspector?.name || null
+              (order.inspectionRequests || inspectionRequests).find((r) => r?.inspector?.name)?.inspector?.name || null
             }
             transporterName={transportJob?.truckOwner?.name || null}
             isSeller={isSeller}
@@ -2279,10 +1783,6 @@ export default function OrderDetail() {
           />
         )}
 
-        {/* ══════════════════════════════════════════════════════
-            REFUND STATUS
-            ══════════════════════════════════════════════════════ */}
-
         {order && (
           <RefundStatusCard
             refunds={refunds}
@@ -2290,16 +1790,10 @@ export default function OrderDetail() {
             people={{
               SELLER: { name: order.seller?.name || null, you: isSeller },
               INSPECTOR: {
-                name:
-                  (order.inspectionRequests || inspectionRequests).find(
-                    (r) => r?.inspector?.name
-                  )?.inspector?.name || null,
+                name: (order.inspectionRequests || inspectionRequests).find((r) => r?.inspector?.name)?.inspector?.name || null,
                 you: isInspector,
               },
-              TRANSPORTER: {
-                name: transportJob?.truckOwner?.name || null,
-                you: isTransporter,
-              },
+              TRANSPORTER: { name: transportJob?.truckOwner?.name || null, you: isTransporter },
             }}
             isAdmin={isAdmin}
             busy={busy}
@@ -2307,10 +1801,6 @@ export default function OrderDetail() {
             onFail={failRefundAsAdmin}
           />
         )}
-
-        {/* ══════════════════════════════════════════════════════
-            PRODUCT MARKETPLACE OFFER
-            ══════════════════════════════════════════════════════ */}
 
         {order && isProductsMarketplace && isBuyer && !order.agreedOfferId && (
           <section className="card order-product-offer-card" id="make-offer">
@@ -2320,56 +1810,24 @@ export default function OrderDetail() {
                 <h2>Make Offer</h2>
               </div>
             </header>
-
             <div className="card-body">
               <section className="card-block">
-                <div className="card-block-title">
-                  <h3>How it works</h3>
-                </div>
+                <div className="card-block-title"><h3>How it works</h3></div>
                 <div className="card-block-body">
                   <p className="muted">
-                    Enter the amount you want to offer for this product. Your offer
-                    enters the seller's competition process; it does not charge you or
-                    reserve the product.
+                    Enter the amount you want to offer for this product. Your offer enters the seller's competition process; it does not charge you or reserve the product.
                   </p>
                 </div>
               </section>
-
               <section className="card-block">
-                <div className="card-block-title">
-                  <h3>Your offer</h3>
-                </div>
+                <div className="card-block-title"><h3>Your offer</h3></div>
                 <div className="card-block-body">
                   <form onSubmit={submitProductOffer} className="order-product-offer-form">
                     <label htmlFor="order-product-offer-amount">Offer amount (ETB)</label>
-                    <input
-                      id="order-product-offer-amount"
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      inputMode="decimal"
-                      placeholder="Enter your offer amount (ETB)"
-                      value={offerAmount}
-                      onChange={(event) => setOfferAmount(event.target.value)}
-                      disabled={submittingOffer}
-                      required
-                    />
-                    <label htmlFor="order-product-offer-message">
-                      Message to seller <span>(optional)</span>
-                    </label>
-                    <textarea
-                      id="order-product-offer-message"
-                      rows="3"
-                      placeholder="Add a message to the seller"
-                      value={offerMessage}
-                      onChange={(event) => setOfferMessage(event.target.value)}
-                      disabled={submittingOffer}
-                    />
-                    <button
-                      type="submit"
-                      className="btn btn-primary order-product-offer-button"
-                      disabled={submittingOffer}
-                    >
+                    <input id="order-product-offer-amount" type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter your offer amount (ETB)" value={offerAmount} onChange={(event) => setOfferAmount(event.target.value)} disabled={submittingOffer} required />
+                    <label htmlFor="order-product-offer-message">Message to seller <span>(optional)</span></label>
+                    <textarea id="order-product-offer-message" rows="3" placeholder="Add a message to the seller" value={offerMessage} onChange={(event) => setOfferMessage(event.target.value)} disabled={submittingOffer} />
+                    <button type="submit" className="btn btn-primary order-product-offer-button" disabled={submittingOffer}>
                       {submittingOffer ? 'Submitting…' : 'Make Offer'}
                     </button>
                   </form>
@@ -2378,10 +1836,6 @@ export default function OrderDetail() {
             </div>
           </section>
         )}
-
-        {/* ══════════════════════════════════════════════════════
-            PAYMENT CENTER
-            ══════════════════════════════════════════════════════ */}
 
         {(!isProductsMarketplace || order?.agreedOfferId) && (
           <PaymentCenter
@@ -2400,10 +1854,6 @@ export default function OrderDetail() {
           />
         )}
 
-        {/* ══════════════════════════════════════════════════════
-            CONFIRM RECEIPT
-            ══════════════════════════════════════════════════════ */}
-
         {order.status === 'DELIVERED' && isBuyer && (
           <div className="card" id="confirm-receipt">
             <header className="card-head">
@@ -2412,56 +1862,32 @@ export default function OrderDetail() {
                 <h2>Confirm receipt</h2>
               </div>
             </header>
-
             <div className="card-body">
               <section className="card-block">
-                <div className="card-block-title">
-                  <h3>Before you confirm</h3>
-                </div>
+                <div className="card-block-title"><h3>Before you confirm</h3></div>
                 <div className="card-block-body">
-                  <p className="muted">
-                    Confirm only after you have physically received the produce/product.
-                  </p>
-
+                  <p className="muted">Confirm only after you have physically received the produce/product.</p>
                   {!marketplacePaid && (
-                    <div className="alert error">
-                      Marketplace payment must be confirmed before receipt can be
-                      completed.
-                    </div>
+                    <div className="alert error">Marketplace payment must be confirmed before receipt can be completed.</div>
                   )}
-
                   {transportJob?.method === 'HIRE_TRANSPORTER' && !transportPaid && (
-                    <div className="alert error">
-                      Transport payment must be confirmed before receipt can be
-                      completed.
-                    </div>
+                    <div className="alert error">Transport payment must be confirmed before receipt can be completed.</div>
                   )}
                 </div>
               </section>
-
-              <div className="sd-actions" style={{ marginTop: 0 }}>
+              <div className="sd-actions">
                 <button
                   type="button"
                   className="btn btn-primary"
-                  disabled={
-                    busy === 'receipt' ||
-                    !marketplacePaid ||
-                    (transportJob?.method === 'HIRE_TRANSPORTER' && !transportPaid)
-                  }
+                  disabled={busy === 'receipt' || !marketplacePaid || (transportJob?.method === 'HIRE_TRANSPORTER' && !transportPaid)}
                   onClick={confirmReceipt}
                 >
-                  {busy === 'receipt'
-                    ? 'Confirming…'
-                    : 'Confirm receipt & complete order'}
+                  {busy === 'receipt' ? 'Confirming…' : 'Confirm receipt & complete order'}
                 </button>
               </div>
             </div>
           </div>
         )}
-
-        {/* ══════════════════════════════════════════════════════
-            DISPUTE
-            ══════════════════════════════════════════════════════ */}
 
         {order.status === 'DISPUTED' ? (
           <div className="card card-warning" id="raise-dispute">
@@ -2473,15 +1899,10 @@ export default function OrderDetail() {
             </header>
             <div className="card-body">
               <section className="card-block">
-                <div className="card-block-title">
-                  <h3>Under review</h3>
-                </div>
+                <div className="card-block-title"><h3>Under review</h3></div>
                 <div className="card-block-body">
                   <p className="muted">
-                    An admin is reviewing this order.{' '}
-                    <strong>Payments, transport, inspection and payouts are paused</strong>{' '}
-                    while the dispute is open. The order will either resume its previous
-                    state or be cancelled and refunded after review.
+                    An admin is reviewing this order. <strong>Payments, transport, inspection and payouts are paused</strong> while the dispute is open. The order will either resume its previous state or be cancelled and refunded after review.
                   </p>
                 </div>
               </section>
@@ -2496,55 +1917,32 @@ export default function OrderDetail() {
                   <h2>Raise a dispute</h2>
                 </div>
               </header>
-
               <div className="card-body">
                 <section className="card-block">
-                  <div className="card-block-title">
-                    <h3>When to use this</h3>
-                  </div>
+                  <div className="card-block-title"><h3>When to use this</h3></div>
                   <div className="card-block-body">
-                    <p className="muted">
-                      Use this if something went wrong with this order — for example
-                      goods not delivered, quality issues, or a payment problem. An
-                      admin will review it.
-                    </p>
+                    <p className="muted">Use this if something went wrong with this order — for example goods not delivered, quality issues, or a payment problem. An admin will review it.</p>
                   </div>
                 </section>
-
                 {disputeSubmitted ? (
-                  <div className="alert success">
-                    Dispute submitted. The order is now marked as disputed while an
-                    admin reviews it.
-                  </div>
+                  <div className="alert success">Dispute submitted. The order is now marked as disputed while an admin reviews it.</div>
                 ) : (
                   <section className="card-block">
-                    <div className="card-block-title">
-                      <h3>Dispute details</h3>
-                    </div>
+                    <div className="card-block-title"><h3>Dispute details</h3></div>
                     <div className="card-block-body">
                       <form onSubmit={raiseDispute}>
                         <label>
                           Dispute against
-                          <select
-                            value={disputeAgainstId}
-                            onChange={(e) => setDisputeAgainstId(e.target.value)}
-                            required
-                          >
+                          <select value={disputeAgainstId} onChange={(e) => setDisputeAgainstId(e.target.value)} required>
                             <option value="">Select who this is about…</option>
                             {disputeCounterparties.map((party) => (
-                              <option key={party.id} value={party.id}>
-                                {party.name} ({party.role})
-                              </option>
+                              <option key={party.id} value={party.id}>{party.name} ({party.role})</option>
                             ))}
                           </select>
                         </label>
-
                         <label>
                           Type
-                          <select
-                            value={disputeType}
-                            onChange={(e) => setDisputeType(e.target.value)}
-                          >
+                          <select value={disputeType} onChange={(e) => setDisputeType(e.target.value)}>
                             <option value="NOT_DELIVERED">Goods not delivered</option>
                             <option value="QUALITY_ISSUE">Quality issue</option>
                             <option value="DAMAGED_GOODS">Damaged goods</option>
@@ -2553,23 +1951,11 @@ export default function OrderDetail() {
                             <option value="OTHER">Other</option>
                           </select>
                         </label>
-
                         <label>
                           What happened?
-                          <textarea
-                            value={disputeDescription}
-                            onChange={(e) => setDisputeDescription(e.target.value)}
-                            rows={4}
-                            placeholder="Describe the issue in detail"
-                            required
-                          />
+                          <textarea value={disputeDescription} onChange={(e) => setDisputeDescription(e.target.value)} rows={4} placeholder="Describe the issue in detail" required />
                         </label>
-
-                        <button
-                          type="submit"
-                          className="btn btn-outline"
-                          disabled={submittingDispute}
-                        >
+                        <button type="submit" className="btn btn-outline" disabled={submittingDispute}>
                           {submittingDispute ? 'Submitting…' : 'Raise dispute'}
                         </button>
                       </form>
@@ -2581,10 +1967,6 @@ export default function OrderDetail() {
           )
         )}
 
-        {/* ══════════════════════════════════════════════════════
-            COMPLETED
-            ══════════════════════════════════════════════════════ */}
-
         {order.status === 'COMPLETED' && (
           <div className="card">
             <header className="card-head">
@@ -2593,17 +1975,12 @@ export default function OrderDetail() {
                 <h2>Order completed</h2>
               </div>
             </header>
-
             <div className="card-body">
               <section className="card-block">
-                <div className="card-block-title">
-                  <h3>Summary</h3>
-                </div>
+                <div className="card-block-title"><h3>Summary</h3></div>
                 <div className="card-block-body">
                   <div className="notice">
-                    <p>
-                      <strong>✓ This order has been completed.</strong>
-                    </p>
+                    <p><strong>✓ This order has been completed.</strong></p>
                     <p className="muted">Receipt was confirmed by the buyer.</p>
                   </div>
                 </div>
@@ -2612,19 +1989,11 @@ export default function OrderDetail() {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════
-            RATING
-            ══════════════════════════════════════════════════════ */}
-
         <RatingBox
           order={order}
           userId={currentUserId}
           onRated={() => load({ silent: true })}
         />
-
-        {/* ══════════════════════════════════════════════════════
-            MESSAGES
-            ══════════════════════════════════════════════════════ */}
 
         {counterpartId && (
           <MessageThread
@@ -2637,10 +2006,6 @@ export default function OrderDetail() {
           />
         )}
 
-        {/* ══════════════════════════════════════════════════════
-            ADMIN INDICATOR
-            ══════════════════════════════════════════════════════ */}
-
         {isAdmin && (
           <div className="card">
             <header className="card-head">
@@ -2651,13 +2016,9 @@ export default function OrderDetail() {
             </header>
             <div className="card-body">
               <section className="card-block">
-                <div className="card-block-title">
-                  <h3>Access level</h3>
-                </div>
+                <div className="card-block-title"><h3>Access level</h3></div>
                 <div className="card-block-body">
-                  <p className="muted">
-                    You are viewing this order with administrator access.
-                  </p>
+                  <p className="muted">You are viewing this order with administrator access.</p>
                 </div>
               </section>
             </div>
@@ -2669,14 +2030,7 @@ export default function OrderDetail() {
         <div className="order-detail-toast" role="alert" aria-live="assertive">
           <span className="order-detail-toast-icon" aria-hidden="true">!</span>
           <span className="order-detail-toast-message">{error}</span>
-          <button
-            type="button"
-            className="order-detail-toast-close"
-            onClick={() => setError('')}
-            aria-label="Dismiss message"
-          >
-            ×
-          </button>
+          <button type="button" className="order-detail-toast-close" onClick={() => setError('')} aria-label="Dismiss message">×</button>
         </div>
       )}
     </main>
