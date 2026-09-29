@@ -80,9 +80,9 @@
 .sd-dashboard .sd-eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  color: var(--sd-accent-ink);
-  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  gap: 10px;
+  color: var(--sd-info);
+  font: 700 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .2em;
   text-transform: uppercase;
   margin: 0 0 12px;
@@ -155,7 +155,7 @@
   min-height: 44px;
   padding: 0 20px;
   border-radius: 14px;
-  border: 1px solid var(--sd-line);
+  border: 1.5px solid var(--sd-line);
   background: #fff;
   color: var(--sd-ink);
   font: 700 14.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
@@ -192,21 +192,20 @@
 /* Primary buttons use dark slate (Ink) for consistency */
 .sd-dashboard .sd-btn-primary,
 .sd-dashboard .btn-primary {
-  border: none;
-  color: #fff;
-  background: var(--sd-ink);
-  box-shadow: 0 4px 12px rgba(13, 27, 42, .15);
+  border: 1.5px solid var(--sd-ink);
+  color: var(--sd-ink);
+  background: #fff;
+  box-shadow: none;
 }
 .sd-dashboard .sd-btn-primary:hover:not(:disabled),
 .sd-dashboard .btn-primary:hover:not(:disabled) {
-  filter: brightness(1.15);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(13, 27, 42, .25);
-  color: #fff;
+  border-color: var(--sd-ink);
+  background: var(--sd-accent-soft);
+  color: var(--sd-ink);
 }
 .sd-dashboard .sd-btn-primary:active:not(:disabled) {
   transform: none;
-  box-shadow: 0 2px 8px rgba(13, 27, 42, .18);
+  background: var(--sd-line-soft);
 }
 
 .sd-dashboard .sd-btn-outline {
@@ -376,7 +375,7 @@
   margin-bottom: 14px;
 }
 .sd-dashboard .sd-toolbar h2,
-.sd-dashboard .sd-toolbar h3 { margin: 4px 0 0; }
+.sd-dashboard .sd-toolbar h3 { margin: 4px 0 0; font-size: 22px; letter-spacing: -.4px; }
 .sd-dashboard .sd-toolbar .sd-eyebrow { margin-bottom: 4px; }
 .sd-dashboard .sd-toolbar p.sd-muted { margin: 6px 0 0; }
 
@@ -526,10 +525,10 @@
 .sd-dashboard .sd-card .sd-eyebrow::before { flex: 0 0 26px; }
 .sd-dashboard .sd-card .sd-eyebrow.is-open,
 .sd-dashboard .sd-card .sd-eyebrow.tone-info    { color: var(--sd-info); }
-.sd-dashboard .sd-card .sd-eyebrow.tone-success { color: var(--sd-accent-ink); }
-.sd-dashboard .sd-card .sd-eyebrow.tone-gold    { color: var(--sd-gold); }
-.sd-dashboard .sd-card .sd-eyebrow.tone-danger  { color: var(--sd-danger); }
-.sd-dashboard .sd-card .sd-eyebrow.tone-muted   { color: var(--sd-muted); }
+.sd-dashboard .sd-card .sd-eyebrow.tone-success { color: var(--sd-info); }
+.sd-dashboard .sd-card .sd-eyebrow.tone-gold    { color: var(--sd-info); }
+.sd-dashboard .sd-card .sd-eyebrow.tone-danger  { color: var(--sd-info); }
+.sd-dashboard .sd-card .sd-eyebrow.tone-muted   { color: var(--sd-info); }
 
 .sd-dashboard .sd-card .sd-card-title {
   margin: 0 0 4px;
@@ -1097,10 +1096,11 @@
 /* Corrected header and title alignment */
 .sd-dashboard .sd-jobs-section-head {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding-bottom: 18px;
   border-bottom: 1px solid var(--sd-line);
 }
 .sd-dashboard .sd-jobs-section-head .sd-eyebrow {
@@ -1109,10 +1109,10 @@
 .sd-dashboard .sd-jobs-section-title {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin: 0;
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 800;
   letter-spacing: -.3px;
   color: var(--sd-ink);
@@ -1121,14 +1121,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 8px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 10px;
   border-radius: 999px;
   background: var(--sd-accent-soft);
-  border: 1px solid var(--sd-accent-line);
+  border: 1.5px solid var(--sd-accent-line);
   color: var(--sd-accent-ink);
-  font: 800 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 800 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1138,14 +1138,14 @@
 .sd-dashboard .sd-badge {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
-  padding: 0 10px;
+  min-height: 30px;
+  padding: 0 14px;
   border-radius: 999px;
   background: var(--sd-accent-soft);
-  border: 1px solid var(--sd-accent-line);
+  border: 1.5px solid var(--sd-accent-line);
   color: var(--sd-accent-ink);
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .06em;
+  font: 700 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .05em;
   text-transform: uppercase;
   white-space: nowrap;
   vertical-align: middle;
@@ -1177,10 +1177,10 @@
 }
 
 .sd-dashboard .sd-table thead th {
-  padding: 12px 14px;
+  padding: 16px 16px;
   background: var(--sd-surface);
   color: var(--sd-muted);
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .12em;
   text-transform: uppercase;
   text-align: left;
@@ -1189,9 +1189,9 @@
 }
 
 .sd-dashboard .sd-table tbody td {
-  padding: 14px;
+  padding: 16px;
   border-bottom: 1px solid var(--sd-line-soft);
-  vertical-align: top;
+  vertical-align: middle;
   color: var(--sd-ink-soft);
   font-size: 13.5px;
   line-height: 1.5;
@@ -1206,13 +1206,29 @@
   color: var(--sd-ink);
 }
 
-.sd-dashboard .sd-mobile-action {
-  color: var(--sd-ink); /* Changed from green to ink */
-  font-weight: 700;
-  font-size: 13px;
+.sd-dashboard .sd-table .sd-mobile-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1.5px solid var(--sd-line);
+  border-radius: 14px;
+  background: #fff none;
+  color: var(--sd-ink);
+  font: 700 14px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: none;
+  transition: border-color .15s var(--sd-ease), background .15s var(--sd-ease), color .15s var(--sd-ease);
+}
+.sd-dashboard .sd-table .sd-mobile-action:hover {
+  border-color: rgba(30, 158, 90, .35);
+  background: var(--sd-accent-soft);
+  color: var(--sd-accent-2);
   text-decoration: none;
 }
-.sd-dashboard .sd-mobile-action:hover { text-decoration: underline; }
 
 /* ══════════════════════════════════════════════════════════
    ALERTS + TOAST
