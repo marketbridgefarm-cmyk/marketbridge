@@ -1,81 +1,100 @@
 /* ============================================================
    MarketBridge — MessageThread  (components/MessageThread.css)
-   A conversational panel that fits inside the Order Detail card.
-   Same class names as before so the JSX is untouched.
+   Consistent with the OrderDetail card system:
+     • Collapsible provides the card-head (eyebrow + title)
+     • Content sits inside a card-block with a content title
+     • The composer is the action footer at the bottom of the card
    ============================================================ */
 
+/* ── Card-block rhythm inside a Collapsible ────────────────
+   OrderDetail.css provides these rules when the thread is used
+   on the order detail page. This block is a fallback so the
+   same rhythm renders if MessageThread is used anywhere else
+   inside a Collapsible. */
+
+.collapsible-body .card-block {
+  margin: 0 0 20px;
+}
+.collapsible-body .card-block:last-of-type {
+  margin-bottom: 0;
+}
+
+.collapsible-body .card-block-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 0 0 10px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.collapsible-body .card-block-title h3 {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -.1px;
+  line-height: 1.3;
+  color: #0d1b2a;
+  margin: 0;
+}
+
+.collapsible-body .card-block-note {
+  font: 600 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
+  color: #64748b;
+  flex: 0 0 auto;
+}
+
+.collapsible-body .card-block-body {
+  display: block;
+}
+
+/* ── Thread ──────────────────────────────────────────────── */
+
 .message-thread {
-  /* ── Local tokens ─────────────────────────────────────── */
-  --mt-accent:      #1e9e5a;
-  --mt-accent-2:    #0f7a44;
-  --mt-accent-soft: #ecfdf3;
-  --mt-accent-line: #c6eccf;
-
-  --mt-ink:         #0d1b2a;
-  --mt-ink-soft:    #2c3a4a;
-  --mt-muted:       #64748b;
-  --mt-muted-2:     #94a3b8;
-
-  --mt-line:        #e5e9ef;
-  --mt-line-soft:   #eef1f5;
-
-  --mt-bubble-in:   #ffffff;
-  --mt-bubble-in-border: #e5e9ef;
-  --mt-bubble-out-bg: linear-gradient(150deg, #1e9e5a 0%, #0f7a44 100%);
-
-  --mt-radius:      14px;
-  --mt-ease:        cubic-bezier(.2, .7, .3, 1);
-
-  position: relative;
-
   display: flex;
   flex-direction: column;
-  gap: 6px;
-
-  padding: 18px 4px 4px;
-  margin: 0 -4px;
-
-  /* The thread sits on a subtle inset surface so bubbles read as
-     "above" the panel. Slight radius so it doesn't clash with the
-     surrounding card's own corners. */
-  background:
-    linear-gradient(180deg, #fbfdfb 0%, #ffffff 100%);
-  border-radius: 12px;
-
-  max-height: 460px;
+  gap: 10px;
+  padding: 4px 2px;
+  max-height: 420px;
   overflow-y: auto;
-
   scrollbar-width: thin;
-  scrollbar-color: var(--mt-line) transparent;
+  scrollbar-color: #dfe4ea transparent;
 }
 
 .message-thread::-webkit-scrollbar { width: 6px; }
 .message-thread::-webkit-scrollbar-thumb {
-  background: var(--mt-line);
+  background: #dfe4ea;
   border-radius: 3px;
 }
-.message-thread::-webkit-scrollbar-track { background: transparent; }
 
-/* ── Bubbles ────────────────────────────────────────────── */
+/* Empty state — centered, quiet, matches the "notice" tone used
+   for empty panels elsewhere on the order page. */
+.message-thread > .muted {
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+  padding: 32px 12px;
+  margin: 0;
+}
+
+/* ── Bubbles ─────────────────────────────────────────────── */
 
 .message-bubble {
-  max-width: min(78%, 480px);
+  max-width: min(78%, 520px);
   padding: 10px 14px;
-  border-radius: var(--mt-radius);
-  font-size: 14.5px;
+  border-radius: 14px;
+  font-size: 14px;
   line-height: 1.5;
-
   word-wrap: break-word;
   overflow-wrap: anywhere;
-
   display: flex;
   flex-direction: column;
   gap: 4px;
-
-  /* Only the outgoing bubbles get a shadow; incoming bubbles rely on
-     their border to read as separate surfaces, which keeps the
-     conversation visually weighted toward the user. */
-  box-shadow: none;
+  box-shadow: 0 1px 2px rgba(15, 30, 45, .04);
 }
 
 .message-bubble p {
@@ -85,116 +104,89 @@
 
 .message-bubble .message-time {
   font-size: 11px;
-  opacity: .7;
+  opacity: .72;
   font-variant-numeric: tabular-nums;
   align-self: flex-end;
-  letter-spacing: .01em;
 }
 
-/* ── Mine — right-aligned, accent gradient ─────────────── */
-
+/* Mine — right-aligned, accent green */
 .message-bubble.message-mine {
   align-self: flex-end;
-  background: var(--mt-bubble-out-bg);
+  background: linear-gradient(150deg, #1e9e5a 0%, #0f7a44 100%);
   color: #fff;
   border-bottom-right-radius: 4px;
-  box-shadow: 0 2px 10px rgba(30, 158, 90, .18);
 }
-
 .message-bubble.message-mine .message-time {
   color: rgba(255, 255, 255, .82);
 }
 
-/* ── Theirs — left-aligned, neutral white with a hairline ─ */
-
+/* Theirs — left-aligned, neutral surface */
 .message-bubble.message-theirs {
   align-self: flex-start;
-  background: var(--mt-bubble-in);
-  border: 1px solid var(--mt-bubble-in-border);
-  color: var(--mt-ink);
+  background: #f1f5f9;
+  color: #0d1b2a;
   border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 2px rgba(15, 30, 45, .04);
 }
-
 .message-bubble.message-theirs .message-time {
-  color: var(--mt-muted);
+  color: #64748b;
 }
 
-/* ── Composer ───────────────────────────────────────────── */
+/* ── Composer — action footer at the bottom of the card ── */
 
 .message-composer {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-
-  margin-top: 8px;
-  padding: 12px 4px 0;
-  border-top: 1px solid var(--mt-line-soft);
+  padding-top: 16px;
+  margin-top: 4px;
+  border-top: 1px solid #eef1f5;
 }
 
 .message-composer textarea {
   flex: 1 1 auto;
   width: 100%;
-  min-height: 60px;
+  min-height: 68px;
   max-height: 180px;
-
-  padding: 12px 14px;
-
-  border: 1px solid var(--mt-line);
-  border-radius: 14px;
+  padding: 11px 13px;
+  border: 1px solid #e5e9ef;
+  border-radius: 12px;
   background: #fff;
-  color: var(--mt-ink);
-
+  color: #0d1b2a;
   font: 400 14.5px/1.5 var(--mb-font-body, 'DM Sans', sans-serif);
-
   resize: vertical;
-
-  transition: border-color .18s var(--mt-ease),
-              box-shadow .18s var(--mt-ease),
-              background .18s var(--mt-ease);
-
+  transition: border-color .18s cubic-bezier(.2, .7, .3, 1),
+              box-shadow .18s cubic-bezier(.2, .7, .3, 1);
   -webkit-appearance: none;
   appearance: none;
+  box-sizing: border-box;
 }
 
-.message-composer textarea::placeholder {
-  color: var(--mt-muted-2);
-}
+.message-composer textarea::placeholder { color: #94a3b8; }
 
-.message-composer textarea:hover {
-  border-color: #cfd6df;
-}
+.message-composer textarea:hover { border-color: #cfd6df; }
 
 .message-composer textarea:focus {
   outline: none;
-  border-color: var(--mt-accent);
+  border-color: #1e9e5a;
   box-shadow: 0 0 0 3px rgba(30, 158, 90, .16);
-  background: #fff;
 }
 
-/* Send button */
 .message-composer .btn,
 .message-composer .btn-primary {
   flex: 0 0 auto;
-  min-height: 42px;
-  padding: 0 20px;
-
-  border-radius: 12px;
+  min-height: 44px;
+  padding: 0 22px;
+  border-radius: 10px;
   border: none;
-
   color: #fff;
-  background: var(--mt-bubble-out-bg);
-
+  background: linear-gradient(150deg, #1e9e5a 0%, #0f7a44 100%);
   font: 700 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .01em;
-
   cursor: pointer;
-
   box-shadow: 0 4px 12px rgba(30, 158, 90, .22);
-
-  transition: transform .12s var(--mt-ease),
-              box-shadow .12s var(--mt-ease),
-              filter .12s var(--mt-ease);
+  transition: transform .12s cubic-bezier(.2, .7, .3, 1),
+              box-shadow .12s cubic-bezier(.2, .7, .3, 1),
+              filter .12s cubic-bezier(.2, .7, .3, 1);
 }
 
 .message-composer .btn:hover:not(:disabled),
@@ -202,12 +194,6 @@
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(30, 158, 90, .28);
   filter: brightness(1.03);
-}
-
-.message-composer .btn:active:not(:disabled),
-.message-composer .btn-primary:active:not(:disabled) {
-  transform: none;
-  box-shadow: 0 2px 8px rgba(30, 158, 90, .18);
 }
 
 .message-composer .btn:disabled,
@@ -221,70 +207,35 @@
 .message-composer .btn:focus-visible,
 .message-composer .btn-primary:focus-visible {
   outline: none;
-  box-shadow:
-    0 0 0 3px rgba(30, 158, 90, .18),
-    0 4px 12px rgba(30, 158, 90, .22);
+  box-shadow: 0 0 0 3px rgba(30, 158, 90, .18),
+              0 4px 12px rgba(30, 158, 90, .22);
 }
 
-/* ── Empty + error states ──────────────────────────────── */
+/* ── Error alert override inside the card ──────────────── */
 
-.message-thread > .muted {
-  color: var(--mt-muted);
-  font-size: 14px;
-  text-align: center;
-  padding: 32px 12px;
-  margin: 0;
-  border: 1px dashed var(--mt-line);
-  border-radius: var(--mt-radius);
-  background: rgba(255, 255, 255, .6);
-}
-
-/* Alert bubbles that sit between the thread and the composer
-   (rendered by the component above the composer). */
-.message-thread + .alert,
-.message-thread ~ .alert.error {
-  margin-top: 12px;
-  margin-bottom: 0;
-  border-radius: 12px;
-  font-size: 13.5px;
-}
-
-/* ── Composer wrapper spacing when it sits directly after a
-   message-thread (as it does in the component) ───────────── */
-.message-thread + .message-composer {
-  margin-top: 12px;
+.collapsible-body .alert.error.small {
+  margin: 0 0 16px;
+  font-size: 13px;
+  padding: 10px 12px;
 }
 
 /* ── Responsive ─────────────────────────────────────────── */
 
 @media (max-width: 480px) {
-  .message-thread {
-    padding: 14px 2px 2px;
-    max-height: 380px;
-  }
-
   .message-bubble {
-    max-width: 90%;
+    max-width: 88%;
     font-size: 13.5px;
     padding: 9px 12px;
-    border-radius: 13px;
-  }
-
-  .message-bubble .message-time {
-    font-size: 10.5px;
   }
 
   .message-composer {
     flex-direction: column;
     align-items: stretch;
-    gap: 8px;
-    padding: 12px 2px 0;
   }
 
   .message-composer .btn,
   .message-composer .btn-primary {
     width: 100%;
-    min-height: 44px;
   }
 }
 
