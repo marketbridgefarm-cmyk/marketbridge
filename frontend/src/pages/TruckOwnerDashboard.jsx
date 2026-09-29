@@ -6,7 +6,7 @@ import RecentActivity from '../components/RecentActivity.jsx';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
-
+import './dashboards/TruckOwnerDashboard.css';
 const TABS = [
   { id: 'trucks', label: 'My Trucks' },
   { id: 'available', label: 'Available Jobs' },
