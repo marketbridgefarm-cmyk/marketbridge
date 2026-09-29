@@ -1,77 +1,69 @@
 /* ============================================================
    MarketBridge — Collapsible  (src/components/Collapsible.css)
+   Uses `all: unset` on the header to strip every inherited
+   property (browser defaults + any global button rule), then
+   re-applies only what the card header needs.
    ============================================================ */
 
 /* Wrapper — extends .card but removes its padding so the header
    and body can own their own spacing. */
 .collapsible-card {
-  padding: 0 !important;
+  padding: 0;
   overflow: hidden;
 }
 
-/* Header — a full-width button. Every property here is written
-   with !important because:
-     - Android Chrome gives buttons a native grey gradient
-     - iOS Safari gives buttons an implicit border-radius
-     - Android Chrome adds a default elevation box-shadow
-     - Some global stylesheets add their own `button { ... }` rules
-   .collapsible-header is a unique class, so !important only affects
-   this button, never anything else on the page. */
+/* ── Header button ────────────────────────────────────────── */
+
 .collapsible-card > .collapsible-header {
-  appearance: none !important;
-  -webkit-appearance: none !important;
+  /* `all: unset` is the key line. It removes:
+       - Android Chrome's grey gradient background
+       - the browser's default border
+       - the elevation box-shadow
+       - iOS Safari's implicit border-radius
+       - any global `button { ... }` rule in this app
+     We then put back only the properties we actually want. */
+  all: unset;
 
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 16px !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 
-  width: 100% !important;
-  margin: 0 !important;
-  padding: 20px 22px !important;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px 22px;
 
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  background-image: none !important;
-  color: inherit !important;
-  text-align: left !important;
-
-  font: inherit !important;
-  font-weight: inherit !important;
-  letter-spacing: inherit !important;
-  line-height: inherit !important;
-
-  box-shadow: none !important;
-  outline: none;
-  cursor: pointer !important;
+  cursor: pointer;
+  text-align: left;
+  color: #0d1b2a;
 
   transition: background .18s cubic-bezier(.2, .7, .3, 1);
 }
 
 .collapsible-card > .collapsible-header:hover {
-  background: #f6f8fa !important;
+  background: #f6f8fa;
 }
 
 .collapsible-card > .collapsible-header:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(30, 158, 90, .18) !important;
+  box-shadow: 0 0 0 3px rgba(30, 158, 90, .18);
 }
 
-/* Header text */
+/* ── Header text ──────────────────────────────────────────── */
+
 .collapsible-header-text {
   min-width: 0;
   flex: 1 1 auto;
 }
 
 .collapsible-header-text h2 {
-  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif) !important;
-  font-size: 18px !important;
-  font-weight: 800 !important;
-  letter-spacing: -.3px !important;
-  color: #0d1b2a !important;
-  margin: 0 !important;
-  line-height: 1.25 !important;
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.3px;
+  color: #0d1b2a;
+  margin: 0;
+  line-height: 1.25;
 }
 
 .collapsible-header-text .eyebrow {
@@ -99,7 +91,8 @@
   line-height: 1.55;
 }
 
-/* Header right side */
+/* ── Header right side (summary + chevron) ────────────────── */
+
 .collapsible-header-side {
   display: flex;
   align-items: center;
@@ -115,7 +108,6 @@
   letter-spacing: 0;
 }
 
-/* Chevron chip — rotates 180° when the card is open */
 .collapsible-chevron {
   display: inline-flex;
   align-items: center;
@@ -139,7 +131,8 @@
   color: #12734a;
 }
 
-/* Body */
+/* ── Body ─────────────────────────────────────────────────── */
+
 .collapsible-body {
   padding: 4px 22px 22px;
   animation: collapsible-fade-in .18s cubic-bezier(.2, .7, .3, 1);
@@ -150,13 +143,13 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Reduced motion ─────────────────────────────────────── */
+/* ── Reduced motion ───────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   .collapsible-card > .collapsible-header,
   .collapsible-chevron,
   .collapsible-body {
-    transition: none !important;
-    animation: none !important;
+    transition: none;
+    animation: none;
   }
 }
