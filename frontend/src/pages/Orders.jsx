@@ -314,10 +314,10 @@ export default function Orders() {
   return (
     <main className="section orders-page">
       <div className="container-narrow">
-        <div className="page-header">
-          <span className="eyebrow">ORDERS</span>
-          <h1>Your orders</h1>
-          <p>
+        <div className="orders-hero">
+          <span className="orders-hero-eyebrow">ORDERS</span>
+          <h1 className="orders-hero-title">Your orders</h1>
+          <p className="orders-hero-text">
             Every accepted offer or purchase becomes an order. Open one to continue with payment,
             transport, inspection and delivery.
           </p>
