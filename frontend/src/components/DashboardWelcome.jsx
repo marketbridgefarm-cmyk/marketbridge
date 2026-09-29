@@ -1,11 +1,9 @@
 import React from 'react';
 import './DashboardWelcome.css';
 
-// Shared across SellerDashboard and BuyerDashboard so both role views feel
-// like one connected "home base" rather than two disconnected pages —
-// same greeting, same avatar treatment, same trust badges. This is the
-// personal, attractive header meant to make people want to stay on the
-// dashboard rather than bounce off it.
+// Personal greeting banner that tops every dashboard.
+// (Previously also hosted the RecentActivity dropdown; that's
+// now removed — activity belongs outside the greeting.)
 
 function greeting() {
   const hour = new Date().getHours();
@@ -21,7 +19,7 @@ const VERIFICATION_COPY = {
   UNVERIFIED: null,
 };
 
-export default function DashboardWelcome({ user, subtitle, children }) {
+export default function DashboardWelcome({ user, subtitle }) {
   if (!user) return null;
 
   const firstName = (user.name || '').split(' ')[0] || 'there';
@@ -40,7 +38,6 @@ export default function DashboardWelcome({ user, subtitle, children }) {
           {hasRating && <span className="dash-badge dash-badge-rating">★ {Number(user.rating).toFixed(1)} rating</span>}
         </div>
       </div>
-      {children}
     </div>
   );
 }
