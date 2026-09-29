@@ -115,6 +115,10 @@ export default function RatingBox({ order, userId, onRated }) {
 
   const myRatings = existing.filter((r) => r.fromUserId === userId);
 
+  // Sayings-style collapsible — open by default when there's history
+  // worth showing; users can collapse it to hide the list.
+  const [historyOpen, setHistoryOpen] = useState(true);
+
   const subtitle =
     !canRateAtAll
       ? 'Opens after delivery'
@@ -135,6 +139,7 @@ export default function RatingBox({ order, userId, onRated }) {
       </header>
 
       <div className="card-body">
+        {/* Not-yet-available / all-done states */}
         {!canRateAtAll ? (
           <section className="card-block">
             <div className="card-block-title">
@@ -157,7 +162,10 @@ export default function RatingBox({ order, userId, onRated }) {
               </p>
             </div>
           </section>
-        ) : targets.length > 0 ? (
+        ) : null}
+
+        {/* Rating forms — the actionable area, always visible */}
+        {targets.length > 0 && (
           <section className="card-block">
             <div className="card-block-title">
               <h3>Rate a participant</h3>
@@ -178,31 +186,38 @@ export default function RatingBox({ order, userId, onRated }) {
               </div>
             </div>
           </section>
-        ) : null}
+        )}
 
+        {/* Submitted ratings — Sayings-style collapsible */}
         {existing.length > 0 && (
-          <section className="card-block">
-            <div className="card-block-title">
-              <h3>Submitted on this order</h3>
-              <span className="card-block-note">
-                {existing.length} total
+          <details
+            className="rating-sayings"
+            open={historyOpen}
+            onToggle={(e) => setHistoryOpen(e.currentTarget.open)}
+          >
+            <summary className="rating-sayings-summary">
+              <span className="rating-sayings-label">Submitted ratings</span>
+              <span className="rating-sayings-count">{existing.length}</span>
+              <span className="rating-sayings-chevron" aria-hidden="true">
+                ▾
               </span>
-            </div>
-            <div className="card-block-body">
-              <div className="rating-list">
-                {existing.map((r) => (
-                  <div className="rating-list-row" key={r.id}>
-                    <div className="rating-list-row-head">
-                      <strong>{nameFor(order, r.fromUserId)}</strong>
-                      <span className="muted"> rated {nameFor(order, r.toUserId)}</span>
-                    </div>
-                    <RatingStars value={r.score} />
-                    {r.comment && <p className="muted">{r.comment}</p>}
+            </summary>
+
+            <div className="rating-list">
+              {existing.map((r) => (
+                <div className="rating-list-row" key={r.id}>
+                  <div className="rating-list-row-head">
+                    <strong>{nameFor(order, r.fromUserId)}</strong>
+                    <span className="muted">
+                      {' '}rated {nameFor(order, r.toUserId)}
+                    </span>
                   </div>
-                ))}
-              </div>
+                  <RatingStars value={r.score} />
+                  {r.comment && <p className="muted">{r.comment}</p>}
+                </div>
+              ))}
             </div>
-          </section>
+          </details>
         )}
       </div>
     </section>
