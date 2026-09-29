@@ -959,13 +959,14 @@
   padding: 14px 16px;
   margin: 12px 0;
   border: 1px solid var(--od-line);
-  border-left: 3px solid rgba(30, 158, 90, .35);
-  border-radius: 4px 12px 12px 4px;
-  background: linear-gradient(180deg, #fbfdfb, #f7faf8);
+  border-radius: 12px;
+  background: var(--od-surface);
   color: var(--od-ink-soft);
   font-size: 14px;
   line-height: 1.55;
 }
+
+
 .order-detail-page .notice:last-child { margin-bottom: 0; }
 .order-detail-page .notice strong { color: var(--od-ink); }
 
