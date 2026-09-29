@@ -1115,3 +1115,203 @@ export default function ListingDetail() {
               <div className="card">
                 <h2>Ready to participate?</h2>
                 <p>Register to buy and sell across MarketBridge.</p>
+                <Link className="btn btn-primary full" to="/register">
+                  Create account
+                </Link>
+              </div>
+            )}
+          </aside>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   Seller negotiations list
+   Each parentOfferId points to the previous step in the same
+   negotiation chain. The leaf is the only actionable offer.
+   Group by buyer so separate negotiations do not visually
+   stack together as if they were one conversation.
+   ───────────────────────────────────────────────────────── */
+function SellerNegotiations({ offers, onAction }) {
+  const list = Array.isArray(offers) ? offers : [];
+
+  const byBuyer = new Map();
+  for (const offer of list) {
+    const buyerId = offer.buyerId || offer.buyer?.id || offer.id;
+    const existing = byBuyer.get(buyerId);
+    if (
+      !existing ||
+      new Date(offer.createdAt || 0) > new Date(existing.createdAt || 0)
+    ) {
+      byBuyer.set(buyerId, offer);
+    }
+  }
+
+  const negotiations = Array.from(byBuyer.values()).sort(
+    (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+  );
+
+  if (!negotiations.length) {
+    return <p className="muted">No negotiations yet.</p>;
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      {negotiations.map((offer) => (
+        <OfferRow key={offer.id} offer={offer} onAction={onAction} />
+      ))}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   Offer row (seller view)
+   ───────────────────────────────────────────────────────── */
+function OfferRow({ offer, onAction }) {
+  const [counter, setCounter] = useState('');
+  const [busy, setBusy] = useState('');
+
+  // The seller may respond to an original PENDING offer, or to the buyer's
+  // latest COUNTERED offer. A seller counter means the buyer must respond.
+  const buyerCountered =
+    offer.status === 'COUNTERED' &&
+    String(offer.counteredBy || '').toUpperCase() === 'BUYER';
+
+  const sellerCanAct = offer.status === 'SELECTED' || buyerCountered;
+
+  const amount = Number(offer.counterAmount ?? offer.amount);
+  const minimum = Number(
+    offer.listing?.minimumPrice ??
+      offer.minimumPrice ??
+      offer.listingMinimumPrice ??
+      NaN
+  );
+
+  const submit = async (action, value) => {
+    if (busy) return;
+    setBusy(action);
+    try {
+      await onAction(offer.id, action, value);
+      if (action === 'COUNTER') setCounter('');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const counterValue = Number(counter);
+  const counterValid = Number.isFinite(counterValue) && counterValue > 0;
+  const counterBelowMinimum =
+    Number.isFinite(minimum) && counterValid && counterValue < minimum;
+
+  return (
+    <div className="offer-row">
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 8,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
+        <strong>
+          {Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB
+        </strong>
+        <span className="badge">{offer.status}</span>
+      </div>
+      <small>{offer.buyer?.name || 'Buyer'}</small>
+
+      {buyerCountered && (
+        <p className="muted" style={{ marginTop: 8 }}>
+          <strong>Buyer countered.</strong> This is the buyer's latest price. You
+          can accept it, reject the negotiation, or send another counter.
+        </p>
+      )}
+
+      {offer.status === 'COUNTERED' &&
+        String(offer.counteredBy || '').toUpperCase() === 'SELLER' && (
+          <p className="muted" style={{ marginTop: 8 }}>
+            You made the latest counter. Waiting for the buyer.
+          </p>
+        )}
+
+      {offer.status === 'PENDING' && (
+        <div className="row-actions" style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            className="btn btn-sm btn-primary"
+            disabled={Boolean(busy)}
+            onClick={() => submit('SELECT')}
+          >
+            {busy === 'SELECT' ? 'Selecting…' : 'Select buyer for deal'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm btn-light"
+            disabled={Boolean(busy)}
+            onClick={() => submit('REJECT')}
+          >
+            {busy === 'REJECT' ? 'Rejecting…' : 'Reject bid'}
+          </button>
+        </div>
+      )}
+
+      {sellerCanAct && (
+        <div className="row-actions" style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={Boolean(busy)}
+            onClick={() => submit('ACCEPT')}
+          >
+            {busy === 'ACCEPT' ? 'Accepting…' : 'Accept'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm btn-light"
+            disabled={Boolean(busy)}
+            onClick={() => submit('REJECT')}
+          >
+            {busy === 'REJECT' ? 'Rejecting…' : 'Reject'}
+          </button>
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            placeholder={
+              Number.isFinite(minimum) ? `Counter ≥ ${minimum}` : 'Counter ETB'
+            }
+            value={counter}
+            disabled={Boolean(busy)}
+            onChange={(e) => setCounter(e.target.value)}
+          />
+          <button
+            type="button"
+            className="btn btn-sm btn-light"
+            disabled={!counterValid || counterBelowMinimum || Boolean(busy)}
+            onClick={() => submit('COUNTER', counter)}
+          >
+            {busy === 'COUNTER' ? 'Sending…' : 'Counter'}
+          </button>
+        </div>
+      )}
+
+      {!sellerCanAct &&
+        offer.status === 'COUNTERED' &&
+        String(offer.counteredBy || '').toUpperCase() !== 'BUYER' && (
+          <p className="small muted" style={{ marginTop: 8 }}>
+            Waiting for the buyer to respond.
+          </p>
+        )}
+
+      {offer.status === 'ACCEPTED' && (
+        <p className="small muted" style={{ marginTop: 8 }}>
+          Agreed price: <strong>{Number(amount).toLocaleString()} ETB</strong>. The
+          order can now continue to inspection and payment.
+        </p>
+      )}
+    </div>
+  );
+}
