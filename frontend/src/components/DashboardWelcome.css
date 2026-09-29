@@ -1,0 +1,256 @@
+/* ============================================================
+   MarketBridge — DashboardWelcome
+   The personal greeting banner that tops every dashboard.
+   Dark-green gradient anchor that stands out against the
+   light page background without clashing with card surfaces.
+   ============================================================ */
+
+.dash-welcome {
+  --dw-accent:      #1e9e5a;
+  --dw-accent-2:    #0f7a44;
+  --dw-accent-soft: #ecfdf3;
+  --dw-accent-line: #c6eccf;
+
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+
+  padding: 22px 26px;
+  margin: 0 0 20px;
+
+  border-radius: 20px;
+  color: #fff;
+
+  /* Deep-green gradient with a subtle diagonal hatch — same texture
+     vocabulary as the auth left panel, keeps the composition
+     consistent across the app. */
+  background:
+    repeating-linear-gradient(
+      -52deg,
+      rgba(255, 255, 255, .035) 0px,
+      rgba(255, 255, 255, .035) 1px,
+      transparent 1px,
+      transparent 22px
+    ),
+    linear-gradient(150deg, #1e7d43 0%, #0e4b29 100%);
+
+  box-shadow:
+    0 1px 2px rgba(14, 75, 41, .06),
+    0 12px 32px rgba(14, 75, 41, .18);
+}
+
+/* Soft arc in the bottom-right, matches the auth panel motif */
+.dash-welcome::after {
+  content: '';
+  position: absolute;
+  bottom: -90px;
+  right: -90px;
+  width: 260px;
+  height: 260px;
+  border: 42px solid rgba(255, 255, 255, .06);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* ── Avatar ─────────────────────────────────────────────── */
+
+.dash-welcome-avatar {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(255, 255, 255, .14);
+  border: 2px solid rgba(255, 255, 255, .35);
+
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -.3px;
+  color: #fff;
+
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .12);
+}
+
+/* ── Body ───────────────────────────────────────────────── */
+
+.dash-welcome-body {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.dash-welcome-heading {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: clamp(18px, 2.4vw, 22px);
+  font-weight: 800;
+  letter-spacing: -.4px;
+  line-height: 1.2;
+  color: #fff;
+  margin: 0 0 4px;
+}
+
+.dash-welcome-subtitle {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, .82);
+  max-width: 60ch;
+}
+
+/* ── Badges ─────────────────────────────────────────────── */
+
+.dash-welcome-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dash-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, .14);
+  border: 1px solid rgba(255, 255, 255, .22);
+  color: rgba(255, 255, 255, .92);
+
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+
+/* Verified — light accent pill so it reads as a positive state */
+.dash-badge.dash-badge-verified {
+  background: rgba(255, 255, 255, .95);
+  border-color: transparent;
+  color: #0f7a44;
+}
+
+/* Verification pending / attention — softer, still on-brand */
+.dash-badge.dash-badge-pending {
+  background: rgba(255, 255, 255, .16);
+  border-color: rgba(255, 220, 130, .45);
+  color: #ffe7b3;
+}
+
+/* Rating — amber accent on the dark green */
+.dash-badge.dash-badge-rating {
+  background: rgba(255, 255, 255, .95);
+  border-color: transparent;
+  color: #a86f10;
+}
+
+/* ── Children slot (e.g. the RecentActivity dropdown) ───── */
+
+.dash-welcome > *:not(.dash-welcome-avatar):not(.dash-welcome-body) {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+
+/* Any button placed as a child gets a light-on-dark treatment */
+.dash-welcome > button,
+.dash-welcome > a.btn,
+.dash-welcome > [role="button"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+
+  background: rgba(255, 255, 255, .14);
+  border: 1px solid rgba(255, 255, 255, .24);
+  color: #fff;
+  font: 700 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  cursor: pointer;
+  transition: background .15s cubic-bezier(.2, .7, .3, 1),
+              border-color .15s cubic-bezier(.2, .7, .3, 1),
+              transform .12s cubic-bezier(.2, .7, .3, 1);
+}
+
+.dash-welcome > button:hover,
+.dash-welcome > a.btn:hover,
+.dash-welcome > [role="button"]:hover {
+  background: rgba(255, 255, 255, .22);
+  border-color: rgba(255, 255, 255, .36);
+  transform: translateY(-1px);
+}
+
+.dash-welcome > button:focus-visible,
+.dash-welcome > a.btn:focus-visible,
+.dash-welcome > [role="button"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .35);
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .dash-welcome {
+    padding: 18px 20px;
+    gap: 14px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .dash-welcome-avatar {
+    width: 48px;
+    height: 48px;
+    font-size: 18px;
+  }
+
+  .dash-welcome-heading { font-size: 18px; }
+  .dash-welcome-subtitle { font-size: 13px; }
+
+  /* Children (e.g. the dropdown button) drop to their own row */
+  .dash-welcome > *:not(.dash-welcome-avatar):not(.dash-welcome-body) {
+    flex: 1 1 100%;
+    align-self: stretch;
+    order: 99;
+    margin-top: 6px;
+  }
+
+  .dash-welcome > button,
+  .dash-welcome > a.btn,
+  .dash-welcome > [role="button"] {
+    width: 100%;
+    justify-content: space-between;
+    min-height: 42px;
+  }
+}
+
+@media (max-width: 420px) {
+  .dash-welcome { padding: 16px; }
+  .dash-welcome-heading { font-size: 17px; }
+  .dash-badge { font-size: 10.5px; height: 22px; padding: 0 9px; }
+}
+
+/* ── Reduced motion ─────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-welcome > button,
+  .dash-welcome > a.btn,
+  .dash-welcome > [role="button"] {
+    transition: none;
+  }
+  .dash-welcome > button:hover,
+  .dash-welcome > a.btn:hover,
+  .dash-welcome > [role="button"]:hover {
+    transform: none;
+  }
+}
