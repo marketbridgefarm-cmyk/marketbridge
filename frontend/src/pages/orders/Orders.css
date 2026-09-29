@@ -834,3 +834,45 @@
 
   .orders-page .btn-view:hover svg { transform: none; }
 }
+/* ============================================================
+   Mobile search fixes — 2026-04
+   ============================================================ */
+
+/* Icon styling — supports both wrapped and unwrapped SVG children */
+.orders-page .search > svg,
+.orders-page .search > .search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--o-muted-2);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.orders-page .search > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.orders-page .search > .search-icon > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* In column flex, flex-basis = height. Collapse it so the search
+   input doesn't force a 220px-tall gap below the tabs. */
+@media (max-width: 720px) {
+  .orders-page .search {
+    flex: 0 0 auto;
+    margin-left: 0;
+    max-width: none;
+    min-width: 0;
+  }
+}
