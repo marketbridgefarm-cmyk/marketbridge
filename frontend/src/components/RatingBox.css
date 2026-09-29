@@ -1,0 +1,226 @@
+/* ============================================================
+   MarketBridge — RatingBox + RatingStars  (components/RatingBox.css)
+   ============================================================ */
+
+/* ── Rating form (submission) ───────────────────────────── */
+
+.rating-form {
+  padding: 16px;
+  margin-bottom: 14px;
+  border: 1px solid #e5e9ef;
+  border-radius: 14px;
+  background: #fbfcfd;
+}
+
+.rating-form:last-child { margin-bottom: 0; }
+
+.rating-form > p:first-child {
+  margin: 0 0 10px;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -.15px;
+  color: #0d1b2a;
+}
+
+.rating-form .rating-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: #e2e8f0;
+  margin-bottom: 12px;
+}
+
+.rating-form .rating-stars svg { display: block; }
+
+.rating-form .rating-stars-interactive { color: #d8dee6; }
+
+.rating-form .rating-star-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 2px;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  line-height: 0;
+  border-radius: 6px;
+  transition: color .15s cubic-bezier(.2, .7, .3, 1),
+              transform .12s cubic-bezier(.2, .7, .3, 1);
+}
+
+/* Filled vs empty: Filled stars use currentColor; empty uses a soft grey */
+.rating-form .rating-stars svg[fill="currentColor"] { color: #f5a623; }
+.rating-form .rating-stars svg[fill="none"] { color: #d8dee6; }
+
+.rating-form .rating-star-btn:hover,
+.rating-form .rating-star-btn:focus-visible {
+  transform: scale(1.08);
+  outline: none;
+}
+
+.rating-form .rating-star-btn:focus-visible {
+  box-shadow: 0 0 0 3px rgba(30, 158, 90, .18);
+}
+
+.rating-form .rating-comment {
+  width: 100%;
+  min-height: 72px;
+  padding: 11px 13px;
+  margin-bottom: 10px;
+  border: 1px solid #e5e9ef;
+  border-radius: 10px;
+  background: #fff;
+  color: #0d1b2a;
+  font: 400 14.5px/1.5 var(--mb-font-body, 'DM Sans', sans-serif);
+  resize: vertical;
+  transition: border-color .18s cubic-bezier(.2, .7, .3, 1),
+              box-shadow .18s cubic-bezier(.2, .7, .3, 1);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.rating-form .rating-comment:hover { border-color: #cfd6df; }
+
+.rating-form .rating-comment:focus {
+  outline: none;
+  border-color: #1e9e5a;
+  box-shadow: 0 0 0 3px rgba(30, 158, 90, .16);
+}
+
+.rating-form .btn,
+.rating-form .btn-primary {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: none;
+  color: #fff;
+  background: linear-gradient(150deg, #1e9e5a 0%, #0f7a44 100%);
+  font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(30, 158, 90, .22);
+  transition: transform .12s cubic-bezier(.2, .7, .3, 1),
+              box-shadow .12s cubic-bezier(.2, .7, .3, 1),
+              filter .12s cubic-bezier(.2, .7, .3, 1);
+}
+
+.rating-form .btn:hover:not(:disabled),
+.rating-form .btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(30, 158, 90, .28);
+  filter: brightness(1.03);
+}
+
+.rating-form .btn:disabled,
+.rating-form .btn-primary:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.rating-form .btn:focus-visible,
+.rating-form .btn-primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(30, 158, 90, .18),
+              0 4px 12px rgba(30, 158, 90, .22);
+}
+
+/* ── Rating list (read-only history) ────────────────────── */
+
+.rating-list {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #eef1f5;
+}
+
+.rating-list h3 {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -.15px;
+  color: #0d1b2a;
+  margin: 0 0 12px;
+}
+
+.rating-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  align-items: center;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border: 1px solid #eef1f5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.rating-list-row:last-child { margin-bottom: 0; }
+
+.rating-list-row > div:first-child {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 13.5px;
+  color: #0d1b2a;
+}
+
+.rating-list-row > div:first-child strong {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-weight: 800;
+  letter-spacing: -.1px;
+}
+
+.rating-list-row > div:first-child .muted {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.rating-list-row > .rating-stars {
+  display: inline-flex;
+  gap: 2px;
+  color: #f5a623;
+  justify-self: end;
+}
+
+.rating-list-row > p.muted {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #64748b;
+  padding-left: 2px;
+}
+
+/* Read-only star color */
+.rating-stars svg[fill="currentColor"] { color: #f5a623; }
+.rating-stars svg[fill="none"] { color: #d8dee6; }
+
+/* ── Responsive ─────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .rating-form { padding: 14px; }
+
+  .rating-list-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rating-list-row > .rating-stars { justify-self: start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rating-form .rating-star-btn,
+  .rating-form .rating-comment,
+  .rating-form .btn,
+  .rating-form .btn-primary {
+    transition: none;
+  }
+
+  .rating-form .rating-star-btn:hover,
+  .rating-form .btn:hover:not(:disabled),
+  .rating-form .btn-primary:hover:not(:disabled) {
+    transform: none;
+  }
+}
