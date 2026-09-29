@@ -1,13 +1,7 @@
 /* ============================================================
    MarketBridge — OrderTimeline  (components/OrderTimeline.css)
-   Centered vertical rail with zigzag content:
-       step 1  →  content to the right
-       step 2  →  content to the left
-       step 3  →  content to the right
-       …  alternating to the last step
-   The rail segments between dots are colored by step state,
-   so progress reads as a continuous green line down to the
-   last completed step.
+   Single vertical rail on the left. Dots sit on the rail.
+   All content flows to the right. Completed segments are green.
    ============================================================ */
 
 .order-timeline {
@@ -33,9 +27,8 @@
   --ot-ease:        cubic-bezier(.2, .7, .3, 1);
 
   --ot-dot-size:    26px;
-  --ot-col-gap:     22px;
-  --ot-row-pad:     14px;
-  --ot-dot-offset:  2px;
+  --ot-col-gap:     16px;
+  --ot-row-pad:     8px;
 
   position: relative;
   list-style: none;
@@ -51,28 +44,21 @@
 .order-timeline-step {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--ot-dot-size) minmax(0, 1fr);
+  grid-template-columns: var(--ot-dot-size) minmax(0, 1fr);
   column-gap: var(--ot-col-gap);
-  padding: var(--ot-row-pad) 0;
+  padding: 0 0 22px;
   align-items: start;
 }
 
-/* ── Rail segment between this dot and the next ─────────── */
-/*
- * Drawn as a ::after on each step that runs from just below
- * the dot down into the next step's top padding. The next
- * dot's opaque background covers the small overlap so the
- * join is seamless.
- */
+/* ── Rail segment: runs from below this dot to the next dot ── */
 
 .order-timeline-step::after {
   content: '';
   position: absolute;
-  left: 50%;
-  transform: translateX(-1px);
+  left: calc(var(--ot-dot-size) / 2 - 1px);
   width: 2px;
-  top: calc(var(--ot-row-pad) + var(--ot-dot-offset) + var(--ot-dot-size));
-  bottom: calc(-1 * var(--ot-row-pad) - 6px);
+  top: var(--ot-dot-size);
+  bottom: 0;
   background: var(--ot-line);
   border-radius: 1px;
   z-index: 0;
@@ -83,13 +69,16 @@
 .order-timeline-step.is-current::after  { background: var(--ot-accent); }
 .order-timeline-step.is-recorded::after { background: var(--ot-info); }
 
-/* The last step never draws a segment below itself */
+/* Last step ends at its dot — no trailing rail */
+.order-timeline-step:last-child {
+  padding-bottom: 0;
+}
 .order-timeline-step:last-child::after { display: none; }
 
 /* ── Dot column ────────────────────────────────────────── */
 
 .order-timeline-dot {
-  grid-column: 2;
+  grid-column: 1;
   grid-row: 1;
   justify-self: center;
   align-self: start;
@@ -103,8 +92,6 @@
   align-items: center;
   justify-content: center;
   line-height: 0;
-
-  margin-top: var(--ot-dot-offset);
 }
 
 .order-timeline-dot svg { display: block; }
@@ -129,33 +116,17 @@
   50%      { transform: scale(1.08); }
 }
 
-/* ── Content column — alternates left / right ──────────── */
+/* ── Content column ────────────────────────────────────── */
 
 .order-timeline-content {
-  min-width: 0;
+  grid-column: 2;
   grid-row: 1;
+  min-width: 0;
   padding-top: 1px;
-}
-
-/* Odd steps (1st, 3rd, 5th…) → right side of the rail */
-.order-timeline-step:nth-child(odd) .order-timeline-content {
-  grid-column: 3;
   text-align: left;
 }
 
-/* Even steps (2nd, 4th, 6th…) → left side of the rail */
-.order-timeline-step:nth-child(even) .order-timeline-content {
-  grid-column: 1;
-  text-align: right;
-}
-
-/* Wide content (activity history) always uses the full
-   remaining column on its side. */
-.order-timeline-content--wide {
-  width: 100%;
-}
-
-/* ── Labels, dates, details ───────────────────────────── */
+.order-timeline-content--wide { width: 100%; }
 
 .order-timeline-label {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
@@ -192,7 +163,7 @@
 
 .order-timeline-events {
   margin: 0;
-  text-align: left; /* reset if parent is right-aligned (even steps) */
+  text-align: left;
 }
 
 .order-timeline-events-summary {
@@ -305,16 +276,12 @@
   white-space: nowrap;
 }
 
-/* ══════════════════════════════════════════════════════════
-   MOBILE — tighten the middle column, keep the zigzag
-   ══════════════════════════════════════════════════════════ */
+/* ── Responsive ────────────────────────────────────────── */
 
 @media (max-width: 640px) {
   .order-timeline {
-    --ot-dot-size:  22px;
-    --ot-col-gap:   14px;
-    --ot-row-pad:   12px;
-    --ot-dot-offset: 1px;
+    --ot-dot-size: 22px;
+    --ot-col-gap:  12px;
   }
 
   .order-timeline-dot svg {
@@ -322,18 +289,20 @@
     height: 22px;
   }
 
-  .order-timeline-label  { font-size: 13px; }
-  .order-timeline-date   { font-size: 11px; }
-  .order-timeline-detail { font-size: 12px; }
+  .order-timeline-step { padding-bottom: 18px; }
+
+  .order-timeline-label  { font-size: 13.5px; }
+  .order-timeline-date   { font-size: 11.5px; }
+  .order-timeline-detail { font-size: 12.5px; }
 
   .order-timeline-events-summary {
-    font-size: 12px;
-    padding: 7px 10px;
+    font-size: 12.5px;
+    padding: 8px 10px;
   }
 
   .order-timeline-event {
-    font-size: 11.5px;
-    padding: 6px 10px;
+    font-size: 12px;
+    padding: 7px 10px;
   }
   .order-timeline-event-time {
     margin-left: 0;
@@ -341,23 +310,7 @@
   }
 }
 
-/* ══════════════════════════════════════════════════════════
-   VERY NARROW — reduce further so labels don't wrap badly
-   ══════════════════════════════════════════════════════════ */
-
-@media (max-width: 400px) {
-  .order-timeline {
-    --ot-col-gap: 10px;
-    --ot-row-pad: 10px;
-  }
-
-  .order-timeline-label  { font-size: 12.5px; }
-  .order-timeline-detail { font-size: 11.5px; }
-}
-
-/* ══════════════════════════════════════════════════════════
-   REDUCED MOTION
-   ══════════════════════════════════════════════════════════ */
+/* ── Reduced motion ────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   .order-timeline-step.is-current .order-timeline-dot svg {
