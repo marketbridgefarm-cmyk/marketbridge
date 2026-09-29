@@ -91,7 +91,10 @@
   align-items: start;
 }
 
-.detail-page .detail-grid > section { min-width: 0; }
+.detail-page .detail-grid > section {
+  min-width: 0;
+  width: 100%;
+}
 
 .detail-page .detail-grid > aside {
   position: sticky;
@@ -99,19 +102,23 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
 
 /* ── Media panel ───────────────────────────────────────── */
 
 .detail-page .detail-media {
+  width: 100%;
+  max-width: 100%;
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border-radius: var(--d-radius);
   border: 1px solid var(--d-line);
   background: linear-gradient(180deg, #f3f8f4, #eaf1ec);
-  margin-bottom: 10px;
+  margin: 0 auto 10px;
   box-shadow: var(--d-shadow);
   position: relative;
+  box-sizing: border-box;
 }
 
 .detail-page .detail-media::after {
@@ -128,7 +135,9 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center center;
   display: block;
+  margin: 0 auto;
 }
 
 /* Placeholder */
@@ -142,6 +151,7 @@
   color: var(--d-muted);
   font: 700 18px/1.4 var(--mb-font-head, Manrope, sans-serif);
   text-align: center;
+  word-break: break-word;
   background:
     repeating-linear-gradient(
       45deg,
@@ -539,7 +549,7 @@
 
 @media (max-width: 980px) {
   .detail-page .detail-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .detail-page .detail-grid > aside {
@@ -548,14 +558,73 @@
 }
 
 @media (max-width: 640px) {
-  .detail-page .container-wide { padding-top: 20px; padding-bottom: 48px; }
+  .detail-page .container-wide {
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: 20px;
+    padding-bottom: 48px;
+  }
 
   .detail-page .card { padding: 18px; }
 
   .detail-page .card.detail-content { padding: 20px 18px 16px; }
 
-  .detail-page h1 { font-size: 20px; letter-spacing: -.3px; }
+  .detail-page h1 {
+    font-size: 20px;
+    letter-spacing: -.3px;
+  }
 
+  /* ── Small-screen safety net ─────────────────────────── */
+  /* Guarantee no horizontal overflow from the grid or its children */
+  .detail-page .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-page .detail-grid > section,
+  .detail-page .detail-grid > aside {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Media panel — prevent aspect-ratio box from being pushed off-center
+     by a flex/grid parent that isn't shrinking. Force it to fill the
+     column and center its own content. */
+  .detail-page .detail-media {
+    width: 100%;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+
+  .detail-page .detail-media img,
+  .detail-page .detail-media video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center center;
+    margin: 0 auto;
+    display: block;
+  }
+
+  /* Keep long unbroken titles from stretching the aspect-ratio box */
+  .detail-page .media-placeholder {
+    padding: 16px;
+    font-size: 16px;
+    word-break: break-word;
+  }
+
+  /* Thumbnail strip — keep it centered instead of hanging left */
+  .detail-page .detail-media-thumbs {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* Fact strip: stack price on its own row, date + seller share second row */
   .detail-page .detail-facts {
     grid-template-columns: 1fr 1fr;
   }
