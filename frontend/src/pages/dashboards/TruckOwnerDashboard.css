@@ -2,6 +2,14 @@
    MarketBridge — Truck Owner Dashboard
    Fleet management, open transport requests, active jobs.
    Scoped under .sd-dashboard.
+
+   Every card follows the Orders card system:
+     sd-card-head    — eyebrow (green dash) + title on the left,
+                       party + avatar on the right
+     sd-card-block   — content title + tiny hairline
+     content
+     sd-card-actions — action row
+   2-column grid on tablet / desktop, single column on phones.
    ============================================================ */
 
 .sd-dashboard {
@@ -231,64 +239,49 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   STATS
+   STATS  (same look as the Orders stats strip)
    ══════════════════════════════════════════════════════════ */
 
 .sd-dashboard .sd-stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
+  gap: 10px;
   margin: 22px 0 0;
 }
 
 .sd-dashboard .sd-stat {
-  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 18px 20px;
+  gap: 4px;
+  padding: 14px 16px;
   border: 1px solid var(--sd-line);
-  border-radius: var(--sd-radius-sm);
+  border-radius: 14px;
   background: #fff;
-  overflow: hidden;
+  box-shadow: var(--sd-shadow-sm);
   transition: border-color .18s var(--sd-ease),
-              transform .18s var(--sd-ease),
-              box-shadow .18s var(--sd-ease);
-}
-.sd-dashboard .sd-stat::after {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: var(--sd-accent);
-  opacity: .9;
+              transform .18s var(--sd-ease);
 }
 .sd-dashboard .sd-stat:hover {
   border-color: rgba(30, 158, 90, .3);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(15, 30, 45, .08);
+  transform: translateY(-1px);
 }
-.sd-dashboard .sd-stat:nth-child(2)::after { background: var(--sd-info); }
-.sd-dashboard .sd-stat:nth-child(3)::after { background: var(--sd-gold); }
-.sd-dashboard .sd-stat:nth-child(4)::after { background: var(--sd-accent-2); }
-.sd-dashboard .sd-stat:nth-child(5)::after { background: #6b46c1; }
 
 .sd-dashboard .sd-stat span {
   font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--sd-muted);
-  padding-top: 4px;
 }
 .sd-dashboard .sd-stat b {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 800;
-  letter-spacing: -.6px;
+  letter-spacing: -.5px;
   line-height: 1;
   color: var(--sd-ink);
   font-variant-numeric: tabular-nums;
 }
+.sd-dashboard .sd-stat:first-child b { color: var(--sd-accent-2); }
 
 /* ══════════════════════════════════════════════════════════
    TABS
@@ -444,86 +437,400 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   CARD GRID + BASE CARD
+   CARD GRID — 2 columns on tablet / desktop, 1 on phones
    ══════════════════════════════════════════════════════════ */
 
 .sd-dashboard .sd-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
 }
+
+@media (min-width: 760px) {
+  .sd-dashboard .sd-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   CARD  (Orders card system)
+   ══════════════════════════════════════════════════════════ */
 
 .sd-dashboard .sd-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 20px 22px;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 22px 24px;
   border: 1px solid var(--sd-line);
   border-radius: var(--sd-radius);
   background-color: #fff;
-  background-image:
-    radial-gradient(120% 100% at 0% 0%,  var(--sd-tint-a) 0%, transparent 55%),
-    radial-gradient(90%  90%  at 100% 100%, var(--sd-tint-b) 0%, transparent 55%);
-  background-repeat: no-repeat;
   box-shadow: var(--sd-shadow);
-  transition: border-color .18s var(--sd-ease),
-              box-shadow .18s var(--sd-ease),
-              transform .18s var(--sd-ease);
-  overflow: hidden;
+  transition: border-color .2s var(--sd-ease),
+              box-shadow .2s var(--sd-ease),
+              transform .2s var(--sd-ease);
 }
 .sd-dashboard .sd-card:hover {
-  border-color: rgba(30, 158, 90, .25);
+  border-color: rgba(30, 158, 90, .28);
   box-shadow: var(--sd-shadow-hi);
   transform: translateY(-2px);
 }
 
-.sd-dashboard .sd-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 20px;
-  bottom: 20px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: linear-gradient(180deg, var(--sd-accent) 0%, var(--sd-accent-2) 100%);
-  opacity: .85;
-}
-
-.sd-dashboard .sd-card h3 {
-  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: -.2px;
-  color: var(--sd-ink);
-  line-height: 1.3;
-  margin: 0 0 8px;
-  overflow-wrap: anywhere;
-}
-
 .sd-dashboard .sd-card p {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 13.5px;
   line-height: 1.55;
   color: var(--sd-ink-soft);
 }
-.sd-dashboard .sd-card p.sd-muted { color: var(--sd-muted); }
-.sd-dashboard .sd-card p:last-child { margin-bottom: 0; }
-
 .sd-dashboard .sd-card strong {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
   font-weight: 800;
   color: var(--sd-ink);
 }
 
-/* Empty state inside a `.sd-cards` grid */
-.sd-dashboard .sd-cards > .sd-panel {
-  grid-column: 1 / -1;
-  margin-bottom: 0;
+/* ── Card head — eyebrow + title left, party + avatar right ── */
+
+.sd-dashboard .sd-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 12px;
+  width: 100%;
+  padding: 0 0 16px;
+  margin: 0 0 16px;
+  border-bottom: 1px solid var(--sd-line);
+}
+
+.sd-dashboard .sd-card-head-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  grid-column: 1;
+}
+
+.sd-dashboard .sd-card .sd-eyebrow {
+  margin: 0 0 6px;
+}
+.sd-dashboard .sd-card .sd-eyebrow::before { flex: 0 0 18px; }
+.sd-dashboard .sd-card .sd-eyebrow.is-open { color: var(--sd-info); }
+
+.sd-dashboard .sd-card .sd-card-title {
+  margin: 0 0 4px;
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.3px;
+  line-height: 1.25;
+  color: var(--sd-ink);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.sd-dashboard .sd-card .sd-card-sub {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--sd-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Party cluster at the far right of the header */
+.sd-dashboard .sd-card-head-party {
+  grid-column: 2;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sd-dashboard .sd-party-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  gap: 2px;
+  min-width: 0;
+  max-width: 160px;
+}
+
+.sd-dashboard .sd-party-role {
+  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--sd-muted);
+}
+
+.sd-dashboard .sd-party-name {
+  font: 700 13.5px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
+  color: var(--sd-ink);
+  letter-spacing: -.1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.sd-dashboard .sd-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: -.2px;
+  flex: 0 0 auto;
+}
+.sd-dashboard .sd-avatar.tone-success { background: var(--sd-accent-soft); color: var(--sd-accent-2); }
+.sd-dashboard .sd-avatar.tone-info    { background: var(--sd-info-soft);   color: var(--sd-info); }
+.sd-dashboard .sd-avatar.tone-gold    { background: var(--sd-gold-soft);   color: var(--sd-gold); }
+.sd-dashboard .sd-avatar.tone-danger  { background: var(--sd-danger-soft); color: var(--sd-danger); }
+.sd-dashboard .sd-avatar.tone-muted   { background: var(--sd-line-soft);   color: var(--sd-muted); }
+
+/* ── Card body ──────────────────────────────────────────── */
+
+.sd-dashboard .sd-card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  align-self: stretch;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+/* ── Card block — content title with tiny hairline ─────── */
+
+.sd-dashboard .sd-card-block {
+  width: 100%;
+  align-self: stretch;
+  margin: 0 0 18px;
+}
+.sd-dashboard .sd-card-block:last-of-type { margin-bottom: 0; }
+
+.sd-dashboard .sd-card-block-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 0 0 10px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid var(--sd-line-soft);
+}
+
+.sd-dashboard .sd-card-block-title h4 {
+  margin: 0;
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -.1px;
+  line-height: 1.3;
+  color: var(--sd-ink);
+}
+
+.sd-dashboard .sd-card-block-note {
+  font: 600 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
+  color: var(--sd-muted);
+  flex: 0 0 auto;
+}
+
+.sd-dashboard .sd-card-block-body { display: block; }
+
+/* ── Card footer — action row ───────────────────────────── */
+
+.sd-dashboard .sd-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+  align-self: stretch;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--sd-line-soft);
+}
+.sd-dashboard .sd-card-actions .sd-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 38px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   STATUS PILLS
+   ══════════════════════════════════════════════════════════ */
+
+.sd-dashboard .sd-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sd-dashboard .sd-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: var(--sd-line-soft);
+  color: var(--sd-ink-soft);
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.sd-dashboard .sd-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+  opacity: .85;
+}
+.sd-dashboard .sd-pill.tone-success {
+  background: var(--sd-accent-soft);
+  border-color: var(--sd-accent-line);
+  color: var(--sd-accent-ink);
+}
+.sd-dashboard .sd-pill.tone-info {
+  background: var(--sd-info-soft);
+  border-color: var(--sd-info-line);
+  color: var(--sd-info);
+}
+.sd-dashboard .sd-pill.tone-gold {
+  background: var(--sd-gold-soft);
+  border-color: var(--sd-gold-line);
+  color: var(--sd-gold);
+}
+.sd-dashboard .sd-pill.tone-danger {
+  background: var(--sd-danger-soft);
+  border-color: var(--sd-danger-line);
+  color: var(--sd-danger);
+}
+.sd-dashboard .sd-pill.tone-muted {
+  background: var(--sd-line-soft);
+  border-color: var(--sd-line);
+  color: var(--sd-muted);
+}
+
+/* ══════════════════════════════════════════════════════════
+   PROGRESS TIMELINE
+   ══════════════════════════════════════════════════════════ */
+
+.sd-dashboard .sd-progress {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+  margin: 16px 0 0;
+  padding: 0 4px;
+}
+
+.sd-dashboard .sd-progress-step {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.sd-dashboard .sd-progress-step::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  right: 50%;
+  left: -50%;
+  height: 2px;
+  background: var(--sd-line);
+  z-index: 0;
+}
+.sd-dashboard .sd-progress-step:first-child::before { display: none; }
+.sd-dashboard .sd-progress-step.done::before,
+.sd-dashboard .sd-progress-step.current::before {
+  background: var(--sd-accent);
+}
+
+.sd-dashboard .sd-progress-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--sd-line);
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .2s var(--sd-ease);
+}
+.sd-dashboard .sd-progress-dot::after {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.sd-dashboard .sd-progress-step.done .sd-progress-dot {
+  background: var(--sd-accent);
+  border-color: var(--sd-accent);
+}
+.sd-dashboard .sd-progress-step.done .sd-progress-dot::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M3 8.5l3 3 7-7' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.sd-dashboard .sd-progress-step.current .sd-progress-dot {
+  background: #fff;
+  border-color: var(--sd-accent);
+  box-shadow: 0 0 0 4px rgba(30, 158, 90, .16);
+}
+.sd-dashboard .sd-progress-step.current .sd-progress-dot::after {
+  background: var(--sd-accent);
+}
+
+.sd-dashboard .sd-progress-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--sd-muted-2);
+  letter-spacing: .01em;
+  line-height: 1.3;
+  max-width: 90px;
+}
+.sd-dashboard .sd-progress-step.done .sd-progress-label { color: var(--sd-ink-soft); }
+.sd-dashboard .sd-progress-step.current .sd-progress-label {
+  color: var(--sd-accent-2);
+  font-weight: 700;
 }
 
 /* ══════════════════════════════════════════════════════════
    EMPTY STATES
    ══════════════════════════════════════════════════════════ */
+
+.sd-dashboard .sd-cards > .sd-panel {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
 
 .sd-dashboard .sd-empty-state {
   grid-column: 1 / -1;
@@ -566,21 +873,8 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   TRUCK CARDS
+   TRUCK CARD CONTENT
    ══════════════════════════════════════════════════════════ */
-
-.sd-dashboard .sd-truck-card {
-  padding: 18px 20px 16px 22px;
-}
-
-.sd-dashboard .sd-truck-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.sd-dashboard .sd-truck-head h3 { margin: 0; }
 
 .sd-dashboard .sd-truck-facts {
   display: grid;
@@ -590,7 +884,6 @@
   border: 1px solid var(--sd-line);
   border-radius: 12px;
   background: var(--sd-surface);
-  margin-bottom: 14px;
 }
 .sd-dashboard .sd-truck-facts > div {
   display: flex;
@@ -613,47 +906,29 @@
   overflow-wrap: anywhere;
 }
 
-.sd-dashboard .sd-truck-actions {
-  display: flex;
+/* Availability buttons: three equal segments, current one highlighted */
+.sd-dashboard .sd-truck-card .sd-card-actions {
+  flex-wrap: nowrap;
   gap: 6px;
-  flex-wrap: wrap;
-  padding-top: 12px;
-  border-top: 1px solid var(--sd-line-soft);
 }
-.sd-dashboard .sd-truck-actions .sd-btn {
-  flex: 1 1 auto;
-  min-height: 34px;
-  padding: 0 12px;
+.sd-dashboard .sd-truck-card .sd-card-actions .sd-btn {
+  flex: 1 1 0;
+  min-height: 36px;
+  padding: 0 10px;
   font-size: 12.5px;
   border-radius: 8px;
 }
-/* The active state button is shown as disabled but with an accent fill
-   so the current availability reads at a glance. */
-.sd-dashboard .sd-truck-actions .sd-btn:disabled {
+.sd-dashboard .sd-truck-card .sd-card-actions .sd-btn:disabled {
   opacity: 1;
   cursor: default;
   background: var(--sd-accent-soft);
   border-color: var(--sd-accent-line);
   color: var(--sd-accent-ink);
-  font-weight: 700;
 }
 
 /* ══════════════════════════════════════════════════════════
-   JOB CARDS
+   JOB CARD CONTENT
    ══════════════════════════════════════════════════════════ */
-
-.sd-dashboard .sd-job-card {
-  padding: 20px 22px 18px 24px;
-}
-
-.sd-dashboard .sd-job-card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.sd-dashboard .sd-job-card-head h3 { margin: 0; }
 
 /* Route strip: pickup → destination */
 .sd-dashboard .sd-job-route {
@@ -665,7 +940,6 @@
   border: 1px solid var(--sd-line);
   border-radius: 12px;
   background: var(--sd-surface);
-  margin-bottom: 14px;
 }
 
 .sd-dashboard .sd-job-endpoint {
@@ -703,7 +977,6 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 12px;
-  margin-bottom: 14px;
 }
 .sd-dashboard .sd-job-meta-item {
   display: flex;
@@ -728,10 +1001,10 @@
 
 .sd-dashboard .sd-job-requirements {
   padding: 10px 12px;
+  margin-top: 14px;
   border-radius: 10px;
   background: var(--sd-gold-soft);
   border: 1px solid var(--sd-gold-line);
-  margin-bottom: 14px;
 }
 .sd-dashboard .sd-job-requirements-label {
   display: block;
@@ -755,20 +1028,6 @@
   border: 1px solid var(--sd-accent-line);
   color: var(--sd-accent-ink);
   font: 600 13px/1.5 var(--mb-font-body, 'DM Sans', sans-serif);
-  margin-bottom: 14px;
-}
-
-.sd-dashboard .sd-job-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding-top: 14px;
-  border-top: 1px solid var(--sd-line-soft);
-}
-.sd-dashboard .sd-job-footer .sd-btn {
-  flex: 1 1 auto;
-  min-width: 0;
 }
 
 .sd-dashboard .sd-job-actions {
@@ -777,7 +1036,7 @@
 
 .sd-dashboard .sd-job-note {
   width: 100%;
-  margin: 10px 0 0;
+  margin: 2px 0 0;
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--sd-muted);
@@ -838,7 +1097,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   BADGES
+   BADGES  (completed-trips table)
    ══════════════════════════════════════════════════════════ */
 
 .sd-dashboard .sd-badge {
@@ -1081,10 +1340,8 @@
 
   .sd-dashboard .sd-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
     margin: 16px 0 0;
   }
-  .sd-dashboard .sd-stat b { font-size: 22px; }
 
   .sd-dashboard .sd-tabs {
     display: flex;
@@ -1106,10 +1363,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .sd-dashboard .sd-cards {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-  }
   .sd-dashboard .sd-card { padding: 18px; }
 
   .sd-dashboard .sd-truck-facts {
@@ -1132,11 +1385,12 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .sd-dashboard .sd-job-footer {
+  /* Job cards: buttons stack full width (like the Orders "View order" button) */
+  .sd-dashboard .sd-job-card .sd-card-actions {
     flex-direction: column;
     align-items: stretch;
   }
-  .sd-dashboard .sd-job-footer .sd-btn {
+  .sd-dashboard .sd-job-card .sd-card-actions .sd-btn {
     width: 100%;
   }
 
@@ -1233,7 +1487,23 @@
   }
   .sd-dashboard .sd-stat b { font-size: 20px; }
 
-  .sd-dashboard .sd-card h3 { font-size: 15px; }
+  .sd-dashboard .sd-card-head { column-gap: 8px; }
+  .sd-dashboard .sd-card-head-party { gap: 8px; }
+  .sd-dashboard .sd-party-info { max-width: 120px; }
+  .sd-dashboard .sd-party-name { font-size: 12.5px; }
+
+  .sd-dashboard .sd-avatar {
+    width: 40px;
+    height: 40px;
+    font-size: 13px;
+    border-radius: 11px;
+  }
+
+  .sd-dashboard .sd-card .sd-card-title { font-size: 16px; }
+
+  .sd-dashboard .sd-progress-label { display: none; }
+  .sd-dashboard .sd-progress-step  { gap: 0; }
+  .sd-dashboard .sd-progress       { margin: 12px 0 0; }
 
   .sd-dashboard .sd-tab { font-size: 12px; padding: 9px 10px; }
 
@@ -1252,6 +1522,7 @@
   .sd-dashboard .sd-tab,
   .sd-dashboard .sd-stat,
   .sd-dashboard .sd-card,
+  .sd-dashboard .sd-progress-dot,
   .sd-dashboard input,
   .sd-dashboard select,
   .sd-dashboard textarea {
