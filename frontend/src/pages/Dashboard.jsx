@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import RecentActivity from '../components/RecentActivity.jsx';
 import MessageThread from '../components/MessageThread.jsx';
-
+import './dashboards/Dashboard.css';
 // ============================================================================
 // UNIFIED DASHBOARD
 // ============================================================================
