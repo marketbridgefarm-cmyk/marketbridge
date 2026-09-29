@@ -1,72 +1,77 @@
 /* ============================================================
-   MarketBridge — Collapsible  (components/Collapsible.css)
-   Hardened: overrides browser-default button rendering on
-   every platform, plus any global `button { ... }` rules.
+   MarketBridge — Collapsible  (src/components/Collapsible.css)
    ============================================================ */
 
+/* Wrapper — extends .card but removes its padding so the header
+   and body can own their own spacing. */
 .collapsible-card {
-  padding: 0;
+  padding: 0 !important;
   overflow: hidden;
 }
 
-/* Specificity note: this selector is `.collapsible-card > .collapsible-header`
-   (0-2-0), which beats a plain `button` (0-0-1) and `.card button` (0-1-1).
-   `appearance: none` removes the OS/browser-native chrome on iOS Safari
-   and Android Chrome; `box-shadow: none` clears the elevation shadow
-   Android Chrome adds by default. */
+/* Header — a full-width button. Every property here is written
+   with !important because:
+     - Android Chrome gives buttons a native grey gradient
+     - iOS Safari gives buttons an implicit border-radius
+     - Android Chrome adds a default elevation box-shadow
+     - Some global stylesheets add their own `button { ... }` rules
+   .collapsible-header is a unique class, so !important only affects
+   this button, never anything else on the page. */
 .collapsible-card > .collapsible-header {
-  appearance: none;
-  -webkit-appearance: none;
+  appearance: none !important;
+  -webkit-appearance: none !important;
 
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
 
-  width: 100%;
-  margin: 0;
-  padding: 20px 22px;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 20px 22px !important;
 
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  color: inherit !important;
+  text-align: left !important;
 
-  font: inherit;
-  font-weight: inherit;
-  letter-spacing: inherit;
+  font: inherit !important;
+  font-weight: inherit !important;
+  letter-spacing: inherit !important;
+  line-height: inherit !important;
 
-  box-shadow: none;
-  cursor: pointer;
+  box-shadow: none !important;
+  outline: none;
+  cursor: pointer !important;
 
   transition: background .18s cubic-bezier(.2, .7, .3, 1);
 }
 
 .collapsible-card > .collapsible-header:hover {
-  background: #f6f8fa;
+  background: #f6f8fa !important;
 }
 
 .collapsible-card > .collapsible-header:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(30, 158, 90, .18);
-  border-radius: 20px 20px 0 0;
+  box-shadow: 0 0 0 3px rgba(30, 158, 90, .18) !important;
 }
 
-/* Header text (title + optional eyebrow/description) */
+/* Header text */
 .collapsible-header-text {
   min-width: 0;
   flex: 1 1 auto;
 }
 
 .collapsible-header-text h2 {
-  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -.3px;
-  color: #0d1b2a;
-  margin: 0;
-  line-height: 1.25;
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif) !important;
+  font-size: 18px !important;
+  font-weight: 800 !important;
+  letter-spacing: -.3px !important;
+  color: #0d1b2a !important;
+  margin: 0 !important;
+  line-height: 1.25 !important;
 }
 
 .collapsible-header-text .eyebrow {
@@ -94,7 +99,7 @@
   line-height: 1.55;
 }
 
-/* Header right side (summary chip + chevron) */
+/* Header right side */
 .collapsible-header-side {
   display: flex;
   align-items: center;
@@ -110,7 +115,7 @@
   letter-spacing: 0;
 }
 
-/* Chevron chip */
+/* Chevron chip — rotates 180° when the card is open */
 .collapsible-chevron {
   display: inline-flex;
   align-items: center;
@@ -145,22 +150,13 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Fallback: neutralize any inherited `.card button` rules when the
-   collapsible sits inside another card. */
-.card .collapsible-header {
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-}
+/* ── Reduced motion ─────────────────────────────────────── */
 
-/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .collapsible-card > .collapsible-header,
   .collapsible-chevron,
   .collapsible-body {
-    transition: none;
-    animation: none;
+    transition: none !important;
+    animation: none !important;
   }
 }
