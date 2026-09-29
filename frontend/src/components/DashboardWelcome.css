@@ -218,26 +218,60 @@
   .dash-welcome-subtitle { font-size: 13px; }
 
   /* Children (e.g. the dropdown button) drop to their own row */
-  .dash-welcome > *:not(.dash-welcome-avatar):not(.dash-welcome-body) {
-    flex: 1 1 100%;
-    align-self: stretch;
-    order: 99;
-    margin-top: 6px;
-  }
+/* ── Children slot (e.g. the RecentActivity dropdown) ───── */
 
-  .dash-welcome > button,
-  .dash-welcome > a.btn,
-  .dash-welcome > [role="button"] {
-    width: 100%;
-    justify-content: space-between;
-    min-height: 42px;
-  }
+.dash-welcome > *:not(.dash-welcome-avatar):not(.dash-welcome-body) {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  align-self: flex-start;
 }
 
-@media (max-width: 420px) {
-  .dash-welcome { padding: 16px; }
-  .dash-welcome-heading { font-size: 17px; }
-  .dash-badge { font-size: 10.5px; height: 22px; padding: 0 9px; }
+/* Any button or trigger inside the banner — including ones
+   rendered by child components like RecentActivity — gets the
+   ghost-on-dark treatment. Uses a descendant selector, not a
+   direct-child selector, so it reaches through component wrappers. */
+.dash-welcome button,
+.dash-welcome a.btn,
+.dash-welcome [role="button"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+
+  background: rgba(255, 255, 255, .14) !important;
+  border: 1px solid rgba(255, 255, 255, .24) !important;
+  color: #fff !important;
+  font: 700 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  cursor: pointer;
+  box-shadow: none;
+  transition: background .15s cubic-bezier(.2, .7, .3, 1),
+              border-color .15s cubic-bezier(.2, .7, .3, 1),
+              transform .12s cubic-bezier(.2, .7, .3, 1);
+}
+
+.dash-welcome button:hover,
+.dash-welcome a.btn:hover,
+.dash-welcome [role="button"]:hover {
+  background: rgba(255, 255, 255, .22) !important;
+  border-color: rgba(255, 255, 255, .36) !important;
+  transform: translateY(-1px);
+}
+
+.dash-welcome button *,
+.dash-welcome a.btn *,
+.dash-welcome [role="button"] * {
+  /* Force any inner text/spans to white too */
+  color: inherit !important;
+}
+
+.dash-welcome button:focus-visible,
+.dash-welcome a.btn:focus-visible,
+.dash-welcome [role="button"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .35) !important;
 }
 
 /* ── Reduced motion ─────────────────────────────────────── */
