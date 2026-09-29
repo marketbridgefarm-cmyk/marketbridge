@@ -933,16 +933,13 @@
    JOB CARD CONTENT
    ══════════════════════════════════════════════════════════ */
 
-/* Route strip: pickup → destination */
+/* Route strip: pickup → destination. Changed to remove box styling. */
 .sd-dashboard .sd-job-route {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 12px;
   align-items: center;
-  padding: 14px 16px;
-  border: 1px solid var(--sd-line);
-  border-radius: 12px;
-  background: var(--sd-surface);
+  /* Box styling removed (border, background, padding, border-radius) */
 }
 
 .sd-dashboard .sd-job-endpoint {
@@ -976,7 +973,7 @@
   opacity: .8;
 }
 
-/* Changed: Job meta items are now typed horizontally */
+/* Changed: Job meta items are now typed horizontally instead of a grid */
 .sd-dashboard .sd-job-meta {
   display: flex;
   flex-wrap: wrap;
@@ -984,6 +981,7 @@
 }
 .sd-dashboard .sd-job-meta-item {
   display: flex;
+  flex-direction: row; /* Changed from column to row */
   align-items: center;
   gap: 8px;
 }
