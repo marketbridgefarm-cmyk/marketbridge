@@ -1,210 +1,166 @@
 /* ============================================================
    MarketBridge — Collapsible  (components/Collapsible.css)
-   Shared disclosure wrapper used by RatingBox and MessageThread.
+   Hardened: overrides browser-default button rendering on
+   every platform, plus any global `button { ... }` rules.
    ============================================================ */
 
-.collapsible {
-  /* ── Local tokens ─────────────────────────────────────── */
-  --c-accent:      #1e9e5a;
-  --c-accent-2:    #0f7a44;
-  --c-accent-ink:  #12734a;
-  --c-accent-soft: #ecfdf3;
-  --c-accent-line: #c6eccf;
-
-  --c-ink:         #0d1b2a;
-  --c-ink-soft:    #2c3a4a;
-  --c-muted:       #64748b;
-  --c-muted-2:     #94a3b8;
-
-  --c-card:        #ffffff;
-  --c-line:        #e5e9ef;
-  --c-line-soft:   #eef1f5;
-
-  --c-radius:      20px;
-  --c-shadow:      0 1px 2px rgba(15, 30, 45, .04),
-                   0 8px 24px rgba(15, 30, 45, .05);
-  --c-ring:        0 0 0 3px rgba(30, 158, 90, .18);
-  --c-ease:        cubic-bezier(.2, .7, .3, 1);
-
-  margin-bottom: 16px;
-  border: 1px solid var(--c-line);
-  border-radius: var(--c-radius);
-  background: var(--c-card);
-  box-shadow: var(--c-shadow);
+.collapsible-card {
+  padding: 0;
   overflow: hidden;
 }
 
-.collapsible:last-child { margin-bottom: 0; }
+/* Specificity note: this selector is `.collapsible-card > .collapsible-header`
+   (0-2-0), which beats a plain `button` (0-0-1) and `.card button` (0-1-1).
+   `appearance: none` removes the OS/browser-native chrome on iOS Safari
+   and Android Chrome; `box-shadow: none` clears the elevation shadow
+   Android Chrome adds by default. */
+.collapsible-card > .collapsible-header {
+  appearance: none;
+  -webkit-appearance: none;
 
-/* ── <details>/<summary> variant ────────────────────────── */
-
-.collapsible > summary,
-.collapsible summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 20px 22px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
+  gap: 16px;
+
+  width: 100%;
+  margin: 0;
+  padding: 20px 22px;
+
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+
+  box-shadow: none;
+  cursor: pointer;
+
+  transition: background .18s cubic-bezier(.2, .7, .3, 1);
+}
+
+.collapsible-card > .collapsible-header:hover {
+  background: #f6f8fa;
+}
+
+.collapsible-card > .collapsible-header:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(30, 158, 90, .18);
+  border-radius: 20px 20px 0 0;
+}
+
+/* Header text (title + optional eyebrow/description) */
+.collapsible-header-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.collapsible-header-text h2 {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
   font-size: 18px;
   font-weight: 800;
   letter-spacing: -.3px;
-  color: var(--c-ink);
-  user-select: none;
-  transition: background .15s var(--c-ease);
+  color: #0d1b2a;
+  margin: 0;
+  line-height: 1.25;
 }
 
-.collapsible > summary::-webkit-details-marker,
-.collapsible > summary::marker { display: none; }
-
-.collapsible > summary:hover { background: var(--c-line-soft); }
-
-.collapsible > summary:focus-visible {
-  outline: none;
-  box-shadow: var(--c-ring);
-  border-radius: var(--c-radius) var(--c-radius) 0 0;
+.collapsible-header-text .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #12734a;
+  font: 700 11px/1 'DM Sans', sans-serif;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
 }
 
-/* Rotating chevron */
-.collapsible > summary::after {
+.collapsible-header-text .eyebrow::before {
   content: '';
-  flex: 0 0 10px;
-  width: 10px;
-  height: 10px;
-  border-right: 2px solid var(--c-muted);
-  border-bottom: 2px solid var(--c-muted);
-  transform: rotate(-45deg);
-  transition: transform .2s var(--c-ease);
-  margin-left: auto;
-  order: 2;
+  flex: 0 0 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
 }
 
-.collapsible[open] > summary::after {
-  transform: rotate(45deg);
+.collapsible-header-text .muted {
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
-/* Summary content — title + optional count bubble */
-.collapsible > summary .collapsible-title,
-.collapsible > summary > span:first-child {
-  flex: 1 1 auto;
-  min-width: 0;
+/* Header right side (summary chip + chevron) */
+.collapsible-header-side {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
 }
 
-.collapsible > summary .muted {
-  color: var(--c-muted);
-  font-family: var(--mb-font-body, 'DM Sans', sans-serif);
+.collapsible-header-side .muted {
+  color: #64748b;
+  font-family: 'DM Sans', sans-serif;
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0;
 }
 
-/* Body */
-.collapsible > .collapsible-body,
-.collapsible > :not(summary) {
-  padding: 0 22px 22px;
-}
-
-/* ── Button-based variant (if Collapsible uses a <button> header) ── */
-
-.collapsible > button.collapsible-toggle,
-.collapsible > .collapsible-toggle {
-  appearance: none;
-  display: flex;
+/* Chevron chip */
+.collapsible-chevron {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  padding: 20px 22px;
-  border: none;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #eef1f5;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1;
+  flex: 0 0 auto;
+  transition: transform .22s cubic-bezier(.2, .7, .3, 1),
+              background .18s cubic-bezier(.2, .7, .3, 1),
+              color .18s cubic-bezier(.2, .7, .3, 1);
+}
+
+.collapsible-card.is-open .collapsible-chevron {
+  transform: rotate(180deg);
+  background: #ecfdf3;
+  color: #12734a;
+}
+
+/* Body */
+.collapsible-body {
+  padding: 4px 22px 22px;
+  animation: collapsible-fade-in .18s cubic-bezier(.2, .7, .3, 1);
+}
+
+@keyframes collapsible-fade-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Fallback: neutralize any inherited `.card button` rules when the
+   collapsible sits inside another card. */
+.card .collapsible-header {
+  appearance: none;
+  -webkit-appearance: none;
   background: transparent;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -.3px;
-  color: var(--c-ink);
-  cursor: pointer;
-  text-align: left;
-  transition: background .15s var(--c-ease);
+  border: 0;
+  box-shadow: none;
 }
 
-.collapsible > button.collapsible-toggle:hover,
-.collapsible > .collapsible-toggle:hover {
-  background: var(--c-line-soft);
-}
-
-.collapsible > button.collapsible-toggle:focus-visible,
-.collapsible > .collapsible-toggle:focus-visible {
-  outline: none;
-  box-shadow: var(--c-ring);
-}
-
-/* ── Headings inside Collapsible (fallback) ─────────────── */
-
-.collapsible h2,
-.collapsible h3 {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  color: var(--c-ink);
-  letter-spacing: -.3px;
-  margin: 0 0 12px;
-}
-
-.collapsible h2 { font-size: 18px; font-weight: 800; }
-.collapsible h3 { font-size: 15px; font-weight: 800; letter-spacing: -.15px; margin-top: 18px; }
-
-.collapsible h3:first-child { margin-top: 0; }
-
-/* ── Neutralize any lingering fieldset/legend styling ───── */
-
-.collapsible fieldset,
-.collapsible legend {
-  border: none;
-  padding: 0;
-  margin: 0;
-}
-
-.collapsible legend {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -.3px;
-  color: var(--c-ink);
-  margin-bottom: 14px;
-}
-
-/* ── Shared helpers ─────────────────────────────────────── */
-
-.collapsible .muted {
-  color: var(--c-muted);
-  font-size: 14px;
-  line-height: 1.55;
-}
-
-.collapsible .alert {
-  padding: 12px 14px;
-  margin: 12px 0;
-  border-radius: 10px;
-  font-size: 14px;
-  line-height: 1.45;
-  background: var(--c-line-soft);
-  color: var(--c-ink-soft);
-}
-
-.collapsible .alert.error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b42318;
-}
-
-.collapsible .small { font-size: 13px; line-height: 1.5; }
-
-/* ── Reduced motion ─────────────────────────────────────── */
-
+/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .collapsible > summary,
-  .collapsible > summary::after,
-  .collapsible > button.collapsible-toggle {
+  .collapsible-card > .collapsible-header,
+  .collapsible-chevron,
+  .collapsible-body {
     transition: none;
+    animation: none;
   }
 }
