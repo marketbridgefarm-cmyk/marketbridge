@@ -1,14 +1,12 @@
 /* ============================================================
    MarketBridge — MessageThread  (components/MessageThread.css)
-   Uses the shared OrderDetail card system:
-     card-head        eyebrow + title
-     card-block       content title with hairline
-     Sayings <details>  collapsible message history
-     composer         action footer at the bottom
+   Card structure:
+     card-head        — eyebrow + "Conversation with <name>" title
+     Sayings <details> — collapsible message history
+     composer         — action footer at the bottom
    ============================================================ */
 
-/* ── Card shell (falls back to a card look if not inside
-   .order-detail-page) ──────────────────────────────────── */
+/* ── Card shell ─────────────────────────────────────────── */
 
 .message-thread-card {
   position: relative;
@@ -23,8 +21,7 @@
 }
 .message-thread-card:last-child { margin-bottom: 0; }
 
-/* When inside OrderDetail, defer to the page-scoped card rules
-   so this card matches every other card exactly. */
+/* Inside OrderDetail, defer to the page-scoped card rules. */
 .order-detail-page .message-thread-card {
   border-color: var(--od-line, #e5e9ef);
   box-shadow: var(--od-shadow, 0 1px 2px rgba(15,30,45,.04),
@@ -90,38 +87,15 @@
   color: #64748b;
 }
 
-/* ── Card body + block ──────────────────────────────────── */
+/* ── Card body ──────────────────────────────────────────── */
 
 .message-thread-card .card-body { display: block; }
-
-.message-thread-card .card-block { margin: 0 0 20px; }
-.message-thread-card .card-block:last-of-type { margin-bottom: 0; }
-
-.message-thread-card .card-block-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 0 0 10px;
-  margin: 0 0 14px;
-  border-bottom: 1px solid #eef1f5;
-}
-
-.message-thread-card .card-block-title h3 {
-  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: -.1px;
-  line-height: 1.3;
-  color: #0d1b2a;
-  margin: 0;
-}
 
 /* ── Sayings — collapsible message history ─────────────── */
 
 .message-sayings {
   display: block;
+  margin: 0;
   border: 1px solid #eef1f5;
   border-radius: 14px;
   background: #fbfcfd;
@@ -267,6 +241,7 @@
   display: flex;
   align-items: flex-end;
   gap: 10px;
+  margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid #eef1f5;
 }
@@ -341,7 +316,7 @@
 /* ── Error alert ───────────────────────────────────────── */
 
 .message-thread-card .alert.error.small {
-  margin: 0 0 16px;
+  margin: 16px 0 0;
   font-size: 13px;
   padding: 10px 12px;
 }
