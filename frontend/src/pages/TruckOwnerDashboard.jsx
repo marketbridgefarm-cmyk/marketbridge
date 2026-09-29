@@ -23,6 +23,118 @@ const EMPTY_TRUCK_FORM = {
 
 const TERMINAL_STATUSES = ['DELIVERED', 'CANCELLED'];
 
+/* ── Small presentational helpers (Orders-style card system) ── */
+
+function initialsOf(name) {
+  if (!name) return '??';
+  const parts = String(name).trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]).join('').toUpperCase();
+}
+
+function fmtDate(value) {
+  return value ? new Date(value).toLocaleDateString() : null;
+}
+
+// Short label + initials for the "Arranged by" cluster in a card head.
+function arrangerShort(arrangingParty) {
+  switch (arrangingParty) {
+    case 'SELLER':
+      return { name: 'Seller', initials: 'S' };
+    case 'BUYER':
+      return { name: 'Buyer', initials: 'B' };
+    case 'JOINT':
+      return { name: 'Buyer + Seller', initials: 'B+S' };
+    default:
+      return { name: 'Marketplace', initials: 'M' };
+  }
+}
+
+// Tone (success | info | gold | danger | muted) for a transport job status.
+function jobTone(status) {
+  switch (status) {
+    case 'DELIVERED':
+    case 'ACCEPTED':
+      return 'success';
+    case 'PICKUP':
+    case 'IN_TRANSIT':
+      return 'info';
+    case 'CANCELLED':
+      return 'danger';
+    case 'REQUESTED':
+    case 'QUOTED':
+    case 'SELECTED':
+      return 'gold';
+    default:
+      return 'muted';
+  }
+}
+
+function truckTone(availability) {
+  if (availability === 'AVAILABLE') return 'success';
+  if (availability === 'BUSY') return 'info';
+  return 'muted';
+}
+
+function verificationTone(status) {
+  const s = String(status || '').toUpperCase();
+  if (['VERIFIED', 'APPROVED'].includes(s)) return 'success';
+  if (['REJECTED', 'SUSPENDED'].includes(s)) return 'danger';
+  return 'gold';
+}
+
+/*
+ * Four-step trip timeline:
+ *   Accepted → Pickup → In transit → Delivered
+ * The "current" step is the next thing that still has to happen.
+ */
+function jobProgress(status) {
+  const labels = ['Accepted', 'Pickup', 'In transit', 'Delivered'];
+  const s = String(status || '').toUpperCase();
+
+  let idx = 0;
+  if (s === 'ACCEPTED') idx = 1;
+  else if (s === 'PICKUP') idx = 2;
+  else if (s === 'IN_TRANSIT') idx = 3;
+  else if (s === 'DELIVERED') idx = 4;
+
+  return labels.map((label, i) => ({
+    label,
+    cls: i < idx ? 'done' : i === idx ? 'current' : '',
+  }));
+}
+
+function RouteStrip({ pickup, destination, compact = false }) {
+  const w = compact ? 20 : 24;
+  const h = compact ? 10 : 12;
+  return (
+    <div className={`sd-job-route${compact ? ' sd-job-route--compact' : ''}`}>
+      <div className="sd-job-endpoint">
+        <span className="sd-job-endpoint-label">Pickup</span>
+        <strong>{pickup || 'Not set'}</strong>
+      </div>
+      <div className="sd-job-route-arrow" aria-hidden="true">
+        <svg
+          width={w}
+          height={h}
+          viewBox="0 0 24 12"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M2 6h18" />
+          <path d="M15 2l5 4-5 4" />
+        </svg>
+      </div>
+      <div className="sd-job-endpoint">
+        <span className="sd-job-endpoint-label">Destination</span>
+        <strong>{destination || 'Not set'}</strong>
+      </div>
+    </div>
+  );
+}
+
 export default function TruckOwnerDashboard() {
   const { user } = useAuth();
   const [trucks, setTrucks] = useState([]);
@@ -647,72 +759,102 @@ export default function TruckOwnerDashboard() {
               {trucks.map((truck) => {
                 const availabilityBusy =
                   actionLoading === `availability-${truck.id}`;
+                const tone = truckTone(truck.availability);
 
                 return (
-                  <div className="sd-card sd-truck-card" key={truck.id}>
-                    <div className="sd-truck-head">
-                      <h3>{truck.truckType || 'Truck'}</h3>
-                      <span
-                        className={
-                          truck.availability === 'AVAILABLE'
-                            ? 'sd-badge'
-                            : truck.availability === 'BUSY'
-                              ? 'sd-badge sd-blue'
-                              : 'sd-badge sd-warn'
-                        }
-                      >
-                        {truck.availability}
-                      </span>
-                    </div>
+                  <article className="sd-card sd-truck-card" key={truck.id}>
+                    {/* Card head — eyebrow + title left, plate + avatar right */}
+                    <div className="sd-card-head">
+                      <div className="sd-card-head-text">
+                        <span className="sd-eyebrow">Truck</span>
+                        <h3 className="sd-card-title" title={truck.truckType || 'Truck'}>
+                          {truck.truckType || 'Truck'}
+                        </h3>
+                        {truck.operatingArea && (
+                          <p className="sd-card-sub">{truck.operatingArea}</p>
+                        )}
+                      </div>
 
-                    <div className="sd-truck-facts">
-                      <div>
-                        <span>Registration</span>
-                        <strong>{truck.registration}</strong>
-                      </div>
-                      <div>
-                        <span>Capacity</span>
-                        <strong>{truck.capacity}t</strong>
-                      </div>
-                      <div>
-                        <span>Routes</span>
-                        <strong>{truck.operatingArea || 'Any'}</strong>
-                      </div>
-                      {truck.verificationStatus && (
-                        <div>
-                          <span>Verification</span>
-                          <strong>{truck.verificationStatus}</strong>
+                      <div className="sd-card-head-party">
+                        <div className="sd-party-info">
+                          <span className="sd-party-role">Plate</span>
+                          <span className="sd-party-name">{truck.registration}</span>
                         </div>
-                      )}
+                        <div className={`sd-avatar tone-${tone}`} aria-hidden="true">
+                          {initialsOf(truck.truckType || truck.registration)}
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="sd-truck-actions">
-                      <button
-                        type="button"
-                        className="sd-btn sd-btn-outline"
-                        disabled={availabilityBusy || truck.availability === 'AVAILABLE'}
-                        onClick={() => setAvailability(truck.id, 'AVAILABLE')}
-                      >
-                        Available
-                      </button>
-                      <button
-                        type="button"
-                        className="sd-btn sd-btn-outline"
-                        disabled={availabilityBusy || truck.availability === 'BUSY'}
-                        onClick={() => setAvailability(truck.id, 'BUSY')}
-                      >
-                        Busy
-                      </button>
-                      <button
-                        type="button"
-                        className="sd-btn sd-btn-outline"
-                        disabled={availabilityBusy || truck.availability === 'OFFLINE'}
-                        onClick={() => setAvailability(truck.id, 'OFFLINE')}
-                      >
-                        Offline
-                      </button>
+                    <div className="sd-card-body">
+                      {/* Block 1 — Availability */}
+                      <section className="sd-card-block">
+                        <div className="sd-card-block-title">
+                          <h4>Availability</h4>
+                        </div>
+                        <div className="sd-card-block-body">
+                          <div className="sd-pills">
+                            <span className={`sd-pill tone-${tone}`}>
+                              <span className="sd-pill-dot" aria-hidden="true" />
+                              {truck.availability}
+                            </span>
+                            {truck.verificationStatus && (
+                              <span className={`sd-pill tone-${verificationTone(truck.verificationStatus)}`}>
+                                {truck.verificationStatus}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </section>
+
+                      {/* Block 2 — Fleet details */}
+                      <section className="sd-card-block">
+                        <div className="sd-card-block-title">
+                          <h4>Fleet details</h4>
+                        </div>
+                        <div className="sd-card-block-body">
+                          <div className="sd-truck-facts">
+                            <div>
+                              <span>Capacity</span>
+                              <strong>{truck.capacity}t</strong>
+                            </div>
+                            <div>
+                              <span>Routes</span>
+                              <strong>{truck.operatingArea || 'Any'}</strong>
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+
+                      {/* Footer */}
+                      <div className="sd-card-actions">
+                        <button
+                          type="button"
+                          className="sd-btn sd-btn-outline"
+                          disabled={availabilityBusy || truck.availability === 'AVAILABLE'}
+                          onClick={() => setAvailability(truck.id, 'AVAILABLE')}
+                        >
+                          Available
+                        </button>
+                        <button
+                          type="button"
+                          className="sd-btn sd-btn-outline"
+                          disabled={availabilityBusy || truck.availability === 'BUSY'}
+                          onClick={() => setAvailability(truck.id, 'BUSY')}
+                        >
+                          Busy
+                        </button>
+                        <button
+                          type="button"
+                          className="sd-btn sd-btn-outline"
+                          disabled={availabilityBusy || truck.availability === 'OFFLINE'}
+                          onClick={() => setAvailability(truck.id, 'OFFLINE')}
+                        >
+                          Offline
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  </article>
                 );
               })}
 
@@ -765,114 +907,147 @@ export default function TruckOwnerDashboard() {
                   myLeaf.counteredBy === 'REQUESTER';
                 const respondBusy = myLeaf && actionLoading === `quote-${myLeaf.id}`;
 
+                const arranger = arrangerShort(job.arrangingParty);
+                const createdLabel = fmtDate(job.createdAt);
+                const showFooter = !hasActiveThread || isMyTurn;
+
                 return (
-                  <div className="sd-card sd-job-card" key={job.id}>
-                    <div className="sd-job-route">
-                      <div className="sd-job-endpoint">
-                        <span className="sd-job-endpoint-label">Pickup</span>
-                        <strong>{job.pickupLocation || 'Not set'}</strong>
+                  <article className="sd-card sd-job-card" key={job.id}>
+                    {/* Card head */}
+                    <div className="sd-card-head">
+                      <div className="sd-card-head-text">
+                        <span className="sd-eyebrow is-open">Open request</span>
+                        <h3 className="sd-card-title" title={job.load || 'Produce'}>
+                          {job.load || 'Produce'}
+                        </h3>
+                        {createdLabel && <p className="sd-card-sub">{createdLabel}</p>}
                       </div>
-                      <div className="sd-job-route-arrow" aria-hidden="true">
-                        <svg
-                          width="24"
-                          height="12"
-                          viewBox="0 0 24 12"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M2 6h18" />
-                          <path d="M15 2l5 4-5 4" />
-                        </svg>
-                      </div>
-                      <div className="sd-job-endpoint">
-                        <span className="sd-job-endpoint-label">Destination</span>
-                        <strong>{job.destination || 'Not set'}</strong>
+
+                      <div className="sd-card-head-party">
+                        <div className="sd-party-info">
+                          <span className="sd-party-role">Arranged by</span>
+                          <span className="sd-party-name">{arranger.name}</span>
+                        </div>
+                        <div className="sd-avatar tone-success" aria-hidden="true">
+                          {arranger.initials}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="sd-job-meta">
-                      <div className="sd-job-meta-item">
-                        <span>Load</span>
-                        <strong>{job.load || 'Produce'}</strong>
-                      </div>
-                      {job.requiredCapacity && (
-                        <div className="sd-job-meta-item">
-                          <span>Capacity</span>
-                          <strong>{job.requiredCapacity}t+</strong>
+                    <div className="sd-card-body">
+                      {/* Block 1 — Route */}
+                      <section className="sd-card-block">
+                        <div className="sd-card-block-title">
+                          <h4>Route</h4>
+                        </div>
+                        <div className="sd-card-block-body">
+                          <RouteStrip
+                            pickup={job.pickupLocation}
+                            destination={job.destination}
+                          />
+                        </div>
+                      </section>
+
+                      {/* Block 2 — Load details */}
+                      <section className="sd-card-block">
+                        <div className="sd-card-block-title">
+                          <h4>Load details</h4>
+                        </div>
+                        <div className="sd-card-block-body">
+                          <div className="sd-job-meta">
+                            <div className="sd-job-meta-item">
+                              <span>Load</span>
+                              <strong>{job.load || 'Produce'}</strong>
+                            </div>
+                            {job.requiredCapacity && (
+                              <div className="sd-job-meta-item">
+                                <span>Capacity</span>
+                                <strong>{job.requiredCapacity}t+</strong>
+                              </div>
+                            )}
+                            <div className="sd-job-meta-item">
+                              <span>Arrangement</span>
+                              <strong>{getArrangingPartyLabel(job.arrangingParty)}</strong>
+                            </div>
+                          </div>
+
+                          {job.specialRequirements && (
+                            <div className="sd-job-requirements">
+                              <span className="sd-job-requirements-label">Requirements</span>
+                              <p>{job.specialRequirements}</p>
+                            </div>
+                          )}
+                        </div>
+                      </section>
+
+                      {/* Block 3 — Your quote (only while a thread is live) */}
+                      {hasActiveThread && (
+                        <section className="sd-card-block">
+                          <div className="sd-card-block-title">
+                            <h4>Your quote</h4>
+                          </div>
+                          <div className="sd-card-block-body">
+                            <div className="sd-job-status">
+                              {myLeaf.status === 'ACCEPTED'
+                                ? `✓ Your quote was accepted at ${Number(myLeaf.amount).toLocaleString()} ETB — awaiting payment.`
+                                : isMyTurn
+                                  ? `The requester countered at ${Number(myLeaf.counterAmount ?? myLeaf.amount).toLocaleString()} ETB. Your turn.`
+                                  : `You quoted ${Number(
+                                      myLeaf.status === 'COUNTERED'
+                                        ? (myLeaf.counterAmount ?? myLeaf.amount)
+                                        : myLeaf.amount
+                                    ).toLocaleString()} ETB — waiting on the requester's decision.`}
+                            </div>
+                          </div>
+                        </section>
+                      )}
+
+                      {/* Footer */}
+                      {showFooter && (
+                        <div className="sd-card-actions">
+                          {!hasActiveThread && (
+                            <button
+                              type="button"
+                              className="sd-btn sd-btn-primary"
+                              disabled={quoting}
+                              onClick={() => respondToJob(job)}
+                            >
+                              {quoting ? 'Sending…' : 'Submit transport quote'}
+                            </button>
+                          )}
+
+                          {isMyTurn && (
+                            <>
+                              <button
+                                type="button"
+                                className="sd-btn sd-btn-primary"
+                                disabled={respondBusy}
+                                onClick={() => acceptTransportQuote(myLeaf.id)}
+                              >
+                                {respondBusy ? 'Accepting…' : 'Accept'}
+                              </button>
+                              <button
+                                type="button"
+                                className="sd-btn sd-btn-outline"
+                                disabled={respondBusy}
+                                onClick={() => counterTransportQuote(myLeaf.id)}
+                              >
+                                {respondBusy ? 'Sending…' : 'Counter'}
+                              </button>
+                              <button
+                                type="button"
+                                className="sd-btn sd-btn-outline"
+                                disabled={respondBusy}
+                                onClick={() => rejectTransportQuote(myLeaf.id)}
+                              >
+                                {respondBusy ? 'Rejecting…' : 'Reject'}
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
-                      <div className="sd-job-meta-item">
-                        <span>Arranged by</span>
-                        <strong>{getArrangingPartyLabel(job.arrangingParty)}</strong>
-                      </div>
                     </div>
-
-                    {job.specialRequirements && (
-                      <div className="sd-job-requirements">
-                        <span className="sd-job-requirements-label">Requirements</span>
-                        <p>{job.specialRequirements}</p>
-                      </div>
-                    )}
-
-                    {hasActiveThread && (
-                      <div className="sd-job-status">
-                        {myLeaf.status === 'ACCEPTED'
-                          ? `✓ Your quote was accepted at ${Number(myLeaf.amount).toLocaleString()} ETB — awaiting payment.`
-                          : isMyTurn
-                            ? `The requester countered at ${Number(myLeaf.counterAmount ?? myLeaf.amount).toLocaleString()} ETB. Your turn.`
-                            : `You quoted ${Number(
-                                myLeaf.status === 'COUNTERED'
-                                  ? (myLeaf.counterAmount ?? myLeaf.amount)
-                                  : myLeaf.amount
-                              ).toLocaleString()} ETB — waiting on the requester's decision.`}
-                      </div>
-                    )}
-
-                    <div className="sd-job-footer">
-                      {!hasActiveThread && (
-                        <button
-                          type="button"
-                          className="sd-btn sd-btn-primary"
-                          disabled={quoting}
-                          onClick={() => respondToJob(job)}
-                        >
-                          {quoting ? 'Sending…' : 'Submit transport quote'}
-                        </button>
-                      )}
-
-                      {isMyTurn && (
-                        <>
-                          <button
-                            type="button"
-                            className="sd-btn sd-btn-primary"
-                            disabled={respondBusy}
-                            onClick={() => acceptTransportQuote(myLeaf.id)}
-                          >
-                            {respondBusy ? 'Accepting…' : 'Accept'}
-                          </button>
-                          <button
-                            type="button"
-                            className="sd-btn sd-btn-outline"
-                            disabled={respondBusy}
-                            onClick={() => counterTransportQuote(myLeaf.id)}
-                          >
-                            {respondBusy ? 'Sending…' : 'Counter'}
-                          </button>
-                          <button
-                            type="button"
-                            className="sd-btn sd-btn-outline"
-                            disabled={respondBusy}
-                            onClick={() => rejectTransportQuote(myLeaf.id)}
-                          >
-                            {respondBusy ? 'Rejecting…' : 'Reject'}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                  </article>
                 );
               })}
 
@@ -918,65 +1093,109 @@ export default function TruckOwnerDashboard() {
                 </div>
 
                 <div className="sd-cards">
-                  {activeJobs.map((job) => (
-                    <div className="sd-card sd-job-card" key={job.id}>
-                      <div className="sd-job-card-head">
-                        <h3>{job.load || 'Produce'}</h3>
-                        <span className={getStatusClass(job.status)}>
-                          {job.status.replace(/_/g, ' ')}
-                        </span>
-                      </div>
+                  {activeJobs.map((job) => {
+                    const arranger = arrangerShort(job.arrangingParty);
+                    const createdLabel = fmtDate(job.createdAt);
+                    const tone = jobTone(job.status);
+                    const steps = jobProgress(job.status);
 
-                      <div className="sd-job-route sd-job-route--compact">
-                        <div className="sd-job-endpoint">
-                          <span className="sd-job-endpoint-label">Pickup</span>
-                          <strong>{job.pickupLocation || '—'}</strong>
-                        </div>
-                        <div className="sd-job-route-arrow" aria-hidden="true">
-                          <svg
-                            width="20"
-                            height="10"
-                            viewBox="0 0 20 10"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.6"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M2 5h14" />
-                            <path d="M12 2l4 3-4 3" />
-                          </svg>
-                        </div>
-                        <div className="sd-job-endpoint">
-                          <span className="sd-job-endpoint-label">Destination</span>
-                          <strong>{job.destination || '—'}</strong>
-                        </div>
-                      </div>
-
-                      <div className="sd-job-meta">
-                        <div className="sd-job-meta-item">
-                          <span>Arranged by</span>
-                          <strong>{getArrangingPartyLabel(job.arrangingParty)}</strong>
-                        </div>
-                        {job.requiredCapacity && (
-                          <div className="sd-job-meta-item">
-                            <span>Capacity</span>
-                            <strong>{job.requiredCapacity}t+</strong>
+                    return (
+                      <article className="sd-card sd-job-card" key={job.id}>
+                        {/* Card head */}
+                        <div className="sd-card-head">
+                          <div className="sd-card-head-text">
+                            <span className="sd-eyebrow">Active trip</span>
+                            <h3 className="sd-card-title" title={job.load || 'Produce'}>
+                              {job.load || 'Produce'}
+                            </h3>
+                            {createdLabel && <p className="sd-card-sub">{createdLabel}</p>}
                           </div>
-                        )}
-                      </div>
 
-                      <div className="sd-job-footer">
-                        <Link
-                          to={`/orders/${job.orderId}`}
-                          className="sd-btn sd-btn-outline"
-                        >
-                          Open order
-                        </Link>
-                        {renderJobActionButtons(job)}
-                      </div>
-                    </div>
-                  ))}
+                          <div className="sd-card-head-party">
+                            <div className="sd-party-info">
+                              <span className="sd-party-role">Arranged by</span>
+                              <span className="sd-party-name">{arranger.name}</span>
+                            </div>
+                            <div className={`sd-avatar tone-${tone}`} aria-hidden="true">
+                              {arranger.initials}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="sd-card-body">
+                          {/* Block 1 — Trip status */}
+                          <section className="sd-card-block">
+                            <div className="sd-card-block-title">
+                              <h4>Trip status</h4>
+                            </div>
+                            <div className="sd-card-block-body">
+                              <div className="sd-pills">
+                                <span className={`sd-pill tone-${tone}`}>
+                                  <span className="sd-pill-dot" aria-hidden="true" />
+                                  {job.status.replace(/_/g, ' ')}
+                                </span>
+                              </div>
+
+                              <div className="sd-progress" aria-label="Trip progress">
+                                {steps.map((step) => (
+                                  <div key={step.label} className={`sd-progress-step ${step.cls}`}>
+                                    <span className="sd-progress-dot" aria-hidden="true" />
+                                    <span className="sd-progress-label">{step.label}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </section>
+
+                          {/* Block 2 — Route */}
+                          <section className="sd-card-block">
+                            <div className="sd-card-block-title">
+                              <h4>Route</h4>
+                            </div>
+                            <div className="sd-card-block-body">
+                              <RouteStrip
+                                compact
+                                pickup={job.pickupLocation || '—'}
+                                destination={job.destination || '—'}
+                              />
+                            </div>
+                          </section>
+
+                          {/* Block 3 — Details */}
+                          <section className="sd-card-block">
+                            <div className="sd-card-block-title">
+                              <h4>Trip details</h4>
+                            </div>
+                            <div className="sd-card-block-body">
+                              <div className="sd-job-meta">
+                                <div className="sd-job-meta-item">
+                                  <span>Arrangement</span>
+                                  <strong>{getArrangingPartyLabel(job.arrangingParty)}</strong>
+                                </div>
+                                {job.requiredCapacity && (
+                                  <div className="sd-job-meta-item">
+                                    <span>Capacity</span>
+                                    <strong>{job.requiredCapacity}t+</strong>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </section>
+
+                          {/* Footer */}
+                          <div className="sd-card-actions">
+                            <Link
+                              to={`/orders/${job.orderId}`}
+                              className="sd-btn sd-btn-outline"
+                            >
+                              Open order
+                            </Link>
+                            {renderJobActionButtons(job)}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               </section>
             )}
