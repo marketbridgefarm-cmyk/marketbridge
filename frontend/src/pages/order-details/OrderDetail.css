@@ -1,12 +1,12 @@
 /* ============================================================
    MarketBridge — Order detail  (order-details/OrderDetail.css)
-   Visual language: a working page — dense, scannable, always
-   clear about what happens next. Two-column layout on tablet
-   and desktop, single column on phones.
+   Visual language: working page — dense, scannable, always
+   clear about what happens next. Two-column on tablet and
+   desktop, single column on phones. Every card shares the
+   same surface treatment: header, hairline divider, body.
    ============================================================ */
 
 .order-detail-page {
-  /* ── Tokens ───────────────────────────────────────────── */
   --od-accent:      #1e9e5a;
   --od-accent-2:    #0f7a44;
   --od-accent-ink:  #12734a;
@@ -317,7 +317,15 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   CARDS + header normalization
+   CARDS
+   ══════════════════════════════════════════════════════════
+   Every card on the page shares the same surface treatment
+   and the same internal rhythm:
+       header block  →  hairline  →  body
+   The hairline is applied below via the `> h2` /
+   `> .order-section-heading` / `> .transport-card-heading`
+   selectors, so any card that starts with one of those three
+   header patterns gets the divider automatically.
    ══════════════════════════════════════════════════════════ */
 
 .order-detail-page .card {
@@ -348,7 +356,7 @@
   letter-spacing: -.3px !important;
   line-height: 1.25 !important;
   color: var(--od-ink) !important;
-  margin: 0 0 14px !important;
+  margin: 0 !important;
   padding: 0 !important;
   text-transform: none !important;
 }
@@ -364,6 +372,30 @@
   margin: 0 0 8px !important;
   padding: 0 !important;
   text-transform: none !important;
+}
+
+/* ── THE HAIRLINE UNDER EVERY CARD HEADER ───────────────── */
+/* Covers the three header patterns used across this page:
+     1. `.card > h2`                    (bare header)
+     2. `.card > .order-section-heading` (eyebrow + h2 + pill)
+     3. `.card > .transport-card-heading` (icon + title + badge)
+   The border sits on the wrapper, not on the h2 itself, so
+   the eyebrow → title → badge group reads as one header. */
+
+.order-detail-page .card > h2:first-child,
+.order-detail-page .card > .order-section-heading,
+.order-detail-page .card > .transport-card-heading {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--od-line-soft);
+  margin-bottom: 18px;
+}
+
+/* When the header is a bare h2 and there is body content
+   directly after it, the divider is what separates them. */
+.order-detail-page .card > h2:first-child {
+  margin-bottom: 18px !important;
+  padding-bottom: 14px !important;
+  border-bottom: 1px solid var(--od-line-soft) !important;
 }
 
 .order-detail-page .card hr {
@@ -560,7 +592,6 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
 }
 .order-detail-page .order-section-heading h2,
 .order-detail-page .order-section-heading h3 {
@@ -682,7 +713,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   DETAIL-FACTS strip — orientation-agnostic dividers
+   DETAIL-FACTS strip
    ══════════════════════════════════════════════════════════ */
 
 .order-detail-page .detail-facts {
@@ -725,8 +756,6 @@
   line-height: 1.25;
 }
 
-/* Transport facts contain long values like HIRE_TRANSPORTER —
-   cap the columns so nothing mid-word wraps. */
 .order-detail-page .transport-detail-facts {
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
@@ -749,6 +778,8 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--od-line-soft);
   margin-bottom: 14px;
 }
 .order-detail-page .inspection-report-header h3 {
@@ -952,9 +983,7 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--od-line-soft);
-  margin-bottom: 16px;
+  /* The base rule above already adds padding-bottom + border + margin */
 }
 
 .order-detail-page .transport-card-icon {
@@ -1193,7 +1222,6 @@
   color: var(--od-muted);
 }
 
-/* Common due countdown */
 .order-detail-page .payout-due {
   display: flex;
   align-items: center;
@@ -1302,7 +1330,11 @@
   background: currentColor;
 }
 
-.order-detail-page .order-product-offer-card h2 { margin-bottom: 8px !important; }
+.order-detail-page .order-product-offer-card h2 {
+  margin-bottom: 8px !important;
+  padding-bottom: 14px !important;
+  border-bottom: 1px solid var(--od-line-soft) !important;
+}
 
 .order-detail-page .order-product-offer-form {
   display: flex;
@@ -1316,7 +1348,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   INSPECTION anchor + section scroll-margin
+   SECTION anchors + scroll-margin
    ══════════════════════════════════════════════════════════ */
 
 .order-detail-page #inspection-section,
@@ -1420,7 +1452,6 @@
     padding: 20px;
   }
 
-  /* Transport facts cap at 3 columns so HIRE_TRANSPORTER fits */
   .order-detail-page .transport-detail-facts {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
