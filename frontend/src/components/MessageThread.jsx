@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import api from '../api/client';
 import Collapsible from './Collapsible.jsx';
+import './MessageThread.css';
 
 export default function MessageThread({ orderId, messages, counterpartId, counterpartName, currentUserId, onSent }) {
   const [content, setContent] = useState('');
