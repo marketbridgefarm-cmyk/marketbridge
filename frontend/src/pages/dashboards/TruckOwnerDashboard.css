@@ -1399,14 +1399,6 @@
     align-items: flex-start;
     gap: 2px;
   }
-  /* Alternative: Keep horizontal on mobile too if it fits */
-  /* 
-  .sd-dashboard .sd-job-endpoint {
-    flex-direction: row;
-    align-items: center;
-    gap: 6px;
-  }
-  */
 
   .sd-dashboard .sd-job-meta {
     flex-direction: column;
