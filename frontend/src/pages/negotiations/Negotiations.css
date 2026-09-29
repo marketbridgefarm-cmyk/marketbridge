@@ -1,10 +1,10 @@
 /* ============================================================
    MarketBridge — Negotiations  (pages/negotiations/Negotiations.css)
-   Page-scoped visual layer for Negotiations.jsx.
+   Redesigned: light-only surfaces, consistent eyebrow headings,
+   horizontally-scrollable filters, tighter cards.
    ============================================================ */
 
 .neg-page {
-  /* ── Local tokens — same vocabulary as auth / orders / order-detail ── */
   --n-accent:      #1e9e5a;
   --n-accent-2:    #0f7a44;
   --n-accent-ink:  #12734a;
@@ -37,11 +37,8 @@
   --n-info-line:   #cddff5;
 
   --n-radius:      20px;
-  --n-radius-sm:   12px;
-  --n-shadow:      0 1px 2px rgba(15, 30, 45, .04),
-                   0 8px 24px rgba(15, 30, 45, .05);
-  --n-shadow-hi:   0 2px 4px rgba(15, 30, 45, .04),
-                   0 18px 44px rgba(15, 30, 45, .09);
+  --n-shadow:      0 1px 2px rgba(15, 30, 45, .04), 0 8px 24px rgba(15, 30, 45, .05);
+  --n-shadow-hi:   0 2px 4px rgba(15, 30, 45, .04), 0 18px 44px rgba(15, 30, 45, .09);
   --n-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
   --n-ring:        0 0 0 3px rgba(30, 158, 90, .18);
   --n-ease:        cubic-bezier(.2, .7, .3, 1);
@@ -64,7 +61,7 @@
   padding: 40px 20px 96px;
 }
 
-/* ── Page header ────────────────────────────────────────── */
+/* ── Page header ──────────────────────────────────────── */
 
 .neg-page .eyebrow {
   display: inline-flex;
@@ -76,7 +73,6 @@
   text-transform: uppercase;
   margin-bottom: 12px;
 }
-
 .neg-page .eyebrow::before {
   content: '';
   flex: 0 0 20px;
@@ -103,13 +99,14 @@
   margin: 0 0 8px;
 }
 
-/* ── Tabs (shared with Orders) ──────────────────────────── */
+/* ── Filters ──────────────────────────────────────────── */
 
+/* Row 1 — compact segmented control for Active / All */
 .neg-page .sd-tabs {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
+  gap: 3px;
+  padding: 3px;
   border: 1px solid var(--n-line);
   border-radius: 999px;
   background: #fff;
@@ -120,51 +117,101 @@
   appearance: none;
   border: none;
   background: transparent;
-  padding: 8px 18px;
+  padding: 7px 16px;
   border-radius: 999px;
   color: var(--n-muted);
-  font: 600 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 600 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   cursor: pointer;
   transition: color .15s var(--n-ease), background .15s var(--n-ease);
 }
-
-.neg-page .sd-tab:hover {
-  color: var(--n-ink);
-  background: var(--n-line-soft);
-}
-
-.neg-page .sd-tab:focus-visible {
-  outline: none;
-  box-shadow: var(--n-ring);
-}
-
+.neg-page .sd-tab:hover { color: var(--n-ink); background: var(--n-line-soft); }
+.neg-page .sd-tab:focus-visible { outline: none; box-shadow: var(--n-ring); }
 .neg-page .sd-tab.sd-active {
   background: linear-gradient(150deg, var(--n-accent) 0%, var(--n-accent-2) 100%);
   color: #fff;
   box-shadow: 0 4px 12px rgba(30, 158, 90, .24);
 }
 
-/* ── Sections ───────────────────────────────────────────── */
+/* Row 2 — horizontal scrollable chips. The second .sd-tabs in the
+   JSX (type filter) gets its own scroll behaviour so it never
+   wraps to a second line on mobile. */
+.neg-page .neg-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 24px;
+  padding: 4px 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.neg-page .neg-filter-row::-webkit-scrollbar { display: none; }
+
+.neg-page .neg-filter-chip {
+  flex: 0 0 auto;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--n-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--n-ink-soft);
+  font: 600 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s var(--n-ease),
+              background .15s var(--n-ease),
+              color .15s var(--n-ease);
+}
+.neg-page .neg-filter-chip:hover {
+  border-color: rgba(30, 158, 90, .35);
+  background: var(--n-accent-soft);
+  color: var(--n-accent-2);
+}
+.neg-page .neg-filter-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--n-ring);
+}
+.neg-page .neg-filter-chip.is-active {
+  background: var(--n-accent-soft);
+  border-color: var(--n-accent-line);
+  color: var(--n-accent-ink);
+  font-weight: 700;
+}
+
+/* ── Section headings (eyebrow pattern via ::before) ──── */
 
 .neg-page .neg-section {
   margin-bottom: 32px;
 }
-
 .neg-page .neg-section:last-child { margin-bottom: 0; }
 
 .neg-page .neg-section-title {
+  position: relative;
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 800;
-  letter-spacing: -.3px;
-  line-height: 1.25;
+  letter-spacing: -.25px;
+  line-height: 1.3;
   color: var(--n-ink);
+  text-align: left;
   margin: 0 0 16px;
-  padding-bottom: 12px;
+  padding: 0 0 12px 28px;
   border-bottom: 1px solid var(--n-line-soft);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+}
+
+/* Green dash leading the title */
+.neg-page .neg-section-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--n-accent-ink);
 }
 
 .neg-page .neg-section-sub {
@@ -175,14 +222,14 @@
   letter-spacing: 0;
   line-height: 1.55;
   color: var(--n-muted);
-  margin-top: 2px;
+  margin-top: 6px;
 }
 
-/* ── Competition groups (BidBoard wrapper) ──────────────── */
+/* ── Competition group wrapper ────────────────────────── */
 
 .neg-page .neg-group {
-  padding: 20px 22px;
-  margin-bottom: 16px;
+  padding: 18px 20px;
+  margin-bottom: 14px;
   border: 1px solid var(--n-line);
   border-radius: var(--n-radius);
   background-color: #fff;
@@ -191,39 +238,66 @@
     radial-gradient(90%  90%  at 100% 100%, var(--n-tint-b) 0%, transparent 55%);
   background-repeat: no-repeat;
   box-shadow: var(--n-shadow);
-  transition: border-color .18s var(--n-ease),
-              box-shadow .18s var(--n-ease);
+  transition: border-color .18s var(--n-ease), box-shadow .18s var(--n-ease);
 }
-
 .neg-page .neg-group:hover {
   border-color: rgba(30, 158, 90, .22);
   box-shadow: var(--n-shadow-hi);
 }
-
 .neg-page .neg-group:last-child { margin-bottom: 0; }
 
-.neg-page .neg-group-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
+/* ── Group header — KILL any solid green surface ──────── */
+/* The BidBoard or a global rule was painting a dark-green banner
+   behind the group title. Force every header/wrapper/bid-board
+   variant back to a light, transparent surface. */
+.neg-page .neg-group-header,
+.neg-page [class*="bid-board"],
+.neg-page [class*="bidboard"],
+.neg-page [class*="bidBoard"],
+.neg-page [class*="group-header"] {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: inherit !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 0 12px !important;
 }
 
-.neg-page .neg-group-heading {
-  min-width: 0;
-  flex: 1 1 auto;
+/* But re-add the flex layout on our own header wrapper */
+.neg-page .neg-group-header {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  flex-wrap: wrap !important;
 }
+
+/* Force the title/meta/link text back to light-mode colors */
+.neg-page .neg-group-title,
+.neg-page .neg-group-header h2,
+.neg-page .neg-group-header h3 {
+  color: var(--n-ink) !important;
+  background: transparent !important;
+}
+
+.neg-page .neg-group-meta,
+.neg-page .neg-group-meta span {
+  color: var(--n-muted) !important;
+  background: transparent !important;
+}
+
+.neg-page .neg-group-heading { min-width: 0; flex: 1 1 auto; }
 
 .neg-page .neg-group-title {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   letter-spacing: -.2px;
+  line-height: 1.35;
   color: var(--n-ink);
-  line-height: 1.3;
-  margin-bottom: 4px;
+  margin: 0 0 4px;
   overflow-wrap: anywhere;
 }
 
@@ -244,7 +318,7 @@
   gap: 4px;
   height: 32px;
   padding: 0 12px;
-  border-radius: 8px;
+  border-radius: 999px;
   border: 1px solid var(--n-line);
   background: #fff;
   color: var(--n-ink-soft);
@@ -254,7 +328,6 @@
               background .15s var(--n-ease),
               color .15s var(--n-ease);
 }
-
 .neg-page .neg-group-link:hover {
   border-color: rgba(30, 158, 90, .35);
   background: var(--n-accent-soft);
@@ -262,13 +335,8 @@
   text-decoration: none;
 }
 
-.neg-page .neg-group-link:focus-visible {
-  outline: none;
-  box-shadow: var(--n-ring);
-}
-
 .neg-page .neg-commit-note {
-  margin: 0 0 14px;
+  margin: 12px 0 14px;
   padding: 10px 14px;
   border: 1px solid var(--n-line-soft);
   border-left: 3px solid rgba(30, 158, 90, .35);
@@ -278,25 +346,19 @@
   line-height: 1.5;
   color: var(--n-muted);
 }
+.neg-page .neg-commit-note strong { color: var(--n-ink-soft); font-weight: 700; }
 
-.neg-page .neg-commit-note strong {
-  color: var(--n-ink-soft);
-  font-weight: 700;
-}
-
-/* ── Bilateral deal list ────────────────────────────────── */
+/* ── Bilateral deal list ──────────────────────────────── */
 
 .neg-page .neg-deal-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
-
-/* ── Negotiation card ───────────────────────────────────── */
 
 .neg-page .neg-card {
   position: relative;
-  padding: 20px 22px;
+  padding: 18px 20px;
   border: 1px solid var(--n-line);
   border-radius: var(--n-radius);
   background: #fff;
@@ -305,27 +367,16 @@
               box-shadow .2s var(--n-ease),
               transform .2s var(--n-ease);
 }
-
 .neg-page .neg-card:hover {
   border-color: rgba(30, 158, 90, .22);
   box-shadow: var(--n-shadow-hi);
 }
 
-/* Highlighted state when it is this viewer's turn to act */
 .neg-page .neg-card--my-turn {
   border-color: var(--n-accent-line);
   background: linear-gradient(180deg, #f0fdf5, #eafaf0);
-  box-shadow: 0 1px 2px rgba(30, 158, 90, .08),
-              0 12px 32px rgba(30, 158, 90, .12);
 }
 
-.neg-page .neg-card--my-turn:hover {
-  border-color: var(--n-accent);
-  box-shadow: 0 2px 4px rgba(30, 158, 90, .10),
-              0 20px 48px rgba(30, 158, 90, .16);
-}
-
-/* Floating "your turn" chip */
 .neg-page .neg-turn-label {
   position: absolute;
   top: -10px;
@@ -344,36 +395,26 @@
   box-shadow: 0 4px 12px rgba(30, 158, 90, .28);
 }
 
-/* Card top row: content on the left, "Open" link on the right */
 .neg-page .neg-card-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
-
-.neg-page .neg-card-top > div:first-child {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
+.neg-page .neg-card-top > div:first-child { min-width: 0; flex: 1 1 auto; }
 .neg-page .neg-card-top > .btn-outline,
-.neg-page .neg-card-top > .btn {
-  flex: 0 0 auto;
-  align-self: flex-start;
-}
+.neg-page .neg-card-top > .btn { flex: 0 0 auto; align-self: flex-start; }
 
-/* Status chip row */
+/* Single-line chip row on desktop, wrap only when necessary */
 .neg-page .neg-deal-status {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   margin-bottom: 8px;
 }
 
-/* Role chip / status chip */
 .neg-page .role-chip {
   display: inline-flex;
   align-items: center;
@@ -384,30 +425,26 @@
   border: 1px solid var(--n-line);
   color: var(--n-ink-soft);
   font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .08em;
+  letter-spacing: .06em;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
-.neg-page .neg-card--my-turn .neg-deal-status .role-chip:first-child {
-  background: var(--n-accent-soft);
-  border-color: var(--n-accent-line);
-  color: var(--n-accent-ink);
-}
+/* First chip = status pill: assign tones based on its content.
+   `:has()` isn't universally supported yet, so we tone by class
+   if the JSX ever adds one; otherwise it stays muted grey. */
 
-/* Title */
 .neg-page .neg-title {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   letter-spacing: -.2px;
   line-height: 1.3;
   color: var(--n-ink);
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   overflow-wrap: anywhere;
 }
 
-/* Amount */
 .neg-page .neg-amount {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
   font-size: 22px;
@@ -418,9 +455,8 @@
   line-height: 1;
   margin: 0;
 }
-
 .neg-page .neg-amount-unit {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: .12em;
   color: var(--n-muted);
@@ -428,34 +464,27 @@
   margin-left: 4px;
 }
 
-/* Context / message paragraphs */
 .neg-page .neg-deal-context {
   margin: 10px 0 0;
-  font-size: 13.5px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--n-ink-soft);
-  padding: 10px 14px;
+  padding: 9px 13px;
   border-radius: 10px;
   background: var(--n-surface);
   border: 1px solid var(--n-line-soft);
 }
+.neg-page .neg-deal-context strong { color: var(--n-ink); font-weight: 700; }
 
-.neg-page .neg-deal-context strong {
-  color: var(--n-ink);
-  font-weight: 700;
-}
-
-/* Waiting note */
 .neg-page .neg-waiting {
   margin: 10px 0 0;
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.5;
   color: var(--n-muted);
   display: flex;
   align-items: center;
   gap: 6px;
 }
-
 .neg-page .neg-waiting::before {
   content: '';
   flex: 0 0 6px;
@@ -465,7 +494,6 @@
   background: var(--n-muted-2);
 }
 
-/* Actions row */
 .neg-page .neg-actions {
   display: flex;
   align-items: center;
@@ -475,14 +503,11 @@
   padding-top: 14px;
   border-top: 1px solid var(--n-line-soft);
 }
-
-.neg-page .neg-card--my-turn .neg-actions {
-  border-top-color: var(--n-accent-line);
-}
+.neg-page .neg-card--my-turn .neg-actions { border-top-color: var(--n-accent-line); }
 
 .neg-page .neg-actions input[type="number"] {
   flex: 0 0 auto;
-  width: 130px !important; /* overrides inline width: 120 in JSX if it ever changes */
+  width: 130px !important;
   min-width: 110px;
   max-width: 160px;
   height: 40px;
@@ -497,18 +522,13 @@
   -webkit-appearance: none;
   appearance: none;
 }
-
-.neg-page .neg-actions input[type="number"]:hover {
-  border-color: #cfd6df;
-}
-
 .neg-page .neg-actions input[type="number"]:focus {
   outline: none;
   border-color: var(--n-accent);
   box-shadow: var(--n-ring);
 }
 
-/* ── Buttons ────────────────────────────────────────────── */
+/* ── Buttons ──────────────────────────────────────────── */
 
 .neg-page .btn,
 .neg-page .btn-outline {
@@ -523,16 +543,11 @@
   background: #fff;
   color: var(--n-ink);
   font: 700 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .01em;
   cursor: pointer;
   text-decoration: none;
-  transition: border-color .15s var(--n-ease),
-              background .15s var(--n-ease),
-              color .15s var(--n-ease),
-              transform .12s var(--n-ease),
-              box-shadow .15s var(--n-ease);
+  transition: border-color .15s var(--n-ease), background .15s var(--n-ease),
+              color .15s var(--n-ease), transform .12s var(--n-ease);
 }
-
 .neg-page .btn:hover,
 .neg-page .btn-outline:hover {
   border-color: rgba(30, 158, 90, .35);
@@ -540,14 +555,12 @@
   color: var(--n-accent-2);
   text-decoration: none;
 }
-
 .neg-page .btn:focus-visible,
 .neg-page .btn-outline:focus-visible {
   outline: none;
   box-shadow: var(--n-ring);
 }
 
-/* sd-btn family — used by NegotiationRow actions */
 .neg-page .sd-btn {
   display: inline-flex;
   align-items: center;
@@ -560,34 +573,18 @@
   background: #fff;
   color: var(--n-ink);
   font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .01em;
   cursor: pointer;
-  text-decoration: none;
-  transition: border-color .15s var(--n-ease),
-              background .15s var(--n-ease),
-              color .15s var(--n-ease),
-              transform .12s var(--n-ease),
-              box-shadow .15s var(--n-ease),
-              filter .12s var(--n-ease);
+  transition: border-color .15s var(--n-ease), background .15s var(--n-ease),
+              color .15s var(--n-ease), transform .12s var(--n-ease),
+              box-shadow .15s var(--n-ease), filter .12s var(--n-ease);
 }
-
 .neg-page .sd-btn:hover:not(:disabled) {
   border-color: rgba(30, 158, 90, .35);
   background: var(--n-accent-soft);
   color: var(--n-accent-2);
 }
-
-.neg-page .sd-btn:disabled {
-  opacity: .55;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-.neg-page .sd-btn:focus-visible {
-  outline: none;
-  box-shadow: var(--n-ring);
-}
+.neg-page .sd-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+.neg-page .sd-btn:focus-visible { outline: none; box-shadow: var(--n-ring); }
 
 .neg-page .sd-btn-primary {
   border: none;
@@ -595,7 +592,6 @@
   background: linear-gradient(150deg, var(--n-accent) 0%, var(--n-accent-2) 100%);
   box-shadow: 0 4px 12px rgba(30, 158, 90, .22);
 }
-
 .neg-page .sd-btn-primary:hover:not(:disabled) {
   filter: brightness(1.03);
   transform: translateY(-1px);
@@ -604,24 +600,18 @@
   border: none;
 }
 
-.neg-page .sd-btn-primary:active:not(:disabled) {
-  transform: none;
-  box-shadow: 0 2px 8px rgba(30, 158, 90, .18);
-}
-
 .neg-page .sd-btn-outline {
   border: 1px solid var(--n-line);
   background: #fff;
   color: var(--n-ink);
 }
-
 .neg-page .sd-btn-outline:hover:not(:disabled) {
   border-color: rgba(30, 158, 90, .35);
   background: var(--n-accent-soft);
   color: var(--n-accent-2);
 }
 
-/* ── Alerts ─────────────────────────────────────────────── */
+/* ── Alerts + states ──────────────────────────────────── */
 
 .neg-page .alert {
   padding: 12px 14px;
@@ -632,14 +622,11 @@
   background: var(--n-line-soft);
   color: var(--n-ink-soft);
 }
-
 .neg-page .alert.error {
   background: var(--n-danger-soft);
   border: 1px solid var(--n-danger-line);
   color: var(--n-danger);
 }
-
-/* ── Loading + empty states ─────────────────────────────── */
 
 .neg-page > .container-narrow > p:not([class]) {
   padding: 24px;
@@ -664,7 +651,7 @@
   box-shadow: none;
 }
 
-/* ── Toast ──────────────────────────────────────────────── */
+/* ── Toast ────────────────────────────────────────────── */
 
 .neg-page .sd-toast {
   position: fixed;
@@ -672,68 +659,45 @@
   bottom: 24px;
   transform: translateX(-50%);
   z-index: 60;
-
   max-width: min(520px, calc(100vw - 32px));
   padding: 12px 18px;
-
   border: 1px solid var(--n-accent-line);
   border-radius: 12px;
   background: #fff;
   color: var(--n-accent-ink);
   font: 600 14px/1.45 var(--mb-font-body, 'DM Sans', sans-serif);
   text-align: center;
-
-  box-shadow:
-    0 1px 2px rgba(15, 30, 45, .06),
-    0 18px 44px rgba(15, 30, 45, .16);
-
+  box-shadow: 0 1px 2px rgba(15, 30, 45, .06), 0 18px 44px rgba(15, 30, 45, .16);
   animation: neg-toast-in .22s var(--n-ease);
 }
-
 @keyframes neg-toast-in {
   from { opacity: 0; transform: translate(-50%, 12px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* ── Responsive ─────────────────────────────────────────── */
+/* ── Responsive ───────────────────────────────────────── */
 
 @media (max-width: 720px) {
   .neg-page .container-narrow { padding: 24px 16px 72px; }
-
   .neg-page h1 { font-size: 24px; }
 
-  .neg-page .sd-tabs {
-    display: flex;
-    width: 100%;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    border-radius: 14px;
-  }
+  .neg-page .sd-tabs { width: 100%; justify-content: stretch; }
+  .neg-page .sd-tab  { flex: 1 1 0; text-align: center; }
 
-  .neg-page .sd-tab {
-    flex: 1 1 auto;
-    text-align: center;
-    padding: 8px 12px;
-  }
+  .neg-page .neg-filter-row { margin-bottom: 20px; }
 
-  .neg-page .neg-section-title {
-    font-size: 16px;
-    padding-bottom: 10px;
-  }
+  .neg-page .neg-section-title { font-size: 15px; }
 
   .neg-page .neg-group { padding: 16px; }
-  .neg-page .neg-card  { padding: 18px; }
+  .neg-page .neg-card  { padding: 16px; }
 
   .neg-page .neg-card-top {
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
   }
-
   .neg-page .neg-card-top > .btn-outline,
-  .neg-page .neg-card-top > .btn {
-    align-self: flex-start;
-  }
+  .neg-page .neg-card-top > .btn { align-self: flex-start; }
 
   .neg-page .neg-turn-label {
     top: -9px;
@@ -745,15 +709,7 @@
 
   .neg-page .neg-amount { font-size: 20px; }
 
-  .neg-page .neg-actions {
-    gap: 8px;
-  }
-
-  .neg-page .neg-actions > .sd-btn {
-    flex: 1 1 auto;
-    min-height: 42px;
-  }
-
+  .neg-page .neg-actions > .sd-btn { flex: 1 1 auto; min-height: 42px; }
   .neg-page .neg-actions input[type="number"] {
     flex: 1 1 100%;
     width: 100% !important;
@@ -768,7 +724,6 @@
     transform: none;
     max-width: none;
   }
-
   @keyframes neg-toast-in {
     from { opacity: 0; transform: translateY(12px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -777,40 +732,24 @@
 
 @media (max-width: 420px) {
   .neg-page .neg-group { padding: 14px; }
-  .neg-page .neg-card  { padding: 16px; }
-
-  .neg-page .neg-title { font-size: 15px; }
+  .neg-page .neg-card  { padding: 15px; }
+  .neg-page .neg-title { font-size: 14.5px; }
   .neg-page .neg-amount { font-size: 19px; }
-
-  .neg-page .neg-group-title { font-size: 15px; }
-
-  .neg-page .neg-actions > .sd-btn {
-    font-size: 12.5px;
-    padding: 0 14px;
-  }
+  .neg-page .neg-group-title { font-size: 14.5px; }
 }
-
-/* ── Reduced motion ─────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   .neg-page .sd-tab,
+  .neg-page .neg-filter-chip,
   .neg-page .sd-btn,
   .neg-page .btn,
   .neg-page .btn-outline,
   .neg-page .neg-card,
   .neg-page .neg-group,
   .neg-page .neg-group-link,
-  .neg-page .neg-actions input[type="number"] {
-    transition: none;
-  }
-
+  .neg-page .neg-actions input[type="number"] { transition: none; }
   .neg-page .neg-card:hover,
   .neg-page .neg-group:hover,
-  .neg-page .sd-btn-primary:hover:not(:disabled) {
-    transform: none;
-  }
-
-  .neg-page .sd-toast {
-    animation: none;
-  }
+  .neg-page .sd-btn-primary:hover:not(:disabled) { transform: none; }
+  .neg-page .sd-toast { animation: none; }
 }
