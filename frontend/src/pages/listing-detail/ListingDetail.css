@@ -190,10 +190,10 @@
 
 .detail-page h1 {
   font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: clamp(24px, 3.4vw, 34px);
+  font-size: clamp(19px, 2.4vw, 24px);
   font-weight: 800;
-  letter-spacing: -.65px;
-  line-height: 1.14;
+  letter-spacing: -.4px;
+  line-height: 1.2;
   color: var(--d-ink);
   margin-bottom: 8px;
 }
@@ -311,31 +311,10 @@
   box-shadow: var(--d-shadow);
 }
 
-.detail-page .card#negotiation h2 {
-  margin: -20px -20px 16px;
-  padding: 14px 20px;
-  border-radius: calc(var(--d-radius) - 1px) calc(var(--d-radius) - 1px) 0 0;
-  background: var(--d-soft);
-  color: var(--d-green);
-  font-size: 14px;
-  letter-spacing: .01em;
-}
-
-/* Offer / seller-controls card: the unmistakable action zone.
-   Green header strip, elevated shadow to draw the eye. */
+/* Offer / seller-controls card: elevated shadow to draw the eye. */
 .detail-page .card.sticky-card {
   border-color: rgba(23, 107, 58, .22);
   box-shadow: 0 6px 28px rgba(14, 75, 41, .12);
-}
-
-.detail-page .card.sticky-card h2 {
-  margin: -20px -20px 16px;
-  padding: 14px 20px;
-  border-radius: calc(var(--d-radius) - 1px) calc(var(--d-radius) - 1px) 0 0;
-  background: var(--d-green);
-  color: #fff;
-  font-size: 14px;
-  letter-spacing: .01em;
 }
 
 /* ── Form elements inside cards ─────────────────────────── */
@@ -489,7 +468,7 @@
 @media (max-width: 640px) {
   .detail-page .container-wide { padding-top: 20px; padding-bottom: 48px; }
 
-  .detail-page h1 { font-size: 26px; letter-spacing: -.4px; }
+  .detail-page h1 { font-size: 20px; letter-spacing: -.3px; }
 
   /* Fact strip: stack price on its own row, date + seller share second row */
   .detail-page .detail-facts {
@@ -504,12 +483,6 @@
 
   .detail-page .detail-facts > div:first-child + div {
     border-left: none;
-  }
-
-  .detail-page .card#negotiation h2,
-  .detail-page .card.sticky-card h2 {
-    margin: -16px -16px 14px;
-    padding: 12px 16px;
   }
 
   .detail-page .offer-row .row-actions {
