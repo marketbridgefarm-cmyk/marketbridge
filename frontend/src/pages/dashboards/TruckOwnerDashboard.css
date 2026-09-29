@@ -363,6 +363,11 @@
 }
 .sd-dashboard .sd-panel:last-child { margin-bottom: 0; }
 
+.sd-dashboard .sd-panel--error {
+  border-color: var(--sd-danger-line);
+  background: linear-gradient(180deg, #fff7f6, #fef2f2);
+}
+
 .sd-dashboard .sd-toolbar {
   display: flex;
   align-items: flex-end;
@@ -439,7 +444,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   FLEET / JOB CARDS — .sd-cards wrapper + .sd-card tiles
+   CARD GRID + BASE CARD
    ══════════════════════════════════════════════════════════ */
 
 .sd-dashboard .sd-cards {
@@ -472,7 +477,6 @@
   transform: translateY(-2px);
 }
 
-/* Small accent bar on the left edge */
 .sd-dashboard .sd-card::before {
   content: '';
   position: absolute;
@@ -511,16 +515,326 @@
   color: var(--sd-ink);
 }
 
-/* Card action row */
-.sd-dashboard .sd-card > div[style*="display: flex"] {
-  margin-top: auto;
-  padding-top: 12px;
+/* Empty state inside a `.sd-cards` grid */
+.sd-dashboard .sd-cards > .sd-panel {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
 }
 
-/* Panels that live inside the .sd-cards grid should also fill nicely */
-.sd-dashboard .sd-cards > .sd-panel {
-  margin-bottom: 0;
+/* ══════════════════════════════════════════════════════════
+   EMPTY STATES
+   ══════════════════════════════════════════════════════════ */
+
+.sd-dashboard .sd-empty-state {
   grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  padding: 48px 24px;
+  border: 1px dashed var(--sd-line);
+  border-radius: var(--sd-radius);
+  background: rgba(255, 255, 255, .7);
+}
+.sd-dashboard .sd-empty-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: var(--sd-accent-soft);
+  border: 1px solid var(--sd-accent-line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  color: var(--sd-accent-2);
+}
+.sd-dashboard .sd-empty-state h3 {
+  margin: 0;
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -.2px;
+  color: var(--sd-ink);
+}
+.sd-dashboard .sd-empty-state p {
+  margin: 0;
+  max-width: 40ch;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--sd-muted);
+}
+
+/* ══════════════════════════════════════════════════════════
+   TRUCK CARDS
+   ══════════════════════════════════════════════════════════ */
+
+.sd-dashboard .sd-truck-card {
+  padding: 18px 20px 16px 22px;
+}
+
+.sd-dashboard .sd-truck-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.sd-dashboard .sd-truck-head h3 { margin: 0; }
+
+.sd-dashboard .sd-truck-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--sd-line);
+  border-radius: 12px;
+  background: var(--sd-surface);
+  margin-bottom: 14px;
+}
+.sd-dashboard .sd-truck-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.sd-dashboard .sd-truck-facts span {
+  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--sd-muted);
+}
+.sd-dashboard .sd-truck-facts strong {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--sd-ink);
+  letter-spacing: -.1px;
+  overflow-wrap: anywhere;
+}
+
+.sd-dashboard .sd-truck-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--sd-line-soft);
+}
+.sd-dashboard .sd-truck-actions .sd-btn {
+  flex: 1 1 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  border-radius: 8px;
+}
+/* The active state button is shown as disabled but with an accent fill
+   so the current availability reads at a glance. */
+.sd-dashboard .sd-truck-actions .sd-btn:disabled {
+  opacity: 1;
+  cursor: default;
+  background: var(--sd-accent-soft);
+  border-color: var(--sd-accent-line);
+  color: var(--sd-accent-ink);
+  font-weight: 700;
+}
+
+/* ══════════════════════════════════════════════════════════
+   JOB CARDS
+   ══════════════════════════════════════════════════════════ */
+
+.sd-dashboard .sd-job-card {
+  padding: 20px 22px 18px 24px;
+}
+
+.sd-dashboard .sd-job-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.sd-dashboard .sd-job-card-head h3 { margin: 0; }
+
+/* Route strip: pickup → destination */
+.sd-dashboard .sd-job-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid var(--sd-line);
+  border-radius: 12px;
+  background: var(--sd-surface);
+  margin-bottom: 14px;
+}
+
+.sd-dashboard .sd-job-endpoint {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.sd-dashboard .sd-job-endpoint-label {
+  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--sd-muted);
+}
+.sd-dashboard .sd-job-endpoint strong {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -.1px;
+  color: var(--sd-ink);
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+.sd-dashboard .sd-job-route-arrow {
+  flex: 0 0 auto;
+  color: var(--sd-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: .8;
+}
+
+.sd-dashboard .sd-job-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.sd-dashboard .sd-job-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.sd-dashboard .sd-job-meta-item span {
+  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--sd-muted);
+}
+.sd-dashboard .sd-job-meta-item strong {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: -.1px;
+  color: var(--sd-ink);
+  overflow-wrap: anywhere;
+}
+
+.sd-dashboard .sd-job-requirements {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--sd-gold-soft);
+  border: 1px solid var(--sd-gold-line);
+  margin-bottom: 14px;
+}
+.sd-dashboard .sd-job-requirements-label {
+  display: block;
+  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--sd-gold);
+  margin-bottom: 4px;
+}
+.sd-dashboard .sd-job-requirements p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sd-ink-soft);
+}
+
+.sd-dashboard .sd-job-status {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--sd-accent-soft);
+  border: 1px solid var(--sd-accent-line);
+  color: var(--sd-accent-ink);
+  font: 600 13px/1.5 var(--mb-font-body, 'DM Sans', sans-serif);
+  margin-bottom: 14px;
+}
+
+.sd-dashboard .sd-job-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--sd-line-soft);
+}
+.sd-dashboard .sd-job-footer .sd-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sd-dashboard .sd-job-actions {
+  display: contents;
+}
+
+.sd-dashboard .sd-job-note {
+  width: 100%;
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--sd-muted);
+}
+
+.sd-dashboard .sd-job-waiting {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--sd-muted);
+}
+.sd-dashboard .sd-job-waiting-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sd-gold);
+  box-shadow: 0 0 0 3px rgba(168, 111, 16, .15);
+  flex: 0 0 auto;
+}
+
+/* ══════════════════════════════════════════════════════════
+   MY JOBS — section wrapper + heading
+   ══════════════════════════════════════════════════════════ */
+
+.sd-dashboard .sd-jobs-section {
+  margin-bottom: 32px;
+}
+.sd-dashboard .sd-jobs-section:last-child { margin-bottom: 0; }
+
+.sd-dashboard .sd-jobs-section-head {
+  margin-bottom: 14px;
+}
+.sd-dashboard .sd-jobs-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.3px;
+  color: var(--sd-ink);
+}
+.sd-dashboard .sd-jobs-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--sd-accent-soft);
+  border: 1px solid var(--sd-accent-line);
+  color: var(--sd-accent-ink);
+  font: 800 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -598,6 +912,14 @@
   color: var(--sd-ink);
 }
 
+.sd-dashboard .sd-mobile-action {
+  color: var(--sd-accent-2);
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: none;
+}
+.sd-dashboard .sd-mobile-action:hover { text-decoration: underline; }
+
 /* ══════════════════════════════════════════════════════════
    ALERTS + TOAST
    ══════════════════════════════════════════════════════════ */
@@ -641,18 +963,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   ERROR PANEL (red border replacement)
-   ══════════════════════════════════════════════════════════ */
-
-/* The error panel uses an inline red border; add a stronger visual
-   treatment for the whole panel when it's an error card. */
-.sd-dashboard .sd-panel[style*="c0392b"],
-.sd-dashboard .sd-panel[style*="b42318"] {
-  background: linear-gradient(180deg, #fff7f6, #fef2f2) !important;
-}
-
-/* ══════════════════════════════════════════════════════════
-   EVIDENCE MODAL — .sd-report-backdrop + .sd-report-modal
+   MODALS — evidence + truck registration
    ══════════════════════════════════════════════════════════ */
 
 .sd-dashboard .sd-report-backdrop {
@@ -721,9 +1032,16 @@
   margin: 0 0 14px;
 }
 
-/* Wrappers inside the modal */
+.sd-dashboard .sd-report-modal .sd-form-grid,
 .sd-dashboard .sd-report-modal .form-grid {
   margin-top: 16px;
+}
+
+.sd-dashboard .sd-report-modal form {
+  display: block;
+}
+.sd-dashboard .sd-report-modal form > .sd-form-grid {
+  margin-top: 0;
 }
 
 .sd-dashboard .sd-report-actions {
@@ -736,7 +1054,6 @@
   border-top: 1px solid var(--sd-line-soft);
 }
 
-/* Generic .sd-modal-actions used inside the register-truck form too */
 .sd-dashboard .sd-modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -762,7 +1079,6 @@
   .sd-dashboard { padding: 24px 16px 72px; }
   .sd-dashboard h1 { font-size: 24px; }
 
-  /* Stats collapse to 2-up */
   .sd-dashboard .sd-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
@@ -770,7 +1086,6 @@
   }
   .sd-dashboard .sd-stat b { font-size: 22px; }
 
-  /* Tabs fill the row */
   .sd-dashboard .sd-tabs {
     display: flex;
     width: 100%;
@@ -786,20 +1101,45 @@
 
   .sd-dashboard .sd-panel { padding: 18px; }
 
-  /* Form grid collapses */
   .sd-dashboard .sd-form-grid,
   .sd-dashboard .form-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  /* Fleet cards go single column */
   .sd-dashboard .sd-cards {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
   .sd-dashboard .sd-card { padding: 18px; }
 
-  /* Table becomes scrollable horizontally */
+  .sd-dashboard .sd-truck-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sd-dashboard .sd-job-route {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    text-align: left;
+  }
+  .sd-dashboard .sd-job-route-arrow {
+    justify-content: flex-start;
+    transform: rotate(90deg);
+    transform-origin: left center;
+    margin: 2px 0;
+  }
+
+  .sd-dashboard .sd-job-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sd-dashboard .sd-job-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sd-dashboard .sd-job-footer .sd-btn {
+    width: 100%;
+  }
+
   .sd-dashboard .sd-table-wrap {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -808,7 +1148,53 @@
     min-width: 640px;
   }
 
-  /* Modal fills more of the screen */
+  /* Completed-trips table → cards on mobile */
+  .sd-dashboard .sd-table--mobile-cards {
+    display: block;
+    min-width: 0;
+  }
+  .sd-dashboard .sd-table--mobile-cards thead { display: none; }
+  .sd-dashboard .sd-table--mobile-cards tbody { display: block; }
+  .sd-dashboard .sd-table--mobile-cards tbody tr {
+    display: block;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    border: 1px solid var(--sd-line);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 30, 45, .04);
+  }
+  .sd-dashboard .sd-table--mobile-cards tbody tr:hover { background: #fff; }
+  .sd-dashboard .sd-table--mobile-cards tbody td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 0;
+    border: none;
+    font-size: 13px;
+    text-align: right;
+  }
+  .sd-dashboard .sd-table--mobile-cards tbody td::before {
+    content: attr(data-label);
+    font: 700 10px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--sd-muted);
+    text-align: left;
+    flex: 0 0 auto;
+    padding-right: 8px;
+  }
+  .sd-dashboard .sd-table--mobile-cards tbody td[data-label="Action"] {
+    justify-content: flex-end;
+    padding-top: 10px;
+    margin-top: 6px;
+    border-top: 1px solid var(--sd-line-soft);
+  }
+  .sd-dashboard .sd-table--mobile-cards tbody td[data-label="Action"]::before {
+    display: none;
+  }
+
   .sd-dashboard .sd-report-backdrop { padding: 12px; }
   .sd-dashboard .sd-report-modal {
     padding: 22px 20px 20px;
@@ -824,7 +1210,6 @@
     min-height: 44px;
   }
 
-  /* Toast pins edge to edge */
   .sd-dashboard .sd-toast {
     bottom: 16px;
     left: 16px;
@@ -851,6 +1236,10 @@
   .sd-dashboard .sd-card h3 { font-size: 15px; }
 
   .sd-dashboard .sd-tab { font-size: 12px; padding: 9px 10px; }
+
+  .sd-dashboard .sd-job-meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* ══════════════════════════════════════════════════════════
