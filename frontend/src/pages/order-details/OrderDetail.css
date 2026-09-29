@@ -1,13 +1,31 @@
 /* ============================================================
    MarketBridge — Order detail  (order-details/OrderDetail.css)
-   Every card follows the same structure:
-       header (eyebrow + title)
-       ────────────────────────────────  ← hairline
-       content title
-       ────────────────────────────────  ← tiny hairline
-       card body
-   Two-column on tablet and desktop, single column on phones.
+
+   Table of contents
+   1.  Tokens + page shell
+   2.  Page header
+   3.  Typography
+   4.  Hero
+   5.  Status pills + badges
+   6.  Cards — header / body / block design system
+   7.  Buttons
+   8.  Forms
+   9.  Order overview
+   10. Parties
+   11. Detail-facts
+   12. Inspection report + decision gate
+   13. Notices & alerts
+   14. Transport
+   15. Payout summary
+   16. Next-action + product offer
+   17. Toast
+   18. Responsive
+   19. Print — quarterly report
    ============================================================ */
+
+/* --------------------------------------------------------------------------
+   1. Tokens + page shell
+   -------------------------------------------------------------------------- */
 
 .order-detail-page {
   --od-accent:      #1e9e5a;
@@ -42,7 +60,6 @@
   --od-info-line:   #cddff5;
 
   --od-radius:      20px;
-  --od-radius-sm:   14px;
   --od-shadow:      0 1px 2px rgba(15, 30, 45, .04),
                     0 8px 24px rgba(15, 30, 45, .05);
   --od-shadow-hi:   0 2px 4px rgba(15, 30, 45, .04),
@@ -69,9 +86,9 @@
   padding: 32px 24px 96px;
 }
 
-/* ══════════════════════════════════════════════════════════
-   PAGE HEADER
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   2. Page header
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .row-between {
   display: flex;
@@ -112,9 +129,9 @@
   box-shadow: var(--od-ring);
 }
 
-/* ══════════════════════════════════════════════════════════
-   TYPOGRAPHY
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   3. Typography
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .eyebrow {
   display: inline-flex;
@@ -154,9 +171,9 @@
 .order-detail-page p { margin: 0 0 12px; }
 .order-detail-page p:last-child { margin-bottom: 0; }
 
-/* ══════════════════════════════════════════════════════════
-   HERO
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   4. Hero
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .order-hero {
   position: relative;
@@ -258,9 +275,9 @@
   margin-left: 4px;
 }
 
-/* ══════════════════════════════════════════════════════════
-   STATUS PILLS + BADGES
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   5. Status pills + badges
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .status-pill {
   display: inline-flex;
@@ -319,10 +336,9 @@
   white-space: nowrap;
 }
 
-/* ══════════════════════════════════════════════════════════
-   CARDS — the shared surface and the header / content-title /
-   body rhythm.
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   6. Cards — header / body / block design system
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .card {
   position: relative;
@@ -335,7 +351,7 @@
 }
 .order-detail-page .card:last-child { margin-bottom: 0; }
 
-/* Neutralize any inherited heading styling */
+/* Neutralize any inherited heading pseudos */
 .order-detail-page .card h2::before,
 .order-detail-page .card h2::after,
 .order-detail-page .card h3::before,
@@ -344,11 +360,9 @@
   content: none !important;
 }
 
-/* ─── 1. Card header ──────────────────────────────────── */
-/* Wrapper around eyebrow + card title. Stacks vertically
-   (eyebrow above title), left-aligned, with a hairline
-   divider underneath so every card on the page starts
-   with the same visual anchor. */
+/* ── Card header ─────────────────────────────────────────
+   Stacked left-aligned: eyebrow above title. Hairline divider
+   underneath. Every card starts with the same visual anchor. */
 
 .order-detail-page .card-head {
   display: flex;
@@ -356,7 +370,6 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-
   padding: 0 0 16px;
   margin: 0 0 18px;
   border-bottom: 1px solid var(--od-line);
@@ -371,9 +384,7 @@
   text-align: left;
 }
 
-.order-detail-page .card-head .eyebrow {
-  margin-bottom: 6px;
-}
+.order-detail-page .card-head .eyebrow { margin-bottom: 6px; }
 
 .order-detail-page .card-head h2 {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif) !important;
@@ -388,36 +399,26 @@
   text-transform: none !important;
 }
 
-/* The right-side slot of a header (pill, badge, status) */
 .order-detail-page .card-head > .status-pill,
 .order-detail-page .card-head > .badge {
   align-self: flex-start;
   flex: 0 0 auto;
 }
 
-/* ── Transport card header only ── */
-/* The Transport card lays out its icon next to the text, so
-   only that card's header gets the inline row layout. Every
-   other card keeps the default stacked header. */
+/* Only the Transport card uses the inline icon + text header */
 .order-detail-page .transport-overview-card .card-head > .card-head-text {
   flex-direction: row;
   align-items: center;
   gap: 14px;
 }
 
-/* ─── 2. Card body ────────────────────────────────────── */
+/* ── Card body ─────────────────────────────────────────── */
 
-.order-detail-page .card-body {
-  display: block;
-}
+.order-detail-page .card-body { display: block; }
 
-/* ─── 3. Card block ───────────────────────────────────── */
-/* A labelled section inside the card body: content title
-   with a tiny hairline under it, then the section content. */
+/* ── Card block — labelled section inside the body ─────── */
 
-.order-detail-page .card-block {
-  margin: 0 0 20px;
-}
+.order-detail-page .card-block { margin: 0 0 20px; }
 .order-detail-page .card-block:last-child { margin-bottom: 0; }
 
 .order-detail-page .card-block-title {
@@ -426,7 +427,6 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-
   padding: 0 0 10px;
   margin: 0 0 14px;
   border-bottom: 1px solid var(--od-line-soft);
@@ -452,9 +452,7 @@
   flex: 0 0 auto;
 }
 
-.order-detail-page .card-block-body {
-  display: block;
-}
+.order-detail-page .card-block-body { display: block; }
 
 .order-detail-page .card hr {
   border: none;
@@ -478,9 +476,9 @@
   background: linear-gradient(180deg, #fff7f6, #fef2f2);
 }
 
-/* ══════════════════════════════════════════════════════════
-   BUTTONS
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   7. Buttons
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .btn {
   display: inline-flex;
@@ -502,8 +500,7 @@
               background .15s var(--od-ease),
               color .15s var(--od-ease),
               transform .12s var(--od-ease),
-              box-shadow .15s var(--od-ease),
-              filter .12s var(--od-ease);
+              box-shadow .15s var(--od-ease);
 }
 .order-detail-page .btn:hover {
   border-color: rgba(30, 158, 90, .35);
@@ -569,9 +566,16 @@
   border-radius: 8px;
 }
 
-/* ══════════════════════════════════════════════════════════
-   FORMS
-   ══════════════════════════════════════════════════════════ */
+.order-detail-page .next-action-buttons,
+.order-detail-page .sd-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* --------------------------------------------------------------------------
+   8. Forms
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .card form {
   display: flex;
@@ -638,9 +642,9 @@
   box-shadow: var(--od-ring);
 }
 
-/* ══════════════════════════════════════════════════════════
-   ORDER OVERVIEW CARD
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   9. Order overview
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .order-overview-card { padding: 22px 24px; }
 
@@ -675,9 +679,9 @@
   overflow-wrap: anywhere;
 }
 
-/* ══════════════════════════════════════════════════════════
-   PARTY LIST
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   10. Parties
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .party-list { display: grid; gap: 10px; }
 .order-detail-page .party-list-inline {
@@ -744,9 +748,9 @@
   flex: 0 0 auto;
 }
 
-/* ══════════════════════════════════════════════════════════
-   DETAIL-FACTS strip
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   11. Detail-facts strip — orientation-agnostic dividers
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .detail-facts {
   display: grid;
@@ -792,9 +796,9 @@
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
-/* ══════════════════════════════════════════════════════════
-   INSPECTION
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   12. Inspection report + decision gate
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .inspection-purchase-gate {
   margin-top: 4px;
@@ -951,9 +955,9 @@
   font-size: 14px;
 }
 
-/* ══════════════════════════════════════════════════════════
-   NOTICES / ALERTS
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   13. Notices & alerts — no left accent
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .notice {
   padding: 14px 16px;
@@ -965,8 +969,6 @@
   font-size: 14px;
   line-height: 1.55;
 }
-
-
 .order-detail-page .notice:last-child { margin-bottom: 0; }
 .order-detail-page .notice strong { color: var(--od-ink); }
 
@@ -990,9 +992,9 @@
   color: var(--od-accent-ink);
 }
 
-/* ══════════════════════════════════════════════════════════
-   TRANSPORT CARD
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   14. Transport
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .transport-overview-card { padding: 22px 24px; }
 
@@ -1064,9 +1066,9 @@
   flex: 0 0 auto;
 }
 
-/* ══════════════════════════════════════════════════════════
-   PAYOUT SUMMARY CARD
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   15. Payout summary
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .payout-summary-card { padding: 22px 24px; }
 
@@ -1250,21 +1252,11 @@
   letter-spacing: 0;
 }
 
-/* ══════════════════════════════════════════════════════════
-   NEXT ACTION CARD
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   16. Next-action + product offer
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .next-action-card h2 { margin-bottom: 0 !important; }
-.order-detail-page .next-action-buttons {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 0;
-}
-
-/* ══════════════════════════════════════════════════════════
-   PRODUCT OFFER CARD
-   ══════════════════════════════════════════════════════════ */
 
 .order-detail-page .order-product-offer-card { padding: 22px 24px; }
 
@@ -1279,21 +1271,9 @@
   min-width: 160px;
 }
 
-/* ══════════════════════════════════════════════════════════
-   SECTION anchors
-   ══════════════════════════════════════════════════════════ */
-
-.order-detail-page #inspection-section,
-.order-detail-page #transport-section,
-.order-detail-page #payment-center,
-.order-detail-page #confirm-receipt,
-.order-detail-page #raise-dispute {
-  scroll-margin-top: 96px;
-}
-
-/* ══════════════════════════════════════════════════════════
-   TOAST
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   17. Toast
+   -------------------------------------------------------------------------- */
 
 .order-detail-page .order-detail-toast {
   position: fixed;
@@ -1330,7 +1310,6 @@
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
   font-weight: 800;
   font-size: 12px;
-  line-height: 1;
 }
 .order-detail-page .order-detail-toast-message {
   min-width: 0;
@@ -1349,15 +1328,10 @@
   cursor: pointer;
   padding: 0 2px;
   border-radius: 6px;
-  transition: color .15s var(--od-ease), background .15s var(--od-ease);
 }
 .order-detail-page .order-detail-toast-close:hover {
   color: var(--od-ink);
   background: var(--od-line-soft);
-}
-.order-detail-page .order-detail-toast-close:focus-visible {
-  outline: none;
-  box-shadow: var(--od-ring);
 }
 
 @keyframes order-detail-toast-in {
@@ -1365,29 +1339,21 @@
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* ══════════════════════════════════════════════════════════
-   TABLET — two columns, narrower sidebar
-   721px – 1023px
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   18. Responsive
+   -------------------------------------------------------------------------- */
 
 @media (max-width: 1023px) and (min-width: 721px) {
-  .order-detail-page .container-narrow {
-    padding: 28px 20px 80px;
-  }
-
+  .order-detail-page .container-narrow { padding: 28px 20px 80px; }
   .order-detail-page .card { padding: 20px; }
-
   .order-detail-page .order-overview-card,
   .order-detail-page .transport-overview-card,
   .order-detail-page .payout-summary-card,
-  .order-detail-page .order-product-offer-card {
-    padding: 20px;
-  }
+  .order-detail-page .order-product-offer-card { padding: 20px; }
 
   .order-detail-page .transport-detail-facts {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-
   .order-detail-page .detail-facts > div { padding: 12px 14px; }
   .order-detail-page .detail-facts span { font-size: 9.5px; }
   .order-detail-page .detail-facts strong { font-size: 14px; }
@@ -1395,26 +1361,12 @@
   .order-detail-page .payout-table { font-size: 13px; }
   .order-detail-page .payout-table thead th,
   .order-detail-page .payout-table tbody th,
-  .order-detail-page .payout-table tbody td {
-    padding: 11px 10px;
-  }
-
-  .order-detail-page .order-detail-toast {
-    bottom: 20px;
-    max-width: min(520px, calc(100vw - 40px));
-  }
+  .order-detail-page .payout-table tbody td { padding: 11px 10px; }
 }
-
-/* ══════════════════════════════════════════════════════════
-   PHONE — single column, static sidebar
-   ≤ 720px
-   ══════════════════════════════════════════════════════════ */
 
 @media (max-width: 720px) {
   .order-detail-page .container-narrow { padding: 24px 16px 96px; }
-
   .order-detail-page .card { padding: 18px; }
-
   .order-detail-page .card-head { padding-bottom: 14px; margin-bottom: 16px; }
   .order-detail-page .card-block { margin-bottom: 18px; }
   .order-detail-page .card-block-title { padding-bottom: 8px; margin-bottom: 12px; }
@@ -1435,23 +1387,16 @@
   .order-detail-page .order-overview-card,
   .order-detail-page .transport-overview-card,
   .order-detail-page .payout-summary-card,
-  .order-detail-page .order-product-offer-card {
-    padding: 18px;
-  }
+  .order-detail-page .order-product-offer-card { padding: 18px; }
 
-  .order-detail-page .party-list-inline {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
+  .order-detail-page .party-list-inline { grid-template-columns: minmax(0, 1fr); }
   .order-detail-page .detail-facts > div { padding: 12px 14px; }
   .order-detail-page .detail-facts span { font-size: 9.5px; }
   .order-detail-page .detail-facts strong { font-size: 14px; }
-
   .order-detail-page .transport-detail-facts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  /* Transport card header: keep icon+text row but allow wrap */
   .order-detail-page .transport-overview-card .card-head > .card-head-text {
     align-items: flex-start;
   }
@@ -1460,16 +1405,12 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
-  .order-detail-page .transporter > div:last-child {
-    text-align: left;
-  }
+  .order-detail-page .transporter > div:last-child { text-align: left; }
 
   .order-detail-page .payout-table { font-size: 13px; }
   .order-detail-page .payout-table thead th,
   .order-detail-page .payout-table tbody th,
-  .order-detail-page .payout-table tbody td {
-    padding: 10px 10px;
-  }
+  .order-detail-page .payout-table tbody td { padding: 10px 10px; }
 
   .order-detail-page .payout-due {
     flex-direction: column;
@@ -1491,56 +1432,162 @@
   }
 }
 
-/* ══════════════════════════════════════════════════════════
-   SMALL PHONE
-   ≤ 420px
-   ══════════════════════════════════════════════════════════ */
-
 @media (max-width: 420px) {
   .order-detail-page .order-hero-title { font-size: 20px; letter-spacing: -.4px; }
-
   .order-detail-page .order-overview-facts {
     grid-template-columns: minmax(0, 1fr);
     padding: 12px 14px;
   }
-
   .order-detail-page .payout-table thead th,
   .order-detail-page .payout-table tbody th,
   .order-detail-page .payout-table tbody td {
     padding: 9px 8px;
     font-size: 12.5px;
   }
-
   .order-detail-page .payout-party-name { display: none; }
-
   .order-detail-page .status-pill { font-size: 10.5px; padding: 0 8px; }
   .order-detail-page .btn-sm { min-height: 30px; font-size: 12px; }
-
   .order-detail-page .transport-detail-facts {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-/* ══════════════════════════════════════════════════════════
-   REDUCED MOTION
-   ══════════════════════════════════════════════════════════ */
+/* --------------------------------------------------------------------------
+   19. Print — quarterly report
+   -------------------------------------------------------------------------- */
 
-@media (prefers-reduced-motion: reduce) {
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+
+  html, body { background: #fff !important; }
+
+  .order-detail-page,
+  .order-detail-page * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .order-detail-page {
+    max-width: 100%;
+    width: 100%;
+    padding: 0 !important;
+    font-size: 12.5px;
+    color: #111 !important;
+    background: #fff !important;
+  }
+
+  /* Hide interactive elements */
   .order-detail-page .back-link,
-  .order-detail-page .card,
-  .order-detail-page .status-pill,
-  .order-detail-page .badge,
   .order-detail-page .btn,
-  .order-detail-page .card input,
-  .order-detail-page .card select,
-  .order-detail-page .card textarea,
-  .order-detail-page .order-detail-toast-close {
-    transition: none;
+  .order-detail-page .next-action-buttons,
+  .order-detail-page .order-hero .btn-outline,
+  .order-detail-page .message-composer,
+  .order-detail-page .rating-form,
+  .order-detail-page form,
+  .order-detail-page input,
+  .order-detail-page select,
+  .order-detail-page textarea,
+  .order-detail-page [class*="uploader"],
+  .order-detail-toast {
+    display: none !important;
   }
-  .order-detail-page .back-link:hover,
-  .order-detail-page .btn-primary:hover:not(:disabled),
-  .order-detail-page .btn.primary:hover:not(:disabled) {
-    transform: none;
+
+  .order-detail-page .card-warning { display: block !important; }
+
+  .order-detail-page .order-hero {
+    background: #fff !important;
+    color: #111 !important;
+    border: 1.5px solid #111;
+    border-radius: 0;
+    box-shadow: none !important;
+    padding: 10mm 0 8mm;
+    margin-bottom: 8mm;
+    break-inside: avoid;
+    break-after: avoid;
   }
-  .order-detail-page .order-detail-toast { animation: none; }
+  .order-detail-page .order-hero::after { display: none; }
+  .order-detail-page .order-hero-eyebrow { color: #555 !important; }
+  .order-detail-page .order-hero-title { color: #111 !important; }
+  .order-detail-page .order-hero-chip {
+    background: #fff !important;
+    border: 1px solid #111 !important;
+    color: #111 !important;
+  }
+  .order-detail-page .order-hero-price-label { color: #555 !important; }
+  .order-detail-page .order-hero-price { color: #111 !important; }
+
+  .order-detail-page .status-pill {
+    border: 1px solid #111 !important;
+    background: #fff !important;
+    color: #111 !important;
+  }
+  .order-detail-page .card .status-pill.tone-good,
+  .order-detail-page .status-pill.tone-good { border-color: #146b38 !important; color: #146b38 !important; }
+  .order-detail-page .card .status-pill.tone-wait,
+  .order-detail-page .status-pill.tone-wait { border-color: #875b12 !important; color: #875b12 !important; }
+  .order-detail-page .card .status-pill.tone-bad,
+  .order-detail-page .status-pill.tone-bad { border-color: var(--od-danger) !important; color: var(--od-danger) !important; }
+
+  .order-detail-page .card {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 5mm 6mm;
+    margin-bottom: 5mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .order-detail-page .card-head { border-bottom: 1px solid #ccc; }
+  .order-detail-page .card-head h2 { font-size: 15px !important; }
+
+  .order-detail-page .order-overview-facts,
+  .order-detail-page .party-list-inline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3mm;
+  }
+
+  .order-detail-page .order-overview-fact,
+  .order-detail-page .party-row,
+  .order-detail-page .transporter,
+  .order-detail-page .evidence-item,
+  .order-detail-page .message-bubble,
+  .order-detail-page .rating-list-row {
+    border: 1px solid #ddd;
+    background: #fff !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .order-detail-page .payout-summary-card { overflow: visible; }
+  .order-detail-page .payout-table { min-width: 0; width: 100%; }
+  .order-detail-page .payout-table thead { display: table-header-group; }
+  .order-detail-page .payout-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .order-detail-page .payout-table th,
+  .order-detail-page .payout-table td {
+    border-bottom: 1px solid #ccc !important;
+    color: #111 !important;
+  }
+  .order-detail-page .payout-due {
+    background: #fff !important;
+    border: 1px solid #111;
+    break-inside: avoid;
+  }
+  .order-detail-page .payout-due-clock { display: none !important; }
+
+  .order-detail-page .evidence-thumb { width: 60px; height: 60px; }
+
+  .order-detail-page .payout-summary-card,
+  .order-detail-page .transport-overview-card {
+    break-before: page;
+  }
+
+  h1, h2, h3 { break-after: avoid; }
+  a[href]::after { content: none !important; }
 }
