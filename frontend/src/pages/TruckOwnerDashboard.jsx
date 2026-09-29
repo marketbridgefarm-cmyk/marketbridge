@@ -935,7 +935,7 @@ export default function TruckOwnerDashboard() {
                     </div>
 
                     <div className="sd-card-body">
-                      {/* Block 1 — Route (No box) */}
+                      {/* Block 1 — Route (Horizontal, no box) */}
                       <section className="sd-card-block">
                         <div className="sd-card-block-title">
                           <h4>Route</h4>
@@ -1147,7 +1147,7 @@ export default function TruckOwnerDashboard() {
                             </div>
                           </section>
 
-                          {/* Block 2 — Route (No box) */}
+                          {/* Block 2 — Route (Horizontal, no box) */}
                           <section className="sd-card-block">
                             <div className="sd-card-block-title">
                               <h4>Route</h4>
