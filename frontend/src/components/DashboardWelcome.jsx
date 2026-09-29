@@ -1,4 +1,5 @@
 import React from 'react';
+import './DashboardWelcome.css';
 
 // Shared across SellerDashboard and BuyerDashboard so both role views feel
 // like one connected "home base" rather than two disconnected pages —
