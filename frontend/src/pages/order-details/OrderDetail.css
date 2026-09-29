@@ -1,9 +1,12 @@
 /* ============================================================
    MarketBridge — Order detail  (order-details/OrderDetail.css)
-   Visual language: working page — dense, scannable, always
-   clear about what happens next. Two-column on tablet and
-   desktop, single column on phones. Every card shares the
-   same surface treatment: header, hairline divider, body.
+   Every card follows the same structure:
+       header (eyebrow + title)
+       ────────────────────────────────  ← hairline
+       content title
+       ────────────────────────────────  ← tiny hairline
+       card body
+   Two-column on tablet and desktop, single column on phones.
    ============================================================ */
 
 .order-detail-page {
@@ -67,7 +70,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   HEADER
+   PAGE HEADER
    ══════════════════════════════════════════════════════════ */
 
 .order-detail-page .row-between {
@@ -121,7 +124,7 @@
   font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .16em;
   text-transform: uppercase;
-  margin: 0 0 8px;
+  margin: 0 0 6px;
 }
 .order-detail-page .eyebrow::before {
   content: '';
@@ -317,15 +320,8 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   CARDS
-   ══════════════════════════════════════════════════════════
-   Every card on the page shares the same surface treatment
-   and the same internal rhythm:
-       header block  →  hairline  →  body
-   The hairline is applied below via the `> h2` /
-   `> .order-section-heading` / `> .transport-card-heading`
-   selectors, so any card that starts with one of those three
-   header patterns gets the divider automatically.
+   CARDS — the shared surface and the header / content-title /
+   body rhythm.
    ══════════════════════════════════════════════════════════ */
 
 .order-detail-page .card {
@@ -339,7 +335,7 @@
 }
 .order-detail-page .card:last-child { margin-bottom: 0; }
 
-/* Kill any global green-dot pseudos and force the Manrope heading stack */
+/* Neutralize any inherited heading styling */
 .order-detail-page .card h2::before,
 .order-detail-page .card h2::after,
 .order-detail-page .card h3::before,
@@ -348,7 +344,31 @@
   content: none !important;
 }
 
-.order-detail-page .card h2 {
+/* ─── 1. Card header ──────────────────────────────────── */
+/* Wrapper around eyebrow + card title. Always renders with
+   a hairline divider underneath so every card on the page
+   starts with the same visual anchor. */
+
+.order-detail-page .card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  padding: 0 0 16px;
+  margin: 0 0 18px;
+  border-bottom: 1px solid var(--od-line);
+}
+
+.order-detail-page .card-head-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.order-detail-page .card-head .eyebrow { margin-bottom: 6px; }
+
+.order-detail-page .card-head h2 {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif) !important;
   font-size: 18px !important;
   font-weight: 800 !important;
@@ -361,41 +381,69 @@
   text-transform: none !important;
 }
 
-.order-detail-page .card h3 {
+/* The right-side slot of a header (pill, badge, status) */
+.order-detail-page .card-head > .status-pill,
+.order-detail-page .card-head > .badge {
+  align-self: flex-start;
+  flex: 0 0 auto;
+}
+
+/* Transport card header carries an icon next to the text */
+.order-detail-page .card-head > .card-head-text {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ─── 2. Card body ────────────────────────────────────── */
+
+.order-detail-page .card-body {
+  display: block;
+}
+
+/* ─── 3. Card block ───────────────────────────────────── */
+/* A labelled section inside the card body: content title
+   with a tiny hairline under it, then the section content. */
+
+.order-detail-page .card-block {
+  margin: 0 0 20px;
+}
+.order-detail-page .card-block:last-child { margin-bottom: 0; }
+
+.order-detail-page .card-block-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  padding: 0 0 10px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid var(--od-line-soft);
+}
+
+.order-detail-page .card-block-title h3 {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif) !important;
-  font-size: 15px !important;
+  font-size: 14px !important;
   font-weight: 800 !important;
   font-style: normal !important;
-  letter-spacing: -.15px !important;
+  letter-spacing: -.1px !important;
   line-height: 1.3 !important;
   color: var(--od-ink) !important;
-  margin: 0 0 8px !important;
+  margin: 0 !important;
   padding: 0 !important;
   text-transform: none !important;
 }
 
-/* ── THE HAIRLINE UNDER EVERY CARD HEADER ───────────────── */
-/* Covers the three header patterns used across this page:
-     1. `.card > h2`                    (bare header)
-     2. `.card > .order-section-heading` (eyebrow + h2 + pill)
-     3. `.card > .transport-card-heading` (icon + title + badge)
-   The border sits on the wrapper, not on the h2 itself, so
-   the eyebrow → title → badge group reads as one header. */
-
-.order-detail-page .card > h2:first-child,
-.order-detail-page .card > .order-section-heading,
-.order-detail-page .card > .transport-card-heading {
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--od-line-soft);
-  margin-bottom: 18px;
+.order-detail-page .card-block-note {
+  font: 600 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
+  color: var(--od-muted);
+  flex: 0 0 auto;
 }
 
-/* When the header is a bare h2 and there is body content
-   directly after it, the divider is what separates them. */
-.order-detail-page .card > h2:first-child {
-  margin-bottom: 18px !important;
-  padding-bottom: 14px !important;
-  border-bottom: 1px solid var(--od-line-soft) !important;
+.order-detail-page .card-block-body {
+  display: block;
 }
 
 .order-detail-page .card hr {
@@ -586,24 +634,6 @@
 
 .order-detail-page .order-overview-card { padding: 22px 24px; }
 
-.order-detail-page .order-section-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.order-detail-page .order-section-heading h2,
-.order-detail-page .order-section-heading h3 {
-  margin: 0 !important;
-}
-
-.order-detail-page .order-section-note {
-  font-size: 12px;
-  color: var(--od-muted);
-  font-weight: 600;
-}
-
 .order-detail-page .order-overview-facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -634,14 +664,6 @@
   letter-spacing: -.15px;
   overflow-wrap: anywhere;
 }
-
-.order-detail-page .order-overview-divider {
-  height: 1px;
-  margin: 20px 0 18px;
-  background: var(--od-line-soft);
-}
-
-.order-detail-page .order-parties-heading { margin-bottom: 12px; }
 
 /* ══════════════════════════════════════════════════════════
    PARTY LIST
@@ -720,7 +742,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 1px;
-  margin: 14px 0 16px;
+  margin: 14px 0 0;
   padding: 0;
   border: 1px solid var(--od-line);
   border-radius: 14px;
@@ -761,30 +783,15 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   INSPECTION REPORT / DECISION GATE
+   INSPECTION
    ══════════════════════════════════════════════════════════ */
 
 .order-detail-page .inspection-purchase-gate {
-  margin-top: 16px;
+  margin-top: 4px;
   padding: 18px;
   border: 1px solid var(--od-line);
   border-radius: 16px;
   background: linear-gradient(180deg, #fbfdfb, #f7faf8);
-}
-
-.order-detail-page .inspection-report-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--od-line-soft);
-  margin-bottom: 14px;
-}
-.order-detail-page .inspection-report-header h3 {
-  margin: 4px 0 4px !important;
-  font-size: 16px !important;
 }
 
 .order-detail-page .inspection-report-facts {
@@ -906,7 +913,7 @@
 }
 .order-detail-page .inspection-decision-panel h3 {
   margin: 4px 0 8px !important;
-  font-size: 16px !important;
+  font-size: 15px !important;
 }
 .order-detail-page .inspection-decision-actions {
   display: flex;
@@ -978,14 +985,6 @@
 
 .order-detail-page .transport-overview-card { padding: 22px 24px; }
 
-.order-detail-page .transport-card-heading {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 14px;
-  align-items: center;
-  /* The base rule above already adds padding-bottom + border + margin */
-}
-
 .order-detail-page .transport-card-icon {
   width: 44px;
   height: 44px;
@@ -999,14 +998,8 @@
 }
 .order-detail-page .transport-card-icon svg { width: 22px; height: 22px; }
 
-.order-detail-page .transport-card-title h2 {
-  margin: 0 0 4px !important;
-}
-.order-detail-page .transport-card-title .eyebrow { margin-bottom: 6px; }
-.order-detail-page .transport-card-title p {
-  margin: 0;
-  font-size: 13.5px;
-}
+.order-detail-page .transport-card-title h2 { margin: 0 0 4px !important; }
+.order-detail-page .transport-card-title p { margin: 0; font-size: 13.5px; }
 
 .order-detail-page .transport-status-badge {
   background: var(--od-info-soft);
@@ -1014,49 +1007,7 @@
   color: var(--od-info);
 }
 
-.order-detail-page .transport-details-block { margin-bottom: 16px; }
-
-.order-detail-page .transport-subheading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-.order-detail-page .transport-subheading h3 {
-  margin: 4px 0 0 !important;
-  font-size: 15px !important;
-}
-
-.order-detail-page .transport-detail-facts { margin-top: 4px; }
-
-.order-detail-page .transport-info-panel { margin: 16px 0; }
-
-.order-detail-page .transport-panel-heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.order-detail-page .transport-panel-heading h3 {
-  margin: 0 !important;
-  font-size: 15px !important;
-}
-
-.order-detail-page .transport-panel-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  background: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  flex: 0 0 auto;
-  border: 1px solid var(--od-line);
-}
-
+.order-detail-page .transport-info-panel { margin: 0; }
 .order-detail-page .transport-info-panel p {
   margin: 0 0 6px;
   font-size: 14px;
@@ -1065,17 +1016,11 @@
 }
 .order-detail-page .transport-info-panel p:last-child { margin-bottom: 0; }
 
-/* Quotes */
 .order-detail-page .match-box {
-  margin: 16px 0;
-  padding: 16px;
-  border: 1px solid var(--od-line);
-  border-radius: 14px;
-  background: #fff;
-}
-.order-detail-page .match-box h3 {
-  margin: 0 0 12px !important;
-  font-size: 15px !important;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
 .order-detail-page .transporter {
@@ -1115,7 +1060,7 @@
 .order-detail-page .payout-summary-card { padding: 22px 24px; }
 
 .order-detail-page .payout-intro {
-  margin: 0 0 16px;
+  margin: 0;
   font-size: 14px;
   line-height: 1.6;
   color: var(--od-muted);
@@ -1139,7 +1084,7 @@
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  margin-bottom: 16px;
+  margin: 0;
   border: 1px solid var(--od-line);
   border-radius: 14px;
   overflow: hidden;
@@ -1298,49 +1243,25 @@
    NEXT ACTION CARD
    ══════════════════════════════════════════════════════════ */
 
-.order-detail-page .next-action-card h2 { margin-bottom: 6px !important; }
+.order-detail-page .next-action-card h2 { margin-bottom: 0 !important; }
 .order-detail-page .next-action-buttons {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-top: 14px;
+  margin-top: 0;
 }
 
 /* ══════════════════════════════════════════════════════════
-   PRODUCT MARKETPLACE OFFER CARD
+   PRODUCT OFFER CARD
    ══════════════════════════════════════════════════════════ */
 
 .order-detail-page .order-product-offer-card { padding: 22px 24px; }
-
-.order-detail-page .order-product-offer-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--od-accent-ink);
-  margin-bottom: 8px;
-}
-.order-detail-page .order-product-offer-kicker::before {
-  content: '';
-  flex: 0 0 18px;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
-}
-
-.order-detail-page .order-product-offer-card h2 {
-  margin-bottom: 8px !important;
-  padding-bottom: 14px !important;
-  border-bottom: 1px solid var(--od-line-soft) !important;
-}
 
 .order-detail-page .order-product-offer-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 8px;
+  margin-top: 0;
 }
 .order-detail-page .order-product-offer-button {
   align-self: flex-start;
@@ -1348,7 +1269,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   SECTION anchors + scroll-margin
+   SECTION anchors
    ══════════════════════════════════════════════════════════ */
 
 .order-detail-page #inspection-section,
@@ -1483,6 +1404,10 @@
 
   .order-detail-page .card { padding: 18px; }
 
+  .order-detail-page .card-head { padding-bottom: 14px; margin-bottom: 16px; }
+  .order-detail-page .card-block { margin-bottom: 18px; }
+  .order-detail-page .card-block-title { padding-bottom: 8px; margin-bottom: 12px; }
+
   .order-detail-page .order-hero {
     grid-template-columns: minmax(0, 1fr);
     padding: 18px 18px 20px;
@@ -1515,13 +1440,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .order-detail-page .transport-card-heading {
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 12px;
-  }
-  .order-detail-page .transport-status-badge {
-    grid-column: 1 / -1;
-    justify-self: flex-start;
+  .order-detail-page .card-head > .card-head-text {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
   }
 
   .order-detail-page .transporter {
