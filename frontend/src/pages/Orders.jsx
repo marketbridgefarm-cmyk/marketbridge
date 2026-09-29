@@ -25,7 +25,6 @@ function initialsOf(name) {
   return parts.map((p) => p[0]).join('').toUpperCase();
 }
 
-// Maps backend order status strings to tone variants.
 function statusTone(status) {
   const s = String(status || '').toUpperCase();
   if (['COMPLETED', 'DELIVERED', 'CONFIRMED', 'PAID'].includes(s)) return 'success';
@@ -52,10 +51,6 @@ const TABS = [
   { id: 'selling', label: 'Selling' },
 ];
 
-/*
- * Marketplace payment status, reduced to a single label.
- * PAID wins over PENDING, which wins over FAILED — mirrors OrderDetail.jsx.
- */
 function summarizePayments(payments, type) {
   const rows = (payments || []).filter((payment) => payment.type === type);
   if (rows.length === 0) return null;
@@ -66,11 +61,6 @@ function summarizePayments(payments, type) {
   return rows[0].status;
 }
 
-/*
- * Derive the four-step progress timeline from an order's state:
- *   Order placed → Payment → Transport → Delivered
- * Cancelled/disputed orders reset to step 1.
- */
 function progressFor(order) {
   const steps = ['Order placed', 'Payment', 'Transport', 'Delivered'];
   const status = String(order.status || '').toUpperCase();
@@ -126,19 +116,13 @@ function OrderCard({ order, currentUserId }) {
 
   return (
     <article className="order-card">
-      <header className="order-head">
-        <div className={`order-avatar tone-${avatarTone}`} aria-hidden="true">
-          {initialsOf(counterparty?.name)}
-        </div>
-
-        <div className="order-headings">
-          <div className="order-overline">
-            <span className={`role-chip ${isBuyer ? '' : 'is-selling'}`}>
-              {isBuyer ? 'Buying' : 'Selling'}
-            </span>
-            <span className="order-id">ORD {shortId(order.id)}</span>
-          </div>
-          <h3 className="order-title" title={title}>{title}</h3>
+      {/* Card head — eyebrow (green dash) + title + price */}
+      <header className="card-head">
+        <div className="card-head-text">
+          <span className={`eyebrow ${isBuyer ? '' : 'is-selling'}`}>
+            {isBuyer ? 'Buying' : 'Selling'}
+          </span>
+          <h2 className="order-title" title={title}>{title}</h2>
           <p className="order-party">
             {counterparty?.name || 'Unknown party'}
             {createdLabel && (
@@ -150,70 +134,95 @@ function OrderCard({ order, currentUserId }) {
           </p>
         </div>
 
-        <div className="order-price">
-          <span className="price-amount">{money(order.finalPrice)}</span>
-          <span className="price-currency">ETB</span>
+        <div className={`order-avatar tone-${avatarTone}`} aria-hidden="true">
+          {initialsOf(counterparty?.name)}
         </div>
       </header>
 
-      <div className="badges">
-        <span className={`status-pill tone-${statusTone(order.status)}`}>
-          <span className="status-pill-dot" aria-hidden="true" />
-          {String(order.status || '').replace(/_/g, ' ')}
-        </span>
-
-        {openDispute && (
-          <span className="status-pill tone-danger">
-            <span className="status-pill-dot" aria-hidden="true" />
-            Disputed
-          </span>
-        )}
-
-        {marketplaceStatus && (
-          <span className={`status-pill tone-${statusTone(marketplaceStatus)}`}>
-            Payment: {marketplaceStatus}
-          </span>
-        )}
-
-        {transportJob && (
-          <span className={`status-pill tone-${statusTone(transportJob.status)}`}>
-            Transport: {transportJob.status}
-            {transportStatus ? ` · ${transportStatus}` : ''}
-          </span>
-        )}
-      </div>
-
-      <div className="order-progress" aria-label="Order progress">
-        {steps.map((step) => (
-          <div key={step.label} className={`progress-step ${step.cls}`}>
-            <span className="progress-dot" aria-hidden="true" />
-            <span className="progress-label">{step.label}</span>
+      <div className="card-body">
+        {/* Block 1 — Order status */}
+        <section className="card-block">
+          <div className="card-block-title">
+            <h3>Order status</h3>
+            <span className="card-block-note">ORD {shortId(order.id)}</span>
           </div>
-        ))}
-      </div>
 
-      <footer className="order-actions">
-        <span className="order-time">
-          {createdLabel ? `Created ${createdLabel}` : 'Recently updated'}
-        </span>
-        <Link className="btn-view" to={`/orders/${order.id}`}>
-          View order
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M5 12h14" />
-            <path d="M13 6l6 6-6 6" />
-          </svg>
-        </Link>
-      </footer>
+          <div className="card-block-body">
+            <div className="badges">
+              <span className={`status-pill tone-${statusTone(order.status)}`}>
+                <span className="status-pill-dot" aria-hidden="true" />
+                {String(order.status || '').replace(/_/g, ' ')}
+              </span>
+
+              {openDispute && (
+                <span className="status-pill tone-danger">
+                  <span className="status-pill-dot" aria-hidden="true" />
+                  Disputed
+                </span>
+              )}
+
+              {marketplaceStatus && (
+                <span className={`status-pill tone-${statusTone(marketplaceStatus)}`}>
+                  Payment: {marketplaceStatus}
+                </span>
+              )}
+
+              {transportJob && (
+                <span className={`status-pill tone-${statusTone(transportJob.status)}`}>
+                  Transport: {transportJob.status}
+                  {transportStatus ? ` · ${transportStatus}` : ''}
+                </span>
+              )}
+            </div>
+
+            <div className="order-progress" aria-label="Order progress">
+              {steps.map((step) => (
+                <div key={step.label} className={`progress-step ${step.cls}`}>
+                  <span className="progress-dot" aria-hidden="true" />
+                  <span className="progress-label">{step.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Block 2 — Amount */}
+        <section className="card-block">
+          <div className="card-block-title">
+            <h3>Amount</h3>
+          </div>
+          <div className="card-block-body">
+            <div className="order-price">
+              <span className="price-amount">{money(order.finalPrice)}</span>
+              <span className="price-currency">ETB</span>
+            </div>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="order-actions">
+          <span className="order-time">
+            {createdLabel ? `Created ${createdLabel}` : 'Recently updated'}
+          </span>
+          <Link className="btn-view" to={`/orders/${order.id}`}>
+            View order
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M5 12h14" />
+              <path d="M13 6l6 6-6 6" />
+            </svg>
+          </Link>
+        </footer>
+      </div>
     </article>
   );
 }
@@ -334,20 +343,19 @@ export default function Orders() {
             </div>
 
             <label className="search">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="11" cy="11" r="7" />
-                <path d="M21 21l-4.3-4.3" />
-              </svg>
+              <span className="search-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M21 21l-4.3-4.3" />
+                </svg>
+              </span>
               <input
                 type="search"
                 value={query}
