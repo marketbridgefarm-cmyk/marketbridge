@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
-import './order/orders.css';
+import './orders/orders.css';
 
 const shortId = (id) => id?.slice(0, 8) || '—';
 
