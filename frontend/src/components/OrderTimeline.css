@@ -1,28 +1,9 @@
 /* ============================================================
-   MarketBridge — OrderTimeline  (components/OrderTimeline.css)
-   Centered rail with alternating content:
-       step 1 (odd)   →  content to the RIGHT of the rail
-       step 2 (even)  →  content to the LEFT of the rail
-       step 3 (odd)   →  content to the RIGHT of the rail
-       …  alternating to the last step
-
-   The rail is drawn as a background-image on the row itself
-   (2px wide, positioned at 50% of the row). This guarantees
-   exactly ONE line, and the dots (which have opaque fills)
-   naturally occlude it where they sit. No pseudo-element
-   lines can leak in from anywhere else.
+   MarketBridge — OrderTimeline (components/OrderTimeline.css)
+   Centered vertical rail. Stages alternate: 1st on the left of
+   the line, 2nd on the right, and so on down to the last stage.
+   Below 560px it collapses to a single left-hand rail.
    ============================================================ */
-
-/* ── Kill any inherited ::before / ::after decorative lines ── */
-.order-timeline-step::before,
-.order-timeline-step::after,
-.order-timeline > li::before,
-.order-timeline > li::after {
-  content: none !important;
-  display: none !important;
-  background: none !important;
-  border: 0 !important;
-}
 
 .order-timeline {
   --ot-accent:      #1e9e5a;
@@ -46,110 +27,74 @@
 
   --ot-ease:        cubic-bezier(.2, .7, .3, 1);
 
-  --ot-dot-size:    26px;
-  --ot-col-gap:     18px;
-  --ot-row-gap:     22px;
-
   position: relative;
   list-style: none;
   margin: 0;
   padding: 0;
-
   display: flex;
   flex-direction: column;
+  gap: 0;
 }
 
-/* ── Each step ─────────────────────────────────────────────
-   3-column grid: [ 1fr ] [ dot ] [ 1fr ]
-   The middle column is exactly centred, so 50% of the row is
-   the geometric centre of the dot. The rail background below
-   is anchored at 50% and lines up perfectly.
-   ────────────────────────────────────────────────────────── */
+/* ── Each step: [left content] [dot] [right content] ───── */
 
 .order-timeline-step {
-  /* Default rail colour: grey (pending) */
-  --ot-rail: var(--ot-line);
-
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--ot-dot-size) minmax(0, 1fr);
-  column-gap: var(--ot-col-gap);
-  align-items: start;
-  padding: 0 0 var(--ot-row-gap);
-
-  /* ── THE RAIL ────────────────────────────────────────────
-     A 2px-wide vertical bar, full height of the row,
-     horizontally centred at 50%. The colour is driven by
-     --ot-rail, which is overridden per state below.
-     ────────────────────────────────────────────────────────── */
-  background-image: linear-gradient(
-    to bottom,
-    var(--ot-rail) 0,
-    var(--ot-rail) 100%
-  );
-  background-size: 2px 100%;
-  background-position: 50% 0;
-  background-repeat: no-repeat;
+  grid-template-columns: minmax(0, 1fr) 26px minmax(0, 1fr);
+  column-gap: 16px;
+  padding: 0 0 26px;
 }
 
-/* State-driven rail colour */
-.order-timeline-step.is-complete { --ot-rail: var(--ot-accent); }
-.order-timeline-step.is-current  { --ot-rail: var(--ot-accent); }
-.order-timeline-step.is-recorded { --ot-rail: var(--ot-info); }
-
-/* The last step's rail ends at the centre of its dot —
-   no trailing line after the final milestone. */
-.order-timeline-step:last-child {
-  padding-bottom: 0;
-  background-size: 2px calc(var(--ot-dot-size) / 2);
+/* Rail segment: dead center of the row (the dot column is
+   centered because the two side columns are equal). */
+.order-timeline-step::before {
+  content: '';
+  position: absolute;
+  left: calc(50% - 1px);
+  top: 26px;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--ot-line);
 }
+.order-timeline-step:last-child { padding-bottom: 0; }
+.order-timeline-step:last-child::before { display: none; }
+.order-timeline-step.is-complete::before { background: var(--ot-accent); }
 
-/* ── Dot column ────────────────────────────────────────── */
+/* ── Dot ───────────────────────────────────────────────── */
 
 .order-timeline-dot {
   grid-column: 2;
   grid-row: 1;
-  justify-self: center;
-  align-self: start;
-
   position: relative;
-  z-index: 1;               /* paints above the rail */
-
-  width: var(--ot-dot-size);
-  height: var(--ot-dot-size);
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 26px;
+  height: 26px;
   line-height: 0;
-  flex: 0 0 auto;
 }
+.order-timeline-dot svg { display: block; }
 
-.order-timeline-dot svg {
-  display: block;
-  width: var(--ot-dot-size);
-  height: var(--ot-dot-size);
-}
-
-/* Per-state dot color — SVGs use currentColor. */
-.order-timeline-step.is-complete .order-timeline-dot { color: var(--ot-accent); }
-.order-timeline-step.is-current  .order-timeline-dot { color: var(--ot-accent); }
-.order-timeline-step.is-pending  .order-timeline-dot { color: var(--ot-line); }
+.order-timeline-step.is-complete .order-timeline-dot,
+.order-timeline-step.is-current .order-timeline-dot { color: var(--ot-accent); }
+.order-timeline-step.is-pending .order-timeline-dot { color: var(--ot-line); }
 .order-timeline-step.is-recorded .order-timeline-dot {
   color: var(--ot-info);
   --ot-dot-bg: var(--ot-info-soft);
 }
 
-/* Gentle pulse on the current step's dot */
 .order-timeline-step.is-current .order-timeline-dot svg {
   animation: order-timeline-pulse 2s ease-in-out infinite;
-  transform-origin: center;
 }
 @keyframes order-timeline-pulse {
   0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.08); }
+  50%      { transform: scale(1.06); }
 }
 
-/* ── Content column — alternates left / right ──────────── */
+/* ── Content: alternates sides ─────────────────────────── */
 
 .order-timeline-content {
   grid-row: 1;
@@ -157,21 +102,16 @@
   padding-top: 2px;
 }
 
-/* Step 1, 3, 5 … → RIGHT of the rail, left-aligned */
-.order-timeline-step:nth-child(odd) .order-timeline-content {
-  grid-column: 3;
-  text-align: left;
-}
-
-/* Step 2, 4, 6 … → LEFT of the rail, right-aligned */
-.order-timeline-step:nth-child(even) .order-timeline-content {
+/* Left of the line: hugs the rail, text aligned toward it */
+.order-timeline-step.is-left .order-timeline-content {
   grid-column: 1;
   text-align: right;
 }
-
-.order-timeline-content--wide { width: 100%; }
-
-/* ── Labels, dates, details ────────────────────────────── */
+/* Right of the line */
+.order-timeline-step.is-right .order-timeline-content {
+  grid-column: 3;
+  text-align: left;
+}
 
 .order-timeline-label {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
@@ -181,9 +121,7 @@
   line-height: 1.3;
   color: var(--ot-ink);
   margin: 0 0 3px;
-  overflow-wrap: anywhere;
 }
-
 .order-timeline-step.is-pending .order-timeline-label {
   color: var(--ot-muted);
   font-weight: 700;
@@ -194,22 +132,17 @@
   color: var(--ot-muted);
   letter-spacing: .01em;
   margin-bottom: 2px;
-  font-variant-numeric: tabular-nums;
 }
 
 .order-timeline-detail {
   font: 400 13px/1.5 var(--mb-font-body, 'DM Sans', sans-serif);
   color: var(--ot-muted);
   margin-top: 2px;
-  overflow-wrap: anywhere;
 }
 
-/* ── Activity history (native <details>) ──────────────── */
+/* ── Activity history (native <details>) ───────────────── */
 
-.order-timeline-events {
-  margin: 0;
-  text-align: left; /* reset when parent step is right-aligned */
-}
+.order-timeline-events { margin: 0; text-align: left; }
 
 .order-timeline-events-summary {
   display: flex;
@@ -226,8 +159,7 @@
   font-size: 13px;
   font-weight: 700;
   color: var(--ot-ink);
-  transition: border-color .15s var(--ot-ease),
-              background .15s var(--ot-ease);
+  transition: border-color .15s var(--ot-ease), background .15s var(--ot-ease);
 }
 .order-timeline-events-summary::-webkit-details-marker { display: none; }
 .order-timeline-events-summary:hover {
@@ -252,7 +184,6 @@
   background: var(--ot-info-soft);
   color: var(--ot-info);
   font: 800 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
 
@@ -262,9 +193,7 @@
   line-height: 1;
   transition: transform .22s var(--ot-ease);
 }
-.order-timeline-events[open] .order-timeline-events-chevron {
-  transform: rotate(180deg);
-}
+.order-timeline-events[open] .order-timeline-events-chevron { transform: rotate(180deg); }
 
 .order-timeline-events-list {
   list-style: none;
@@ -295,7 +224,6 @@
   line-height: 1.5;
   color: var(--ot-ink-soft);
 }
-
 .order-timeline-event-type {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
   font-weight: 800;
@@ -304,15 +232,12 @@
   color: var(--ot-ink);
   text-transform: uppercase;
 }
-
 .order-timeline-event-actor { color: var(--ot-muted); }
-
 .order-timeline-event-actor::before {
   content: '—';
   margin-right: 6px;
   color: var(--ot-muted-2);
 }
-
 .order-timeline-event-time {
   margin-left: auto;
   font: 600 11.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
@@ -321,52 +246,36 @@
   white-space: nowrap;
 }
 
-/* ── Responsive ────────────────────────────────────────── */
+/* ── Narrow screens: single rail on the left ───────────── */
 
-@media (max-width: 640px) {
-  .order-timeline {
-    --ot-dot-size: 22px;
-    --ot-col-gap:  12px;
-    --ot-row-gap:  18px;
+@media (max-width: 560px) {
+  .order-timeline-step {
+    grid-template-columns: 22px minmax(0, 1fr);
+    column-gap: 12px;
+    padding-bottom: 18px;
+  }
+  .order-timeline-step::before { left: 10px; top: 22px; }
+
+  .order-timeline-dot { grid-column: 1; width: 22px; height: 22px; }
+  .order-timeline-dot svg { width: 22px; height: 22px; }
+
+  .order-timeline-step.is-left .order-timeline-content,
+  .order-timeline-step.is-right .order-timeline-content {
+    grid-column: 2;
+    text-align: left;
   }
 
-  .order-timeline-label  { font-size: 13px; }
+  .order-timeline-label  { font-size: 13.5px; }
   .order-timeline-date   { font-size: 11.5px; }
-  .order-timeline-detail { font-size: 12px; line-height: 1.45; }
+  .order-timeline-detail { font-size: 12.5px; }
 
-  .order-timeline-events-summary {
-    font-size: 12px;
-    padding: 7px 10px;
-  }
-
-  .order-timeline-event {
-    font-size: 11.5px;
-    padding: 6px 10px;
-  }
-  .order-timeline-event-time {
-    margin-left: 0;
-    flex-basis: 100%;
-  }
+  .order-timeline-events-summary { font-size: 12.5px; padding: 8px 10px; }
+  .order-timeline-event { font-size: 12px; padding: 7px 10px; }
+  .order-timeline-event-time { margin-left: 0; flex-basis: 100%; }
 }
-
-@media (max-width: 420px) {
-  .order-timeline {
-    --ot-col-gap: 8px;
-    --ot-row-gap: 16px;
-  }
-
-  .order-timeline-label  { font-size: 12.5px; }
-  .order-timeline-detail { font-size: 11.5px; }
-}
-
-/* ── Reduced motion ────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
-  .order-timeline-step.is-current .order-timeline-dot svg {
-    animation: none;
-  }
+  .order-timeline-step.is-current .order-timeline-dot svg { animation: none; }
   .order-timeline-events-summary,
-  .order-timeline-events-chevron {
-    transition: none;
-  }
+  .order-timeline-events-chevron { transition: none; }
 }

@@ -2,17 +2,12 @@ import React from 'react';
 import './OrderTimeline.css';
 
 // ============================================================================
-// ORDER TIMELINE
+// ORDER TIMELINE — centered rail, stages alternate left / right
 // ============================================================================
-// Shows chronological transaction progress from the `timeline` array
-// returned by GET /orders/:id/workflow. Steps that don't apply to this
-// order (e.g. no inspection was requested) are simply absent from the
-// array rather than shown as permanently pending.
-//
-// Phase 3 visual: each dot is an inline SVG — checkmark for completed,
-// pulsing circle for current, empty ring for pending — so the state is
-// communicated without color alone (WCAG 1.4.1). SVGs use currentColor
-// so the stylesheet owns every color decision.
+// Data comes from the `timeline` array returned by GET /orders/:id/workflow.
+// Steps that don't apply to an order are absent from the array.
+// Dots are inline SVG (checkmark / pulsing circle / empty ring) so state is
+// not conveyed by color alone (WCAG 1.4.1). SVGs use currentColor.
 // ============================================================================
 
 const formatDate = (value) => {
@@ -29,9 +24,6 @@ const formatDate = (value) => {
   }
 };
 
-// Inline SVG indicators — no external icon font needed (CSP-safe).
-// All strokes/fills use currentColor so `.order-timeline-step.is-*`
-// can drive the color from CSS.
 function DotComplete() {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
@@ -50,14 +42,7 @@ function DotComplete() {
 function DotCurrent() {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-      <circle
-        cx="13"
-        cy="13"
-        r="12"
-        stroke="currentColor"
-        strokeWidth="2"
-        fill="var(--ot-dot-bg, #fff)"
-      />
+      <circle cx="13" cy="13" r="12" stroke="currentColor" strokeWidth="2" fill="var(--ot-dot-bg, #fff)" />
       <circle cx="13" cy="13" r="5" fill="currentColor" />
     </svg>
   );
@@ -66,14 +51,7 @@ function DotCurrent() {
 function DotPending() {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-      <circle
-        cx="13"
-        cy="13"
-        r="12"
-        stroke="currentColor"
-        strokeWidth="2"
-        fill="var(--ot-dot-bg, #fff)"
-      />
+      <circle cx="13" cy="13" r="12" stroke="currentColor" strokeWidth="2" fill="var(--ot-dot-bg, #fff)" />
     </svg>
   );
 }
@@ -81,18 +59,14 @@ function DotPending() {
 function DotRecorded() {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-      <circle
-        cx="13"
-        cy="13"
-        r="12"
-        stroke="currentColor"
-        strokeWidth="2"
-        fill="var(--ot-dot-bg, #fff)"
-      />
+      <circle cx="13" cy="13" r="12" stroke="currentColor" strokeWidth="2" fill="var(--ot-dot-bg, #fff)" />
       <circle cx="13" cy="13" r="4" fill="currentColor" />
     </svg>
   );
 }
+
+// Even index → left of the line, odd → right.
+const sideClass = (index) => (index % 2 === 0 ? 'is-left' : 'is-right');
 
 export default function OrderTimeline({ steps, events = [] }) {
   const milestoneSteps = Array.isArray(steps) ? steps : [];
@@ -109,16 +83,11 @@ export default function OrderTimeline({ steps, events = [] }) {
     <ol className="order-timeline" aria-label="Order milestone progress">
       {milestoneSteps.map((step, index) => {
         const explicitState = String(step.state || '').toUpperCase();
-        const isComplete =
-          explicitState === 'COMPLETED' || Boolean(step.completed);
+        const isComplete = explicitState === 'COMPLETED' || Boolean(step.completed);
         const isCurrent =
           explicitState === 'CURRENT' ||
           (!step.completed && index === lastCompletedIndex + 1);
-        const stateClass = isComplete
-          ? 'is-complete'
-          : isCurrent
-            ? 'is-current'
-            : 'is-pending';
+        const stateClass = isComplete ? 'is-complete' : isCurrent ? 'is-current' : 'is-pending';
 
         const at = formatDate(step.at);
         const label = isComplete
@@ -128,46 +97,37 @@ export default function OrderTimeline({ steps, events = [] }) {
             : 'Upcoming milestone';
 
         return (
-          <li key={step.code} className={`order-timeline-step ${stateClass}`}>
+          <li
+            key={step.code}
+            className={`order-timeline-step ${stateClass} ${sideClass(index)}`}
+          >
             <span className="order-timeline-dot" role="img" aria-label={label}>
-              {step.completed ? (
-                <DotComplete />
-              ) : isCurrent ? (
-                <DotCurrent />
-              ) : (
-                <DotPending />
-              )}
+              {step.completed ? <DotComplete /> : isCurrent ? <DotCurrent /> : <DotPending />}
             </span>
 
             <div className="order-timeline-content">
               <div className="order-timeline-label">{step.label}</div>
               {at && <div className="order-timeline-date">{at}</div>}
-              {step.detail && (
-                <div className="order-timeline-detail">{step.detail}</div>
-              )}
+              {step.detail && <div className="order-timeline-detail">{step.detail}</div>}
             </div>
           </li>
         );
       })}
 
       {durableEvents.length > 0 && (
-        <li className="order-timeline-step is-recorded">
+        <li
+          className={`order-timeline-step is-recorded ${sideClass(milestoneSteps.length)}`}
+        >
           <span className="order-timeline-dot" aria-hidden="true">
             <DotRecorded />
           </span>
 
-          <div className="order-timeline-content order-timeline-content--wide">
+          <div className="order-timeline-content">
             <details className="order-timeline-events">
               <summary className="order-timeline-events-summary">
-                <span className="order-timeline-events-label">
-                  Activity history
-                </span>
-                <span className="order-timeline-events-count">
-                  {durableEvents.length}
-                </span>
-                <span className="order-timeline-events-chevron" aria-hidden="true">
-                  ▾
-                </span>
+                <span className="order-timeline-events-label">Activity history</span>
+                <span className="order-timeline-events-count">{durableEvents.length}</span>
+                <span className="order-timeline-events-chevron" aria-hidden="true">▾</span>
               </summary>
 
               <ul className="order-timeline-events-list">
@@ -177,14 +137,10 @@ export default function OrderTimeline({ steps, events = [] }) {
                       {String(event.type || '').replace(/_/g, ' ')}
                     </span>
                     {event.actor?.name && (
-                      <span className="order-timeline-event-actor">
-                        {event.actor.name}
-                      </span>
+                      <span className="order-timeline-event-actor">{event.actor.name}</span>
                     )}
                     {formatDate(event.at) && (
-                      <span className="order-timeline-event-time">
-                        {formatDate(event.at)}
-                      </span>
+                      <span className="order-timeline-event-time">{formatDate(event.at)}</span>
                     )}
                   </li>
                 ))}
