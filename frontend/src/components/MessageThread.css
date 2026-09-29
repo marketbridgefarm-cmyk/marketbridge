@@ -1,25 +1,103 @@
 /* ============================================================
    MarketBridge — MessageThread  (components/MessageThread.css)
-   Consistent with the OrderDetail card system:
-     • Collapsible provides the card-head (eyebrow + title)
-     • Content sits inside a card-block with a content title
-     • The composer is the action footer at the bottom of the card
+   Uses the shared OrderDetail card system:
+     card-head        eyebrow + title
+     card-block       content title with hairline
+     Sayings <details>  collapsible message history
+     composer         action footer at the bottom
    ============================================================ */
 
-/* ── Card-block rhythm inside a Collapsible ────────────────
-   OrderDetail.css provides these rules when the thread is used
-   on the order detail page. This block is a fallback so the
-   same rhythm renders if MessageThread is used anywhere else
-   inside a Collapsible. */
+/* ── Card shell (falls back to a card look if not inside
+   .order-detail-page) ──────────────────────────────────── */
 
-.collapsible-body .card-block {
-  margin: 0 0 20px;
+.message-thread-card {
+  position: relative;
+  padding: 22px 24px;
+  margin-bottom: 16px;
+  border: 1px solid #e5e9ef;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(15, 30, 45, .04),
+    0 8px 24px rgba(15, 30, 45, .05);
 }
-.collapsible-body .card-block:last-of-type {
-  margin-bottom: 0;
+.message-thread-card:last-child { margin-bottom: 0; }
+
+/* When inside OrderDetail, defer to the page-scoped card rules
+   so this card matches every other card exactly. */
+.order-detail-page .message-thread-card {
+  border-color: var(--od-line, #e5e9ef);
+  box-shadow: var(--od-shadow, 0 1px 2px rgba(15,30,45,.04),
+                       0 8px 24px rgba(15,30,45,.05));
 }
 
-.collapsible-body .card-block-title {
+/* ── Card head ──────────────────────────────────────────── */
+
+.message-thread-card .card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 0 0 16px;
+  margin: 0 0 18px;
+  border-bottom: 1px solid #e5e9ef;
+}
+
+.message-thread-card .card-head-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.message-thread-card .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #12734a;
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  margin: 0 0 6px;
+}
+
+.message-thread-card .eyebrow::before {
+  content: '';
+  flex: 0 0 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.message-thread-card .card-head h2 {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.3px;
+  line-height: 1.25;
+  color: #0d1b2a;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.message-thread-card .card-block-note {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  font: 600 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
+  color: #64748b;
+}
+
+/* ── Card body + block ──────────────────────────────────── */
+
+.message-thread-card .card-body { display: block; }
+
+.message-thread-card .card-block { margin: 0 0 20px; }
+.message-thread-card .card-block:last-of-type { margin-bottom: 0; }
+
+.message-thread-card .card-block-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -30,7 +108,7 @@
   border-bottom: 1px solid #eef1f5;
 }
 
-.collapsible-body .card-block-title h3 {
+.message-thread-card .card-block-title h3 {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
   font-size: 14px;
   font-weight: 800;
@@ -40,28 +118,84 @@
   margin: 0;
 }
 
-.collapsible-body .card-block-note {
-  font: 600 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .01em;
-  color: #64748b;
-  flex: 0 0 auto;
-}
+/* ── Sayings — collapsible message history ─────────────── */
 
-.collapsible-body .card-block-body {
+.message-sayings {
   display: block;
+  border: 1px solid #eef1f5;
+  border-radius: 14px;
+  background: #fbfcfd;
+  overflow: hidden;
 }
 
-/* ── Thread ──────────────────────────────────────────────── */
+.message-sayings > summary.message-sayings-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  font-family: var(--mb-font-body, 'DM Sans', sans-serif);
+  font-size: 13px;
+  font-weight: 700;
+  color: #0d1b2a;
+  transition: background .15s cubic-bezier(.2, .7, .3, 1);
+}
+
+.message-sayings > summary.message-sayings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.message-sayings > summary.message-sayings-summary:hover {
+  background: #f0fdf5;
+}
+
+.message-sayings > summary.message-sayings-summary:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 3px rgba(30, 158, 90, .18);
+}
+
+.message-sayings-label { flex: 1 1 auto; }
+
+.message-sayings-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #eff5fd;
+  color: #1e5fa8;
+  font: 800 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  font-variant-numeric: tabular-nums;
+}
+
+.message-sayings-chevron {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1;
+  transition: transform .22s cubic-bezier(.2, .7, .3, 1);
+}
+
+.message-sayings[open] .message-sayings-chevron {
+  transform: rotate(180deg);
+}
+
+/* ── Thread inside Sayings ─────────────────────────────── */
 
 .message-thread {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 4px 2px;
+  padding: 12px 14px 16px;
   max-height: 420px;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: #dfe4ea transparent;
+  border-top: 1px solid #eef1f5;
+  background: #fff;
 }
 
 .message-thread::-webkit-scrollbar { width: 6px; }
@@ -70,18 +204,16 @@
   border-radius: 3px;
 }
 
-/* Empty state — centered, quiet, matches the "notice" tone used
-   for empty panels elsewhere on the order page. */
 .message-thread > .muted {
   color: #64748b;
   font-size: 14px;
   line-height: 1.5;
   text-align: center;
-  padding: 32px 12px;
+  padding: 24px 12px;
   margin: 0;
 }
 
-/* ── Bubbles ─────────────────────────────────────────────── */
+/* ── Bubbles ────────────────────────────────────────────── */
 
 .message-bubble {
   max-width: min(78%, 520px);
@@ -109,7 +241,6 @@
   align-self: flex-end;
 }
 
-/* Mine — right-aligned, accent green */
 .message-bubble.message-mine {
   align-self: flex-end;
   background: linear-gradient(150deg, #1e9e5a 0%, #0f7a44 100%);
@@ -120,7 +251,6 @@
   color: rgba(255, 255, 255, .82);
 }
 
-/* Theirs — left-aligned, neutral surface */
 .message-bubble.message-theirs {
   align-self: flex-start;
   background: #f1f5f9;
@@ -138,7 +268,6 @@
   align-items: flex-end;
   gap: 10px;
   padding-top: 16px;
-  margin-top: 4px;
   border-top: 1px solid #eef1f5;
 }
 
@@ -162,9 +291,7 @@
 }
 
 .message-composer textarea::placeholder { color: #94a3b8; }
-
 .message-composer textarea:hover { border-color: #cfd6df; }
-
 .message-composer textarea:focus {
   outline: none;
   border-color: #1e9e5a;
@@ -211,9 +338,9 @@
               0 4px 12px rgba(30, 158, 90, .22);
 }
 
-/* ── Error alert override inside the card ──────────────── */
+/* ── Error alert ───────────────────────────────────────── */
 
-.collapsible-body .alert.error.small {
+.message-thread-card .alert.error.small {
   margin: 0 0 16px;
   font-size: 13px;
   padding: 10px 12px;
@@ -222,6 +349,11 @@
 /* ── Responsive ─────────────────────────────────────────── */
 
 @media (max-width: 480px) {
+  .message-thread-card {
+    padding: 18px;
+    border-radius: 16px;
+  }
+
   .message-bubble {
     max-width: 88%;
     font-size: 13.5px;
@@ -244,7 +376,9 @@
 @media (prefers-reduced-motion: reduce) {
   .message-composer textarea,
   .message-composer .btn,
-  .message-composer .btn-primary {
+  .message-composer .btn-primary,
+  .message-sayings-chevron,
+  .message-sayings > summary.message-sayings-summary {
     transition: none;
   }
 
