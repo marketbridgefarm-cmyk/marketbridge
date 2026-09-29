@@ -5,7 +5,7 @@ import RecentActivity from '../components/RecentActivity.jsx';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
-
+import './buyer-dashboard/BuyerDashboard.css';
 const TABS = [
   { id: 'offers', label: 'My Offers' },
   { id: 'orders', label: 'My Orders' },
