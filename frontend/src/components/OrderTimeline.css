@@ -1,16 +1,28 @@
 /* ============================================================
    MarketBridge — OrderTimeline  (components/OrderTimeline.css)
    Centered rail with alternating content:
-       step 1 (odd)   →  content on the RIGHT of the rail
-       step 2 (even)  →  content on the LEFT of the rail
-       step 3 (odd)   →  content on the RIGHT of the rail
+       step 1 (odd)   →  content to the RIGHT of the rail
+       step 2 (even)  →  content to the LEFT of the rail
+       step 3 (odd)   →  content to the RIGHT of the rail
        …  alternating to the last step
 
-   The rail is a single line at the exact center of the row.
-   Content on the left is right-aligned (ends at the dot column),
-   content on the right is left-aligned (starts after the dot).
-   Nothing overlaps the rail.
+   The rail is drawn as a background-image on the row itself
+   (2px wide, positioned at 50% of the row). This guarantees
+   exactly ONE line, and the dots (which have opaque fills)
+   naturally occlude it where they sit. No pseudo-element
+   lines can leak in from anywhere else.
    ============================================================ */
+
+/* ── Kill any inherited ::before / ::after decorative lines ── */
+.order-timeline-step::before,
+.order-timeline-step::after,
+.order-timeline > li::before,
+.order-timeline > li::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  border: 0 !important;
+}
 
 .order-timeline {
   --ot-accent:      #1e9e5a;
@@ -48,57 +60,49 @@
 }
 
 /* ── Each step ─────────────────────────────────────────────
-   Three columns:
-     [ 1fr ] [ dot-size ] [ 1fr ]
-   The two 1fr columns are equal, so the middle of the middle
-   column is the geometric centre of the whole row. That's where
-   the rail lives (via `::after` below).
+   3-column grid: [ 1fr ] [ dot ] [ 1fr ]
+   The middle column is exactly centred, so 50% of the row is
+   the geometric centre of the dot. The rail background below
+   is anchored at 50% and lines up perfectly.
    ────────────────────────────────────────────────────────── */
 
 .order-timeline-step {
+  /* Default rail colour: grey (pending) */
+  --ot-rail: var(--ot-line);
+
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--ot-dot-size) minmax(0, 1fr);
   column-gap: var(--ot-col-gap);
   align-items: start;
   padding: 0 0 var(--ot-row-gap);
+
+  /* ── THE RAIL ────────────────────────────────────────────
+     A 2px-wide vertical bar, full height of the row,
+     horizontally centred at 50%. The colour is driven by
+     --ot-rail, which is overridden per state below.
+     ────────────────────────────────────────────────────────── */
+  background-image: linear-gradient(
+    to bottom,
+    var(--ot-rail) 0,
+    var(--ot-rail) 100%
+  );
+  background-size: 2px 100%;
+  background-position: 50% 0;
+  background-repeat: no-repeat;
 }
 
-/* ── Rail segment ──────────────────────────────────────────
-   Runs from just below this step's dot down to the top of the
-   next step's dot. Colored by step state. The dot's opaque
-   background hides the top of the segment so the join between
-   a green segment and the next grey segment is seamless.
-   ────────────────────────────────────────────────────────── */
+/* State-driven rail colour */
+.order-timeline-step.is-complete { --ot-rail: var(--ot-accent); }
+.order-timeline-step.is-current  { --ot-rail: var(--ot-accent); }
+.order-timeline-step.is-recorded { --ot-rail: var(--ot-info); }
 
-.order-timeline-step::after {
-  content: '';
-  position: absolute;
-  /* Exact horizontal center of the row. `margin-left: -1px`
-     centers a 2px line on the axis. */
-  left: 50%;
-  margin-left: -1px;
-  width: 2px;
-  /* Starts just below the dot */
-  top: var(--ot-dot-size);
-  /* Extends through the rest of this step and into the next
-     step's bottom padding, so there is no gap at the join. */
-  bottom: calc(-1 * var(--ot-row-gap));
-  background: var(--ot-line);
-  border-radius: 1px;
-  z-index: 0;
-}
-
-/* State-driven segment colors */
-.order-timeline-step.is-complete::after { background: var(--ot-accent); }
-.order-timeline-step.is-current::after  { background: var(--ot-accent); }
-.order-timeline-step.is-recorded::after { background: var(--ot-info); }
-
-/* Last step ends at its dot — no trailing rail */
+/* The last step's rail ends at the centre of its dot —
+   no trailing line after the final milestone. */
 .order-timeline-step:last-child {
   padding-bottom: 0;
+  background-size: 2px calc(var(--ot-dot-size) / 2);
 }
-.order-timeline-step:last-child::after { display: none; }
 
 /* ── Dot column ────────────────────────────────────────── */
 
@@ -109,7 +113,7 @@
   align-self: start;
 
   position: relative;
-  z-index: 1;
+  z-index: 1;               /* paints above the rail */
 
   width: var(--ot-dot-size);
   height: var(--ot-dot-size);
@@ -126,8 +130,7 @@
   height: var(--ot-dot-size);
 }
 
-/* Per-state dot color — SVGs use currentColor so this is the
-   only place colors are decided. */
+/* Per-state dot color — SVGs use currentColor. */
 .order-timeline-step.is-complete .order-timeline-dot { color: var(--ot-accent); }
 .order-timeline-step.is-current  .order-timeline-dot { color: var(--ot-accent); }
 .order-timeline-step.is-pending  .order-timeline-dot { color: var(--ot-line); }
@@ -146,13 +149,7 @@
   50%      { transform: scale(1.08); }
 }
 
-/* ── Content column ────────────────────────────────────────
-   Odd steps put content in column 3 (right of the rail),
-   left-aligned. Even steps put content in column 1 (left of
-   the rail), right-aligned so it ends at the dot column.
-   The `minmax(0, 1fr)` grid template keeps either column from
-   stretching past the dot.
-   ────────────────────────────────────────────────────────── */
+/* ── Content column — alternates left / right ──────────── */
 
 .order-timeline-content {
   grid-row: 1;
@@ -160,22 +157,21 @@
   padding-top: 2px;
 }
 
+/* Step 1, 3, 5 … → RIGHT of the rail, left-aligned */
 .order-timeline-step:nth-child(odd) .order-timeline-content {
   grid-column: 3;
   text-align: left;
 }
 
+/* Step 2, 4, 6 … → LEFT of the rail, right-aligned */
 .order-timeline-step:nth-child(even) .order-timeline-content {
   grid-column: 1;
   text-align: right;
 }
 
-/* The activity history row always uses the right side, full width */
-.order-timeline-content--wide {
-  width: 100%;
-}
+.order-timeline-content--wide { width: 100%; }
 
-/* ── Labels, dates, details ───────────────────────────── */
+/* ── Labels, dates, details ────────────────────────────── */
 
 .order-timeline-label {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
@@ -212,8 +208,7 @@
 
 .order-timeline-events {
   margin: 0;
-  /* Reset any inherited right-alignment when this row is even */
-  text-align: left;
+  text-align: left; /* reset when parent step is right-aligned */
 }
 
 .order-timeline-events-summary {
@@ -326,9 +321,7 @@
   white-space: nowrap;
 }
 
-/* ══════════════════════════════════════════════════════════
-   RESPONSIVE — keep the alternating layout, tighten spacing
-   ══════════════════════════════════════════════════════════ */
+/* ── Responsive ────────────────────────────────────────── */
 
 @media (max-width: 640px) {
   .order-timeline {
@@ -366,17 +359,14 @@
   .order-timeline-detail { font-size: 11.5px; }
 }
 
-/* ══════════════════════════════════════════════════════════
-   REDUCED MOTION
-   ══════════════════════════════════════════════════════════ */
+/* ── Reduced motion ────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   .order-timeline-step.is-current .order-timeline-dot svg {
     animation: none;
   }
   .order-timeline-events-summary,
-  .order-timeline-events-chevron,
-  .order-timeline-step::after {
+  .order-timeline-events-chevron {
     transition: none;
   }
 }
