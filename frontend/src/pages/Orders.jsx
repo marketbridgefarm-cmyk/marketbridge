@@ -126,9 +126,13 @@ function OrderCard({ order, currentUserId }) {
 
   return (
     <article className="order-card">
-      {/* Card head — eyebrow + title on the left, party + avatar on the right */}
-      <header className="card-head">
-        <div className="card-head-text">
+      {/*
+        Card head — eyebrow + title on the left, party + avatar on the right.
+        Uses <div> + unique class names (not <header>/.card-head) so global or
+        OrderDetail stylesheets can't override the layout.
+      */}
+      <div className="order-card-head">
+        <div className="order-card-head-text">
           <span className={`eyebrow ${isBuyer ? '' : 'is-selling'}`}>
             {isBuyer ? 'Buying' : 'Selling'}
           </span>
@@ -138,7 +142,7 @@ function OrderCard({ order, currentUserId }) {
           )}
         </div>
 
-        <div className="card-head-party">
+        <div className="order-card-head-party">
           <div className="order-party-info">
             <span className="order-party-role">
               {isBuyer ? 'Seller' : 'Buyer'}
@@ -152,7 +156,7 @@ function OrderCard({ order, currentUserId }) {
             {initialsOf(counterparty?.name)}
           </div>
         </div>
-      </header>
+      </div>
 
       <div className="card-body">
         {/* Block 1 — Order status */}
@@ -215,7 +219,7 @@ function OrderCard({ order, currentUserId }) {
         </section>
 
         {/* Footer */}
-        <footer className="order-actions">
+        <div className="order-actions">
           <span className="order-time">
             {createdLabel ? `Created ${createdLabel}` : 'Recently updated'}
           </span>
@@ -236,7 +240,7 @@ function OrderCard({ order, currentUserId }) {
               <path d="M13 6l6 6-6 6" />
             </svg>
           </Link>
-        </footer>
+        </div>
       </div>
     </article>
   );
