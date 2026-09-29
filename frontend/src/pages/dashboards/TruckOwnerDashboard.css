@@ -45,8 +45,8 @@
   --sd-info-soft:   #eff5fd;
   --sd-info-line:   #cddff5;
 
-  --sd-radius:      20px;
-  --sd-radius-sm:   14px;
+  --sd-radius:      28px;
+  --sd-radius-sm:   18px;
   --sd-shadow:      0 1px 2px rgba(15, 30, 45, .04),
                     0 8px 24px rgba(15, 30, 45, .05);
   --sd-shadow-hi:   0 2px 4px rgba(15, 30, 45, .04),
@@ -83,14 +83,14 @@
   gap: 8px;
   color: var(--sd-accent-ink);
   font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .16em;
+  letter-spacing: .2em;
   text-transform: uppercase;
   margin: 0 0 12px;
 }
 .sd-dashboard .sd-eyebrow::before {
   content: '';
-  flex: 0 0 20px;
-  height: 2px;
+  flex: 0 0 26px;
+  height: 3px;
   border-radius: 2px;
   background: currentColor;
 }
@@ -152,13 +152,13 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 40px;
-  padding: 0 18px;
-  border-radius: 10px;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 14px;
   border: 1px solid var(--sd-line);
   background: #fff;
   color: var(--sd-ink);
-  font: 700 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 700 14.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .01em;
   cursor: pointer;
   text-decoration: none;
@@ -471,7 +471,7 @@
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  padding: 22px 24px;
+  padding: 26px 26px 24px;
   border: 1px solid var(--sd-line);
   border-radius: var(--sd-radius);
   background-color: #fff;
@@ -506,8 +506,8 @@
   align-items: start;
   column-gap: 12px;
   width: 100%;
-  padding: 0 0 16px;
-  margin: 0 0 16px;
+  padding: 0 0 20px;
+  margin: 0 0 20px;
   border-bottom: 1px solid var(--sd-line);
 }
 
@@ -522,13 +522,19 @@
 .sd-dashboard .sd-card .sd-eyebrow {
   margin: 0 0 6px;
 }
-.sd-dashboard .sd-card .sd-eyebrow::before { flex: 0 0 18px; }
-.sd-dashboard .sd-card .sd-eyebrow.is-open { color: var(--sd-info); }
+.sd-dashboard .sd-card .sd-eyebrow { color: var(--sd-info); font-size: 12px; }
+.sd-dashboard .sd-card .sd-eyebrow::before { flex: 0 0 26px; }
+.sd-dashboard .sd-card .sd-eyebrow.is-open,
+.sd-dashboard .sd-card .sd-eyebrow.tone-info    { color: var(--sd-info); }
+.sd-dashboard .sd-card .sd-eyebrow.tone-success { color: var(--sd-accent-ink); }
+.sd-dashboard .sd-card .sd-eyebrow.tone-gold    { color: var(--sd-gold); }
+.sd-dashboard .sd-card .sd-eyebrow.tone-danger  { color: var(--sd-danger); }
+.sd-dashboard .sd-card .sd-eyebrow.tone-muted   { color: var(--sd-muted); }
 
 .sd-dashboard .sd-card .sd-card-title {
   margin: 0 0 4px;
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 800;
   letter-spacing: -.3px;
   line-height: 1.25;
@@ -539,7 +545,7 @@
 
 .sd-dashboard .sd-card .sd-card-sub {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.4;
   color: var(--sd-muted);
   font-variant-numeric: tabular-nums;
@@ -567,14 +573,14 @@
 }
 
 .sd-dashboard .sd-party-role {
-  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .12em;
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--sd-muted);
 }
 
 .sd-dashboard .sd-party-name {
-  font: 700 13.5px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 700 15px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
   color: var(--sd-ink);
   letter-spacing: -.1px;
   overflow: hidden;
@@ -584,9 +590,9 @@
 }
 
 .sd-dashboard .sd-avatar {
-  width: 46px;
-  height: 46px;
-  border-radius: 13px;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -619,7 +625,7 @@
 .sd-dashboard .sd-card-block {
   width: 100%;
   align-self: stretch;
-  margin: 0 0 18px;
+  margin: 0 0 22px;
 }
 .sd-dashboard .sd-card-block:last-of-type { margin-bottom: 0; }
 
@@ -629,24 +635,25 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 0 0 10px;
-  margin: 0 0 14px;
+  padding: 0 0 14px;
+  margin: 0 0 16px;
   border-bottom: 1px solid var(--sd-line-soft);
 }
 
 .sd-dashboard .sd-card-block-title h4 {
   margin: 0;
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 800;
-  letter-spacing: -.1px;
+  letter-spacing: -.2px;
   line-height: 1.3;
   color: var(--sd-ink);
 }
 
 .sd-dashboard .sd-card-block-note {
-  font: 600 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .01em;
+  font: 700 13.5px/1.2 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .06em;
+  text-transform: uppercase;
   color: var(--sd-muted);
   flex: 0 0 auto;
 }
@@ -663,14 +670,14 @@
   flex-wrap: wrap;
   width: 100%;
   align-self: stretch;
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--sd-line-soft);
+  margin-top: 16px;
+  padding-top: 0;
+  border-top: none;
 }
 .sd-dashboard .sd-card-actions .sd-btn {
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 38px;
+  min-height: 44px;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -680,27 +687,27 @@
 .sd-dashboard .sd-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 10px;
 }
 
 .sd-dashboard .sd-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 24px;
-  padding: 0 10px;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 15px;
   border-radius: 999px;
-  border: 1px solid transparent;
+  border: 1.5px solid transparent;
   background: var(--sd-line-soft);
   color: var(--sd-ink-soft);
-  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .04em;
+  font: 700 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .05em;
   text-transform: uppercase;
   white-space: nowrap;
 }
 .sd-dashboard .sd-pill-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: currentColor;
   flex: 0 0 auto;
@@ -740,7 +747,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   width: 100%;
-  margin: 16px 0 0;
+  margin: 22px 0 0;
   padding: 0 4px;
 }
 
@@ -758,10 +765,10 @@
 .sd-dashboard .sd-progress-step::before {
   content: '';
   position: absolute;
-  top: 7px;
+  top: 7.5px;
   right: 50%;
   left: -50%;
-  height: 2px;
+  height: 3px;
   background: var(--sd-line);
   z-index: 0;
 }
@@ -772,8 +779,8 @@
 }
 
 .sd-dashboard .sd-progress-dot {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: #fff;
   border: 2px solid var(--sd-line);
@@ -1391,7 +1398,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .sd-dashboard .sd-card { padding: 18px; }
+  .sd-dashboard .sd-card { padding: 22px 20px 20px; }
 
   /* Fleet details, Route and Load / Trip details intentionally keep
      their horizontal (label + value on one line, wrapping) layout on
@@ -1554,4 +1561,73 @@
   .sd-dashboard .sd-report-modal {
     animation: none;
   }
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   ORDERS-CARD DETAILS  (amount, footnote, full-width actions)
+   ══════════════════════════════════════════════════════════ */
+
+/* Amount block: big number + small muted unit */
+.sd-dashboard .sd-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.sd-dashboard .sd-amount b {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -.8px;
+  line-height: 1.1;
+  color: var(--sd-ink);
+  font-variant-numeric: tabular-nums;
+}
+.sd-dashboard .sd-amount span {
+  font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--sd-muted);
+}
+.sd-dashboard .sd-card .sd-amount-note {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  color: var(--sd-muted);
+}
+
+/* "Created 9/27/2026" line above the action row */
+.sd-dashboard .sd-card .sd-card-foot {
+  margin: 4px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--sd-line-soft);
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--sd-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Job cards: every action is a full-width button, stacked */
+.sd-dashboard .sd-job-card .sd-card-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+.sd-dashboard .sd-job-card .sd-card-actions .sd-btn {
+  width: 100%;
+  flex: 0 0 auto;
+}
+.sd-dashboard .sd-job-card .sd-card-actions .sd-btn svg {
+  flex: 0 0 auto;
+}
+.sd-dashboard .sd-job-card .sd-job-waiting {
+  justify-content: center;
+  text-align: center;
+  padding: 4px 0 2px;
+}
+
+/* Trip progress: dots only on phones, like the Orders card */
+@media (max-width: 720px) {
+  .sd-dashboard .sd-progress-label { display: none; }
+  .sd-dashboard .sd-progress-step  { gap: 0; }
+  .sd-dashboard .sd-card .sd-card-title { font-size: 20px; }
+  .sd-dashboard .sd-amount b { font-size: 28px; }
 }
