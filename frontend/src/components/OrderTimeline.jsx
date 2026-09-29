@@ -1,4 +1,5 @@
 import React from 'react';
+import './OrderTimeline.css';
 
 // ============================================================================
 // ORDER TIMELINE
@@ -10,15 +11,18 @@ import React from 'react';
 //
 // Phase 3 visual: each dot is an inline SVG — checkmark for completed,
 // pulsing circle for current, empty ring for pending — so the state is
-// communicated without color alone (WCAG 1.4.1).
+// communicated without color alone (WCAG 1.4.1). SVGs use currentColor
+// so the stylesheet owns every color decision.
 // ============================================================================
 
 const formatDate = (value) => {
   if (!value) return null;
   try {
     return new Date(value).toLocaleString(undefined, {
-      month: 'short', day: 'numeric',
-      hour: 'numeric', minute: '2-digit',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
     });
   } catch {
     return null;
@@ -26,12 +30,19 @@ const formatDate = (value) => {
 };
 
 // Inline SVG indicators — no external icon font needed (CSP-safe).
+// All strokes/fills use currentColor so `.order-timeline-step.is-*`
+// can drive the color from CSS.
 function DotComplete() {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-      <circle cx="13" cy="13" r="13" fill="var(--mb-primary)" />
-      <path d="M7.5 13.5l4 4 7-8" stroke="#fff" strokeWidth="2"
-        strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="13" cy="13" r="13" fill="currentColor" />
+      <path
+        d="M7.5 13.5l4 4 7-8"
+        stroke="var(--ot-dot-mark, #fff)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -39,9 +50,15 @@ function DotComplete() {
 function DotCurrent() {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-      <circle cx="13" cy="13" r="12" stroke="var(--mb-primary)" strokeWidth="2"
-        fill="var(--mb-card)" />
-      <circle cx="13" cy="13" r="5" fill="var(--mb-primary)" />
+      <circle
+        cx="13"
+        cy="13"
+        r="12"
+        stroke="currentColor"
+        strokeWidth="2"
+        fill="var(--ot-dot-bg, #fff)"
+      />
+      <circle cx="13" cy="13" r="5" fill="currentColor" />
     </svg>
   );
 }
@@ -49,8 +66,14 @@ function DotCurrent() {
 function DotPending() {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-      <circle cx="13" cy="13" r="12" stroke="var(--mb-border)" strokeWidth="2"
-        fill="var(--mb-bg)" />
+      <circle
+        cx="13"
+        cy="13"
+        r="12"
+        stroke="currentColor"
+        strokeWidth="2"
+        fill="var(--ot-dot-bg, #fff)"
+      />
     </svg>
   );
 }
@@ -58,48 +81,70 @@ function DotPending() {
 function DotRecorded() {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-      <circle cx="13" cy="13" r="12" stroke="var(--mb-info-border, #b9e6fe)"
-        strokeWidth="2" fill="var(--mb-info-light, #f0f9ff)" />
-      <circle cx="13" cy="13" r="4" fill="var(--mb-info, #026aa2)" />
+      <circle
+        cx="13"
+        cy="13"
+        r="12"
+        stroke="currentColor"
+        strokeWidth="2"
+        fill="var(--ot-dot-bg, #fff)"
+      />
+      <circle cx="13" cy="13" r="4" fill="currentColor" />
     </svg>
   );
 }
 
 export default function OrderTimeline({ steps, events = [] }) {
   const milestoneSteps = Array.isArray(steps) ? steps : [];
-  const durableEvents  = Array.isArray(events) ? events : [];
+  const durableEvents = Array.isArray(events) ? events : [];
+
   if (milestoneSteps.length === 0 && durableEvents.length === 0) return null;
 
   const lastCompletedIndex = milestoneSteps.reduce(
     (acc, step, index) => (step.completed ? index : acc),
-    -1,
+    -1
   );
 
   return (
     <ol className="order-timeline" aria-label="Order milestone progress">
       {milestoneSteps.map((step, index) => {
         const explicitState = String(step.state || '').toUpperCase();
-        const isCurrent = explicitState === 'CURRENT' || (!step.completed && index === lastCompletedIndex + 1);
-        const isComplete = explicitState === 'COMPLETED' || Boolean(step.completed);
-        const stateClass = isComplete ? 'is-complete' : isCurrent ? 'is-current' : 'is-pending';
+        const isComplete =
+          explicitState === 'COMPLETED' || Boolean(step.completed);
+        const isCurrent =
+          explicitState === 'CURRENT' ||
+          (!step.completed && index === lastCompletedIndex + 1);
+        const stateClass = isComplete
+          ? 'is-complete'
+          : isCurrent
+            ? 'is-current'
+            : 'is-pending';
+
         const at = formatDate(step.at);
         const label = isComplete
           ? 'Completed milestone'
-          : isCurrent ? 'Current milestone' : 'Upcoming milestone';
+          : isCurrent
+            ? 'Current milestone'
+            : 'Upcoming milestone';
 
         return (
           <li key={step.code} className={`order-timeline-step ${stateClass}`}>
             <span className="order-timeline-dot" role="img" aria-label={label}>
-              {step.completed
-                ? <DotComplete />
-                : isCurrent
-                  ? <DotCurrent />
-                  : <DotPending />}
+              {step.completed ? (
+                <DotComplete />
+              ) : isCurrent ? (
+                <DotCurrent />
+              ) : (
+                <DotPending />
+              )}
             </span>
-            <div>
+
+            <div className="order-timeline-content">
               <div className="order-timeline-label">{step.label}</div>
-              {at && <div className="order-timeline-date muted">{at}</div>}
-              {step.detail && <div className="order-timeline-detail muted">{step.detail}</div>}
+              {at && <div className="order-timeline-date">{at}</div>}
+              {step.detail && (
+                <div className="order-timeline-detail">{step.detail}</div>
+              )}
             </div>
           </li>
         );
@@ -110,22 +155,40 @@ export default function OrderTimeline({ steps, events = [] }) {
           <span className="order-timeline-dot" aria-hidden="true">
             <DotRecorded />
           </span>
-          <div style={{ width: '100%' }}>
-            {/* Collapsed: this list only grows and is rarely what someone
-                opens the timeline to see first. */}
-            <details>
-              <summary className="order-timeline-label" style={{ cursor: 'pointer' }}>
-                Activity history ({durableEvents.length})
+
+          <div className="order-timeline-content order-timeline-content--wide">
+            <details className="order-timeline-events">
+              <summary className="order-timeline-events-summary">
+                <span className="order-timeline-events-label">
+                  Activity history
+                </span>
+                <span className="order-timeline-events-count">
+                  {durableEvents.length}
+                </span>
+                <span className="order-timeline-events-chevron" aria-hidden="true">
+                  ▾
+                </span>
               </summary>
-              <div style={{ marginTop: 6 }}>
+
+              <ul className="order-timeline-events-list">
                 {durableEvents.map((event) => (
-                  <div key={event.id} className="muted" style={{ fontSize: 12, marginBottom: 5 }}>
-                    <strong>{String(event.type || '').replace(/_/g, ' ')}</strong>
-                    {event.actor?.name ? ` — ${event.actor.name}` : ''}
-                    {formatDate(event.at)  ? ` · ${formatDate(event.at)}`  : ''}
-                  </div>
+                  <li key={event.id} className="order-timeline-event">
+                    <span className="order-timeline-event-type">
+                      {String(event.type || '').replace(/_/g, ' ')}
+                    </span>
+                    {event.actor?.name && (
+                      <span className="order-timeline-event-actor">
+                        {event.actor.name}
+                      </span>
+                    )}
+                    {formatDate(event.at) && (
+                      <span className="order-timeline-event-time">
+                        {formatDate(event.at)}
+                      </span>
+                    )}
+                  </li>
                 ))}
-              </div>
+              </ul>
             </details>
           </div>
         </li>
