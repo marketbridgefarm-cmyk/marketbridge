@@ -711,17 +711,26 @@
   flex: 0 0 auto;
 }
 
-/* ── Detail-facts strip (used inside inspection + transport) ── */
+/* ── Detail-facts strip (orientation-agnostic dividers) ── */
+/*
+ * The divider between cells is a 1px grid gap over a solid --od-line
+ * background. Each cell paints itself with --od-surface on top, so the
+ * grid background shows through the gap only where two cells meet.
+ * This produces clean hairlines in ANY layout — 6 columns on desktop,
+ * 2 columns on tablet, 1 column on phone — with no leftover border
+ * artifacts on the left edge when the grid collapses to a single column.
+ */
 
 .order-detail-page .detail-facts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 1px;                       /* the 1px gap IS the divider */
   margin: 14px 0 16px;
+  padding: 0;
   border: 1px solid var(--od-line);
   border-radius: 14px;
   overflow: hidden;
-  background: var(--od-surface);
+  background: var(--od-line);     /* shows through the gap */
 }
 
 .order-detail-page .detail-facts > div {
@@ -729,10 +738,10 @@
   flex-direction: column;
   gap: 5px;
   padding: 14px 16px;
-  border-left: 1px solid var(--od-line);
+  background: var(--od-surface);  /* each cell covers the gap */
+  border: none;                   /* no leftover border-left */
+  min-width: 0;
 }
-
-.order-detail-page .detail-facts > div:first-child { border-left: none; }
 
 .order-detail-page .detail-facts span {
   font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
@@ -1352,7 +1361,7 @@
   min-width: 160px;
 }
 
-/* ── Inspection / decision actions ──────────────────────── */
+/* ── Inspection / decision anchor ───────────────────────── */
 
 .order-detail-page #inspection-section { scroll-margin-top: 96px; }
 
@@ -1471,6 +1480,19 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* Slightly tighter fact cells so 2 columns fit comfortably on phones */
+  .order-detail-page .detail-facts > div {
+    padding: 12px 14px;
+  }
+
+  .order-detail-page .detail-facts span {
+    font-size: 9.5px;
+  }
+
+  .order-detail-page .detail-facts strong {
+    font-size: 14px;
+  }
+
   .order-detail-page .transport-card-heading {
     grid-template-columns: auto minmax(0, 1fr);
     gap: 12px;
@@ -1529,10 +1551,6 @@
 
   .order-detail-page .order-overview-facts {
     grid-template-columns: minmax(0, 1fr);
-    padding: 12px 14px;
-  }
-
-  .order-detail-page .detail-facts > div {
     padding: 12px 14px;
   }
 
