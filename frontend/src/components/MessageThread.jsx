@@ -40,16 +40,30 @@ export default function MessageThread({ orderId, messages, counterpartId, counte
       title={`Messages with ${counterpartName || 'the other party'}`}
       summary={count > 0 && <span className="muted" style={{ fontSize: 13 }}>{count} message{count === 1 ? '' : 's'}</span>}
     >
-      <div className="message-thread">
-        {(!messages || messages.length === 0) && <p className="muted">No messages yet — say hello.</p>}
-        {(messages || []).map((m) => (
-          <div key={m.id} className={`message-bubble ${m.senderId === currentUserId ? 'message-mine' : 'message-theirs'}`}>
-            <p>{m.content}</p>
-            <span className="message-time">{new Date(m.createdAt).toLocaleString()}</span>
+      <section className="card-block">
+        <div className="card-block-title">
+          <h3>Conversation</h3>
+        </div>
+        <div className="card-block-body">
+          <div className="message-thread">
+            {(!messages || messages.length === 0) && (
+              <p className="muted">No messages yet — say hello.</p>
+            )}
+            {(messages || []).map((m) => (
+              <div
+                key={m.id}
+                className={`message-bubble ${m.senderId === currentUserId ? 'message-mine' : 'message-theirs'}`}
+              >
+                <p>{m.content}</p>
+                <span className="message-time">{new Date(m.createdAt).toLocaleString()}</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      </section>
+
       {error && <div className="alert error small">{error}</div>}
+
       <div className="message-composer">
         <textarea
           value={content}
@@ -58,7 +72,11 @@ export default function MessageThread({ orderId, messages, counterpartId, counte
           placeholder="Write a message about this order…"
           maxLength={5000}
         />
-        <button className="btn btn-primary btn-sm" disabled={busy || !content.trim()} onClick={send}>
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={busy || !content.trim()}
+          onClick={send}
+        >
           {busy ? 'Sending…' : 'Send'}
         </button>
       </div>
