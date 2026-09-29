@@ -56,11 +56,13 @@ export default function MessageThread({
 
   return (
     <section className="card message-thread-card">
-      {/* Card header — eyebrow + title */}
+      {/* Card header — eyebrow + card title. The title IS the
+          conversation title, so there is no separate block title
+          below it. */}
       <header className="card-head">
         <div className="card-head-text">
           <span className="eyebrow">MESSAGES</span>
-          <h2>Messages with {partyName}</h2>
+          <h2>Conversation with {partyName}</h2>
         </div>
         <span className="card-block-note">
           {count} message{count === 1 ? '' : 's'}
@@ -68,51 +70,42 @@ export default function MessageThread({
       </header>
 
       <div className="card-body">
-        {/* Content block — Conversation with <name> */}
-        <section className="card-block">
-          <div className="card-block-title">
-            <h3>Conversation with {partyName}</h3>
-          </div>
+        {/* Sayings — collapsible message history */}
+        <details
+          className="message-sayings"
+          open={sayingsOpen}
+          onToggle={(e) => setSayingsOpen(e.currentTarget.open)}
+        >
+          <summary className="message-sayings-summary">
+            <span className="message-sayings-label">Sayings</span>
+            <span className="message-sayings-count">{count}</span>
+            <span className="message-sayings-chevron" aria-hidden="true">
+              ▾
+            </span>
+          </summary>
 
-          <div className="card-block-body">
-            {/* Sayings — collapsible message history */}
-            <details
-              className="message-sayings"
-              open={sayingsOpen}
-              onToggle={(e) => setSayingsOpen(e.currentTarget.open)}
-            >
-              <summary className="message-sayings-summary">
-                <span className="message-sayings-label">Sayings</span>
-                <span className="message-sayings-count">{count}</span>
-                <span className="message-sayings-chevron" aria-hidden="true">
-                  ▾
+          <div className="message-thread">
+            {(!messages || messages.length === 0) && (
+              <p className="muted">No messages yet — say hello.</p>
+            )}
+
+            {(messages || []).map((m) => (
+              <div
+                key={m.id}
+                className={`message-bubble ${
+                  m.senderId === currentUserId
+                    ? 'message-mine'
+                    : 'message-theirs'
+                }`}
+              >
+                <p>{m.content}</p>
+                <span className="message-time">
+                  {new Date(m.createdAt).toLocaleString()}
                 </span>
-              </summary>
-
-              <div className="message-thread">
-                {(!messages || messages.length === 0) && (
-                  <p className="muted">No messages yet — say hello.</p>
-                )}
-
-                {(messages || []).map((m) => (
-                  <div
-                    key={m.id}
-                    className={`message-bubble ${
-                      m.senderId === currentUserId
-                        ? 'message-mine'
-                        : 'message-theirs'
-                    }`}
-                  >
-                    <p>{m.content}</p>
-                    <span className="message-time">
-                      {new Date(m.createdAt).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
               </div>
-            </details>
+            ))}
           </div>
-        </section>
+        </details>
 
         {error && <div className="alert error small">{error}</div>}
 
