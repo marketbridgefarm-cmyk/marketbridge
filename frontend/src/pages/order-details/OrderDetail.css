@@ -1,774 +1,1255 @@
-/* ==========================================================================
-   OrderDetail — page-level styles
-   ==========================================================================
-   Table of contents
-   1.  Page & card shell
-   2.  Hero
-   3.  Status pills
-   4.  Order overview facts
-   5.  Parties
-   6.  Timeline / next-action
-   7.  Match box & transporter list
-   8.  Transport overview & details
-   9.  Payout summary card + table
-   10. Notices, alerts, choice cards
-   11. Messages
-   12. Rating
-   13. Evidence
-   14. Payment center rows
-   15. Toast (screen only)
-   16. Responsive breakpoints
-   17. Print — quarterly report output
-   ========================================================================== */
-
-/* --------------------------------------------------------------------------
-   1. Page & card shell
-   -------------------------------------------------------------------------- */
+/* ============================================================
+   MarketBridge — Order detail  (order-details/OrderDetail.css)
+   Page-scoped visual layer for OrderDetail.jsx.
+   ============================================================ */
 
 .order-detail-page {
-  --odp-radius-lg: 18px;
-  --odp-radius-md: 14px;
-  --odp-radius-sm: 10px;
-  --odp-surface: #fbfdfb;
+  /* ── Local tokens — same vocabulary as auth / orders / listings ── */
+  --od-accent:      #1e9e5a;
+  --od-accent-2:    #0f7a44;
+  --od-accent-ink:  #12734a;
+  --od-accent-soft: #ecfdf3;
+  --od-accent-line: #c6eccf;
+
+  --od-ink:         #0d1b2a;
+  --od-ink-soft:    #2c3a4a;
+  --od-muted:       #64748b;
+  --od-muted-2:     #94a3b8;
+
+  --od-card:        #ffffff;
+  --od-tint-a:      #eefbf3;
+  --od-tint-b:      #eff3fb;
+
+  --od-line:        #e5e9ef;
+  --od-line-soft:   #eef1f5;
+  --od-surface:     #fbfcfd;
+
+  --od-gold:        #a86f10;
+  --od-gold-soft:   #fdf6e7;
+  --od-gold-line:   #f4e0b6;
+
+  --od-danger:      #b42318;
+  --od-danger-soft: #fef2f2;
+  --od-danger-line: #fecaca;
+
+  --od-info:        #1e5fa8;
+  --od-info-soft:   #eff5fd;
+  --od-info-line:   #cddff5;
+
+  --od-radius:      20px;
+  --od-radius-sm:   12px;
+  --od-shadow:      0 1px 2px rgba(15, 30, 45, .04),
+                    0 8px 24px rgba(15, 30, 45, .05);
+  --od-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
+  --od-shadow-hi:   0 2px 4px rgba(15, 30, 45, .04),
+                    0 18px 44px rgba(15, 30, 45, .09);
+  --od-ring:        0 0 0 3px rgba(30, 158, 90, .18);
+  --od-ease:        cubic-bezier(.2, .7, .3, 1);
+
+  min-height: calc(100vh - 72px);
+  color: var(--od-ink);
+  font-family: var(--mb-font-body, 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif);
+  -webkit-font-smoothing: antialiased;
+
+  background:
+    radial-gradient(circle at 88% 0%,  rgba(230, 245, 236, .85), transparent 40%),
+    radial-gradient(circle at 5% 100%, rgba(231, 235, 245, .8),  transparent 40%),
+    linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
+  background-attachment: fixed;
 }
 
-.order-detail-page .card {
-  border-radius: var(--odp-radius-lg);
-  margin-bottom: var(--space-md);
-  transition: box-shadow .18s var(--ease), transform .18s var(--ease);
+.order-detail-page .container-narrow {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 32px 20px 96px;
 }
 
-.order-detail-page .card:last-child {
-  margin-bottom: 0;
-}
+/* ── Header ─────────────────────────────────────────────── */
 
-.order-detail-page .card > h2:first-child,
-.order-detail-page .card > .row-between:first-child h2 {
-  font-family: var(--serif);
-  font-size: 19px;
-  letter-spacing: -.2px;
-  margin: 0 0 4px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
+.order-detail-page .row-between {
   display: flex;
   align-items: center;
-  gap: 9px;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.order-detail-page .card > h2:first-child::before {
-  content: "";
-  width: 6px;
-  height: 6px;
+.order-detail-page .back-link {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px 0 12px;
+  border: 1px solid var(--od-line);
   border-radius: 999px;
-  background: var(--green-light);
-  flex: 0 0 auto;
+  background: #fff;
+  color: var(--od-muted);
+  font: 600 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--od-shadow-sm);
+  transition: border-color .18s var(--od-ease),
+              color .18s var(--od-ease),
+              background .18s var(--od-ease),
+              transform .18s var(--od-ease);
 }
 
-.order-detail-page .card > h2:first-child + p.muted {
-  margin-top: 10px;
+.order-detail-page .back-link:hover {
+  border-color: rgba(30, 158, 90, .35);
+  background: var(--od-accent-soft);
+  color: var(--od-accent-2);
+  transform: translateX(-2px);
 }
 
-.order-detail-page .card > .detail-facts:first-child,
-.order-detail-page .card > h2:first-child + .detail-facts {
-  margin-top: 16px;
+.order-detail-page .back-link:focus-visible {
+  outline: none;
+  box-shadow: var(--od-ring);
 }
 
-/* --------------------------------------------------------------------------
-   2. Hero
-   -------------------------------------------------------------------------- */
+/* ── Hero ───────────────────────────────────────────────── */
 
 .order-detail-page .order-hero {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 20px;
-  flex-wrap: wrap;
-  background: linear-gradient(155deg, var(--green-dark) 0%, var(--green) 62%, var(--green-light) 130%);
-  border-radius: 22px;
-  padding: clamp(20px, 3.4vw, 34px);
-  margin-bottom: var(--space-md);
-  box-shadow: var(--shadow-lift);
-  color: #fff;
-  position: relative;
-  overflow: hidden;
+  align-items: center;
+  padding: 22px 24px;
+  margin-bottom: 16px;
+  border: 1px solid var(--od-line);
+  border-radius: var(--od-radius);
+  background-color: #fff;
+  background-image:
+    radial-gradient(120% 100% at 0% 0%,  var(--od-tint-a) 0%, transparent 55%),
+    radial-gradient(90%  90%  at 100% 100%, var(--od-tint-b) 0%, transparent 55%);
+  background-repeat: no-repeat;
+  box-shadow: var(--od-shadow);
 }
 
-.order-detail-page .order-hero::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(140% 100% at 100% 0%, rgba(255, 255, 255, .14), transparent 55%),
-    radial-gradient(90% 90% at 0% 100%, rgba(0, 0, 0, .14), transparent 60%);
-  pointer-events: none;
-}
-
-.order-detail-page .order-hero-main,
-.order-detail-page .order-hero-side {
-  position: relative;
-  z-index: 1;
-}
+.order-detail-page .order-hero-main { min-width: 0; }
 
 .order-detail-page .order-hero-eyebrow {
-  color: rgba(255, 255, 255, .75);
-  letter-spacing: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--od-accent-ink);
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.order-detail-page .order-hero-eyebrow::before {
+  content: '';
+  flex: 0 0 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
 }
 
 .order-detail-page .order-hero-title {
-  font-family: var(--serif);
-  color: #fff;
-  margin: 6px 0 14px;
-  font-size: clamp(24px, 3.4vw, 36px);
-  line-height: 1.1;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: clamp(22px, 3.6vw, 30px);
+  font-weight: 800;
+  letter-spacing: -.6px;
+  line-height: 1.15;
+  color: var(--od-ink);
+  margin: 0 0 12px;
   overflow-wrap: anywhere;
 }
 
 .order-detail-page .order-hero-meta {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
   gap: 8px;
+  align-items: center;
 }
 
 .order-detail-page .order-hero-chip {
-  background: rgba(255, 255, 255, .14);
-  border: 1px solid rgba(255, 255, 255, .22);
-  color: #fff;
-  padding: 5px 11px;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
+  background: var(--od-line-soft);
+  border: 1px solid var(--od-line);
+  color: var(--od-ink-soft);
+  font: 600 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
 }
 
 .order-detail-page .order-hero-side {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 10px;
+  gap: 8px;
   text-align: right;
+  flex: 0 0 auto;
 }
 
 .order-detail-page .order-hero-price-label {
-  font-size: 11px;
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
   text-transform: uppercase;
-  letter-spacing: .6px;
-  color: rgba(255, 255, 255, .7);
+  color: var(--od-muted);
 }
 
 .order-detail-page .order-hero-price {
-  font-family: var(--serif);
-  font-size: clamp(26px, 3.6vw, 38px);
-  font-weight: 600;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: clamp(22px, 3.4vw, 28px);
+  font-weight: 800;
+  letter-spacing: -.5px;
+  color: var(--od-ink);
+  font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 
 .order-detail-page .order-hero-price small {
-  font-size: 14px;
-  font-weight: 600;
-  opacity: .8;
-  margin-left: 3px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--od-muted);
+  text-transform: uppercase;
+  margin-left: 4px;
 }
 
-.order-detail-page .order-hero .btn-outline {
-  border-color: rgba(255, 255, 255, .55);
-  color: #fff;
-  background: rgba(255, 255, 255, .06);
+/* ── Eyebrow ────────────────────────────────────────────── */
+
+.order-detail-page .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--od-accent-ink);
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
 }
 
-.order-detail-page .order-hero .btn-outline:hover {
-  background: rgba(255, 255, 255, .16);
-  border-color: #fff;
+.order-detail-page .eyebrow::before {
+  content: '';
+  flex: 0 0 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
 }
 
-/* --------------------------------------------------------------------------
-   3. Status pills
-   -------------------------------------------------------------------------- */
+/* ── Status pills ───────────────────────────────────────── */
 
 .order-detail-page .status-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px 5px 10px;
+  min-height: 24px;
+  padding: 0 10px;
   border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: .3px;
+  border: 1px solid transparent;
+  background: var(--od-line-soft);
+  color: var(--od-ink-soft);
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .04em;
   text-transform: uppercase;
-  background: rgba(255, 255, 255, .16);
-  border: 1px solid rgba(255, 255, 255, .28);
-  color: #fff;
+  white-space: nowrap;
 }
 
 .order-detail-page .status-pill-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   background: currentColor;
+  opacity: .85;
+  flex: 0 0 auto;
 }
 
-.order-detail-page .status-pill.tone-good    { background: rgba(255, 255, 255, .92); color: var(--green-dark); border-color: transparent; }
-.order-detail-page .status-pill.tone-wait    { background: #fff3da; color: #8a5a10; border-color: transparent; }
-.order-detail-page .status-pill.tone-bad     { background: #ffe3e0; color: var(--danger); border-color: transparent; }
-.order-detail-page .status-pill.tone-neutral { background: rgba(255, 255, 255, .85); color: var(--ink); border-color: transparent; }
-
-.order-detail-page .card .status-pill.tone-good    { background: #e7f6ea; color: #146b38; }
-.order-detail-page .card .status-pill.tone-wait    { background: #fff5df; color: #875b12; }
-.order-detail-page .card .status-pill.tone-bad     { background: #fdeceb; color: var(--danger); }
-.order-detail-page .card .status-pill.tone-neutral { background: #eef1ee; color: var(--muted); }
-
-/* --------------------------------------------------------------------------
-   4. Order overview facts
-   -------------------------------------------------------------------------- */
-
-.order-detail-page .order-summary-grid {
-  margin-bottom: var(--space-md);
+.order-detail-page .status-pill.tone-good {
+  background: var(--od-accent-soft);
+  border-color: var(--od-accent-line);
+  color: var(--od-accent-ink);
 }
 
-.order-detail-page .order-summary-grid .card {
-  margin-bottom: 0;
+.order-detail-page .status-pill.tone-wait {
+  background: var(--od-gold-soft);
+  border-color: var(--od-gold-line);
+  color: var(--od-gold);
 }
+
+.order-detail-page .status-pill.tone-bad {
+  background: var(--od-danger-soft);
+  border-color: var(--od-danger-line);
+  color: var(--od-danger);
+}
+
+.order-detail-page .status-pill.tone-neutral {
+  background: var(--od-line-soft);
+  border-color: var(--od-line);
+  color: var(--od-muted);
+}
+
+/* ── Generic badges ─────────────────────────────────────── */
+
+.order-detail-page .badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--od-line-soft);
+  border: 1px solid var(--od-line);
+  color: var(--od-ink-soft);
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ── Cards (base) ───────────────────────────────────────── */
+
+.order-detail-page .card {
+  padding: 22px;
+  margin-bottom: 16px;
+  border: 1px solid var(--od-line);
+  border-radius: var(--od-radius);
+  background: var(--od-card);
+  box-shadow: var(--od-shadow);
+}
+
+.order-detail-page .card:last-child { margin-bottom: 0; }
+
+.order-detail-page .card h2 {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.3px;
+  color: var(--od-ink);
+  margin: 0 0 14px;
+}
+
+.order-detail-page .card h3 {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -.15px;
+  color: var(--od-ink);
+  margin: 0 0 8px;
+}
+
+.order-detail-page .card hr {
+  border: none;
+  border-top: 1px solid var(--od-line-soft);
+  margin: 16px 0;
+}
+
+.order-detail-page .card.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 260px;
+  color: var(--od-muted);
+  font-size: 14.5px;
+  border-style: dashed;
+  background: rgba(255, 255, 255, .7);
+}
+
+.order-detail-page .card.card-warning {
+  border-color: var(--od-danger-line);
+  background: linear-gradient(180deg, #fff7f6, #fef2f2);
+}
+
+/* ── Muted / small typography ───────────────────────────── */
+
+.order-detail-page .muted {
+  color: var(--od-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.order-detail-page .small {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.order-detail-page p.muted { margin: 0 0 12px; }
+.order-detail-page p.muted:last-child { margin-bottom: 0; }
+
+/* ── Notices & alerts ───────────────────────────────────── */
+
+.order-detail-page .notice {
+  padding: 14px 16px;
+  margin: 12px 0;
+  border: 1px solid var(--od-line);
+  border-left: 3px solid rgba(30, 158, 90, .35);
+  border-radius: 4px 12px 12px 4px;
+  background: linear-gradient(180deg, #fbfdfb, #f7faf8);
+  color: var(--od-ink-soft);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.order-detail-page .notice:last-child { margin-bottom: 0; }
+
+.order-detail-page .notice strong { color: var(--od-ink); }
+
+.order-detail-page .alert {
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--od-line-soft);
+  color: var(--od-ink-soft);
+}
+
+.order-detail-page .alert.error {
+  background: var(--od-danger-soft);
+  border: 1px solid var(--od-danger-line);
+  color: var(--od-danger);
+}
+
+.order-detail-page .alert.success {
+  background: var(--od-accent-soft);
+  border: 1px solid var(--od-accent-line);
+  color: var(--od-accent-ink);
+}
+
+/* ── Buttons (page-scoped reinforcement) ────────────────── */
+
+.order-detail-page .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 10px;
+  border: 1px solid var(--od-line);
+  background: #fff;
+  color: var(--od-ink);
+  font: 700 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color .15s var(--od-ease),
+              background .15s var(--od-ease),
+              color .15s var(--od-ease),
+              transform .12s var(--od-ease),
+              box-shadow .15s var(--od-ease);
+}
+
+.order-detail-page .btn:hover {
+  border-color: rgba(30, 158, 90, .35);
+  background: var(--od-accent-soft);
+  color: var(--od-accent-2);
+  text-decoration: none;
+}
+
+.order-detail-page .btn:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.order-detail-page .btn:focus-visible {
+  outline: none;
+  box-shadow: var(--od-ring);
+}
+
+.order-detail-page .btn-primary,
+.order-detail-page .btn.primary {
+  border: none;
+  color: #fff;
+  background: linear-gradient(150deg, var(--od-accent) 0%, var(--od-accent-2) 100%);
+  box-shadow: 0 4px 12px rgba(30, 158, 90, .22);
+}
+
+.order-detail-page .btn-primary:hover,
+.order-detail-page .btn.primary:hover {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(30, 158, 90, .28);
+  color: #fff;
+}
+
+.order-detail-page .btn-light {
+  border: 1px solid var(--od-line);
+  background: var(--od-line-soft);
+  color: var(--od-ink);
+}
+
+.order-detail-page .btn-light:hover {
+  border-color: rgba(30, 158, 90, .3);
+  background: var(--od-accent-soft);
+  color: var(--od-accent-2);
+}
+
+.order-detail-page .btn-outline {
+  border: 1px solid rgba(180, 35, 24, .25);
+  background: #fff;
+  color: var(--od-danger);
+}
+
+.order-detail-page .btn-outline:hover {
+  border-color: var(--od-danger);
+  background: var(--od-danger-soft);
+  color: var(--od-danger);
+}
+
+.order-detail-page .btn-sm {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  border-radius: 8px;
+}
+
+/* ── Forms (in-card) ────────────────────────────────────── */
+
+.order-detail-page .card form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.order-detail-page .card label {
+  display: block;
+  font: 600 13px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
+  color: var(--od-ink-soft);
+}
+
+.order-detail-page .card label > span {
+  color: var(--od-muted-2);
+  font-weight: 500;
+}
+
+.order-detail-page .card input[type="text"],
+.order-detail-page .card input[type="number"],
+.order-detail-page .card input[type="email"],
+.order-detail-page .card input[type="tel"],
+.order-detail-page .card input[type="search"],
+.order-detail-page .card select,
+.order-detail-page .card textarea {
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid var(--od-line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--od-ink);
+  font: 400 15px/1.35 var(--mb-font-body, 'DM Sans', sans-serif);
+  transition: border-color .18s var(--od-ease),
+              box-shadow .18s var(--od-ease);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.order-detail-page .card select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M4 6l4 4 4-4' stroke='%2364748b' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px 16px;
+  padding-right: 36px;
+}
+
+.order-detail-page .card textarea {
+  min-height: 90px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.order-detail-page .card input:hover,
+.order-detail-page .card select:hover,
+.order-detail-page .card textarea:hover {
+  border-color: #cfd6df;
+}
+
+.order-detail-page .card input:focus,
+.order-detail-page .card select:focus,
+.order-detail-page .card textarea:focus {
+  outline: none;
+  border-color: var(--od-accent);
+  box-shadow: var(--od-ring);
+}
+
+/* ── Order overview card ────────────────────────────────── */
 
 .order-detail-page .order-overview-card {
-  margin-bottom: var(--space-md);
-  padding: clamp(18px, 3vw, 28px);
-}
-
-.order-detail-page .order-section-heading,
-.order-detail-page .transport-card-heading,
-.order-detail-page .transport-subheading,
-.order-detail-page .transport-panel-heading {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
+  padding: 22px 24px;
 }
 
 .order-detail-page .order-section-heading {
+  display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 20px;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
 .order-detail-page .order-section-heading h2,
-.order-detail-page .order-section-heading h3,
-.order-detail-page .transport-card-heading h2,
-.order-detail-page .transport-subheading h3,
-.order-detail-page .transport-panel-heading h3 {
-  margin: 3px 0 0;
+.order-detail-page .order-section-heading h3 {
+  margin: 0;
 }
 
-.order-detail-page .order-section-heading h2 {
-  font-size: clamp(22px, 3vw, 32px);
-}
-
-.order-detail-page .order-section-heading h3,
-.order-detail-page .transport-subheading h3,
-.order-detail-page .transport-panel-heading h3 {
-  font-size: 18px;
-}
-
-.order-detail-page .order-overview-card .status-pill {
-  flex: 0 0 auto;
-  margin-top: 4px;
+.order-detail-page .order-section-note {
+  font-size: 12px;
+  color: var(--od-muted);
+  font-weight: 600;
+  letter-spacing: .02em;
 }
 
 .order-detail-page .order-overview-facts {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 22px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--od-line);
+  border-radius: 14px;
+  background: var(--od-surface);
 }
 
 .order-detail-page .order-overview-fact {
-  min-height: 76px;
-  padding: 14px 15px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  background: var(--odp-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 .order-detail-page .order-overview-fact span {
-  display: block;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
   text-transform: uppercase;
-  letter-spacing: .45px;
-  margin-bottom: 5px;
+  color: var(--od-muted);
 }
 
 .order-detail-page .order-overview-fact strong {
-  display: block;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
   font-size: 15px;
+  font-weight: 800;
+  color: var(--od-ink);
+  letter-spacing: -.15px;
   overflow-wrap: anywhere;
 }
 
 .order-detail-page .order-overview-divider {
   height: 1px;
-  background: var(--line);
-  margin: 24px 0 20px;
+  margin: 20px 0 18px;
+  background: var(--od-line-soft);
 }
 
-/* --------------------------------------------------------------------------
-   5. Parties
-   -------------------------------------------------------------------------- */
+.order-detail-page .order-parties-heading { margin-bottom: 12px; }
 
-.order-detail-page .order-parties-heading {
-  align-items: center;
-}
-
-.order-detail-page .order-section-note {
-  color: var(--muted);
-  font-size: 12px;
-}
+/* ── Party list ─────────────────────────────────────────── */
 
 .order-detail-page .party-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 16px;
+  display: grid;
+  gap: 10px;
 }
 
 .order-detail-page .party-list-inline {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.order-detail-page .party-list-inline .party-row {
-  margin: 0;
-  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .order-detail-page .party-row {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--odp-surface);
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--od-line);
+  border-radius: 12px;
+  background: #fff;
+  min-width: 0;
 }
 
 .order-detail-page .party-avatar {
-  flex: 0 0 auto;
   width: 40px;
   height: 40px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: 13px;
-  color: #fff;
-  background: linear-gradient(145deg, var(--green-light), var(--green-dark));
+  border-radius: 50%;
+  background: var(--od-info-soft);
+  color: var(--od-info);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: -.2px;
+  flex: 0 0 auto;
 }
 
 .order-detail-page .party-avatar-seller {
-  background: linear-gradient(145deg, var(--gold), #8a5a10);
+  background: var(--od-accent-soft);
+  color: var(--od-accent-2);
 }
 
 .order-detail-page .party-role {
   display: block;
-  font-size: 11px;
-  color: #77827a;
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
   text-transform: uppercase;
-  letter-spacing: .4px;
+  color: var(--od-muted);
+  margin-bottom: 4px;
 }
 
 .order-detail-page .party-name {
-  display: block;
-  font-size: 14.5px;
-  margin-top: 2px;
-  overflow-wrap: anywhere;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--od-ink);
+  letter-spacing: -.1px;
 }
 
 .order-detail-page .party-you {
-  margin-left: auto;
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--green);
-  background: var(--soft);
-  padding: 3px 8px;
-  border-radius: 999px;
-  letter-spacing: .3px;
-}
-
-/* --------------------------------------------------------------------------
-   6. Timeline / next action
-   -------------------------------------------------------------------------- */
-
-.order-detail-page .order-timeline {
-  margin-top: 14px;
-  list-style: none;
-  padding: 0;
-}
-
-.order-detail-page .order-timeline-dot {
-  width: 18px;
-  height: 18px;
-}
-
-.order-detail-page .order-timeline-step.is-current .order-timeline-label {
-  color: var(--green-dark);
-}
-
-.order-detail-page .next-action-card {
-  border-radius: 18px;
-  box-shadow: 0 12px 30px rgba(20, 45, 28, .08);
-}
-
-.order-detail-page .next-action-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.order-detail-page .card-warning {
-  border-color: #f3c9c3;
-  background: linear-gradient(180deg, #fff8f7, #fff);
-}
-
-.order-detail-page .card-warning > h2:first-child::before {
-  background: var(--danger);
-}
-
-/* --------------------------------------------------------------------------
-   7. Match box & transporter list
-   -------------------------------------------------------------------------- */
-
-.order-detail-page .match-box {
-  border: 1px solid var(--line);
-  border-radius: var(--odp-radius-md);
-  overflow: hidden;
-  background: var(--odp-surface);
-}
-
-.order-detail-page .match-box > .row-between {
-  padding: 10px 14px;
-  background: #fff;
-  border-bottom: 1px solid var(--line);
-}
-
-.order-detail-page .transporter {
-  display: flex;
-  justify-content: space-between;
+  display: inline-flex;
   align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--od-accent-soft);
+  border: 1px solid var(--od-accent-line);
+  color: var(--od-accent-ink);
+  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  flex: 0 0 auto;
+}
+
+/* ── Detail-facts strip (used inside inspection + transport) ── */
+
+.order-detail-page .detail-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0;
+  margin: 14px 0 16px;
+  border: 1px solid var(--od-line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--od-surface);
+}
+
+.order-detail-page .detail-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 16px;
+  border-left: 1px solid var(--od-line);
+}
+
+.order-detail-page .detail-facts > div:first-child { border-left: none; }
+
+.order-detail-page .detail-facts span {
+  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--od-muted);
+}
+
+.order-detail-page .detail-facts strong {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--od-ink);
+  letter-spacing: -.15px;
+  overflow-wrap: anywhere;
+}
+
+/* ── Inspection report / decision gate ──────────────────── */
+
+.order-detail-page .inspection-purchase-gate {
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid var(--od-line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fbfdfb, #f7faf8);
+}
+
+.order-detail-page .inspection-report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.order-detail-page .inspection-report-header h3 {
+  margin: 4px 0 4px;
+  font-size: 16px;
+}
+
+.order-detail-page .inspection-report-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.order-detail-page .inspection-report-facts > div {
+  padding: 10px 12px;
+  border: 1px solid var(--od-line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.order-detail-page .inspection-report-facts span {
+  display: block;
+  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--od-muted);
+  margin-bottom: 6px;
+}
+
+.order-detail-page .inspection-report-facts strong {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--od-ink);
+}
+
+.order-detail-page .inspection-findings {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.order-detail-page .inspection-findings > div {
   padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-  transition: background .15s var(--ease);
+  border: 1px solid var(--od-line-soft);
+  border-radius: 10px;
+  background: #fff;
 }
 
-.order-detail-page .transporter:last-child {
-  border-bottom: 0;
+.order-detail-page .inspection-findings span {
+  display: block;
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--od-muted);
+  margin-bottom: 6px;
 }
 
-.order-detail-page .transporter.chosen {
-  background: var(--soft);
-  outline: 2px solid var(--green);
-  outline-offset: -2px;
-  border-radius: var(--odp-radius-sm);
+.order-detail-page .inspection-findings p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--od-ink-soft);
 }
 
-.order-detail-page .transporter strong {
-  font: 600 14px/1.3 Manrope, system-ui, sans-serif;
-  color: var(--ink);
+/* Decision state: signed-off row */
+.order-detail-page .inspection-decision-state {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--od-line);
+  background: #fff;
+  margin-top: 12px;
 }
 
-.order-detail-page .transporter p {
-  font-size: 12px;
-  color: var(--muted);
-  margin: 2px 0 0;
+.order-detail-page .inspection-decision-state.is-buy {
+  border-color: var(--od-accent-line);
+  background: var(--od-accent-soft);
 }
 
-/* --------------------------------------------------------------------------
-   8. Transport overview & details
-   -------------------------------------------------------------------------- */
-
-.order-detail-page .transport-overview-card {
-  margin-bottom: var(--space-md);
-  padding: clamp(18px, 3vw, 28px);
+.order-detail-page .inspection-decision-state.is-cancel {
+  border-color: var(--od-danger-line);
+  background: var(--od-danger-soft);
 }
+
+.order-detail-page .inspection-decision-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--od-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-weight: 800;
+  font-size: 15px;
+  flex: 0 0 auto;
+  border: 1px solid var(--od-line);
+}
+
+.order-detail-page .inspection-decision-state.is-buy .inspection-decision-icon {
+  color: var(--od-accent-2);
+  border-color: var(--od-accent-line);
+}
+
+.order-detail-page .inspection-decision-state.is-cancel .inspection-decision-icon {
+  color: var(--od-danger);
+  border-color: var(--od-danger-line);
+}
+
+.order-detail-page .inspection-decision-state strong {
+  display: block;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--od-ink);
+  margin-bottom: 4px;
+}
+
+.order-detail-page .inspection-decision-state p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--od-ink-soft);
+}
+
+/* Decision panel (buttons) */
+.order-detail-page .inspection-decision-panel {
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--od-line);
+  background: #fff;
+}
+
+.order-detail-page .inspection-decision-panel h3 {
+  margin: 4px 0 8px;
+  font-size: 16px;
+}
+
+.order-detail-page .inspection-decision-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+/* Waiting note */
+.order-detail-page .inspection-waiting-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px dashed var(--od-line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--od-muted);
+  font-size: 13.5px;
+}
+
+.order-detail-page .inspection-waiting-note strong {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-weight: 800;
+  color: var(--od-ink);
+  font-size: 14px;
+}
+
+/* ── Transport card ─────────────────────────────────────── */
+
+.order-detail-page .transport-overview-card { padding: 22px 24px; }
 
 .order-detail-page .transport-card-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
   align-items: center;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--od-line-soft);
+  margin-bottom: 16px;
 }
 
 .order-detail-page .transport-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--od-info-soft);
+  color: var(--od-info);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  border-radius: 14px;
-  background: var(--soft);
-  color: var(--green);
-  border: 1px solid #d7e7d9;
 }
 
 .order-detail-page .transport-card-icon svg {
-  width: 27px;
-  height: 27px;
-}
-
-.order-detail-page .transport-card-title {
-  flex: 1 1 auto;
-  min-width: 0;
+  width: 22px;
+  height: 22px;
 }
 
 .order-detail-page .transport-card-title h2 {
-  font-size: clamp(22px, 3vw, 32px);
+  margin: 0 0 4px;
 }
 
+.order-detail-page .transport-card-title .eyebrow { margin-bottom: 6px; }
+
 .order-detail-page .transport-card-title p {
-  max-width: 68ch;
-  margin: 7px 0 0;
-  font-size: 13px;
+  margin: 0;
+  font-size: 13.5px;
 }
 
 .order-detail-page .transport-status-badge {
-  flex: 0 0 auto;
-  margin-left: auto;
+  background: var(--od-info-soft);
+  border-color: var(--od-info-line);
+  color: var(--od-info);
 }
 
 .order-detail-page .transport-details-block {
-  margin-top: 20px;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 15px;
-  background: var(--odp-surface);
+  margin-bottom: 16px;
 }
 
 .order-detail-page .transport-subheading {
+  display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2px;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.order-detail-page .transport-subheading h3 {
+  margin: 4px 0 0;
+  font-size: 15px;
 }
 
 .order-detail-page .transport-detail-facts {
-  margin-bottom: 0;
+  margin-top: 4px;
 }
 
 .order-detail-page .transport-info-panel {
-  margin-top: 14px;
-  border-color: var(--line);
-  background: #fff;
+  margin: 16px 0;
 }
 
 .order-detail-page .transport-panel-heading {
+  display: flex;
   align-items: center;
+  gap: 10px;
   margin-bottom: 10px;
 }
 
 .order-detail-page .transport-panel-heading h3 {
   margin: 0;
+  font-size: 15px;
 }
 
 .order-detail-page .transport-panel-icon {
-  flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  background: var(--soft);
-  color: var(--green);
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 14px;
-  border: 1px solid #dceade;
+  flex: 0 0 auto;
+  border: 1px solid var(--od-line);
 }
 
-.order-detail-page .transport-info-panel > p:last-child,
-.order-detail-page .transport-payment-confirmed > p:last-child {
-  margin-bottom: 0;
+.order-detail-page .transport-info-panel p {
+  margin: 0 0 6px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--od-ink-soft);
 }
 
-.order-detail-page .transport-payment-confirmed {
-  margin-top: 14px;
-  border-color: #b9d9c0;
-  background: #f4fbf5;
+.order-detail-page .transport-info-panel p:last-child { margin-bottom: 0; }
+
+/* Quotes block (`.match-box` + `.transporter`) */
+.order-detail-page .match-box {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--od-line);
+  border-radius: 14px;
+  background: #fff;
 }
 
-.order-detail-page .transport-payment-confirmed .transport-panel-icon {
-  background: #e2f3e5;
-  color: var(--green);
+.order-detail-page .match-box h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
 }
 
-/* --------------------------------------------------------------------------
-   9. Payout summary card + table
-   -------------------------------------------------------------------------- */
-
-.order-detail-page .payout-summary-card {
-  overflow-x: auto;
+.order-detail-page .transporter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  padding: 14px;
+  margin-bottom: 10px;
+  border: 1px solid var(--od-line);
+  border-radius: 12px;
+  background: var(--od-surface);
 }
+
+.order-detail-page .transporter:last-child { margin-bottom: 0; }
+
+.order-detail-page .transporter strong {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-weight: 800;
+  font-size: 14.5px;
+  color: var(--od-ink);
+}
+
+.order-detail-page .transporter p {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--od-muted);
+}
+
+.order-detail-page .transporter > div:last-child {
+  text-align: right;
+  flex: 0 0 auto;
+}
+
+/* ── Payout summary card ────────────────────────────────── */
+
+.order-detail-page .payout-summary-card { padding: 22px 24px; }
 
 .order-detail-page .payout-intro {
-  margin: 14px 0 20px;
-  max-width: 62ch;
-  color: var(--muted);
-  line-height: 1.7;
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--od-muted);
 }
 
 .order-detail-page .payout-hold-chip {
-  display: inline-block;
-  padding: 0 7px;
-  margin: 0 1px;
-  border: 1.5px solid var(--green);
-  border-radius: 6px;
-  background: var(--soft);
-  color: var(--green-dark);
-  font-weight: 700;
-  line-height: 1.5;
-  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--od-accent-soft);
+  border: 1px solid var(--od-accent-line);
+  color: var(--od-accent-ink);
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .06em;
+  text-transform: uppercase;
 }
 
 .order-detail-page .payout-table {
   width: 100%;
-  min-width: 460px;
-  border-collapse: collapse;
-  margin: 0;
-}
-
-.order-detail-page .payout-table th,
-.order-detail-page .payout-table td {
-  background: none;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--ink);
-  font-size: inherit;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin-bottom: 16px;
+  border: 1px solid var(--od-line);
+  border-radius: 14px;
+  overflow: hidden;
+  font-size: 14px;
 }
 
 .order-detail-page .payout-table thead th {
-  padding: 0 0 10px;
-  border-bottom: 1.5px solid var(--ink);
-  font-family: Manrope, system-ui, sans-serif;
-  font-size: 13px;
-  font-weight: 700;
+  padding: 10px 14px;
+  background: var(--od-surface);
+  color: var(--od-muted);
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
   text-align: left;
-}
-
-.order-detail-page .payout-table thead th.payout-amount-col {
-  text-align: right;
-  white-space: nowrap;
-}
-
-.order-detail-page .payout-table thead th.payout-status-col {
-  padding-left: 16px;
+  border-bottom: 1px solid var(--od-line);
 }
 
 .order-detail-page .payout-table tbody th,
 .order-detail-page .payout-table tbody td {
-  padding: 14px 0;
-  border-bottom: 1px solid var(--line);
-  vertical-align: top;
+  padding: 14px;
+  border-top: 1px solid var(--od-line-soft);
+  vertical-align: middle;
+  text-align: left;
+  font-weight: 400;
+  color: var(--od-ink-soft);
 }
 
-.order-detail-page .payout-table tbody tr:last-child th,
-.order-detail-page .payout-table tbody tr:last-child td {
-  border-bottom: 0;
+.order-detail-page .payout-table tbody tr:first-child th,
+.order-detail-page .payout-table tbody tr:first-child td {
+  border-top: none;
 }
 
-.order-detail-page .payout-table tbody td.payout-status {
-  padding-left: 16px;
+.order-detail-page .payout-amount-col,
+.order-detail-page .payout-amount {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.order-detail-page .payout-table .status-pill {
-  padding: 4px 10px;
-  font-size: 11px;
-}
-
-.order-detail-page .payout-party {
-  text-align: left;
-  font-weight: 400;
+.order-detail-page .payout-status-col,
+.order-detail-page .payout-status {
+  text-align: right !important;
+  white-space: nowrap;
 }
 
 .order-detail-page .payout-party-body {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .order-detail-page .payout-party-line {
   display: flex;
+  align-items: center;
+  gap: 6px;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 6px;
 }
 
 .order-detail-page .payout-party-role {
-  font-family: Manrope, system-ui, sans-serif;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--ink);
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-weight: 800;
+  font-size: 13.5px;
+  color: var(--od-ink);
+  letter-spacing: -.1px;
 }
 
 .order-detail-page .payout-party-name {
-  font-size: 15px;
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-
-.order-detail-page .payout-table .party-you {
-  margin-left: 2px;
-  align-self: center;
+  font-size: 13px;
+  color: var(--od-muted);
 }
 
 .order-detail-page .payout-party-note {
-  font-size: 12.5px;
-  color: var(--muted);
+  font-size: 12px;
+  color: var(--od-muted-2);
+  font-variant-numeric: tabular-nums;
 }
 
 .order-detail-page .payout-amount {
-  text-align: right;
-  white-space: nowrap;
-  font-family: Manrope, system-ui, sans-serif;
-  font-size: 17px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--od-ink);
 }
 
 .order-detail-page .payout-currency {
-  margin-left: 5px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
+  display: inline-block;
+  margin-left: 6px;
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  color: var(--od-muted);
 }
 
+/* Common due countdown */
 .order-detail-page .payout-due {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px 20px;
-  margin-top: 16px;
-  padding: 16px 18px;
-  border: 1px solid #f0dcae;
-  border-left: 4px solid var(--gold);
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border: 1px solid var(--od-accent-line);
   border-radius: 12px;
-  background: #fff8e8;
+  background: linear-gradient(180deg, #f0fdf5, #eafaf0);
 }
 
 .order-detail-page .payout-due-when {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .order-detail-page .payout-due-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #875b12;
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--od-accent-ink);
 }
 
 .order-detail-page .payout-due-date {
-  font-family: Manrope, system-ui, sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--ink);
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--od-ink);
+  letter-spacing: -.1px;
 }
 
 .order-detail-page .payout-due-clock {
@@ -778,1268 +1259,319 @@
 }
 
 .order-detail-page .payout-due-digits {
-  font-family: Manrope, system-ui, sans-serif;
-  font-size: clamp(28px, 8vw, 36px);
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 22px;
   font-weight: 800;
-  letter-spacing: .5px;
+  letter-spacing: -.5px;
+  color: var(--od-accent-2);
   font-variant-numeric: tabular-nums;
-  color: var(--ink);
+  line-height: 1;
 }
 
 .order-detail-page .payout-due-digits-now {
-  font-size: 20px;
+  font-size: 15px;
   letter-spacing: 0;
-  color: var(--green-dark);
 }
 
 .order-detail-page .payout-due-unit {
-  font-size: 13px;
-  color: #875b12;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--od-muted);
 }
 
 .order-detail-page .payout-due-done {
-  border-color: #cfe6d6;
-  border-left-color: var(--green);
-  background: #f1f9f3;
-}
-
-.order-detail-page .payout-due-done .payout-due-label {
-  color: var(--green-dark);
+  border-color: var(--od-accent-line);
+  background: linear-gradient(180deg, #f0fdf5, #e2f8ec);
 }
 
 .order-detail-page .payout-due-idle {
-  border-color: var(--line);
-  border-left-color: var(--line);
-  background: var(--odp-surface);
+  border-color: var(--od-line);
+  border-style: dashed;
+  background: var(--od-surface);
 }
 
-.order-detail-page .payout-due-idle .payout-due-label {
-  color: var(--muted);
-}
+.order-detail-page .payout-due-idle .payout-due-label { color: var(--od-muted); }
 
 .order-detail-page .payout-due-idle .payout-due-date {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-/* --------------------------------------------------------------------------
-   10. Notices, alerts, choice cards
-   -------------------------------------------------------------------------- */
-
-.order-detail-page .notice {
-  border-radius: 12px;
-}
-
-.order-detail-page .choice {
-  border-radius: 14px;
-  transition: border-color .15s var(--ease), box-shadow .15s var(--ease), transform .15s var(--ease);
-}
-
-.order-detail-page .choice:hover {
-  border-color: var(--green-light);
-  box-shadow: var(--shadow-tight);
-  transform: translateY(-2px);
-}
-
-/* --------------------------------------------------------------------------
-   11. Messages
-   -------------------------------------------------------------------------- */
-
-.order-detail-page .message-thread {
-  background: var(--odp-surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 12px;
-}
-
-.order-detail-page .message-bubble {
-  border-radius: 16px;
-  box-shadow: var(--shadow-tight);
-}
-
-.order-detail-page .message-mine {
-  border-bottom-right-radius: 4px;
-}
-
-.order-detail-page .message-theirs {
-  border-bottom-left-radius: 4px;
-  background: #fff;
-  border: 1px solid var(--line);
-}
-
-.order-detail-page .message-composer {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 8px;
-}
-
-.order-detail-page .message-composer textarea {
-  border: none;
-  background: transparent;
-  padding: 6px 8px;
-}
-
-.order-detail-page .message-composer textarea:focus {
-  outline: none;
-  box-shadow: none;
-}
-
-/* --------------------------------------------------------------------------
-   12. Rating
-   -------------------------------------------------------------------------- */
-
-.order-detail-page .rating-form {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 14px;
-  margin-top: 12px;
-  background: var(--odp-surface);
-}
-
-.order-detail-page .rating-list {
-  margin-top: 16px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-
-.order-detail-page .rating-list h3 {
+  font-family: var(--mb-font-body, 'DM Sans', sans-serif);
+  font-weight: 500;
   font-size: 13px;
+  color: var(--od-muted);
+  letter-spacing: 0;
+}
+
+/* ── Next action card ───────────────────────────────────── */
+
+.order-detail-page .next-action-card h2 {
+  margin-bottom: 6px;
+}
+
+.order-detail-page .next-action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+/* ── Product marketplace offer card ─────────────────────── */
+
+.order-detail-page .order-product-offer-card { padding: 22px 24px; }
+
+.order-detail-page .order-product-offer-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .16em;
   text-transform: uppercase;
-  letter-spacing: .5px;
-  color: var(--muted);
+  color: var(--od-accent-ink);
   margin-bottom: 8px;
 }
 
-.order-detail-page .rating-list-row {
-  padding: 10px 0;
-  border-top: 1px solid #edf0ec;
+.order-detail-page .order-product-offer-kicker::before {
+  content: '';
+  flex: 0 0 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
 }
 
-.order-detail-page .rating-list-row:first-of-type {
-  border-top: 0;
+.order-detail-page .order-product-offer-card h2 { margin-bottom: 8px; }
+
+.order-detail-page .order-product-offer-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
 }
 
-/* --------------------------------------------------------------------------
-   13. Evidence
-   -------------------------------------------------------------------------- */
-
-.order-detail-page .evidence-item {
-  border-radius: 14px;
-  background: var(--odp-surface);
+.order-detail-page .order-product-offer-button {
+  align-self: flex-start;
+  min-width: 160px;
 }
 
-.order-detail-page .evidence-thumb {
-  width: 92px;
-  height: 92px;
-  border-radius: 10px;
-  transition: transform .15s var(--ease);
-}
+/* ── Inspection / decision actions ──────────────────────── */
 
-.order-detail-page .evidence-thumb:hover {
-  transform: scale(1.04);
-}
+.order-detail-page #inspection-section { scroll-margin-top: 96px; }
 
-/* --------------------------------------------------------------------------
-   14. Payment center rows
-   -------------------------------------------------------------------------- */
+/* ── Toast ──────────────────────────────────────────────── */
 
-.order-detail-page .payment-center-row {
-  border-radius: 14px;
-  border-left: 3px solid var(--line);
-  background: var(--odp-surface);
-}
-
-.order-detail-page .payment-center-row:has(.badge-success) {
-  border-left-color: var(--green);
-}
-
-.order-detail-page .payment-center-row:has(.badge-pending) {
-  border-left-color: var(--gold);
-}
-
-/* --------------------------------------------------------------------------
-   15. Toast (screen only — hidden from print in section 17)
-   -------------------------------------------------------------------------- */
-
-.order-detail-toast {
+.order-detail-page .order-detail-toast {
   position: fixed;
-  z-index: 2000;
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: min(560px, calc(100vw - 32px));
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 60;
+
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 16px 18px;
-  border: 1px solid #e5c66a;
-  border-radius: 14px;
-  background: #fffdf4;
-  color: #4a3a0a;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, .18);
-  animation: order-detail-toast-in 180ms ease-out;
-}
+  gap: 10px;
 
-.order-detail-toast-icon {
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: #f2c94c;
-  color: #fff;
-  font-weight: 800;
-  line-height: 1;
-}
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 12px 14px 12px 12px;
 
-.order-detail-toast-message {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding-top: 3px;
+  border: 1px solid var(--od-danger-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--od-danger);
   font-size: 14px;
-  line-height: 1.5;
-  font-weight: 600;
+  line-height: 1.45;
+
+  box-shadow:
+    0 1px 2px rgba(15, 30, 45, .06),
+    0 18px 44px rgba(15, 30, 45, .16);
+
+  animation: order-detail-toast-in .22s var(--od-ease);
 }
 
-.order-detail-toast-close {
-  flex: 0 0 auto;
-  border: 0;
-  background: transparent;
-  color: #76651f;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 22px;
+.order-detail-page .order-detail-toast-icon {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--od-danger-soft);
+  color: var(--od-danger);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-weight: 800;
+  font-size: 12px;
   line-height: 1;
 }
 
-.order-detail-toast-close:hover {
-  background: rgba(118, 101, 31, .09);
+.order-detail-page .order-detail-toast-message {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--od-ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.order-detail-page .order-detail-toast-close {
+  flex: 0 0 auto;
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--od-muted-2);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 6px;
+  transition: color .15s var(--od-ease), background .15s var(--od-ease);
+}
+
+.order-detail-page .order-detail-toast-close:hover {
+  color: var(--od-ink);
+  background: var(--od-line-soft);
+}
+
+.order-detail-page .order-detail-toast-close:focus-visible {
+  outline: none;
+  box-shadow: var(--od-ring);
 }
 
 @keyframes order-detail-toast-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, calc(-50% + 10px)) scale(.98);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* --------------------------------------------------------------------------
-   16. Responsive breakpoints (screen)
-   -------------------------------------------------------------------------- */
+/* ── Responsive: tablet ─────────────────────────────────── */
 
-/* Tablet — tighten the 4-column fact grid and give the hero side a touch
-   more breathing room before it has to wrap. */
-@media (max-width: 900px) {
-  .order-detail-page .order-overview-facts {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
+@media (max-width: 720px) {
+  .order-detail-page .container-narrow { padding: 24px 16px 96px; }
 
-/* Large phone / small tablet */
-@media (max-width: 760px) {
-  .order-detail-page .order-overview-facts {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .order-detail-page .party-list-inline {
-    grid-template-columns: 1fr;
-  }
-
-  .order-detail-page .transport-card-heading {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .order-detail-page .transport-status-badge {
-    margin-left: 62px;
-    margin-top: -10px;
-  }
-}
-
-/* Where the hero stops sitting side-by-side */
-@media (max-width: 620px) {
-  .order-detail-page .order-summary-grid {
-    grid-template-columns: 1fr;
-  }
+  .order-detail-page .card { padding: 18px; }
 
   .order-detail-page .order-hero {
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px 18px 20px;
+    gap: 16px;
   }
 
   .order-detail-page .order-hero-side {
     align-items: flex-start;
     text-align: left;
-    width: 100%;
+    border-top: 1px solid var(--od-line-soft);
+    padding-top: 14px;
   }
 
-  .order-detail-page .payout-due {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
+  .order-detail-page .order-hero-title { font-size: 22px; }
 
-/* Small phone */
-@media (max-width: 480px) {
-  .order-detail-page .order-overview-facts {
-    grid-template-columns: 1fr;
+  .order-detail-page .order-overview-card,
+  .order-detail-page .transport-overview-card,
+  .order-detail-page .payout-summary-card,
+  .order-detail-page .order-product-offer-card {
+    padding: 18px;
   }
 
-  .order-detail-page .order-section-heading {
-    align-items: flex-start;
-  }
-
-  .order-detail-page .order-section-heading .status-pill {
-    font-size: 10px;
-    padding-inline: 8px;
-  }
-
-  .order-detail-page .transport-details-block {
-    padding: 14px;
-  }
-
-  .order-detail-toast {
-    width: calc(100vw - 24px);
-    padding: 14px;
-  }
-
-  .order-detail-toast-message {
-    font-size: 13px;
-  }
-}
-
-/* Very small phone — the payout table gets a horizontal scroller rather
-   than crushing its columns unreadably. */
-@media (max-width: 420px) {
-  .order-detail-page .payout-summary-card {
-    padding-inline: 14px;
-  }
-
-  .order-detail-page .payout-due-digits {
-    font-size: 26px;
-  }
-}
-
-
-/* ==========================================================================\n   16B. Modern order command-center redesign\n   --------------------------------------------------------------------------\n   This layer intentionally reuses the existing component class names so the\n   purchase, inspection, transport, payment and evidence functionality stays\n   untouched while the page gets a clearer commercial workflow.\n   ========================================================================== */\n\n.order-detail-page {\n  --odp-bg: #f4f7f4;\n  --odp-card: #ffffff;\n  --odp-card-soft: #f8faf8;\n  --odp-border: #e1e7e2;\n  --odp-border-strong: #cfd9d1;\n  --odp-ink: #17231b;\n  --odp-muted: #68756c;\n  --odp-green: #176b43;\n  --odp-green-2: #0f5736;\n  --odp-green-soft: #eaf6ee;\n  --odp-gold: #a66a09;\n  --odp-gold-soft: #fff5df;\n  --odp-red: #b42318;\n  --odp-red-soft: #fff0ee;\n  --odp-blue: #245f93;\n  --odp-blue-soft: #edf5fc;\n  background: transparent;\n  color: var(--odp-ink);\n}\n\n.order-detail-page > .container-narrow {\n  max-width: 1180px;\n}\n\n.order-detail-page .card {\n  background: var(--odp-card);\n  border: 1px solid var(--odp-border);\n  border-radius: 20px;\n  box-shadow: 0 8px 28px rgba(22, 42, 29, .055);\n  padding: 24px;\n  margin-bottom: 18px;\n  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;\n}\n\n.order-detail-page .card:hover {\n  border-color: var(--odp-border-strong);\n  box-shadow: 0 12px 34px rgba(22, 42, 29, .075);\n}\n\n.order-detail-page .back-link {\n  color: var(--odp-green);\n  font-weight: 700;\n  border-radius: 10px;\n  padding: 8px 10px;\n}\n\n.order-detail-page .back-link:hover {\n  background: var(--odp-green-soft);\n}\n\n.order-detail-page .order-hero {\n  min-height: 215px;\n  padding: 30px 32px;\n  margin-bottom: 18px;\n  border-radius: 24px;\n  background:\n    radial-gradient(circle at 88% 18%, rgba(255,255,255,.16), transparent 30%),\n    linear-gradient(135deg, #103f2b 0%, #176b43 56%, #258454 100%);\n  box-shadow: 0 18px 42px rgba(17, 79, 49, .18);\n}\n\n.order-detail-page .order-hero-title {\n  max-width: 680px;\n  font-size: clamp(28px, 4vw, 42px);\n  letter-spacing: -.7px;\n}\n\n.order-detail-page .order-hero-meta {\n  gap: 9px;\n}\n\n.order-detail-page .order-hero-side {\n  min-width: 205px;\n  padding: 16px 0 0 24px;\n  border-left: 1px solid rgba(255,255,255,.2);\n}\n\n.order-detail-page .order-hero-price {\n  font-size: clamp(30px, 4vw, 44px);\n}\n\n.order-detail-page .order-hero .btn-outline {\n  border-radius: 11px;\n  font-weight: 700;\n}\n\n.order-detail-page .next-action-card {\n  position: relative;\n  overflow: hidden;\n  border: 1px solid #b9dcc5;\n  background: linear-gradient(135deg, #f0faf3 0%, #ffffff 72%);\n  box-shadow: 0 10px 28px rgba(23,107,67,.08);\n}\n\n.order-detail-page .next-action-card::before {\n  content: '';\n  position: absolute;\n  left: 0;\n  top: 0;\n  bottom: 0;\n  width: 5px;\n  background: var(--odp-green);\n}\n\n.order-detail-page .next-action-card h2 {\n  font-size: 23px;\n  margin-bottom: 8px !important;\n}\n\n.order-detail-page .next-action-buttons {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 9px;\n}\n\n.order-detail-page .next-action-card .btn-primary {\n  min-height: 44px;\n  padding-inline: 18px;\n  box-shadow: 0 5px 14px rgba(23,107,67,.16);\n}\n\n.order-detail-page .order-overview-card {\n  padding: 26px;\n}\n\n.order-detail-page .order-section-heading {\n  padding-bottom: 16px;\n  border-bottom: 1px solid var(--odp-border);\n}\n\n.order-detail-page .order-section-heading h2 {\n  font-size: 25px;\n  letter-spacing: -.35px;\n}\n\n.order-detail-page .order-overview-facts {\n  grid-template-columns: repeat(4, minmax(0, 1fr));\n  gap: 12px;\n  margin-top: 18px;\n}\n\n.order-detail-page .order-overview-fact {\n  min-height: 84px;\n  padding: 15px 16px;\n  background: var(--odp-card-soft);\n  border: 1px solid var(--odp-border);\n  border-radius: 14px;\n}\n\n.order-detail-page .order-overview-fact strong {\n  color: var(--odp-ink);\n  font-size: 16px;\n}\n\n.order-detail-page .order-overview-divider {\n  margin: 25px 0 20px;\n}\n\n.order-detail-page .party-list-inline {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  gap: 12px;\n}\n\n.order-detail-page .party-row {\n  min-height: 76px;\n  padding: 13px 15px;\n  border: 1px solid var(--odp-border);\n  border-radius: 14px;\n  background: var(--odp-card-soft);\n}\n\n.order-detail-page .party-avatar {\n  width: 44px;\n  height: 44px;\n  border-radius: 13px;\n  background: var(--odp-green-soft);\n  color: var(--odp-green);\n  font-weight: 800;\n}\n\n.order-detail-page .party-avatar-seller {\n  background: #f1eee5;\n  color: #765c20;\n}\n\n.order-detail-page .party-you {\n  margin-left: auto;\n  background: var(--odp-green);\n  color: #fff;\n  border-radius: 999px;\n  padding: 4px 9px;\n  font-size: 10px;\n  font-weight: 800;\n  text-transform: uppercase;\n}\n\n.order-detail-page #inspection-section > .card,\n.order-detail-page #transport-section,\n.order-detail-page #payment-center,\n.order-detail-page #order-payout-status {\n  scroll-margin-top: 24px;\n}\n\n.order-detail-page #inspection-section > .card {\n  border-left: 4px solid #7c9d82;\n}\n\n.order-detail-page #inspection-section .detail-facts,\n.order-detail-page .transport-detail-facts {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: 10px;\n}\n\n.order-detail-page .detail-facts > div {\n  padding: 12px 13px;\n  border: 1px solid var(--odp-border);\n  border-radius: 12px;\n  background: var(--odp-card-soft);\n}\n\n.order-detail-page .detail-facts span {\n  color: var(--odp-muted);\n  font-size: 10px;\n  font-weight: 800;\n  letter-spacing: .65px;\n  text-transform: uppercase;\n}\n\n.order-detail-page .detail-facts strong {\n  display: block;\n  margin-top: 4px;\n}\n\n.order-detail-page .transport-overview-card {\n  overflow: hidden;\n  border: 1px solid #c9dce9;\n  background: linear-gradient(180deg, #fbfdff 0%, #fff 34%);\n}\n\n.order-detail-page .transport-card-heading {\n  padding-bottom: 18px;\n  border-bottom: 1px solid var(--odp-border);\n}\n\n.order-detail-page .transport-card-icon {\n  width: 48px;\n  height: 48px;\n  flex: 0 0 48px;\n  display: grid;\n  place-items: center;\n  border-radius: 14px;\n  background: var(--odp-blue-soft);\n  color: var(--odp-blue);\n}\n\n.order-detail-page .transport-card-title h2 {\n  font-size: 24px;\n  margin-bottom: 4px;\n}\n\n.order-detail-page .transport-status-badge {\n  margin-left: auto;\n  white-space: nowrap;\n}\n\n.order-detail-page .transport-details-block {\n  margin-top: 18px;\n  padding: 18px;\n  border: 1px solid var(--odp-border);\n  border-radius: 16px;\n  background: var(--odp-card-soft);\n}\n\n.order-detail-page .transport-info-panel {\n  margin-top: 12px;\n  border: 1px solid var(--odp-border);\n  border-radius: 14px;\n  background: #fff;\n  padding: 16px;\n}\n\n.order-detail-page .transport-panel-heading h3 {\n  font-size: 16px;\n}\n\n.order-detail-page .transport-panel-icon {\n  width: 34px;\n  height: 34px;\n  display: grid;\n  place-items: center;\n  border-radius: 10px;\n  background: var(--odp-blue-soft);\n}\n\n.order-detail-page .match-box {\n  margin-top: 16px;\n  padding: 18px;\n  border: 1px solid #d8e2dc;\n  border-radius: 16px;\n  background: #f9fbfa;\n}\n\n.order-detail-page .match-box > h3 {\n  margin: 0 0 12px;\n  font-size: 17px;\n}\n\n.order-detail-page .transporter {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto;\n  gap: 18px;\n  align-items: center;\n  padding: 15px;\n  margin-top: 10px;\n  border: 1px solid var(--odp-border);\n  border-radius: 14px;\n  background: #fff;\n}\n\n.order-detail-page .transporter:hover {\n  border-color: #b9cfc0;\n  box-shadow: 0 6px 18px rgba(20,70,40,.05);\n}\n\n.order-detail-page .payment-action-center {\n  border: 1px solid #c8dfd1;\n  background: linear-gradient(180deg, #fbfffc 0%, #fff 100%);\n}\n\n.order-detail-page .payment-action-center > .row-between {\n  padding-bottom: 16px;\n  border-bottom: 1px solid var(--odp-border);\n}\n\n.order-detail-page .payment-action-center h2 {\n  font-size: 25px;\n  margin-bottom: 5px;\n}\n\n.order-detail-page .payment-center-row {\n  padding: 17px;\n  border: 1px solid var(--odp-border);\n  border-radius: 15px;\n  background: #fff;\n  box-shadow: none;\n}\n\n.order-detail-page .payment-center-row:hover {\n  border-color: #b9cfc0;\n}\n\n.order-detail-page .payment-center-row .btn-primary {\n  min-height: 40px;\n}\n\n.order-detail-page .payout-summary-card {\n  background: #fff;\n}\n\n.order-detail-page .payout-table {\n  border-collapse: separate;\n  border-spacing: 0;\n  overflow: hidden;\n  border: 1px solid var(--odp-border);\n  border-radius: 14px;\n}\n\n.order-detail-page .payout-table th,\n.order-detail-page .payout-table td {\n  padding: 13px 14px;\n  border-bottom: 1px solid var(--odp-border);\n}\n\n.order-detail-page .payout-table tr:last-child th,\n.order-detail-page .payout-table tr:last-child td {\n  border-bottom: 0;\n}\n\n.order-detail-page .payout-table thead th {\n  background: #f5f8f5;\n  color: var(--odp-muted);\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: .55px;\n}\n\n.order-detail-page .payout-due {\n  margin-top: 14px;\n  padding: 15px 17px;\n  border: 1px solid #cfe0d4;\n  border-radius: 14px;\n  background: var(--odp-green-soft);\n}\n\n.order-detail-page .order-timeline {\n  padding-top: 4px;\n}\n\n.order-detail-page .order-timeline-step {\n  min-height: 56px;\n}\n\n.order-detail-page .notice,\n.order-detail-page .alert {\n  border-radius: 13px;\n}\n\n.order-detail-page .choice-grid {\n  gap: 12px;\n}\n\n.order-detail-page .choice-grid > * {\n  border-radius: 14px;\n}\n\n.order-detail-page .evidence-gallery,\n.order-detail-page .evidence-list {\n  border-radius: 14px;\n}\n\n.order-detail-page .message-bubble {\n  border-radius: 14px;\n}\n\n.order-detail-page .btn {\n  border-radius: 11px;\n  font-weight: 700;\n}\n\n.order-detail-page .btn-primary {\n  box-shadow: 0 4px 12px rgba(23,107,67,.10);\n}\n\n.order-detail-page input,\n.order-detail-page select,\n.order-detail-page textarea {\n  border-radius: 10px;\n  border-color: var(--odp-border-strong);\n}\n\n.order-detail-page .order-detail-toast {\n  z-index: 1000;\n  width: min(560px, calc(100vw - 28px));\n  border: 1px solid #e4c85c;\n  border-left: 5px solid #b88709;\n  border-radius: 16px;\n  background: rgba(255,252,235,.98);\n  box-shadow: 0 18px 48px rgba(39,34,12,.18);\n  backdrop-filter: blur(8px);\n}\n\n.order-detail-page .order-detail-toast-icon {\n  width: 32px;\n  height: 32px;\n  border-radius: 10px;\n  background: #fff0bd;\n  color: #8b6505;\n}\n\n@media (max-width: 900px) {\n  .order-detail-page .order-overview-facts {\n    grid-template-columns: repeat(2, minmax(0, 1fr));\n  }\n\n  .order-detail-page .order-hero-side {\n    border-left: 0;\n    border-top: 1px solid rgba(255,255,255,.2);\n    padding: 16px 0 0;\n    width: 100%;\n    align-items: flex-start;\n    text-align: left;\n  }\n}\n\n@media (max-width: 680px) {\n  .order-detail-page .card {\n    padding: 18px;\n    border-radius: 16px;\n  }\n\n  .order-detail-page .order-hero {\n    padding: 24px 20px;\n    border-radius: 19px;\n  }\n\n  .order-detail-page .order-overview-facts,\n  .order-detail-page .party-list-inline,\n  .order-detail-page #inspection-section .detail-facts,\n  .order-detail-page .transport-detail-facts {\n    grid-template-columns: 1fr;\n  }\n\n  .order-detail-page .transporter {\n    grid-template-columns: 1fr;\n  }\n\n  .order-detail-page .transporter > div:last-child {\n    display: flex;\n    flex-wrap: wrap;\n    align-items: center;\n    gap: 8px;\n  }\n}\n\n@media (max-width: 480px) {\n  .order-detail-page .order-hero-title {\n    font-size: 28px;\n  }\n\n  .order-detail-page .order-hero-price {\n    font-size: 32px;\n  }\n\n  .order-detail-page .order-section-heading {\n    gap: 10px;\n  }\n\n  .order-detail-page .next-action-buttons .btn,\n  .order-detail-page .payment-center-row .btn {\n    width: 100%;\n  }\n}\n\n/* ==========================================================================
-   17. Print — quarterly report output
-   ==========================================================================
-   Goal: every fact on the page reaches paper, nothing interactive (buttons,
-   forms, composer, uploader, toast) does, and long tables/cards don't get
-   sliced across a page break. Colour is toned down to a print-safe palette
-   so a black & white office printer still reads every pill and heading.
-   ========================================================================== */
-
-@media print {
-  @page {
-    size: A4;
-    margin: 14mm 12mm;
-  }
-
-  html,
-  body {
-    background: #fff !important;
-  }
-
-  /* Ask the browser to keep pill/background colours rather than
-     stripping them to white-on-white. */
-  .order-detail-page,
-  .order-detail-page * {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-    color-adjust: exact;
-    box-shadow: none !important;
-    text-shadow: none !important;
-    animation: none !important;
-    transition: none !important;
-  }
-
-  .order-detail-page {
-    max-width: 100%;
-    width: 100%;
-    padding: 0 !important;
-    font-size: 12.5px;
-    color: #111 !important;
-  }
-
-  /* -- Hide anything that only makes sense on a live, editable page ----- */
-
-  .order-detail-page .back-link,
-  .order-detail-page .btn,
-  .order-detail-page .next-action-buttons,
-  .order-detail-page .order-hero .btn-outline,
-  .order-detail-page .message-composer,
-  .order-detail-page .rating-form,
-  .order-detail-page form,
-  .order-detail-page input,
-  .order-detail-page select,
-  .order-detail-page textarea,
-  .order-detail-page [class*="uploader"],
-  .order-detail-toast {
-    display: none !important;
-  }
-
-  /* Dispute form fields hide above, but if a dispute is genuinely open
-     the read-only notice card must still print in full. */
-  .order-detail-page .card-warning {
-    display: block !important;
-  }
-
-  /* -- Hero: swap the dark gradient for an ink-friendly letterhead ------ */
-
-  .order-detail-page .order-hero {
-    background: #fff !important;
-    color: #111 !important;
-    border: 1.5px solid #111;
-    border-radius: 0;
-    box-shadow: none !important;
-    padding: 10mm 0 8mm;
-    margin-bottom: 8mm;
-    break-inside: avoid;
-    break-after: avoid;
-  }
-
-  .order-detail-page .order-hero::after {
-    display: none;
-  }
-
-  .order-detail-page .order-hero-eyebrow {
-    color: #555 !important;
-  }
-
-  .order-detail-page .order-hero-title {
-    color: #111 !important;
-  }
-
-  .order-detail-page .order-hero-chip {
-    background: #fff !important;
-    border: 1px solid #111 !important;
-    color: #111 !important;
-  }
-
-  .order-detail-page .order-hero-price-label {
-    color: #555 !important;
-  }
-
-  .order-detail-page .order-hero-price {
-    color: #111 !important;
-  }
-
-  .order-detail-page .status-pill {
-    border: 1px solid #111 !important;
-    background: #fff !important;
-    color: #111 !important;
-  }
-
-  .order-detail-page .card .status-pill.tone-good,
-  .order-detail-page .status-pill.tone-good {
-    border-color: #146b38 !important;
-    color: #146b38 !important;
-  }
-
-  .order-detail-page .card .status-pill.tone-wait,
-  .order-detail-page .status-pill.tone-wait {
-    border-color: #875b12 !important;
-    color: #875b12 !important;
-  }
-
-  .order-detail-page .card .status-pill.tone-bad,
-  .order-detail-page .status-pill.tone-bad {
-    border-color: var(--danger) !important;
-    color: var(--danger) !important;
-  }
-
-  /* -- Cards: flatten the shadowed, rounded "app" look into a plain,
-     bordered report block, and never let one split across a page ------- */
-
-  .order-detail-page .card {
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 5mm 6mm;
-    margin-bottom: 5mm;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-
-  .order-detail-page .card > h2:first-child {
-    font-size: 14px;
-    border-bottom: 1px solid #ccc;
-  }
-
-  .order-detail-page .card > h2:first-child::before {
-    background: #111 !important;
-  }
-
-  /* -- Fact grids: two columns reads cleanly on A4/Letter -------------- */
-
-  .order-detail-page .order-overview-facts,
   .order-detail-page .party-list-inline {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 3mm;
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .order-detail-page .order-overview-fact,
-  .order-detail-page .party-row,
-  .order-detail-page .transporter,
-  .order-detail-page .evidence-item,
-  .order-detail-page .message-bubble,
-  .order-detail-page .rating-list-row {
-    border: 1px solid #ddd;
-    background: #fff !important;
-    break-inside: avoid;
-    page-break-inside: avoid;
+  .order-detail-page .transport-card-heading {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
   }
 
-  /* -- Payout table: force it to always fit the printed width, with
-     visible rules since the soft background won't reliably print ------ */
+  .order-detail-page .transport-status-badge {
+    grid-column: 1 / -1;
+    justify-self: flex-start;
+  }
 
-  .order-detail-page .payout-summary-card {
-    overflow: visible;
+  .order-detail-page .transporter {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .order-detail-page .transporter > div:last-child {
+    text-align: left;
   }
 
   .order-detail-page .payout-table {
-    min-width: 0;
-    width: 100%;
+    font-size: 13px;
   }
 
-  .order-detail-page .payout-table thead {
-    display: table-header-group;
-  }
-
-  .order-detail-page .payout-table tr {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-
-  .order-detail-page .payout-table th,
-  .order-detail-page .payout-table td {
-    border-bottom: 1px solid #ccc !important;
-    color: #111 !important;
+  .order-detail-page .payout-table thead th,
+  .order-detail-page .payout-table tbody th,
+  .order-detail-page .payout-table tbody td {
+    padding: 10px 10px;
   }
 
   .order-detail-page .payout-due {
-    background: #fff !important;
-    border: 1px solid #111;
-    border-left: 4px solid #111;
-    break-inside: avoid;
-  }
-
-  /* A live countdown is meaningless on paper — show the due date only. */
-  .order-detail-page .payout-due-clock {
-    display: none !important;
-  }
-
-  /* -- Evidence photos: keep them, but modestly sized so a gallery
-     doesn't burn through pages ------------------------------------------ */
-
-  .order-detail-page .evidence-thumb {
-    width: 60px;
-    height: 60px;
-  }
-
-  /* -- Section-level page breaks: start a few key sections on a clean
-     page so the printed packet reads like a formal report -------------- */
-
-  .order-detail-page .payout-summary-card,
-  .order-detail-page .transport-overview-card {
-    break-before: page;
-  }
-
-  h1, h2, h3 {
-    break-after: avoid;
-  }
-
-  a[href]::after {
-    content: none !important;
-  }
-}
-
-/* ==========================================================================
-   18. Purchase → inspection → transport workflow presentation
-   --------------------------------------------------------------------------
-   Presentation-only layer. Existing business logic, statuses, actions and
-   component boundaries remain unchanged. The page reads as one commercial
-   journey: purchase commitment first, quality verification second, logistics
-   third, with payment/receipt states visible at each stage.
-   ========================================================================== */
-
-.order-detail-page {
-  --workflow-line: #d9e4dc;
-  --workflow-active: #176b43;
-  --workflow-active-soft: #edf8f0;
-  --workflow-blue: #24648f;
-  --workflow-blue-soft: #edf6fb;
-  --workflow-gold: #a66a09;
-  --workflow-gold-soft: #fff7e7;
-}
-
-/* Keep the vertical rhythm deliberate: the workflow sections feel like
-   stages rather than a collection of unrelated cards. */
-.order-detail-page > .container-narrow > .order-overview-card,
-.order-detail-page > .container-narrow > #inspection-section,
-.order-detail-page > .container-narrow > #transport-section,
-.order-detail-page > .container-narrow > #order-payout-status,
-.order-detail-page > .container-narrow > .payment-action-center,
-.order-detail-page > .container-narrow > #confirm-receipt {
-  position: relative;
-}
-
-/* Timeline becomes the visual spine for the commercial journey. */
-.order-detail-page .card:has(> h2:first-child:only-child) .order-timeline {
-  padding: 8px 4px 2px;
-}
-
-.order-detail-page .order-timeline-step {
-  position: relative;
-  padding: 10px 0 10px 6px;
-}
-
-.order-detail-page .order-timeline-step.is-current {
-  padding: 12px 14px 12px 12px;
-  border: 1px solid #bcdac6;
-  border-radius: 14px;
-  background: linear-gradient(90deg, var(--workflow-active-soft), #fff);
-}
-
-.order-detail-page .order-timeline-step.is-complete .order-timeline-dot {
-  box-shadow: 0 0 0 4px rgba(23,107,67,.09);
-}
-
-/* Inspection stage */
-.order-detail-page #inspection-section {
-  scroll-margin-top: 90px;
-}
-
-.order-detail-page #inspection-section > .card {
-  border-top: 4px solid var(--workflow-gold);
-  background:
-    linear-gradient(180deg, rgba(255,247,231,.7), rgba(255,255,255,0) 115px),
-    #fff;
-}
-
-.order-detail-page #inspection-section > .card h2 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.order-detail-page #inspection-section > .card h2::before {
-  content: "2";
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border-radius: 10px;
-  background: var(--workflow-gold-soft);
-  color: var(--workflow-gold);
-  border: 1px solid #efd9a8;
-  font: 800 12px/1 Manrope, system-ui, sans-serif;
-}
-
-.order-detail-page #inspection-section .detail-facts {
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.order-detail-page #inspection-section .detail-facts > div {
-  padding: 13px 14px;
-  border: 1px solid #eadfc9;
-  border-radius: 12px;
-  background: #fffdf8;
-}
-
-.order-detail-page #inspection-section .detail-facts span {
-  color: #8a7449;
-}
-
-/* Transport stage */
-.order-detail-page #transport-section {
-  scroll-margin-top: 90px;
-  border-top: 4px solid var(--workflow-blue);
-  background:
-    linear-gradient(180deg, rgba(237,246,251,.72), rgba(255,255,255,0) 145px),
-    #fff;
-}
-
-.order-detail-page #transport-section .transport-card-heading {
-  padding-bottom: 22px;
-}
-
-.order-detail-page #transport-section .transport-card-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 15px;
-  background: var(--workflow-blue-soft);
-  color: var(--workflow-blue);
-  border-color: #cfe2ef;
-}
-
-.order-detail-page #transport-section .transport-card-title h2 {
-  margin-top: 2px;
-  letter-spacing: -.35px;
-}
-
-.order-detail-page #transport-section .transport-status-badge {
-  padding: 7px 11px;
-  border-radius: 999px;
-  background: #f1f5f2;
-  border: 1px solid var(--workflow-line);
-  color: #526258;
-  font-weight: 800;
-  letter-spacing: .25px;
-}
-
-.order-detail-page .transport-details-block {
-  margin-top: 22px;
-  padding: 19px;
-  border: 1px solid #dbe5df;
-  border-radius: 16px;
-  background: #fbfdfb;
-}
-
-.order-detail-page .transport-detail-facts > div {
-  min-height: 66px;
-  padding: 12px 13px;
-  border: 1px solid #e0e8e2;
-  border-radius: 11px;
-  background: #fff;
-}
-
-.order-detail-page .transport-info-panel {
-  box-shadow: none;
-}
-
-.order-detail-page .match-box {
-  border-color: #cbded2;
-  background: #f8fbf9;
-}
-
-.order-detail-page .transporter.chosen {
-  background: var(--workflow-active-soft);
-  border-color: #9fcaae;
-  outline: 0;
-  box-shadow: inset 4px 0 0 var(--workflow-active);
-}
-
-/* Payment stage: make the payment center look like the commitment gate. */
-.order-detail-page .payment-action-center {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid #bfd8c7;
-  border-top: 4px solid var(--workflow-active);
-  background:
-    linear-gradient(180deg, #f2faf4 0, rgba(242,250,244,.35) 105px, #fff 180px);
-}
-
-.order-detail-page .payment-action-center::before {
-  content: "COMMITMENT GATE";
-  position: absolute;
-  top: 16px;
-  right: 20px;
-  padding: 5px 8px;
-  border-radius: 999px;
-  background: #e5f4e9;
-  color: var(--workflow-active);
-  font: 800 9px/1 Manrope, system-ui, sans-serif;
-  letter-spacing: .7px;
-}
-
-.order-detail-page .payment-action-center > .row-between {
-  padding-right: 150px;
-}
-
-.order-detail-page .payment-center-row {
-  position: relative;
-  border-left: 4px solid #d9e4dc;
-  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
-}
-
-.order-detail-page .payment-center-row:has(.badge-success) {
-  border-left-color: var(--workflow-active);
-  background: #fbfffc;
-}
-
-.order-detail-page .payment-center-row:has(.badge-pending) {
-  border-left-color: var(--workflow-gold);
-  background: #fffdf8;
-}
-
-/* Purchase receipt is the terminal confirmation stage. */
-.order-detail-page #confirm-receipt {
-  border-top: 4px solid var(--workflow-active);
-  background: linear-gradient(180deg, #f3faf5 0, #fff 145px);
-}
-
-.order-detail-page #confirm-receipt h2::before {
-  content: "✓";
-  width: 30px;
-  height: 30px;
-  display: inline-grid;
-  place-items: center;
-  margin-right: 8px;
-  border-radius: 10px;
-  background: #e3f4e8;
-  color: var(--workflow-active);
-  font-size: 14px;
-  vertical-align: middle;
-}
-
-/* Payout card sits after the operational stages and reads as settlement,
-   not as another purchase action. */
-.order-detail-page #order-payout-status {
-  border-top: 3px solid #899990;
-}
-
-.order-detail-page #order-payout-status > h2 {
-  letter-spacing: -.25px;
-}
-
-/* Stronger visual grouping for evidence and reports that appear inside the
-   inspection/transport stage without changing their component markup. */
-.order-detail-page #inspection-section .evidence-item,
-.order-detail-page #transport-section .evidence-item {
-  border: 1px solid #dce6df;
-  background: #fff;
-}
-
-.order-detail-page #inspection-section .notice,
-.order-detail-page #transport-section .notice {
-  border-color: #dbe5df;
-  background: #fbfdfb;
-}
-
-.order-detail-page #inspection-section .alert,
-.order-detail-page #transport-section .alert {
-  box-shadow: none;
-}
-
-/* Buttons in workflow sections have a consistent hierarchy. */
-.order-detail-page #inspection-section .btn-primary,
-.order-detail-page #inspection-section .btn-light,
-.order-detail-page #transport-section .btn-primary,
-.order-detail-page #transport-section .btn-light,
-.order-detail-page .payment-action-center .btn-primary,
-.order-detail-page #confirm-receipt .btn-primary {
-  min-height: 42px;
-  border-radius: 11px;
-  font-weight: 800;
-}
-
-@media (max-width: 700px) {
-  .order-detail-page .payment-action-center::before {
-    position: static;
-    display: inline-block;
-    margin-bottom: 12px;
-  }
-
-  .order-detail-page .payment-action-center > .row-between {
-    padding-right: 0;
-  }
-
-  .order-detail-page #inspection-section > .card,
-  .order-detail-page #transport-section,
-  .order-detail-page #confirm-receipt,
-  .order-detail-page .payment-action-center {
-    border-radius: 16px;
-  }
-}
-
-@media (max-width: 480px) {
-  .order-detail-page #inspection-section > .card,
-  .order-detail-page #transport-section,
-  .order-detail-page #confirm-receipt,
-  .order-detail-page .payment-action-center {
-    border-top-width: 3px;
-  }
-
-  .order-detail-page #inspection-section > .card h2::before,
-  .order-detail-page #confirm-receipt h2::before {
-    width: 28px;
-    height: 28px;
-  }
-}
-
-/* ==========================================================================\n   Agricultural inspection → purchase decision gate\n   --------------------------------------------------------------------------\n   The inspection report is a commercial stage of the order, not just a\n   service-status card. Keep the report, buyer decision and payment gate\n   visually connected without changing the existing component architecture.\n   ========================================================================== */
-.order-detail-page .inspection-purchase-gate {
-  margin-top: 18px;
-  padding: 20px;
-  border: 1px solid #cfe0d4;
-  border-radius: 18px;
-  background: linear-gradient(180deg, #fbfffc 0%, #f5faf6 100%);
-}
-
-.order-detail-page .inspection-report-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: flex-start;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #dce7df;
-}
-
-.order-detail-page .inspection-report-header h3 {
-  margin: 3px 0 4px;
-  font-size: 19px;
-}
-
-.order-detail-page .inspection-report-facts {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.order-detail-page .inspection-report-facts > div {
-  min-width: 0;
-  padding: 13px;
-  border: 1px solid #e0e8e2;
-  border-radius: 13px;
-  background: #fff;
-}
-
-.order-detail-page .inspection-report-facts span,
-.order-detail-page .inspection-findings span {
-  display: block;
-  margin-bottom: 5px;
-  color: #718077;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .45px;
-  text-transform: uppercase;
-}
-
-.order-detail-page .inspection-report-facts strong {
-  color: #17231b;
-  font-size: 15px;
-}
-
-.order-detail-page .inspection-findings {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.order-detail-page .inspection-findings > div {
-  padding: 14px;
-  border-radius: 13px;
-  background: #fff;
-  border: 1px solid #e0e8e2;
-}
-
-.order-detail-page .inspection-findings p {
-  margin: 0;
-  color: #39473e;
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.order-detail-page .inspection-decision-panel,
-.order-detail-page .inspection-decision-state,
-.order-detail-page .inspection-waiting-note {
-  margin-top: 14px;
-  padding: 16px;
-  border-radius: 15px;
-}
-
-.order-detail-page .inspection-decision-panel {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: center;
-  border: 1px solid #c8dfd1;
-  background: #edf8f0;
-}
-
-.order-detail-page .inspection-decision-panel h3 {
-  margin: 3px 0 5px;
-  font-size: 17px;
-}
-
-.order-detail-page .inspection-decision-panel p {
-  max-width: 680px;
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.order-detail-page .inspection-decision-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  flex: 0 0 auto;
-}
-
-.order-detail-page .inspection-decision-state {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  border: 1px solid #c8dfd1;
-  background: #edf8f0;
-}
-
-.order-detail-page .inspection-decision-state.is-cancel {
-  border-color: #f0c9c4;
-  background: #fff5f4;
-}
-
-.order-detail-page .inspection-decision-icon {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  background: #d7efde;
-  color: #176b43;
-  font-weight: 900;
-}
-
-.order-detail-page .inspection-decision-state.is-cancel .inspection-decision-icon {
-  background: #fde1dd;
-  color: #b42318;
-}
-
-.order-detail-page .inspection-decision-state strong,
-.order-detail-page .inspection-waiting-note strong {
-  display: block;
-  margin-bottom: 3px;
-}
-
-.order-detail-page .inspection-decision-state p {
-  margin: 0;
-  color: #647168;
-  font-size: 13px;
-}
-
-.order-detail-page .inspection-waiting-note {
-  display: grid;
-  gap: 3px;
-  border: 1px dashed #d5dfd7;
-  background: #f8faf8;
-  color: #536158;
-  font-size: 13px;
-}
-
-@media (max-width: 760px) {
-  .order-detail-page .inspection-report-header,
-  .order-detail-page .inspection-decision-panel {
     flex-direction: column;
-    align-items: stretch;
-  }
-
-  .order-detail-page .inspection-report-facts {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .order-detail-page .inspection-findings {
-    grid-template-columns: 1fr;
-  }
-
-  .order-detail-page .inspection-decision-actions .btn {
-    flex: 1 1 100%;
-  }
-}
-
-@media (max-width: 480px) {
-  .order-detail-page .inspection-purchase-gate {
-    padding: 15px;
-  }
-
-  .order-detail-page .inspection-report-facts {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* --------------------------------------------------------------------------
-   Order workflow timeline — scoped to Order Details.
-   The backend supplies explicit CURRENT/COMPLETED/PENDING state so this UI
-   never guesses the business stage from array position.
-   -------------------------------------------------------------------------- */
-.order-detail-page .order-timeline {
-  margin: 0;
-  padding: 8px 0 2px;
-}
-
-.order-detail-page .order-timeline-step {
-  min-height: 54px;
-  padding-bottom: 18px;
-  align-items: flex-start;
-}
-
-.order-detail-page .order-timeline-step::before {
-  top: 28px;
-  bottom: -2px;
-  background: var(--mb-border);
-}
-
-.order-detail-page .order-timeline-step.is-complete::before {
-  background: var(--mb-primary-light);
-}
-
-.order-detail-page .order-timeline-step.is-current::before {
-  background: linear-gradient(var(--mb-primary), var(--mb-border));
-}
-
-.order-detail-page .order-timeline-dot {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  z-index: 1;
-  background: var(--mb-card);
-}
-
-.order-detail-page .order-timeline-label {
-  font-size: 14px;
-  line-height: 1.3;
-}
-
-.order-detail-page .order-timeline-step.is-current .order-timeline-label {
-  font-weight: 800;
-}
-
-.order-detail-page .order-timeline-detail {
-  margin-top: 4px;
-  max-width: 560px;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.order-detail-page .order-timeline-step.is-pending .order-timeline-detail {
-  color: var(--mb-text-muted);
-}
-
-@media (max-width: 600px) {
-  .order-detail-page .order-timeline-step {
-    padding-bottom: 16px;
-  }
-
-  .order-detail-page .order-timeline-detail {
-    font-size: 11.5px;
-  }
-}
-
-
-.order-product-offer-card { border: 1px solid var(--mb-border, #dfe7df); background: var(--mb-card, #fff); }
-.order-product-offer-kicker { font-size: .75rem; font-weight: 800; letter-spacing: .08em; color: var(--mb-primary, #176b3a); margin-bottom: .35rem; }
-.order-product-offer-card h2 { margin: 0 0 .45rem; }
-.order-product-offer-form { display: grid; gap: .65rem; max-width: 620px; margin-top: 1rem; }
-.order-product-offer-form label { font-weight: 700; }
-.order-product-offer-form label span { font-weight: 500; color: var(--mb-text-muted, #667168); }
-.order-product-offer-form input, .order-product-offer-form textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--mb-border-strong, #c5d5c8); border-radius: var(--mb-radius-sm, 8px); padding: .8rem .9rem; font: inherit; background: #fff; color: var(--mb-text, #17231b); }
-.order-product-offer-form input:focus, .order-product-offer-form textarea:focus { outline: var(--mb-focus-ring, 2px solid #176b3a); outline-offset: 1px; }
-.order-product-offer-button { min-height: 44px; width: fit-content; padding: .75rem 1.25rem; margin-top: .25rem; }
-@media (max-width: 560px) { .order-product-offer-button { width: 100%; } }
-
-/* Inspector competition + buyer ↔ selected inspector negotiation */
-.inspection-quote-marketplace {
-  margin: 18px 0 20px;
-  padding: 18px;
-  border: 1px solid var(--mb-border, #dfe7df);
-  border-radius: var(--mb-radius-md, 14px);
-  background: var(--mb-surface-soft, #f3f7f3);
-}
-
-.inspection-quote-heading,
-.inspection-quote-card-top,
-.inspection-quote-meta,
-.inspection-negotiation-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.inspection-quote-heading,
-.inspection-quote-card-top {
-  justify-content: space-between;
-}
-
-.inspection-quote-heading h3 {
-  margin: 4px 0 3px;
-}
-
-.inspection-quote-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.inspection-quote-card {
-  padding: 15px;
-  border: 1px solid var(--mb-border, #dfe7df);
-  border-radius: 12px;
-  background: var(--mb-card, #fff);
-}
-
-.inspection-quote-card.is-selected {
-  border-color: var(--mb-primary, #176b3a);
-  box-shadow: 0 0 0 2px rgba(23, 107, 58, .08);
-}
-
-.inspection-quote-card-top > div {
-  display: grid;
-  gap: 3px;
-}
-
-.inspection-quote-amount {
-  font-size: 1.05rem;
-}
-
-.inspection-quote-meta {
-  justify-content: space-between;
-  flex-wrap: wrap;
-  margin: 9px 0;
-  color: var(--mb-text-muted, #667168);
-  font-size: .86rem;
-}
-
-.inspection-negotiation-panel {
-  margin-top: 12px;
-  padding: 13px;
-  border-radius: 10px;
-  background: var(--mb-primary-soft, #eef5ef);
-}
-
-.inspection-negotiation-panel > div:first-child {
-  display: grid;
-  gap: 3px;
-}
-
-.inspection-negotiation-actions {
-  align-items: stretch;
-  flex-wrap: wrap;
-  margin-top: 12px;
-}
-
-.inspection-negotiation-actions input {
-  min-width: 160px;
-  flex: 1 1 170px;
-}
-
-@media (max-width: 680px) {
-  .inspection-quote-heading,
-  .inspection-quote-card-top {
     align-items: flex-start;
-    flex-direction: column;
+    gap: 10px;
   }
 
-  .inspection-quote-card .btn,
-  .inspection-negotiation-actions .btn {
-    width: 100%;
+  .order-detail-page .payout-due-clock { align-self: flex-start; }
+
+  .order-detail-page .order-detail-toast {
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    transform: none;
+    max-width: none;
   }
 
-  .inspection-negotiation-actions input {
-    width: 100%;
-    min-width: 0;
+  @keyframes order-detail-toast-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* ── Responsive: small phone ────────────────────────────── */
+
+@media (max-width: 420px) {
+  .order-detail-page .order-hero-title { font-size: 20px; letter-spacing: -.4px; }
+
+  .order-detail-page .order-overview-facts {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px 14px;
+  }
+
+  .order-detail-page .detail-facts > div {
+    padding: 12px 14px;
+  }
+
+  .order-detail-page .payout-table thead th,
+  .order-detail-page .payout-table tbody th,
+  .order-detail-page .payout-table tbody td {
+    padding: 9px 8px;
+    font-size: 12.5px;
+  }
+
+  .order-detail-page .payout-party-name { display: none; }
+
+  .order-detail-page .status-pill { font-size: 10.5px; padding: 0 8px; }
+
+  .order-detail-page .btn-sm { min-height: 30px; font-size: 12px; }
+}
+
+/* ── Reduced motion ─────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .order-detail-page .back-link,
+  .order-detail-page .card,
+  .order-detail-page .status-pill,
+  .order-detail-page .badge,
+  .order-detail-page .btn,
+  .order-detail-page .card input,
+  .order-detail-page .card select,
+  .order-detail-page .card textarea,
+  .order-detail-page .order-detail-toast-close {
+    transition: none;
+  }
+
+  .order-detail-page .back-link:hover,
+  .order-detail-page .btn-primary:hover,
+  .order-detail-page .btn.primary:hover {
+    transform: none;
+  }
+
+  .order-detail-page .order-detail-toast {
+    animation: none;
   }
 }
