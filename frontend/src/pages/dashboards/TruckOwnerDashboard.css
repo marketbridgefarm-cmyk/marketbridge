@@ -189,23 +189,24 @@
   box-shadow: var(--sd-ring);
 }
 
+/* Changed: Primary buttons now use dark slate (Ink) instead of large green */
 .sd-dashboard .sd-btn-primary,
 .sd-dashboard .btn-primary {
   border: none;
   color: #fff;
-  background: linear-gradient(150deg, var(--sd-accent) 0%, var(--sd-accent-2) 100%);
-  box-shadow: 0 4px 12px rgba(30, 158, 90, .22);
+  background: var(--sd-ink);
+  box-shadow: 0 4px 12px rgba(13, 27, 42, .15);
 }
 .sd-dashboard .sd-btn-primary:hover:not(:disabled),
 .sd-dashboard .btn-primary:hover:not(:disabled) {
-  filter: brightness(1.03);
+  filter: brightness(1.15);
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(30, 158, 90, .28);
+  box-shadow: 0 6px 18px rgba(13, 27, 42, .25);
   color: #fff;
 }
 .sd-dashboard .sd-btn-primary:active:not(:disabled) {
   transform: none;
-  box-shadow: 0 2px 8px rgba(30, 158, 90, .18);
+  box-shadow: 0 2px 8px rgba(13, 27, 42, .18);
 }
 
 .sd-dashboard .sd-btn-outline {
@@ -239,7 +240,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   STATS  (same look as the Orders stats strip)
+   STATS  (Redesigned horizontally)
    ══════════════════════════════════════════════════════════ */
 
 .sd-dashboard .sd-stat-grid {
@@ -251,9 +252,10 @@
 
 .sd-dashboard .sd-stat {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 16px;
+  flex-direction: row; /* Changed to horizontal */
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
   border: 1px solid var(--sd-line);
   border-radius: 14px;
   background: #fff;
@@ -271,6 +273,7 @@
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--sd-muted);
+  margin-bottom: 0; /* Reset margin */
 }
 .sd-dashboard .sd-stat b {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
@@ -280,6 +283,7 @@
   line-height: 1;
   color: var(--sd-ink);
   font-variant-numeric: tabular-nums;
+  margin-left: 12px;
 }
 .sd-dashboard .sd-stat:first-child b { color: var(--sd-accent-2); }
 
@@ -328,10 +332,12 @@
   outline: none;
   box-shadow: var(--sd-ring);
 }
+
+/* Changed: Active tab now uses dark slate (Ink) instead of green */
 .sd-dashboard .sd-tab.sd-active {
-  background: linear-gradient(150deg, var(--sd-accent) 0%, var(--sd-accent-2) 100%);
+  background: var(--sd-ink);
   color: #fff;
-  box-shadow: 0 4px 12px rgba(30, 158, 90, .24);
+  box-shadow: 0 4px 12px rgba(13, 27, 42, .24);
 }
 
 .sd-dashboard .sd-tab span {
@@ -876,28 +882,25 @@
    TRUCK CARD CONTENT
    ══════════════════════════════════════════════════════════ */
 
-.sd-dashboard .sd-truck-facts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 14px;
-  padding: 12px 14px;
-  border: 1px solid var(--sd-line);
-  border-radius: 12px;
-  background: var(--sd-surface);
-}
-.sd-dashboard .sd-truck-facts > div {
+/* Changed: Removed internal card. Contents are now typed horizontally. */
+.sd-dashboard .sd-facts-row {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  align-items: center;
 }
-.sd-dashboard .sd-truck-facts span {
+.sd-dashboard .sd-fact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sd-dashboard .sd-fact span {
   font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--sd-muted);
 }
-.sd-dashboard .sd-truck-facts strong {
+.sd-dashboard .sd-fact strong {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
   font-size: 14px;
   font-weight: 800;
@@ -973,16 +976,16 @@
   opacity: .8;
 }
 
+/* Changed: Job meta items are now typed horizontally */
 .sd-dashboard .sd-job-meta {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
 }
 .sd-dashboard .sd-job-meta-item {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
+  align-items: center;
+  gap: 8px;
 }
 .sd-dashboard .sd-job-meta-item span {
   font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
@@ -1068,8 +1071,17 @@
 }
 .sd-dashboard .sd-jobs-section:last-child { margin-bottom: 0; }
 
+/* Changed: Corrected header and title alignment */
 .sd-dashboard .sd-jobs-section-head {
-  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--sd-line);
+}
+.sd-dashboard .sd-jobs-section-head .sd-eyebrow {
+  margin: 0;
 }
 .sd-dashboard .sd-jobs-section-title {
   display: inline-flex;
@@ -1172,7 +1184,7 @@
 }
 
 .sd-dashboard .sd-mobile-action {
-  color: var(--sd-accent-2);
+  color: var(--sd-ink); /* Changed from green to ink */
   font-weight: 700;
   font-size: 13px;
   text-decoration: none;
@@ -1365,8 +1377,10 @@
 
   .sd-dashboard .sd-card { padding: 18px; }
 
-  .sd-dashboard .sd-truck-facts {
-    grid-template-columns: minmax(0, 1fr);
+  .sd-dashboard .sd-facts-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
   }
 
   .sd-dashboard .sd-job-route {
@@ -1382,7 +1396,13 @@
   }
 
   .sd-dashboard .sd-job-meta {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .sd-dashboard .sd-job-meta-item {
+    width: 100%;
+    justify-content: space-between;
   }
 
   /* Job cards: buttons stack full width (like the Orders "View order" button) */
@@ -1506,10 +1526,6 @@
   .sd-dashboard .sd-progress       { margin: 12px 0 0; }
 
   .sd-dashboard .sd-tab { font-size: 12px; padding: 9px 10px; }
-
-  .sd-dashboard .sd-job-meta {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 /* ══════════════════════════════════════════════════════════
