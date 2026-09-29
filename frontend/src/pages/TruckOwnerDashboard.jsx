@@ -35,6 +35,31 @@ function fmtDate(value) {
   return value ? new Date(value).toLocaleDateString() : null;
 }
 
+function fmtMoney(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString() : null;
+}
+
+// "ORD 25464DE7" style short reference, matching the Orders cards.
+function shortOrder(id) {
+  if (!id) return null;
+  return `ORD ${String(id).replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+}
+
+// The agreed price of a job: explicit field first, then the accepted quote
+// (a counter-offer, when present, is the price that was actually accepted).
+function jobAmount(job) {
+  const accepted = (job.quotes || []).find((q) => q.status === 'ACCEPTED');
+  const raw =
+    job.agreedAmount ??
+    job.amount ??
+    job.price ??
+    accepted?.counterAmount ??
+    accepted?.amount ??
+    null;
+  return raw == null ? null : fmtMoney(raw);
+}
+
 // Short label + initials for the "Arranged by" cluster in a card head.
 function arrangerShort(arrangingParty) {
   switch (arrangingParty) {
@@ -103,6 +128,25 @@ function jobProgress(status) {
   }));
 }
 
+function ArrowIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12h14" />
+      <path d="M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
 function RouteStrip({ pickup, destination, compact = false }) {
   const w = compact ? 20 : 24;
   const h = compact ? 10 : 12;
@@ -131,6 +175,16 @@ function RouteStrip({ pickup, destination, compact = false }) {
         <span className="sd-job-endpoint-label">Destination</span>
         <strong>{destination || 'Not set'}</strong>
       </div>
+    </div>
+  );
+}
+
+// Big number + small unit, as on the Orders "Amount" block.
+function AmountRow({ value, unit = 'ETB' }) {
+  return (
+    <div className="sd-amount">
+      <b>{value}</b>
+      <span>{unit}</span>
     </div>
   );
 }
@@ -760,13 +814,14 @@ export default function TruckOwnerDashboard() {
                 const availabilityBusy =
                   actionLoading === `availability-${truck.id}`;
                 const tone = truckTone(truck.availability);
+                const registeredLabel = fmtDate(truck.createdAt);
 
                 return (
                   <article className="sd-card sd-truck-card" key={truck.id}>
                     {/* Card head — eyebrow + title left, plate + avatar right */}
                     <div className="sd-card-head">
                       <div className="sd-card-head-text">
-                        <span className="sd-eyebrow">Truck</span>
+                        <span className={`sd-eyebrow tone-${tone}`}>Truck</span>
                         <h3 className="sd-card-title" title={truck.truckType || 'Truck'}>
                           {truck.truckType || 'Truck'}
                         </h3>
@@ -791,6 +846,7 @@ export default function TruckOwnerDashboard() {
                       <section className="sd-card-block">
                         <div className="sd-card-block-title">
                           <h4>Availability</h4>
+                          <span className="sd-card-block-note">{truck.capacity}t capacity</span>
                         </div>
                         <div className="sd-card-block-body">
                           <div className="sd-pills">
@@ -807,7 +863,7 @@ export default function TruckOwnerDashboard() {
                         </div>
                       </section>
 
-                      {/* Block 2 — Fleet details (Horizontal, no internal card) */}
+                      {/* Block 2 — Fleet details */}
                       <section className="sd-card-block">
                         <div className="sd-card-block-title">
                           <h4>Fleet details</h4>
@@ -825,6 +881,10 @@ export default function TruckOwnerDashboard() {
                           </div>
                         </div>
                       </section>
+
+                      {registeredLabel && (
+                        <p className="sd-card-foot">Registered {registeredLabel}</p>
+                      )}
 
                       {/* Footer */}
                       <div className="sd-card-actions">
@@ -907,6 +967,14 @@ export default function TruckOwnerDashboard() {
                   myLeaf.counteredBy === 'REQUESTER';
                 const respondBusy = myLeaf && actionLoading === `quote-${myLeaf.id}`;
 
+                const quoteAmount = hasActiveThread
+                  ? fmtMoney(
+                      myLeaf.status === 'COUNTERED'
+                        ? (myLeaf.counterAmount ?? myLeaf.amount)
+                        : myLeaf.amount
+                    )
+                  : null;
+
                 const arranger = arrangerShort(job.arrangingParty);
                 const createdLabel = fmtDate(job.createdAt);
                 const showFooter = !hasActiveThread || isMyTurn;
@@ -916,7 +984,7 @@ export default function TruckOwnerDashboard() {
                     {/* Card head */}
                     <div className="sd-card-head">
                       <div className="sd-card-head-text">
-                        <span className="sd-eyebrow is-open">Open request</span>
+                        <span className="sd-eyebrow tone-info">Open request</span>
                         <h3 className="sd-card-title" title={job.load || 'Produce'}>
                           {job.load || 'Produce'}
                         </h3>
@@ -935,7 +1003,7 @@ export default function TruckOwnerDashboard() {
                     </div>
 
                     <div className="sd-card-body">
-                      {/* Block 1 — Route (Horizontal, no box) */}
+                      {/* Block 1 — Route */}
                       <section className="sd-card-block">
                         <div className="sd-card-block-title">
                           <h4>Route</h4>
@@ -948,7 +1016,7 @@ export default function TruckOwnerDashboard() {
                         </div>
                       </section>
 
-                      {/* Block 2 — Load details (Horizontal, no box) */}
+                      {/* Block 2 — Load details */}
                       <section className="sd-card-block">
                         <div className="sd-card-block-title">
                           <h4>Load details</h4>
@@ -984,23 +1052,23 @@ export default function TruckOwnerDashboard() {
                       {hasActiveThread && (
                         <section className="sd-card-block">
                           <div className="sd-card-block-title">
-                            <h4>Your quote</h4>
+                            <h4>{isMyTurn ? 'Counter-offer' : 'Your quote'}</h4>
+                            <span className="sd-card-block-note">
+                              {isMyTurn ? 'Your turn' : 'Waiting'}
+                            </span>
                           </div>
                           <div className="sd-card-block-body">
-                            <div className="sd-job-status">
-                              {myLeaf.status === 'ACCEPTED'
-                                ? `✓ Your quote was accepted at ${Number(myLeaf.amount).toLocaleString()} ETB — awaiting payment.`
-                                : isMyTurn
-                                  ? `The requester countered at ${Number(myLeaf.counterAmount ?? myLeaf.amount).toLocaleString()} ETB. Your turn.`
-                                  : `You quoted ${Number(
-                                      myLeaf.status === 'COUNTERED'
-                                        ? (myLeaf.counterAmount ?? myLeaf.amount)
-                                        : myLeaf.amount
-                                    ).toLocaleString()} ETB — waiting on the requester's decision.`}
-                            </div>
+                            <AmountRow value={quoteAmount} />
+                            <p className="sd-amount-note">
+                              {isMyTurn
+                                ? 'The requester countered this price.'
+                                : 'Waiting on the requester’s decision.'}
+                            </p>
                           </div>
                         </section>
                       )}
+
+                      {createdLabel && <p className="sd-card-foot">Created {createdLabel}</p>}
 
                       {/* Footer */}
                       {showFooter && (
@@ -1098,13 +1166,15 @@ export default function TruckOwnerDashboard() {
                     const createdLabel = fmtDate(job.createdAt);
                     const tone = jobTone(job.status);
                     const steps = jobProgress(job.status);
+                    const orderRef = shortOrder(job.orderId);
+                    const amount = jobAmount(job);
 
                     return (
                       <article className="sd-card sd-job-card" key={job.id}>
                         {/* Card head */}
                         <div className="sd-card-head">
                           <div className="sd-card-head-text">
-                            <span className="sd-eyebrow">Active trip</span>
+                            <span className={`sd-eyebrow tone-${tone}`}>Active trip</span>
                             <h3 className="sd-card-title" title={job.load || 'Produce'}>
                               {job.load || 'Produce'}
                             </h3>
@@ -1127,6 +1197,7 @@ export default function TruckOwnerDashboard() {
                           <section className="sd-card-block">
                             <div className="sd-card-block-title">
                               <h4>Trip status</h4>
+                              {orderRef && <span className="sd-card-block-note">{orderRef}</span>}
                             </div>
                             <div className="sd-card-block-body">
                               <div className="sd-pills">
@@ -1138,7 +1209,11 @@ export default function TruckOwnerDashboard() {
 
                               <div className="sd-progress" aria-label="Trip progress">
                                 {steps.map((step) => (
-                                  <div key={step.label} className={`sd-progress-step ${step.cls}`}>
+                                  <div
+                                    key={step.label}
+                                    className={`sd-progress-step ${step.cls}`}
+                                    title={step.label}
+                                  >
                                     <span className="sd-progress-dot" aria-hidden="true" />
                                     <span className="sd-progress-label">{step.label}</span>
                                   </div>
@@ -1147,7 +1222,7 @@ export default function TruckOwnerDashboard() {
                             </div>
                           </section>
 
-                          {/* Block 2 — Route (Horizontal, no box) */}
+                          {/* Block 2 — Route */}
                           <section className="sd-card-block">
                             <div className="sd-card-block-title">
                               <h4>Route</h4>
@@ -1161,7 +1236,7 @@ export default function TruckOwnerDashboard() {
                             </div>
                           </section>
 
-                          {/* Block 3 — Details (Horizontal, no box) */}
+                          {/* Block 3 — Details */}
                           <section className="sd-card-block">
                             <div className="sd-card-block-title">
                               <h4>Trip details</h4>
@@ -1182,15 +1257,30 @@ export default function TruckOwnerDashboard() {
                             </div>
                           </section>
 
+                          {/* Block 4 — Amount */}
+                          {amount && (
+                            <section className="sd-card-block">
+                              <div className="sd-card-block-title">
+                                <h4>Amount</h4>
+                              </div>
+                              <div className="sd-card-block-body">
+                                <AmountRow value={amount} />
+                              </div>
+                            </section>
+                          )}
+
+                          {createdLabel && <p className="sd-card-foot">Created {createdLabel}</p>}
+
                           {/* Footer */}
                           <div className="sd-card-actions">
+                            {renderJobActionButtons(job)}
                             <Link
                               to={`/orders/${job.orderId}`}
                               className="sd-btn sd-btn-outline"
                             >
-                              Open order
+                              View order
+                              <ArrowIcon />
                             </Link>
-                            {renderJobActionButtons(job)}
                           </div>
                         </div>
                       </article>
@@ -1245,7 +1335,7 @@ export default function TruckOwnerDashboard() {
                               to={`/orders/${job.orderId}`}
                               className="sd-mobile-action"
                             >
-                              Open order
+                              View order
                             </Link>
                           </td>
                         </tr>
