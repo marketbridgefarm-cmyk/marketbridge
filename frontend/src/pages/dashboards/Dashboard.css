@@ -1,7 +1,7 @@
 /* ============================================================
    MarketBridge — Unified Dashboard  (pages/dashboards/Dashboard.css)
    Redesign: unified command bar, scrollable tabs, bolder stats,
-   cleaner tables. Page-scoped under .dashboard-page.
+   cleaner tables, compact mobile cards. Scoped under .dashboard-page.
    ============================================================ */
 
 .dashboard-page {
@@ -296,7 +296,6 @@
               box-shadow .2s var(--db-ease);
 }
 .dashboard-page .service-access-card::before {
-  /* Left accent bar that appears on hover */
   content: '';
   position: absolute;
   inset: 0 auto 0 0;
@@ -383,7 +382,6 @@
   margin: 0 0 20px;
 }
 
-/* Mobile trigger — hidden on desktop */
 .dashboard-page .sd-tabs-current {
   display: none;
   width: 100%;
@@ -415,7 +413,6 @@
 }
 .dashboard-page .sd-tabs-open .sd-tabs-chevron { transform: rotate(180deg); }
 
-/* Desktop: horizontal scrollable pill bar */
 .dashboard-page .sd-tabs-list {
   display: flex;
   align-items: center;
@@ -528,7 +525,6 @@
               transform .18s var(--db-ease);
 }
 .dashboard-page .sd-stat::after {
-  /* Small accent bar at the top of the tile */
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -617,7 +613,6 @@
 }
 .dashboard-page .sd-table tbody td a:hover { text-decoration: underline; }
 
-/* Counter input inside an Offers action cell */
 .dashboard-page .sd-counter-input {
   width: 120px;
   height: 34px;
@@ -637,7 +632,6 @@
   box-shadow: var(--db-ring);
 }
 
-/* Small "View / Manage / Open order" link */
 .dashboard-page .sd-mobile-action {
   display: inline-flex;
   align-items: center;
@@ -829,69 +823,191 @@
   .dashboard-page .sd-stat-grid { gap: 10px; margin: 14px 0; }
   .dashboard-page .sd-stat b { font-size: 22px; }
 
-  /* ────────────────────────────────────────────────────────
-     Tables → cards
-     ──────────────────────────────────────────────────────── */
+  /* ════════════════════════════════════════════════════════
+     TABLES → COMPACT CARDS
+     Each row becomes a scannable card:
+       • Cell 1 (first)       → card title, bold, full-width
+       • Middle cells         → compact label/value rows
+       • Last cell (action)   → small right-aligned pill
+     A 3px green accent bar on the left edge gives every card
+     a consistent visual anchor.
+     ════════════════════════════════════════════════════════ */
+
   .dashboard-page .sd-table--mobile-cards {
     display: block;
     margin-top: 4px;
-    font-size: 14px;
   }
   .dashboard-page .sd-table--mobile-cards thead { display: none; }
   .dashboard-page .sd-table--mobile-cards tbody { display: block; }
 
+  /* Card container */
   .dashboard-page .sd-table--mobile-cards tbody tr {
-    display: block;
-    padding: 14px 16px;
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0 12px;
+
+    padding: 14px 16px 12px 20px;
     margin-bottom: 10px;
+
     border: 1px solid var(--db-line);
-    border-radius: var(--db-radius-sm);
+    border-radius: 14px;
     background: #fff;
-    box-shadow: var(--db-shadow-sm);
-    transition: border-color .15s var(--db-ease);
+    box-shadow: 0 1px 2px rgba(15, 30, 45, .04);
+
+    transition: border-color .15s var(--db-ease),
+                box-shadow .15s var(--db-ease),
+                transform .15s var(--db-ease);
+  }
+  .dashboard-page .sd-table--mobile-cards tbody tr:hover {
+    border-color: rgba(30, 158, 90, .28);
+    box-shadow: 0 4px 14px rgba(15, 30, 45, .07);
+    transform: translateY(-1px);
+    background: #fff;
   }
   .dashboard-page .sd-table--mobile-cards tbody tr:last-child { margin-bottom: 0; }
-  .dashboard-page .sd-table--mobile-cards tbody tr:hover { background: #fff; }
 
-  .dashboard-page .sd-table--mobile-cards tbody td {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    padding: 7px 0;
+  /* Left accent bar */
+  .dashboard-page .sd-table--mobile-cards tbody tr::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 12px;
+    bottom: 12px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: linear-gradient(180deg, var(--db-accent) 0%, var(--db-accent-2) 100%);
+    opacity: .85;
+  }
+
+  /* Cell 1 — card title */
+  .dashboard-page .sd-table--mobile-cards tbody td:first-child {
+    grid-column: 1 / -1;
+    display: block;
+
+    padding: 0 0 10px;
+    margin-bottom: 8px;
     border: none;
-    font-size: 13.5px;
+    border-bottom: 1px solid var(--db-line-soft);
+
+    font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: -.2px;
+    line-height: 1.25;
+    color: var(--db-ink);
+    text-align: left;
+
+    overflow-wrap: anywhere;
+  }
+  .dashboard-page .sd-table--mobile-cards tbody td:first-child::before {
+    display: none;
+  }
+
+  /* Middle cells — compact label / value rows */
+  .dashboard-page .sd-table--mobile-cards tbody td:not(:first-child):not(:last-child) {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+
+    padding: 5px 0;
+    border: none;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--db-ink-soft);
     text-align: right;
   }
-  .dashboard-page .sd-table--mobile-cards tbody td::before {
+  .dashboard-page .sd-table--mobile-cards tbody td:not(:first-child):not(:last-child)::before {
     content: attr(data-label);
-    font: 700 10.5px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
+    flex: 0 0 auto;
+    font: 700 10px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
     letter-spacing: .12em;
     text-transform: uppercase;
     color: var(--db-muted);
     text-align: left;
-    flex: 0 0 auto;
     padding-right: 8px;
   }
-  .dashboard-page .sd-table--mobile-cards tbody td[data-label="Action"] {
+
+  /* Last cell — action */
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
     justify-content: flex-end;
-    padding-top: 10px;
-    margin-top: 8px;
+
+    padding: 10px 0 0;
+    margin-top: 6px;
+    border: none;
     border-top: 1px solid var(--db-line-soft);
   }
-  .dashboard-page .sd-table--mobile-cards tbody td[data-label="Action"]::before {
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child::before {
     display: none;
   }
 
-  .dashboard-page .sd-table--mobile-cards tbody td[data-label="Action"] .sd-actions {
+  /* Pill-style action link — overrides global button rules */
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child > a,
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child > button,
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child .sd-mobile-action {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    width: auto !important;
+    min-height: 32px !important;
+    padding: 0 14px !important;
+
+    background: var(--db-accent-soft) !important;
+    border: 1px solid var(--db-accent-line) !important;
+    border-radius: 8px !important;
+    color: var(--db-accent-2) !important;
+
+    font: 700 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif) !important;
+    letter-spacing: .01em !important;
+    text-decoration: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+    cursor: pointer;
+
+    transition: background .15s var(--db-ease),
+                border-color .15s var(--db-ease),
+                transform .12s var(--db-ease);
+  }
+
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child > a:hover,
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child > button:hover,
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child .sd-mobile-action:hover {
+    background: #fff !important;
+    border-color: var(--db-accent) !important;
+    transform: translateX(2px) !important;
+    text-decoration: none !important;
+  }
+
+  /* Chevron on the pill */
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child > a::after,
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child .sd-mobile-action::after {
+    content: '→';
+    font-size: 13px;
+    line-height: 1;
+    opacity: .75;
+    margin-left: 2px;
+  }
+
+  /* If the action cell holds multiple buttons (Orders tab), keep them inline */
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child .sd-actions {
     width: 100%;
-    margin-top: 0;
     justify-content: flex-end;
+    gap: 6px;
+    margin-top: 0;
   }
-  .dashboard-page .sd-table--mobile-cards tbody td[data-label="Action"] .btn,
-  .dashboard-page .sd-table--mobile-cards tbody td[data-label="Action"] .btn-sm {
-    min-height: 34px;
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child .btn,
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child .sd-btn {
+    width: auto !important;
+    min-height: 34px !important;
+    padding: 0 14px !important;
+    font-size: 12.5px !important;
   }
+
   .dashboard-page .sd-counter-input {
     width: 100%;
     height: 38px;
@@ -941,12 +1057,20 @@
   .dashboard-page .service-access-icon,
   .dashboard-page .service-access-arrow,
   .dashboard-page .sd-stat,
-  .dashboard-page .sd-counter-input {
+  .dashboard-page .sd-counter-input,
+  .dashboard-page .sd-table--mobile-cards tbody tr,
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child > a,
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child > button,
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child .sd-mobile-action {
     transition: none;
   }
   .dashboard-page .btn-primary:hover:not(:disabled),
   .dashboard-page .service-access-card:hover,
-  .dashboard-page .sd-stat:hover {
+  .dashboard-page .sd-stat:hover,
+  .dashboard-page .sd-table--mobile-cards tbody tr:hover,
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child > a:hover,
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child > button:hover,
+  .dashboard-page .sd-table--mobile-cards tbody td:last-child .sd-mobile-action:hover {
     transform: none;
   }
   .dashboard-page .sd-toast { animation: none; }
