@@ -1,10 +1,11 @@
 /* ============================================================
    MarketBridge — Unified Dashboard  (pages/dashboards/Dashboard.css)
-   Page-scoped visual layer for Dashboard.jsx.
+   Redesign: unified command bar, scrollable tabs, bolder stats,
+   cleaner tables. Page-scoped under .dashboard-page.
    ============================================================ */
 
 .dashboard-page {
-  /* ── Local tokens ─────────────────────────────────────── */
+  /* ── Tokens ───────────────────────────────────────────── */
   --db-accent:      #1e9e5a;
   --db-accent-2:    #0f7a44;
   --db-accent-ink:  #12734a;
@@ -37,6 +38,7 @@
   --db-info-line:   #cddff5;
 
   --db-radius:      20px;
+  --db-radius-sm:   14px;
   --db-shadow:      0 1px 2px rgba(15, 30, 45, .04),
                     0 8px 24px rgba(15, 30, 45, .05);
   --db-shadow-hi:   0 2px 4px rgba(15, 30, 45, .04),
@@ -51,8 +53,8 @@
   -webkit-font-smoothing: antialiased;
 
   background:
-    radial-gradient(circle at 88% 0%,  rgba(230, 245, 236, .85), transparent 40%),
-    radial-gradient(circle at 5% 100%, rgba(231, 235, 245, .8),  transparent 40%),
+    radial-gradient(circle at 88% 0%,  rgba(230, 245, 236, .9), transparent 42%),
+    radial-gradient(circle at 5% 100%, rgba(231, 235, 245, .85), transparent 42%),
     linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
   background-attachment: fixed;
 }
@@ -63,7 +65,7 @@
   padding: 32px 24px 96px;
 }
 
-/* ── Eyebrow ──────────────────────────────────────────── */
+/* ── Typography ───────────────────────────────────────── */
 
 .dashboard-page .eyebrow {
   display: inline-flex;
@@ -95,7 +97,7 @@
 
 .dashboard-page h2 {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 800;
   letter-spacing: -.3px;
   line-height: 1.25;
@@ -105,7 +107,7 @@
 
 .dashboard-page h3 {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 800;
   letter-spacing: -.15px;
   line-height: 1.3;
@@ -122,7 +124,20 @@
 .dashboard-page p { margin: 0 0 12px; }
 .dashboard-page p:last-child { margin-bottom: 0; }
 
-/* ── Utilities ────────────────────────────────────────── */
+.dashboard-page .loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  padding: 24px;
+  border: 1px dashed var(--db-line);
+  border-radius: var(--db-radius);
+  background: rgba(255, 255, 255, .7);
+  color: var(--db-muted);
+  font-size: 14.5px;
+}
+
+/* ── Row layout helper ────────────────────────────────── */
 
 .dashboard-page .row-between {
   display: flex;
@@ -130,18 +145,13 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 .dashboard-page .row-between h2 { margin: 0; }
 
-.dashboard-page .loading {
-  padding: 48px 24px;
-  text-align: center;
-  color: var(--db-muted);
-  font-size: 14.5px;
-}
-
-/* ── Buttons ──────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   BUTTONS
+   ══════════════════════════════════════════════════════════ */
 
 .dashboard-page .btn {
   display: inline-flex;
@@ -187,6 +197,10 @@
   box-shadow: 0 6px 18px rgba(30, 158, 90, .28);
   color: #fff;
 }
+.dashboard-page .btn-primary:active:not(:disabled) {
+  transform: none;
+  box-shadow: 0 2px 8px rgba(30, 158, 90, .18);
+}
 
 .dashboard-page .btn-outline {
   border: 1px solid var(--db-line);
@@ -211,109 +225,131 @@
 }
 
 .dashboard-page .btn-sm {
-  min-height: 32px;
-  padding: 0 12px;
+  min-height: 34px;
+  padding: 0 14px;
   font-size: 12.5px;
   border-radius: 8px;
 }
 
-/* ── Service access banner ────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   SERVICE ACCESS BANNER
+   ══════════════════════════════════════════════════════════ */
 
 .dashboard-page .service-access {
-  padding: 22px 24px;
+  padding: 24px 26px;
   margin: 20px 0 24px;
   border: 1px solid var(--db-line);
   border-radius: var(--db-radius);
   background-color: #fff;
   background-image:
-    radial-gradient(120% 100% at 0% 0%,  var(--db-tint-a) 0%, transparent 55%),
-    radial-gradient(90%  90%  at 100% 100%, var(--db-tint-b) 0%, transparent 55%);
+    radial-gradient(120% 100% at 0% 0%,  var(--db-tint-a) 0%, transparent 60%),
+    radial-gradient(90%  90%  at 100% 100%, var(--db-tint-b) 0%, transparent 60%);
   background-repeat: no-repeat;
   box-shadow: var(--db-shadow);
 }
 
 .dashboard-page .service-access-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: end;
+  margin-bottom: 20px;
 }
-.dashboard-page .service-access-header > div { min-width: 0; max-width: 62ch; }
 .dashboard-page .service-access-header h2 {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
   font-size: 20px;
   font-weight: 800;
   letter-spacing: -.4px;
   color: var(--db-ink);
-  margin: 4px 0 8px;
+  margin: 6px 0 6px;
 }
-.dashboard-page .service-access-header p { margin: 0; }
+.dashboard-page .service-access-header p {
+  margin: 0;
+  max-width: 56ch;
+  color: var(--db-muted);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
 .dashboard-page .service-access-header .btn { flex: 0 0 auto; }
 
 .dashboard-page .service-access-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .dashboard-page .service-access-card {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 14px;
+  position: relative;
+  display: flex;
   align-items: center;
-  padding: 16px 18px;
+  gap: 16px;
+  padding: 18px 20px;
   border: 1px solid var(--db-line);
-  border-radius: 14px;
+  border-radius: var(--db-radius-sm);
   background: #fff;
   color: inherit;
   text-decoration: none;
-  box-shadow: var(--db-shadow-sm);
-  transition: border-color .18s var(--db-ease),
-              background .18s var(--db-ease),
-              transform .18s var(--db-ease),
-              box-shadow .18s var(--db-ease);
+  overflow: hidden;
+  transition: border-color .2s var(--db-ease),
+              background .2s var(--db-ease),
+              transform .2s var(--db-ease),
+              box-shadow .2s var(--db-ease);
+}
+.dashboard-page .service-access-card::before {
+  /* Left accent bar that appears on hover */
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--db-accent);
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform .2s var(--db-ease);
 }
 .dashboard-page .service-access-card:hover {
   border-color: rgba(30, 158, 90, .35);
-  background: var(--db-accent-soft);
-  transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(30, 158, 90, .12);
+  background: linear-gradient(180deg, #f6fcf8, #fff);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(30, 158, 90, .12);
   text-decoration: none;
 }
+.dashboard-page .service-access-card:hover::before { transform: scaleY(1); }
 .dashboard-page .service-access-card:focus-visible {
   outline: none;
   box-shadow: var(--db-ring);
 }
 
 .dashboard-page .service-access-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
   background: var(--db-info-soft);
   color: var(--db-info);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 22px;
   flex: 0 0 auto;
-  transition: background .18s var(--db-ease), color .18s var(--db-ease);
+  transition: background .2s var(--db-ease),
+              color .2s var(--db-ease),
+              transform .2s var(--db-ease);
 }
 .dashboard-page .service-access-card:hover .service-access-icon {
-  background: #fff;
-  color: var(--db-accent-2);
+  background: linear-gradient(150deg, var(--db-accent), var(--db-accent-2));
+  color: #fff;
+  transform: scale(1.05);
 }
 
 .dashboard-page .service-access-copy {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
+  flex: 1 1 auto;
 }
 .dashboard-page .service-access-copy strong {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 800;
   letter-spacing: -.1px;
   color: var(--db-ink);
@@ -328,36 +364,38 @@
 .dashboard-page .service-access-arrow {
   flex: 0 0 auto;
   color: var(--db-muted-2);
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
-  transition: color .18s var(--db-ease),
-              transform .18s var(--db-ease);
+  transition: color .2s var(--db-ease),
+              transform .2s var(--db-ease);
 }
 .dashboard-page .service-access-card:hover .service-access-arrow {
   color: var(--db-accent-2);
-  transform: translateX(3px);
+  transform: translateX(4px);
 }
 
-/* ── Tabs (collapsible on mobile) ─────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   TABS — desktop: scrollable pill bar. mobile: dropdown.
+   ══════════════════════════════════════════════════════════ */
 
 .dashboard-page .sd-tabs-nav {
   position: relative;
   margin: 0 0 20px;
 }
 
-/* The "current tab" trigger — hidden on desktop */
+/* Mobile trigger — hidden on desktop */
 .dashboard-page .sd-tabs-current {
   display: none;
   width: 100%;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 14px 18px;
   border: 1px solid var(--db-line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #fff;
   color: var(--db-ink);
-  font: 700 14px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 800 15px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   cursor: pointer;
   box-shadow: var(--db-shadow-sm);
   transition: border-color .15s var(--db-ease),
@@ -368,29 +406,35 @@
   outline: none;
   box-shadow: var(--db-ring);
 }
+
 .dashboard-page .sd-tabs-chevron {
   font-size: 16px;
   line-height: 1;
   color: var(--db-muted);
-  transition: transform .18s var(--db-ease);
+  transition: transform .22s var(--db-ease);
 }
 .dashboard-page .sd-tabs-open .sd-tabs-chevron { transform: rotate(180deg); }
 
-/* The tabs list */
+/* Desktop: horizontal scrollable pill bar */
 .dashboard-page .sd-tabs-list {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--db-line);
   border-radius: 999px;
   background: #fff;
   box-shadow: var(--db-shadow-sm);
-  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.dashboard-page .sd-tabs-list::-webkit-scrollbar { display: none; }
 
 .dashboard-page .sd-tab {
   appearance: none;
+  flex: 0 0 auto;
   border: none;
   background: transparent;
   padding: 8px 16px;
@@ -402,7 +446,8 @@
   align-items: center;
   gap: 6px;
   white-space: nowrap;
-  transition: color .15s var(--db-ease), background .15s var(--db-ease);
+  transition: color .15s var(--db-ease),
+              background .15s var(--db-ease);
 }
 .dashboard-page .sd-tab:hover {
   color: var(--db-ink);
@@ -418,7 +463,6 @@
   box-shadow: 0 4px 12px rgba(30, 158, 90, .24);
 }
 
-/* Notification count bubble inside a tab */
 .dashboard-page .sd-tab-count {
   display: inline-flex;
   align-items: center;
@@ -437,10 +481,12 @@
   color: var(--db-accent-2);
 }
 
-/* ── Cards ────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   CARDS
+   ══════════════════════════════════════════════════════════ */
 
 .dashboard-page .card {
-  padding: 22px;
+  padding: 22px 24px;
   margin-bottom: 16px;
   border: 1px solid var(--db-line);
   border-radius: var(--db-radius);
@@ -457,42 +503,66 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-/* ── Stats ────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   STATS
+   ══════════════════════════════════════════════════════════ */
 
 .dashboard-page .sd-stat-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin: 16px 0;
+  margin: 18px 0;
 }
 
 .dashboard-page .sd-stat {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 16px 18px;
+  gap: 8px;
+  padding: 18px 20px;
   border: 1px solid var(--db-line);
-  border-radius: 14px;
+  border-radius: var(--db-radius-sm);
   background: #fff;
-  box-shadow: var(--db-shadow-sm);
+  overflow: hidden;
+  transition: border-color .18s var(--db-ease),
+              transform .18s var(--db-ease);
 }
+.dashboard-page .sd-stat::after {
+  /* Small accent bar at the top of the tile */
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--db-accent);
+  opacity: .9;
+}
+.dashboard-page .sd-stat:hover {
+  border-color: rgba(30, 158, 90, .3);
+  transform: translateY(-1px);
+}
+.dashboard-page .sd-stat:nth-child(2)::after { background: var(--db-info); }
+.dashboard-page .sd-stat:nth-child(3)::after { background: var(--db-gold); }
+
 .dashboard-page .sd-stat span {
   font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--db-muted);
+  padding-top: 4px;
 }
 .dashboard-page .sd-stat b {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 800;
-  letter-spacing: -.4px;
+  letter-spacing: -.5px;
   line-height: 1;
   color: var(--db-ink);
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Actions row ──────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   ACTIONS ROW
+   ══════════════════════════════════════════════════════════ */
 
 .dashboard-page .sd-actions {
   display: flex;
@@ -502,13 +572,15 @@
   margin-top: 12px;
 }
 
-/* ── Tables ───────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   TABLES
+   ══════════════════════════════════════════════════════════ */
 
 .dashboard-page .sd-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .dashboard-page .sd-table thead th {
@@ -523,6 +595,8 @@
   white-space: nowrap;
 }
 
+.dashboard-page .sd-table thead th:last-child { text-align: right; }
+
 .dashboard-page .sd-table tbody td {
   padding: 14px;
   border-bottom: 1px solid var(--db-line-soft);
@@ -531,30 +605,31 @@
   font-size: 13.5px;
   line-height: 1.5;
 }
+.dashboard-page .sd-table tbody td:last-child { text-align: right; }
 .dashboard-page .sd-table tbody tr:last-child td { border-bottom: none; }
-.dashboard-page .sd-table tbody tr:hover { background: #fafcfb; }
+.dashboard-page .sd-table tbody tr { transition: background .12s var(--db-ease); }
+.dashboard-page .sd-table tbody tr:hover { background: #f7fbf8; }
 
 .dashboard-page .sd-table tbody td a {
   color: var(--db-accent-2);
   text-decoration: none;
   font-weight: 600;
 }
-.dashboard-page .sd-table tbody td a:hover {
-  text-decoration: underline;
-}
+.dashboard-page .sd-table tbody td a:hover { text-decoration: underline; }
 
-/* Small counter input inside an Offers action cell */
+/* Counter input inside an Offers action cell */
 .dashboard-page .sd-counter-input {
-  width: 110px;
-  height: 32px;
-  padding: 0 10px;
+  width: 120px;
+  height: 34px;
+  padding: 0 12px;
   border: 1px solid var(--db-line);
   border-radius: 8px;
   background: #fff;
   color: var(--db-ink);
   font: 400 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   font-variant-numeric: tabular-nums;
-  transition: border-color .15s var(--db-ease), box-shadow .15s var(--db-ease);
+  transition: border-color .15s var(--db-ease),
+              box-shadow .15s var(--db-ease);
 }
 .dashboard-page .sd-counter-input:focus {
   outline: none;
@@ -562,7 +637,7 @@
   box-shadow: var(--db-ring);
 }
 
-/* The small "View/Manage/Open order" link shown on mobile */
+/* Small "View / Manage / Open order" link */
 .dashboard-page .sd-mobile-action {
   display: inline-flex;
   align-items: center;
@@ -574,7 +649,9 @@
 }
 .dashboard-page .sd-mobile-action:hover { text-decoration: underline; }
 
-/* ── Badges ───────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   BADGES
+   ══════════════════════════════════════════════════════════ */
 
 .dashboard-page .badge {
   display: inline-flex;
@@ -601,7 +678,9 @@
   color: var(--db-gold);
 }
 
-/* ── Conversations list ───────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   CONVERSATIONS LIST
+   ══════════════════════════════════════════════════════════ */
 
 .dashboard-page .sd-list {
   list-style: none;
@@ -612,6 +691,7 @@
   gap: 4px;
   max-height: 480px;
   overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .dashboard-page .sd-list-item {
@@ -629,9 +709,7 @@
               border-color .15s var(--db-ease),
               color .15s var(--db-ease);
 }
-.dashboard-page .sd-list-item:hover {
-  background: var(--db-line-soft);
-}
+.dashboard-page .sd-list-item:hover { background: var(--db-line-soft); }
 .dashboard-page .sd-list-item.sd-active {
   background: var(--db-accent-soft);
   border-color: var(--db-accent-line);
@@ -642,7 +720,9 @@
   box-shadow: var(--db-ring);
 }
 
-/* ── Alerts + toast ───────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   ALERTS + TOAST
+   ══════════════════════════════════════════════════════════ */
 
 .dashboard-page .alert {
   padding: 12px 14px;
@@ -665,47 +745,53 @@
   bottom: 24px;
   transform: translateX(-50%);
   z-index: 60;
-
   max-width: min(520px, calc(100vw - 32px));
   padding: 12px 18px;
-
   border: 1px solid var(--db-accent-line);
   border-radius: 12px;
   background: #fff;
   color: var(--db-accent-ink);
   font: 600 14px/1.45 var(--mb-font-body, 'DM Sans', sans-serif);
   text-align: center;
-
-  box-shadow:
-    0 1px 2px rgba(15, 30, 45, .06),
-    0 18px 44px rgba(15, 30, 45, .16);
-
+  box-shadow: 0 1px 2px rgba(15, 30, 45, .06),
+              0 18px 44px rgba(15, 30, 45, .16);
   animation: db-toast-in .22s var(--db-ease);
 }
-
 @keyframes db-toast-in {
   from { opacity: 0; transform: translate(-50%, 12px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* ============================================================
-   TABLET — collapse 3-col stats to 2
-   ============================================================ */
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE — TABLET
+   ══════════════════════════════════════════════════════════ */
 
 @media (max-width: 900px) {
   .dashboard-page .sd-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .dashboard-page .service-access-header {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: flex-start;
+  }
+  .dashboard-page .service-access-header .btn { align-self: flex-start; }
 }
 
-/* ============================================================
-   MOBILE — up to 720px
-   ============================================================ */
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE — MOBILE
+   ══════════════════════════════════════════════════════════ */
 
 @media (max-width: 720px) {
   .dashboard-page .container-wide { padding: 24px 16px 72px; }
-
   .dashboard-page h1 { font-size: 24px; }
+
+  /* Service access */
+  .dashboard-page .service-access { padding: 18px; margin: 16px 0 20px; }
+  .dashboard-page .service-access-header h2 { font-size: 17px; }
+  .dashboard-page .service-access-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .dashboard-page .service-access-card { padding: 16px; }
+  .dashboard-page .service-access-icon { width: 42px; height: 42px; font-size: 20px; border-radius: 12px; }
 
   /* Tabs become a dropdown */
   .dashboard-page .sd-tabs-current { display: flex; }
@@ -721,8 +807,9 @@
     position: absolute;
     left: 0;
     right: 0;
+    overflow-x: visible;
     z-index: 20;
-    box-shadow: 0 12px 32px rgba(15, 30, 45, .12);
+    box-shadow: 0 12px 32px rgba(15, 30, 45, .14);
   }
   .dashboard-page .sd-tabs-open .sd-tabs-list { display: flex; }
 
@@ -733,28 +820,18 @@
     font-size: 14px;
   }
 
-  /* Service access stacks */
-  .dashboard-page .service-access { padding: 18px; margin: 16px 0 20px; }
-  .dashboard-page .service-access-header { align-items: flex-start; margin-bottom: 14px; }
-  .dashboard-page .service-access-header h2 { font-size: 17px; }
-  .dashboard-page .service-access-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
-  .dashboard-page .service-access-card { padding: 14px; }
-  .dashboard-page .service-access-icon { width: 38px; height: 38px; font-size: 18px; border-radius: 10px; }
-
-  /* Two-column grids stack */
+  /* Card grids stack */
   .dashboard-page .card-grid.two-col { grid-template-columns: minmax(0, 1fr); }
 
-  /* Cards tighten up */
   .dashboard-page .card { padding: 18px; }
 
-  /* Stats one column on very narrow */
-  .dashboard-page .sd-stat-grid { gap: 10px; margin: 12px 0; }
+  /* Stats */
+  .dashboard-page .sd-stat-grid { gap: 10px; margin: 14px 0; }
+  .dashboard-page .sd-stat b { font-size: 22px; }
 
-  /* ─────────────────────────────────────────────────────
-     Table → mobile cards
-     Each <tr> becomes a self-contained card.
-     Each <td> shows its column header via data-label.
-     ───────────────────────────────────────────────────── */
+  /* ────────────────────────────────────────────────────────
+     Tables → cards
+     ──────────────────────────────────────────────────────── */
   .dashboard-page .sd-table--mobile-cards {
     display: block;
     margin-top: 4px;
@@ -768,7 +845,7 @@
     padding: 14px 16px;
     margin-bottom: 10px;
     border: 1px solid var(--db-line);
-    border-radius: 14px;
+    border-radius: var(--db-radius-sm);
     background: #fff;
     box-shadow: var(--db-shadow-sm);
     transition: border-color .15s var(--db-ease);
@@ -781,7 +858,7 @@
     justify-content: space-between;
     align-items: center;
     gap: 12px;
-    padding: 6px 0;
+    padding: 7px 0;
     border: none;
     font-size: 13.5px;
     text-align: right;
@@ -799,14 +876,13 @@
   .dashboard-page .sd-table--mobile-cards tbody td[data-label="Action"] {
     justify-content: flex-end;
     padding-top: 10px;
-    margin-top: 6px;
+    margin-top: 8px;
     border-top: 1px solid var(--db-line-soft);
   }
   .dashboard-page .sd-table--mobile-cards tbody td[data-label="Action"]::before {
     display: none;
   }
 
-  /* Counter input + action buttons inside the Offers tab */
   .dashboard-page .sd-table--mobile-cards tbody td[data-label="Action"] .sd-actions {
     width: 100%;
     margin-top: 0;
@@ -818,10 +894,10 @@
   }
   .dashboard-page .sd-counter-input {
     width: 100%;
-    height: 36px;
+    height: 38px;
   }
 
-  /* Toast pins to bottom */
+  /* Toast */
   .dashboard-page .sd-toast {
     bottom: 16px;
     left: 16px;
@@ -835,9 +911,9 @@
   }
 }
 
-/* ============================================================
-   SMALL PHONE
-   ============================================================ */
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE — SMALL PHONE
+   ══════════════════════════════════════════════════════════ */
 
 @media (max-width: 420px) {
   .dashboard-page .sd-stat-grid { grid-template-columns: minmax(0, 1fr); }
@@ -846,18 +922,13 @@
   .dashboard-page .service-access-copy strong { font-size: 14px; }
   .dashboard-page .service-access-copy span { font-size: 12.5px; }
 
-  .dashboard-page .sd-actions {
-    gap: 6px;
-  }
-  .dashboard-page .sd-actions .btn {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
+  .dashboard-page .sd-actions { gap: 6px; }
+  .dashboard-page .sd-actions .btn { flex: 1 1 auto; min-width: 0; }
 }
 
-/* ============================================================
-   Reduced motion
-   ============================================================ */
+/* ══════════════════════════════════════════════════════════
+   REDUCED MOTION
+   ══════════════════════════════════════════════════════════ */
 
 @media (prefers-reduced-motion: reduce) {
   .dashboard-page .btn,
@@ -866,12 +937,16 @@
   .dashboard-page .sd-tabs-chevron,
   .dashboard-page .sd-list-item,
   .dashboard-page .service-access-card,
+  .dashboard-page .service-access-card::before,
+  .dashboard-page .service-access-icon,
   .dashboard-page .service-access-arrow,
+  .dashboard-page .sd-stat,
   .dashboard-page .sd-counter-input {
     transition: none;
   }
   .dashboard-page .btn-primary:hover:not(:disabled),
-  .dashboard-page .service-access-card:hover {
+  .dashboard-page .service-access-card:hover,
+  .dashboard-page .sd-stat:hover {
     transform: none;
   }
   .dashboard-page .sd-toast { animation: none; }
