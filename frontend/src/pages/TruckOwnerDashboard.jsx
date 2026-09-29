@@ -7,6 +7,7 @@ import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/TruckOwnerDashboard.css';
+
 const TABS = [
   { id: 'trucks', label: 'My Trucks' },
   { id: 'available', label: 'Available Jobs' },
@@ -36,6 +37,7 @@ export default function TruckOwnerDashboard() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const [truckForm, setTruckForm] = useState(EMPTY_TRUCK_FORM);
+  const [showTruckModal, setShowTruckModal] = useState(false);
 
   // Evidence capture, required by the backend before PICKUP -> IN_TRANSIT
   // (needs PICKUP evidence) and IN_TRANSIT -> DELIVERED (needs DELIVERY evidence).
@@ -159,7 +161,7 @@ export default function TruckOwnerDashboard() {
       });
 
       setTruckForm(EMPTY_TRUCK_FORM);
-
+      setShowTruckModal(false);
       toast('Truck registered successfully.');
 
       await loadAll(false);
@@ -200,18 +202,40 @@ export default function TruckOwnerDashboard() {
   }
 
   async function respondToJob(job) {
-    const available = trucks.filter(t => t.availability === 'AVAILABLE' && (!job.requiredCapacity || t.capacity >= Number(job.requiredCapacity)));
-    if (!available.length) { toast('No available truck meets this request.'); return; }
+    const available = trucks.filter(
+      (t) =>
+        t.availability === 'AVAILABLE' &&
+        (!job.requiredCapacity || t.capacity >= Number(job.requiredCapacity))
+    );
+
+    if (!available.length) {
+      toast('No available truck meets this request.');
+      return;
+    }
+
     const amount = window.prompt(`Transport quote in ETB for ${job.load}:`);
     if (amount === null) return;
-    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) { toast('Enter a valid positive quote.'); return; }
+
+    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+      toast('Enter a valid positive quote.');
+      return;
+    }
+
     setActionLoading(`job-${job.id}-QUOTE`);
+
     try {
-      await api.post(`/transport/${job.id}/quotes`, { truckId: available[0].id, amount: Number(amount) });
+      await api.post(`/transport/${job.id}/quotes`, {
+        truckId: available[0].id,
+        amount: Number(amount),
+      });
       toast('Transport quote submitted. The buyer can compare your sealed bid with other transporters.');
-      await loadAll(false); setActiveTab('jobs');
-    } catch (err) { toast(getErrorMessage(err,'Could not submit transport quote.')); }
-    finally { setActionLoading(null); }
+      await loadAll(false);
+      setActiveTab('jobs');
+    } catch (err) {
+      toast(getErrorMessage(err, 'Could not submit transport quote.'));
+    } finally {
+      setActionLoading(null);
+    }
   }
 
   // A quote's negotiation thread is only "live" at its leaf: the row that
@@ -219,9 +243,12 @@ export default function TruckOwnerDashboard() {
   function leafTransportQuote(quotes) {
     const list = Array.isArray(quotes) ? quotes : [];
     const parentIds = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
-    // Return the newest actionable leaf, not the root of the negotiation.
     const leaves = list.filter((q) => !parentIds.has(q.id));
-    return leaves.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))[0] || null;
+    return leaves.sort(
+      (a, b) =>
+        new Date(b.updatedAt || b.createdAt || 0) -
+        new Date(a.updatedAt || a.createdAt || 0)
+    )[0] || null;
   }
 
   async function acceptTransportQuote(quoteId) {
@@ -229,22 +256,38 @@ export default function TruckOwnerDashboard() {
     try {
       await api.patch(`/transport/quotes/${quoteId}`, { action: 'ACCEPT' });
       toast('Requester\u2019s price accepted. The transport deal is provisional until payment settles.');
-      await loadAll(false); setActiveTab('jobs');
-    } catch (err) { toast(getErrorMessage(err, 'Could not accept this negotiation.')); }
-    finally { setActionLoading(null); }
+      await loadAll(false);
+      setActiveTab('jobs');
+    } catch (err) {
+      toast(getErrorMessage(err, 'Could not accept this negotiation.'));
+    } finally {
+      setActionLoading(null);
+    }
   }
 
   async function counterTransportQuote(quoteId) {
     const amount = window.prompt('Your counter-offer in ETB:');
     if (amount === null) return;
-    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) { toast('Enter a valid positive amount.'); return; }
+
+    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+      toast('Enter a valid positive amount.');
+      return;
+    }
+
     setActionLoading(`quote-${quoteId}`);
+
     try {
-      await api.patch(`/transport/quotes/${quoteId}`, { action: 'COUNTER', counterAmount: Number(amount) });
+      await api.patch(`/transport/quotes/${quoteId}`, {
+        action: 'COUNTER',
+        counterAmount: Number(amount),
+      });
       toast('Counter-offer sent to the requester.');
       await loadAll(false);
-    } catch (err) { toast(getErrorMessage(err, 'Could not send counter-offer.')); }
-    finally { setActionLoading(null); }
+    } catch (err) {
+      toast(getErrorMessage(err, 'Could not send counter-offer.'));
+    } finally {
+      setActionLoading(null);
+    }
   }
 
   async function rejectTransportQuote(quoteId) {
@@ -253,8 +296,11 @@ export default function TruckOwnerDashboard() {
       await api.patch(`/transport/quotes/${quoteId}`, { action: 'REJECT' });
       toast('Negotiation ended.');
       await loadAll(false);
-    } catch (err) { toast(getErrorMessage(err, 'Could not reject this negotiation.')); }
-    finally { setActionLoading(null); }
+    } catch (err) {
+      toast(getErrorMessage(err, 'Could not reject this negotiation.'));
+    } finally {
+      setActionLoading(null);
+    }
   }
 
   async function updateStatus(jobId, status) {
@@ -304,7 +350,12 @@ export default function TruckOwnerDashboard() {
     if (!evidenceModal) return;
     const { jobId, type, nextStatus } = evidenceModal;
 
-    if (!evidenceKeys.photoKeys.length && !evidenceKeys.videoKeys.length && !evidenceNotes && !evidenceGps) {
+    if (
+      !evidenceKeys.photoKeys.length &&
+      !evidenceKeys.videoKeys.length &&
+      !evidenceNotes &&
+      !evidenceGps
+    ) {
       setEvidenceError('Upload a photo/video or add notes/GPS before continuing.');
       return;
     }
@@ -324,7 +375,9 @@ export default function TruckOwnerDashboard() {
       closeEvidenceModal();
       await updateStatus(jobId, nextStatus);
     } catch (err) {
-      setEvidenceError(getErrorMessage(err, `Could not record ${type.toLowerCase()} evidence.`));
+      setEvidenceError(
+        getErrorMessage(err, `Could not record ${type.toLowerCase()} evidence.`)
+      );
     } finally {
       setSubmittingEvidence(false);
     }
@@ -354,31 +407,67 @@ export default function TruckOwnerDashboard() {
   function renderJobActionButtons(job) {
     const busy = actionLoading?.startsWith(`status-${job.id}`);
 
-    if (job.status === 'ACCEPTED') {
-      const acceptedQuote = (job.quotes || []).find((quote) => quote.status === 'ACCEPTED');
-      const orderPayments = job.order?.payments || [];
-      const marketplacePaid = orderPayments.some((p) => p.type === 'MARKETPLACE' && p.status === 'PAID');
-      const transportPaid = job.method !== 'HIRE_TRANSPORTER' || (orderPayments.some((p) => p.type === 'TRANSPORT' && p.status === 'PAID') || (job.payments || []).some((p) => p.type === 'TRANSPORT' && p.status === 'PAID'));
-      const inspectionRequests = job.order?.listing?.inspectionRequests || [];
-      const inspectionPaid = inspectionRequests.filter((r) => r.status !== 'CANCELLED' && r.fee != null && Number(r.fee) > 0).every((r) => (r.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID'));
-      const paymentsReady = marketplacePaid && transportPaid && inspectionPaid;
+    if (job.status === 'REQUESTED' || job.status === 'QUOTED') {
       return (
-        <div>
+        <p className="sd-job-waiting">
+          <span className="sd-job-waiting-dot" aria-hidden="true" />
+          Waiting for the requester to select a transporter
+        </p>
+      );
+    }
+
+    if (job.status === 'SELECTED') {
+      return (
+        <p className="sd-job-waiting">
+          <span className="sd-job-waiting-dot" aria-hidden="true" />
+          You've been selected — finalising the deal terms
+        </p>
+      );
+    }
+
+    if (job.status === 'ACCEPTED') {
+      const acceptedQuote = (job.quotes || []).find(
+        (quote) => quote.status === 'ACCEPTED'
+      );
+      const orderPayments = job.order?.payments || [];
+      const marketplacePaid = orderPayments.some(
+        (p) => p.type === 'MARKETPLACE' && p.status === 'PAID'
+      );
+      const transportPaid =
+        job.method !== 'HIRE_TRANSPORTER' ||
+        orderPayments.some((p) => p.type === 'TRANSPORT' && p.status === 'PAID') ||
+        (job.payments || []).some((p) => p.type === 'TRANSPORT' && p.status === 'PAID');
+      const inspectionRequests = job.order?.listing?.inspectionRequests || [];
+      const inspectionPaid = inspectionRequests
+        .filter((r) => r.status !== 'CANCELLED' && r.fee != null && Number(r.fee) > 0)
+        .every((r) =>
+          (r.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID')
+        );
+      const paymentsReady = marketplacePaid && transportPaid && inspectionPaid;
+
+      return (
+        <div className="sd-job-actions">
           <button
-            className="sd-btn sd-btn-outline"
+            type="button"
+            className="sd-btn sd-btn-primary"
             disabled={busy || !paymentsReady}
             onClick={() => updateStatus(job.id, 'PICKUP')}
           >
-            {busy ? 'Updating...' : paymentsReady ? 'Mark picked up' : 'Waiting for all payments'}
+            {busy ? 'Updating…' : paymentsReady ? 'Mark picked up' : 'Waiting for all payments'}
           </button>
-          {!paymentsReady && <p className="sd-muted" style={{ marginTop: 6 }}>This transport deal is provisional until payment settles. The buyer can still cancel it and select another transporter before payment.</p>}
+
+          {!paymentsReady && (
+            <p className="sd-job-note">
+              The deal is provisional until all payments settle. The buyer can still cancel and select another transporter before payment completes.
+            </p>
+          )}
+
           {!transportPaid && acceptedQuote && (
             <button
               type="button"
               className="sd-btn sd-btn-outline"
               disabled={actionLoading === `quote-${acceptedQuote.id}`}
               onClick={() => rejectTransportQuote(acceptedQuote.id)}
-              style={{ marginTop: 6 }}
             >
               {actionLoading === `quote-${acceptedQuote.id}` ? 'Cancelling…' : 'Cancel provisional deal'}
             </button>
@@ -389,25 +478,31 @@ export default function TruckOwnerDashboard() {
 
     if (job.status === 'PICKUP') {
       return (
-        <button
-          className="sd-btn sd-btn-outline"
-          disabled={busy}
-          onClick={() => openEvidenceModal(job.id, 'PICKUP', 'IN_TRANSIT')}
-        >
-          {busy ? 'Updating...' : 'Add pickup evidence & mark in transit'}
-        </button>
+        <div className="sd-job-actions">
+          <button
+            type="button"
+            className="sd-btn sd-btn-primary"
+            disabled={busy}
+            onClick={() => openEvidenceModal(job.id, 'PICKUP', 'IN_TRANSIT')}
+          >
+            {busy ? 'Updating…' : 'Add pickup evidence & start trip'}
+          </button>
+        </div>
       );
     }
 
     if (job.status === 'IN_TRANSIT') {
       return (
-        <button
-          className="sd-btn sd-btn-primary"
-          disabled={busy}
-          onClick={() => openEvidenceModal(job.id, 'DELIVERY', 'DELIVERED')}
-        >
-          {busy ? 'Updating...' : 'Add delivery evidence & mark delivered'}
-        </button>
+        <div className="sd-job-actions">
+          <button
+            type="button"
+            className="sd-btn sd-btn-primary"
+            disabled={busy}
+            onClick={() => openEvidenceModal(job.id, 'DELIVERY', 'DELIVERED')}
+          >
+            {busy ? 'Updating…' : 'Add delivery evidence & complete trip'}
+          </button>
+        </div>
       );
     }
 
@@ -419,7 +514,7 @@ export default function TruckOwnerDashboard() {
       <div className="sd-dashboard">
         <section>
           <span className="sd-eyebrow">TRANSPORT DASHBOARD</span>
-          <h1>Loading your transport workspace...</h1>
+          <h1>Loading your transport workspace…</h1>
           <p className="sd-muted">
             Loading trucks, available requests and your transport jobs.
           </p>
@@ -436,25 +531,27 @@ export default function TruckOwnerDashboard() {
       ========================================================= */}
 
       <section>
-        <DashboardWelcome user={user} subtitle="Register your trucks, pick up transport jobs, and manage trips through delivery." />
+        <DashboardWelcome
+          user={user}
+          subtitle="Register your trucks, pick up transport jobs, and manage trips through delivery."
+        />
         <span className="sd-eyebrow">TRANSPORT DASHBOARD</span>
 
         <h1>Your trucks, your jobs, your routes.</h1>
 
-        <p
-          className="sd-muted"
-          style={{ maxWidth: 780 }}
-        >
+        <p className="sd-muted" style={{ maxWidth: 780 }}>
           Register your trucks, receive agricultural transport
           requests created through MarketBridge, respond to jobs,
           and manage accepted trips through delivery.
         </p>
 
         <RoleSwitchCTA current="TRUCK_OWNER" />
-        <RecentActivity items={activityItems} emptyText="No transport jobs yet — check available jobs below." />
+        <RecentActivity
+          items={activityItems}
+          emptyText="No transport jobs yet — check available jobs below."
+        />
 
         <div className="sd-stat-grid">
-
           <div className="sd-stat">
             <span>REGISTERED TRUCKS</span>
             <b>{trucks.length}</b>
@@ -479,7 +576,6 @@ export default function TruckOwnerDashboard() {
             <span>COMPLETED TRIPS</span>
             <b>{completedJobs.length}</b>
           </div>
-
         </div>
       </section>
 
@@ -489,20 +585,11 @@ export default function TruckOwnerDashboard() {
 
       {errorMsg && (
         <section>
-          <div
-            className="sd-panel"
-            style={{
-              border: '1px solid #c0392b',
-              marginBottom: 20,
-            }}
-          >
+          <div className="sd-panel sd-panel--error">
             <strong>Unable to load dashboard</strong>
-
-            <p className="sd-muted">
-              {errorMsg}
-            </p>
-
+            <p className="sd-muted">{errorMsg}</p>
             <button
+              type="button"
               className="sd-btn sd-btn-outline"
               onClick={() => loadAll(true)}
             >
@@ -517,23 +604,17 @@ export default function TruckOwnerDashboard() {
       ========================================================= */}
 
       <section>
-
         <div className="sd-tabs">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
-              className={`sd-tab ${
-                activeTab === tab.id ? 'sd-active' : ''
-              }`}
+              className={`sd-tab ${activeTab === tab.id ? 'sd-active' : ''}`}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}
-
               {tab.id === 'available' && openJobs.length > 0 && (
-                <span style={{ marginLeft: 6 }}>
-                  ({openJobs.length})
-                </span>
+                <span>({openJobs.length})</span>
               )}
             </button>
           ))}
@@ -545,221 +626,88 @@ export default function TruckOwnerDashboard() {
 
         {activeTab === 'trucks' && (
           <div>
-
-            <div className="sd-toolbar">
-              <div>
-                <span className="sd-eyebrow">FLEET</span>
-                <h2>Register a truck</h2>
-              </div>
-            </div>
-
-            <div
-              className="sd-panel"
-              style={{ marginBottom: 20 }}
-            >
-              <form onSubmit={registerTruck}>
-
-                <div className="sd-form-grid">
-
-                  <div>
-                    <label htmlFor="registration">
-                      Registration plate
-                    </label>
-
-                    <input
-                      id="registration"
-                      required
-                      value={truckForm.registration}
-                      onChange={(e) =>
-                        setTruckForm({
-                          ...truckForm,
-                          registration: e.target.value,
-                        })
-                      }
-                      placeholder="e.g. ET-12345"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="truckType">
-                      Truck type
-                    </label>
-
-                    <input
-                      id="truckType"
-                      required
-                      value={truckForm.truckType}
-                      onChange={(e) =>
-                        setTruckForm({
-                          ...truckForm,
-                          truckType: e.target.value,
-                        })
-                      }
-                      placeholder="e.g. Flatbed, Isuzu, FSR"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="capacity">
-                      Capacity (tons)
-                    </label>
-
-                    <input
-                      id="capacity"
-                      required
-                      min="0.1"
-                      step="0.1"
-                      type="number"
-                      value={truckForm.capacity}
-                      onChange={(e) =>
-                        setTruckForm({
-                          ...truckForm,
-                          capacity: e.target.value,
-                        })
-                      }
-                      placeholder="e.g. 18"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="operatingArea">
-                      Operating area / routes
-                    </label>
-
-                    <input
-                      id="operatingArea"
-                      value={truckForm.operatingArea}
-                      onChange={(e) =>
-                        setTruckForm({
-                          ...truckForm,
-                          operatingArea: e.target.value,
-                        })
-                      }
-                      placeholder="e.g. Addis Ababa – Jimma"
-                    />
-                  </div>
-
-                </div>
-
-                <div
-                  className="sd-modal-actions"
-                  style={{ marginTop: 20 }}
-                >
-                  <button
-                    type="submit"
-                    className="sd-btn sd-btn-primary"
-                    disabled={actionLoading === 'register-truck'}
-                  >
-                    {actionLoading === 'register-truck'
-                      ? 'Registering...'
-                      : 'Register truck'}
-                  </button>
-                </div>
-
-              </form>
-            </div>
-
-            {/* ---------------------------------------------------
-                REGISTERED TRUCKS
-            --------------------------------------------------- */}
-
             <div className="sd-toolbar">
               <div>
                 <span className="sd-eyebrow">FLEET</span>
                 <h2>My trucks</h2>
+                <p className="sd-muted">
+                  Manage your fleet and availability.
+                </p>
               </div>
+              <button
+                type="button"
+                className="sd-btn sd-btn-primary"
+                onClick={() => setShowTruckModal(true)}
+              >
+                + Register a truck
+              </button>
             </div>
 
             <div className="sd-cards">
-
               {trucks.map((truck) => {
-
                 const availabilityBusy =
-                  actionLoading ===
-                  `availability-${truck.id}`;
+                  actionLoading === `availability-${truck.id}`;
 
                 return (
-                  <div
-                    className="sd-card"
-                    key={truck.id}
-                  >
-                    <h3>{truck.truckType}</h3>
-
-                    <p className="sd-muted">
-                      {truck.registration}
-                      {' · '}
-                      {truck.capacity}t
-                      {' · '}
-                      {truck.operatingArea || 'No area set'}
-                    </p>
-
-                    <p>
-                      <strong>Availability:</strong>{' '}
-
+                  <div className="sd-card sd-truck-card" key={truck.id}>
+                    <div className="sd-truck-head">
+                      <h3>{truck.truckType || 'Truck'}</h3>
                       <span
                         className={
                           truck.availability === 'AVAILABLE'
                             ? 'sd-badge'
-                            : 'sd-badge sd-warn'
+                            : truck.availability === 'BUSY'
+                              ? 'sd-badge sd-blue'
+                              : 'sd-badge sd-warn'
                         }
                       >
                         {truck.availability}
                       </span>
-                    </p>
+                    </div>
 
-                    {truck.verificationStatus && (
-                      <p className="sd-muted">
-                        Verification:{' '}
-                        {truck.verificationStatus}
-                      </p>
-                    )}
+                    <div className="sd-truck-facts">
+                      <div>
+                        <span>Registration</span>
+                        <strong>{truck.registration}</strong>
+                      </div>
+                      <div>
+                        <span>Capacity</span>
+                        <strong>{truck.capacity}t</strong>
+                      </div>
+                      <div>
+                        <span>Routes</span>
+                        <strong>{truck.operatingArea || 'Any'}</strong>
+                      </div>
+                      {truck.verificationStatus && (
+                        <div>
+                          <span>Verification</span>
+                          <strong>{truck.verificationStatus}</strong>
+                        </div>
+                      )}
+                    </div>
 
-                    <div
-                      style={{
-                        marginTop: 10,
-                        display: 'flex',
-                        gap: 8,
-                        flexWrap: 'wrap',
-                      }}
-                    >
+                    <div className="sd-truck-actions">
                       <button
                         type="button"
                         className="sd-btn sd-btn-outline"
-                        disabled={availabilityBusy}
-                        onClick={() =>
-                          setAvailability(
-                            truck.id,
-                            'AVAILABLE'
-                          )
-                        }
+                        disabled={availabilityBusy || truck.availability === 'AVAILABLE'}
+                        onClick={() => setAvailability(truck.id, 'AVAILABLE')}
                       >
                         Available
                       </button>
-
                       <button
                         type="button"
                         className="sd-btn sd-btn-outline"
-                        disabled={availabilityBusy}
-                        onClick={() =>
-                          setAvailability(
-                            truck.id,
-                            'BUSY'
-                          )
-                        }
+                        disabled={availabilityBusy || truck.availability === 'BUSY'}
+                        onClick={() => setAvailability(truck.id, 'BUSY')}
                       >
                         Busy
                       </button>
-
                       <button
                         type="button"
                         className="sd-btn sd-btn-outline"
-                        disabled={availabilityBusy}
-                        onClick={() =>
-                          setAvailability(
-                            truck.id,
-                            'OFFLINE'
-                          )
-                        }
+                        disabled={availabilityBusy || truck.availability === 'OFFLINE'}
+                        onClick={() => setAvailability(truck.id, 'OFFLINE')}
                       >
                         Offline
                       </button>
@@ -769,19 +717,21 @@ export default function TruckOwnerDashboard() {
               })}
 
               {trucks.length === 0 && (
-                <div className="sd-panel">
-                  <p>
-                    No trucks registered yet.
-                  </p>
-
+                <div className="sd-empty-state">
+                  <div className="sd-empty-icon" aria-hidden="true">🚛</div>
+                  <h3>No trucks registered yet</h3>
                   <p className="sd-muted">
-                    Register a truck above to start
-                    receiving suitable MarketBridge
-                    transport requests.
+                    Register your first truck to start receiving suitable MarketBridge transport requests.
                   </p>
+                  <button
+                    type="button"
+                    className="sd-btn sd-btn-primary"
+                    onClick={() => setShowTruckModal(true)}
+                  >
+                    Register your first truck
+                  </button>
                 </div>
               )}
-
             </div>
           </div>
         )}
@@ -792,138 +742,149 @@ export default function TruckOwnerDashboard() {
 
         {activeTab === 'available' && (
           <div>
-
             <div className="sd-toolbar">
               <div>
-                <span className="sd-eyebrow">
-                  MARKETPLACE
-                </span>
-
-                <h2>
-                  Open transport requests
-                </h2>
-
+                <span className="sd-eyebrow">MARKETPLACE</span>
+                <h2>Open transport requests</h2>
                 <p className="sd-muted">
-                  These are buyer-, seller-, or
-                  jointly-arranged transport requests
-                  that require a transporter.
+                  Buyer-, seller-, or jointly-arranged requests looking for a transporter.
                 </p>
               </div>
             </div>
 
             <div className="sd-cards">
-
               {openJobs.map((job) => {
-
-                const quoting =
-                  actionLoading ===
-                  `job-${job.id}-QUOTE`;
+                const quoting = actionLoading === `job-${job.id}-QUOTE`;
 
                 const myLeaf = leafTransportQuote(job.quotes);
-                const hasActiveThread = myLeaf && ['PENDING', 'SELECTED', 'COUNTERED'].includes(myLeaf.status);
-                const isMyTurn = hasActiveThread && myLeaf.status === 'COUNTERED' && myLeaf.counteredBy === 'REQUESTER';
+                const hasActiveThread =
+                  myLeaf && ['PENDING', 'SELECTED', 'COUNTERED'].includes(myLeaf.status);
+                const isMyTurn =
+                  hasActiveThread &&
+                  myLeaf.status === 'COUNTERED' &&
+                  myLeaf.counteredBy === 'REQUESTER';
                 const respondBusy = myLeaf && actionLoading === `quote-${myLeaf.id}`;
 
                 return (
-                  <div
-                    className="sd-card"
-                    key={job.id}
-                  >
-                    <h3>{job.load}</h3>
-
-                    <p className="sd-muted">
-                      <strong>Pickup:</strong>{' '}
-                      {job.pickupLocation}
-                    </p>
-
-                    <p className="sd-muted">
-                      <strong>Destination:</strong>{' '}
-                      {job.destination}
-                    </p>
-
-                    {job.requiredCapacity && (
-                      <p className="sd-muted">
-                        <strong>Required capacity:</strong>{' '}
-                        {job.requiredCapacity}t+
-                      </p>
-                    )}
-
-                    {job.specialRequirements && (
-                      <p className="sd-muted">
-                        <strong>Requirements:</strong>{' '}
-                        {job.specialRequirements}
-                      </p>
-                    )}
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 8,
-                        flexWrap: 'wrap',
-                        marginTop: 10,
-                      }}
-                    >
-                      <span className="sd-badge sd-warn">
-                        {getArrangingPartyLabel(
-                          job.arrangingParty
-                        )}
-                      </span>
-
-                      <span className="sd-badge sd-blue">
-                        {job.method}
-                      </span>
+                  <div className="sd-card sd-job-card" key={job.id}>
+                    <div className="sd-job-route">
+                      <div className="sd-job-endpoint">
+                        <span className="sd-job-endpoint-label">Pickup</span>
+                        <strong>{job.pickupLocation || 'Not set'}</strong>
+                      </div>
+                      <div className="sd-job-route-arrow" aria-hidden="true">
+                        <svg
+                          width="24"
+                          height="12"
+                          viewBox="0 0 24 12"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M2 6h18" />
+                          <path d="M15 2l5 4-5 4" />
+                        </svg>
+                      </div>
+                      <div className="sd-job-endpoint">
+                        <span className="sd-job-endpoint-label">Destination</span>
+                        <strong>{job.destination || 'Not set'}</strong>
+                      </div>
                     </div>
 
-                    {hasActiveThread && (
-                      <p className="sd-muted" style={{ marginTop: 10 }}>
-                        {myLeaf.status === 'ACCEPTED'
-                          ? `Your transport quote was accepted provisionally at ${Number(myLeaf.amount).toLocaleString()} ETB — waiting for transport payment.`
-                          : isMyTurn
-                            ? `The requester countered at ${Number(myLeaf.counterAmount ?? myLeaf.amount).toLocaleString()} ETB.`
-                            : `You quoted ${Number(myLeaf.status === 'COUNTERED' ? (myLeaf.counterAmount ?? myLeaf.amount) : myLeaf.amount).toLocaleString()} ETB — waiting on the requester's decision.`}
-                      </p>
+                    <div className="sd-job-meta">
+                      <div className="sd-job-meta-item">
+                        <span>Load</span>
+                        <strong>{job.load || 'Produce'}</strong>
+                      </div>
+                      {job.requiredCapacity && (
+                        <div className="sd-job-meta-item">
+                          <span>Capacity</span>
+                          <strong>{job.requiredCapacity}t+</strong>
+                        </div>
+                      )}
+                      <div className="sd-job-meta-item">
+                        <span>Arranged by</span>
+                        <strong>{getArrangingPartyLabel(job.arrangingParty)}</strong>
+                      </div>
+                    </div>
+
+                    {job.specialRequirements && (
+                      <div className="sd-job-requirements">
+                        <span className="sd-job-requirements-label">Requirements</span>
+                        <p>{job.specialRequirements}</p>
+                      </div>
                     )}
 
-                    <div
-                      style={{
-                        marginTop: 14,
-                        display: 'flex',
-                        gap: 8,
-                        flexWrap: 'wrap',
-                      }}
-                    >
+                    {hasActiveThread && (
+                      <div className="sd-job-status">
+                        {myLeaf.status === 'ACCEPTED'
+                          ? `✓ Your quote was accepted at ${Number(myLeaf.amount).toLocaleString()} ETB — awaiting payment.`
+                          : isMyTurn
+                            ? `The requester countered at ${Number(myLeaf.counterAmount ?? myLeaf.amount).toLocaleString()} ETB. Your turn.`
+                            : `You quoted ${Number(
+                                myLeaf.status === 'COUNTERED'
+                                  ? (myLeaf.counterAmount ?? myLeaf.amount)
+                                  : myLeaf.amount
+                              ).toLocaleString()} ETB — waiting on the requester's decision.`}
+                      </div>
+                    )}
+
+                    <div className="sd-job-footer">
                       {!hasActiveThread && (
-                        <button type="button" className="sd-btn sd-btn-primary" disabled={quoting} onClick={() => respondToJob(job)}>{quoting ? 'Sending...' : 'Submit transport quote'}</button>
+                        <button
+                          type="button"
+                          className="sd-btn sd-btn-primary"
+                          disabled={quoting}
+                          onClick={() => respondToJob(job)}
+                        >
+                          {quoting ? 'Sending…' : 'Submit transport quote'}
+                        </button>
                       )}
 
                       {isMyTurn && (
                         <>
-                          <button type="button" className="sd-btn sd-btn-primary" disabled={respondBusy} onClick={() => acceptTransportQuote(myLeaf.id)}>{respondBusy ? 'Accepting...' : 'Accept'}</button>
-                          <button type="button" className="sd-btn sd-btn-outline" disabled={respondBusy} onClick={() => counterTransportQuote(myLeaf.id)}>{respondBusy ? 'Sending...' : 'Counter'}</button>
-                          <button type="button" className="sd-btn sd-btn-outline" disabled={respondBusy} onClick={() => rejectTransportQuote(myLeaf.id)}>{respondBusy ? 'Rejecting...' : 'Reject'}</button>
+                          <button
+                            type="button"
+                            className="sd-btn sd-btn-primary"
+                            disabled={respondBusy}
+                            onClick={() => acceptTransportQuote(myLeaf.id)}
+                          >
+                            {respondBusy ? 'Accepting…' : 'Accept'}
+                          </button>
+                          <button
+                            type="button"
+                            className="sd-btn sd-btn-outline"
+                            disabled={respondBusy}
+                            onClick={() => counterTransportQuote(myLeaf.id)}
+                          >
+                            {respondBusy ? 'Sending…' : 'Counter'}
+                          </button>
+                          <button
+                            type="button"
+                            className="sd-btn sd-btn-outline"
+                            disabled={respondBusy}
+                            onClick={() => rejectTransportQuote(myLeaf.id)}
+                          >
+                            {respondBusy ? 'Rejecting…' : 'Reject'}
+                          </button>
                         </>
                       )}
                     </div>
-
                   </div>
                 );
               })}
 
               {openJobs.length === 0 && (
-                <div className="sd-panel">
-                  <h3>
-                    No open transport requests
-                  </h3>
-
+                <div className="sd-empty-state">
+                  <div className="sd-empty-icon" aria-hidden="true">📭</div>
+                  <h3>No open transport requests</h3>
                   <p className="sd-muted">
-                    New requests will appear here when
-                    buyers or sellers choose
-                    <strong> Hire Transporter</strong>
-                    through MarketBridge.
+                    New requests will appear here when buyers or sellers choose <strong>Hire Transporter</strong> through MarketBridge.
                   </p>
                 </div>
               )}
-
             </div>
           </div>
         )}
@@ -934,135 +895,168 @@ export default function TruckOwnerDashboard() {
 
         {activeTab === 'jobs' && (
           <div>
-
             <div className="sd-toolbar">
               <div>
-                <span className="sd-eyebrow">
-                  MY JOBS
-                </span>
-
-                <h2>
-                  Active and completed trips
-                </h2>
-
+                <span className="sd-eyebrow">MY JOBS</span>
+                <h2>Active and completed trips</h2>
                 <p className="sd-muted">
-                  Manage accepted transport jobs from
-                  pickup through delivery.
+                  Manage accepted transport jobs from pickup through delivery.
                 </p>
               </div>
             </div>
 
-            <div className="sd-panel sd-table-wrap">
+            {/* ── Active trips (cards) ─────────────────────────── */}
 
-              <table className="sd-table">
+            {activeJobs.length > 0 && (
+              <section className="sd-jobs-section">
+                <div className="sd-jobs-section-head">
+                  <span className="sd-eyebrow">IN PROGRESS</span>
+                  <h3 className="sd-jobs-section-title">
+                    Active trips
+                    <span className="sd-jobs-count">{activeJobs.length}</span>
+                  </h3>
+                </div>
 
-                <thead>
-                  <tr>
-                    <th>Load</th>
-                    <th>Route</th>
-                    <th>Arranged by</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
+                <div className="sd-cards">
+                  {activeJobs.map((job) => (
+                    <div className="sd-card sd-job-card" key={job.id}>
+                      <div className="sd-job-card-head">
+                        <h3>{job.load || 'Produce'}</h3>
+                        <span className={getStatusClass(job.status)}>
+                          {job.status.replace(/_/g, ' ')}
+                        </span>
+                      </div>
 
-                <tbody>
+                      <div className="sd-job-route sd-job-route--compact">
+                        <div className="sd-job-endpoint">
+                          <span className="sd-job-endpoint-label">Pickup</span>
+                          <strong>{job.pickupLocation || '—'}</strong>
+                        </div>
+                        <div className="sd-job-route-arrow" aria-hidden="true">
+                          <svg
+                            width="20"
+                            height="10"
+                            viewBox="0 0 20 10"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M2 5h14" />
+                            <path d="M12 2l4 3-4 3" />
+                          </svg>
+                        </div>
+                        <div className="sd-job-endpoint">
+                          <span className="sd-job-endpoint-label">Destination</span>
+                          <strong>{job.destination || '—'}</strong>
+                        </div>
+                      </div>
 
-                  {myJobs.map((job) => (
-                    <tr key={job.id}>
-
-                      <td>
-                        <strong>
-                          {job.load}
-                        </strong>
-
+                      <div className="sd-job-meta">
+                        <div className="sd-job-meta-item">
+                          <span>Arranged by</span>
+                          <strong>{getArrangingPartyLabel(job.arrangingParty)}</strong>
+                        </div>
                         {job.requiredCapacity && (
-                          <div className="sd-muted">
-                            {job.requiredCapacity}t+
+                          <div className="sd-job-meta-item">
+                            <span>Capacity</span>
+                            <strong>{job.requiredCapacity}t+</strong>
                           </div>
                         )}
-                      </td>
+                      </div>
 
-                      <td>
-                        <div>
-                          {job.pickupLocation}
-                        </div>
-
-                        <div className="sd-muted">
-                          ↓
-                        </div>
-
-                        <div>
-                          {job.destination}
-                        </div>
-                      </td>
-
-                      <td>
-                        {getArrangingPartyLabel(
-                          job.arrangingParty
-                        )}
-                      </td>
-
-                      <td>
-                        <span
-                          className={getStatusClass(
-                            job.status
-                          )}
+                      <div className="sd-job-footer">
+                        <Link
+                          to={`/orders/${job.orderId}`}
+                          className="sd-btn sd-btn-outline"
                         >
-                          {job.status}
-                        </span>
-                      </td>
-
-                      <td>
-                        <div
-                          style={{
-                            display: 'flex',
-                            gap: 6,
-                            flexWrap: 'wrap',
-                          }}
-                        >
-                          <Link
-                            to={`/orders/${job.orderId}`}
-                            className="sd-btn sd-btn-outline"
-                          >
-                            Open order
-                          </Link>
-
-                          {renderJobActionButtons(job)}
-
-                          {job.status === 'DELIVERED' && (
-                            <span className="sd-muted">
-                              Trip completed
-                            </span>
-                          )}
-
-                          {job.status === 'CANCELLED' && (
-                            <span className="sd-muted">
-                              Cancelled
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                    </tr>
+                          Open order
+                        </Link>
+                        {renderJobActionButtons(job)}
+                      </div>
+                    </div>
                   ))}
+                </div>
+              </section>
+            )}
 
-                  {myJobs.length === 0 && (
-                    <tr>
-                      <td colSpan="5">
-                        No transport jobs yet.
-                      </td>
-                    </tr>
-                  )}
+            {/* ── Completed trips (table) ──────────────────────── */}
 
-                </tbody>
+            {completedJobs.length > 0 && (
+              <section className="sd-jobs-section">
+                <div className="sd-jobs-section-head">
+                  <span className="sd-eyebrow">HISTORY</span>
+                  <h3 className="sd-jobs-section-title">
+                    Completed trips
+                    <span className="sd-jobs-count">{completedJobs.length}</span>
+                  </h3>
+                </div>
 
-              </table>
+                <div className="sd-panel sd-table-wrap">
+                  <table className="sd-table sd-table--mobile-cards">
+                    <thead>
+                      <tr>
+                        <th>Load</th>
+                        <th>Route</th>
+                        <th>Arranged by</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {completedJobs.map((job) => (
+                        <tr key={job.id}>
+                          <td data-label="Load">
+                            <strong>{job.load}</strong>
+                          </td>
+                          <td data-label="Route">
+                            {job.pickupLocation} → {job.destination}
+                          </td>
+                          <td data-label="Arranged by">
+                            {getArrangingPartyLabel(job.arrangingParty)}
+                          </td>
+                          <td data-label="Status">
+                            <span className={getStatusClass(job.status)}>
+                              {job.status}
+                            </span>
+                          </td>
+                          <td data-label="Action">
+                            <Link
+                              to={`/orders/${job.orderId}`}
+                              className="sd-mobile-action"
+                            >
+                              Open order
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
 
-            </div>
+            {/* ── Empty state ──────────────────────────────────── */}
+
+            {myJobs.length === 0 && (
+              <div className="sd-empty-state">
+                <div className="sd-empty-icon" aria-hidden="true">📋</div>
+                <h3>No transport jobs yet</h3>
+                <p className="sd-muted">
+                  Once a requester accepts your quote, the job will appear here with the next steps.
+                </p>
+                <button
+                  type="button"
+                  className="sd-btn sd-btn-primary"
+                  onClick={() => setActiveTab('available')}
+                >
+                  Browse available jobs
+                </button>
+              </div>
+            )}
           </div>
         )}
-
       </section>
 
       {/* =========================================================
@@ -1070,12 +1064,121 @@ export default function TruckOwnerDashboard() {
       ========================================================= */}
 
       {toastMsg && (
-        <div
-          className="sd-toast"
-          role="status"
-          aria-live="polite"
-        >
+        <div className="sd-toast" role="status" aria-live="polite">
           {toastMsg}
+        </div>
+      )}
+
+      {/* =========================================================
+          TRUCK REGISTRATION MODAL
+      ========================================================= */}
+
+      {showTruckModal && (
+        <div
+          className="sd-report-backdrop"
+          role="presentation"
+          onClick={() => setShowTruckModal(false)}
+        >
+          <div
+            className="sd-report-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="truck-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sd-report-header">
+              <h2 id="truck-modal-title">Register a truck</h2>
+              <button
+                type="button"
+                className="btn btn-light btn-sm"
+                aria-label="Close registration form"
+                onClick={() => setShowTruckModal(false)}
+                disabled={actionLoading === 'register-truck'}
+              >
+                Close
+              </button>
+            </div>
+
+            <p className="muted small">
+              Register a truck so buyers and sellers can request it for transport jobs.
+            </p>
+
+            <form onSubmit={registerTruck}>
+              <div className="sd-form-grid">
+                <div>
+                  <label htmlFor="registration">Registration plate</label>
+                  <input
+                    id="registration"
+                    required
+                    value={truckForm.registration}
+                    onChange={(e) =>
+                      setTruckForm({ ...truckForm, registration: e.target.value })
+                    }
+                    placeholder="e.g. ET-12345"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="truckType">Truck type</label>
+                  <input
+                    id="truckType"
+                    required
+                    value={truckForm.truckType}
+                    onChange={(e) =>
+                      setTruckForm({ ...truckForm, truckType: e.target.value })
+                    }
+                    placeholder="e.g. Flatbed, Isuzu, FSR"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="capacity">Capacity (tons)</label>
+                  <input
+                    id="capacity"
+                    required
+                    min="0.1"
+                    step="0.1"
+                    type="number"
+                    value={truckForm.capacity}
+                    onChange={(e) =>
+                      setTruckForm({ ...truckForm, capacity: e.target.value })
+                    }
+                    placeholder="e.g. 18"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="operatingArea">Operating area / routes</label>
+                  <input
+                    id="operatingArea"
+                    value={truckForm.operatingArea}
+                    onChange={(e) =>
+                      setTruckForm({ ...truckForm, operatingArea: e.target.value })
+                    }
+                    placeholder="e.g. Addis Ababa – Jimma"
+                  />
+                </div>
+              </div>
+
+              <div className="sd-modal-actions sd-report-actions">
+                <button
+                  type="button"
+                  className="sd-btn sd-btn-outline"
+                  onClick={() => setShowTruckModal(false)}
+                  disabled={actionLoading === 'register-truck'}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="sd-btn sd-btn-primary"
+                  disabled={actionLoading === 'register-truck'}
+                >
+                  {actionLoading === 'register-truck' ? 'Registering…' : 'Register truck'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -1084,7 +1187,11 @@ export default function TruckOwnerDashboard() {
       ========================================================= */}
 
       {evidenceModal && (
-        <div className="sd-report-backdrop" role="presentation" onClick={closeEvidenceModal}>
+        <div
+          className="sd-report-backdrop"
+          role="presentation"
+          onClick={closeEvidenceModal}
+        >
           <div
             className="sd-report-modal"
             role="dialog"
@@ -1094,15 +1201,23 @@ export default function TruckOwnerDashboard() {
           >
             <div className="sd-report-header">
               <h2 id="evidence-modal-title">
-                {evidenceModal.type === 'PICKUP' ? 'Pickup evidence' : 'Delivery evidence'}
+                {evidenceModal.type === 'PICKUP'
+                  ? 'Pickup evidence'
+                  : 'Delivery evidence'}
               </h2>
-              <button type="button" className="btn btn-light btn-sm" aria-label="Close evidence form" onClick={closeEvidenceModal}>
+              <button
+                type="button"
+                className="btn btn-light btn-sm"
+                aria-label="Close evidence form"
+                onClick={closeEvidenceModal}
+              >
                 Close
               </button>
             </div>
 
             <p className="muted small">
-              A photo, video, GPS location or note is required before this trip can be marked {evidenceModal.nextStatus === 'IN_TRANSIT' ? 'in transit' : 'delivered'}.
+              A photo, video, GPS location or note is required before this trip can be marked{' '}
+              {evidenceModal.nextStatus === 'IN_TRANSIT' ? 'in transit' : 'delivered'}.
             </p>
 
             {evidenceError && <div className="alert error">{evidenceError}</div>}
@@ -1118,20 +1233,30 @@ export default function TruckOwnerDashboard() {
               }
             />
 
-            {(evidenceKeys.photoKeys.length > 0 || evidenceKeys.videoKeys.length > 0) && (
+            {(evidenceKeys.photoKeys.length > 0 ||
+              evidenceKeys.videoKeys.length > 0) && (
               <p className="muted small">
-                {evidenceKeys.photoKeys.length} photo(s), {evidenceKeys.videoKeys.length} video(s) ready to submit
+                {evidenceKeys.photoKeys.length} photo(s),{' '}
+                {evidenceKeys.videoKeys.length} video(s) ready to submit
               </p>
             )}
 
-            <div className="form-grid">
+            <div className="sd-form-grid">
               <div>
                 <label>GPS location (optional)</label>
-                <input value={evidenceGps} onChange={(e) => setEvidenceGps(e.target.value)} placeholder="lat,lng" />
+                <input
+                  value={evidenceGps}
+                  onChange={(e) => setEvidenceGps(e.target.value)}
+                  placeholder="lat,lng"
+                />
               </div>
               <div>
                 <label>Notes (optional)</label>
-                <input value={evidenceNotes} onChange={(e) => setEvidenceNotes(e.target.value)} placeholder="Condition on pickup/delivery..." />
+                <input
+                  value={evidenceNotes}
+                  onChange={(e) => setEvidenceNotes(e.target.value)}
+                  placeholder="Condition on pickup/delivery…"
+                />
               </div>
             </div>
 
@@ -1142,13 +1267,18 @@ export default function TruckOwnerDashboard() {
                 disabled={submittingEvidence}
                 onClick={submitEvidenceAndAdvance}
               >
-                {submittingEvidence ? 'Submitting…' : `Submit & mark ${evidenceModal.nextStatus === 'IN_TRANSIT' ? 'in transit' : 'delivered'}`}
+                {submittingEvidence
+                  ? 'Submitting…'
+                  : `Submit & mark ${
+                      evidenceModal.nextStatus === 'IN_TRANSIT'
+                        ? 'in transit'
+                        : 'delivered'
+                    }`}
               </button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }
