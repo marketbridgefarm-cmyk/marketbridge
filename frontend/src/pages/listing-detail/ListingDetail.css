@@ -1,35 +1,44 @@
 /* ============================================================
    MarketBridge — ListingDetail  (listing-detail/ListingDetail.css)
-   Page-scoped visual layer. Functionality and shared component
-   styles remain unchanged.
+   Page-scoped visual layer — refined.
    ============================================================ */
 
 .detail-page {
-  /* ── Local tokens — aligned with Listings / Home palette ── */
+  /* ── Local tokens ─────────────────────────────────────── */
   --d-green:      #176b3a;
+  --d-green-600:  #1a7a42;
   --d-dark:       #0e4b29;
   --d-light:      #2f9159;
   --d-soft:       #eef5ef;
-  --d-mint:       #effdf0;
+  --d-mint:       #f2fbf4;
+  --d-mint-line:  #cfe8d8;
   --d-card:       #ffffff;
-  --d-ink:        #17231b;
-  --d-muted:      #667168;
-  --d-line:       #dfe7df;
-  --d-gold:       #b77b1b;
-  --d-gold-soft:  #fbf3e2;
-  --d-gold-line:  #fae1b8;
-  --d-radius:     20px;
-  --d-shadow:     0 4px 20px rgba(14, 75, 41, .08);
-  --d-shadow-sm:  0 2px 8px  rgba(14, 75, 41, .05);
+  --d-ink:        #16211a;
+  --d-ink-soft:   #2b3a30;
+  --d-muted:      #6a756c;
+  --d-line:       #e3eae4;
+  --d-line-soft:  #eef2ee;
+  --d-gold:       #a86f10;
+  --d-gold-soft:  #fdf6e7;
+  --d-gold-line:  #f4e0b6;
+
+  --d-radius:     18px;
+  --d-radius-sm:  12px;
+  --d-shadow:     0 1px 2px rgba(14, 75, 41, .04), 0 8px 24px rgba(14, 75, 41, .06);
+  --d-shadow-sm:  0 1px 2px rgba(14, 75, 41, .05);
+  --d-shadow-lg:  0 2px 4px rgba(14, 75, 41, .04), 0 16px 40px rgba(14, 75, 41, .10);
+  --d-ring:       0 0 0 3px rgba(23, 107, 58, .14);
+  --d-ease:       cubic-bezier(.2, .7, .3, 1);
 
   min-height: calc(100vh - 72px);
   color: var(--d-ink);
+  font-family: var(--mb-font-body, 'DM Sans', sans-serif);
+  -webkit-font-smoothing: antialiased;
 
-  /* Gradient flows in from the opposite corner to Listings — keeps pages
-     visually distinct while sharing the same palette vocabulary. */
   background:
-    radial-gradient(circle at 15% -8%, rgba(47, 145, 89, .11), transparent 36%),
-    linear-gradient(180deg, #edf7ef 0px, #f7f9f6 300px);
+    radial-gradient(1200px 500px at 12% -10%, rgba(47, 145, 89, .10), transparent 60%),
+    radial-gradient(900px 400px at 100% 0%, rgba(183, 123, 27, .05), transparent 55%),
+    linear-gradient(180deg, #eef7f0 0px, #f8faf8 320px, #f8faf8 100%);
 }
 
 .detail-page .container-wide {
@@ -46,28 +55,38 @@
   gap: 6px;
   min-height: 34px;
   padding: 0 14px 0 10px;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
   border: 1px solid var(--d-line);
   border-radius: 999px;
   background: var(--d-card);
   color: var(--d-muted);
   font: 600 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   text-decoration: none;
-  transition: border-color .15s, color .15s, background .15s;
+  box-shadow: var(--d-shadow-sm);
+  transition: border-color .18s var(--d-ease),
+              color .18s var(--d-ease),
+              background .18s var(--d-ease),
+              transform .18s var(--d-ease);
 }
 
 .detail-page .back-link:hover {
-  border-color: rgba(23, 107, 58, .3);
+  border-color: rgba(23, 107, 58, .35);
   background: var(--d-soft);
   color: var(--d-green);
+  transform: translateX(-2px);
   text-decoration: none;
+}
+
+.detail-page .back-link:focus-visible {
+  outline: none;
+  box-shadow: var(--d-ring);
 }
 
 /* ── Two-column layout ─────────────────────────────────── */
 
 .detail-page .detail-grid {
   display: grid;
-  grid-template-columns: 1fr 360px;
+  grid-template-columns: minmax(0, 1fr) 360px;
   gap: 24px;
   align-items: start;
 }
@@ -89,9 +108,19 @@
   overflow: hidden;
   border-radius: var(--d-radius);
   border: 1px solid var(--d-line);
-  background: var(--d-soft);
+  background: linear-gradient(180deg, #f3f8f4, #eaf1ec);
   margin-bottom: 10px;
   box-shadow: var(--d-shadow);
+  position: relative;
+}
+
+.detail-page .detail-media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5);
+  pointer-events: none;
 }
 
 .detail-page .detail-media img,
@@ -102,7 +131,7 @@
   display: block;
 }
 
-/* Placeholder shown when no photos/videos have been uploaded */
+/* Placeholder */
 .detail-page .media-placeholder {
   width: 100%;
   height: 100%;
@@ -116,12 +145,12 @@
   background:
     repeating-linear-gradient(
       45deg,
-      rgba(23, 107, 58, .03) 0px,
-      rgba(23, 107, 58, .03) 1px,
+      rgba(23, 107, 58, .035) 0px,
+      rgba(23, 107, 58, .035) 1px,
       transparent 1px,
-      transparent 20px
+      transparent 22px
     ),
-    #eef5ef;
+    linear-gradient(180deg, #f3f8f4, #eaf1ec);
 }
 
 /* Thumbnail strip */
@@ -130,7 +159,7 @@
   gap: 8px;
   margin-bottom: 14px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding: 2px 2px 6px;
   scrollbar-width: none;
 }
 
@@ -138,15 +167,22 @@
 
 .detail-page .detail-media-thumb {
   position: relative;
-  flex: 0 0 80px;
-  height: 56px;
+  flex: 0 0 84px;
+  height: 58px;
   padding: 0;
-  border: 2px solid var(--d-line);
+  border: 2px solid transparent;
+  outline: 1px solid var(--d-line);
   border-radius: 10px;
   background: var(--d-soft);
   overflow: hidden;
   cursor: pointer;
-  transition: border-color .15s;
+  transition: outline-color .18s var(--d-ease),
+              transform .18s var(--d-ease);
+}
+
+.detail-page .detail-media-thumb:hover {
+  transform: translateY(-1px);
+  outline-color: rgba(23, 107, 58, .35);
 }
 
 .detail-page .detail-media-thumb img,
@@ -159,8 +195,13 @@
 }
 
 .detail-page .detail-media-thumb.active {
-  border-color: var(--d-green);
+  outline-color: var(--d-green);
   box-shadow: 0 0 0 2px rgba(23, 107, 58, .18);
+}
+
+.detail-page .detail-media-thumb:focus-visible {
+  outline: none;
+  box-shadow: var(--d-ring);
 }
 
 .detail-page .detail-media-thumb-play {
@@ -169,104 +210,34 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(14, 75, 41, .38);
+  background: linear-gradient(180deg, rgba(14, 75, 41, .15), rgba(14, 75, 41, .45));
   color: #fff;
   font-size: 13px;
   pointer-events: none;
 }
 
-/* ── Detail content card ───────────────────────────────── */
-
-.detail-page .card.detail-content {
-  margin-bottom: 16px;
-}
-
-.detail-page .listing-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.detail-page h1 {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: clamp(19px, 2.4vw, 24px);
-  font-weight: 800;
-  letter-spacing: -.4px;
-  line-height: 1.2;
-  color: var(--d-ink);
-  margin-bottom: 8px;
-}
-
-.detail-page p.lead {
-  font-size: 15px;
-  line-height: 1.55;
-  color: var(--d-muted);
-  margin-bottom: 20px;
-}
-
-/* Spec-sheet strip — three metric tiles in a row.
-   The first tile (Asking price) is highlighted in gold to signal
-   the most important field without adding a heavy label. */
-.detail-page .detail-facts {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  border: 1px solid var(--d-line);
-  border-radius: 14px;
-  overflow: hidden;
-  margin-bottom: 16px;
-}
-
-.detail-page .detail-facts > div {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 16px;
-  background: #fbfdfb;
-}
-
-.detail-page .detail-facts > div + div {
-  border-left: 1px solid var(--d-line);
-}
-
-.detail-page .detail-facts span {
-  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--d-muted);
-}
-
-.detail-page .detail-facts strong {
-  font: 700 18px/1.2 var(--mb-font-head, Manrope, sans-serif);
-  color: var(--d-ink);
-}
-
-/* Asking price tile: gold tint */
-.detail-page .detail-facts > div:first-child {
-  background: var(--d-gold-soft);
-  border-right: 1px solid var(--d-gold-line);
-}
-
-.detail-page .detail-facts > div:first-child span { color: #9a6014; }
-.detail-page .detail-facts > div:first-child strong { color: var(--d-gold); }
-
-/* ── Cards (general) ───────────────────────────────────── */
+/* ── Cards (shared) ────────────────────────────────────── */
 
 .detail-page .card {
+  padding: 22px;
+  border: 1px solid var(--d-line);
+  border-radius: var(--d-radius);
+  background: var(--d-card);
+  box-shadow: var(--d-shadow);
   margin-bottom: 16px;
 }
 
 .detail-page .card:last-child { margin-bottom: 0; }
 
 .detail-page .card h2 {
-  font: 700 16px/1.2 var(--mb-font-head, Manrope, sans-serif);
+  font: 700 16px/1.25 var(--mb-font-head, Manrope, sans-serif);
   letter-spacing: -.15px;
   color: var(--d-ink);
   margin-bottom: 14px;
 }
 
 .detail-page .card h3 {
-  font: 700 14px/1.3 var(--mb-font-head, Manrope, sans-serif);
+  font: 700 14px/1.35 var(--mb-font-head, Manrope, sans-serif);
   color: var(--d-ink);
   margin-bottom: 8px;
 }
@@ -275,49 +246,134 @@
 
 .detail-page .card hr {
   border: none;
-  border-top: 1px solid var(--d-line);
+  border-top: 1px solid var(--d-line-soft);
   margin: 16px 0;
+}
+
+/* ── Detail content card ───────────────────────────────── */
+
+.detail-page .card.detail-content {
+  margin-bottom: 16px;
+  padding: 24px 24px 20px;
+}
+
+.detail-page .listing-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.detail-page h1 {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: clamp(20px, 2.4vw, 25px);
+  font-weight: 800;
+  letter-spacing: -.5px;
+  line-height: 1.2;
+  color: var(--d-ink);
+  margin-bottom: 8px;
+  text-wrap: balance;
+}
+
+.detail-page p.lead {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--d-muted);
+  margin-bottom: 20px;
+  max-width: 62ch;
+}
+
+/* ── Spec-sheet strip ──────────────────────────────────── */
+
+.detail-page .detail-facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--d-line);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  background: #fdfdfd;
+}
+
+.detail-page .detail-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  background: transparent;
+}
+
+.detail-page .detail-facts > div + div {
+  border-left: 1px solid var(--d-line);
+}
+
+.detail-page .detail-facts span {
+  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--d-muted);
+}
+
+.detail-page .detail-facts strong {
+  font: 700 19px/1.2 var(--mb-font-head, Manrope, sans-serif);
+  color: var(--d-ink);
+  letter-spacing: -.2px;
+}
+
+/* Asking price tile: gold accent */
+.detail-page .detail-facts > div:first-child {
+  background: linear-gradient(180deg, var(--d-gold-soft), #fbeed1);
+  border-right: 1px solid var(--d-gold-line);
+}
+
+.detail-page .detail-facts > div:first-child span { color: #986112; }
+.detail-page .detail-facts > div:first-child strong {
+  color: var(--d-gold);
+  font-size: 21px;
 }
 
 /* ── Inspection evidence blocks ────────────────────────── */
 
-/* Each inspection request reads like a field-report entry:
-   the left accent communicates "official record." */
 .detail-page .evidence {
-  padding: 12px 14px;
-  border-left: 3px solid var(--d-soft);
-  border-radius: 0 10px 10px 0;
-  background: #fbfdfb;
+  padding: 14px 16px;
+  border: 1px solid var(--d-line-soft);
+  border-left: 3px solid rgba(23, 107, 58, .35);
+  border-radius: 4px 12px 12px 4px;
+  background: linear-gradient(180deg, #fbfdfb, #f7faf8);
   margin-bottom: 10px;
-  transition: border-left-color .15s;
+  transition: border-left-color .18s var(--d-ease),
+              box-shadow .18s var(--d-ease),
+              transform .18s var(--d-ease);
 }
 
-.detail-page .evidence:hover { border-left-color: rgba(23, 107, 58, .5); }
+.detail-page .evidence:hover {
+  border-left-color: var(--d-green);
+  box-shadow: var(--d-shadow-sm);
+}
+
 .detail-page .evidence:last-child { margin-bottom: 0; }
 
-/* Nested evidence (inspector quotes) get a lighter indent */
 .detail-page .evidence .evidence {
-  margin-top: 8px;
-  border-left-color: rgba(23, 107, 58, .18);
-  background: rgba(255, 255, 255, .6);
+  margin-top: 10px;
+  border-left-color: rgba(23, 107, 58, .2);
+  background: rgba(255, 255, 255, .7);
 }
 
 /* ── Sidebar — sticky action zone ──────────────────────── */
 
-/* Negotiation status card: mint background, green-tinted border */
 .detail-page .card#negotiation {
-  border-color: rgba(23, 107, 58, .22);
-  background: var(--d-mint);
+  border-color: var(--d-mint-line);
+  background: linear-gradient(180deg, var(--d-mint), #eafaf0);
   box-shadow: var(--d-shadow);
 }
 
-/* Offer / seller-controls card: elevated shadow to draw the eye. */
 .detail-page .card.sticky-card {
-  border-color: rgba(23, 107, 58, .22);
-  box-shadow: 0 6px 28px rgba(14, 75, 41, .12);
+  border-color: var(--d-mint-line);
+  box-shadow: var(--d-shadow-lg);
 }
 
-/* ── Form elements inside cards ─────────────────────────── */
+/* ── Forms ─────────────────────────────────────────────── */
 
 .detail-page .card form {
   display: flex;
@@ -327,20 +383,27 @@
 
 .detail-page .card label {
   font: 600 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--d-ink);
+  color: var(--d-ink-soft);
 }
 
 .detail-page .card input[type="number"],
 .detail-page .card textarea,
 .detail-page .card select {
   width: 100%;
-  padding: 10px 12px;
+  padding: 11px 13px;
   border: 1px solid var(--d-line);
   border-radius: 10px;
   background: #fff;
   color: var(--d-ink);
-  font: 400 15px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  transition: border-color .15s, box-shadow .15s;
+  font: 400 15px/1.2 var(--mb-font-body, 'DM Sans', sans-serif);
+  transition: border-color .18s var(--d-ease),
+              box-shadow .18s var(--d-ease);
+}
+
+.detail-page .card input[type="number"]:hover,
+.detail-page .card textarea:hover,
+.detail-page .card select:hover {
+  border-color: #cdd9d0;
 }
 
 .detail-page .card input[type="number"]:focus,
@@ -348,27 +411,30 @@
 .detail-page .card select:focus {
   outline: none;
   border-color: var(--d-green);
-  box-shadow: 0 0 0 3px rgba(23, 107, 58, .14);
+  box-shadow: var(--d-ring);
 }
 
 .detail-page .card textarea {
-  min-height: 76px;
+  min-height: 84px;
   resize: vertical;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
-/* ── Offer rows (seller view) ───────────────────────────── */
+/* ── Offer rows (seller view) ──────────────────────────── */
 
 .detail-page .offer-row {
+  padding: 14px 16px;
   border: 1px solid var(--d-line);
   border-radius: 14px;
-  background: #fdfdfd;
-  transition: border-color .15s, box-shadow .15s;
+  background: #fff;
+  transition: border-color .18s var(--d-ease),
+              box-shadow .18s var(--d-ease),
+              transform .18s var(--d-ease);
 }
 
 .detail-page .offer-row:hover {
-  border-color: rgba(23, 107, 58, .22);
-  box-shadow: 0 2px 10px rgba(14, 75, 41, .06);
+  border-color: rgba(23, 107, 58, .28);
+  box-shadow: 0 4px 14px rgba(14, 75, 41, .07);
 }
 
 .detail-page .offer-row .row-actions {
@@ -381,67 +447,83 @@
 .detail-page .offer-row .row-actions input[type="number"] {
   flex: 1 1 100px;
   min-width: 100px;
-  height: 36px;
-  padding: 0 10px;
+  height: 38px;
+  padding: 0 12px;
   border: 1px solid var(--d-line);
-  border-radius: 8px;
+  border-radius: 9px;
   background: #fff;
   color: var(--d-ink);
   font-size: 14px;
-  transition: border-color .15s;
+  transition: border-color .18s var(--d-ease), box-shadow .18s var(--d-ease);
 }
 
 .detail-page .offer-row .row-actions input[type="number"]:focus {
   outline: none;
   border-color: var(--d-green);
-  box-shadow: 0 0 0 2px rgba(23, 107, 58, .12);
+  box-shadow: var(--d-ring);
 }
 
-/* ── Negotiation counter input (buyer view) ─────────────── */
+/* ── Negotiation counter input (buyer view) ────────────── */
 
 .detail-page aside input[type="number"] {
-  padding: 9px 12px;
+  width: 100%;
+  padding: 10px 13px;
   border: 1px solid var(--d-line);
   border-radius: 10px;
   background: #fff;
   color: var(--d-ink);
   font-size: 14px;
-  transition: border-color .15s;
+  transition: border-color .18s var(--d-ease), box-shadow .18s var(--d-ease);
 }
 
 .detail-page aside input[type="number"]:focus {
   outline: none;
   border-color: var(--d-green);
-  box-shadow: 0 0 0 3px rgba(23, 107, 58, .12);
+  box-shadow: var(--d-ring);
 }
 
-/* Inspection payment: inline select + button row */
+/* Inspection payment: select */
 .detail-page aside select {
-  height: 40px;
-  padding: 0 10px;
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
   border: 1px solid var(--d-line);
   border-radius: 10px;
   background: #fff;
   color: var(--d-ink);
   font-size: 14px;
+  transition: border-color .18s var(--d-ease), box-shadow .18s var(--d-ease);
 }
 
-/* ── Typography helpers ─────────────────────────────────── */
+.detail-page aside select:focus {
+  outline: none;
+  border-color: var(--d-green);
+  box-shadow: var(--d-ring);
+}
 
-.detail-page p.muted  { color: var(--d-muted); font-size: 14px; line-height: 1.5; }
-.detail-page p.small  { font-size: 13px; line-height: 1.4; }
-.detail-page .small   { font-size: 13px; line-height: 1.4; }
+/* ── Typography helpers ────────────────────────────────── */
 
-/* ── Full-width button helper ───────────────────────────── */
+.detail-page p.muted  { color: var(--d-muted); font-size: 14px; line-height: 1.55; }
+.detail-page p.small,
+.detail-page .small   { font-size: 13px; line-height: 1.5; }
+
+/* ── Buttons ───────────────────────────────────────────── */
 
 .detail-page .btn.full,
 .detail-page .btn-primary.full,
 .detail-page .btn-light.full { width: 100%; }
 
-/* ── Loading / empty state ──────────────────────────────── */
+.detail-page .btn:focus-visible,
+.detail-page .btn-primary:focus-visible,
+.detail-page .btn-light:focus-visible {
+  outline: none;
+  box-shadow: var(--d-ring);
+}
+
+/* ── Loading / empty state ─────────────────────────────── */
 
 .detail-page .loading {
-  min-height: 260px;
+  min-height: 280px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -449,17 +531,17 @@
   font-size: 15px;
   border: 1px dashed var(--d-line);
   border-radius: var(--d-radius);
-  background: rgba(255, 255, 255, .68);
+  background: rgba(255, 255, 255, .7);
+  backdrop-filter: blur(2px);
 }
 
-/* ── Responsive ─────────────────────────────────────────── */
+/* ── Responsive ────────────────────────────────────────── */
 
 @media (max-width: 980px) {
   .detail-page .detail-grid {
     grid-template-columns: 1fr;
   }
 
-  /* On tablet the aside moves below the content; sticky no longer applies */
   .detail-page .detail-grid > aside {
     position: static;
   }
@@ -468,9 +550,12 @@
 @media (max-width: 640px) {
   .detail-page .container-wide { padding-top: 20px; padding-bottom: 48px; }
 
+  .detail-page .card { padding: 18px; }
+
+  .detail-page .card.detail-content { padding: 20px 18px 16px; }
+
   .detail-page h1 { font-size: 20px; letter-spacing: -.3px; }
 
-  /* Fact strip: stack price on its own row, date + seller share second row */
   .detail-page .detail-facts {
     grid-template-columns: 1fr 1fr;
   }
@@ -490,11 +575,23 @@
   }
 }
 
+/* ── Reduced motion ────────────────────────────────────── */
+
 @media (prefers-reduced-motion: reduce) {
   .detail-page .back-link,
   .detail-page .detail-media-thumb,
   .detail-page .offer-row,
   .detail-page .evidence,
   .detail-page .card input,
-  .detail-page .card textarea { transition: none; }
+  .detail-page .card textarea,
+  .detail-page .card select,
+  .detail-page aside input[type="number"],
+  .detail-page aside select {
+    transition: none;
+  }
+
+  .detail-page .back-link:hover,
+  .detail-page .detail-media-thumb:hover {
+    transform: none;
+  }
 }
