@@ -879,28 +879,35 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   TRUCK CARD CONTENT
+   LABEL + VALUE PAIRS  (shared horizontal pattern)
+   Used by: Fleet details, Route endpoints, Load / Trip details.
+   The label and its value sit side by side on one line and the
+   whole pair wraps onto the next line when space runs out.
    ══════════════════════════════════════════════════════════ */
 
-/* Removed internal card. Contents are now typed horizontally. */
+/* Truck card — Fleet details */
 .sd-dashboard .sd-facts-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 16px 24px;
-  align-items: center;
+  flex-flow: row wrap;
+  gap: 12px 24px;
+  align-items: baseline;
 }
 .sd-dashboard .sd-fact {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-flow: row wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
 }
 .sd-dashboard .sd-fact span {
+  flex: 0 0 auto;
   font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--sd-muted);
 }
 .sd-dashboard .sd-fact strong {
+  min-width: 0;
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
   font-size: 14px;
   font-weight: 800;
@@ -933,30 +940,34 @@
    JOB CARD CONTENT
    ══════════════════════════════════════════════════════════ */
 
-/* Route strip: pickup → destination. Typed horizontally. */
+/* Route strip: PICKUP <value> → DESTINATION <value>
+   A wrapping flex row. Each endpoint keeps its label + value on
+   the same line; the arrow and the second endpoint drop to the
+   next line only when there is no room left. */
 .sd-dashboard .sd-job-route {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
+  display: flex;
+  flex-flow: row wrap;
+  align-items: baseline;
+  gap: 10px 14px;
   /* No box styling (border, background, padding, border-radius) */
 }
 
-/* Changed to horizontal layout */
 .sd-dashboard .sd-job-endpoint {
   display: flex;
-  flex-direction: row; /* Keep horizontal */
-  align-items: center;
-  gap: 8px;
+  flex-flow: row wrap;
+  align-items: baseline;
+  gap: 4px 8px;
   min-width: 0;
 }
 .sd-dashboard .sd-job-endpoint-label {
+  flex: 0 0 auto;
   font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--sd-muted);
 }
 .sd-dashboard .sd-job-endpoint strong {
+  min-width: 0;
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
   font-size: 14px;
   font-weight: 800;
@@ -968,6 +979,7 @@
 
 .sd-dashboard .sd-job-route-arrow {
   flex: 0 0 auto;
+  align-self: center;
   color: var(--sd-accent);
   display: flex;
   align-items: center;
@@ -975,25 +987,29 @@
   opacity: .8;
 }
 
-/* Job meta items are typed horizontally */
+/* Load / Trip details: LABEL value  LABEL value  LABEL value */
 .sd-dashboard .sd-job-meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 16px 24px;
+  flex-flow: row wrap;
+  align-items: baseline;
+  gap: 12px 24px;
 }
 .sd-dashboard .sd-job-meta-item {
   display: flex;
-  flex-direction: row; /* Horizontal */
-  align-items: center;
-  gap: 8px;
+  flex-flow: row wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
 }
 .sd-dashboard .sd-job-meta-item span {
+  flex: 0 0 auto;
   font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--sd-muted);
 }
 .sd-dashboard .sd-job-meta-item strong {
+  min-width: 0;
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
   font-size: 13.5px;
   font-weight: 800;
@@ -1377,31 +1393,15 @@
 
   .sd-dashboard .sd-card { padding: 18px; }
 
-  .sd-dashboard .sd-facts-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
-
-  /* Keep Route and Load details contents horizontal on mobile */
-  .sd-dashboard .sd-job-route {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: 8px;
-    text-align: left;
-  }
-  .sd-dashboard .sd-job-route-arrow {
-    justify-content: center;
-    transform: none; /* Keep arrow horizontal */
-    margin: 0;
-  }
-  
-  /* Removed the override that forced sd-job-endpoint and sd-job-meta into columns */
+  /* Fleet details, Route and Load / Trip details intentionally keep
+     their horizontal (label + value on one line, wrapping) layout on
+     phones — no column overrides here. Only the gaps tighten a little. */
+  .sd-dashboard .sd-facts-row,
   .sd-dashboard .sd-job-meta {
-    gap: 12px 20px; /* Adjust gap for mobile */
+    gap: 10px 20px;
   }
-  .sd-dashboard .sd-job-meta-item {
-    width: auto; /* Allow intrinsic width */
-    justify-content: flex-start; /* Align to start */
+  .sd-dashboard .sd-job-route {
+    gap: 8px 12px;
   }
 
   /* Job cards: buttons stack full width (like the Orders "View order" button) */
