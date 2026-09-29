@@ -1,10 +1,15 @@
 /* ============================================================
    MarketBridge — Orders list  (pages/order/orders.css)
-   Page-scoped visual layer for Orders.jsx.
+   Every order card follows the OrderDetail card system:
+     card-head       — eyebrow (green dash) + title
+     card-block      — content title + tiny hairline
+     content
+     footer          — action row
+   2-column grid on desktop / tablet, single column on phones.
    ============================================================ */
 
 .orders-page {
-  /* ── Local tokens ─────────────────────────────────────── */
+  /* ── Tokens ───────────────────────────────────────────── */
   --o-accent:      #1e9e5a;
   --o-accent-2:    #0f7a44;
   --o-accent-ink:  #12734a;
@@ -58,9 +63,9 @@
 }
 
 .orders-page .container-narrow {
-  max-width: 940px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 40px 20px 80px;
+  padding: 40px 24px 80px;
 }
 
 /* ── Page header ────────────────────────────────────────── */
@@ -69,6 +74,7 @@
   margin-bottom: 26px;
 }
 
+.orders-page .page-header .eyebrow,
 .orders-page .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -200,10 +206,7 @@
   box-shadow: 0 4px 12px rgba(30, 158, 90, .24);
 }
 
-/* Search — icon lives inside a wrapper span so it can never fall into
-   normal flow, regardless of any global `label { display: block }` rule.
-   The input hides the browser's native search decorations so it matches
-   the pill design. */
+/* Search */
 .orders-page .search {
   position: relative;
   display: flex;
@@ -253,14 +256,12 @@
 }
 
 .orders-page .search input::placeholder { color: var(--o-muted-2); }
-
 .orders-page .search input:focus {
   outline: none;
   border-color: var(--o-accent);
   box-shadow: var(--o-ring);
 }
 
-/* Kill the browser's built-in search field decorations */
 .orders-page .search input::-webkit-search-decoration,
 .orders-page .search input::-webkit-search-cancel-button,
 .orders-page .search input::-webkit-search-results-button,
@@ -269,26 +270,38 @@
   appearance: none;
 }
 
-/* ── Order list ─────────────────────────────────────────── */
+/* ── Order grid — 2 columns on desktop / tablet ─────────── */
 
 .orders-page .order-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
 }
+
+@media (min-width: 760px) {
+  .orders-page .order-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1180px) {
+  .orders-page .order-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ── Order card ─────────────────────────────────────────── */
 
 .orders-page .order-card {
   position: relative;
-  display: block;            /* guarantee block layout inside any parent */
+  display: flex;
+  flex-direction: column;
   width: 100%;
-  padding: 20px 22px;
+  padding: 22px 24px;
   border: 1px solid var(--o-line);
   border-radius: var(--o-radius);
   background-color: #fff;
-  background-image:
-    radial-gradient(120% 100% at 0% 0%,  var(--o-tint-a) 0%, transparent 55%),
-    radial-gradient(90%  90%  at 100% 100%, var(--o-tint-b) 0%, transparent 55%);
-  background-repeat: no-repeat;
   box-shadow: var(--o-shadow);
   transition: border-color .2s var(--o-ease),
               box-shadow .2s var(--o-ease),
@@ -301,15 +314,78 @@
   transform: translateY(-2px);
 }
 
-/* ── Card header ────────────────────────────────────────── */
+/* ── Card head — eyebrow + title + price/avatar ────────── */
 
-.orders-page .order-head {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 14px;
+.orders-page .order-card .card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 0 16px;
+  margin: 0 0 16px;
+  border-bottom: 1px solid var(--o-line);
+}
+
+.orders-page .order-card .card-head-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* The eyebrow inside a card — same look as the page header,
+   but with a smaller dash */
+.orders-page .order-card .eyebrow {
+  display: inline-flex;
   align-items: center;
-  width: 100%;
-  padding-bottom: 16px;
+  gap: 8px;
+  color: var(--o-accent-ink);
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  margin: 0 0 6px;
+}
+
+.orders-page .order-card .eyebrow::before {
+  content: '';
+  flex: 0 0 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.orders-page .order-card .eyebrow.is-selling {
+  color: var(--o-info);
+}
+
+.orders-page .order-title {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.3px;
+  line-height: 1.25;
+  color: var(--o-ink);
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.orders-page .order-party {
+  margin: 0;
+  font-size: 13px;
+  color: var(--o-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.orders-page .order-party .dot {
+  width: 3px; height: 3px; border-radius: 50%;
+  background: var(--o-muted-2);
+  flex: 0 0 auto;
 }
 
 .orders-page .order-avatar {
@@ -332,97 +408,50 @@
 .orders-page .order-avatar.tone-danger  { background: var(--o-danger-soft); color: var(--o-danger); }
 .orders-page .order-avatar.tone-muted   { background: var(--o-line-soft);   color: var(--o-muted); }
 
-.orders-page .order-headings { min-width: 0; }
+/* ── Card body ──────────────────────────────────────────── */
 
-.orders-page .order-overline {
+.orders-page .order-card .card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+/* ── Card block — content title with tiny hairline ─────── */
+
+.orders-page .order-card .card-block {
+  margin: 0 0 18px;
+}
+.orders-page .order-card .card-block:last-of-type { margin-bottom: 0; }
+
+.orders-page .order-card .card-block-title {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
+  justify-content: space-between;
+  gap: 12px;
   flex-wrap: wrap;
+  padding: 0 0 10px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid var(--o-line-soft);
 }
 
-.orders-page .role-chip {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 9px;
-  border-radius: 999px;
-  background: var(--o-accent-soft);
-  border: 1px solid var(--o-accent-line);
-  color: var(--o-accent-ink);
-  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .1em;
-  text-transform: uppercase;
-}
-
-.orders-page .role-chip.is-selling {
-  background: var(--o-info-soft);
-  border-color: var(--o-info-line);
-  color: var(--o-info);
-}
-
-.orders-page .order-id {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .08em;
-  color: var(--o-muted);
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-}
-
-.orders-page .order-title {
+.orders-page .order-card .card-block-title h3 {
   font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 800;
-  letter-spacing: -.3px;
+  letter-spacing: -.1px;
+  line-height: 1.3;
   color: var(--o-ink);
-  margin: 0 0 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.orders-page .order-party {
   margin: 0;
-  font-size: 13.5px;
-  color: var(--o-muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
 }
 
-.orders-page .order-party .dot {
-  width: 3px; height: 3px; border-radius: 50%;
-  background: var(--o-muted-2);
+.orders-page .order-card .card-block-note {
+  font: 600 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
+  color: var(--o-muted);
   flex: 0 0 auto;
 }
 
-.orders-page .order-price {
-  text-align: right;
-  flex: 0 0 auto;
-  line-height: 1;
-}
-
-.orders-page .price-amount {
-  display: block;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -.5px;
-  color: var(--o-ink);
-  font-variant-numeric: tabular-nums;
-  margin-bottom: 4px;
-}
-
-.orders-page .price-currency {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .12em;
-  color: var(--o-muted);
-  text-transform: uppercase;
-}
+.orders-page .order-card .card-block-body { display: block; }
 
 /* ── Badges row ─────────────────────────────────────────── */
 
@@ -430,9 +459,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  width: 100%;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--o-line-soft);
 }
 
 .orders-page .status-pill {
@@ -486,19 +512,14 @@
   color: var(--o-muted);
 }
 
-/* ── Progress timeline ──────────────────────────────────── */
+/* ── Progress timeline ─────────────────────────────────── */
 
-/* The grid must stretch to the full card width even when the parent is
-   a flex container. minmax(0, 1fr) lets columns shrink below their
-   content's intrinsic width, so the four dots spread evenly instead
-   of clustering at the left. */
 .orders-page .order-progress {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   width: 100%;
-  margin: 16px 0 18px;
+  margin: 16px 0 0;
   padding: 0 4px;
-  align-self: stretch;
 }
 
 .orders-page .progress-step {
@@ -591,6 +612,32 @@
   font-weight: 700;
 }
 
+/* ── Amount block ──────────────────────────────────────── */
+
+.orders-page .order-price {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.orders-page .price-amount {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -.5px;
+  color: var(--o-ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.orders-page .price-currency {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  color: var(--o-muted);
+  text-transform: uppercase;
+}
+
 /* ── Card footer ────────────────────────────────────────── */
 
 .orders-page .order-actions {
@@ -600,10 +647,13 @@
   gap: 12px;
   flex-wrap: wrap;
   width: 100%;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--o-line-soft);
 }
 
 .orders-page .order-time {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--o-muted);
 }
 
@@ -743,34 +793,10 @@
     margin-left: 0;
     max-width: none;
     min-width: 0;
+    flex: 0 0 auto;
   }
 
-  .orders-page .order-card { padding: 18px 18px 16px; }
-
-  .orders-page .order-head {
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 12px;
-    padding-bottom: 14px;
-  }
-
-  .orders-page .order-price {
-    grid-column: 1 / -1;
-    text-align: left;
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    padding-top: 4px;
-  }
-
-  .orders-page .price-amount { font-size: 20px; }
-
-  .orders-page .order-title { white-space: normal; }
-
-  .orders-page .badges { padding-bottom: 14px; }
-
-  .orders-page .order-progress { margin: 14px 0; }
-
-  .orders-page .progress-label { font-size: 9.5px; max-width: 70px; }
+  .orders-page .order-card { padding: 18px; }
 
   .orders-page .order-actions { gap: 10px; }
 
@@ -792,23 +818,14 @@
     border-radius: 11px;
   }
 
-  .orders-page .order-head {
-    gap: 10px;
-    padding-bottom: 12px;
-  }
-
-  .orders-page .order-title { font-size: 15.5px; margin-bottom: 2px; }
+  .orders-page .order-title { font-size: 16px; }
   .orders-page .order-party { font-size: 12.5px; }
 
-  .orders-page .price-amount { font-size: 19px; }
+  .orders-page .price-amount { font-size: 20px; }
 
-  /* Labels hidden — collapse the reserved gap under each dot so the
-     timeline sits tight against the badges above and the footer below. */
   .orders-page .progress-label { display: none; }
   .orders-page .progress-step  { gap: 0; }
-  .orders-page .order-progress { margin: 12px 0 14px; }
-
-  .orders-page .badges { padding-bottom: 12px; }
+  .orders-page .order-progress { margin: 12px 0 0; }
 
   .orders-page .btn-view {
     height: 36px;
@@ -833,46 +850,4 @@
   }
 
   .orders-page .btn-view:hover svg { transform: none; }
-}
-/* ============================================================
-   Mobile search fixes — 2026-04
-   ============================================================ */
-
-/* Icon styling — supports both wrapped and unwrapped SVG children */
-.orders-page .search > svg,
-.orders-page .search > .search-icon {
-  position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  color: var(--o-muted-2);
-  pointer-events: none;
-  z-index: 1;
-}
-
-.orders-page .search > svg {
-  width: 16px;
-  height: 16px;
-}
-
-.orders-page .search > .search-icon > svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-/* In column flex, flex-basis = height. Collapse it so the search
-   input doesn't force a 220px-tall gap below the tabs. */
-@media (max-width: 720px) {
-  .orders-page .search {
-    flex: 0 0 auto;
-    margin-left: 0;
-    max-width: none;
-    min-width: 0;
-  }
 }
