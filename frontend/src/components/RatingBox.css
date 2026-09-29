@@ -1,9 +1,10 @@
 /* ============================================================
    MarketBridge — RatingBox  (components/RatingBox.css)
-   Card structure:
-     card-head          — eyebrow + "Ratings on this order"
-     card-block         — "Rate a participant" form(s)
-     card-block         — "Submitted on this order" list
+   Card structure mirrors MessageThread:
+     card-head           eyebrow + "Ratings on this order"
+     card-block          "Rate a participant" (actionable)
+     Sayings-style
+       <details>         "Submitted ratings" collapsible
    ============================================================ */
 
 /* ── Card shell ─────────────────────────────────────────── */
@@ -86,7 +87,7 @@
   color: #64748b;
 }
 
-/* ── Card body ──────────────────────────────────────────── */
+/* ── Card body + block ──────────────────────────────────── */
 
 .rating-card .card-body { display: block; }
 
@@ -255,12 +256,81 @@
               0 4px 12px rgba(30, 158, 90, .22);
 }
 
-/* ── Submitted ratings list ───────────────────────────── */
+/* ── Submitted ratings — Sayings-style collapsible ─────── */
+
+.rating-sayings {
+  display: block;
+  margin: 0;
+  border: 1px solid #eef1f5;
+  border-radius: 14px;
+  background: #fbfcfd;
+  overflow: hidden;
+}
+
+.rating-sayings > summary.rating-sayings-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  font-family: var(--mb-font-body, 'DM Sans', sans-serif);
+  font-size: 13px;
+  font-weight: 700;
+  color: #0d1b2a;
+  transition: background .15s cubic-bezier(.2, .7, .3, 1);
+}
+
+.rating-sayings > summary.rating-sayings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.rating-sayings > summary.rating-sayings-summary:hover {
+  background: #f0fdf5;
+}
+
+.rating-sayings > summary.rating-sayings-summary:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 3px rgba(30, 158, 90, .18);
+}
+
+.rating-sayings-label { flex: 1 1 auto; }
+
+.rating-sayings-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #eff5fd;
+  color: #1e5fa8;
+  font: 800 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  font-variant-numeric: tabular-nums;
+}
+
+.rating-sayings-chevron {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1;
+  transition: transform .22s cubic-bezier(.2, .7, .3, 1);
+}
+
+.rating-sayings[open] .rating-sayings-chevron {
+  transform: rotate(180deg);
+}
+
+/* ── Submitted ratings list inside the collapsible ─────── */
 
 .rating-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding: 12px 14px 16px;
+  border-top: 1px solid #eef1f5;
+  background: #fff;
 }
 
 .rating-list-row {
@@ -344,7 +414,9 @@
   .rating-form .rating-star-btn,
   .rating-form .rating-comment,
   .rating-form .btn,
-  .rating-form .btn-primary {
+  .rating-form .btn-primary,
+  .rating-sayings-chevron,
+  .rating-sayings > summary.rating-sayings-summary {
     transition: none;
   }
 
