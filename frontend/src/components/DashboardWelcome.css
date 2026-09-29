@@ -1,31 +1,27 @@
 /* ============================================================
    MarketBridge — DashboardWelcome
-   The personal greeting banner that tops every dashboard.
-   Dark-green gradient anchor that stands out against the
-   light page background without clashing with card surfaces.
+   Personal greeting banner that tops every dashboard.
    ============================================================ */
 
 .dash-welcome {
   --dw-accent:      #1e9e5a;
   --dw-accent-2:    #0f7a44;
-  --dw-accent-soft: #ecfdf3;
-  --dw-accent-line: #c6eccf;
 
   position: relative;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  gap: 18px;
 
-  padding: 22px 26px;
+  /* Grid: avatar | body | children (RecentActivity) */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px 20px;
+  align-items: center;
+
+  padding: 20px 24px;
   margin: 0 0 20px;
 
   border-radius: 20px;
   color: #fff;
 
-  /* Deep-green gradient with a subtle diagonal hatch — same texture
-     vocabulary as the auth left panel, keeps the composition
-     consistent across the app. */
   background:
     repeating-linear-gradient(
       -52deg,
@@ -41,56 +37,60 @@
     0 12px 32px rgba(14, 75, 41, .18);
 }
 
-/* Soft arc in the bottom-right, matches the auth panel motif */
+/* Decorative arc bottom-right */
 .dash-welcome::after {
   content: '';
   position: absolute;
-  bottom: -90px;
-  right: -90px;
-  width: 260px;
-  height: 260px;
-  border: 42px solid rgba(255, 255, 255, .06);
+  bottom: -100px;
+  right: -100px;
+  width: 280px;
+  height: 280px;
+  border: 44px solid rgba(255, 255, 255, .06);
   border-radius: 50%;
   pointer-events: none;
+  z-index: 0;
 }
 
-/* ── Avatar ─────────────────────────────────────────────── */
+/* ── Avatar (column 1) ──────────────────────────────────── */
 
 .dash-welcome-avatar {
   position: relative;
   z-index: 1;
-  flex: 0 0 auto;
-  width: 56px;
-  height: 56px;
+  grid-column: 1;
+  align-self: center;
+
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
 
   background: rgba(255, 255, 255, .14);
-  border: 2px solid rgba(255, 255, 255, .35);
+  border: 2px solid rgba(255, 255, 255, .32);
+  color: #fff;
 
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
   font-weight: 800;
-  font-size: 22px;
+  font-size: 20px;
   letter-spacing: -.3px;
-  color: #fff;
+  flex: 0 0 auto;
 
   box-shadow: 0 6px 18px rgba(0, 0, 0, .12);
 }
 
-/* ── Body ───────────────────────────────────────────────── */
+/* ── Body (column 2) ────────────────────────────────────── */
 
 .dash-welcome-body {
   position: relative;
   z-index: 1;
+  grid-column: 2;
   min-width: 0;
-  flex: 1 1 auto;
 }
 
 .dash-welcome-heading {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: clamp(18px, 2.4vw, 22px);
+  font-size: clamp(17px, 2vw, 20px);
   font-weight: 800;
   letter-spacing: -.4px;
   line-height: 1.2;
@@ -102,7 +102,7 @@
   margin: 0 0 10px;
   font-size: 13.5px;
   line-height: 1.5;
-  color: rgba(255, 255, 255, .82);
+  color: rgba(255, 255, 255, .8);
   max-width: 60ch;
 }
 
@@ -119,172 +119,94 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 24px;
+  height: 22px;
   padding: 0 10px;
   border-radius: 999px;
 
   background: rgba(255, 255, 255, .14);
-  border: 1px solid rgba(255, 255, 255, .22);
+  border: 1px solid rgba(255, 255, 255, .2);
   color: rgba(255, 255, 255, .92);
 
-  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .04em;
   white-space: nowrap;
 }
 
-/* Verified — light accent pill so it reads as a positive state */
 .dash-badge.dash-badge-verified {
   background: rgba(255, 255, 255, .95);
   border-color: transparent;
   color: #0f7a44;
 }
 
-/* Verification pending / attention — softer, still on-brand */
 .dash-badge.dash-badge-pending {
   background: rgba(255, 255, 255, .16);
   border-color: rgba(255, 220, 130, .45);
   color: #ffe7b3;
 }
 
-/* Rating — amber accent on the dark green */
 .dash-badge.dash-badge-rating {
   background: rgba(255, 255, 255, .95);
   border-color: transparent;
   color: #a86f10;
 }
 
-/* ── Children slot (e.g. the RecentActivity dropdown) ───── */
+/* ── Children (column 3) — RecentActivity and similar ──── */
+/*
+ * Deliberately light-touch: we position the child, but we do NOT
+ * restyle any button inside it. RecentActivity renders its own
+ * button and its own styles; overriding them from here made the
+ * text invisible on the previous version.
+ */
 
 .dash-welcome > *:not(.dash-welcome-avatar):not(.dash-welcome-body) {
   position: relative;
   z-index: 1;
+  grid-column: 3;
+  justify-self: end;
+  align-self: center;
   flex: 0 0 auto;
-  align-self: flex-start;
-}
-
-/* Any button placed as a child gets a light-on-dark treatment */
-.dash-welcome > button,
-.dash-welcome > a.btn,
-.dash-welcome > [role="button"] {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 0 14px;
-  border-radius: 10px;
-
-  background: rgba(255, 255, 255, .14);
-  border: 1px solid rgba(255, 255, 255, .24);
-  color: #fff;
-  font: 700 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  cursor: pointer;
-  transition: background .15s cubic-bezier(.2, .7, .3, 1),
-              border-color .15s cubic-bezier(.2, .7, .3, 1),
-              transform .12s cubic-bezier(.2, .7, .3, 1);
-}
-
-.dash-welcome > button:hover,
-.dash-welcome > a.btn:hover,
-.dash-welcome > [role="button"]:hover {
-  background: rgba(255, 255, 255, .22);
-  border-color: rgba(255, 255, 255, .36);
-  transform: translateY(-1px);
-}
-
-.dash-welcome > button:focus-visible,
-.dash-welcome > a.btn:focus-visible,
-.dash-welcome > [role="button"]:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, .35);
 }
 
 /* ── Responsive ─────────────────────────────────────────── */
 
 @media (max-width: 720px) {
   .dash-welcome {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 14px 16px;
     padding: 18px 20px;
-    gap: 14px;
     align-items: flex-start;
-    flex-wrap: wrap;
   }
 
   .dash-welcome-avatar {
-    width: 48px;
-    height: 48px;
+    width: 46px;
+    height: 46px;
     font-size: 18px;
   }
 
-  .dash-welcome-heading { font-size: 18px; }
-  .dash-welcome-subtitle { font-size: 13px; }
+  .dash-welcome-heading { font-size: 17px; }
+  .dash-welcome-subtitle { font-size: 13px; margin-bottom: 8px; }
 
-  /* Children (e.g. the dropdown button) drop to their own row */
-/* ── Children slot (e.g. the RecentActivity dropdown) ───── */
-
-.dash-welcome > *:not(.dash-welcome-avatar):not(.dash-welcome-body) {
-  position: relative;
-  z-index: 1;
-  flex: 0 0 auto;
-  align-self: flex-start;
+  /* Children drop to a second row, spanning full width */
+  .dash-welcome > *:not(.dash-welcome-avatar):not(.dash-welcome-body) {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    width: 100%;
+    margin-top: 4px;
+  }
 }
 
-/* Any button or trigger inside the banner — including ones
-   rendered by child components like RecentActivity — gets the
-   ghost-on-dark treatment. Uses a descendant selector, not a
-   direct-child selector, so it reaches through component wrappers. */
-.dash-welcome button,
-.dash-welcome a.btn,
-.dash-welcome [role="button"] {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 0 14px;
-  border-radius: 10px;
-
-  background: rgba(255, 255, 255, .14) !important;
-  border: 1px solid rgba(255, 255, 255, .24) !important;
-  color: #fff !important;
-  font: 700 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  cursor: pointer;
-  box-shadow: none;
-  transition: background .15s cubic-bezier(.2, .7, .3, 1),
-              border-color .15s cubic-bezier(.2, .7, .3, 1),
-              transform .12s cubic-bezier(.2, .7, .3, 1);
-}
-
-.dash-welcome button:hover,
-.dash-welcome a.btn:hover,
-.dash-welcome [role="button"]:hover {
-  background: rgba(255, 255, 255, .22) !important;
-  border-color: rgba(255, 255, 255, .36) !important;
-  transform: translateY(-1px);
-}
-
-.dash-welcome button *,
-.dash-welcome a.btn *,
-.dash-welcome [role="button"] * {
-  /* Force any inner text/spans to white too */
-  color: inherit !important;
-}
-
-.dash-welcome button:focus-visible,
-.dash-welcome a.btn:focus-visible,
-.dash-welcome [role="button"]:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, .35) !important;
+@media (max-width: 420px) {
+  .dash-welcome { padding: 16px; }
+  .dash-welcome-heading { font-size: 16px; }
+  .dash-welcome-subtitle { font-size: 12.5px; }
+  .dash-badge { font-size: 10px; height: 20px; padding: 0 8px; }
 }
 
 /* ── Reduced motion ─────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
-  .dash-welcome > button,
-  .dash-welcome > a.btn,
-  .dash-welcome > [role="button"] {
+  .dash-welcome,
+  .dash-welcome::after {
     transition: none;
-  }
-  .dash-welcome > button:hover,
-  .dash-welcome > a.btn:hover,
-  .dash-welcome > [role="button"]:hover {
-    transform: none;
   }
 }
