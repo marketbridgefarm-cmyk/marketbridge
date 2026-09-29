@@ -25,6 +25,7 @@ function initialsOf(name) {
   return parts.map((p) => p[0]).join('').toUpperCase();
 }
 
+// Maps backend order status strings to tone variants.
 function statusTone(status) {
   const s = String(status || '').toUpperCase();
   if (['COMPLETED', 'DELIVERED', 'CONFIRMED', 'PAID'].includes(s)) return 'success';
@@ -51,6 +52,10 @@ const TABS = [
   { id: 'selling', label: 'Selling' },
 ];
 
+/*
+ * Marketplace payment status, reduced to a single label.
+ * PAID wins over PENDING, which wins over FAILED — mirrors OrderDetail.jsx.
+ */
 function summarizePayments(payments, type) {
   const rows = (payments || []).filter((payment) => payment.type === type);
   if (rows.length === 0) return null;
@@ -61,6 +66,11 @@ function summarizePayments(payments, type) {
   return rows[0].status;
 }
 
+/*
+ * Derive the four-step progress timeline from an order's state:
+ *   Order placed → Payment → Transport → Delivered
+ * Cancelled/disputed orders reset to step 1.
+ */
 function progressFor(order) {
   const steps = ['Order placed', 'Payment', 'Transport', 'Delivered'];
   const status = String(order.status || '').toUpperCase();
@@ -116,26 +126,31 @@ function OrderCard({ order, currentUserId }) {
 
   return (
     <article className="order-card">
-      {/* Card head — eyebrow (green dash) + title + price */}
+      {/* Card head — eyebrow + title on the left, party + avatar on the right */}
       <header className="card-head">
         <div className="card-head-text">
           <span className={`eyebrow ${isBuyer ? '' : 'is-selling'}`}>
             {isBuyer ? 'Buying' : 'Selling'}
           </span>
           <h2 className="order-title" title={title}>{title}</h2>
-          <p className="order-party">
-            {counterparty?.name || 'Unknown party'}
-            {createdLabel && (
-              <>
-                <span className="dot" aria-hidden="true" />
-                <span>{createdLabel}</span>
-              </>
-            )}
-          </p>
+          {createdLabel && (
+            <p className="order-date">{createdLabel}</p>
+          )}
         </div>
 
-        <div className={`order-avatar tone-${avatarTone}`} aria-hidden="true">
-          {initialsOf(counterparty?.name)}
+        <div className="card-head-party">
+          <div className="order-party-info">
+            <span className="order-party-role">
+              {isBuyer ? 'Seller' : 'Buyer'}
+            </span>
+            <span className="order-party-name">
+              {counterparty?.name || 'Unknown party'}
+            </span>
+          </div>
+
+          <div className={`order-avatar tone-${avatarTone}`} aria-hidden="true">
+            {initialsOf(counterparty?.name)}
+          </div>
         </div>
       </header>
 
