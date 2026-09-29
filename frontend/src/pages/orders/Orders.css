@@ -1,11 +1,12 @@
 /* ============================================================
    MarketBridge — Orders list  (pages/order/orders.css)
    Page-scoped visual layer for Orders.jsx.
-   Functionality and shared component styles remain unchanged.
+   Redesigned: stats strip, search toolbar, counterparty
+   avatars, progress timeline, richer empty states.
    ============================================================ */
 
 .orders-page {
-  /* ── Local tokens — shared vocabulary with auth / listings ── */
+  /* ── Local tokens ─────────────────────────────────────── */
   --o-accent:      #1e9e5a;
   --o-accent-2:    #0f7a44;
   --o-accent-ink:  #12734a;
@@ -15,11 +16,11 @@
   --o-ink:         #0d1b2a;
   --o-ink-soft:    #2c3a4a;
   --o-muted:       #64748b;
+  --o-muted-2:     #94a3b8;
 
   --o-card:        #ffffff;
-  --o-card-tint-a: #e8f4ec;
-  --o-card-tint-b: #e7ebf5;
-  --o-card-tint-c: #e6f5ec;
+  --o-tint-a:      #eefbf3;
+  --o-tint-b:      #eff3fb;
 
   --o-line:        #e5e9ef;
   --o-line-soft:   #eef1f5;
@@ -37,10 +38,12 @@
   --o-info-soft:   #eff5fd;
   --o-info-line:   #cddff5;
 
-  --o-radius:      18px;
-  --o-radius-sm:   12px;
+  --o-radius:      20px;
+  --o-radius-sm:   10px;
   --o-shadow:      0 1px 2px rgba(15, 30, 45, .04),
-                   0 8px 24px rgba(15, 30, 45, .06);
+                   0 8px 24px rgba(15, 30, 45, .05);
+  --o-shadow-hi:   0 2px 4px rgba(15, 30, 45, .04),
+                   0 18px 44px rgba(15, 30, 45, .09);
   --o-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
   --o-ring:        0 0 0 3px rgba(30, 158, 90, .18);
   --o-ease:        cubic-bezier(.2, .7, .3, 1);
@@ -51,72 +54,120 @@
   -webkit-font-smoothing: antialiased;
 
   background:
-    radial-gradient(circle at 90% 8%,  rgba(230, 245, 236, .7), transparent 42%),
-    radial-gradient(circle at 5% 100%, rgba(231, 235, 245, .7), transparent 42%),
+    radial-gradient(circle at 88% 0%,  rgba(230, 245, 236, .85), transparent 40%),
+    radial-gradient(circle at 5% 100%, rgba(231, 235, 245, .8),  transparent 40%),
     linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
+  background-attachment: fixed;
 }
 
 .orders-page .container-narrow {
-  max-width: 900px;
-  padding-top: 32px;
-  padding-bottom: 72px;
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 40px 20px 80px;
 }
 
-/* ── Page header ────────────────────────────────────── */
+/* ── Page header ────────────────────────────────────────── */
 
-.orders-page .page-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-bottom: 24px;
-}
+.orders-page .page-header { margin-bottom: 26px; }
 
-.orders-page .page-header > div { min-width: 0; }
-
-.orders-page .page-header .eyebrow {
+.orders-page .eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   color: var(--o-accent-ink);
   font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .14em;
+  letter-spacing: .16em;
   text-transform: uppercase;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
-.orders-page .page-header .eyebrow::before {
+.orders-page .eyebrow::before {
   content: '';
-  flex: 0 0 18px;
+  flex: 0 0 20px;
   height: 2px;
   border-radius: 2px;
   background: currentColor;
 }
 
 .orders-page .page-header h1 {
-  font: 800 clamp(24px, 3.6vw, 30px)/1.15 var(--mb-font-head, Manrope, sans-serif);
-  letter-spacing: -.5px;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: clamp(26px, 4vw, 34px);
+  font-weight: 800;
+  letter-spacing: -.7px;
+  line-height: 1.1;
   color: var(--o-ink);
-  margin: 0 0 8px;
+  margin: 0 0 10px;
 }
 
 .orders-page .page-header p {
   color: var(--o-muted);
   font-size: 15px;
-  line-height: 1.55;
-  max-width: 62ch;
+  line-height: 1.6;
+  max-width: 60ch;
   margin: 0;
 }
 
-/* ── Tabs ───────────────────────────────────────────── */
+/* ── Stats strip ────────────────────────────────────────── */
+
+.orders-page .stats-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.orders-page .stat {
+  padding: 14px 16px;
+  border: 1px solid var(--o-line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--o-shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color .18s var(--o-ease),
+              transform .18s var(--o-ease);
+}
+
+.orders-page .stat:hover {
+  border-color: rgba(30, 158, 90, .3);
+  transform: translateY(-1px);
+}
+
+.orders-page .stat-label {
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--o-muted);
+}
+
+.orders-page .stat-value {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -.5px;
+  color: var(--o-ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.orders-page .stat.tone-accent .stat-value { color: var(--o-accent-2); }
+
+/* ── Toolbar: tabs + search ─────────────────────────────── */
+
+.orders-page .toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
 
 .orders-page .sd-tabs {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 4px;
-  margin-bottom: 20px;
   border: 1px solid var(--o-line);
   border-radius: 999px;
   background: #fff;
@@ -127,7 +178,7 @@
   appearance: none;
   border: none;
   background: transparent;
-  padding: 8px 16px;
+  padding: 8px 18px;
   border-radius: 999px;
   color: var(--o-muted);
   font: 600 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
@@ -152,87 +203,205 @@
   box-shadow: 0 4px 12px rgba(30, 158, 90, .24);
 }
 
-/* ── Order card ─────────────────────────────────────── */
+.orders-page .search {
+  position: relative;
+  flex: 1 1 220px;
+  min-width: 180px;
+  max-width: 320px;
+  margin-left: auto;
+}
+
+.orders-page .search input {
+  width: 100%;
+  height: 40px;
+  padding: 0 14px 0 40px;
+  border: 1px solid var(--o-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--o-ink);
+  font: 400 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  box-shadow: var(--o-shadow-sm);
+  transition: border-color .18s var(--o-ease),
+              box-shadow .18s var(--o-ease);
+}
+
+.orders-page .search input::placeholder { color: var(--o-muted-2); }
+
+.orders-page .search input:focus {
+  outline: none;
+  border-color: var(--o-accent);
+  box-shadow: var(--o-ring);
+}
+
+.orders-page .search svg {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--o-muted-2);
+  pointer-events: none;
+}
+
+/* ── Order list ─────────────────────────────────────────── */
+
+.orders-page .order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 
 .orders-page .order-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  position: relative;
   padding: 20px 22px;
-  margin-bottom: 14px;
   border: 1px solid var(--o-line);
   border-radius: var(--o-radius);
-  background: var(--o-card);
-
-  /* Same soft gradient wash as auth — subtle, keeps the cards
-     reading as one continuous surface with the page. */
+  background-color: #fff;
   background-image:
-    radial-gradient(120% 100% at 0% 0%,  var(--o-card-tint-a) 0%, transparent 55%),
-    radial-gradient(90%  90%  at 100% 100%, var(--o-card-tint-c) 0%, transparent 55%);
+    radial-gradient(120% 100% at 0% 0%,   var(--o-tint-a) 0%, transparent 55%),
+    radial-gradient(90%  90%  at 100% 100%, var(--o-tint-b) 0%, transparent 55%);
   background-repeat: no-repeat;
-
   box-shadow: var(--o-shadow);
-  transition: border-color .18s var(--o-ease),
-              box-shadow .18s var(--o-ease),
-              transform .18s var(--o-ease);
+  transition: border-color .2s var(--o-ease),
+              box-shadow .2s var(--o-ease),
+              transform .2s var(--o-ease);
 }
 
 .orders-page .order-card:hover {
   border-color: rgba(30, 158, 90, .28);
-  box-shadow: 0 4px 16px rgba(15, 30, 45, .08),
-              0 12px 32px rgba(15, 30, 45, .06);
-  transform: translateY(-1px);
+  box-shadow: var(--o-shadow-hi);
+  transform: translateY(-2px);
 }
 
-.orders-page .order-card:last-child { margin-bottom: 0; }
+/* ── Card header ────────────────────────────────────────── */
 
-.orders-page .order-card > div { min-width: 0; flex: 1 1 auto; }
+.orders-page .order-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding-bottom: 16px;
+}
 
-.orders-page .order-card h3 {
-  font: 800 17px/1.25 var(--mb-font-head, Manrope, sans-serif);
-  letter-spacing: -.25px;
+.orders-page .order-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: -.2px;
+  flex: 0 0 auto;
+}
+
+.orders-page .order-avatar.tone-success { background: var(--o-accent-soft); color: var(--o-accent-2); }
+.orders-page .order-avatar.tone-info    { background: var(--o-info-soft);   color: var(--o-info); }
+.orders-page .order-avatar.tone-gold    { background: var(--o-gold-soft);   color: var(--o-gold); }
+.orders-page .order-avatar.tone-danger  { background: var(--o-danger-soft); color: var(--o-danger); }
+.orders-page .order-avatar.tone-muted   { background: var(--o-line-soft);   color: var(--o-muted); }
+
+.orders-page .order-headings { min-width: 0; }
+
+.orders-page .order-overline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.orders-page .role-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--o-accent-soft);
+  border: 1px solid var(--o-accent-line);
+  color: var(--o-accent-ink);
+  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.orders-page .role-chip.is-selling {
+  background: var(--o-info-soft);
+  border-color: var(--o-info-line);
+  color: var(--o-info);
+}
+
+.orders-page .order-id {
+  font: 600 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .08em;
+  color: var(--o-muted);
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+.orders-page .order-title {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -.3px;
   color: var(--o-ink);
-  margin: 8px 0 6px;
+  margin: 0 0 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.orders-page .order-card p {
-  color: var(--o-muted);
+.orders-page .order-party {
+  margin: 0;
   font-size: 13.5px;
-  line-height: 1.5;
-  margin: 0 0 10px;
-  font-variant-numeric: tabular-nums;
+  color: var(--o-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-/* ── Role chip (BUYING / SELLING) ───────────────────── */
+.orders-page .order-party .dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--o-muted-2);
+  flex: 0 0 auto;
+}
 
-.orders-page .role-chip {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: var(--o-accent-soft);
-  border: 1px solid var(--o-accent-line);
-  color: var(--o-accent-ink);
+.orders-page .order-price {
+  text-align: right;
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.orders-page .price-amount {
+  display: block;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -.5px;
+  color: var(--o-ink);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 4px;
+}
+
+.orders-page .price-currency {
   font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .1em;
+  letter-spacing: .12em;
+  color: var(--o-muted);
   text-transform: uppercase;
 }
 
-/* ── Badges group ───────────────────────────────────── */
+/* ── Badges row ─────────────────────────────────────────── */
 
 .orders-page .badges {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 2px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--o-line-soft);
 }
-
-/* ── Status pill ────────────────────────────────────── */
 
 .orders-page .status-pill {
   display: inline-flex;
@@ -244,8 +413,8 @@
   border: 1px solid transparent;
   background: var(--o-line-soft);
   color: var(--o-ink-soft);
-  font: 600 11.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .02em;
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .04em;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -256,10 +425,8 @@
   border-radius: 50%;
   background: currentColor;
   flex: 0 0 auto;
-  opacity: .8;
+  opacity: .85;
 }
-
-/* Tones — success / info / gold / danger / muted */
 
 .orders-page .status-pill.tone-success {
   background: var(--o-accent-soft);
@@ -291,22 +458,200 @@
   color: var(--o-muted);
 }
 
-/* ── Notice / empty card ────────────────────────────── */
+/* ── Progress timeline ──────────────────────────────────── */
 
-.orders-page .card.notice {
-  padding: 28px 24px;
-  border: 1px dashed var(--o-line);
-  border-radius: var(--o-radius);
-  background: rgba(255, 255, 255, .7);
-  color: var(--o-muted);
-  font-size: 14.5px;
-  line-height: 1.55;
+.orders-page .order-progress {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 16px 0 18px;
+  padding: 0 4px;
+}
+
+.orders-page .progress-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   text-align: center;
 }
 
-/* ── Loading state ──────────────────────────────────── */
+.orders-page .progress-step::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  right: 50%;
+  left: -50%;
+  height: 2px;
+  background: var(--o-line);
+  z-index: 0;
+}
 
-.orders-page > .container-narrow > p:not([class]) {
+.orders-page .progress-step:first-child::before { display: none; }
+
+.orders-page .progress-step.done::before,
+.orders-page .progress-step.current::before {
+  background: var(--o-accent);
+}
+
+.orders-page .progress-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--o-line);
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .2s var(--o-ease);
+}
+
+.orders-page .progress-dot::after {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.orders-page .progress-step.done .progress-dot {
+  background: var(--o-accent);
+  border-color: var(--o-accent);
+}
+
+.orders-page .progress-step.done .progress-dot::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M3 8.5l3 3 7-7' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.orders-page .progress-step.current .progress-dot {
+  background: #fff;
+  border-color: var(--o-accent);
+  box-shadow: 0 0 0 4px rgba(30, 158, 90, .16);
+}
+
+.orders-page .progress-step.current .progress-dot::after {
+  background: var(--o-accent);
+}
+
+.orders-page .progress-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--o-muted-2);
+  letter-spacing: .01em;
+  line-height: 1.3;
+  max-width: 90px;
+}
+
+.orders-page .progress-step.done .progress-label { color: var(--o-ink-soft); }
+
+.orders-page .progress-step.current .progress-label {
+  color: var(--o-accent-2);
+  font-weight: 700;
+}
+
+/* ── Card footer ────────────────────────────────────────── */
+
+.orders-page .order-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.orders-page .order-time {
+  font-size: 12.5px;
+  color: var(--o-muted);
+}
+
+.orders-page .btn-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--o-line);
+  background: #fff;
+  color: var(--o-ink);
+  font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color .15s var(--o-ease),
+              background .15s var(--o-ease),
+              color .15s var(--o-ease),
+              transform .15s var(--o-ease);
+}
+
+.orders-page .btn-view svg { transition: transform .15s var(--o-ease); }
+
+.orders-page .btn-view:hover {
+  border-color: var(--o-accent);
+  background: var(--o-accent-soft);
+  color: var(--o-accent-2);
+  text-decoration: none;
+}
+
+.orders-page .btn-view:hover svg { transform: translateX(3px); }
+
+.orders-page .btn-view:focus-visible {
+  outline: none;
+  box-shadow: var(--o-ring);
+}
+
+/* ── Empty / loading / error states ─────────────────────── */
+
+.orders-page .state-card {
+  padding: 48px 24px;
+  border: 1px dashed var(--o-line);
+  border-radius: var(--o-radius);
+  background: rgba(255, 255, 255, .7);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.orders-page .state-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: var(--o-accent-soft);
+  border: 1px solid var(--o-accent-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--o-accent-2);
+}
+
+.orders-page .state-card h3 {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -.2px;
+  color: var(--o-ink);
+  margin: 0;
+}
+
+.orders-page .state-card p {
+  margin: 0;
+  color: var(--o-muted);
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 40ch;
+}
+
+.orders-page .loading {
   padding: 24px;
   border: 1px dashed var(--o-line);
   border-radius: var(--o-radius);
@@ -314,9 +659,10 @@
   color: var(--o-muted);
   text-align: center;
   font-size: 14.5px;
+  margin: 0;
 }
 
-/* ── Alerts ─────────────────────────────────────────── */
+/* ── Alerts ─────────────────────────────────────────────── */
 
 .orders-page .alert {
   padding: 12px 14px;
@@ -332,63 +678,23 @@
   color: var(--o-danger);
 }
 
-/* ── Buttons (page-scoped reinforcement) ────────────── */
-
-.orders-page .order-card .btn,
-.orders-page .order-card .btn-primary {
-  flex: 0 0 auto;
-  align-self: center;
-  min-height: 40px;
-  padding: 0 18px;
-  border-radius: 10px;
-  border: none;
-  color: #fff;
-  background: linear-gradient(150deg, var(--o-accent) 0%, var(--o-accent-2) 100%);
-  font: 700 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .01em;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 12px rgba(30, 158, 90, .22);
-  transition: transform .12s var(--o-ease),
-              box-shadow .12s var(--o-ease),
-              filter .12s var(--o-ease);
-}
-
-.orders-page .order-card .btn:hover,
-.orders-page .order-card .btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(30, 158, 90, .28);
-  filter: brightness(1.03);
-  text-decoration: none;
-}
-
-.orders-page .order-card .btn:active,
-.orders-page .order-card .btn-primary:active {
-  transform: none;
-  box-shadow: 0 2px 8px rgba(30, 158, 90, .2);
-}
-
-.orders-page .order-card .btn:focus-visible,
-.orders-page .order-card .btn-primary:focus-visible {
-  outline: none;
-  box-shadow: var(--o-ring), 0 4px 12px rgba(30, 158, 90, .22);
-}
-
-/* ── Responsive ─────────────────────────────────────── */
+/* ── Responsive ─────────────────────────────────────────── */
 
 @media (max-width: 720px) {
   .orders-page .container-narrow {
-    padding-top: 20px;
-    padding-bottom: 48px;
-    padding-left: 16px;
-    padding-right: 16px;
+    padding: 24px 16px 56px;
   }
 
-  .orders-page .page-header { margin-bottom: 20px; }
+  .orders-page .page-header h1 { font-size: 24px; }
 
-  .orders-page .page-header h1 { font-size: 22px; }
+  .orders-page .stats-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .orders-page .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
 
   .orders-page .sd-tabs {
     display: flex;
@@ -396,45 +702,80 @@
     justify-content: space-between;
   }
 
-  .orders-page .sd-tab { flex: 1 1 auto; text-align: center; }
-
-  /* Stack card content; button goes full width below */
-  .orders-page .order-card {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 14px;
-    padding: 18px;
+  .orders-page .sd-tab {
+    flex: 1 1 auto;
+    text-align: center;
+    padding: 8px 12px;
   }
 
-  .orders-page .order-card h3 { white-space: normal; }
+  .orders-page .search {
+    margin-left: 0;
+    max-width: none;
+  }
 
-  .orders-page .order-card .btn,
-  .orders-page .order-card .btn-primary {
+  .orders-page .order-card { padding: 18px; }
+
+  .orders-page .order-head {
+    grid-template-columns: auto 1fr;
+    gap: 12px;
+  }
+
+  .orders-page .order-price {
+    grid-column: 1 / -1;
+    text-align: left;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding-top: 4px;
+  }
+
+  .orders-page .price-amount { font-size: 20px; }
+
+  .orders-page .order-title { white-space: normal; }
+
+  .orders-page .progress-label {
+    font-size: 9.5px;
+    max-width: 70px;
+  }
+
+  .orders-page .btn-view {
     width: 100%;
-    align-self: stretch;
-    min-height: 42px;
+    justify-content: center;
   }
 }
 
 @media (max-width: 420px) {
-  .orders-page .order-card { padding: 16px; }
-  .orders-page .order-card h3 { font-size: 16px; }
-  .orders-page .status-pill { font-size: 11px; padding: 0 9px; }
+  .orders-page .order-avatar {
+    width: 40px;
+    height: 40px;
+    font-size: 13px;
+    border-radius: 11px;
+  }
+
+  .orders-page .order-title { font-size: 15.5px; }
+
+  .orders-page .progress-label { display: none; }
+
+  .orders-page .order-progress { margin: 14px 0 12px; }
 }
 
-/* ── Reduced motion ─────────────────────────────────── */
+/* ── Reduced motion ─────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   .orders-page .order-card,
+  .orders-page .stat,
   .orders-page .sd-tab,
-  .orders-page .order-card .btn,
-  .orders-page .order-card .btn-primary {
+  .orders-page .btn-view,
+  .orders-page .progress-dot {
     transition: none;
   }
 
   .orders-page .order-card:hover,
-  .orders-page .order-card .btn:hover,
-  .orders-page .order-card .btn-primary:hover {
+  .orders-page .stat:hover {
+    transform: none;
+  }
+
+  .orders-page .btn-view:hover svg {
     transform: none;
   }
 }
