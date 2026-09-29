@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
+import './order/orders.css';
 
 const shortId = (id) => id?.slice(0, 8) || '—';
 
@@ -150,7 +151,7 @@ export default function Orders() {
   }, [orders, tab, currentUserId]);
 
   return (
-    <main className="section">
+    <main className="section orders-page">
       <div className="container-narrow">
         <div className="page-header">
           <div>
@@ -179,10 +180,16 @@ export default function Orders() {
         </div>
 
         {loading ? (
-          <p>Loading orders…</p>
+          <p className="loading">Loading orders…</p>
         ) : filtered.length === 0 ? (
           <div className="card notice">
-            No orders here yet. {tab === 'buying' ? 'Purchases and accepted offers' : tab === 'selling' ? 'Your sold listings' : 'Accepted offers and purchases'} will appear on this page.
+            No orders here yet.{' '}
+            {tab === 'buying'
+              ? 'Purchases and accepted offers'
+              : tab === 'selling'
+              ? 'Your sold listings'
+              : 'Accepted offers and purchases'}{' '}
+            will appear on this page.
           </div>
         ) : (
           <div>
