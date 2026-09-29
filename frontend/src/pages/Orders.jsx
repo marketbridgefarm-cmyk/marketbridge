@@ -328,7 +328,7 @@
   flex-direction: column;
   align-items: flex-start;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 auto; /* Ensures this takes up available space, pushing the right side away */
 }
 
 /* The eyebrow inside a card */
@@ -382,6 +382,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  /* ✨ FIX: Forces this block to the absolute right edge */
+  margin-left: auto; 
 }
 
 .orders-page .order-card .order-party-info {
@@ -857,7 +859,8 @@
   }
 
   .orders-page .order-card .order-party-info {
-    max-width: 110px;
+    /* ✨ FIX: Increased from 110px to allow the seller name more room before wrapping/truncating */
+    max-width: 140px; 
   }
 
   .orders-page .order-card .order-party-name {
