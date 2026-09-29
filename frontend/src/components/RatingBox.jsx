@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import api from '../api/client';
 import RatingStars from './RatingStars.jsx';
 import Collapsible from './Collapsible.jsx';
+import './RatingBox.css';
 
 // One "who can I rate" target: { toUserId, name, role }
 function buildTargets(order, userId) {
