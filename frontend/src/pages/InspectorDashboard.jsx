@@ -6,6 +6,7 @@ import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import RecentActivity from '../components/RecentActivity.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import './dashboards/InspectorDashboard.css';
 
 const EMPTY_REPORT = {
   quantity: '',
@@ -17,6 +18,20 @@ const EMPTY_REPORT = {
   gpsLocation: '',
 };
 
+const CHECKLIST = [
+  'Quantity',
+  'Grade / quality',
+  'Size where applicable',
+  'Moisture where applicable',
+  'Visible defects / damage',
+  'Packaging',
+  'Photos / videos',
+  'GPS / location',
+  'Date, time & inspector identity',
+];
+
+/* ── Small presentational helpers (same card system as Transport) ── */
+
 function modeLabel(mode) {
   return (mode || '').replaceAll('_', ' ');
 }
@@ -25,10 +40,109 @@ function isProductInspection(request) {
   return request?.listing?.category === 'PRODUCT';
 }
 
+function initialsOf(name) {
+  if (!name) return '??';
+  const parts = String(name).trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]).join('').toUpperCase();
+}
+
+function fmtDate(value) {
+  return value ? new Date(value).toLocaleDateString() : null;
+}
+
+function fmtMoney(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString() : null;
+}
+
+// "ORD 25464DE7" style short reference, matching the Orders cards.
+function shortOrder(id) {
+  if (!id) return null;
+  return `ORD ${String(id).replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+}
+
+function listingTitle(request) {
+  return request?.listing?.cropType || request?.listing?.title || 'Listing';
+}
+
+function listingQuantity(request) {
+  const { quantity, unit } = request?.listing || {};
+  if (quantity == null || quantity === '') return null;
+  return `${quantity}${unit ? ` ${unit}` : ''}`;
+}
+
+function jobTone(status) {
+  switch (status) {
+    case 'COMPLETED':
+      return 'success';
+    case 'IN_PROGRESS':
+      return 'info';
+    case 'ACCEPTED':
+      return 'gold';
+    default:
+      return 'muted';
+  }
+}
+
+/*
+ * Three-step inspection timeline:
+ *   Accepted → In progress → Completed
+ * The "current" step is the next thing that still has to happen.
+ */
+function jobProgress(status) {
+  const labels = ['Accepted', 'In progress', 'Completed'];
+  const s = String(status || '').toUpperCase();
+
+  let idx = 0;
+  if (s === 'ACCEPTED') idx = 1;
+  else if (s === 'IN_PROGRESS') idx = 2;
+  else if (s === 'COMPLETED') idx = 3;
+
+  return labels.map((label, i) => ({
+    label,
+    cls: i < idx ? 'done' : i === idx ? 'current' : '',
+  }));
+}
+
+// The agreed inspection fee, once an inspector has been assigned.
+function jobAmount(request) {
+  const accepted = (request.quotes || []).find((q) => q.status === 'ACCEPTED');
+  const raw = request.fee ?? accepted?.counterAmount ?? accepted?.amount ?? null;
+  return raw == null ? null : fmtMoney(raw);
+}
+
+function ArrowIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12h14" />
+      <path d="M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+// Big number + small unit, as on the Orders "Amount" block.
+function AmountRow({ value, unit = 'ETB' }) {
+  return (
+    <div className="sd-amount">
+      <b>{value}</b>
+      <span>{unit}</span>
+    </div>
+  );
+}
+
 export default function InspectorDashboard() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
-  const currentUserId = user?.id || user?.userId || user?._id || null;
 
   const [tab, setTab] = useState('available');
 
@@ -39,7 +153,7 @@ export default function InspectorDashboard() {
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
 
-  const [feeInputs, setFeeInputs] = useState({});
+  const [feeInputs] = useState({});
   const [quoteAmountInputs, setQuoteAmountInputs] = useState({});
   const [quoteMessageInputs, setQuoteMessageInputs] = useState({});
   const [submittingQuoteId, setSubmittingQuoteId] = useState('');
@@ -89,6 +203,7 @@ export default function InspectorDashboard() {
     }
   }, [searchParams, mine]);
 
+  // Kept for direct-accept flows; the marketplace now runs on sealed quotes.
   async function accept(id) {
     setError('');
     setMsg('');
@@ -311,23 +426,15 @@ export default function InspectorDashboard() {
     }
   }
 
-  const acceptedMine = mine.filter(
-    (r) => r.status === 'ACCEPTED'
-  );
-
-  const inProgressMine = mine.filter(
-    (r) => r.status === 'IN_PROGRESS'
-  );
-
+  const acceptedMine = mine.filter((r) => r.status === 'ACCEPTED');
+  const inProgressMine = mine.filter((r) => r.status === 'IN_PROGRESS');
   const pendingMine = mine.filter(
-    (r) =>
-      r.status === 'ACCEPTED' ||
-      r.status === 'IN_PROGRESS'
+    (r) => r.status === 'ACCEPTED' || r.status === 'IN_PROGRESS'
   );
+  const completedMine = mine.filter((r) => r.status === 'COMPLETED');
 
-  const completedMine = mine.filter(
-    (r) => r.status === 'COMPLETED'
-  );
+  const activeRequest = mine.find((r) => r.id === activeRequestId);
+  const productReport = isProductInspection(activeRequest);
 
   const activityItems = mine.map((r) => ({
     id: `insp-${r.id}`,
@@ -341,17 +448,10 @@ export default function InspectorDashboard() {
     return (
       <div className="sd-dashboard">
         <section>
-          <span className="sd-eyebrow">
-            INSPECTOR DASHBOARD
-          </span>
-
-          <h1>
-            Loading your inspection workspace...
-          </h1>
-
+          <span className="sd-eyebrow">INSPECTOR DASHBOARD</span>
+          <h1>Loading your inspection workspace…</h1>
           <p className="sd-muted">
-            Loading available jobs and your accepted
-            inspections.
+            Loading available jobs and your accepted inspections.
           </p>
         </section>
       </div>
@@ -360,33 +460,33 @@ export default function InspectorDashboard() {
 
   return (
     <div className="sd-dashboard">
+
+      {/* =========================================================
+          HEADER / SUMMARY
+      ========================================================= */}
+
       <section>
-        <DashboardWelcome user={user} subtitle="Verify produce quality independently, document evidence, and get paid for completed inspections." />
+        <DashboardWelcome
+          user={user}
+          subtitle="Verify produce quality independently, document evidence, and get paid for completed inspections."
+        />
         <RoleSwitchCTA current="INSPECTOR" />
-        <RecentActivity items={activityItems} emptyText="No inspections accepted yet — check available jobs below." />
+        <RecentActivity
+          items={activityItems}
+          emptyText="No inspections accepted yet — check available jobs below."
+        />
+
         <div className="sd-toolbar">
           <div>
-            <span className="sd-eyebrow">
-              INSPECTOR DASHBOARD
-            </span>
-
-            <h1>
-              Verify. Document. Report.
-            </h1>
-
-            <p
-              className="sd-muted"
-              style={{ maxWidth: 780 }}
-            >
-              Inspectors are independent verifiers. They do
-              not own produce, set farmer prices or arrange
-              transport.
+            <span className="sd-eyebrow">INSPECTOR DASHBOARD</span>
+            <h1>Verify. Document. Report.</h1>
+            <p className="sd-muted" style={{ maxWidth: 780 }}>
+              Inspectors are independent verifiers. They do not own produce,
+              set farmer prices or arrange transport.
             </p>
           </div>
 
-          <span className="sd-badge sd-blue">
-            VERIFICATION ROLE
-          </span>
+          <span className="sd-badge sd-blue">VERIFICATION ROLE</span>
         </div>
 
         <div className="sd-stat-grid">
@@ -412,516 +512,591 @@ export default function InspectorDashboard() {
         </div>
       </section>
 
+      {/* =========================================================
+          MESSAGES
+      ========================================================= */}
+
       {msg && (
         <section>
-          <div className="alert success">
-            {msg}
-          </div>
+          <div className="alert success" role="status">{msg}</div>
         </section>
       )}
 
       {error && (
         <section>
-          <div className="alert error">
-            {error}
-          </div>
+          <div className="alert error" role="alert">{error}</div>
         </section>
       )}
+
+      {/* =========================================================
+          TABS
+      ========================================================= */}
 
       <section>
         <div className="sd-tabs">
           <button
             type="button"
-            className={`sd-tab ${
-              tab === 'available'
-                ? 'sd-active'
-                : ''
-            }`}
-            onClick={() =>
-              setTab('available')
-            }
+            className={`sd-tab ${tab === 'available' ? 'sd-active' : ''}`}
+            onClick={() => setTab('available')}
           >
-            Available Jobs{' '}
-            {available.length > 0 &&
-              `(${available.length})`}
+            Available Jobs
+            {available.length > 0 && <span>({available.length})</span>}
           </button>
 
           <button
             type="button"
-            className={`sd-tab ${
-              tab === 'mine'
-                ? 'sd-active'
-                : ''
-            }`}
-            onClick={() =>
-              setTab('mine')
-            }
+            className={`sd-tab ${tab === 'mine' ? 'sd-active' : ''}`}
+            onClick={() => setTab('mine')}
           >
-            My Jobs{' '}
-            {pendingMine.length > 0 &&
-              `(${pendingMine.length})`}
+            My Jobs
+            {pendingMine.length > 0 && <span>({pendingMine.length})</span>}
           </button>
         </div>
 
         <div className="sd-workspace">
           <div>
+
+            {/* =====================================================
+                AVAILABLE JOBS
+            ===================================================== */}
+
             {tab === 'available' && (
               <div>
                 <div className="sd-toolbar">
                   <div>
-                    <span className="sd-eyebrow">
-                      MARKETPLACE
-                    </span>
-
-                    <h2>
-                      Open inspection requests
-                    </h2>
-
+                    <span className="sd-eyebrow">MARKETPLACE</span>
+                    <h2>Open inspection requests</h2>
                     <p className="sd-muted">
-                      Requests from sellers or buyers
-                      that no inspector has accepted
-                      yet.
+                      Requests from sellers or buyers that no inspector has
+                      accepted yet.
                     </p>
                   </div>
                 </div>
 
                 <div className="sd-cards">
-                  {available.map((r) => (
-                    <div
-                      className="sd-card"
-                      key={r.id}
-                    >
-                      <h3>
-                        {r.listing?.cropType ||
-                          r.listing?.title ||
-                          'Listing'}{' '}
-                        · {r.listing?.quantity}{' '}
-                        {r.listing?.unit}
-                      </h3>
+                  {available.map((r) => {
+                    const myLeaf = leafInspectionQuote(r.quotes);
+                    const hasActiveThread =
+                      myLeaf &&
+                      ['PENDING', 'SELECTED', 'COUNTERED'].includes(myLeaf.status);
+                    const isMyTurn =
+                      hasActiveThread &&
+                      myLeaf.status === 'COUNTERED' &&
+                      myLeaf.counteredBy === 'REQUESTER';
+                    const justQuoted = quotedRequestIds.has(r.id);
+                    const canQuote = !hasActiveThread && !justQuoted;
+                    const responding = myLeaf && respondingQuoteId === myLeaf.id;
 
-                      <p className="sd-muted">
-                        {modeLabel(r.mode)} —
-                        requested for{' '}
-                        {r.location ||
-                          r.listing?.location ||
-                          'location not set'}
-                      </p>
+                    const displayAmount = myLeaf
+                      ? fmtMoney(
+                          myLeaf.status === 'COUNTERED'
+                            ? (myLeaf.counterAmount ?? myLeaf.amount)
+                            : myLeaf.amount
+                        )
+                      : null;
 
-                      <p className="sd-muted">
-                        Requested by{' '}
-                        {r.requestedBy?.name ||
-                          'user'}
-                      </p>
+                    const requesterName = r.requestedBy?.name || 'User';
+                    const quantity = listingQuantity(r);
+                    const place = r.location || r.listing?.location || 'Location not set';
+                    const createdLabel = fmtDate(r.createdAt);
 
-                      {(() => {
-                        const myLeaf = leafInspectionQuote(r.quotes);
-                        if (!myLeaf) return null;
-                        const displayAmount = myLeaf.status === 'COUNTERED' ? (myLeaf.counterAmount ?? myLeaf.amount) : myLeaf.amount;
-                        return (
-                          <p className="sd-muted">
-                            You quoted {Number(displayAmount).toLocaleString()} ETB on this job ({myLeaf.status}).
-                            Quotes are sealed — you won't see what anyone else bids, and the requester decides.
-                          </p>
-                        );
-                      })()}
+                    return (
+                      <article className="sd-card sd-job-card" key={r.id}>
+                        {/* Card head */}
+                        <div className="sd-card-head">
+                          <div className="sd-card-head-text">
+                            <span className="sd-eyebrow tone-info">Open request</span>
+                            <h3 className="sd-card-title" title={listingTitle(r)}>
+                              {listingTitle(r)}
+                            </h3>
+                            {createdLabel && <p className="sd-card-sub">{createdLabel}</p>}
+                          </div>
 
-                      <div
-                        className="sd-form-grid"
-                        style={{
-                          marginTop: 12,
-                        }}
-                      >
-                        <div>
-                          <label>
-                            Your fee (ETB)
-                          </label>
-
-                          <input
-                            type="number"
-                            min="1"
-                            step="0.01"
-                            placeholder="e.g. 500"
-                            value={
-                              feeInputs[r.id] ||
-                              ''
-                            }
-                            onChange={(e) =>
-                              setFeeInputs(
-                                (f) => ({
-                                  ...f,
-                                  [r.id]:
-                                    e.target
-                                      .value,
-                                })
-                              )
-                            }
-                          />
-                        </div>
-                      </div>
-
-                      {!(quotedRequestIds.has(r.id) || (() => { const l = leafInspectionQuote(r.quotes); return l && ['PENDING', 'SELECTED', 'COUNTERED'].includes(l.status); })()) && (
-                        <p className="sd-muted" style={{ marginTop: 10, marginBottom: 4 }}>
-                          Submit a sealed quote. The requester compares all inspector bids and selects one for price negotiation; you cannot claim the job directly and you cannot see other inspectors' amounts.
-                        </p>
-                      )}
-
-                      {(() => {
-                        const myLeaf = leafInspectionQuote(r.quotes);
-                        const hasActiveThread = myLeaf && ['PENDING', 'SELECTED', 'COUNTERED'].includes(myLeaf.status);
-
-                        if (!hasActiveThread) {
-                          if (quotedRequestIds.has(r.id)) {
-                            return <p className="sd-muted" style={{ marginTop: 10 }}>Waiting on the requester's decision.</p>;
-                          }
-                          return (
-                            <>
-                              <div
-                                className="sd-form-grid"
-                                style={{ marginTop: 6 }}
-                              >
-                                <div>
-                                  <label>Your quote (ETB)</label>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    step="0.01"
-                                    placeholder="e.g. 450"
-                                    value={quoteAmountInputs[r.id] || ''}
-                                    onChange={(e) =>
-                                      setQuoteAmountInputs((q) => ({
-                                        ...q,
-                                        [r.id]: e.target.value,
-                                      }))
-                                    }
-                                  />
-                                </div>
-                              </div>
-
-                              <textarea
-                                placeholder="Optional message to the requester"
-                                value={quoteMessageInputs[r.id] || ''}
-                                onChange={(e) =>
-                                  setQuoteMessageInputs((q) => ({
-                                    ...q,
-                                    [r.id]: e.target.value,
-                                  }))
-                                }
-                                style={{ marginTop: 6, width: '100%' }}
-                              />
-
-                              <button
-                                type="button"
-                                className="sd-btn sd-btn-outline"
-                                style={{ marginTop: 6 }}
-                                disabled={submittingQuoteId === r.id}
-                                onClick={() => submitQuote(r.id)}
-                              >
-                                {submittingQuoteId === r.id ? 'Submitting…' : 'Submit quote'}
-                              </button>
-                            </>
-                          );
-                        }
-
-                        const isMyTurn = myLeaf.status === 'COUNTERED' && myLeaf.counteredBy === 'REQUESTER';
-
-                        if (!isMyTurn) {
-                          return <p className="sd-muted" style={{ marginTop: 10 }}>Waiting on the requester's decision.</p>;
-                        }
-
-                        return (
-                          <div style={{ marginTop: 10 }}>
-                            <p className="sd-muted">
-                              The requester countered at {Number(myLeaf.counterAmount ?? myLeaf.amount).toLocaleString()} ETB.
-                            </p>
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                              <button
-                                type="button"
-                                className="sd-btn sd-btn-primary"
-                                disabled={respondingQuoteId === myLeaf.id}
-                                onClick={() => acceptInspectionQuote(r.id, myLeaf.id)}
-                              >
-                                {respondingQuoteId === myLeaf.id ? 'Accepting…' : 'Accept'}
-                              </button>
-                              <input
-                                type="number"
-                                min="1"
-                                step="0.01"
-                                placeholder="Counter (ETB)"
-                                style={{ width: 130 }}
-                                value={quoteCounterInputs[myLeaf.id] || ''}
-                                onChange={(e) =>
-                                  setQuoteCounterInputs((q) => ({ ...q, [myLeaf.id]: e.target.value }))
-                                }
-                              />
-                              <button
-                                type="button"
-                                className="sd-btn sd-btn-outline"
-                                disabled={respondingQuoteId === myLeaf.id}
-                                onClick={() => counterInspectionQuote(r.id, myLeaf.id)}
-                              >
-                                {respondingQuoteId === myLeaf.id ? 'Sending…' : 'Counter'}
-                              </button>
-                              <button
-                                type="button"
-                                className="sd-btn sd-btn-outline"
-                                disabled={respondingQuoteId === myLeaf.id}
-                                onClick={() => rejectInspectionQuote(r.id, myLeaf.id)}
-                              >
-                                {respondingQuoteId === myLeaf.id ? 'Rejecting…' : 'Reject'}
-                              </button>
+                          <div className="sd-card-head-party">
+                            <div className="sd-party-info">
+                              <span className="sd-party-role">Requested by</span>
+                              <span className="sd-party-name">{requesterName}</span>
+                            </div>
+                            <div className="sd-avatar tone-success" aria-hidden="true">
+                              {initialsOf(requesterName)}
                             </div>
                           </div>
-                        );
-                      })()}
-                    </div>
-                  ))}
+                        </div>
+
+                        <div className="sd-card-body">
+                          {/* Block 1 — Inspection details */}
+                          <section className="sd-card-block">
+                            <div className="sd-card-block-title">
+                              <h4>Inspection details</h4>
+                            </div>
+                            <div className="sd-card-block-body">
+                              <div className="sd-job-meta">
+                                {r.mode && (
+                                  <div className="sd-job-meta-item">
+                                    <span>Mode</span>
+                                    <strong>{modeLabel(r.mode)}</strong>
+                                  </div>
+                                )}
+                                {quantity && (
+                                  <div className="sd-job-meta-item">
+                                    <span>Quantity</span>
+                                    <strong>{quantity}</strong>
+                                  </div>
+                                )}
+                                <div className="sd-job-meta-item">
+                                  <span>Location</span>
+                                  <strong>{place}</strong>
+                                </div>
+                              </div>
+                            </div>
+                          </section>
+
+                          {/* Block 2 — Your quote (whenever a quote exists) */}
+                          {myLeaf && displayAmount && (
+                            <section className="sd-card-block">
+                              <div className="sd-card-block-title">
+                                <h4>{isMyTurn ? 'Counter-offer' : 'Your quote'}</h4>
+                                <span className="sd-card-block-note">
+                                  {isMyTurn ? 'Your turn' : modeLabel(myLeaf.status)}
+                                </span>
+                              </div>
+                              <div className="sd-card-block-body">
+                                <AmountRow value={displayAmount} />
+                                <p className="sd-amount-note">
+                                  {isMyTurn
+                                    ? 'The requester countered this price.'
+                                    : hasActiveThread || justQuoted
+                                      ? 'Waiting on the requester’s decision.'
+                                      : 'This quote is no longer active.'}
+                                </p>
+                                <p className="sd-amount-note">
+                                  Quotes are sealed — you won’t see what anyone else bids, and the requester decides.
+                                </p>
+                              </div>
+
+                              {isMyTurn && (
+                                <div className="sd-form-grid sd-form-grid--tight">
+                                  <div>
+                                    <label htmlFor={`counter-${myLeaf.id}`}>Your counter (ETB)</label>
+                                    <input
+                                      id={`counter-${myLeaf.id}`}
+                                      type="number"
+                                      min="1"
+                                      step="0.01"
+                                      placeholder="e.g. 450"
+                                      value={quoteCounterInputs[myLeaf.id] || ''}
+                                      onChange={(e) =>
+                                        setQuoteCounterInputs((q) => ({
+                                          ...q,
+                                          [myLeaf.id]: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </section>
+                          )}
+
+                          {/* Block 3 — Submit a quote */}
+                          {canQuote && (
+                            <section className="sd-card-block">
+                              <div className="sd-card-block-title">
+                                <h4>Submit a quote</h4>
+                                <span className="sd-card-block-note">Sealed</span>
+                              </div>
+                              <div className="sd-card-block-body">
+                                <p className="sd-amount-note">
+                                  The requester compares all inspector bids and selects one for price negotiation. You can’t claim the job directly or see other inspectors’ amounts.
+                                </p>
+
+                                <div className="sd-form-grid sd-form-grid--tight">
+                                  <div>
+                                    <label htmlFor={`quote-${r.id}`}>Your quote (ETB)</label>
+                                    <input
+                                      id={`quote-${r.id}`}
+                                      type="number"
+                                      min="1"
+                                      step="0.01"
+                                      placeholder="e.g. 450"
+                                      value={quoteAmountInputs[r.id] || ''}
+                                      onChange={(e) =>
+                                        setQuoteAmountInputs((q) => ({
+                                          ...q,
+                                          [r.id]: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label htmlFor={`quote-msg-${r.id}`}>Message (optional)</label>
+                                    <textarea
+                                      id={`quote-msg-${r.id}`}
+                                      placeholder="Optional message to the requester"
+                                      value={quoteMessageInputs[r.id] || ''}
+                                      onChange={(e) =>
+                                        setQuoteMessageInputs((q) => ({
+                                          ...q,
+                                          [r.id]: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </section>
+                          )}
+
+                          {createdLabel && <p className="sd-card-foot">Created {createdLabel}</p>}
+
+                          {/* Footer */}
+                          {(canQuote || isMyTurn) && (
+                            <div className="sd-card-actions">
+                              {canQuote && (
+                                <button
+                                  type="button"
+                                  className="sd-btn sd-btn-primary"
+                                  disabled={submittingQuoteId === r.id}
+                                  onClick={() => submitQuote(r.id)}
+                                >
+                                  {submittingQuoteId === r.id ? 'Submitting…' : 'Submit quote'}
+                                </button>
+                              )}
+
+                              {isMyTurn && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="sd-btn sd-btn-primary"
+                                    disabled={responding}
+                                    onClick={() => acceptInspectionQuote(r.id, myLeaf.id)}
+                                  >
+                                    {responding ? 'Accepting…' : 'Accept'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="sd-btn sd-btn-outline"
+                                    disabled={responding}
+                                    onClick={() => counterInspectionQuote(r.id, myLeaf.id)}
+                                  >
+                                    {responding ? 'Sending…' : 'Counter'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="sd-btn sd-btn-outline"
+                                    disabled={responding}
+                                    onClick={() => rejectInspectionQuote(r.id, myLeaf.id)}
+                                  >
+                                    {responding ? 'Rejecting…' : 'Reject'}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
 
                   {available.length === 0 && (
-                    <div className="sd-panel">
-                      <h3>
-                        No open requests
-                      </h3>
-
+                    <div className="sd-empty-state">
+                      <div className="sd-empty-icon" aria-hidden="true">🔍</div>
+                      <h3>No open requests</h3>
                       <p className="sd-muted">
-                        New inspection requests
-                        will appear here.
+                        New inspection requests will appear here.
                       </p>
                     </div>
                   )}
                 </div>
               </div>
             )}
+
+            {/* =====================================================
+                MY JOBS
+            ===================================================== */}
 
             {tab === 'mine' && (
               <div>
                 <div className="sd-toolbar">
                   <div>
-                    <span className="sd-eyebrow">
-                      MY JOBS
-                    </span>
-
-                    <h2>
-                      My inspection jobs
-                    </h2>
-
+                    <span className="sd-eyebrow">MY JOBS</span>
+                    <h2>My inspection jobs</h2>
                     <p className="sd-muted">
-                      Start an accepted inspection
-                      when you arrive at the inspection
-                      location. Submit the evidence
-                      report after completing the
-                      inspection.
+                      Start an accepted inspection when you arrive at the
+                      inspection location. Submit the evidence report after
+                      completing the inspection.
                     </p>
                   </div>
                 </div>
 
-                <div className="sd-cards">
-                  {pendingMine.map((r) => (
-                    <div
-                      className="sd-card"
-                      key={r.id}
-                    >
-                      <h3>
-                        {r.listing?.cropType ||
-                          r.listing?.title ||
-                          'Listing'}{' '}
-                        · {r.listing?.quantity}{' '}
-                        {r.listing?.unit}
+                {/* ── Active jobs (cards) ─────────────────────── */}
+
+                {pendingMine.length > 0 && (
+                  <section className="sd-jobs-section">
+                    <div className="sd-jobs-section-head">
+                      <span className="sd-eyebrow">IN PROGRESS</span>
+                      <h3 className="sd-jobs-section-title">
+                        Active inspections
+                        <span className="sd-jobs-count">{pendingMine.length}</span>
                       </h3>
-
-                      <p className="sd-muted">
-                        {modeLabel(r.mode)} —{' '}
-                        {r.location ||
-                          r.listing?.location ||
-                          'location not set'}
-                      </p>
-
-                      <div
-                        style={{
-                          display: 'flex',
-                          gap: 8,
-                          flexWrap: 'wrap',
-                          marginTop: 12,
-                        }}
-                      >
-                        {r.status ===
-                          'ACCEPTED' && (
-                          <>
-                            <button
-                              type="button"
-                              className="sd-btn sd-btn-primary"
-                              onClick={() =>
-                                startInspection(
-                                  r.id
-                                )
-                              }
-                            >
-                              Start inspection
-                            </button>
-                            {(() => {
-                              const acceptedQuote = (r.quotes || []).find((q) => q.status === 'ACCEPTED');
-                              const paid = (r.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID');
-                              return acceptedQuote && !paid ? (
-                                <button
-                                  type="button"
-                                  className="sd-btn sd-btn-outline"
-                                  disabled={respondingQuoteId === acceptedQuote.id}
-                                  onClick={() => cancelAcceptedInspection(r.id, acceptedQuote.id)}
-                                >
-                                  {respondingQuoteId === acceptedQuote.id ? 'Cancelling…' : 'Cancel provisional deal'}
-                                </button>
-                              ) : null;
-                            })()}
-                          </>
-                        )}
-
-                        {r.status ===
-                          'IN_PROGRESS' && (
-                          <button
-                            type="button"
-                            className="sd-btn sd-btn-primary"
-                            onClick={() =>
-                              openReportForm(
-                                r.id
-                              )
-                            }
-                          >
-                            Submit report
-                          </button>
-                        )}
-                      </div>
-
-                      <div
-                        style={{
-                          marginTop: 10,
-                          display: 'flex',
-                          gap: 8,
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        {r.listing?.orders?.[0]?.id && (
-                          <Link
-                            to={`/orders/${r.listing.orders[0].id}`}
-                            className="sd-btn sd-btn-outline"
-                          >
-                            Open related order
-                          </Link>
-                        )}
-                        <span className="sd-badge">
-                          {r.status.replaceAll(
-                            '_',
-                            ' '
-                          )}
-                        </span>
-                      </div>
                     </div>
-                  ))}
 
-                  {pendingMine.length === 0 && (
-                    <div className="sd-panel">
-                      <p className="sd-muted">
-                        No accepted or in-progress
-                        inspection jobs.
-                      </p>
+                    <div className="sd-cards">
+                      {pendingMine.map((r) => {
+                        const tone = jobTone(r.status);
+                        const steps = jobProgress(r.status);
+                        const requesterName = r.requestedBy?.name || 'Requester';
+                        const quantity = listingQuantity(r);
+                        const place = r.location || r.listing?.location || 'Location not set';
+                        const createdLabel = fmtDate(r.createdAt);
+                        const orderId = r.listing?.orders?.[0]?.id;
+                        const orderRef = shortOrder(orderId);
+                        const amount = jobAmount(r);
+
+                        const acceptedQuote = (r.quotes || []).find((q) => q.status === 'ACCEPTED');
+                        const paid = (r.payments || []).some(
+                          (p) => p.type === 'INSPECTOR' && p.status === 'PAID'
+                        );
+
+                        return (
+                          <article className="sd-card sd-job-card" key={r.id}>
+                            {/* Card head */}
+                            <div className="sd-card-head">
+                              <div className="sd-card-head-text">
+                                <span className={`sd-eyebrow tone-${tone}`}>Inspection</span>
+                                <h3 className="sd-card-title" title={listingTitle(r)}>
+                                  {listingTitle(r)}
+                                </h3>
+                                {createdLabel && <p className="sd-card-sub">{createdLabel}</p>}
+                              </div>
+
+                              <div className="sd-card-head-party">
+                                <div className="sd-party-info">
+                                  <span className="sd-party-role">Requested by</span>
+                                  <span className="sd-party-name">{requesterName}</span>
+                                </div>
+                                <div className={`sd-avatar tone-${tone}`} aria-hidden="true">
+                                  {initialsOf(requesterName)}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="sd-card-body">
+                              {/* Block 1 — Inspection status */}
+                              <section className="sd-card-block">
+                                <div className="sd-card-block-title">
+                                  <h4>Inspection status</h4>
+                                  {orderRef && <span className="sd-card-block-note">{orderRef}</span>}
+                                </div>
+                                <div className="sd-card-block-body">
+                                  <div className="sd-pills">
+                                    <span className={`sd-pill tone-${tone}`}>
+                                      <span className="sd-pill-dot" aria-hidden="true" />
+                                      {r.status.replaceAll('_', ' ')}
+                                    </span>
+                                  </div>
+
+                                  <div className="sd-progress sd-progress--3" aria-label="Inspection progress">
+                                    {steps.map((step) => (
+                                      <div
+                                        key={step.label}
+                                        className={`sd-progress-step ${step.cls}`}
+                                        title={step.label}
+                                      >
+                                        <span className="sd-progress-dot" aria-hidden="true" />
+                                        <span className="sd-progress-label">{step.label}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </section>
+
+                              {/* Block 2 — Inspection details */}
+                              <section className="sd-card-block">
+                                <div className="sd-card-block-title">
+                                  <h4>Inspection details</h4>
+                                </div>
+                                <div className="sd-card-block-body">
+                                  <div className="sd-job-meta">
+                                    {r.mode && (
+                                      <div className="sd-job-meta-item">
+                                        <span>Mode</span>
+                                        <strong>{modeLabel(r.mode)}</strong>
+                                      </div>
+                                    )}
+                                    {quantity && (
+                                      <div className="sd-job-meta-item">
+                                        <span>Quantity</span>
+                                        <strong>{quantity}</strong>
+                                      </div>
+                                    )}
+                                    <div className="sd-job-meta-item">
+                                      <span>Location</span>
+                                      <strong>{place}</strong>
+                                    </div>
+                                  </div>
+                                </div>
+                              </section>
+
+                              {/* Block 3 — Amount */}
+                              {amount && (
+                                <section className="sd-card-block">
+                                  <div className="sd-card-block-title">
+                                    <h4>Inspection fee</h4>
+                                    <span className="sd-card-block-note">{paid ? 'Paid' : 'Provisional'}</span>
+                                  </div>
+                                  <div className="sd-card-block-body">
+                                    <AmountRow value={amount} />
+                                  </div>
+                                </section>
+                              )}
+
+                              {createdLabel && <p className="sd-card-foot">Created {createdLabel}</p>}
+
+                              {/* Footer */}
+                              <div className="sd-card-actions">
+                                {r.status === 'ACCEPTED' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="sd-btn sd-btn-primary"
+                                      onClick={() => startInspection(r.id)}
+                                    >
+                                      Start inspection
+                                    </button>
+
+                                    {acceptedQuote && !paid && (
+                                      <button
+                                        type="button"
+                                        className="sd-btn sd-btn-outline"
+                                        disabled={respondingQuoteId === acceptedQuote.id}
+                                        onClick={() => cancelAcceptedInspection(r.id, acceptedQuote.id)}
+                                      >
+                                        {respondingQuoteId === acceptedQuote.id
+                                          ? 'Cancelling…'
+                                          : 'Cancel provisional deal'}
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+
+                                {r.status === 'IN_PROGRESS' && (
+                                  <button
+                                    type="button"
+                                    className="sd-btn sd-btn-primary"
+                                    onClick={() => openReportForm(r.id)}
+                                  >
+                                    Submit report
+                                  </button>
+                                )}
+
+                                {orderId && (
+                                  <Link to={`/orders/${orderId}`} className="sd-btn sd-btn-outline">
+                                    View order
+                                    <ArrowIcon />
+                                  </Link>
+                                )}
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })}
                     </div>
-                  )}
-                </div>
+                  </section>
+                )}
+
+                {/* ── Completed (table) ───────────────────────── */}
 
                 {completedMine.length > 0 && (
-                  <>
-                    <div
-                      className="sd-toolbar"
-                      style={{
-                        marginTop: 28,
-                      }}
-                    >
-                      <div>
-                        <span className="sd-eyebrow">
-                          HISTORY
-                        </span>
-
-                        <h2>
-                          Completed
-                        </h2>
-                      </div>
+                  <section className="sd-jobs-section">
+                    <div className="sd-jobs-section-head">
+                      <span className="sd-eyebrow">HISTORY</span>
+                      <h3 className="sd-jobs-section-title">
+                        Completed inspections
+                        <span className="sd-jobs-count">{completedMine.length}</span>
+                      </h3>
                     </div>
 
                     <div className="sd-panel sd-table-wrap">
-                      <table className="sd-table">
+                      <table className="sd-table sd-table--mobile-cards">
                         <thead>
                           <tr>
-                            <th>
-                              Listing
-                            </th>
-
-                            <th>
-                              Report
-                            </th>
-
-                            <th>
-                              Action
-                            </th>
+                            <th>Listing</th>
+                            <th>Report</th>
+                            <th>Status</th>
+                            <th>Action</th>
                           </tr>
                         </thead>
 
                         <tbody>
-                          {completedMine.map(
-                            (r) => (
-                              <tr key={r.id}>
-                                <td>
-                                  <strong>
-                                    {r.listing
-                                      ?.cropType ||
-                                      r.listing
-                                        ?.title ||
-                                      'Listing'}
-                                  </strong>
-                                </td>
+                          {completedMine.map((r) => (
+                            <tr key={r.id}>
+                              <td data-label="Listing">
+                                <strong>{listingTitle(r)}</strong>
+                              </td>
 
-                                <td className="sd-muted">
-                                  {r.report
-                                    ? `Grade: ${
-                                        r.report
-                                          .grade ||
-                                        '—'
-                                      } · Quantity verified: ${
-                                        r.report
-                                          .quantity
-                                      }`
-                                    : 'Report on file'}
-                                </td>
+                              <td data-label="Report">
+                                {r.report
+                                  ? `Grade: ${r.report.grade || '—'} · Quantity verified: ${r.report.quantity}`
+                                  : 'Report on file'}
+                              </td>
 
-                                <td>
-                                  <Link
-                                    to={`/listings/${r.listing?.id}`}
-                                  >
-                                    <button
-                                      type="button"
-                                      className="sd-btn sd-btn-outline"
-                                    >
-                                      View listing
-                                    </button>
-                                  </Link>
-                                </td>
-                              </tr>
-                            )
-                          )}
+                              <td data-label="Status">
+                                <span className="sd-badge">COMPLETED</span>
+                              </td>
+
+                              <td data-label="Action">
+                                <Link to={`/listings/${r.listing?.id}`} className="sd-mobile-action">
+                                  View listing
+                                  <ArrowIcon />
+                                </Link>
+                              </td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>
-                  </>
+                  </section>
+                )}
+
+                {/* ── Empty state ─────────────────────────────── */}
+
+                {pendingMine.length === 0 && completedMine.length === 0 && (
+                  <div className="sd-empty-state">
+                    <div className="sd-empty-icon" aria-hidden="true">📋</div>
+                    <h3>No inspection jobs yet</h3>
+                    <p className="sd-muted">
+                      Once a requester accepts your quote, the job will appear here with the next steps.
+                    </p>
+                    <button
+                      type="button"
+                      className="sd-btn sd-btn-primary"
+                      onClick={() => setTab('available')}
+                    >
+                      Browse available jobs
+                    </button>
+                  </div>
+                )}
+
+                {pendingMine.length === 0 && completedMine.length > 0 && (
+                  <p className="sd-muted" style={{ marginTop: 4 }}>
+                    No accepted or in-progress inspection jobs.
+                  </p>
                 )}
               </div>
             )}
+
+            {/* =====================================================
+                REPORT MODAL
+            ===================================================== */}
 
             {activeRequestId && (
               <div
                 className="sd-report-backdrop"
                 role="presentation"
                 onMouseDown={(e) => {
-                  if (
-                    e.target ===
-                    e.currentTarget
-                  ) {
+                  if (e.target === e.currentTarget) {
                     closeReportForm();
                   }
                 }}
@@ -934,16 +1109,16 @@ export default function InspectorDashboard() {
                 >
                   <div className="sd-report-header">
                     <div>
-                      <span className="sd-eyebrow">
-                        INSPECTION EVIDENCE
-                      </span>
+                      <span className="sd-eyebrow">INSPECTION EVIDENCE</span>
 
                       <h2 id="inspection-report-title">
-                        {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Product inspection report' : 'Agricultural inspection report'}
+                        {productReport
+                          ? 'Product inspection report'
+                          : 'Agricultural inspection report'}
                       </h2>
 
                       <p className="sd-muted">
-                        {isProductInspection(mine.find((r) => r.id === activeRequestId))
+                        {productReport
                           ? 'Verify identity, physical condition, functionality and included items for the product.'
                           : 'Record the verified condition, quantity, quality and supporting evidence for the produce.'}
                       </p>
@@ -951,157 +1126,134 @@ export default function InspectorDashboard() {
 
                     <button
                       type="button"
-                      className="sd-close"
-                      onClick={
-                        closeReportForm
-                      }
+                      className="btn btn-light btn-sm"
+                      onClick={closeReportForm}
                       aria-label="Close report form"
                     >
-                      ×
+                      Close
                     </button>
                   </div>
 
-                  <form
-                    onSubmit={submitReport}
-                  >
+                  <form onSubmit={submitReport}>
                     <div className="sd-form-grid">
                       <div>
-                        <label>
-                          {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Verified units / quantity' : 'Verified quantity'}
+                        <label htmlFor="rep-quantity">
+                          {productReport ? 'Verified units / quantity' : 'Verified quantity'}
                         </label>
-
                         <input
+                          id="rep-quantity"
                           required
                           type="number"
                           min="0.01"
                           step="0.01"
-                          value={
-                            report.quantity
-                          }
+                          value={report.quantity}
                           onChange={(e) =>
-                            setReport({
-                              ...report,
-                              quantity:
-                                e.target
-                                  .value,
-                            })
+                            setReport({ ...report, quantity: e.target.value })
                           }
                         />
                       </div>
 
                       <div>
-                        <label>
-                          {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Condition / quality grade' : 'Grade'}
+                        <label htmlFor="rep-grade">
+                          {productReport ? 'Condition / quality grade' : 'Grade'}
                         </label>
-
                         <input
-                          value={
-                            report.grade
-                          }
+                          id="rep-grade"
+                          value={report.grade}
                           onChange={(e) =>
-                            setReport({
-                              ...report,
-                              grade:
-                                e.target
-                                  .value,
-                            })
+                            setReport({ ...report, grade: e.target.value })
                           }
                         />
                       </div>
 
-                      {!isProductInspection(mine.find((r) => r.id === activeRequestId)) && (
+                      {!productReport && (
                         <div>
-                          <label>Moisture (%)</label>
+                          <label htmlFor="rep-moisture">Moisture (%)</label>
                           <input
+                            id="rep-moisture"
                             type="number"
                             min="0"
                             step="0.01"
                             value={report.moisture}
-                            onChange={(e) => setReport({ ...report, moisture: e.target.value })}
+                            onChange={(e) =>
+                              setReport({ ...report, moisture: e.target.value })
+                            }
                           />
                         </div>
                       )}
 
                       <div>
-                        <label>
-                          {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Product identifier / model / serial' : 'GPS / location evidence'}
+                        <label htmlFor="rep-gps">
+                          {productReport
+                            ? 'Product identifier / model / serial'
+                            : 'GPS / location evidence'}
                         </label>
-
                         <input
-                          value={
-                            report.gpsLocation
+                          id="rep-gps"
+                          value={report.gpsLocation}
+                          placeholder={
+                            productReport
+                              ? 'Model, serial number, SKU or identifying marks'
+                              : 'e.g. 8.9806, 38.7578'
                           }
-                          placeholder={isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Model, serial number, SKU or identifying marks' : 'e.g. 8.9806, 38.7578'}
                           onChange={(e) =>
-                            setReport({
-                              ...report,
-                              gpsLocation:
-                                e.target
-                                  .value,
-                            })
+                            setReport({ ...report, gpsLocation: e.target.value })
                           }
                         />
                       </div>
 
                       <div className="sd-full">
-                        <label>
-                          {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Functional / visible condition' : 'Visible defects'}
+                        <label htmlFor="rep-defects">
+                          {productReport ? 'Functional / visible condition' : 'Visible defects'}
                         </label>
-
                         <textarea
-                          value={
-                            report.visibleDefects
+                          id="rep-defects"
+                          value={report.visibleDefects}
+                          placeholder={
+                            productReport
+                              ? 'Describe operation/function test, visible condition, faults or defects.'
+                              : 'Describe visible defects, quality issues or contamination.'
                           }
-                          placeholder={isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Describe operation/function test, visible condition, faults or defects.' : 'Describe visible defects, quality issues or contamination.'}
                           onChange={(e) =>
-                            setReport({
-                              ...report,
-                              visibleDefects:
-                                e.target
-                                  .value,
-                            })
+                            setReport({ ...report, visibleDefects: e.target.value })
                           }
                         />
                       </div>
 
                       <div className="sd-full">
-                        <label>
-                          {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Physical damage / wear' : 'Damage notes'}
+                        <label htmlFor="rep-damage">
+                          {productReport ? 'Physical damage / wear' : 'Damage notes'}
                         </label>
-
                         <textarea
-                          value={
-                            report.damageNotes
+                          id="rep-damage"
+                          value={report.damageNotes}
+                          placeholder={
+                            productReport
+                              ? 'Describe scratches, dents, wear, missing parts or other physical damage.'
+                              : 'Describe physical damage, bruising, broken packaging, etc.'
                           }
-                          placeholder={isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Describe scratches, dents, wear, missing parts or other physical damage.' : 'Describe physical damage, bruising, broken packaging, etc.'}
                           onChange={(e) =>
-                            setReport({
-                              ...report,
-                              damageNotes:
-                                e.target
-                                  .value,
-                            })
+                            setReport({ ...report, damageNotes: e.target.value })
                           }
                         />
                       </div>
 
                       <div className="sd-full">
-                        <label>
-                          {isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'Included items / packaging / accessories' : 'Packaging notes'}
+                        <label htmlFor="rep-packaging">
+                          {productReport
+                            ? 'Included items / packaging / accessories'
+                            : 'Packaging notes'}
                         </label>
-
                         <textarea
-                          value={
-                            report.packagingNotes
+                          id="rep-packaging"
+                          value={report.packagingNotes}
+                          placeholder={
+                            productReport
+                              ? 'List accessories, documents, packaging and included components verified.'
+                              : 'Describe packaging condition and quantity of packages inspected.'
                           }
-                          placeholder={isProductInspection(mine.find((r) => r.id === activeRequestId)) ? 'List accessories, documents, packaging and included components verified.' : 'Describe packaging condition and quantity of packages inspected.'}
                           onChange={(e) =>
-                            setReport({
-                              ...report,
-                              packagingNotes:
-                                e.target
-                                  .value,
-                            })
+                            setReport({ ...report, packagingNotes: e.target.value })
                           }
                         />
                       </div>
@@ -1117,9 +1269,11 @@ export default function InspectorDashboard() {
                             }))
                           }
                         />
-                        {(reportEvidence.photoKeys.length > 0 || reportEvidence.videoKeys.length > 0) && (
+                        {(reportEvidence.photoKeys.length > 0 ||
+                          reportEvidence.videoKeys.length > 0) && (
                           <p className="muted small">
-                            {reportEvidence.photoKeys.length} photo(s), {reportEvidence.videoKeys.length} video(s) attached
+                            {reportEvidence.photoKeys.length} photo(s),{' '}
+                            {reportEvidence.videoKeys.length} video(s) attached
                           </p>
                         )}
                       </div>
@@ -1127,20 +1281,14 @@ export default function InspectorDashboard() {
 
                     <div className="sd-modal-actions sd-report-actions">
                       <button
-                        className="sd-btn sd-btn-primary"
-                        type="submit"
-                      >
-                        Publish evidence report
-                      </button>
-
-                      <button
                         type="button"
                         className="sd-btn sd-btn-outline"
-                        onClick={
-                          closeReportForm
-                        }
+                        onClick={closeReportForm}
                       >
                         Cancel
+                      </button>
+                      <button className="sd-btn sd-btn-primary" type="submit">
+                        Publish evidence report
                       </button>
                     </div>
                   </form>
@@ -1149,30 +1297,27 @@ export default function InspectorDashboard() {
             )}
           </div>
 
-          <aside>
-            <div className="sd-panel">
-              <h3>
-                Evidence checklist
-              </h3>
+          {/* =====================================================
+              EVIDENCE CHECKLIST
+          ===================================================== */}
 
-              {[
-                'Quantity',
-                'Grade / quality',
-                'Size where applicable',
-                'Moisture where applicable',
-                'Visible defects / damage',
-                'Packaging',
-                'Photos / videos',
-                'GPS / location',
-                'Date, time & inspector identity',
-              ].map((x) => (
-                <div
-                  className="tool-row"
-                  key={x}
-                >
-                  ✓ {x}
+          <aside className="sd-aside">
+            <div className="sd-card sd-checklist">
+              <div className="sd-card-head">
+                <div className="sd-card-head-text">
+                  <span className="sd-eyebrow tone-info">Reference</span>
+                  <h3 className="sd-card-title">Evidence checklist</h3>
+                  <p className="sd-card-sub">What every report should cover</p>
                 </div>
-              ))}
+              </div>
+
+              <ul className="sd-check-list">
+                {CHECKLIST.map((x) => (
+                  <li className="sd-check-row" key={x}>
+                    {x}
+                  </li>
+                ))}
+              </ul>
             </div>
           </aside>
         </div>
