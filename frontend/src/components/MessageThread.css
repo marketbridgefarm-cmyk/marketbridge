@@ -1,37 +1,81 @@
 /* ============================================================
    MarketBridge — MessageThread  (components/MessageThread.css)
+   A conversational panel that fits inside the Order Detail card.
+   Same class names as before so the JSX is untouched.
    ============================================================ */
 
 .message-thread {
+  /* ── Local tokens ─────────────────────────────────────── */
+  --mt-accent:      #1e9e5a;
+  --mt-accent-2:    #0f7a44;
+  --mt-accent-soft: #ecfdf3;
+  --mt-accent-line: #c6eccf;
+
+  --mt-ink:         #0d1b2a;
+  --mt-ink-soft:    #2c3a4a;
+  --mt-muted:       #64748b;
+  --mt-muted-2:     #94a3b8;
+
+  --mt-line:        #e5e9ef;
+  --mt-line-soft:   #eef1f5;
+
+  --mt-bubble-in:   #ffffff;
+  --mt-bubble-in-border: #e5e9ef;
+  --mt-bubble-out-bg: linear-gradient(150deg, #1e9e5a 0%, #0f7a44 100%);
+
+  --mt-radius:      14px;
+  --mt-ease:        cubic-bezier(.2, .7, .3, 1);
+
+  position: relative;
+
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 4px 0 12px;
-  max-height: 420px;
+  gap: 6px;
+
+  padding: 18px 4px 4px;
+  margin: 0 -4px;
+
+  /* The thread sits on a subtle inset surface so bubbles read as
+     "above" the panel. Slight radius so it doesn't clash with the
+     surrounding card's own corners. */
+  background:
+    linear-gradient(180deg, #fbfdfb 0%, #ffffff 100%);
+  border-radius: 12px;
+
+  max-height: 460px;
   overflow-y: auto;
+
   scrollbar-width: thin;
+  scrollbar-color: var(--mt-line) transparent;
 }
 
 .message-thread::-webkit-scrollbar { width: 6px; }
 .message-thread::-webkit-scrollbar-thumb {
-  background: #e5e9ef;
+  background: var(--mt-line);
   border-radius: 3px;
 }
+.message-thread::-webkit-scrollbar-track { background: transparent; }
 
 /* ── Bubbles ────────────────────────────────────────────── */
 
 .message-bubble {
   max-width: min(78%, 480px);
   padding: 10px 14px;
-  border-radius: 14px;
-  font-size: 14px;
+  border-radius: var(--mt-radius);
+  font-size: 14.5px;
   line-height: 1.5;
+
   word-wrap: break-word;
   overflow-wrap: anywhere;
+
   display: flex;
   flex-direction: column;
   gap: 4px;
-  box-shadow: 0 1px 2px rgba(15, 30, 45, .05);
+
+  /* Only the outgoing bubbles get a shadow; incoming bubbles rely on
+     their border to read as separate surfaces, which keeps the
+     conversation visually weighted toward the user. */
+  box-shadow: none;
 }
 
 .message-bubble p {
@@ -44,27 +88,37 @@
   opacity: .7;
   font-variant-numeric: tabular-nums;
   align-self: flex-end;
+  letter-spacing: .01em;
 }
 
-/* Mine — right-aligned, accent green */
+/* ── Mine — right-aligned, accent gradient ─────────────── */
+
 .message-bubble.message-mine {
   align-self: flex-end;
-  background: linear-gradient(150deg, #1e9e5a 0%, #0f7a44 100%);
+  background: var(--mt-bubble-out-bg);
   color: #fff;
   border-bottom-right-radius: 4px;
+  box-shadow: 0 2px 10px rgba(30, 158, 90, .18);
 }
 
-.message-bubble.message-mine .message-time { color: rgba(255, 255, 255, .82); }
+.message-bubble.message-mine .message-time {
+  color: rgba(255, 255, 255, .82);
+}
 
-/* Theirs — left-aligned, neutral */
+/* ── Theirs — left-aligned, neutral white with a hairline ─ */
+
 .message-bubble.message-theirs {
   align-self: flex-start;
-  background: #f1f5f9;
-  color: #0d1b2a;
+  background: var(--mt-bubble-in);
+  border: 1px solid var(--mt-bubble-in-border);
+  color: var(--mt-ink);
   border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 2px rgba(15, 30, 45, .04);
 }
 
-.message-bubble.message-theirs .message-time { color: #64748b; }
+.message-bubble.message-theirs .message-time {
+  color: var(--mt-muted);
+}
 
 /* ── Composer ───────────────────────────────────────────── */
 
@@ -72,55 +126,75 @@
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  margin-top: 10px;
-  padding-top: 14px;
-  border-top: 1px solid #eef1f5;
+
+  margin-top: 8px;
+  padding: 12px 4px 0;
+  border-top: 1px solid var(--mt-line-soft);
 }
 
 .message-composer textarea {
   flex: 1 1 auto;
   width: 100%;
-  min-height: 68px;
+  min-height: 60px;
   max-height: 180px;
-  padding: 11px 13px;
-  border: 1px solid #e5e9ef;
-  border-radius: 12px;
+
+  padding: 12px 14px;
+
+  border: 1px solid var(--mt-line);
+  border-radius: 14px;
   background: #fff;
-  color: #0d1b2a;
+  color: var(--mt-ink);
+
   font: 400 14.5px/1.5 var(--mb-font-body, 'DM Sans', sans-serif);
+
   resize: vertical;
-  transition: border-color .18s cubic-bezier(.2, .7, .3, 1),
-              box-shadow .18s cubic-bezier(.2, .7, .3, 1);
+
+  transition: border-color .18s var(--mt-ease),
+              box-shadow .18s var(--mt-ease),
+              background .18s var(--mt-ease);
+
   -webkit-appearance: none;
   appearance: none;
 }
 
-.message-composer textarea::placeholder { color: #94a3b8; }
+.message-composer textarea::placeholder {
+  color: var(--mt-muted-2);
+}
 
-.message-composer textarea:hover { border-color: #cfd6df; }
+.message-composer textarea:hover {
+  border-color: #cfd6df;
+}
 
 .message-composer textarea:focus {
   outline: none;
-  border-color: #1e9e5a;
+  border-color: var(--mt-accent);
   box-shadow: 0 0 0 3px rgba(30, 158, 90, .16);
+  background: #fff;
 }
 
+/* Send button */
 .message-composer .btn,
 .message-composer .btn-primary {
   flex: 0 0 auto;
-  min-height: 40px;
-  padding: 0 18px;
-  border-radius: 10px;
+  min-height: 42px;
+  padding: 0 20px;
+
+  border-radius: 12px;
   border: none;
+
   color: #fff;
-  background: linear-gradient(150deg, #1e9e5a 0%, #0f7a44 100%);
+  background: var(--mt-bubble-out-bg);
+
   font: 700 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .01em;
+
   cursor: pointer;
+
   box-shadow: 0 4px 12px rgba(30, 158, 90, .22);
-  transition: transform .12s cubic-bezier(.2, .7, .3, 1),
-              box-shadow .12s cubic-bezier(.2, .7, .3, 1),
-              filter .12s cubic-bezier(.2, .7, .3, 1);
+
+  transition: transform .12s var(--mt-ease),
+              box-shadow .12s var(--mt-ease),
+              filter .12s var(--mt-ease);
 }
 
 .message-composer .btn:hover:not(:disabled),
@@ -128,6 +202,12 @@
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(30, 158, 90, .28);
   filter: brightness(1.03);
+}
+
+.message-composer .btn:active:not(:disabled),
+.message-composer .btn-primary:active:not(:disabled) {
+  transform: none;
+  box-shadow: 0 2px 8px rgba(30, 158, 90, .18);
 }
 
 .message-composer .btn:disabled,
@@ -141,39 +221,74 @@
 .message-composer .btn:focus-visible,
 .message-composer .btn-primary:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(30, 158, 90, .18),
-              0 4px 12px rgba(30, 158, 90, .22);
+  box-shadow:
+    0 0 0 3px rgba(30, 158, 90, .18),
+    0 4px 12px rgba(30, 158, 90, .22);
 }
 
-/* ── Empty + error ──────────────────────────────────────── */
+/* ── Empty + error states ──────────────────────────────── */
 
 .message-thread > .muted {
-  color: #64748b;
+  color: var(--mt-muted);
   font-size: 14px;
   text-align: center;
-  padding: 24px 12px;
+  padding: 32px 12px;
   margin: 0;
+  border: 1px dashed var(--mt-line);
+  border-radius: var(--mt-radius);
+  background: rgba(255, 255, 255, .6);
+}
+
+/* Alert bubbles that sit between the thread and the composer
+   (rendered by the component above the composer). */
+.message-thread + .alert,
+.message-thread ~ .alert.error {
+  margin-top: 12px;
+  margin-bottom: 0;
+  border-radius: 12px;
+  font-size: 13.5px;
+}
+
+/* ── Composer wrapper spacing when it sits directly after a
+   message-thread (as it does in the component) ───────────── */
+.message-thread + .message-composer {
+  margin-top: 12px;
 }
 
 /* ── Responsive ─────────────────────────────────────────── */
 
 @media (max-width: 480px) {
+  .message-thread {
+    padding: 14px 2px 2px;
+    max-height: 380px;
+  }
+
   .message-bubble {
-    max-width: 88%;
+    max-width: 90%;
     font-size: 13.5px;
     padding: 9px 12px;
+    border-radius: 13px;
+  }
+
+  .message-bubble .message-time {
+    font-size: 10.5px;
   }
 
   .message-composer {
     flex-direction: column;
     align-items: stretch;
+    gap: 8px;
+    padding: 12px 2px 0;
   }
 
   .message-composer .btn,
   .message-composer .btn-primary {
     width: 100%;
+    min-height: 44px;
   }
 }
+
+/* ── Reduced motion ─────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   .message-composer textarea,
