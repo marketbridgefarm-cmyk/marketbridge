@@ -1,7 +1,8 @@
 /* ============================================================
    MarketBridge — Orders list  (pages/order/orders.css)
    Every order card follows the OrderDetail card system:
-     card-head       — eyebrow (green dash) + title
+     order-card-head — eyebrow (green dash) + title on the left,
+                       party + avatar on the right
      card-block      — content title + tiny hairline
      content
      footer          — action row
@@ -206,7 +207,8 @@
   box-shadow: 0 4px 12px rgba(30, 158, 90, .24);
 }
 
-/* Search */
+/* ── Search ─────────────────────────────────────────────── */
+
 .orders-page .search {
   position: relative;
   display: flex;
@@ -256,6 +258,7 @@
 }
 
 .orders-page .search input::placeholder { color: var(--o-muted-2); }
+
 .orders-page .search input:focus {
   outline: none;
   border-color: var(--o-accent);
@@ -285,12 +288,6 @@
   }
 }
 
-@media (min-width: 1180px) {
-  .orders-page .order-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 /* ── Order card ─────────────────────────────────────────── */
 
 .orders-page .order-card {
@@ -314,28 +311,41 @@
   transform: translateY(-2px);
 }
 
-/* ── Card head — eyebrow + title + price/avatar ────────── */
+/* ── Card head — eyebrow + title on the left, party + avatar on the right ──
+   Two-column grid: left column flexes, right column is auto-width and
+   pinned to the far right edge with justify-self: end. This works even
+   if another stylesheet sets display on .order-card-head's children.          */
 
-.orders-page .order-card .card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+.orders-page .order-card .order-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 12px;
+  width: 100%;
   padding: 0 0 16px;
   margin: 0 0 16px;
   border-bottom: 1px solid var(--o-line);
 }
 
-.orders-page .order-card .card-head-text {
+.orders-page .order-card .order-card-head-text {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   min-width: 0;
-  flex: 1 1 auto;
+  grid-column: 1;
 }
 
-/* The eyebrow inside a card — same look as the page header,
-   but with a smaller dash */
+/* Belt-and-braces: beat any global header/flex rules on the head row */
+.orders-page .order-card > .order-card-head {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+}
+.orders-page .order-card > .order-card-head > .order-card-head-party {
+  justify-self: end !important;
+  margin-left: auto;
+}
+
+/* The eyebrow inside a card */
 .orders-page .order-card .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -366,26 +376,56 @@
   letter-spacing: -.3px;
   line-height: 1.25;
   color: var(--o-ink);
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   overflow-wrap: anywhere;
   white-space: normal;
 }
 
-.orders-page .order-party {
+.orders-page .order-date {
   margin: 0;
-  font-size: 13px;
+  font-size: 12.5px;
+  line-height: 1.4;
   color: var(--o-muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
 }
 
-.orders-page .order-party .dot {
-  width: 3px; height: 3px; border-radius: 50%;
-  background: var(--o-muted-2);
-  flex: 0 0 auto;
+/* ── Party cluster at the far right of the header ──────── */
+
+.orders-page .order-card .order-card-head-party {
+  grid-column: 2;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.orders-page .order-card .order-party-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  gap: 2px;
+  min-width: 0;
+  max-width: 160px;
+}
+
+.orders-page .order-card .order-party-role {
+  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--o-muted);
+}
+
+.orders-page .order-card .order-party-name {
+  font: 700 13.5px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
+  color: var(--o-ink);
+  letter-spacing: -.1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .orders-page .order-avatar {
@@ -407,6 +447,24 @@
 .orders-page .order-avatar.tone-gold    { background: var(--o-gold-soft);   color: var(--o-gold); }
 .orders-page .order-avatar.tone-danger  { background: var(--o-danger-soft); color: var(--o-danger); }
 .orders-page .order-avatar.tone-muted   { background: var(--o-line-soft);   color: var(--o-muted); }
+
+/* Legacy helper — kept for safety in case other pages use it */
+.orders-page .order-party {
+  margin: 0;
+  font-size: 13px;
+  color: var(--o-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.orders-page .order-party .dot {
+  width: 3px; height: 3px; border-radius: 50%;
+  background: var(--o-muted-2);
+  flex: 0 0 auto;
+}
 
 /* ── Card body ──────────────────────────────────────────── */
 
@@ -811,6 +869,22 @@
 /* ── Responsive: small phone ────────────────────────────── */
 
 @media (max-width: 420px) {
+  .orders-page .order-card .order-card-head {
+    column-gap: 8px;
+  }
+
+  .orders-page .order-card .order-card-head-party {
+    gap: 8px;
+  }
+
+  .orders-page .order-card .order-party-info {
+    max-width: 120px;
+  }
+
+  .orders-page .order-card .order-party-name {
+    font-size: 12.5px;
+  }
+
   .orders-page .order-avatar {
     width: 40px;
     height: 40px;
@@ -819,7 +893,6 @@
   }
 
   .orders-page .order-title { font-size: 16px; }
-  .orders-page .order-party { font-size: 12.5px; }
 
   .orders-page .price-amount { font-size: 20px; }
 
