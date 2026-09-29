@@ -945,7 +945,7 @@
 /* Changed to horizontal layout */
 .sd-dashboard .sd-job-endpoint {
   display: flex;
-  flex-direction: row; /* Changed from column */
+  flex-direction: row; /* Keep horizontal */
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -983,7 +983,7 @@
 }
 .sd-dashboard .sd-job-meta-item {
   display: flex;
-  flex-direction: row;
+  flex-direction: row; /* Horizontal */
   align-items: center;
   gap: 8px;
 }
@@ -1383,7 +1383,7 @@
     gap: 10px;
   }
 
-  /* Keep Route contents horizontal on mobile */
+  /* Keep Route and Load details contents horizontal on mobile */
   .sd-dashboard .sd-job-route {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     gap: 8px;
@@ -1394,20 +1394,14 @@
     transform: none; /* Keep arrow horizontal */
     margin: 0;
   }
-  .sd-dashboard .sd-job-endpoint {
-    flex-direction: column; /* Stack label and value vertically on tiny screens if needed */
-    align-items: flex-start;
-    gap: 2px;
-  }
-
+  
+  /* Removed the override that forced sd-job-endpoint and sd-job-meta into columns */
   .sd-dashboard .sd-job-meta {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
+    gap: 12px 20px; /* Adjust gap for mobile */
   }
   .sd-dashboard .sd-job-meta-item {
-    width: 100%;
-    justify-content: space-between;
+    width: auto; /* Allow intrinsic width */
+    justify-content: flex-start; /* Align to start */
   }
 
   /* Job cards: buttons stack full width (like the Orders "View order" button) */
