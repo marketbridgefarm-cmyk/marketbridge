@@ -200,12 +200,39 @@
   box-shadow: 0 4px 12px rgba(30, 158, 90, .24);
 }
 
+/* Search — icon lives inside a wrapper span so it can never fall into
+   normal flow, regardless of any global `label { display: block }` rule.
+   The input hides the browser's native search decorations so it matches
+   the pill design. */
 .orders-page .search {
   position: relative;
+  display: flex;
+  align-items: center;
   flex: 1 1 220px;
   min-width: 180px;
   max-width: 320px;
   margin-left: auto;
+}
+
+.orders-page .search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--o-muted-2);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.orders-page .search-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .orders-page .search input {
@@ -218,8 +245,11 @@
   color: var(--o-ink);
   font: inherit;
   font-size: 13.5px;
+  line-height: 1;
   box-shadow: var(--o-shadow-sm);
   transition: border-color .18s var(--o-ease), box-shadow .18s var(--o-ease);
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .orders-page .search input::placeholder { color: var(--o-muted-2); }
@@ -230,13 +260,13 @@
   box-shadow: var(--o-ring);
 }
 
-.orders-page .search svg {
-  position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--o-muted-2);
-  pointer-events: none;
+/* Kill the browser's built-in search field decorations */
+.orders-page .search input::-webkit-search-decoration,
+.orders-page .search input::-webkit-search-cancel-button,
+.orders-page .search input::-webkit-search-results-button,
+.orders-page .search input::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 /* ── Order list ─────────────────────────────────────────── */
@@ -249,6 +279,8 @@
 
 .orders-page .order-card {
   position: relative;
+  display: block;            /* guarantee block layout inside any parent */
+  width: 100%;
   padding: 20px 22px;
   border: 1px solid var(--o-line);
   border-radius: var(--o-radius);
@@ -269,12 +301,14 @@
   transform: translateY(-2px);
 }
 
-/* Card header */
+/* ── Card header ────────────────────────────────────────── */
+
 .orders-page .order-head {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
+  width: 100%;
   padding-bottom: 16px;
 }
 
@@ -356,6 +390,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
 .orders-page .order-party .dot {
@@ -389,11 +424,13 @@
   text-transform: uppercase;
 }
 
-/* Badges row */
+/* ── Badges row ─────────────────────────────────────────── */
+
 .orders-page .badges {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  width: 100%;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--o-line-soft);
 }
@@ -449,16 +486,25 @@
   color: var(--o-muted);
 }
 
-/* Progress timeline */
+/* ── Progress timeline ──────────────────────────────────── */
+
+/* The grid must stretch to the full card width even when the parent is
+   a flex container. minmax(0, 1fr) lets columns shrink below their
+   content's intrinsic width, so the four dots spread evenly instead
+   of clustering at the left. */
 .orders-page .order-progress {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
   margin: 16px 0 18px;
   padding: 0 4px;
+  align-self: stretch;
 }
 
 .orders-page .progress-step {
   position: relative;
+  width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -545,13 +591,15 @@
   font-weight: 700;
 }
 
-/* Card footer */
+/* ── Card footer ────────────────────────────────────────── */
+
 .orders-page .order-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  width: 100%;
 }
 
 .orders-page .order-time {
@@ -663,10 +711,11 @@
   color: var(--o-danger);
 }
 
-/* ── Responsive ─────────────────────────────────────────── */
+/* ── Responsive: tablet ─────────────────────────────────── */
 
 @media (max-width: 720px) {
   .orders-page .container-narrow { padding: 24px 16px 56px; }
+
   .orders-page .page-header h1 { font-size: 24px; }
 
   .orders-page .stats-strip {
@@ -684,18 +733,24 @@
     justify-content: space-between;
   }
 
-  .orders-page .sd-tab { flex: 1 1 auto; text-align: center; padding: 8px 12px; }
+  .orders-page .sd-tab {
+    flex: 1 1 auto;
+    text-align: center;
+    padding: 8px 12px;
+  }
 
   .orders-page .search {
     margin-left: 0;
     max-width: none;
+    min-width: 0;
   }
 
-  .orders-page .order-card { padding: 18px; }
+  .orders-page .order-card { padding: 18px 18px 16px; }
 
   .orders-page .order-head {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
     gap: 12px;
+    padding-bottom: 14px;
   }
 
   .orders-page .order-price {
@@ -708,18 +763,57 @@
   }
 
   .orders-page .price-amount { font-size: 20px; }
+
   .orders-page .order-title { white-space: normal; }
+
+  .orders-page .badges { padding-bottom: 14px; }
+
+  .orders-page .order-progress { margin: 14px 0; }
 
   .orders-page .progress-label { font-size: 9.5px; max-width: 70px; }
 
-  .orders-page .btn-view { width: 100%; justify-content: center; }
+  .orders-page .order-actions { gap: 10px; }
+
+  .orders-page .order-time { font-size: 12px; }
+
+  .orders-page .btn-view {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
+/* ── Responsive: small phone ────────────────────────────── */
+
 @media (max-width: 420px) {
-  .orders-page .order-avatar { width: 40px; height: 40px; font-size: 13px; border-radius: 11px; }
-  .orders-page .order-title { font-size: 15.5px; }
+  .orders-page .order-avatar {
+    width: 40px;
+    height: 40px;
+    font-size: 13px;
+    border-radius: 11px;
+  }
+
+  .orders-page .order-head {
+    gap: 10px;
+    padding-bottom: 12px;
+  }
+
+  .orders-page .order-title { font-size: 15.5px; margin-bottom: 2px; }
+  .orders-page .order-party { font-size: 12.5px; }
+
+  .orders-page .price-amount { font-size: 19px; }
+
+  /* Labels hidden — collapse the reserved gap under each dot so the
+     timeline sits tight against the badges above and the footer below. */
   .orders-page .progress-label { display: none; }
-  .orders-page .order-progress { margin: 14px 0 12px; }
+  .orders-page .progress-step  { gap: 0; }
+  .orders-page .order-progress { margin: 12px 0 14px; }
+
+  .orders-page .badges { padding-bottom: 12px; }
+
+  .orders-page .btn-view {
+    height: 36px;
+    font-size: 12.5px;
+  }
 }
 
 /* ── Reduced motion ─────────────────────────────────────── */
