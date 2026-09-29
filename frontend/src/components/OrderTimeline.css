@@ -1,7 +1,15 @@
 /* ============================================================
    MarketBridge — OrderTimeline  (components/OrderTimeline.css)
-   Single vertical rail on the left. Dots sit on the rail.
-   All content flows to the right. Completed segments are green.
+   Centered rail with alternating content:
+       step 1 (odd)   →  content on the RIGHT of the rail
+       step 2 (even)  →  content on the LEFT of the rail
+       step 3 (odd)   →  content on the RIGHT of the rail
+       …  alternating to the last step
+
+   The rail is a single line at the exact center of the row.
+   Content on the left is right-aligned (ends at the dot column),
+   content on the right is left-aligned (starts after the dot).
+   Nothing overlaps the rail.
    ============================================================ */
 
 .order-timeline {
@@ -27,8 +35,8 @@
   --ot-ease:        cubic-bezier(.2, .7, .3, 1);
 
   --ot-dot-size:    26px;
-  --ot-col-gap:     16px;
-  --ot-row-pad:     8px;
+  --ot-col-gap:     18px;
+  --ot-row-gap:     22px;
 
   position: relative;
   list-style: none;
@@ -39,32 +47,49 @@
   flex-direction: column;
 }
 
-/* ── Each step ─────────────────────────────────────────── */
+/* ── Each step ─────────────────────────────────────────────
+   Three columns:
+     [ 1fr ] [ dot-size ] [ 1fr ]
+   The two 1fr columns are equal, so the middle of the middle
+   column is the geometric centre of the whole row. That's where
+   the rail lives (via `::after` below).
+   ────────────────────────────────────────────────────────── */
 
 .order-timeline-step {
   position: relative;
   display: grid;
-  grid-template-columns: var(--ot-dot-size) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--ot-dot-size) minmax(0, 1fr);
   column-gap: var(--ot-col-gap);
-  padding: 0 0 22px;
   align-items: start;
+  padding: 0 0 var(--ot-row-gap);
 }
 
-/* ── Rail segment: runs from below this dot to the next dot ── */
+/* ── Rail segment ──────────────────────────────────────────
+   Runs from just below this step's dot down to the top of the
+   next step's dot. Colored by step state. The dot's opaque
+   background hides the top of the segment so the join between
+   a green segment and the next grey segment is seamless.
+   ────────────────────────────────────────────────────────── */
 
 .order-timeline-step::after {
   content: '';
   position: absolute;
-  left: calc(var(--ot-dot-size) / 2 - 1px);
+  /* Exact horizontal center of the row. `margin-left: -1px`
+     centers a 2px line on the axis. */
+  left: 50%;
+  margin-left: -1px;
   width: 2px;
+  /* Starts just below the dot */
   top: var(--ot-dot-size);
-  bottom: 0;
+  /* Extends through the rest of this step and into the next
+     step's bottom padding, so there is no gap at the join. */
+  bottom: calc(-1 * var(--ot-row-gap));
   background: var(--ot-line);
   border-radius: 1px;
   z-index: 0;
-  transition: background .2s var(--ot-ease);
 }
 
+/* State-driven segment colors */
 .order-timeline-step.is-complete::after { background: var(--ot-accent); }
 .order-timeline-step.is-current::after  { background: var(--ot-accent); }
 .order-timeline-step.is-recorded::after { background: var(--ot-info); }
@@ -78,7 +103,7 @@
 /* ── Dot column ────────────────────────────────────────── */
 
 .order-timeline-dot {
-  grid-column: 1;
+  grid-column: 2;
   grid-row: 1;
   justify-self: center;
   align-self: start;
@@ -92,9 +117,14 @@
   align-items: center;
   justify-content: center;
   line-height: 0;
+  flex: 0 0 auto;
 }
 
-.order-timeline-dot svg { display: block; }
+.order-timeline-dot svg {
+  display: block;
+  width: var(--ot-dot-size);
+  height: var(--ot-dot-size);
+}
 
 /* Per-state dot color — SVGs use currentColor so this is the
    only place colors are decided. */
@@ -116,17 +146,36 @@
   50%      { transform: scale(1.08); }
 }
 
-/* ── Content column ────────────────────────────────────── */
+/* ── Content column ────────────────────────────────────────
+   Odd steps put content in column 3 (right of the rail),
+   left-aligned. Even steps put content in column 1 (left of
+   the rail), right-aligned so it ends at the dot column.
+   The `minmax(0, 1fr)` grid template keeps either column from
+   stretching past the dot.
+   ────────────────────────────────────────────────────────── */
 
 .order-timeline-content {
-  grid-column: 2;
   grid-row: 1;
   min-width: 0;
-  padding-top: 1px;
+  padding-top: 2px;
+}
+
+.order-timeline-step:nth-child(odd) .order-timeline-content {
+  grid-column: 3;
   text-align: left;
 }
 
-.order-timeline-content--wide { width: 100%; }
+.order-timeline-step:nth-child(even) .order-timeline-content {
+  grid-column: 1;
+  text-align: right;
+}
+
+/* The activity history row always uses the right side, full width */
+.order-timeline-content--wide {
+  width: 100%;
+}
+
+/* ── Labels, dates, details ───────────────────────────── */
 
 .order-timeline-label {
   font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
@@ -159,10 +208,11 @@
   overflow-wrap: anywhere;
 }
 
-/* ── Activity history (native <details>) ───────────────── */
+/* ── Activity history (native <details>) ──────────────── */
 
 .order-timeline-events {
   margin: 0;
+  /* Reset any inherited right-alignment when this row is even */
   text-align: left;
 }
 
@@ -276,33 +326,29 @@
   white-space: nowrap;
 }
 
-/* ── Responsive ────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE — keep the alternating layout, tighten spacing
+   ══════════════════════════════════════════════════════════ */
 
 @media (max-width: 640px) {
   .order-timeline {
     --ot-dot-size: 22px;
     --ot-col-gap:  12px;
+    --ot-row-gap:  18px;
   }
 
-  .order-timeline-dot svg {
-    width: 22px;
-    height: 22px;
-  }
-
-  .order-timeline-step { padding-bottom: 18px; }
-
-  .order-timeline-label  { font-size: 13.5px; }
+  .order-timeline-label  { font-size: 13px; }
   .order-timeline-date   { font-size: 11.5px; }
-  .order-timeline-detail { font-size: 12.5px; }
+  .order-timeline-detail { font-size: 12px; line-height: 1.45; }
 
   .order-timeline-events-summary {
-    font-size: 12.5px;
-    padding: 8px 10px;
+    font-size: 12px;
+    padding: 7px 10px;
   }
 
   .order-timeline-event {
-    font-size: 12px;
-    padding: 7px 10px;
+    font-size: 11.5px;
+    padding: 6px 10px;
   }
   .order-timeline-event-time {
     margin-left: 0;
@@ -310,7 +356,19 @@
   }
 }
 
-/* ── Reduced motion ────────────────────────────────────── */
+@media (max-width: 420px) {
+  .order-timeline {
+    --ot-col-gap: 8px;
+    --ot-row-gap: 16px;
+  }
+
+  .order-timeline-label  { font-size: 12.5px; }
+  .order-timeline-detail { font-size: 11.5px; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   REDUCED MOTION
+   ══════════════════════════════════════════════════════════ */
 
 @media (prefers-reduced-motion: reduce) {
   .order-timeline-step.is-current .order-timeline-dot svg {
