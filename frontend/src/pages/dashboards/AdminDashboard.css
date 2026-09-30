@@ -27,6 +27,12 @@
   --ac-shadow-hi: 0 2px 4px rgba(15, 30, 45, .04), 0 18px 44px rgba(15, 30, 45, .09);
   --ac-ring: 0 0 0 3px rgba(30, 158, 90, .18);
   --ac-ease: cubic-bezier(.2, .7, .3, 1);
+  
+  /* New variables from Orders page */
+  --ac-green: #176b3a;
+  --ac-green-light: #2f9159;
+  --ac-green-soft: #eef5ef;
+  --ac-green-line: #dfe7df;
 
   max-width: 1180px;
   margin: 0 auto;
@@ -307,8 +313,11 @@
 }
 .ac-metric-card:hover { border-color: rgba(30, 158, 90, .3); transform: translateY(-1px); }
 
-.ac-metric-card-label {
-  display: block;
+.ac-metric-card-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
   color: var(--ac-muted);
   font-size: 10px;
   font-weight: 800;
@@ -318,7 +327,6 @@
 
 .ac-metric-card-value {
   display: block;
-  margin-top: 6px;
   font-family: var(--mb-font-head, Manrope, sans-serif);
   font-size: 22px;
   line-height: 1.1;
@@ -327,6 +335,7 @@
   overflow-wrap: anywhere;
 }
 
+/* Tone variations */
 .ac-metric-card.warn { border-left: 4px solid #f59e0b; }
 .ac-metric-card.warn .ac-metric-card-value { color: #a86f10; }
 
@@ -343,6 +352,28 @@
   border: 1px dashed var(--ac-border-strong);
   border-radius: 16px;
   background: #f8fafc;
+}
+
+/* ── Eyebrow / Green Line Accent ────────────────────────── */
+
+.ac-eyebrow-line {
+  display: inline-block;
+  width: 20px;
+  height: 2px;
+  background-color: var(--ac-green);
+  border-radius: 2px;
+}
+
+.ac-toolbar-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: var(--ac-green);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  text-transform: uppercase;
 }
 
 /* ── Tabs ────────────────────────────────────────────────── */
@@ -430,26 +461,7 @@
   line-height: 1.6;
 }
 
-.ac-section-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-  color: #12734a;
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-}
-.ac-section-label::before {
-  content: '';
-  flex: 0 0 18px;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
-}
-
-/* ── Card grid ───────────────────────────────────────────── */
+/* ── Card Grid (General) ─────────────────────────────────── */
 
 .ac-grid {
   display: grid;
@@ -491,17 +503,28 @@
 }
 .ac-card p strong { color: var(--ac-text); font-weight: 700; }
 
-.ac-status-row {
+.ac-card-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--ac-green);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.ac-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
   padding-bottom: 12px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid #eef1f5;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--ac-green-line);
 }
-.ac-status-row h3 { flex: 1 1 auto; }
 
 .ac-actions {
   display: flex;
@@ -510,7 +533,7 @@
   flex-wrap: wrap;
   margin-top: 15px;
   padding-top: 14px;
-  border-top: 1px solid #eef1f5;
+  border-top: 1px solid var(--ac-green-line);
 }
 .ac-card .ac-actions { margin-top: auto; }
 .ac-card p + .ac-actions,
@@ -524,7 +547,7 @@
   flex: 0 0 auto;
 }
 
-/* ── NEW: User Cards Grid ────────────────────────────────── */
+/* ── User Cards Grid ────────────────────────────────────── */
 
 .ac-users-grid {
   display: grid;
@@ -560,7 +583,7 @@
   gap: 12px;
   padding-bottom: 12px;
   margin-bottom: 12px;
-  border-bottom: 1px solid #eef1f5;
+  border-bottom: 1px solid var(--ac-green-line);
 }
 
 .ac-user-card-name {
@@ -587,7 +610,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 8px 0;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--ac-green-line);
 }
 .ac-user-card-row:last-child { border-bottom: 0; }
 
@@ -597,7 +620,7 @@
   gap: 8px;
   padding-top: 12px;
   margin-top: 4px;
-  border-top: 1px solid #eef1f5;
+  border-top: 1px solid var(--ac-green-line);
 }
 
 .ac-user-card-label {
