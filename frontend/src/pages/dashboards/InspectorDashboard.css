@@ -4,7 +4,6 @@
    Shares the Truck Owner dashboard's card system.
    Scoped under .sd-dashboard.
 
-
    Every card follows the Orders card system:
      sd-card-head    — eyebrow (green dash) + title on the left,
                        party + avatar on the right
@@ -1776,4 +1775,143 @@
   background-size: 12px 12px;
   background-repeat: no-repeat;
   background-position: center;
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   ENHANCEMENTS  (spacing, touch, small phones, form fields)
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Vertical rhythm inside cards ───────────────────────── */
+
+/* Blocks keep their breathing room even when they are the last one */
+.sd-dashboard .sd-card-block,
+.sd-dashboard .sd-card-block:last-of-type {
+  margin-bottom: 26px;
+}
+
+/* Cards in the same row stretch to equal height; the footnote and
+   action row sit together at the bottom of every card. */
+.sd-dashboard .sd-cards { align-items: stretch; }
+.sd-dashboard .sd-card .sd-card-foot { margin-top: auto; }
+.sd-dashboard .sd-card-block + .sd-card-actions { margin-top: auto; }
+.sd-dashboard .sd-card-foot + .sd-card-actions { margin-top: 16px; }
+
+/* Section spacing on the My Jobs tab */
+.sd-dashboard .sd-toolbar { margin-bottom: 20px; }
+.sd-dashboard .sd-toolbar p.sd-muted { max-width: 62ch; }
+.sd-dashboard .sd-toolbar + .sd-jobs-section { margin-top: 32px; }
+
+/* ── Labels: a touch larger so they stay legible on phones ─ */
+
+.sd-dashboard .sd-fact span,
+.sd-dashboard .sd-job-endpoint-label,
+.sd-dashboard .sd-job-meta-item span,
+.sd-dashboard .sd-job-requirements-label {
+  font-size: 11px;
+}
+.sd-dashboard .sd-job-meta-item strong,
+.sd-dashboard .sd-job-endpoint strong,
+.sd-dashboard .sd-fact strong {
+  font-size: 14.5px;
+}
+
+/* Card eyebrows never wrap onto two lines */
+.sd-dashboard .sd-card .sd-eyebrow { white-space: nowrap; }
+
+/* ── Form fields: one consistent look for inputs and textareas ── */
+
+.sd-dashboard input[type="text"],
+.sd-dashboard input[type="number"],
+.sd-dashboard input[type="email"],
+.sd-dashboard input[type="tel"],
+.sd-dashboard input:not([type]),
+.sd-dashboard select,
+.sd-dashboard textarea {
+  padding: 13px 15px;
+  border: 1.5px solid var(--sd-line);
+  border-radius: 14px;
+  background: #fff;
+  font-size: 16px;            /* avoids the mobile browser zoom-on-focus */
+  font-family: var(--mb-font-body, 'DM Sans', system-ui, sans-serif);
+}
+.sd-dashboard input::placeholder,
+.sd-dashboard textarea::placeholder {
+  color: var(--sd-muted-2);
+}
+.sd-dashboard textarea {
+  min-height: 96px;
+  line-height: 1.5;
+}
+.sd-dashboard .sd-form-grid > div,
+.sd-dashboard .form-grid > div {
+  gap: 8px;
+}
+.sd-dashboard .sd-form-grid { gap: 18px; }
+
+/* ── Touch screens: no "stuck" hover after a tap ────────── */
+
+@media (hover: none) {
+  .sd-dashboard .sd-card:hover {
+    border-color: var(--sd-line);
+    box-shadow: var(--sd-shadow);
+    transform: none;
+  }
+  .sd-dashboard .sd-stat:hover {
+    border-color: var(--sd-line);
+    transform: none;
+  }
+  .sd-dashboard .sd-btn:hover:not(:disabled),
+  .sd-dashboard .btn:hover:not(:disabled),
+  .sd-dashboard .sd-btn.sd-btn-outline:hover:not(:disabled) {
+    border-color: var(--sd-line);
+    background: #fff;
+    color: var(--sd-ink);
+  }
+  .sd-dashboard .sd-btn.sd-btn-primary:hover:not(:disabled),
+  .sd-dashboard .btn.btn-primary:hover:not(:disabled) {
+    border-color: var(--sd-ink);
+    background: #fff;
+    color: var(--sd-ink);
+  }
+  .sd-dashboard .sd-table .sd-mobile-action:hover {
+    border-color: var(--sd-line);
+    background: #fff;
+    color: var(--sd-ink);
+  }
+  .sd-dashboard .sd-tab:hover:not(.sd-active) {
+    background: transparent;
+    color: var(--sd-muted);
+  }
+  .sd-dashboard .sd-tab.sd-active:hover {
+    background: var(--sd-ink);
+    color: #fff;
+  }
+  /* pressed feedback instead */
+  .sd-dashboard .sd-btn:active:not(:disabled) {
+    background: var(--sd-line-soft);
+  }
+}
+
+/* ── Small phones: keep the card head on one tidy row ───── */
+
+@media (max-width: 480px) {
+  .sd-dashboard .sd-card .sd-eyebrow {
+    letter-spacing: .14em;
+    font-size: 11.5px;
+  }
+  .sd-dashboard .sd-card .sd-eyebrow::before { flex: 0 0 18px; }
+  .sd-dashboard .sd-party-role {
+    letter-spacing: .1em;
+    font-size: 10px;
+  }
+  .sd-dashboard .sd-party-info { max-width: 130px; }
+  .sd-dashboard .sd-avatar {
+    width: 42px;
+    height: 42px;
+    font-size: 14px;
+    border-radius: 13px;
+  }
+  .sd-dashboard .sd-card .sd-card-foot { font-size: 14px; }
+  .sd-dashboard .sd-amount b { font-size: 26px; }
 }
