@@ -8,6 +8,7 @@ import RecentActivity from '../components/RecentActivity.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/InspectorDashboard.css';
 
+
 const EMPTY_REPORT = {
   quantity: '',
   grade: '',
