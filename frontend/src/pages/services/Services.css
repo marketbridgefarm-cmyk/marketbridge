@@ -1,0 +1,446 @@
+/* ============================================================
+   MarketBridge — Services  (pages/services/Services.css)
+   Page-scoped visual layer for Services.jsx.
+   ============================================================ */
+
+.services-page {
+  /* ── Local tokens ─────────────────────────────────────── */
+  --sv-accent:      #1e9e5a;
+  --sv-accent-2:    #0f7a44;
+  --sv-accent-ink:  #12734a;
+  --sv-accent-soft: #ecfdf3;
+  --sv-accent-line: #c6eccf;
+
+  --sv-ink:         #0d1b2a;
+  --sv-ink-soft:    #2c3a4a;
+  --sv-muted:       #64748b;
+  --sv-muted-2:     #94a3b8;
+
+  --sv-card:        #ffffff;
+  --sv-tint-a:      #eefbf3;
+  --sv-tint-b:      #eff3fb;
+
+  --sv-line:        #e5e9ef;
+  --sv-line-soft:   #eef1f5;
+  --sv-surface:     #fbfcfd;
+
+  --sv-info:        #1e5fa8;
+  --sv-info-soft:   #eff5fd;
+
+  --sv-radius:      20px;
+  --sv-shadow:      0 1px 2px rgba(15, 30, 45, .04),
+                    0 8px 24px rgba(15, 30, 45, .05);
+  --sv-shadow-hi:   0 2px 4px rgba(15, 30, 45, .04),
+                    0 18px 44px rgba(15, 30, 45, .09);
+  --sv-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
+  --sv-ring:        0 0 0 3px rgba(30, 158, 90, .18);
+  --sv-ease:        cubic-bezier(.2, .7, .3, 1);
+
+  max-width: 980px;
+  margin: 0 auto;
+  color: var(--sv-ink);
+  font-family: var(--mb-font-body, 'DM Sans', system-ui, sans-serif);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Page header
+   ══════════════════════════════════════════════════════════ */
+
+.services-page .page-header {
+  margin-bottom: 32px;
+}
+
+.services-page .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sv-accent-ink);
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  margin: 0 0 12px;
+}
+.services-page .eyebrow::before {
+  content: '';
+  flex: 0 0 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.services-page h1 {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: clamp(26px, 4vw, 36px);
+  font-weight: 800;
+  letter-spacing: -.7px;
+  line-height: 1.15;
+  color: var(--sv-ink);
+  margin: 0 0 12px;
+  max-width: 22ch;
+}
+
+.services-page .lead {
+  color: var(--sv-muted);
+  font-size: 15.5px;
+  line-height: 1.6;
+  max-width: 60ch;
+  margin: 0;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Service access grid — the two primary cards
+   ══════════════════════════════════════════════════════════ */
+
+.services-page .service-access-grid-large {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0 0 32px;
+}
+
+.services-page .service-access-card-large {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 24px 26px;
+  min-height: 210px;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-radius);
+  background-color: #fff;
+  background-image:
+    radial-gradient(120% 100% at 0% 0%,  var(--sv-tint-a) 0%, transparent 55%),
+    radial-gradient(90%  90%  at 100% 100%, var(--sv-tint-b) 0%, transparent 55%);
+  background-repeat: no-repeat;
+  color: inherit;
+  text-decoration: none;
+  box-shadow: var(--sv-shadow);
+  overflow: hidden;
+  transition: border-color .2s var(--sv-ease),
+              box-shadow .2s var(--sv-ease),
+              transform .2s var(--sv-ease);
+}
+
+/* Left accent bar that appears on hover */
+.services-page .service-access-card-large::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--sv-accent);
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform .2s var(--sv-ease);
+}
+
+.services-page .service-access-card-large:hover {
+  border-color: rgba(30, 158, 90, .35);
+  transform: translateY(-2px);
+  box-shadow: var(--sv-shadow-hi);
+  text-decoration: none;
+}
+.services-page .service-access-card-large:hover::before {
+  transform: scaleY(1);
+}
+
+.services-page .service-access-card-large:focus-visible {
+  outline: none;
+  box-shadow: var(--sv-ring), var(--sv-shadow);
+}
+
+/* Icon */
+.services-page .service-access-icon {
+  flex: 0 0 56px;
+  width: 56px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: var(--sv-info-soft);
+  color: var(--sv-info);
+  font-size: 26px;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(30, 95, 168, .12);
+  transition: background .2s var(--sv-ease),
+              color .2s var(--sv-ease),
+              transform .2s var(--sv-ease),
+              box-shadow .2s var(--sv-ease);
+}
+
+.services-page .service-access-card-large:nth-child(2) .service-access-icon {
+  background: var(--sv-accent-soft);
+  color: var(--sv-accent-2);
+  box-shadow: 0 4px 12px rgba(30, 158, 90, .12);
+}
+
+.services-page .service-access-card-large:hover .service-access-icon {
+  background: linear-gradient(150deg, var(--sv-accent), var(--sv-accent-2));
+  color: #fff;
+  transform: scale(1.06) rotate(-3deg);
+  box-shadow: 0 8px 20px rgba(30, 158, 90, .24);
+}
+
+/* Copy block */
+.services-page .service-access-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.services-page .service-access-copy strong {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.3px;
+  line-height: 1.25;
+  color: var(--sv-ink);
+}
+
+.services-page .service-access-copy > span {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--sv-muted);
+}
+
+.services-page .service-access-copy em {
+  margin-top: 6px;
+  color: var(--sv-accent-ink);
+  font-style: normal;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .01em;
+}
+
+/* Arrow */
+.services-page .service-access-arrow {
+  flex: 0 0 auto;
+  align-self: center;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--sv-muted-2);
+  transition: color .2s var(--sv-ease),
+              transform .2s var(--sv-ease);
+}
+
+.services-page .service-access-card-large:hover .service-access-arrow {
+  color: var(--sv-accent-2);
+  transform: translateX(4px);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Provider access panel (only shown to INSPECTOR / TRUCK_OWNER)
+   ══════════════════════════════════════════════════════════ */
+
+.services-page .provider-service-panel {
+  margin: 0 0 24px;
+  padding: 24px 26px;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-radius);
+  background: #fff;
+  box-shadow: var(--sv-shadow);
+}
+
+.services-page .provider-service-panel .eyebrow {
+  margin-bottom: 10px;
+}
+
+.services-page .provider-service-panel h2 {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -.4px;
+  line-height: 1.25;
+  color: var(--sv-ink);
+  margin: 0 0 8px;
+}
+
+.services-page .provider-service-panel p.muted {
+  color: var(--sv-muted);
+  font-size: 14.5px;
+  line-height: 1.6;
+  margin: 0 0 18px;
+  max-width: 62ch;
+}
+
+.services-page .service-provider-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Buttons (page-scoped reinforcement)
+   ══════════════════════════════════════════════════════════ */
+
+.services-page .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 11px;
+  border: 1px solid var(--sv-line);
+  background: #fff;
+  color: var(--sv-ink);
+  font: 700 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color .15s var(--sv-ease),
+              background .15s var(--sv-ease),
+              color .15s var(--sv-ease),
+              transform .12s var(--sv-ease),
+              box-shadow .15s var(--sv-ease);
+}
+
+.services-page .btn-primary {
+  border: none;
+  color: #fff;
+  background: linear-gradient(150deg, var(--sv-accent) 0%, var(--sv-accent-2) 100%);
+  box-shadow: 0 4px 12px rgba(30, 158, 90, .22);
+}
+.services-page .btn-primary:hover:not(:disabled) {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(30, 158, 90, .28);
+  color: #fff;
+}
+.services-page .btn-primary:active:not(:disabled) {
+  transform: none;
+  box-shadow: 0 2px 8px rgba(30, 158, 90, .18);
+}
+.services-page .btn:focus-visible {
+  outline: none;
+  box-shadow: var(--sv-ring);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Separation explainer strip
+   ══════════════════════════════════════════════════════════ */
+
+.services-page .service-help-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 20px 24px;
+  border: 1px solid var(--sv-line);
+  border-radius: var(--sv-radius);
+  background: var(--sv-surface);
+  box-shadow: var(--sv-shadow-sm);
+}
+
+.services-page .service-help-note strong {
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  font-size: 14.5px;
+  font-weight: 800;
+  letter-spacing: -.1px;
+  color: var(--sv-ink);
+}
+
+.services-page .service-help-note span {
+  color: var(--sv-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Responsive
+   ══════════════════════════════════════════════════════════ */
+
+@media (max-width: 760px) {
+  .services-page .service-access-grid-large {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .services-page .service-access-card-large {
+    padding: 20px;
+    min-height: 0;
+    gap: 16px;
+  }
+
+  .services-page .service-access-icon {
+    flex-basis: 50px;
+    width: 50px;
+    height: 50px;
+    border-radius: 14px;
+    font-size: 22px;
+  }
+
+  .services-page .service-access-copy strong {
+    font-size: 16.5px;
+  }
+
+  .services-page .service-access-copy > span {
+    font-size: 13.5px;
+  }
+
+  .services-page .provider-service-panel {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .services-page .page-header {
+    margin-bottom: 24px;
+  }
+
+  .services-page h1 {
+    font-size: 24px;
+    letter-spacing: -.5px;
+  }
+
+  .services-page .lead {
+    font-size: 14.5px;
+  }
+
+  .services-page .service-access-card-large {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 18px;
+  }
+
+  .services-page .service-access-arrow {
+    display: none;
+  }
+
+  .services-page .service-provider-links {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .services-page .service-provider-links .btn {
+    width: 100%;
+  }
+
+  .services-page .service-help-note {
+    padding: 18px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   Reduced motion
+   ══════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  .services-page .service-access-card-large,
+  .services-page .service-access-card-large::before,
+  .services-page .service-access-icon,
+  .services-page .service-access-arrow,
+  .services-page .btn {
+    transition: none;
+  }
+
+  .services-page .service-access-card-large:hover,
+  .services-page .service-access-card-large:hover .service-access-icon,
+  .services-page .service-access-card-large:hover .service-access-arrow,
+  .services-page .btn-primary:hover:not(:disabled) {
+    transform: none;
+  }
+}
