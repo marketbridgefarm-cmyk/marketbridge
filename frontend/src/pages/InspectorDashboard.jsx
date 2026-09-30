@@ -8,7 +8,6 @@ import RecentActivity from '../components/RecentActivity.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/InspectorDashboard.css';
 
-
 const EMPTY_REPORT = {
   quantity: '',
   grade: '',
@@ -33,8 +32,10 @@ const CHECKLIST = [
 
 /* ── Small presentational helpers (same card system as Transport) ── */
 
+// BUYER_REQUESTED -> "Buyer requested" (sentence case reads better in cards).
 function modeLabel(mode) {
-  return (mode || '').replaceAll('_', ' ');
+  const text = String(mode || '').replaceAll('_', ' ').toLowerCase();
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function isProductInspection(request) {
