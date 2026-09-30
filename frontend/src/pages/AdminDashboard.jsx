@@ -52,14 +52,89 @@ function ShieldIcon() {
   );
 }
 
-function Metric({ label, value, tone = '' }) {
+/**
+ * MetricSparkline
+ * Renders a smooth, progressively animated area chart representing the
+ * metric's value relative to a dynamic max. Each chart has its own
+ * accent cadence via the `tone` prop.
+ */
+function MetricSparkline({ value = 0, max = 100, tone = 'primary', label = '' }) {
+  const safeMax = max > 0 ? max : 1;
+  const rawPercent = Math.min((Number(value) / safeMax) * 100, 100);
+  const percent = Math.max(rawPercent, 3); // Ensure a minimum visible baseline
+
+  const width = 140;
+  const height = 36;
+  const baseline = height - 4;
+
+  // Generate a smooth cubic bezier path
+  const pathData = useMemo(() => {
+    const startX = 0;
+    const endX = width;
+    const startY = baseline;
+    const endY = height - (percent / 100) * (height - 4);
+
+    // Two control points create a gentle S-curve, giving a 'wave' effect
+    const cp1x = width * 0.3;
+    const cp1y = baseline;
+    const cp2x = width * 0.7;
+    const cp2y = endY;
+
+    return `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`;
+  }, [percent, baseline, height]);
+
+  return (
+    <div className={`ac-sparkline ac-sparkline-${tone}`}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        className="ac-sparkline-svg"
+        role="img"
+        aria-label={`${label} trend: ${fmt(value)}`}
+      >
+        <defs>
+          <linearGradient id={`spark-fill-${tone}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <path
+          d={pathData}
+          fill={`url(#spark-fill-${tone})`}
+          stroke="none"
+          className="ac-sparkline-area"
+        />
+        <path
+          d={pathData}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          className="ac-sparkline-line"
+        />
+      </svg>
+    </div>
+  );
+}
+
+function Metric({ label, value, tone = '', max = 100, rawValue }) {
+  const numValue = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]+/g, '')) : value;
+
   return (
     <div className={`ac-metric ${tone}`}>
       <div className="ac-metric-label">
         <span>{label}</span>
-        <span className="ac-metric-dot" />
       </div>
       <strong className="ac-metric-value">{value}</strong>
+      {/* Visual sparkline replaces the static dot */}
+      <div className="ac-metric-chart">
+        <MetricSparkline
+          value={rawValue !== undefined ? rawValue : numValue}
+          max={max}
+          tone={tone || 'primary'}
+          label={label}
+        />
+      </div>
     </div>
   );
 }
@@ -95,7 +170,7 @@ function adAnalytics(ad) {
 }
 
 export default function AdminDashboard() {
-  useAuth(); // keeps the route auth-aware; admin gating is enforced by the API
+  useAuth();
 
   const [tab, setTab] = useState('overview');
 
@@ -156,11 +231,7 @@ export default function AdminDashboard() {
         api.get('/admin/order-events', { params: { limit: 100 } }),
         api.get('/admin/audit-events', { params: { limit: 100 } }),
         api.get('/admin/financial/refunds'),
-        // NOTE: replace with your real installment-plans route if it differs.
-        // A failure here must not take down the whole admin dashboard.
-        api
-          .get('/admin/financial/installment-plans')
-          .catch(() => ({ data: { plans: [] } })),
+        api.get('/admin/financial/installment-plans').catch(() => ({ data: { plans: [] } })),
       ]);
 
       setOverview(overviewRes.data);
@@ -190,11 +261,6 @@ export default function AdminDashboard() {
     loadAll();
   }, [loadAll]);
 
-  // Any refund stuck at PROCESSING is picked up automatically in the
-  // background. Chapa's webhook usually finalizes it first; this polling
-  // loop is the fallback, so no admin ever has to click a "check status"
-  // button. It only re-fetches the refunds queue (not the whole
-  // dashboard) and stops itself once nothing is PROCESSING.
   useEffect(() => {
     const pending = refunds.filter((r) => r.status === 'PROCESSING');
     if (pending.length === 0) return undefined;
@@ -206,8 +272,7 @@ export default function AdminDashboard() {
         try {
           await api.post(`/admin/financial/refunds/${refund.id}/verify`);
         } catch {
-          // Silent background check — a real problem surfaces next time
-          // an admin looks at the refund row itself.
+          // Silent background check
         }
       }
       if (cancelled) return;
@@ -231,7 +296,6 @@ export default function AdminDashboard() {
     setSuccess('');
   }
 
-  // Runs one admin action with shared loading/error handling.
   async function run(key, fn, fallbackError) {
     clearMessages();
     setActionLoading(key);
@@ -245,10 +309,6 @@ export default function AdminDashboard() {
       setActionLoading('');
     }
   }
-
-  // ------------------------------------------------------------------
-  // Disputes
-  // ------------------------------------------------------------------
 
   function openDisputeDecision(dispute, status) {
     clearMessages();
@@ -288,10 +348,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // ------------------------------------------------------------------
-  // Refunds
-  // ------------------------------------------------------------------
-
   async function processRefund(refund) {
     clearMessages();
 
@@ -321,10 +377,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // ------------------------------------------------------------------
-  // Orders
-  // ------------------------------------------------------------------
-
   async function cancelOrder(order) {
     clearMessages();
 
@@ -349,10 +401,6 @@ export default function AdminDashboard() {
       setActionLoading('');
     }
   }
-
-  // ------------------------------------------------------------------
-  // Users
-  // ------------------------------------------------------------------
 
   async function setVerification(userId, verificationStatus) {
     const ok = await run(
@@ -430,10 +478,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // ------------------------------------------------------------------
-  // Advertising
-  // ------------------------------------------------------------------
-
   async function markTelegramPublished(adId) {
     clearMessages();
     const postReference = window.prompt('Telegram post reference/link (optional):') || undefined;
@@ -487,10 +531,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // ------------------------------------------------------------------
-  // Derived data
-  // ------------------------------------------------------------------
-
   const filteredUsers = useMemo(() => {
     const search = userSearch.trim().toLowerCase();
     if (!search) return users;
@@ -524,6 +564,19 @@ export default function AdminDashboard() {
       ]
     : [];
 
+  // Determine a dynamic max for each chart based on the overview
+  const getMaxForMetric = (label) => {
+    if (!overview) return 100;
+    const allValues = [overview.users, overview.listings, overview.orders, overview.activeAds].filter(n => typeof n === 'number');
+    const baseMax = Math.max(...allValues, 1) * 1.2; // 20% headroom
+
+    // Specific overrides for scale
+    if (label === 'Paid volume') return overview.totalPaidVolume * 1.2 || 1000000;
+    if (label === 'Open disputes') return Math.max(overview.openDisputes * 2, 5);
+    if (label === 'Suspended users') return Math.max(overview.suspendedUsers * 2, 5);
+    return baseMax;
+  };
+
   const openDisputes = disputes.filter((d) => d.status === 'OPEN' || d.status === 'UNDER_REVIEW');
   const resolvedDisputes = disputes.filter((d) => d.status !== 'OPEN' && d.status !== 'UNDER_REVIEW');
 
@@ -553,10 +606,6 @@ export default function AdminDashboard() {
       count: (operations?.queues?.reconciliationPayments || 0) + (operations?.queues?.openDisputes || 0),
     },
   ];
-
-  // ------------------------------------------------------------------
-  // Early returns
-  // ------------------------------------------------------------------
 
   if (loading && !overview && !mfaRequired) {
     return (
@@ -606,13 +655,8 @@ export default function AdminDashboard() {
     );
   }
 
-  // ------------------------------------------------------------------
-  // Main render
-  // ------------------------------------------------------------------
-
   return (
     <div className="sd-dashboard admin-control-center">
-      {/* HERO + METRICS */}
       <section className="ac-section">
         <div className="ac-hero">
           <div className="ac-hero-content">
@@ -654,18 +698,28 @@ export default function AdminDashboard() {
         </div>
 
         <div className="ac-metrics">
-          {cards.map(([label, value]) => (
-            <Metric
-              key={label}
-              label={label}
-              value={value}
-              tone={label === 'Open disputes' ? 'warn' : label === 'Suspended users' ? 'danger' : ''}
-            />
-          ))}
+          {cards.map(([label, value]) => {
+            let tone = '';
+            if (label === 'Open disputes') tone = 'warn';
+            if (label === 'Suspended users') tone = 'danger';
+            
+            const max = getMaxForMetric(label);
+            let rawValue = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]+/g, '')) : value;
+
+            return (
+              <Metric
+                key={label}
+                label={label}
+                value={value}
+                tone={tone}
+                max={max}
+                rawValue={rawValue}
+              />
+            );
+          })}
         </div>
       </section>
 
-      {/* PERFORMANCE MODAL */}
       <dialog ref={performanceModalRef} className="ac-dialog">
         <div className="ac-modal">
           <button
@@ -688,7 +742,6 @@ export default function AdminDashboard() {
         </div>
       </dialog>
 
-      {/* DISPUTE DECISION MODAL */}
       <dialog ref={disputeModalRef} className="ac-dialog" onClose={() => setDisputeDecision(null)}>
         <div className="ac-modal">
           <button type="button" className="ac-close" onClick={closeDisputeDecision} aria-label="Close">
@@ -773,7 +826,6 @@ export default function AdminDashboard() {
         </div>
       </dialog>
 
-      {/* MESSAGES */}
       {error && (
         <section className="ac-section">
           <div className="ac-alert error">
@@ -793,7 +845,6 @@ export default function AdminDashboard() {
       )}
 
       <section className="ac-section">
-        {/* TABS */}
         <div className="ac-tabs-shell">
           <div className="ac-tabs" role="tablist" aria-label="Admin sections">
             {tabItems.map((item) => (
@@ -815,7 +866,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* OVERVIEW */}
         {tab === 'overview' && (
           <div className="ac-panel">
             <div className="ac-panel-header">
@@ -842,7 +892,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* USERS */}
         {tab === 'users' && (
           <div className="ac-panel">
             <Toolbar
@@ -1005,7 +1054,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* DISPUTES */}
         {tab === 'disputes' && (
           <div>
             <Toolbar label="MODERATION" title="Open disputes">
@@ -1099,7 +1147,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* FRAUD */}
         {tab === 'fraud' && (
           <div>
             <Toolbar label="RISK MONITORING" title="Flagged users">
@@ -1136,7 +1183,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ADVERTISING */}
         {tab === 'advertising' && (
           <div>
             <Toolbar label="ADVERTISING" title="Campaign control">
@@ -1379,7 +1425,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ORDERS */}
         {tab === 'orders' && (
           <div>
             <Toolbar label="ORDERS" title="All orders">
@@ -1451,7 +1496,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* PAYMENTS */}
         {tab === 'payments' && (
           <div>
             <Toolbar label="PAYMENTS" title="Payments needing attention">
@@ -1506,7 +1550,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* REFUNDS */}
         {tab === 'refunds' && (
           <div>
             <div className="ac-panel">
@@ -1636,7 +1679,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* INSTALLMENTS */}
         {tab === 'installments' && (
           <div>
             <div className="ac-panel">
@@ -1775,7 +1817,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* OPERATIONS */}
         {tab === 'operations' && (
           <div>
             <div className="ac-panel">
