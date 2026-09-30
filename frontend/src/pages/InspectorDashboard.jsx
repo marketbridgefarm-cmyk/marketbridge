@@ -1073,7 +1073,7 @@ export default function InspectorDashboard() {
                               </td>
 
                               <td data-label="Action">
-                                <Link to={`/listings/${r.listing?.id}`} className="sd-mobile-action">
+                                <Link to={`/listings/${r.listing?.id}`} className="sd-table-action">
                                   View listing
                                   <ArrowIcon />
                                 </Link>
