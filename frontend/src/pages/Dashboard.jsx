@@ -43,11 +43,16 @@ function money(value) {
 }
 
 function shortId(id) {
-  return id ? id.slice(0, 8) : '—';
+  return id ? id.slice(0, 8).toUpperCase() : '—';
 }
 
 function listingLabel(listing) {
   return listing?.cropType || listing?.title || 'Listing';
+}
+
+// 2-letter tag for a record card's leading icon square.
+function recordTag(label) {
+  return String(label || '??').replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || '??';
 }
 
 export default function Dashboard() {
@@ -388,30 +393,29 @@ export default function Dashboard() {
                   {offersSent.length === 0 ? (
                     <p className="muted">You haven't made an offer yet.</p>
                   ) : (
-                    <table className="sd-table sd-table--mobile-cards">
-                      <thead>
-                        <tr>
-                          <th>Listing</th>
-                          <th>Amount</th>
-                          <th>Status</th>
-                          <th />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {offersSent.slice(0, 8).map((o) => (
-                          <tr key={o.id}>
-                            <td data-label="Listing">{listingLabel(o.listing)}</td>
-                            <td data-label="Amount">{money(o.amount)}</td>
-                            <td data-label="Status">{o.status}</td>
-                            <td data-label="Action">
-                              <Link className="sd-mobile-action" to={`/listings/${o.listing?.id}`}>
-                                View
-                              </Link>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <ul className="sd-record-list">
+                      {offersSent.slice(0, 8).map((o) => (
+                        <li key={o.id} className="sd-record">
+                          <span className="sd-record-icon tone-info">{recordTag(listingLabel(o.listing))}</span>
+                          <div className="sd-record-main">
+                            <span className="sd-record-title">{listingLabel(o.listing)}</span>
+                            <div className="sd-record-meta">
+                              <span className="sd-record-meta-item">
+                                <span className="sd-record-meta-label">Amount</span>
+                                <span className="sd-record-meta-value">{money(o.amount)}</span>
+                              </span>
+                              <span className="sd-record-meta-item">
+                                <span className="sd-record-meta-label">Status</span>
+                                <span className="sd-record-meta-value">{o.status}</span>
+                              </span>
+                            </div>
+                          </div>
+                          <div className="sd-record-side">
+                            <Link className="sd-record-action" to={`/listings/${o.listing?.id}`}>View</Link>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               </section>
@@ -508,34 +512,31 @@ export default function Dashboard() {
                   {myListings.length === 0 ? (
                     <p className="muted">You haven't listed anything yet.</p>
                   ) : (
-                    <table className="sd-table sd-table--mobile-cards">
-                      <thead>
-                        <tr>
-                          <th>Listing</th>
-                          <th>Status</th>
-                          <th>Offers</th>
-                          <th />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {myListings.map((l) => (
-                          <tr key={l.id}>
-                            <td data-label="Listing">{listingLabel(l)}</td>
-                            <td data-label="Status">
-                              <span className="badge">{l.status}</span>
-                            </td>
-                            <td data-label="Offers">
-                              {offersReceived.filter((o) => o.listing?.id === l.id).length}
-                            </td>
-                            <td data-label="Action">
-                              <Link className="sd-mobile-action" to={`/listings/${l.id}`}>
-                                Manage
-                              </Link>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <ul className="sd-record-list">
+                      {myListings.map((l) => (
+                        <li key={l.id} className="sd-record">
+                          <span className="sd-record-icon tone-success">{recordTag(listingLabel(l))}</span>
+                          <div className="sd-record-main">
+                            <span className="sd-record-title">{listingLabel(l)}</span>
+                            <div className="sd-record-meta">
+                              <span className="sd-record-meta-item">
+                                <span className="sd-record-meta-label">Status</span>
+                                <span className="sd-record-meta-value">{l.status}</span>
+                              </span>
+                              <span className="sd-record-meta-item">
+                                <span className="sd-record-meta-label">Offers</span>
+                                <span className="sd-record-meta-value">
+                                  {offersReceived.filter((o) => o.listing?.id === l.id).length}
+                                </span>
+                              </span>
+                            </div>
+                          </div>
+                          <div className="sd-record-side">
+                            <Link className="sd-record-action" to={`/listings/${l.id}`}>Manage</Link>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               </section>
@@ -569,109 +570,114 @@ export default function Dashboard() {
                   {allOffers.length === 0 ? (
                     <p className="muted">No offers yet.</p>
                   ) : (
-                    <table className="sd-table sd-table--mobile-cards">
-                      <thead>
-                        <tr>
-                          <th>Listing</th>
-                          <th>Role</th>
-                          <th>Amount</th>
-                          <th>Status</th>
-                          <th>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {allOffers.map((o) => {
-                          const myTurn = myTurnOffers.some((mt) => mt.id === o.id);
-                          return (
-                            <tr key={o.id}>
-                              <td data-label="Listing">{listingLabel(o.listing)}</td>
-                              <td data-label="Role">{o.viewerRole}</td>
-                              <td data-label="Amount">{money(o.amount)}</td>
-                              <td data-label="Status">
-                                {o.status}
-                                {o.status === 'COUNTERED'
-                                  ? ` (${o.counteredBy === 'SELLER' ? 'seller' : 'buyer'} countered)`
-                                  : ''}
-                              </td>
-                              <td data-label="Action">
-                                {myTurn ? (() => {
-                                  // Action names must match the offer's exact
-                                  // status/role combination — the backend
-                                  // rejects ACCEPT/COUNTER from a buyer and
-                                  // only accepts them from a seller, and vice
-                                  // versa for ACCEPT_SELECTED /
-                                  // ACCEPT_COUNTER / RE_COUNTER.
-                                  const isSellerTurn = o.viewerRole === 'SELLER';
-                                  const isPendingSelect = o.status === 'PENDING' && isSellerTurn;
-                                  const acceptAction = isPendingSelect
-                                    ? 'SELECT'
-                                    : isSellerTurn
-                                      ? 'ACCEPT' // SELECTED, or COUNTERED by BUYER
-                                      : o.status === 'SELECTED'
-                                        ? 'ACCEPT_SELECTED'
-                                        : 'ACCEPT_COUNTER'; // COUNTERED by SELLER
-                                  const counterAction = isSellerTurn ? 'COUNTER' : 'RE_COUNTER';
-                                  // A seller cannot counter a still-PENDING
-                                  // bid — it must be selected first.
-                                  const canCounter = !isPendingSelect;
-                                  return (
-                                    <div className="sd-actions">
+                    <ul className="sd-record-list">
+                      {allOffers.map((o) => {
+                        const myTurn = myTurnOffers.some((mt) => mt.id === o.id);
+                        return (
+                          <li key={o.id} className="sd-record sd-record--offer">
+                            <span className={`sd-record-icon tone-${o.viewerRole === 'BUYER' ? 'info' : 'success'}`}>
+                              {o.viewerRole === 'BUYER' ? 'BY' : 'SL'}
+                            </span>
+                            <div className="sd-record-main">
+                              <span className="sd-record-title">{listingLabel(o.listing)}</span>
+                              <div className="sd-record-meta">
+                                <span className="sd-record-meta-item">
+                                  <span className="sd-record-meta-label">Role</span>
+                                  <span className="sd-record-meta-value">{o.viewerRole}</span>
+                                </span>
+                                <span className="sd-record-meta-item">
+                                  <span className="sd-record-meta-label">Amount</span>
+                                  <span className="sd-record-meta-value">{money(o.amount)}</span>
+                                </span>
+                                <span className="sd-record-meta-item">
+                                  <span className="sd-record-meta-label">Status</span>
+                                  <span className="sd-record-meta-value">
+                                    {o.status}
+                                    {o.status === 'COUNTERED'
+                                      ? ` (${o.counteredBy === 'SELLER' ? 'seller' : 'buyer'} countered)`
+                                      : ''}
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
+                            <div className="sd-record-side">
+                              {myTurn ? (() => {
+                                // Action names must match the offer's exact
+                                // status/role combination — the backend
+                                // rejects ACCEPT/COUNTER from a buyer and
+                                // only accepts them from a seller, and vice
+                                // versa for ACCEPT_SELECTED /
+                                // ACCEPT_COUNTER / RE_COUNTER.
+                                const isSellerTurn = o.viewerRole === 'SELLER';
+                                const isPendingSelect = o.status === 'PENDING' && isSellerTurn;
+                                const acceptAction = isPendingSelect
+                                  ? 'SELECT'
+                                  : isSellerTurn
+                                    ? 'ACCEPT' // SELECTED, or COUNTERED by BUYER
+                                    : o.status === 'SELECTED'
+                                      ? 'ACCEPT_SELECTED'
+                                      : 'ACCEPT_COUNTER'; // COUNTERED by SELLER
+                                const counterAction = isSellerTurn ? 'COUNTER' : 'RE_COUNTER';
+                                // A seller cannot counter a still-PENDING
+                                // bid — it must be selected first.
+                                const canCounter = !isPendingSelect;
+                                return (
+                                  <div className="sd-actions">
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-primary"
+                                      disabled={offerBusy === o.id}
+                                      onClick={() => respondToOffer(o.id, acceptAction)}
+                                    >
+                                      {isPendingSelect ? 'Select buyer' : 'Accept'}
+                                    </button>
+                                    {isSellerTurn && (
                                       <button
                                         type="button"
-                                        className="btn btn-sm btn-primary"
+                                        className="btn btn-sm btn-outline"
                                         disabled={offerBusy === o.id}
-                                        onClick={() => respondToOffer(o.id, acceptAction)}
+                                        onClick={() => respondToOffer(o.id, 'REJECT')}
                                       >
-                                        {isPendingSelect ? 'Select buyer' : 'Accept'}
+                                        Reject
                                       </button>
-                                      {isSellerTurn && (
+                                    )}
+                                    {canCounter && (
+                                      <>
+                                        <input
+                                          className="sd-counter-input"
+                                          type="number"
+                                          placeholder="Counter ETB"
+                                          value={counterDrafts[o.id] || ''}
+                                          onChange={(e) =>
+                                            setCounterDrafts((d) => ({ ...d, [o.id]: e.target.value }))
+                                          }
+                                        />
                                         <button
                                           type="button"
                                           className="btn btn-sm btn-outline"
-                                          disabled={offerBusy === o.id}
-                                          onClick={() => respondToOffer(o.id, 'REJECT')}
+                                          disabled={offerBusy === o.id || !counterDrafts[o.id]}
+                                          onClick={() =>
+                                            respondToOffer(o.id, counterAction, counterDrafts[o.id])
+                                          }
                                         >
-                                          Reject
+                                          Counter
                                         </button>
-                                      )}
-                                      {canCounter && (
-                                        <>
-                                          <input
-                                            className="sd-counter-input"
-                                            type="number"
-                                            placeholder="Counter ETB"
-                                            value={counterDrafts[o.id] || ''}
-                                            onChange={(e) =>
-                                              setCounterDrafts((d) => ({ ...d, [o.id]: e.target.value }))
-                                            }
-                                          />
-                                          <button
-                                            type="button"
-                                            className="btn btn-sm btn-outline"
-                                            disabled={offerBusy === o.id || !counterDrafts[o.id]}
-                                            onClick={() =>
-                                              respondToOffer(o.id, counterAction, counterDrafts[o.id])
-                                            }
-                                          >
-                                            Counter
-                                          </button>
-                                        </>
-                                      )}
-                                    </div>
-                                  );
-                                })() : (
-                                  <span className="muted">
-                                    {['PENDING', 'SELECTED', 'COUNTERED'].includes(o.status)
-                                      ? 'Waiting on the other party'
-                                      : '—'}
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })() : (
+                                <span className="sd-record-wait">
+                                  {['PENDING', 'SELECTED', 'COUNTERED'].includes(o.status)
+                                    ? 'Waiting on the other party'
+                                    : '—'}
+                                </span>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   )}
                 </div>
               </section>
@@ -702,34 +708,29 @@ export default function Dashboard() {
                   {ordersTagged.length === 0 ? (
                     <p className="muted">No orders yet.</p>
                   ) : (
-                    <table className="sd-table sd-table--mobile-cards">
-                      <thead>
-                        <tr>
-                          <th>Order</th>
-                          <th>Listing</th>
-                          <th>Role</th>
-                          <th>Status</th>
-                          <th />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ordersTagged.map((o) => (
-                          <tr key={o.id}>
-                            <td data-label="Order">{shortId(o.id)}</td>
-                            <td data-label="Listing">{listingLabel(o.listing)}</td>
-                            <td data-label="Role">{o.viewerRole}</td>
-                            <td data-label="Status">
-                              <span className="badge">{o.status}</span>
-                            </td>
-                            <td data-label="Action">
-                              <Link className="sd-mobile-action" to={`/orders/${o.id}`}>
-                                Open
-                              </Link>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <ul className="sd-record-list">
+                      {ordersTagged.map((o) => (
+                        <li key={o.id} className="sd-record">
+                          <span className="sd-record-icon tone-muted">{shortId(o.id)}</span>
+                          <div className="sd-record-main">
+                            <span className="sd-record-title">{listingLabel(o.listing)}</span>
+                            <div className="sd-record-meta">
+                              <span className="sd-record-meta-item">
+                                <span className="sd-record-meta-label">Role</span>
+                                <span className="sd-record-meta-value">{o.viewerRole}</span>
+                              </span>
+                              <span className="sd-record-meta-item">
+                                <span className="sd-record-meta-label">Status</span>
+                                <span className="sd-record-meta-value">{o.status}</span>
+                              </span>
+                            </div>
+                          </div>
+                          <div className="sd-record-side">
+                            <Link className="sd-record-action" to={`/orders/${o.id}`}>Open</Link>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               </section>
@@ -859,40 +860,35 @@ export default function Dashboard() {
                   {allPayments.length === 0 ? (
                     <p className="muted">No payments yet.</p>
                   ) : (
-                    <table className="sd-table sd-table--mobile-cards">
-                      <thead>
-                        <tr>
-                          <th>Order</th>
-                          <th>Type</th>
-                          <th>Amount</th>
-                          <th>Status</th>
-                          <th />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {allPayments.map((p) => (
-                          <tr key={p.id}>
-                            <td data-label="Order">{shortId(p.orderId)}</td>
-                            <td data-label="Type">{p.type}</td>
-                            <td data-label="Amount">{money(p.amount)}</td>
-                            <td data-label="Status">
-                              <span
-                                className={`badge ${
-                                  p.status === 'PAID' ? 'badge-success' : 'badge-pending'
-                                }`}
-                              >
-                                {p.status}
+                    <ul className="sd-record-list">
+                      {allPayments.map((p) => (
+                        <li key={p.id} className="sd-record">
+                          <span className={`sd-record-icon tone-${p.status === 'PAID' ? 'success' : 'gold'}`}>
+                            {p.type === 'TRANSPORT' ? 'TR' : 'PY'}
+                          </span>
+                          <div className="sd-record-main">
+                            <span className="sd-record-title">Order {shortId(p.orderId)}</span>
+                            <div className="sd-record-meta">
+                              <span className="sd-record-meta-item">
+                                <span className="sd-record-meta-label">Type</span>
+                                <span className="sd-record-meta-value">{p.type}</span>
                               </span>
-                            </td>
-                            <td data-label="Action">
-                              <Link className="sd-mobile-action" to={`/orders/${p.order.id}`}>
-                                Open order
-                              </Link>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                              <span className="sd-record-meta-item">
+                                <span className="sd-record-meta-label">Amount</span>
+                                <span className="sd-record-meta-value">{money(p.amount)}</span>
+                              </span>
+                            </div>
+                          </div>
+                          <div className="sd-record-side">
+                            <span className={`status-pill tone-${p.status === 'PAID' ? 'success' : 'gold'}`}>
+                              <span className="status-pill-dot" aria-hidden="true" />
+                              {p.status}
+                            </span>
+                            <Link className="sd-record-action" to={`/orders/${p.order.id}`}>Open order</Link>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               </section>
@@ -945,30 +941,29 @@ export default function Dashboard() {
                   {confirmedSales.length === 0 ? (
                     <p className="muted">No confirmed sales yet.</p>
                   ) : (
-                    <table className="sd-table sd-table--mobile-cards">
-                      <thead>
-                        <tr>
-                          <th>Order</th>
-                          <th>Listing</th>
-                          <th>Amount</th>
-                          <th>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {confirmedSales.map((o) => (
-                          <tr key={o.id}>
-                            <td data-label="Order">
-                              <Link className="sd-mobile-action" to={`/orders/${o.id}`}>
-                                {shortId(o.id)}
-                              </Link>
-                            </td>
-                            <td data-label="Listing">{listingLabel(o.listing)}</td>
-                            <td data-label="Amount">{money(o.finalPrice)}</td>
-                            <td data-label="Status">{o.status}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <ul className="sd-record-list">
+                      {confirmedSales.map((o) => (
+                        <li key={o.id} className="sd-record">
+                          <span className="sd-record-icon tone-success">{shortId(o.id)}</span>
+                          <div className="sd-record-main">
+                            <span className="sd-record-title">{listingLabel(o.listing)}</span>
+                            <div className="sd-record-meta">
+                              <span className="sd-record-meta-item">
+                                <span className="sd-record-meta-label">Amount</span>
+                                <span className="sd-record-meta-value">{money(o.finalPrice)}</span>
+                              </span>
+                              <span className="sd-record-meta-item">
+                                <span className="sd-record-meta-label">Status</span>
+                                <span className="sd-record-meta-value">{o.status}</span>
+                              </span>
+                            </div>
+                          </div>
+                          <div className="sd-record-side">
+                            <Link className="sd-record-action" to={`/orders/${o.id}`}>Open order</Link>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               </section>
