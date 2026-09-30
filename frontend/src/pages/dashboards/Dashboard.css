@@ -1,6 +1,10 @@
 /* ============================================================
    MarketBridge — Unified Dashboard  (dashboards/Dashboard.css)
-   Every list item is a standalone Orders-style card.
+   Card system mirrors pages/orders/Orders.css:
+     order-card-head — eyebrow + title left, party + avatar right
+     card-block      — title + hairline + content
+     footer          — created date + action
+   2-column grid on desktop / tablet, single column on phones.
    ============================================================ */
 
 .dashboard-page {
@@ -61,16 +65,6 @@
 }
 
 /* ── Primitives ──────────────────────────────────────────── */
-
-.dashboard-page .sr-only {
-  position: absolute;
-  width: 1px; height: 1px;
-  margin: -1px; padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
 
 .dashboard-page .muted {
   color: var(--d-muted);
@@ -328,6 +322,143 @@
   font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
 }
 
+/* ── Stats strip ────────────────────────────────────────── */
+
+.dashboard-page .stats-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.dashboard-page .stats-strip--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.dashboard-page .stat {
+  padding: 14px 16px;
+  border: 1px solid var(--d-line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--d-shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  transition: border-color .18s var(--d-ease), transform .18s var(--d-ease);
+}
+.dashboard-page .stat:hover {
+  border-color: rgba(30, 158, 90, .3);
+  transform: translateY(-1px);
+}
+.dashboard-page .stat-label {
+  font: 700 10.5px/1.2 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--d-muted);
+}
+.dashboard-page .stat-value {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -.5px;
+  color: var(--d-ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.dashboard-page .stat.tone-accent {
+  background: linear-gradient(150deg, var(--d-accent-soft) 0%, #fff 100%);
+  border-color: var(--d-accent-line);
+}
+.dashboard-page .stat.tone-accent .stat-value { color: var(--d-accent-2); }
+
+/* ── Toolbar: segmented filter + search ─────────────────── */
+
+.dashboard-page .toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 18px;
+}
+.dashboard-page .sd-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--d-line);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: var(--d-shadow-sm);
+}
+.dashboard-page .sd-seg-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 8px 18px;
+  border-radius: 999px;
+  color: var(--d-muted);
+  font: 600 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  cursor: pointer;
+  transition: color .15s var(--d-ease), background .15s var(--d-ease);
+}
+.dashboard-page .sd-seg-btn:hover { color: var(--d-ink); background: var(--d-line-soft); }
+.dashboard-page .sd-seg-btn:focus-visible { outline: none; box-shadow: var(--d-ring); }
+.dashboard-page .sd-seg-btn.sd-active {
+  background: linear-gradient(150deg, var(--d-accent) 0%, var(--d-accent-2) 100%);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(30, 158, 90, .24);
+}
+
+.dashboard-page .search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 220px;
+  min-width: 180px;
+  max-width: 320px;
+  margin-left: auto;
+}
+.dashboard-page .search-icon {
+  position: absolute;
+  left: 14px; top: 50%;
+  transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px;
+  color: var(--d-muted-2);
+  pointer-events: none;
+  z-index: 1;
+}
+.dashboard-page .search-icon svg { display: block; width: 100%; height: 100%; }
+.dashboard-page .search input {
+  width: 100%;
+  height: 40px;
+  padding: 0 14px 0 40px;
+  border: 1px solid var(--d-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--d-ink);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1;
+  box-shadow: var(--d-shadow-sm);
+  transition: border-color .18s var(--d-ease), box-shadow .18s var(--d-ease);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.dashboard-page .search input::placeholder { color: var(--d-muted-2); }
+.dashboard-page .search input:focus {
+  outline: none;
+  border-color: var(--d-accent);
+  box-shadow: var(--d-ring);
+}
+.dashboard-page .search input::-webkit-search-decoration,
+.dashboard-page .search input::-webkit-search-cancel-button,
+.dashboard-page .search input::-webkit-search-results-button,
+.dashboard-page .search input::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 /* ── Panels (non-list summaries) ───────────────────────── */
 
 .dashboard-page .panel {
@@ -376,7 +507,41 @@
   font-size: 15px; font-weight: 800; color: var(--d-ink); margin: 0;
 }
 
-/* ── Order card ────────────────────────────────────────── */
+/* ── Empty state card ──────────────────────────────────── */
+
+.dashboard-page .state-card {
+  padding: 44px 24px;
+  border: 1px dashed var(--d-line);
+  border-radius: var(--d-radius);
+  background: rgba(255, 255, 255, .7);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.dashboard-page .state-icon {
+  width: 56px; height: 56px;
+  border-radius: 16px;
+  background: var(--d-accent-soft);
+  border: 1px solid var(--d-accent-line);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px;
+}
+.dashboard-page .state-card h3 {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 16px; font-weight: 800; letter-spacing: -.2px;
+  color: var(--d-ink);
+  margin: 0;
+}
+.dashboard-page .state-card p {
+  margin: 0;
+  color: var(--d-muted);
+  font-size: 14px; line-height: 1.55;
+  max-width: 44ch;
+}
+
+/* ── Order grid ────────────────────────────────────────── */
 
 .dashboard-page .order-list {
   display: grid;
@@ -393,6 +558,8 @@
   grid-template-columns: minmax(0, 1fr) !important;
   gap: 8px;
 }
+
+/* ── Order card ────────────────────────────────────────── */
 
 .dashboard-page .order-card {
   position: relative;
@@ -417,13 +584,14 @@
   box-shadow: 0 0 0 3px rgba(30, 158, 90, .08), var(--d-shadow);
 }
 
-/* Head — buyer/seller stays on the right, on every screen size */
+/* Head — party + avatar pinned right on every screen size */
 .dashboard-page .order-card .order-card-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
   align-items: start;
   column-gap: 12px;
-  padding: 0 0 18px; margin: 0 0 22px;
+  width: 100%;
+  padding: 0 0 18px; margin: 0 0 20px;
   border-bottom: 1px solid var(--d-line);
 }
 .dashboard-page .order-card .order-card-head-text {
@@ -438,6 +606,7 @@
   line-height: 1.25; color: var(--d-ink);
   margin: 0 0 6px;
   overflow-wrap: anywhere;
+  white-space: normal;
 }
 .dashboard-page .order-date {
   margin: 0; font-size: 12.5px; line-height: 1.4;
@@ -445,7 +614,9 @@
 }
 
 .dashboard-page .order-card .order-card-head-party {
-  grid-column: 2; justify-self: end;
+  grid-column: 2;
+  justify-self: end !important;
+  margin-left: auto;
   display: flex; align-items: center; justify-content: flex-end;
   gap: 10px; min-width: 0;
 }
@@ -483,37 +654,32 @@
 /* Body */
 .dashboard-page .order-card .card-body {
   display: flex; flex-direction: column; align-items: stretch;
+  align-self: stretch;
   flex: 1 1 auto; width: 100%; min-width: 0;
 }
-.dashboard-page .order-card .card-block { margin: 0 0 16px; }
+.dashboard-page .order-card .card-block { margin: 0 0 18px; width: 100%; }
 .dashboard-page .order-card .card-block:last-of-type { margin-bottom: 0; }
-.dashboard-page .order-card .card-block + .card-block { margin-top: 4px; }
 
 .dashboard-page .order-card .card-block-title {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap;
-  padding: 0 0 10px; margin: 0 0 12px;
+  padding: 0 0 10px; margin: 0 0 14px;
   border-bottom: 1px solid var(--d-line-soft);
 }
 .dashboard-page .order-card .card-block-title h3 {
   font-family: var(--mb-font-head, Manrope, sans-serif);
   font-size: 15px; font-weight: 800; letter-spacing: -.1px;
+  line-height: 1.3;
   color: var(--d-ink);
   margin: 0;
 }
 .dashboard-page .order-card .card-block-note {
   font: 700 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--d-muted);
   letter-spacing: .02em;
+  color: var(--d-muted);
   flex: 0 0 auto;
 }
 .dashboard-page .order-card .card-block-body { display: block; }
-
-/* Amount block gets a divider under the value (as in the design) */
-.dashboard-page .order-card .card-block--amount .card-block-body {
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--d-line-soft);
-}
 
 /* Badges */
 .dashboard-page .badges { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -547,48 +713,88 @@
   background: var(--d-line-soft); border-color: var(--d-line); color: var(--d-muted);
 }
 
-/* Progress steps (connected check circles) */
+/* Progress timeline — labelled steps, done / current states */
 .dashboard-page .order-progress {
-  list-style: none;
-  display: flex;
-  margin: 16px 0 6px;
-  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+  margin: 18px 0 2px;
+  padding: 0 4px;
 }
-.dashboard-page .order-progress-step {
+.dashboard-page .progress-step {
   position: relative;
-  flex: 1 1 0;
-  display: flex;
-  justify-content: center;
+  width: 100%;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
 }
-.dashboard-page .order-progress-step:not(:last-child)::after {
+.dashboard-page .progress-step::before {
   content: '';
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 100%;
+  top: 7px;
+  right: 50%;
+  left: -50%;
   height: 2px;
-  margin-top: -1px;
   background: var(--d-line);
   z-index: 0;
 }
-.dashboard-page .order-progress-step.is-done:not(:last-child)::after {
-  background: var(--d-accent);
-}
-.dashboard-page .order-progress-dot {
-  position: relative;
-  z-index: 1;
+.dashboard-page .progress-step:first-child::before { display: none; }
+.dashboard-page .progress-step.done::before,
+.dashboard-page .progress-step.current::before { background: var(--d-accent); }
+
+.dashboard-page .progress-dot {
   width: 16px; height: 16px;
   border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
   background: #fff;
   border: 2px solid var(--d-line);
-  color: #fff;
+  position: relative;
+  z-index: 1;
+  display: flex; align-items: center; justify-content: center;
   box-sizing: border-box;
+  transition: all .2s var(--d-ease);
 }
-.dashboard-page .order-progress-step.is-done .order-progress-dot {
+.dashboard-page .progress-dot::after {
+  content: '';
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: transparent;
+}
+.dashboard-page .progress-step.done .progress-dot {
   background: var(--d-accent);
   border-color: var(--d-accent);
+}
+.dashboard-page .progress-step.done .progress-dot::after {
+  content: '';
+  width: 8px; height: 8px;
+  border-radius: 0;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M3 8.5l3 3 7-7' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.dashboard-page .progress-step.current .progress-dot {
+  background: #fff;
+  border-color: var(--d-accent);
+  box-shadow: 0 0 0 4px rgba(30, 158, 90, .16);
+}
+.dashboard-page .progress-step.current .progress-dot::after { background: var(--d-accent); }
+
+.dashboard-page .progress-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--d-muted-2);
+  letter-spacing: .01em;
+  line-height: 1.3;
+  max-width: 90px;
+}
+.dashboard-page .progress-step.done .progress-label { color: var(--d-ink-soft); }
+.dashboard-page .progress-step.current .progress-label {
+  color: var(--d-accent-2);
+  font-weight: 700;
 }
 
 /* Amount */
@@ -613,7 +819,9 @@
   width: 100%;
   margin-top: auto;
   padding-top: 16px;
+  border-top: 1px solid var(--d-line-soft);
 }
+.dashboard-page .card-block + .order-actions { margin-top: 16px; }
 .dashboard-page .order-actions--stack { justify-content: flex-end; }
 .dashboard-page .order-time { font-size: 12.5px; color: var(--d-muted); }
 
@@ -624,6 +832,7 @@
   border: 1.5px solid var(--d-line);
   background: #fff; color: var(--d-ink);
   font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
   cursor: pointer; text-decoration: none;
   transition: border-color .15s var(--d-ease),
               background .15s var(--d-ease),
@@ -751,33 +960,6 @@
   color: var(--d-accent-2); transform: translateX(3px);
 }
 
-/* ── Earnings stat tiles ──────────────────────────────── */
-
-.dashboard-page .sd-stat-grid {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
-}
-.dashboard-page .sd-stat {
-  padding: 14px 16px;
-  border: 1px solid var(--d-line);
-  border-radius: var(--d-radius-sm);
-  background: var(--d-surface);
-  display: flex; flex-direction: column; gap: 6px;
-}
-.dashboard-page .sd-stat--accent {
-  background: linear-gradient(150deg, var(--d-accent-soft) 0%, #fff 100%);
-  border-color: var(--d-accent-line);
-}
-.dashboard-page .sd-stat span {
-  font: 700 10.5px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .12em; text-transform: uppercase; color: var(--d-muted);
-}
-.dashboard-page .sd-stat b {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 20px; font-weight: 800; letter-spacing: -.5px;
-  color: var(--d-ink); font-variant-numeric: tabular-nums;
-}
-.dashboard-page .sd-stat--accent b { color: var(--d-accent-2); }
-
 /* ── Messages grid ────────────────────────────────────── */
 
 .dashboard-page .card-grid.two-col {
@@ -794,7 +976,6 @@
 
 @media (max-width: 900px) {
   .dashboard-page .service-access-grid { grid-template-columns: minmax(0, 1fr); }
-  .dashboard-page .sd-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -836,6 +1017,14 @@
   }
   .dashboard-page .tab-head > .btn { width: auto; }
 
+  .dashboard-page .stats-strip,
+  .dashboard-page .stats-strip--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .dashboard-page .toolbar { flex-direction: column; align-items: stretch; }
+  .dashboard-page .sd-seg { display: flex; width: 100%; justify-content: space-between; }
+  .dashboard-page .sd-seg-btn { flex: 1 1 auto; text-align: center; padding: 8px 12px; }
+  .dashboard-page .search { margin-left: 0; max-width: none; min-width: 0; flex: 0 0 auto; }
+
   .dashboard-page .panel { padding: 16px; }
 
   .dashboard-page .order-card { padding: 18px; }
@@ -845,12 +1034,8 @@
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
-    padding-top: 14px;
   }
-  .dashboard-page .order-card .order-actions .order-time {
-    text-align: left;
-    font-size: 13px;
-  }
+  .dashboard-page .order-card .order-actions .order-time { text-align: left; font-size: 13px; }
   .dashboard-page .order-card .order-actions .btn-view {
     width: 100%;
     height: 40px;
@@ -862,29 +1047,36 @@
 
   .dashboard-page .action-grid { justify-content: stretch; }
   .dashboard-page .action-grid > .btn { flex: 1 1 auto; }
-
-  .dashboard-page .sd-stat-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 420px) {
+  .dashboard-page .order-card .order-card-head { column-gap: 8px; }
   .dashboard-page .order-card .order-card-head-party { gap: 8px; }
   .dashboard-page .order-card .order-party-info { max-width: 110px; }
-  .dashboard-page .order-card .order-party-name { font-size: 13px; }
+  .dashboard-page .order-card .order-party-name { font-size: 12.5px; }
   .dashboard-page .order-avatar { width: 40px; height: 40px; font-size: 13px; border-radius: 12px; }
   .dashboard-page .order-title { font-size: 16px; }
   .dashboard-page .price-amount { font-size: 22px; }
 
+  .dashboard-page .progress-label { display: none; }
+  .dashboard-page .progress-step  { gap: 0; }
+  .dashboard-page .order-progress { margin: 14px 0 0; }
+
   .dashboard-page .btn { height: 38px; padding: 0 14px; }
   .dashboard-page .btn-sm { height: 30px; padding: 0 10px; }
+  .dashboard-page .order-card .order-actions .btn-view { height: 38px; font-size: 12.5px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .dashboard-page .service-access-card,
   .dashboard-page .sd-tab,
+  .dashboard-page .sd-seg-btn,
   .dashboard-page .order-card,
+  .dashboard-page .stat,
   .dashboard-page .btn-view,
   .dashboard-page .conv-card,
   .dashboard-page .btn,
+  .dashboard-page .progress-dot,
   .dashboard-page .sd-tabs-chevron,
   .dashboard-page .service-access-arrow,
   .dashboard-page .conv-card-arrow,
@@ -893,7 +1085,9 @@
     animation: none;
   }
   .dashboard-page .order-card:hover,
+  .dashboard-page .stat:hover,
   .dashboard-page .service-access-card:hover,
   .dashboard-page .conv-card:hover { transform: none; }
+  .dashboard-page .btn-view:hover svg { transform: none; }
   .dashboard-page .sd-toast { animation: none; }
 }
