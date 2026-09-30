@@ -186,3 +186,465 @@
 @media (prefers-reduced-motion: reduce) {
   .admin-control-center .ac-bar-fill { animation: none; }
 }
+
+
+/* ══════════════════════════════════════════════════════════
+   ORDERS-CARD RESTYLE  (same system as Transport / Inspector /
+   Dashboard): blue eyebrows with a thick dash, 28px cards, titled
+   blocks with hairlines, status pills, white outline buttons.
+   Every selector is prefixed with the root class twice so it wins
+   over AdminDashboard.css and any other dashboard stylesheet.
+   ══════════════════════════════════════════════════════════ */
+
+.admin-control-center.admin-control-center {
+  --ac-text: #0d1b2a;
+  --ac-muted: #64748b;
+  --ac-muted-2: #94a3b8;
+  --ac-border: #e5e9ef;
+  --ac-border-strong: #e5e9ef;
+  --ac-surface: #ffffff;
+  --ac-surface-soft: #fbfcfd;
+  --ac-primary: #12734a;
+  --ac-primary-2: #0f7a44;
+  --ac-primary-soft: #ecfdf3;
+  --ac-primary-line: #c6eccf;
+  --ac-info: #1e5fa8;
+  --ac-info-soft: #eff5fd;
+  --ac-shadow: 0 1px 2px rgba(15, 30, 45, .04), 0 8px 24px rgba(15, 30, 45, .05);
+  --ac-shadow-hi: 0 2px 4px rgba(15, 30, 45, .04), 0 18px 44px rgba(15, 30, 45, .09);
+
+  --oc-line-soft: #eef1f5;
+  --oc-radius: 28px;
+  --oc-radius-md: 22px;
+  --oc-nav-h: 88px;
+
+  min-height: calc(100vh - 72px);
+  padding: 32px 20px 96px;
+  background:
+    radial-gradient(circle at 88% 0%, rgba(230, 245, 236, .9), transparent 42%),
+    radial-gradient(circle at 5% 100%, rgba(231, 235, 245, .85), transparent 42%),
+    linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
+  background-attachment: fixed;
+}
+
+/* ── Eyebrows ───────────────────────────────────────────── */
+
+.admin-control-center.admin-control-center .ac-kicker,
+.admin-control-center.admin-control-center .ac-section-label {
+  gap: 10px;
+  margin-bottom: 8px;
+  color: var(--ac-info);
+  font: 700 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .2em;
+}
+.admin-control-center.admin-control-center .ac-kicker::before,
+.admin-control-center.admin-control-center .ac-section-label::before {
+  flex: 0 0 26px;
+  height: 3px;
+}
+
+/* ── Hero ───────────────────────────────────────────────── */
+
+.admin-control-center.admin-control-center .ac-hero {
+  padding: 26px;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--oc-radius);
+  background: #fff;
+  box-shadow: var(--ac-shadow);
+}
+.admin-control-center.admin-control-center .ac-hero::after { display: none; }
+.admin-control-center.admin-control-center .ac-hero h1 {
+  font-size: clamp(26px, 4vw, 34px);
+  font-weight: 800;
+  letter-spacing: -.7px;
+}
+.admin-control-center.admin-control-center .ac-subtitle { font-size: 14.5px; }
+
+.admin-control-center.admin-control-center .ac-shield {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border-radius: 16px;
+  color: #0f7a44;
+  background: var(--ac-primary-soft);
+  border: 1px solid var(--ac-primary-line);
+  box-shadow: none;
+}
+
+.admin-control-center.admin-control-center .ac-cc-pill {
+  min-height: 32px;
+  padding: 0 15px;
+  gap: 8px;
+  border: 1.5px solid var(--ac-primary-line);
+  background: var(--ac-primary-soft);
+  color: #12734a;
+  font: 700 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .05em;
+  backdrop-filter: none;
+}
+.admin-control-center.admin-control-center .ac-cc-dot { width: 8px; height: 8px; box-shadow: none; }
+
+/* ── Metric cards ───────────────────────────────────────── */
+
+.admin-control-center.admin-control-center .ac-metrics { gap: 14px; }
+.admin-control-center.admin-control-center .ac-metric {
+  padding: 20px 20px 58px;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--oc-radius-md);
+  background: #fff;
+  box-shadow: var(--ac-shadow);
+}
+.admin-control-center.admin-control-center .ac-metric-label {
+  font-size: 11px;
+  letter-spacing: .14em;
+}
+.admin-control-center.admin-control-center .ac-metric-value {
+  margin-top: 10px;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -.6px;
+}
+
+/* ── Tabs: white pill bar, dark active tab ──────────────── */
+
+.admin-control-center.admin-control-center .ac-tabs-shell { top: 12px; }
+.admin-control-center.admin-control-center .ac-tabs {
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--ac-border);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 30, 45, .05);
+  backdrop-filter: none;
+}
+.admin-control-center.admin-control-center .ac-tab {
+  min-height: 40px;
+  padding: 10px 18px;
+  font: 600 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+}
+.admin-control-center.admin-control-center .ac-tab:hover { background: var(--oc-line-soft); color: var(--ac-text); }
+.admin-control-center.admin-control-center .ac-tab.active {
+  color: #fff;
+  background: #0d1b2a;
+  box-shadow: 0 4px 12px rgba(13, 27, 42, .24);
+}
+.admin-control-center.admin-control-center .ac-tab-count {
+  background: #fdf6e7;
+  border: 1px solid #f4e0b6;
+  color: #a86f10;
+  font-weight: 800;
+}
+.admin-control-center.admin-control-center .ac-tab.active .ac-tab-count {
+  background: rgba(255, 255, 255, .2);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* ── Panels and section headers (card head + hairline) ──── */
+
+.admin-control-center.admin-control-center .ac-panel {
+  padding: 26px;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--oc-radius);
+  background: #fff;
+  box-shadow: var(--ac-shadow);
+}
+.admin-control-center.admin-control-center .ac-panel-header,
+.admin-control-center.admin-control-center .ac-toolbar {
+  align-items: flex-end;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--ac-border);
+}
+.admin-control-center.admin-control-center .ac-panel-header h2,
+.admin-control-center.admin-control-center .ac-toolbar h2 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -.4px;
+}
+.admin-control-center.admin-control-center .ac-panel-header p,
+.admin-control-center.admin-control-center .ac-toolbar p { font-size: 14px; }
+
+/* ── Cards (disputes, fraud, campaigns) ─────────────────── */
+
+.admin-control-center.admin-control-center .ac-grid { gap: 16px; align-items: stretch; }
+.admin-control-center.admin-control-center .ac-card {
+  padding: 26px;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--oc-radius);
+  background: #fff;
+  box-shadow: var(--ac-shadow);
+}
+.admin-control-center.admin-control-center .ac-card h3 {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -.3px;
+}
+.admin-control-center.admin-control-center .ac-card p { font-size: 14px; }
+.admin-control-center.admin-control-center .ac-status-row {
+  padding-bottom: 18px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--ac-border);
+}
+.admin-control-center.admin-control-center .ac-image { border-radius: 20px; }
+
+.admin-control-center.admin-control-center .ac-card .ac-actions {
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: none;
+}
+.admin-control-center.admin-control-center .ac-actions { gap: 10px; }
+.admin-control-center.admin-control-center .ac-actions .sd-btn {
+  flex: 1 1 140px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 14px;
+  font-size: 14px;
+}
+.admin-control-center.admin-control-center .ac-table-shell .ac-actions .sd-btn {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+.admin-control-center.admin-control-center .ac-financial { gap: 10px; }
+.admin-control-center.admin-control-center .ac-financial-item {
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--ac-surface-soft);
+}
+
+/* ── Status pills (badges) ──────────────────────────────── */
+
+.admin-control-center.admin-control-center .sd-badge {
+  min-height: 30px;
+  padding: 0 14px;
+  border: 1.5px solid var(--ac-border);
+  background: #f4f6f9;
+  color: #2c3a4a;
+  font: 700 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .05em;
+}
+.admin-control-center.admin-control-center .sd-badge.sd-good {
+  background: var(--ac-primary-soft);
+  border-color: var(--ac-primary-line);
+  color: #12734a;
+}
+.admin-control-center.admin-control-center .sd-badge.sd-warn {
+  background: #fdf6e7;
+  border-color: #f4e0b6;
+  color: #a86f10;
+}
+.admin-control-center.admin-control-center .sd-badge.sd-red {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b42318;
+}
+.admin-control-center.admin-control-center .sd-badge.sd-good::before,
+.admin-control-center.admin-control-center .sd-badge.sd-warn::before,
+.admin-control-center.admin-control-center .sd-badge.sd-red::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .85;
+}
+
+/* ── Buttons: white, dark text, soft border, 14px corners ── */
+
+.admin-control-center.admin-control-center .sd-btn {
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1.5px solid var(--ac-border);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ac-text);
+  font: 700 14.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+}
+.admin-control-center.admin-control-center .sd-btn:hover:not(:disabled) {
+  border-color: rgba(30, 158, 90, .35);
+  background: var(--ac-primary-soft);
+  color: #0f7a44;
+}
+.admin-control-center.admin-control-center .sd-btn-primary {
+  border: 1.5px solid #0d1b2a;
+  background: #fff;
+  color: #0d1b2a;
+  box-shadow: none;
+}
+.admin-control-center.admin-control-center .sd-btn-primary:hover:not(:disabled) {
+  border-color: #0d1b2a;
+  background: var(--ac-primary-soft);
+  color: #0d1b2a;
+}
+.admin-control-center.admin-control-center .sd-btn-outline { background: #fff; border-color: var(--ac-border); }
+
+.admin-control-center.admin-control-center .ac-role-actions .sd-btn {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+/* ── Tables ─────────────────────────────────────────────── */
+
+.admin-control-center.admin-control-center .ac-table-shell {
+  border: 1px solid var(--ac-border);
+  border-radius: var(--oc-radius-md);
+}
+.admin-control-center.admin-control-center .sd-table th {
+  padding: 14px 16px;
+  background: var(--ac-surface-soft);
+  font-size: 11px;
+  letter-spacing: .12em;
+}
+.admin-control-center.admin-control-center .sd-table td { padding: 16px; }
+
+/* ── Forms ──────────────────────────────────────────────── */
+
+.admin-control-center.admin-control-center select,
+.admin-control-center.admin-control-center textarea,
+.admin-control-center.admin-control-center input[type="text"],
+.admin-control-center.admin-control-center input[type="search"] {
+  border: 1.5px solid var(--ac-border);
+  border-radius: 14px;
+  font-size: 16px;
+}
+.admin-control-center.admin-control-center select { min-height: 46px; padding: 0 12px; }
+.admin-control-center.admin-control-center textarea { padding: 12px 14px; }
+.admin-control-center.admin-control-center .ac-search input {
+  min-height: 50px;
+  border-radius: 14px;
+}
+
+.admin-control-center.admin-control-center .ac-radio-option {
+  padding: 14px;
+  border: 1.5px solid var(--ac-border);
+  border-radius: 18px;
+  background: var(--ac-surface-soft);
+}
+
+/* ── Alerts, empty states, small stats, modules ─────────── */
+
+.admin-control-center.admin-control-center .ac-alert {
+  padding: 16px 18px;
+  border-width: 1.5px;
+  border-radius: 18px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.admin-control-center.admin-control-center .ac-empty {
+  padding: 40px 24px;
+  border: 1.5px dashed var(--ac-border);
+  border-radius: var(--oc-radius);
+}
+
+.admin-control-center.admin-control-center .ac-stat-strip { gap: 12px; }
+.admin-control-center.admin-control-center .ac-small-stat {
+  padding: 16px 18px;
+  border: 1px solid var(--ac-border);
+  border-radius: 18px;
+  background: var(--ac-surface-soft);
+  box-shadow: none;
+}
+.admin-control-center.admin-control-center .ac-small-stat b,
+.admin-control-center.admin-control-center .ac-small-stat strong {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -.4px;
+}
+
+.admin-control-center.admin-control-center .ac-module {
+  min-height: 54px;
+  border: 1.5px solid var(--ac-border);
+  border-radius: 18px;
+}
+.admin-control-center.admin-control-center .ac-module-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 12px;
+}
+
+/* ── Dialogs and MFA card ───────────────────────────────── */
+
+.admin-control-center.admin-control-center .ac-dialog { border-radius: var(--oc-radius); }
+.admin-control-center.admin-control-center .ac-modal {
+  padding: 28px;
+  border-radius: var(--oc-radius);
+}
+.admin-control-center.admin-control-center .ac-modal h2 {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -.4px;
+}
+.admin-control-center.admin-control-center .ac-close { border-radius: 12px; }
+.admin-control-center.admin-control-center .ac-mfa {
+  border: 1px solid var(--ac-border);
+  border-radius: var(--oc-radius);
+  box-shadow: var(--ac-shadow);
+}
+
+/* ── Touch screens: no "stuck" hover ────────────────────── */
+
+@media (hover: none) {
+  .admin-control-center.admin-control-center .ac-card:hover,
+  .admin-control-center.admin-control-center .ac-metric:hover {
+    transform: none;
+    border-color: var(--ac-border);
+    box-shadow: var(--ac-shadow);
+  }
+  .admin-control-center.admin-control-center .sd-btn:hover:not(:disabled) {
+    border-color: var(--ac-border);
+    background: #fff;
+    color: var(--ac-text);
+  }
+  .admin-control-center.admin-control-center .sd-btn-primary:hover:not(:disabled) {
+    border-color: #0d1b2a;
+    background: #fff;
+    color: #0d1b2a;
+  }
+  .admin-control-center.admin-control-center .ac-tab:hover:not(.active) { background: transparent; color: var(--ac-muted); }
+}
+
+/* ── Small screens ──────────────────────────────────────── */
+
+@media (max-width: 760px) {
+  .admin-control-center.admin-control-center {
+    padding: 24px 16px calc(var(--oc-nav-h) + env(safe-area-inset-bottom, 0px) + 32px);
+  }
+  .admin-control-center.admin-control-center .ac-hero { padding: 22px; border-radius: 24px; }
+  .admin-control-center.admin-control-center .ac-panel { padding: 20px; border-radius: 24px; }
+  .admin-control-center.admin-control-center .ac-card { padding: 22px; border-radius: 24px; }
+  .admin-control-center.admin-control-center .ac-metric { padding-bottom: 50px; }
+  .admin-control-center.admin-control-center .ac-metric-value { font-size: 24px; }
+
+  .admin-control-center.admin-control-center .ac-hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .admin-control-center.admin-control-center .ac-hero-actions .sd-btn { width: 100%; }
+
+  .admin-control-center.admin-control-center .ac-panel-header,
+  .admin-control-center.admin-control-center .ac-toolbar { align-items: stretch; }
+
+  /* stacked table rows become rounded cards inside the panel */
+  .admin-control-center.admin-control-center .sd-table--stack tr {
+    margin-bottom: 14px;
+    padding: 10px 0;
+    border: 1px solid var(--ac-border);
+    border-radius: var(--oc-radius-md);
+    background: var(--ac-surface-soft);
+    box-shadow: none;
+  }
+  .admin-control-center.admin-control-center .ac-table-shell .ac-actions .sd-btn { flex: 1 1 auto; }
+}
+
+@media (max-width: 480px) {
+  .admin-control-center.admin-control-center .ac-hero h1 { font-size: 27px; }
+  .admin-control-center.admin-control-center .ac-metric { padding: 16px 16px 44px; }
+  .admin-control-center.admin-control-center .ac-metric-value { font-size: 22px; }
+  .admin-control-center.admin-control-center .ac-actions .sd-btn { min-width: 100%; }
+}
