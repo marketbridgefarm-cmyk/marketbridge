@@ -63,6 +63,7 @@ function humanStatus(status) {
     COUNTERED:'Counter-offer',
     ACCEPTED: 'Accepted',
     REJECTED: 'Rejected',
+    WITHDRAWN:'Released',
     EXPIRED:  'Expired',
   }[status] || String(status || '').replaceAll('_', ' '));
 }
@@ -327,10 +328,14 @@ export default function Negotiations() {
       if (roles.includes('TRUCK_OWNER')) {
         const openRes = await api.get('/transport/open');
         (openRes.data?.jobs || []).forEach((job) => {
-          const myQuotes = (job.quotes || []).filter((q) =>
-            ['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status)
+          // Find each chain's leaf across EVERY status first, then keep the
+          // ones worth showing. Filtering by status before finding leaves
+          // makes a rejected leaf vanish and exposes its stale COUNTERED
+          // parent as if the negotiation were still open.
+          const myQuotes = leavesOnly(job.quotes || [], 'parentQuoteId').filter((q) =>
+            ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'].includes(q.status)
           );
-          leavesOnly(myQuotes, 'parentQuoteId').forEach((quote) => {
+          myQuotes.forEach((quote) => {
             collected.push({
               type:        'TRANSPORT_QUOTE',
               id:          quote.id,
@@ -353,10 +358,10 @@ export default function Negotiations() {
       if (roles.includes('INSPECTOR')) {
         const availableRes = await api.get('/inspections/available');
         (availableRes.data?.requests || []).forEach((request) => {
-          const myQuotes = (request.quotes || []).filter((q) =>
-            ['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status)
+          const myQuotes = leavesOnly(request.quotes || [], 'parentQuoteId').filter((q) =>
+            ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'].includes(q.status)
           );
-          leavesOnly(myQuotes, 'parentQuoteId').forEach((quote) => {
+          myQuotes.forEach((quote) => {
             collected.push({
               type:        'INSPECTION_QUOTE',
               id:          quote.id,

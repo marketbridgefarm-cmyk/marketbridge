@@ -417,6 +417,26 @@ export default function TruckOwnerDashboard() {
     )[0] || null;
   }
 
+  function isQuoteExpired(quote) {
+    return Boolean(quote?.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
+  }
+
+  // Release a provisionally accepted deal (before transport payment). This is
+  // a WITHDRAW, not a REJECT: the backend only allows REJECT on quotes that
+  // are still being negotiated, so rejecting an ACCEPTED quote always failed.
+  async function releaseTransportAgreement(quoteId) {
+    setActionLoading(`quote-${quoteId}`);
+    try {
+      await api.patch(`/transport/quotes/${quoteId}`, { action: 'WITHDRAW' });
+      toast('Agreement released. The requester can now choose another transporter.');
+      await loadAll(false);
+    } catch (err) {
+      toast(getErrorMessage(err, 'Could not release this agreement.'));
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
   async function acceptTransportQuote(quoteId) {
     setActionLoading(`quote-${quoteId}`);
     try {
@@ -574,6 +594,39 @@ export default function TruckOwnerDashboard() {
     const busy = actionLoading?.startsWith(`status-${job.id}`);
 
     if (job.status === 'REQUESTED' || job.status === 'QUOTED') {
+      // The backend keeps the job in QUOTED after a deal is accepted: the
+      // agreement is provisional until transport payment settles. Without
+      // this branch the truck owner whose quote was accepted was told the
+      // requester was still "selecting a transporter".
+      const agreedQuote = (job.quotes || []).find((quote) => quote.status === 'ACCEPTED');
+      if (agreedQuote) {
+        const orderPayments = job.order?.payments || [];
+        const transportPayStarted =
+          orderPayments.some(
+            (p) => p.type === 'TRANSPORT' && ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
+          ) ||
+          (job.payments || []).some(
+            (p) => p.type === 'TRANSPORT' && ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
+          );
+        return (
+          <div className="sd-job-actions">
+            <p className="sd-job-waiting">
+              <span className="sd-job-waiting-dot" aria-hidden="true" />
+              Agreement reached at {fmtMoney(job.agreedAmount ?? agreedQuote.amount)} ETB — waiting for the requester&apos;s transport payment
+            </p>
+            {!transportPayStarted && (
+              <button
+                type="button"
+                className="sd-btn sd-btn-outline"
+                disabled={actionLoading === `quote-${agreedQuote.id}`}
+                onClick={() => releaseTransportAgreement(agreedQuote.id)}
+              >
+                {actionLoading === `quote-${agreedQuote.id}` ? 'Releasing…' : 'Cancel provisional deal'}
+              </button>
+            )}
+          </div>
+        );
+      }
       return (
         <p className="sd-job-waiting">
           <span className="sd-job-waiting-dot" aria-hidden="true" />
@@ -633,7 +686,7 @@ export default function TruckOwnerDashboard() {
               type="button"
               className="sd-btn sd-btn-outline"
               disabled={actionLoading === `quote-${acceptedQuote.id}`}
-              onClick={() => rejectTransportQuote(acceptedQuote.id)}
+              onClick={() => releaseTransportAgreement(acceptedQuote.id)}
             >
               {actionLoading === `quote-${acceptedQuote.id}` ? 'Cancelling…' : 'Cancel provisional deal'}
             </button>
@@ -959,8 +1012,12 @@ export default function TruckOwnerDashboard() {
                 const quoting = actionLoading === `job-${job.id}-QUOTE`;
 
                 const myLeaf = leafTransportQuote(job.quotes);
+                const leafExpired = isQuoteExpired(myLeaf);
+                // A quote the requester already accepted is settled (payment
+                // pending); show that instead of offering to quote again.
+                const hasAgreement = Boolean(myLeaf) && myLeaf.status === 'ACCEPTED';
                 const hasActiveThread =
-                  myLeaf && ['PENDING', 'SELECTED', 'COUNTERED'].includes(myLeaf.status);
+                  myLeaf && !leafExpired && ['PENDING', 'SELECTED', 'COUNTERED'].includes(myLeaf.status);
                 const isMyTurn =
                   hasActiveThread &&
                   myLeaf.status === 'COUNTERED' &&
@@ -977,7 +1034,7 @@ export default function TruckOwnerDashboard() {
 
                 const arranger = arrangerShort(job.arrangingParty);
                 const createdLabel = fmtDate(job.createdAt);
-                const showFooter = !hasActiveThread || isMyTurn;
+                const showFooter = (!hasActiveThread && !hasAgreement) || isMyTurn;
 
                 return (
                   <article className="sd-card sd-job-card" key={job.id}>
@@ -1068,12 +1125,27 @@ export default function TruckOwnerDashboard() {
                         </section>
                       )}
 
+                      {hasAgreement && (
+                        <section className="sd-card-block">
+                          <div className="sd-card-block-title">
+                            <h4>Agreement reached</h4>
+                            <span className="sd-card-block-note">Provisional</span>
+                          </div>
+                          <div className="sd-card-block-body">
+                            <AmountRow value={fmtMoney(myLeaf.counterAmount ?? myLeaf.amount)} />
+                            <p className="sd-amount-note">
+                              Your price was accepted. The deal becomes final once the requester pays for transport.
+                            </p>
+                          </div>
+                        </section>
+                      )}
+
                       {createdLabel && <p className="sd-card-foot">Created {createdLabel}</p>}
 
                       {/* Footer */}
                       {showFooter && (
                         <div className="sd-card-actions">
-                          {!hasActiveThread && (
+                          {!hasActiveThread && !hasAgreement && (
                             <button
                               type="button"
                               className="sd-btn sd-btn-primary"

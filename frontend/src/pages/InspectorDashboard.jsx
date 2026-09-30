@@ -302,7 +302,22 @@ export default function InspectorDashboard() {
   function leafInspectionQuote(quotes) {
     const list = Array.isArray(quotes) ? quotes : [];
     const parentIds = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
-    return list.find((q) => !parentIds.has(q.id)) || null;
+    // The inspector can own several chains on one request (e.g. an earlier
+    // rejected bid and a newer one). `find` returned the OLDEST leaf, so a
+    // rejected bid hid the live one; take the most recent leaf instead.
+    return (
+      list
+        .filter((q) => !parentIds.has(q.id))
+        .sort(
+          (a, b) =>
+            new Date(b.updatedAt || b.createdAt || 0) -
+            new Date(a.updatedAt || a.createdAt || 0)
+        )[0] || null
+    );
+  }
+
+  function isInspectionQuoteExpired(quote) {
+    return Boolean(quote?.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
   }
 
   async function acceptInspectionQuote(requestId, quoteId) {
@@ -604,12 +619,13 @@ export default function InspectorDashboard() {
                     const myLeaf = leafInspectionQuote(r.quotes);
                     const hasActiveThread =
                       myLeaf &&
+                      !isInspectionQuoteExpired(myLeaf) &&
                       ['PENDING', 'SELECTED', 'COUNTERED'].includes(myLeaf.status);
                     const isMyTurn =
                       hasActiveThread &&
                       myLeaf.status === 'COUNTERED' &&
                       myLeaf.counteredBy === 'REQUESTER';
-                    const justQuoted = quotedRequestIds.has(r.id);
+                    const justQuoted = quotedRequestIds.has(r.id) && !myLeaf;
                     const canQuote = !hasActiveThread && !justQuoted;
                     const responding = myLeaf && respondingQuoteId === myLeaf.id;
 
