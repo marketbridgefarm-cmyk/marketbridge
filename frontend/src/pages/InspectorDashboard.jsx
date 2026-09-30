@@ -154,6 +154,7 @@ export default function InspectorDashboard() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const [feeInputs] = useState({});
   const [quoteAmountInputs, setQuoteAmountInputs] = useState({});
@@ -168,7 +169,7 @@ export default function InspectorDashboard() {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    setError('');
+    setLoadError('');
 
     try {
       const [availRes, mineRes] = await Promise.all([
@@ -179,7 +180,7 @@ export default function InspectorDashboard() {
       setAvailable(availRes.data?.requests || []);
       setMine(mineRes.data?.requests || []);
     } catch (err) {
-      setError(
+      setLoadError(
         err.response?.data?.error ||
           'Could not load inspection jobs.'
       );
@@ -191,6 +192,25 @@ export default function InspectorDashboard() {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  // Action feedback is shown as a floating toast (always in view, wherever
+  // the person has scrolled) and dismisses itself.
+  useEffect(() => {
+    if (!msg) return undefined;
+    const timer = window.setTimeout(() => setMsg(''), 5000);
+    return () => window.clearTimeout(timer);
+  }, [msg]);
+
+  useEffect(() => {
+    if (!error) return undefined;
+    const timer = window.setTimeout(() => setError(''), 8000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
+
+  function dismissToast() {
+    setMsg('');
+    setError('');
+  }
 
   // Order Action Center can deep-link an inspector directly to the report
   // workspace. This removes the dead-end of being sent to a dashboard and
@@ -518,15 +538,19 @@ export default function InspectorDashboard() {
           MESSAGES
       ========================================================= */}
 
-      {msg && (
+      {loadError && (
         <section>
-          <div className="alert success" role="status">{msg}</div>
-        </section>
-      )}
-
-      {error && (
-        <section>
-          <div className="alert error" role="alert">{error}</div>
+          <div className="sd-panel sd-panel--error">
+            <strong>Unable to load inspection jobs</strong>
+            <p className="sd-muted">{loadError}</p>
+            <button
+              type="button"
+              className="sd-btn sd-btn-outline"
+              onClick={loadAll}
+            >
+              Try again
+            </button>
+          </div>
         </section>
       )}
 
@@ -1324,6 +1348,28 @@ export default function InspectorDashboard() {
           </aside>
         </div>
       </section>
+
+      {/* =========================================================
+          TOAST — floats in view, above modals and the bottom tab bar
+      ========================================================= */}
+
+      {(error || msg) && (
+        <div
+          className={`sd-toast ${error ? 'sd-toast--error' : 'sd-toast--success'}`}
+          role={error ? 'alert' : 'status'}
+          aria-live={error ? 'assertive' : 'polite'}
+        >
+          <span className="sd-toast-text">{error || msg}</span>
+          <button
+            type="button"
+            className="sd-toast-close"
+            aria-label="Dismiss message"
+            onClick={dismissToast}
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }
