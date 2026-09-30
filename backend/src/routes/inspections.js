@@ -57,6 +57,42 @@ function quoteExpiry(hours = 24) {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
+// Prisma filter: a quote that has not timed out. Expired quotes must never
+// block a provider from re-bidding or freeze the competition.
+function notExpiredFilter() {
+  return { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] };
+}
+
+// Ids of every ancestor in a counter chain (nearest parent first).
+async function ancestorQuoteIds(tx, quote) {
+  const ids = [];
+  let parentId = quote.parentQuoteId;
+  let guard = 0;
+  while (parentId && guard < 100) {
+    ids.push(parentId);
+    const parent = await tx.inspectionQuote.findUnique({
+      where: { id: parentId },
+      select: { parentQuoteId: true },
+    });
+    parentId = parent?.parentQuoteId || null;
+    guard += 1;
+  }
+  return ids;
+}
+
+// Map a thrown error to the right HTTP response (quoteError, order lock
+// failures and the generic fallback).
+function sendQuoteError(req, res, error, label, fallback) {
+  if (error?.code === 'ORDER_NOT_ACTIONABLE') {
+    return res.status(error.status || 409).json({ error: error.message });
+  }
+  if (error?.statusCode) {
+    return res.status(error.statusCode).json({ error: error.message });
+  }
+  req.log.error({ err: error }, label);
+  return res.status(500).json({ error: fallback });
+}
+
 // ============================================================================
 // CREATE INSPECTION REQUEST
 // Seller or buyer requests an inspection.
@@ -303,7 +339,10 @@ router.get(
           // GET /:id/quotes route below.
           quotes: {
             where: {
-              status: { in: ['PENDING', 'COUNTERED', 'ACCEPTED', 'REJECTED'] },
+              // SELECTED must be included: it is the state an inspector's
+              // bid is in after the requester picks it, and without it the
+              // inspector sees nothing and can even file a duplicate bid.
+              status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN', 'EXPIRED'] },
               inspectorId: req.user.id,
             },
 
@@ -318,6 +357,7 @@ router.get(
               counteredBy: true,
               expiresAt: true,
               createdAt: true,
+              updatedAt: true,
             },
 
             orderBy: { createdAt: 'asc' },
@@ -400,8 +440,9 @@ router.post(
         where: {
           inspectionRequestId: request.id,
           inspectorId: req.user.id,
-          status: { in: ['PENDING', 'COUNTERED'] },
+          status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
           childQuotes: { none: {} },
+          ...notExpiredFilter(),
         },
       });
 
@@ -581,6 +622,18 @@ async function loadQuoteForNegotiation(req, res) {
     return null;
   }
 
+  // Only the newest row of a counter chain is live. An older row that a
+  // later counter points back to is history; acting on it would fork the
+  // negotiation or resurrect an offer that was already answered.
+  const supersededBy = await prisma.inspectionQuote.count({ where: { parentQuoteId: quote.id } });
+  if (supersededBy > 0) {
+    res.status(409).json({
+      code: 'QUOTE_SUPERSEDED',
+      error: 'This offer was already answered with a newer counter-offer. Refresh to see the latest.',
+    });
+    return null;
+  }
+
   return { request, quote, actorRole: isRequester ? 'REQUESTER' : 'PROVIDER' };
 }
 
@@ -610,12 +663,13 @@ router.patch(
           where: { inspectionRequestId: request.id, id: { not: fresh.id }, status: 'SELECTED' },
           data: { status: 'PENDING' },
         });
-        return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
+        // Give the negotiation a fresh window; otherwise a bid selected
+        // late in its original 24h life expires mid-negotiation.
+        return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED', expiresAt: quoteExpiry(24) } });
       }, { maxWait: 10000, timeout: 15000 });
       return res.json({ message: 'Inspector bid selected for price negotiation', quote: selected });
     } catch (error) {
-      req.log.error({ err: error }, 'SELECT INSPECTION QUOTE ERROR:');
-      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not select inspection bid' });
+      return sendQuoteError(req, res, error, 'SELECT INSPECTION QUOTE ERROR:', 'Could not select inspection bid');
     }
   }
 );
@@ -754,11 +808,7 @@ router.patch(
         });
       }
 
-      req.log.error({ err: error }, 'ACCEPT INSPECTION QUOTE ERROR:');
-
-      return res.status(500).json({
-        error: 'Could not accept inspection quote',
-      });
+      return sendQuoteError(req, res, error, 'ACCEPT INSPECTION QUOTE ERROR:', 'Could not accept inspection quote');
     }
   }
 );
@@ -866,13 +916,7 @@ router.post(
         quote: counterQuote,
       });
     } catch (error) {
-      if (error.statusCode) {
-        return res.status(error.statusCode).json({ error: error.message });
-      }
-
-      req.log.error({ err: error }, 'COUNTER INSPECTION QUOTE ERROR:');
-
-      return res.status(500).json({ error: 'Could not counter inspection quote' });
+      return sendQuoteError(req, res, error, 'COUNTER INSPECTION QUOTE ERROR:', 'Could not counter inspection quote');
     }
   }
 );
@@ -940,9 +984,7 @@ router.patch(
 
       return res.json({ message: 'Provisional inspector agreement released. Other inspector bids are available again.', quote: result });
     } catch (error) {
-      if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
-      req.log.error({ err: error }, 'WITHDRAW INSPECTION QUOTE ERROR:');
-      return res.status(500).json({ error: 'Could not release inspection agreement' });
+      return sendQuoteError(req, res, error, 'WITHDRAW INSPECTION QUOTE ERROR:', 'Could not release inspection agreement');
     }
   }
 );
@@ -974,10 +1016,30 @@ router.patch(
       const updated = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, loaded.request.orderId, 'an inspection quote cannot be rejected until the order dispute is resolved');
 
+        const freshQuote = await tx.inspectionQuote.findUnique({ where: { id: quote.id } });
+        if (!freshQuote || !['PENDING', 'SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
+          throw quoteError(`Quote cannot be rejected because it is ${freshQuote?.status || 'unavailable'}`, 409);
+        }
+        if (quoteTurn(freshQuote) !== actorRole) {
+          throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
+        }
+
         const rejected = await tx.inspectionQuote.update({
           where: { id: quote.id },
           data: { status: 'REJECTED' },
         });
+
+        // Rejecting a counter ends the WHOLE negotiation with this
+        // inspector. The earlier rows of the chain were left COUNTERED when
+        // each counter was made; without closing them they look like live
+        // offers again the moment the rejected leaf is hidden.
+        const ancestors = await ancestorQuoteIds(tx, freshQuote);
+        if (ancestors.length) {
+          await tx.inspectionQuote.updateMany({
+            where: { id: { in: ancestors }, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
+            data: { status: 'REJECTED' },
+          });
+        }
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
@@ -992,8 +1054,7 @@ router.patch(
 
       return res.json({ message: 'Quote rejected', quote: updated });
     } catch (error) {
-      req.log.error({ err: error }, 'REJECT INSPECTION QUOTE ERROR:');
-      return res.status(500).json({ error: 'Could not reject inspection quote' });
+      return sendQuoteError(req, res, error, 'REJECT INSPECTION QUOTE ERROR:', 'Could not reject inspection quote');
     }
   }
 );

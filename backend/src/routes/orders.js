@@ -41,6 +41,7 @@ const transportInclude = {
     include: {
       truckOwner: { select: { id: true, name: true, phone: true, rating: true, verificationStatus: true } },
       truck: { select: { id: true, registration: true, truckType: true, capacity: true, operatingArea: true, availability: true, verificationStatus: true, rating: true } },
+      _count: { select: { childQuotes: true } },
     },
     orderBy: { amount: 'asc' },
   },
@@ -58,8 +59,10 @@ const orderInclude = {
           quotes: {
             where: { status: { not: 'REJECTED' } },
             select: {
-              id: true, inspectorId: true, amount: true, status: true,
-              parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true,
+              id: true, inspectorId: true, amount: true, status: true, message: true,
+              parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
+              inspector: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
+              _count: { select: { childQuotes: true } },
             },
             orderBy: { createdAt: 'asc' },
           },
@@ -77,7 +80,11 @@ const orderInclude = {
       payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
       quotes: {
         where: { status: { not: 'REJECTED' } },
-        select: { id: true, inspectorId: true, amount: true, status: true, parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true },
+        select: {
+          id: true, inspectorId: true, amount: true, status: true, message: true, parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
+          inspector: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
+          _count: { select: { childQuotes: true } },
+        },
         orderBy: { createdAt: 'asc' },
       },
     },

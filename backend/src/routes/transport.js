@@ -86,6 +86,29 @@ function quoteExpiry(hours = 24) {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
+// Prisma filter: a quote that has not timed out. Expired quotes must never
+// block a truck owner from re-bidding or freeze the competition.
+function notExpiredFilter() {
+  return { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] };
+}
+
+// Ids of every ancestor in a counter chain (nearest parent first).
+async function ancestorTransportQuoteIds(tx, quote) {
+  const ids = [];
+  let parentId = quote.parentQuoteId;
+  let guard = 0;
+  while (parentId && guard < 100) {
+    ids.push(parentId);
+    const parent = await tx.transportQuote.findUnique({
+      where: { id: parentId },
+      select: { parentQuoteId: true },
+    });
+    parentId = parent?.parentQuoteId || null;
+    guard += 1;
+  }
+  return ids;
+}
+
 function isArrangingParty(job, order, userId) {
   return (
     (job.arrangingParty === 'SELLER' && order.sellerId === userId) ||
@@ -1857,6 +1880,14 @@ router.post(
         where: {
           transportJobId: job.id,
           status: { in: ['SELECTED', 'COUNTERED', 'ACCEPTED'] },
+          childQuotes: { none: {} },
+          // ACCEPTED is provisional and never times out on its own; only
+          // in-progress negotiation threads can go stale.
+          OR: [
+            { status: 'ACCEPTED' },
+            { expiresAt: null },
+            { expiresAt: { gt: new Date() } },
+          ],
         },
         select: { id: true, truckOwnerId: true, status: true },
       });
@@ -1933,11 +1964,13 @@ router.post(
             status: {
               in: [
                 'PENDING',
+                'SELECTED',
                 'COUNTERED',
                 'ACCEPTED',
               ],
             },
             childQuotes: { none: {} },
+            ...notExpiredFilter(),
           },
         });
 
@@ -2126,7 +2159,8 @@ router.get(
 
       const isTruckOwner =
         job.truckOwnerId ===
-        req.user.id;
+        req.user.id ||
+        (req.user.roles || []).includes('TRUCK_OWNER');
 
       if (
         !isArranging &&
@@ -2139,10 +2173,16 @@ router.get(
         });
       }
 
+      // Bids are sealed: a truck owner only ever sees their OWN quotes (every
+      // row of their counter chain), never competitors' amounts. Only the
+      // arranging party and admins see the full list.
       const quotes =
         await prisma.transportQuote.findMany({
           where: {
             transportJobId: job.id,
+            ...(isArranging || isAdmin(req.user)
+              ? {}
+              : { truckOwnerId: req.user.id }),
           },
 
           include: {
@@ -2208,6 +2248,18 @@ async function loadTransportQuoteForNegotiation(req, res) {
     return null;
   }
 
+  // Only the newest row of a counter chain is live. An older row that a
+  // later counter points back to is history; acting on it would fork the
+  // negotiation or resurrect an offer that was already answered.
+  const supersededBy = await prisma.transportQuote.count({ where: { parentQuoteId: quote.id } });
+  if (supersededBy > 0) {
+    res.status(409).json({
+      code: 'QUOTE_SUPERSEDED',
+      error: 'This offer was already answered with a newer counter-offer. Refresh to see the latest.',
+    });
+    return null;
+  }
+
   return {
     quote,
     job,
@@ -2250,7 +2302,9 @@ router.patch(
           where: { transportJobId: job.id, id: { not: fresh.id }, status: 'SELECTED' },
           data: { status: 'PENDING' },
         });
-        const selected = await tx.transportQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
+        // Give the negotiation a fresh window; otherwise a bid selected late
+        // in its original 24h life expires mid-negotiation.
+        const selected = await tx.transportQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED', expiresAt: quoteExpiry(24) } });
         await tx.transportJob.update({
           where: { id: job.id },
           data: { truckOwnerId: null, truckId: null, agreedAmount: null, status: 'QUOTED' },
@@ -2486,10 +2540,42 @@ router.patch(
           });
         }
 
-        const updatedQuote = await prisma.transportQuote.update({
-          where: { id: quote.id },
-          data: { status: 'REJECTED' },
-        });
+        const updatedQuote = await prisma.$transaction(async (tx) => {
+          const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
+          if (!freshQuote || !['PENDING', 'SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
+            throw quoteError(`This quote is already ${String(freshQuote?.status || 'unavailable').toLowerCase()}`, 409);
+          }
+          if (quoteTurn(freshQuote) !== effectiveRole && !isAdmin(req.user)) {
+            throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
+          }
+
+          const rejected = await tx.transportQuote.update({
+            where: { id: quote.id },
+            data: { status: 'REJECTED' },
+          });
+
+          // Rejecting a counter ends the WHOLE negotiation with this truck
+          // owner. Earlier rows of the chain were left COUNTERED when each
+          // counter was made; without closing them they look like live
+          // offers again as soon as the rejected leaf is hidden.
+          const ancestors = await ancestorTransportQuoteIds(tx, freshQuote);
+          if (ancestors.length) {
+            await tx.transportQuote.updateMany({
+              where: { id: { in: ancestors }, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
+              data: { status: 'REJECTED' },
+            });
+          }
+
+          await recordAuditEvent(tx, {
+            actorId: req.user.id,
+            action: 'TRANSPORT_QUOTE_REJECTED',
+            resourceType: 'TransportQuote',
+            resourceId: rejected.id,
+            metadata: { transportJobId: rejected.transportJobId, rejectedBy: effectiveRole },
+          });
+
+          return rejected;
+        }, { maxWait: 10000, timeout: 15000 });
 
         return res.json({
           message: 'Quote rejected',
