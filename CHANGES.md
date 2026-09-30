@@ -1,136 +1,31 @@
-# MarketBridge — Complete Enhancements Patch
+# Negotiation fixes (buyer <-> inspector, buyer <-> truck owner)
 
-Date: 2026-09-20
+Copy these files over the same paths in the project. No database migration, no new dependencies, no API route changes.
 
-This package consolidates the current MarketBridge enhancements into complete replacement files so they can be copied into the GitHub repository without merging fragments from earlier steps.
+## Root causes fixed
 
-## Included fixes and enhancements
+1. **Rejecting a counter did not end the negotiation.** Only the last row was marked REJECTED; the earlier COUNTERED rows stayed "live" and reappeared as actionable offers (Negotiations page / BidBoard), and the backend would still accept actions on them.
+   - Backend: reject now closes the whole counter chain (inspection + transport), inside a transaction with a fresh-state check. Transport reject is now audited too.
+   - Backend: only the newest row of a chain can be selected/accepted/countered/rejected/released (`409 QUOTE_SUPERSEDED` otherwise).
+   - Frontend: BidBoard and the provider-side list now find the latest row across ALL statuses before hiding rejected rows.
+2. **Inspector never saw that their bid was selected.** `/inspections/available` dropped SELECTED quotes, so the inspector saw nothing and could even file a duplicate bid. SELECTED (plus WITHDRAWN/EXPIRED) is now returned; the duplicate-bid check also covers SELECTED and ACCEPTED.
+3. **Inspector dashboard showed the oldest row of the chain** (a rejected bid hid the live one). It now uses the most recent leaf.
+4. **Truck owner could not cancel an accepted deal.** The button sent REJECT (only valid for in-negotiation quotes); it now sends WITHDRAW. The button was also only rendered for job status ACCEPTED, which the backend does not use before payment.
+5. **Truck owner with an accepted quote was told "Waiting for the requester to select a transporter".** The job stays QUOTED until payment; the dashboard now shows "Agreement reached at X ETB - waiting for payment" (with release option before payment) and no longer offers to submit another quote.
+6. **Expired negotiations froze everything.** Expired threads blocked re-bidding and the transport "competition frozen" check. Expired rows are now ignored by those checks, BidBoard disables accept/counter on expired quotes (Reject stays available), and selecting a bid refreshes its expiry so it cannot expire mid-negotiation.
+7. **Requester's inspection bids had no provider name** because /orders did not include the inspector. Added inspector, message and child-count to the quote payload (plus child-count for transport quotes).
+8. **Sealed-bid leak:** `GET /transport/:id/quotes` returned every competitor's quote to the assigned truck owner (and 403'd other truck owners). Non-arranging truck owners now get only their own quotes.
+9. Order-lock failures (dispute/cancel) on accept/counter/reject/release returned 500; they now return the intended 409 message.
 
-### 1. Seller payout protection / 3-day hold
-- Seller payout is created when a verified MARKETPLACE payment settles PAID.
-- Default hold is 3 days (`SELLER_PAYOUT_HOLD_DAYS=3`).
-- `HELD -> RELEASED -> PAID_OUT` lifecycle is tracked.
-- Disputes freeze the payout as `ON_HOLD_DISPUTE`.
-- Seller-favorable dispute resolution restarts a fresh 3-day hold.
-- Seller-unfavorable dispute resolution can permanently move the payout to `CANCELLED`.
-- Admin payout completion requires `RELEASED` and records a payout reference.
-- Maintenance scheduler automatically releases due holds.
+## Files
+- backend/src/routes/inspections.js
+- backend/src/routes/transport.js
+- backend/src/routes/orders.js
+- backend/test/marketplace.e2e.test.js (now selects a bid before accepting, matching the competitive flow)
+- frontend/src/components/BidBoard.jsx
+- frontend/src/pages/Negotiations.jsx
+- frontend/src/pages/TruckOwnerDashboard.jsx
+- frontend/src/pages/InspectorDashboard.jsx
 
-### 2. Seller payout is visible on Order Details
-- Order API now returns a controlled `sellerPayout` view.
-- Seller/admin can see payout amount/reference.
-- Buyer and other authorized participants can see hold/release status and timing without seeing the seller's net payout amount/reference.
-- Order Details explicitly states the 3-day hold before payment, while HELD, dispute-held, RELEASED, CANCELLED and PAID_OUT states have separate messaging.
-- Removed the unnecessary persistent red buyer-payment-control error banner.
-
-### 3. Chapa checkout actually redirects
-- Complete `chapaCheckout.js` is included.
-- Payment creation is followed by `/payments/:id/chapa/initialize`.
-- The returned hosted checkout URL is assigned to `window.location`.
-- PROCESSING payments are treated as active duplicates so concurrent payment attempts cannot create a second checkout intent.
-
-### 4. Payment/idempotency hardening
-- Existing idempotency/P2002 handling remains in the central payment service.
-- PROCESSING is included in duplicate-payment protection.
-- Provider initialization claims the payment before contacting Chapa and returns it to PENDING if provider initialization fails.
-
-### 5. Public listing privacy
-- Public listing responses use an explicit allow-list.
-- Seller minimum acceptable price is not exposed.
-- Private negotiation/order/inspection information remains participant-controlled.
-- Signed media URLs are used for public-approved media.
-- Fixed the media-signing error path that referenced an out-of-scope `req` variable.
-
-### 6. Inspector reputation
-- Inspector ratings are accepted and validated against completed inspection participation.
-- Inspector reputation endpoint is included.
-
-### 7. Market price trends
-- `GET /listings/market-trends` aggregates recent completed/delivered agricultural sale prices by crop, region and unit.
-
-### 8. Transport backhaul matching
-- Active route destinations can contribute a matching bonus when they align with a new pickup area.
-- Only committed route states are considered.
-
-### 9. SMS listing creation
-- Inbound `LIST` and `ACTIVATE` commands are included.
-- Inbound SMS is fail-closed behind `SMS_INBOUND_WEBHOOK_SECRET`.
-- SMS-created listings start as DRAFT and require explicit activation.
-
-### 10. Existing deployment protection
-- `backend/src/utils/evidenceUpload.js` is included at the exact required path/case to prevent the previous Render module-not-found failure.
-- Sidebar remains hidden for signed-out visitors.
-- Negotiations remains a single hub for produce, transport and inspection negotiations.
-
-## New migration
-
-Apply both payout migrations in order:
-
-1. `202609200001_seller_payouts`
-2. `202609200002_seller_payout_dispute_outcome`
-
-The second migration adds `CANCELLED` to `SellerPayoutStatus`.
-
-## Environment
-
-Set at least:
-
-```text
-SELLER_PAYOUT_HOLD_DAYS=3
-MARKETBRIDGE_JOBS_ENABLED=true
-SMS_INBOUND_WEBHOOK_SECRET=<strong-random-secret>
-```
-
-The existing Chapa variables must also be configured for live checkout:
-
-```text
-CHAPA_SECRET_KEY=<server-secret>
-APP_BASE_URL=<frontend-url>
-API_BASE_URL=<backend-url>
-```
-
-## Dispute resolution API change
-
-When a dispute has a frozen seller payout, the admin resolution request must include one of:
-
-```json
-{"payoutDecision":"RELEASE"}
-```
-
-or
-
-```json
-{"payoutDecision":"CANCEL"}
-```
-
-`RELEASE` restarts the complete 3-day hold. `CANCEL` permanently prevents that payout record from being released.
-
-## Deployment sequence
-
-Backend:
-
-```bash
-cd backend
-npm ci
-npx prisma generate
-npx prisma migrate deploy
-npm test
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm ci
-npm run build
-```
-
-The repository's Render build script already runs Prisma migration deployment.
-
-## Verification performed in this environment
-
-- Backend syntax checks passed for all touched backend files.
-- Seller payout unit tests passed: 5/5.
-- The full Node test suite was attempted. Tests that do not require external dependencies ran successfully; two existing test files could not load because `node_modules` is not installed in this working environment (`express-rate-limit` and `jsonwebtoken` were missing).
-- Prisma validation/generation could not be completed here because the local Prisma executable/dependencies were unavailable; an attempted `npx prisma validate` timed out. Run `npm ci` followed by `npx prisma generate` and `npx prisma migrate deploy` in the repository/CI environment before production deployment.
-- Frontend production build could not be executed here because `frontend/node_modules` is not installed.
+## Not verified
+Changes were syntax-checked (node --check / tsc) only; dependencies and a database were not available here, so the e2e test and the UI were not run.
