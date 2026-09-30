@@ -5,12 +5,9 @@ import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import ImageCarousel from '../components/ImageCarousel.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/AdminDashboard.css';
-import './dashboards/AdminDashboardFixes.css';
 
 const VERIFICATION_OPTIONS = ['PENDING', 'VERIFIED', 'REJECTED'];
-
 const ROLE_OPTIONS = ['BUYER', 'SELLER', 'INSPECTOR', 'TRUCK_OWNER', 'ADVERTISER', 'ADMIN'];
-
 const PAYMENT_STATUSES = ['PENDING', 'RECONCILIATION_REQUIRED'];
 
 const MODULES = [
@@ -32,13 +29,11 @@ const humanize = (s) => String(s || '').replace(/_/g, ' ');
 const shortDate = (d) => new Date(d).toLocaleDateString();
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-// Always returns a finite number (NaN / undefined / "abc" -> 0).
 const toNumber = (value) => {
   const n = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]+/g, '')) : Number(value);
   return Number.isFinite(n) ? n : 0;
 };
 
-// One readable line for any failure: "500 · Timed out fetching a new connection".
 function describeError(err) {
   const status = err?.response?.status;
   const message =
@@ -49,8 +44,6 @@ function describeError(err) {
   return [status, message].filter(Boolean).join(' · ') || 'Unknown error';
 }
 
-// Network errors, timeouts, rate limits and 5xx are worth one more try
-// (a free-tier API that has just woken up, or a busy connection pool).
 function isTransient(err) {
   const status = err?.response?.status;
   return !err?.response || status === 408 || status === 429 || status >= 500;
@@ -68,8 +61,6 @@ async function withRetry(fn, retries = 1, delay = 1200) {
   }
 }
 
-// /payments?status[]=… is not understood by every backend. Try the filtered
-// call first; if it fails, fetch everything and filter here.
 async function fetchPayments() {
   try {
     return await api.get('/payments', { params: { status: PAYMENT_STATUSES } });
@@ -105,134 +96,15 @@ function ShieldIcon() {
   );
 }
 
-let sparklineSeq = 0;
-
 /**
- * MetricSparkline
- * A small area curve showing the metric's size relative to `max`.
- * (It is a relative-level indicator, not a historical trend: the API
- * returns totals only, so there is no time series to plot.)
- *
- * Reliability notes:
- *  - every instance gets its own gradient id, so charts inside the closed
- *    <dialog> (display: none) can never steal the gradient from visible ones;
- *  - the area path is explicitly closed down to the baseline;
- *  - all numbers are sanitised, so a missing value can't produce an invalid
- *    "NaN" path that silently draws nothing;
- *  - the line is fully visible by default and only *animates in* when
- *    animations are allowed.
+ * Metric Card
+ * Designed to match the clean, bordered style of the Orders page.
  */
-function MetricSparkline({ value = 0, max = 100, tone = 'primary', label = '' }) {
-  const gradientId = useRef(`ac-spark-${++sparklineSeq}`).current;
-
-  const safeValue = Math.max(toNumber(value), 0);
-  const safeMax = toNumber(max) > 0 ? toNumber(max) : 1;
-  const percent = Math.min(Math.max((safeValue / safeMax) * 100, 6), 100);
-
-  const width = 140;
-  const height = 36;
-  const baseline = height - 3;
-  const endY = baseline - (percent / 100) * (baseline - 4);
-
-  const { linePath, areaPath } = useMemo(() => {
-    const line =
-      `M 0 ${baseline} ` +
-      `C ${width * 0.3} ${baseline}, ${width * 0.7} ${endY}, ${width} ${endY}`;
-    const area = `${line} L ${width} ${height} L 0 ${height} Z`;
-    return { linePath: line, areaPath: area };
-  }, [baseline, endY]);
-
+function Metric({ label, value, tone = '' }) {
   return (
-    <div className={`ac-sparkline ac-sparkline-${tone}`}>
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        className="ac-sparkline-svg"
-        role="img"
-        aria-label={`${label}: ${fmt(safeValue)}`}
-      >
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="currentColor" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="currentColor" stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
-
-        <path d={areaPath} fill={`url(#${gradientId})`} stroke="none" className="ac-sparkline-area" />
-        <path
-          d={linePath}
-          pathLength="1"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          className="ac-sparkline-line"
-        />
-      </svg>
-    </div>
-  );
-}
-
-function Metric({ label, value, tone = '', max = 100, rawValue }) {
-  const numeric = toNumber(rawValue !== undefined ? rawValue : value);
-
-  return (
-    <div className={`ac-metric ${tone}`}>
-      <div className="ac-metric-label">
-        <span>{label}</span>
-        <i className="ac-metric-dot" aria-hidden="true" />
-      </div>
-      <strong className="ac-metric-value">{value}</strong>
-      <div className="ac-metric-chart">
-        <MetricSparkline value={numeric} max={max} tone={tone || 'primary'} label={label} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * CombinedChart
- * One graphic for every count metric, drawn on a single shared scale so the
- * bars can be compared directly. Paid volume is money, not a count, so it is
- * shown as a headline figure instead of a bar on the same axis.
- */
-function CombinedChart({ items, volume }) {
-  const max = Math.max(...items.map((item) => item.value), 1);
-
-  return (
-    <div className="ac-panel ac-glance">
-      <div className="ac-panel-header">
-        <div>
-          <span className="ac-section-label">AT A GLANCE</span>
-          <h2>Marketplace overview</h2>
-          <p>Every activity count on one shared scale, so you can compare them directly.</p>
-        </div>
-
-        <div className="ac-glance-volume">
-          <span>Paid volume</span>
-          <b>
-            {fmt(volume)} <small>ETB</small>
-          </b>
-        </div>
-      </div>
-
-      <div className="ac-bars" role="list">
-        {items.map((item) => {
-          const pct = item.value > 0 ? Math.max((item.value / max) * 100, 1.5) : 0;
-
-          return (
-            <div className="ac-bar-row" role="listitem" key={item.label}>
-              <div className="ac-bar-head">
-                <span>{item.label}</span>
-                <b>{fmt(item.value)}</b>
-              </div>
-              <div className="ac-bar-track" aria-hidden="true">
-                <span className={`ac-bar-fill ac-bar-${item.tone}`} style={{ width: `${pct}%` }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
+    <div className={`ac-metric-card ${tone}`}>
+      <span className="ac-metric-card-label">{label}</span>
+      <strong className="ac-metric-card-value">{value}</strong>
     </div>
   );
 }
@@ -300,19 +172,6 @@ export default function AdminDashboard() {
   const [bootstrapped, setBootstrapped] = useState(false);
   const [actionLoading, setActionLoading] = useState('');
 
-  /**
-   * Loads the dashboard in two phases instead of 12 simultaneous requests:
-   *
-   *  1. Overview + users (what the header and metrics need) — the page renders
-   *     as soon as these return.
-   *  2. Everything else, three requests at a time, in the background.
-   *
-   * Each request is isolated: one failing endpoint no longer blanks the whole
-   * control center. Failures are collected and shown in a banner naming the
-   * endpoint and the exact error. Transient failures are retried once.
-   * Batching also keeps a small database connection pool from being exhausted
-   * by a burst of admin queries.
-   */
   const loadAll = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -335,7 +194,6 @@ export default function AdminDashboard() {
       }
     };
 
-    // Phase 1 — critical
     await Promise.all([
       load('Overview', () => api.get('/admin/overview'), (d) => setOverview(d)),
       load('Users', () => api.get('/admin/users'), (d) => setUsers(d.users || [])),
@@ -350,7 +208,6 @@ export default function AdminDashboard() {
 
     setBootstrapped(true);
 
-    // Phase 2 — everything else, in small batches
     const batches = [
       [
         () => load('Disputes', () => api.get('/disputes'), (d) => setDisputes(d.disputes || [])),
@@ -687,39 +544,15 @@ export default function AdminDashboard() {
 
   const cards = overview
     ? [
-        ['Users', overview.users],
-        ['Listings', overview.listings],
-        ['Orders', overview.orders],
-        ['Open disputes', overview.openDisputes],
-        ['Active ads', overview.activeAds],
-        ['Suspended users', overview.suspendedUsers || 0],
-        ['Paid volume', `${fmt(overview.totalPaidVolume)} ETB`],
+        { label: 'Users', value: overview.users, tone: '' },
+        { label: 'Listings', value: overview.listings, tone: '' },
+        { label: 'Orders', value: overview.orders, tone: '' },
+        { label: 'Open disputes', value: overview.openDisputes, tone: 'warn' },
+        { label: 'Active ads', value: overview.activeAds, tone: '' },
+        { label: 'Suspended users', value: overview.suspendedUsers || 0, tone: 'danger' },
+        { label: 'Paid volume', value: `${fmt(overview.totalPaidVolume)} ETB`, tone: 'primary' },
       ]
     : [];
-
-  const chartItems = overview
-    ? [
-        { label: 'Users', value: toNumber(overview.users), tone: 'primary' },
-        { label: 'Listings', value: toNumber(overview.listings), tone: 'primary' },
-        { label: 'Orders', value: toNumber(overview.orders), tone: 'primary' },
-        { label: 'Active ads', value: toNumber(overview.activeAds), tone: 'primary' },
-        { label: 'Open disputes', value: toNumber(overview.openDisputes), tone: 'warn' },
-        { label: 'Suspended users', value: toNumber(overview.suspendedUsers), tone: 'danger' },
-      ]
-    : [];
-
-  const getMaxForMetric = (label) => {
-    if (!overview) return 100;
-    const allValues = [overview.users, overview.listings, overview.orders, overview.activeAds]
-      .map(toNumber)
-      .filter((n) => n > 0);
-    const baseMax = Math.max(...allValues, 1) * 1.2;
-
-    if (label === 'Paid volume') return toNumber(overview.totalPaidVolume) * 1.2 || 1000000;
-    if (label === 'Open disputes') return Math.max(toNumber(overview.openDisputes) * 2, 5);
-    if (label === 'Suspended users') return Math.max(toNumber(overview.suspendedUsers) * 2, 5);
-    return baseMax;
-  };
 
   const openDisputes = disputes.filter((d) => d.status === 'OPEN' || d.status === 'UNDER_REVIEW');
   const resolvedDisputes = disputes.filter((d) => d.status !== 'OPEN' && d.status !== 'UNDER_REVIEW');
@@ -842,35 +675,23 @@ export default function AdminDashboard() {
         </div>
 
         {cards.length > 0 ? (
-          <div className="ac-metrics">
-            {cards.map(([label, value]) => {
-              let tone = '';
-              if (label === 'Open disputes') tone = 'warn';
-              if (label === 'Suspended users') tone = 'danger';
-
-              return (
-                <Metric
-                  key={label}
-                  label={label}
-                  value={value}
-                  tone={tone}
-                  max={getMaxForMetric(label)}
-                  rawValue={toNumber(value)}
-                />
-              );
-            })}
+          <div className="ac-metrics-grid">
+            {cards.map((card) => (
+              <Metric
+                key={card.label}
+                label={card.label}
+                value={card.value}
+                tone={card.tone}
+              />
+            ))}
           </div>
         ) : (
-          <div className="ac-metrics ac-metrics--empty">
+          <div className="ac-metrics-grid ac-metrics--empty">
             <Empty title="Metrics unavailable">
               The overview numbers couldn’t be loaded. See the notice below for the exact error, then try
               again.
             </Empty>
           </div>
-        )}
-
-        {overview && chartItems.length > 0 && (
-          <CombinedChart items={chartItems} volume={toNumber(overview.totalPaidVolume)} />
         )}
       </section>
 
@@ -888,9 +709,14 @@ export default function AdminDashboard() {
           <span className="ac-section-label">MARKETPLACE SNAPSHOT</span>
           <h2>Marketplace performance</h2>
 
-          <div className="ac-metrics" style={{ marginTop: 18 }}>
-            {cards.map(([label, value]) => (
-              <Metric key={label} label={label} value={value} max={getMaxForMetric(label)} />
+          <div className="ac-metrics-grid" style={{ marginTop: 18 }}>
+            {cards.map((card) => (
+              <Metric
+                key={card.label}
+                label={card.label}
+                value={card.value}
+                tone={card.tone}
+              />
             ))}
           </div>
         </div>
