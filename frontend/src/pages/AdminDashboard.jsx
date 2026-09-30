@@ -98,13 +98,37 @@ function ShieldIcon() {
 
 /**
  * Metric Card
- * Designed to match the clean, bordered style of the Orders page.
+ * Designed to match the "Selling" card style from the Orders page.
  */
 function Metric({ label, value, tone = '' }) {
   return (
     <div className={`ac-metric-card ${tone}`}>
-      <span className="ac-metric-card-label">{label}</span>
+      <div className="ac-metric-card-eyebrow">
+        <span className="ac-eyebrow-line" />
+        <span>{label}</span>
+      </div>
       <strong className="ac-metric-card-value">{value}</strong>
+    </div>
+  );
+}
+
+/**
+ * Progress Tracker
+ * Replicates the green checkmark stepper from the Orders page.
+ */
+function ProgressTracker({ steps, currentStep }) {
+  return (
+    <div className="ac-progress-tracker">
+      {steps.map((step, index) => (
+        <div key={step} className="ac-progress-step">
+          <div className={`ac-progress-dot ${index <= currentStep ? 'active' : ''}`}>
+            {index <= currentStep ? '✓' : ''}
+          </div>
+          {index < steps.length - 1 && (
+            <div className={`ac-progress-line ${index < currentStep ? 'active' : ''}`} />
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -122,7 +146,10 @@ function Toolbar({ label, title, children, action }) {
   return (
     <div className="ac-toolbar">
       <div>
-        <span className="ac-section-label">{label}</span>
+        <div className="ac-toolbar-eyebrow">
+          <span className="ac-eyebrow-line" />
+          <span>{label}</span>
+        </div>
         <h2>{title}</h2>
         {children && <p>{children}</p>}
       </div>
@@ -871,7 +898,10 @@ export default function AdminDashboard() {
           <div className="ac-panel">
             <div className="ac-panel-header">
               <div>
-                <span className="ac-section-label">SYSTEM OVERVIEW</span>
+                <div className="ac-toolbar-eyebrow">
+                  <span className="ac-eyebrow-line" />
+                  <span>SYSTEM OVERVIEW</span>
+                </div>
                 <h2>Marketplace modules</h2>
                 <p>
                   Current administrative capabilities and implementation status across the MarketBridge
@@ -1067,7 +1097,11 @@ export default function AdminDashboard() {
             <div className="ac-grid">
               {openDisputes.map((item) => (
                 <div className="ac-card" key={item.id}>
-                  <div className="ac-status-row">
+                  <div className="ac-card-eyebrow">
+                    <span className="ac-eyebrow-line" />
+                    <span>DISPUTE</span>
+                  </div>
+                  <div className="ac-card-header">
                     <h3>{item.disputeType}</h3>
                     <span className={statusBadgeClass(item.status)}>{item.status}</span>
                   </div>
@@ -1161,7 +1195,11 @@ export default function AdminDashboard() {
             <div className="ac-grid">
               {suspiciousUsers.map((item) => (
                 <div className="ac-card" key={item.id}>
-                  <div className="ac-status-row">
+                  <div className="ac-card-eyebrow">
+                    <span className="ac-eyebrow-line" />
+                    <span>FLAGGED USER</span>
+                  </div>
+                  <div className="ac-card-header">
                     <h3>{item.name}</h3>
                     <span className="sd-badge sd-warn">REVIEW</span>
                   </div>
@@ -1202,6 +1240,10 @@ export default function AdminDashboard() {
 
                 return (
                   <div className="ac-card" key={ad.id}>
+                    <div className="ac-card-eyebrow">
+                      <span className="ac-eyebrow-line" />
+                      <span>ADVERTISING</span>
+                    </div>
                     {ad.creativeImageUrl && (
                       <img
                         src={ad.creativeImageUrl}
@@ -1212,7 +1254,7 @@ export default function AdminDashboard() {
                       />
                     )}
 
-                    <div className="ac-status-row">
+                    <div className="ac-card-header">
                       <h3>{humanize(ad.type)}</h3>
                       <span className={statusBadgeClass(ad.status)}>{ad.status}</span>
                     </div>
@@ -1311,7 +1353,10 @@ export default function AdminDashboard() {
             <div className="ac-panel" style={{ marginTop: 20 }}>
               <div className="ac-panel-header">
                 <div>
-                  <span className="ac-section-label">HISTORY</span>
+                  <div className="ac-toolbar-eyebrow">
+                    <span className="ac-eyebrow-line" />
+                    <span>HISTORY</span>
+                  </div>
                   <h2>Campaign ledger</h2>
                 </div>
               </div>
