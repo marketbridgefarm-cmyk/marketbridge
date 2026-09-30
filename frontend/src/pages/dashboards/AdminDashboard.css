@@ -1,11 +1,5 @@
 /* ============================================================
    MarketBridge — Admin Control Center  (pages/dashboards/AdminDashboard.css)
-   Extracted from the inline ADMIN_STYLES string and aligned with the
-   Dashboard / Orders design system (same green accent, radii, shadows).
-
-   Everything is scoped under .admin-control-center. The sd-* helpers used
-   by the JSX (sd-btn, sd-badge, sd-table …) are given scoped definitions
-   here so the page looks right even if the global sheet changes.
    ============================================================ */
 
 .admin-control-center {
@@ -306,6 +300,9 @@
   background: var(--ac-surface);
   box-shadow: var(--ac-shadow);
   transition: border-color .18s var(--ac-ease), transform .18s var(--ac-ease);
+  position: relative;
+  overflow: hidden;
+  padding-bottom: 54px; /* Make room for the chart */
 }
 .ac-metric:hover { border-color: rgba(30, 158, 90, .3); transform: translateY(-1px); }
 .ac-metric-label {
@@ -332,6 +329,56 @@
 .ac-metric-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
 .ac-metric.warn .ac-metric-dot { background: #f59e0b; }
 .ac-metric.danger .ac-metric-dot { background: #ef4444; }
+
+/* Sparkline container */
+.ac-metric-chart {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  padding: 0 14px 8px;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+/* SVG wrapper */
+.ac-sparkline {
+  width: 100%;
+  height: 100%;
+  color: var(--ac-primary);
+}
+
+.ac-sparkline-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ac-sparkline-line {
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  animation: drawLine 1.6s var(--ac-ease) forwards;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.08));
+}
+
+.ac-sparkline-area {
+  opacity: 0;
+  animation: fadeInArea 1s var(--ac-ease) 0.5s forwards;
+}
+
+.ac-sparkline-primary { color: #15803d; }
+.ac-sparkline-warn { color: #d97706; }
+.ac-sparkline-danger { color: #dc2626; }
+
+@keyframes drawLine {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes fadeInArea {
+  to { opacity: 1; }
+}
 
 /* ── Tabs ────────────────────────────────────────────────── */
 
@@ -492,7 +539,6 @@
 }
 .ac-status-row h3 { flex: 1 1 auto; }
 
-/* Action row pinned to the card bottom so buttons line up */
 .ac-actions {
   display: flex;
   align-items: center;
@@ -844,7 +890,10 @@
   .ac-dialog { width: calc(100vw - 18px); }
   .ac-modal { padding: 21px; }
 
-  /* Tables turn into stacked cards, using each cell's data-label */
+  .ac-metric { padding-bottom: 44px; }
+  .ac-metric-chart { height: 38px; padding: 0 10px 6px; }
+  .ac-metric-value { font-size: 22px; }
+
   .ac-table-shell { overflow: visible; border: 0; background: transparent; }
   .ac-table-shell .sd-table { min-width: 0; }
   .admin-control-center .sd-table--stack thead { display: none; }
@@ -887,8 +936,9 @@
   .ac-shield { width: 41px; height: 41px; flex-basis: 41px; border-radius: 13px; }
   .ac-hero h1 { font-size: 27px; }
   .ac-metrics { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .ac-metric { padding: 13px; border-radius: 14px; }
+  .ac-metric { padding: 13px; border-radius: 14px; padding-bottom: 38px; }
   .ac-metric-value { font-size: 19px; }
+  .ac-metric-chart { height: 32px; padding: 0 8px 4px; }
   .ac-small-stat { padding: 11px; }
   .ac-stat-strip { grid-template-columns: 1fr 1fr; }
   .ac-hero-actions,
@@ -900,4 +950,7 @@
 @media (prefers-reduced-motion: reduce) {
   .ac-card, .ac-metric, .ac-tab, .admin-control-center .sd-btn, .ac-radio-option { transition: none; }
   .ac-card:hover, .ac-metric:hover { transform: none; }
+  .ac-sparkline-line { stroke-dasharray: none; stroke-dashoffset: 0; animation: none; }
+  .ac-sparkline-area { opacity: 1; animation: none; }
+  .ac-metric-chart { opacity: 1; }
 }
