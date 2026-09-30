@@ -41,9 +41,14 @@ function recordTag(label) {
   return String(label || '??').replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || '??';
 }
 
-function initialsOf(name) {
-  if (!name) return '·';
-  const parts = String(name).trim().split(/\s+/).slice(0, 2);
+// Initials from a name, falling back to a 2-letter tag when the name is
+// missing or literally "Unknown".
+function initialsOf(name, fallback) {
+  const cleaned = String(name || '').trim();
+  if (!cleaned || cleaned.toLowerCase() === 'unknown') {
+    return recordTag(fallback);
+  }
+  const parts = cleaned.split(/\s+/).slice(0, 2);
   return parts.map((p) => p[0]).join('').toUpperCase();
 }
 
@@ -421,7 +426,7 @@ export default function Dashboard() {
                             <span className="order-party-name">{o.seller?.name || 'Unknown'}</span>
                           </div>
                           <div className={`order-avatar tone-${tone}`}>
-                            {initialsOf(o.seller?.name)}
+                            {initialsOf(o.seller?.name, title)}
                           </div>
                         </div>
                       </div>
@@ -535,12 +540,13 @@ export default function Dashboard() {
                   const offersForListing = offersReceived.filter((o) => o.listing?.id === l.id).length;
                   const dateLabel = l.createdAt ? new Date(l.createdAt).toLocaleDateString() : null;
                   const tone = statusTone(l.status);
+                  const title = listingLabel(l);
                   return (
                     <article key={l.id} className="order-card">
                       <div className="order-card-head">
                         <div className="order-card-head-text">
                           <span className="eyebrow">Listing</span>
-                          <h2 className="order-title">{listingLabel(l)}</h2>
+                          <h2 className="order-title">{title}</h2>
                           {dateLabel && <p className="order-date">{dateLabel}</p>}
                         </div>
                         <div className="order-card-head-party">
@@ -549,7 +555,7 @@ export default function Dashboard() {
                             <span className="order-party-name">{l.status}</span>
                           </div>
                           <div className={`order-avatar tone-${tone}`}>
-                            {recordTag(listingLabel(l))}
+                            {recordTag(title)}
                           </div>
                         </div>
                       </div>
@@ -620,6 +626,7 @@ export default function Dashboard() {
                       ? new Date(o.updatedAt || o.createdAt).toLocaleDateString()
                       : null;
                   const tone = statusTone(o.status);
+                  const title = listingLabel(o.listing);
                   return (
                     <article
                       key={o.id}
@@ -630,7 +637,7 @@ export default function Dashboard() {
                           <span className={`eyebrow ${isSeller ? 'is-selling' : ''}`}>
                             {isSeller ? 'Selling' : 'Buying'}
                           </span>
-                          <h2 className="order-title">{listingLabel(o.listing)}</h2>
+                          <h2 className="order-title">{title}</h2>
                           {dateLabel && <p className="order-date">{dateLabel}</p>}
                         </div>
                         <div className="order-card-head-party">
@@ -641,7 +648,7 @@ export default function Dashboard() {
                             </span>
                           </div>
                           <div className={`order-avatar tone-${isSeller ? 'success' : 'info'}`}>
-                            {initialsOf(counterparty?.name)}
+                            {initialsOf(counterparty?.name, title)}
                           </div>
                         </div>
                       </div>
@@ -777,6 +784,7 @@ export default function Dashboard() {
                     ? new Date(o.createdAt).toLocaleDateString()
                     : null;
                   const tone = statusTone(o.status);
+                  const title = listingLabel(o.listing);
                   return (
                     <article key={o.id} className="order-card">
                       <div className="order-card-head">
@@ -784,7 +792,7 @@ export default function Dashboard() {
                           <span className={`eyebrow ${isSeller ? 'is-selling' : ''}`}>
                             {isSeller ? 'Selling' : 'Buying'}
                           </span>
-                          <h2 className="order-title">{listingLabel(o.listing)}</h2>
+                          <h2 className="order-title">{title}</h2>
                           {dateLabel && <p className="order-date">{dateLabel}</p>}
                         </div>
                         <div className="order-card-head-party">
@@ -795,7 +803,7 @@ export default function Dashboard() {
                             </span>
                           </div>
                           <div className={`order-avatar tone-${tone}`}>
-                            {initialsOf(counterparty?.name)}
+                            {initialsOf(counterparty?.name, title)}
                           </div>
                         </div>
                       </div>
@@ -870,7 +878,7 @@ export default function Dashboard() {
                         onClick={() => openThread(c)}
                       >
                         <span className="order-avatar tone-muted">
-                          {initialsOf(c.name || 'User')}
+                          {initialsOf(c.name, 'User')}
                         </span>
                         <span className="conv-card-text">
                           <span className="order-title">{c.name || 'User'}</span>
@@ -1038,12 +1046,13 @@ export default function Dashboard() {
                     ? new Date(o.createdAt).toLocaleDateString()
                     : null;
                   const tone = statusTone(o.status);
+                  const title = listingLabel(o.listing);
                   return (
                     <article key={o.id} className="order-card">
                       <div className="order-card-head">
                         <div className="order-card-head-text">
                           <span className="eyebrow is-selling">Sale</span>
-                          <h2 className="order-title">{listingLabel(o.listing)}</h2>
+                          <h2 className="order-title">{title}</h2>
                           {dateLabel && <p className="order-date">{dateLabel}</p>}
                         </div>
                         <div className="order-card-head-party">
@@ -1052,7 +1061,7 @@ export default function Dashboard() {
                             <span className="order-party-name">{o.buyer?.name || 'Unknown'}</span>
                           </div>
                           <div className="order-avatar tone-success">
-                            {initialsOf(o.buyer?.name)}
+                            {initialsOf(o.buyer?.name, title)}
                           </div>
                         </div>
                       </div>
