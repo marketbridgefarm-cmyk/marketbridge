@@ -1207,7 +1207,7 @@
   color: var(--sd-ink);
 }
 
-.sd-dashboard .sd-table .sd-mobile-action {
+.sd-dashboard .sd-table .sd-table-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1224,7 +1224,7 @@
   box-shadow: none;
   transition: border-color .15s var(--sd-ease), background .15s var(--sd-ease), color .15s var(--sd-ease);
 }
-.sd-dashboard .sd-table .sd-mobile-action:hover {
+.sd-dashboard .sd-table .sd-table-action:hover {
   border-color: rgba(30, 158, 90, .35);
   background: var(--sd-accent-soft);
   color: var(--sd-accent-2);
@@ -1874,7 +1874,7 @@
     background: #fff;
     color: var(--sd-ink);
   }
-  .sd-dashboard .sd-table .sd-mobile-action:hover {
+  .sd-dashboard .sd-table .sd-table-action:hover {
     border-color: var(--sd-line);
     background: #fff;
     color: var(--sd-ink);
@@ -2019,5 +2019,95 @@
 @media (max-width: 900px) {
   .sd-dashboard .sd-toast {
     bottom: calc(var(--sd-nav-h) + env(safe-area-inset-bottom, 0px) + 12px);
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   FIXES — completed table, action links, page bottom space
+   ══════════════════════════════════════════════════════════ */
+
+/* The table link is a dedicated class (.sd-table-action) so no global
+   link/button styles can turn its text white-on-white. */
+.sd-dashboard .sd-table .sd-table-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+  line-height: 1;
+  text-indent: 0;
+  visibility: visible;
+  opacity: 1;
+  color: var(--sd-ink) !important;
+  background: #fff none;
+  border: 1.5px solid var(--sd-line);
+  border-radius: 14px;
+  white-space: nowrap;
+}
+.sd-dashboard .sd-table .sd-table-action:hover {
+  color: var(--sd-accent-2) !important;
+}
+.sd-dashboard .sd-table .sd-table-action svg {
+  display: block;
+  flex: 0 0 auto;
+  stroke: currentColor;
+}
+
+/* Table: columns size to their content and long text wraps instead of
+   running underneath the neighbouring column. */
+.sd-dashboard .sd-table { table-layout: auto; }
+.sd-dashboard .sd-table tbody td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.sd-dashboard .sd-table td[data-label="Report"] { min-width: 220px; }
+.sd-dashboard .sd-table th:last-child,
+.sd-dashboard .sd-table td[data-label="Action"] {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* .sd-panel padding must not leak into the table wrapper */
+.sd-dashboard .sd-panel.sd-table-wrap { padding: 0; }
+
+/* Phones: rows become standalone cards (no card-inside-a-card) */
+@media (max-width: 720px) {
+  .sd-dashboard .sd-panel.sd-table-wrap {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    overflow: visible;
+  }
+  .sd-dashboard .sd-table--mobile-cards tbody tr {
+    padding: 18px 18px 16px;
+    margin-bottom: 14px;
+    border-radius: 22px;
+    box-shadow: var(--sd-shadow);
+  }
+  .sd-dashboard .sd-table--mobile-cards tbody td {
+    white-space: normal;
+    padding: 7px 0;
+  }
+  .sd-dashboard .sd-table--mobile-cards tbody td[data-label="Report"] {
+    min-width: 0;
+  }
+  .sd-dashboard .sd-table--mobile-cards tbody td[data-label="Action"] {
+    width: 100%;
+    justify-content: stretch;
+    padding-top: 14px;
+  }
+  .sd-dashboard .sd-table--mobile-cards .sd-table-action {
+    width: 100%;
+    min-height: 46px;
+  }
+}
+
+/* The last card is never hidden behind the bottom tab bar */
+@media (max-width: 900px) {
+  .sd-dashboard {
+    padding-bottom: calc(var(--sd-nav-h) + env(safe-area-inset-bottom, 0px) + 32px);
   }
 }
