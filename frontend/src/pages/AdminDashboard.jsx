@@ -61,7 +61,7 @@ function ShieldIcon() {
 function MetricSparkline({ value = 0, max = 100, tone = 'primary', label = '' }) {
   const safeMax = max > 0 ? max : 1;
   const rawPercent = Math.min((Number(value) / safeMax) * 100, 100);
-  const percent = Math.max(rawPercent, 3); // Ensure a minimum visible baseline
+  const percent = Math.max(rawPercent, 5); // Ensure a visible baseline
 
   const width = 140;
   const height = 36;
@@ -74,7 +74,6 @@ function MetricSparkline({ value = 0, max = 100, tone = 'primary', label = '' })
     const startY = baseline;
     const endY = height - (percent / 100) * (height - 4);
 
-    // Two control points create a gentle S-curve, giving a 'wave' effect
     const cp1x = width * 0.3;
     const cp1y = baseline;
     const cp2x = width * 0.7;
@@ -126,7 +125,6 @@ function Metric({ label, value, tone = '', max = 100, rawValue }) {
         <span>{label}</span>
       </div>
       <strong className="ac-metric-value">{value}</strong>
-      {/* Visual sparkline replaces the static dot */}
       <div className="ac-metric-chart">
         <MetricSparkline
           value={rawValue !== undefined ? rawValue : numValue}
@@ -250,7 +248,13 @@ export default function AdminDashboard() {
       if (err.response?.data?.code === 'MFA_SETUP_REQUIRED') {
         setMfaRequired(true);
       } else {
-        setError(err.response?.data?.error || 'Could not load admin data');
+        // Log the full error for debugging
+        console.error("Admin Dashboard Load Error:", err);
+        setError(
+          err.response?.data?.error || 
+          err.message || 
+          'Could not load admin data. Please check your network and API status.'
+        );
       }
     } finally {
       setLoading(false);
@@ -564,13 +568,11 @@ export default function AdminDashboard() {
       ]
     : [];
 
-  // Determine a dynamic max for each chart based on the overview
   const getMaxForMetric = (label) => {
     if (!overview) return 100;
     const allValues = [overview.users, overview.listings, overview.orders, overview.activeAds].filter(n => typeof n === 'number');
-    const baseMax = Math.max(...allValues, 1) * 1.2; // 20% headroom
+    const baseMax = Math.max(...allValues, 1) * 1.2;
 
-    // Specific overrides for scale
     if (label === 'Paid volume') return overview.totalPaidVolume * 1.2 || 1000000;
     if (label === 'Open disputes') return Math.max(overview.openDisputes * 2, 5);
     if (label === 'Suspended users') return Math.max(overview.suspendedUsers * 2, 5);
