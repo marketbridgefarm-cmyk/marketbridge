@@ -1,9 +1,10 @@
 /* ============================================================
    MarketBridge — Unified Dashboard  (dashboards/Dashboard.css)
-   Every list item is a standalone card (Orders-style).
+   Every list item is a standalone Orders-style card.
    ============================================================ */
 
 .dashboard-page {
+  /* ── Tokens ───────────────────────────────────────────── */
   --d-accent:      #1e9e5a;
   --d-accent-2:    #0f7a44;
   --d-accent-ink:  #12734a;
@@ -345,22 +346,27 @@
   color: var(--d-muted);
   flex: 0 0 auto;
 }
-
-/* Container panel — strips the outer card */
-.dashboard-page .panel--list {
-  padding: 0; border: 0; border-radius: 0;
-  background: transparent; box-shadow: none;
+.dashboard-page .panel--empty {
+  min-height: 240px;
+  display: flex; align-items: center; justify-content: center;
 }
-.dashboard-page .panel--list .panel-head {
-  padding: 14px 18px;
-  margin: 0 0 12px;
-  border: 1px solid var(--d-line);
-  border-radius: var(--d-radius);
-  background: #fff;
-  box-shadow: var(--d-shadow-sm);
+.dashboard-page .panel-empty {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; gap: 10px; max-width: 340px;
+}
+.dashboard-page .panel-empty-icon {
+  width: 50px; height: 50px; border-radius: 14px;
+  background: var(--d-accent-soft);
+  border: 1px solid var(--d-accent-line);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+}
+.dashboard-page .panel-empty h3 {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 15px; font-weight: 800; color: var(--d-ink); margin: 0;
 }
 
-/* ── Order card — the target style ─────────────────────── */
+/* ── Order card ────────────────────────────────────────── */
 
 .dashboard-page .order-list {
   display: grid;
@@ -372,6 +378,10 @@
   .dashboard-page .order-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+.dashboard-page .order-list--one {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 8px;
 }
 
 .dashboard-page .order-card {
@@ -465,13 +475,14 @@
   display: flex; flex-direction: column; align-items: stretch;
   flex: 1 1 auto; width: 100%; min-width: 0;
 }
-.dashboard-page .order-card .card-block { margin: 0 0 18px; }
+.dashboard-page .order-card .card-block { margin: 0 0 14px; }
 .dashboard-page .order-card .card-block:last-of-type { margin-bottom: 0; }
+.dashboard-page .order-card .card-block + .card-block { margin-top: 4px; }
 
 .dashboard-page .order-card .card-block-title {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap;
-  padding: 0 0 10px; margin: 0 0 14px;
+  padding: 0 0 8px; margin: 0 0 10px;
   border-bottom: 1px solid var(--d-line-soft);
 }
 .dashboard-page .order-card .card-block-title h3 {
@@ -488,9 +499,7 @@
 .dashboard-page .order-card .card-block-body { display: block; }
 
 /* Badges */
-.dashboard-page .badges {
-  display: flex; flex-wrap: wrap; gap: 6px;
-}
+.dashboard-page .badges { display: flex; flex-wrap: wrap; gap: 6px; }
 .dashboard-page .status-pill {
   display: inline-flex; align-items: center; gap: 6px;
   min-height: 24px; padding: 0 10px;
@@ -522,9 +531,7 @@
 }
 
 /* Amount */
-.dashboard-page .order-price {
-  display: flex; align-items: baseline; gap: 6px;
-}
+.dashboard-page .order-price { display: flex; align-items: baseline; gap: 6px; }
 .dashboard-page .price-amount {
   font-family: var(--mb-font-head, Manrope, sans-serif);
   font-size: 24px; font-weight: 800; letter-spacing: -.5px;
@@ -643,14 +650,12 @@
 
 /* ── Conversation cards ───────────────────────────────── */
 
-.dashboard-page .sd-conv-list {
-  list-style: none; margin: 0; padding: 0;
-  display: flex; flex-direction: column; gap: 8px;
-}
-.dashboard-page .sd-conv {
+.dashboard-page .conv-card {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  display: grid; grid-template-columns: 40px minmax(0, 1fr) 18px;
-  align-items: center; gap: 12px;
   padding: 12px 14px;
   border: 1px solid var(--d-line);
   border-radius: var(--d-radius-sm);
@@ -662,42 +667,27 @@
               box-shadow .15s var(--d-ease),
               transform .15s var(--d-ease);
 }
-.dashboard-page .sd-conv:hover {
+.dashboard-page .conv-card:hover {
   border-color: rgba(30, 158, 90, .3);
   box-shadow: var(--d-shadow);
   transform: translateY(-1px);
 }
-.dashboard-page .sd-conv:focus-visible { outline: none; box-shadow: var(--d-ring); }
-.dashboard-page .sd-conv--active {
+.dashboard-page .conv-card--active {
   border-color: var(--d-accent);
   background: var(--d-accent-soft);
 }
-.dashboard-page .sd-conv-avatar {
-  width: 40px; height: 40px;
-  border-radius: 12px;
-  background: var(--d-line-soft);
-  color: var(--d-muted);
-  display: inline-flex; align-items: center; justify-content: center;
-  font: 800 12px/1 var(--mb-font-head, Manrope, sans-serif);
+.dashboard-page .conv-card-text {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
 }
-.dashboard-page .sd-conv--active .sd-conv-avatar {
-  background: #fff; color: var(--d-accent-2);
+.dashboard-page .conv-card-text .order-title {
+  font-size: 14px; margin: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.dashboard-page .sd-conv-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.dashboard-page .sd-conv-name {
-  font: 700 13.5px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--d-ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.dashboard-page .sd-conv-meta {
-  font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .12em; text-transform: uppercase; color: var(--d-muted);
-}
-.dashboard-page .sd-conv-arrow {
+.dashboard-page .conv-card-arrow {
   font-size: 15px; color: var(--d-muted-2);
   transition: color .15s var(--d-ease), transform .15s var(--d-ease);
 }
-.dashboard-page .sd-conv:hover .sd-conv-arrow {
+.dashboard-page .conv-card:hover .conv-card-arrow {
   color: var(--d-accent-2); transform: translateX(3px);
 }
 
@@ -747,6 +737,35 @@
   .dashboard-page .sd-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+/* Head stacks under 520px */
+@media (max-width: 520px) {
+  .dashboard-page .order-card .order-card-head {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 12px;
+    align-items: start;
+  }
+  .dashboard-page .order-card .order-card-head-party {
+    grid-column: 1;
+    justify-self: start;
+    justify-content: flex-start;
+    width: 100%;
+    padding-top: 12px;
+    border-top: 1px solid var(--d-line-soft);
+  }
+  .dashboard-page .order-card .order-party-info {
+    align-items: flex-start;
+    text-align: left;
+    max-width: none;
+    flex: 1 1 auto;
+  }
+  .dashboard-page .order-card .order-avatar {
+    width: 42px;
+    height: 42px;
+    font-size: 14px;
+    border-radius: 12px;
+  }
+}
+
 @media (max-width: 720px) {
   .dashboard-page .container-wide { padding: 20px 14px 60px; }
   .dashboard-page .service-access-header { flex-direction: column; align-items: flex-start; }
@@ -787,14 +806,22 @@
   .dashboard-page .tab-head > .btn { width: auto; }
 
   .dashboard-page .panel { padding: 16px; }
-  .dashboard-page .panel--list { padding: 0; }
 
   .dashboard-page .order-card { padding: 18px; }
 
-  .dashboard-page .order-actions { gap: 10px; }
-  .dashboard-page .btn-view { width: 100%; justify-content: center; }
-
-  .dashboard-page .order-card .order-card-head { column-gap: 10px; }
+  .dashboard-page .order-card .order-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .dashboard-page .order-card .order-actions .order-time {
+    text-align: center;
+    font-size: 11.5px;
+  }
+  .dashboard-page .order-card .order-actions .btn-view {
+    width: 100%;
+    justify-content: center;
+  }
 
   .dashboard-page .sd-counter-input { width: 100%; flex: 1 1 100%; }
   .dashboard-page .sd-actions { justify-content: flex-end; width: 100%; }
@@ -807,7 +834,6 @@
 
 @media (max-width: 420px) {
   .dashboard-page .order-card .order-card-head-party { gap: 8px; }
-  .dashboard-page .order-card .order-party-info { max-width: 120px; }
   .dashboard-page .order-card .order-party-name { font-size: 12.5px; }
   .dashboard-page .order-avatar { width: 40px; height: 40px; font-size: 13px; border-radius: 11px; }
   .dashboard-page .order-title { font-size: 16px; }
@@ -823,17 +849,17 @@
   .dashboard-page .sd-tab,
   .dashboard-page .order-card,
   .dashboard-page .btn-view,
-  .dashboard-page .sd-conv,
+  .dashboard-page .conv-card,
   .dashboard-page .btn,
   .dashboard-page .sd-tabs-chevron,
   .dashboard-page .service-access-arrow,
-  .dashboard-page .sd-conv-arrow,
+  .dashboard-page .conv-card-arrow,
   .dashboard-page .loading-spinner {
     transition: none;
     animation: none;
   }
   .dashboard-page .order-card:hover,
   .dashboard-page .service-access-card:hover,
-  .dashboard-page .sd-conv:hover { transform: none; }
+  .dashboard-page .conv-card:hover { transform: none; }
   .dashboard-page .sd-toast { animation: none; }
 }
