@@ -377,6 +377,14 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
     const inspectionQuoteId = inspectionQuoteResponse.body.quote.id;
     created.inspectionQuoteIds.push(inspectionQuoteId);
 
+    // Competitive flow: the requester must select a bid before negotiating
+    // or accepting it.
+    const inspectionSelectResponse = await api(
+      `/api/inspections/${created.inspectionRequestId}/quotes/${inspectionQuoteId}/select`,
+      { token: buyer.token, method: 'PATCH' }
+    );
+    assert.equal(inspectionSelectResponse.status, 200, JSON.stringify(inspectionSelectResponse.body));
+
     const inspectionAcceptResponse = await api(
       `/api/inspections/${created.inspectionRequestId}/quotes/${inspectionQuoteId}/accept`,
       { token: buyer.token, method: 'PATCH' }
@@ -492,6 +500,12 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
     assert.equal(transportQuoteResponse.status, 201, JSON.stringify(transportQuoteResponse.body));
     const transportQuoteId = transportQuoteResponse.body.quote.id;
     created.transportQuoteIds.push(transportQuoteId);
+
+    const transportSelectResponse = await api(`/api/transport/quotes/${transportQuoteId}/select`, {
+      token: buyer.token,
+      method: 'PATCH',
+    });
+    assert.equal(transportSelectResponse.status, 200, JSON.stringify(transportSelectResponse.body));
 
     const transportAcceptResponse = await api(`/api/transport/quotes/${transportQuoteId}`, {
       token: buyer.token,
