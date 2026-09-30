@@ -5,10 +5,13 @@ import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import ImageCarousel from '../components/ImageCarousel.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/AdminDashboard.css';
+import './dashboards/AdminDashboardFixes.css';
 
 const VERIFICATION_OPTIONS = ['PENDING', 'VERIFIED', 'REJECTED'];
 
 const ROLE_OPTIONS = ['BUYER', 'SELLER', 'INSPECTOR', 'TRUCK_OWNER', 'ADVERTISER', 'ADMIN'];
+
+const PAYMENT_STATUSES = ['PENDING', 'RECONCILIATION_REQUIRED'];
 
 const MODULES = [
   ['Users & role management', true],
@@ -27,6 +30,56 @@ const MODULES = [
 const fmt = (n) => Number(n || 0).toLocaleString();
 const humanize = (s) => String(s || '').replace(/_/g, ' ');
 const shortDate = (d) => new Date(d).toLocaleDateString();
+const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+// Always returns a finite number (NaN / undefined / "abc" -> 0).
+const toNumber = (value) => {
+  const n = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]+/g, '')) : Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+// One readable line for any failure: "500 · Timed out fetching a new connection".
+function describeError(err) {
+  const status = err?.response?.status;
+  const message =
+    err?.response?.data?.error ||
+    err?.response?.data?.message ||
+    err?.message ||
+    (typeof err === 'string' ? err : '');
+  return [status, message].filter(Boolean).join(' · ') || 'Unknown error';
+}
+
+// Network errors, timeouts, rate limits and 5xx are worth one more try
+// (a free-tier API that has just woken up, or a busy connection pool).
+function isTransient(err) {
+  const status = err?.response?.status;
+  return !err?.response || status === 408 || status === 429 || status >= 500;
+}
+
+async function withRetry(fn, retries = 1, delay = 1200) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (retries > 0 && isTransient(err)) {
+      await sleep(delay);
+      return withRetry(fn, retries - 1, delay * 1.5);
+    }
+    throw err;
+  }
+}
+
+// /payments?status[]=… is not understood by every backend. Try the filtered
+// call first; if it fails, fetch everything and filter here.
+async function fetchPayments() {
+  try {
+    return await api.get('/payments', { params: { status: PAYMENT_STATUSES } });
+  } catch (err) {
+    if (err.response?.data?.code === 'MFA_SETUP_REQUIRED') throw err;
+    const res = await api.get('/payments');
+    const all = res.data?.payments || [];
+    return { data: { payments: all.filter((p) => PAYMENT_STATUSES.includes(p.status)) } };
+  }
+}
 
 function statusBadgeClass(status) {
   if (['VERIFIED', 'ACTIVE', 'APPROVED', 'PUBLISHED', 'SCHEDULED', 'RESOLVED', 'COMPLETED'].includes(status)) {
@@ -52,35 +105,42 @@ function ShieldIcon() {
   );
 }
 
+let sparklineSeq = 0;
+
 /**
  * MetricSparkline
- * Renders a smooth, progressively animated area chart representing the
- * metric's value relative to a dynamic max. Each chart has its own
- * accent cadence via the `tone` prop.
+ * A small area curve showing the metric's size relative to `max`.
+ * (It is a relative-level indicator, not a historical trend: the API
+ * returns totals only, so there is no time series to plot.)
+ *
+ * Reliability notes:
+ *  - every instance gets its own gradient id, so charts inside the closed
+ *    <dialog> (display: none) can never steal the gradient from visible ones;
+ *  - the area path is explicitly closed down to the baseline;
+ *  - all numbers are sanitised, so a missing value can't produce an invalid
+ *    "NaN" path that silently draws nothing;
+ *  - the line is fully visible by default and only *animates in* when
+ *    animations are allowed.
  */
 function MetricSparkline({ value = 0, max = 100, tone = 'primary', label = '' }) {
-  const safeMax = max > 0 ? max : 1;
-  const rawPercent = Math.min((Number(value) / safeMax) * 100, 100);
-  const percent = Math.max(rawPercent, 5); // Ensure a visible baseline
+  const gradientId = useRef(`ac-spark-${++sparklineSeq}`).current;
+
+  const safeValue = Math.max(toNumber(value), 0);
+  const safeMax = toNumber(max) > 0 ? toNumber(max) : 1;
+  const percent = Math.min(Math.max((safeValue / safeMax) * 100, 6), 100);
 
   const width = 140;
   const height = 36;
-  const baseline = height - 4;
+  const baseline = height - 3;
+  const endY = baseline - (percent / 100) * (baseline - 4);
 
-  // Generate a smooth cubic bezier path
-  const pathData = useMemo(() => {
-    const startX = 0;
-    const endX = width;
-    const startY = baseline;
-    const endY = height - (percent / 100) * (height - 4);
-
-    const cp1x = width * 0.3;
-    const cp1y = baseline;
-    const cp2x = width * 0.7;
-    const cp2y = endY;
-
-    return `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`;
-  }, [percent, baseline, height]);
+  const { linePath, areaPath } = useMemo(() => {
+    const line =
+      `M 0 ${baseline} ` +
+      `C ${width * 0.3} ${baseline}, ${width * 0.7} ${endY}, ${width} ${endY}`;
+    const area = `${line} L ${width} ${height} L 0 ${height} Z`;
+    return { linePath: line, areaPath: area };
+  }, [baseline, endY]);
 
   return (
     <div className={`ac-sparkline ac-sparkline-${tone}`}>
@@ -89,22 +149,19 @@ function MetricSparkline({ value = 0, max = 100, tone = 'primary', label = '' })
         preserveAspectRatio="none"
         className="ac-sparkline-svg"
         role="img"
-        aria-label={`${label} trend: ${fmt(value)}`}
+        aria-label={`${label}: ${fmt(safeValue)}`}
       >
         <defs>
-          <linearGradient id={`spark-fill-${tone}`} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="currentColor" stopOpacity="0.35" />
             <stop offset="100%" stopColor="currentColor" stopOpacity="0.02" />
           </linearGradient>
         </defs>
+
+        <path d={areaPath} fill={`url(#${gradientId})`} stroke="none" className="ac-sparkline-area" />
         <path
-          d={pathData}
-          fill={`url(#spark-fill-${tone})`}
-          stroke="none"
-          className="ac-sparkline-area"
-        />
-        <path
-          d={pathData}
+          d={linePath}
+          pathLength="1"
           fill="none"
           stroke="currentColor"
           strokeWidth="2.5"
@@ -117,7 +174,7 @@ function MetricSparkline({ value = 0, max = 100, tone = 'primary', label = '' })
 }
 
 function Metric({ label, value, tone = '', max = 100, rawValue }) {
-  const numValue = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]+/g, '')) : value;
+  const numeric = toNumber(rawValue !== undefined ? rawValue : value);
 
   return (
     <div className={`ac-metric ${tone}`}>
@@ -126,12 +183,7 @@ function Metric({ label, value, tone = '', max = 100, rawValue }) {
       </div>
       <strong className="ac-metric-value">{value}</strong>
       <div className="ac-metric-chart">
-        <MetricSparkline
-          value={rawValue !== undefined ? rawValue : numValue}
-          max={max}
-          tone={tone || 'primary'}
-          label={label}
-        />
+        <MetricSparkline value={numeric} max={max} tone={tone || 'primary'} label={label} />
       </div>
     </div>
   );
@@ -193,72 +245,101 @@ export default function AdminDashboard() {
   const [roleSelections, setRoleSelections] = useState({});
 
   const [error, setError] = useState('');
+  const [loadIssues, setLoadIssues] = useState([]);
   const [mfaRequired, setMfaRequired] = useState(false);
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
+  const [bootstrapped, setBootstrapped] = useState(false);
   const [actionLoading, setActionLoading] = useState('');
 
+  /**
+   * Loads the dashboard in two phases instead of 12 simultaneous requests:
+   *
+   *  1. Overview + users (what the header and metrics need) — the page renders
+   *     as soon as these return.
+   *  2. Everything else, three requests at a time, in the background.
+   *
+   * Each request is isolated: one failing endpoint no longer blanks the whole
+   * control center. Failures are collected and shown in a banner naming the
+   * endpoint and the exact error. Transient failures are retried once.
+   * Batching also keeps a small database connection pool from being exhausted
+   * by a burst of admin queries.
+   */
   const loadAll = useCallback(async () => {
     setLoading(true);
     setError('');
     setMfaRequired(false);
 
-    try {
-      const [
-        overviewRes,
-        usersRes,
-        disputesRes,
-        fraudRes,
-        adsRes,
-        paymentsRes,
-        ordersRes,
-        operationsRes,
-        orderEventsRes,
-        auditEventsRes,
-        refundsRes,
-        installmentPlansRes,
-      ] = await Promise.all([
-        api.get('/admin/overview'),
-        api.get('/admin/users'),
-        api.get('/disputes'),
-        api.get('/admin/fraud-flags'),
-        api.get('/ads'),
-        api.get('/payments', { params: { status: ['PENDING', 'RECONCILIATION_REQUIRED'] } }),
-        api.get('/orders'),
-        api.get('/admin/operations/summary'),
-        api.get('/admin/order-events', { params: { limit: 100 } }),
-        api.get('/admin/audit-events', { params: { limit: 100 } }),
-        api.get('/admin/financial/refunds'),
-        api.get('/admin/financial/installment-plans').catch(() => ({ data: { plans: [] } })),
-      ]);
+    const issues = [];
+    let mfa = false;
 
-      setOverview(overviewRes.data);
-      setUsers(usersRes.data?.users || []);
-      setDisputes(disputesRes.data?.disputes || []);
-      setSuspiciousUsers(fraudRes.data?.suspiciousUsers || []);
-      setAds(adsRes.data?.ads || []);
-      setPayments(paymentsRes.data?.payments || []);
-      setOrders(ordersRes.data?.orders || []);
-      setOperations(operationsRes.data || null);
-      setOrderEvents(orderEventsRes.data?.events || []);
-      setAuditEvents(auditEventsRes.data?.events || []);
-      setRefunds(refundsRes.data?.refunds || []);
-      setInstallmentPlans(installmentPlansRes.data?.plans || []);
-    } catch (err) {
-      if (err.response?.data?.code === 'MFA_SETUP_REQUIRED') {
-        setMfaRequired(true);
-      } else {
-        // Log the full error for debugging
-        console.error("Admin Dashboard Load Error:", err);
-        setError(
-          err.response?.data?.error || 
-          err.message || 
-          'Could not load admin data. Please check your network and API status.'
-        );
+    const load = async (label, request, apply) => {
+      try {
+        const res = await withRetry(request);
+        apply(res?.data || {});
+      } catch (err) {
+        if (err?.response?.data?.code === 'MFA_SETUP_REQUIRED') {
+          mfa = true;
+          return;
+        }
+        console.error(`Admin Dashboard: "${label}" failed`, err);
+        issues.push({ label, detail: describeError(err) });
       }
-    } finally {
+    };
+
+    // Phase 1 — critical
+    await Promise.all([
+      load('Overview', () => api.get('/admin/overview'), (d) => setOverview(d)),
+      load('Users', () => api.get('/admin/users'), (d) => setUsers(d.users || [])),
+    ]);
+
+    if (mfa) {
+      setMfaRequired(true);
+      setBootstrapped(true);
       setLoading(false);
+      return;
     }
+
+    setBootstrapped(true);
+
+    // Phase 2 — everything else, in small batches
+    const batches = [
+      [
+        () => load('Disputes', () => api.get('/disputes'), (d) => setDisputes(d.disputes || [])),
+        () => load('Fraud flags', () => api.get('/admin/fraud-flags'), (d) => setSuspiciousUsers(d.suspiciousUsers || [])),
+        () => load('Advertising', () => api.get('/ads'), (d) => setAds(d.ads || [])),
+      ],
+      [
+        () => load('Payments', fetchPayments, (d) => setPayments(d.payments || [])),
+        () => load('Orders', () => api.get('/orders'), (d) => setOrders(d.orders || [])),
+        () => load('Operations summary', () => api.get('/admin/operations/summary'), (d) => setOperations(d || null)),
+      ],
+      [
+        () => load('Order events', () => api.get('/admin/order-events', { params: { limit: 100 } }), (d) => setOrderEvents(d.events || [])),
+        () => load('Audit events', () => api.get('/admin/audit-events', { params: { limit: 100 } }), (d) => setAuditEvents(d.events || [])),
+        () => load('Refunds', () => api.get('/admin/financial/refunds'), (d) => setRefunds(d.refunds || [])),
+      ],
+      [
+        () =>
+          load(
+            'Installment plans',
+            () => api.get('/admin/financial/installment-plans').catch(() => ({ data: { plans: [] } })),
+            (d) => setInstallmentPlans(d.plans || [])
+          ),
+      ],
+    ];
+
+    for (const batch of batches) {
+      await Promise.all(batch.map((run) => run()));
+      if (mfa) break;
+    }
+
+    if (mfa) {
+      setMfaRequired(true);
+    }
+
+    setLoadIssues(issues);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -570,12 +651,14 @@ export default function AdminDashboard() {
 
   const getMaxForMetric = (label) => {
     if (!overview) return 100;
-    const allValues = [overview.users, overview.listings, overview.orders, overview.activeAds].filter(n => typeof n === 'number');
+    const allValues = [overview.users, overview.listings, overview.orders, overview.activeAds]
+      .map(toNumber)
+      .filter((n) => n > 0);
     const baseMax = Math.max(...allValues, 1) * 1.2;
 
-    if (label === 'Paid volume') return overview.totalPaidVolume * 1.2 || 1000000;
-    if (label === 'Open disputes') return Math.max(overview.openDisputes * 2, 5);
-    if (label === 'Suspended users') return Math.max(overview.suspendedUsers * 2, 5);
+    if (label === 'Paid volume') return toNumber(overview.totalPaidVolume) * 1.2 || 1000000;
+    if (label === 'Open disputes') return Math.max(toNumber(overview.openDisputes) * 2, 5);
+    if (label === 'Suspended users') return Math.max(toNumber(overview.suspendedUsers) * 2, 5);
     return baseMax;
   };
 
@@ -609,14 +692,14 @@ export default function AdminDashboard() {
     },
   ];
 
-  if (loading && !overview && !mfaRequired) {
+  if (!bootstrapped && !mfaRequired) {
     return (
       <div className="sd-dashboard admin-control-center">
         <div className="ac-mfa">
           <div className="ac-mfa-icon">⌛</div>
           <span className="ac-kicker">ADMINISTRATION</span>
           <h1>Loading control center</h1>
-          <p className="sd-muted">{error || 'Loading admin dashboard…'}</p>
+          <p className="sd-muted">Loading admin dashboard…</p>
         </div>
       </div>
     );
@@ -699,27 +782,33 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="ac-metrics">
-          {cards.map(([label, value]) => {
-            let tone = '';
-            if (label === 'Open disputes') tone = 'warn';
-            if (label === 'Suspended users') tone = 'danger';
-            
-            const max = getMaxForMetric(label);
-            let rawValue = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]+/g, '')) : value;
+        {cards.length > 0 ? (
+          <div className="ac-metrics">
+            {cards.map(([label, value]) => {
+              let tone = '';
+              if (label === 'Open disputes') tone = 'warn';
+              if (label === 'Suspended users') tone = 'danger';
 
-            return (
-              <Metric
-                key={label}
-                label={label}
-                value={value}
-                tone={tone}
-                max={max}
-                rawValue={rawValue}
-              />
-            );
-          })}
-        </div>
+              return (
+                <Metric
+                  key={label}
+                  label={label}
+                  value={value}
+                  tone={tone}
+                  max={getMaxForMetric(label)}
+                  rawValue={toNumber(value)}
+                />
+              );
+            })}
+          </div>
+        ) : (
+          <div className="ac-metrics ac-metrics--empty">
+            <Empty title="Metrics unavailable">
+              The overview numbers couldn’t be loaded. See the notice below for the exact error, then try
+              again.
+            </Empty>
+          </div>
+        )}
       </section>
 
       <dialog ref={performanceModalRef} className="ac-dialog">
@@ -738,7 +827,7 @@ export default function AdminDashboard() {
 
           <div className="ac-metrics" style={{ marginTop: 18 }}>
             {cards.map(([label, value]) => (
-              <Metric key={label} label={label} value={value} />
+              <Metric key={label} label={label} value={value} max={getMaxForMetric(label)} />
             ))}
           </div>
         </div>
@@ -827,6 +916,27 @@ export default function AdminDashboard() {
           )}
         </div>
       </dialog>
+
+      {loadIssues.length > 0 && (
+        <section className="ac-section">
+          <div className="ac-alert warn" role="alert">
+            <span className="ac-alert-icon">!</span>
+            <div className="ac-alert-body">
+              <strong>Some data couldn’t be loaded</strong>
+              <ul className="ac-alert-list">
+                {loadIssues.map((issue) => (
+                  <li key={issue.label}>
+                    <b>{issue.label}</b> — {issue.detail}
+                  </li>
+                ))}
+              </ul>
+              <button type="button" className="sd-btn sd-btn-outline" onClick={loadAll} disabled={loading}>
+                {loading ? 'Retrying…' : 'Try again'}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {error && (
         <section className="ac-section">
