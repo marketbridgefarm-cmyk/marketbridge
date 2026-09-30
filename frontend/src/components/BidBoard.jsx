@@ -50,6 +50,18 @@ function quoteTurn(quote) {
   return null;
 }
 
+function isQuoteExpired(quote) {
+  return Boolean(quote.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
+}
+
+// A row is "superseded" when a later counter points back to it (or the API
+// says it has children). Only the newest row of a chain is a live offer.
+function supersededIds(quotes) {
+  const ids = new Set(quotes.map((q) => q.parentQuoteId).filter(Boolean));
+  quotes.forEach((q) => { if ((q._count?.childQuotes || 0) > 0) ids.add(q.id); });
+  return ids;
+}
+
 // ---- Individual bid card ------------------------------------------------
 function BidCard({ quote, type, onRespond, disabled }) {
   const [showCounter, setShowCounter] = useState(false);
@@ -62,11 +74,12 @@ function BidCard({ quote, type, onRespond, disabled }) {
   const isNeg      = quote.status === 'COUNTERED';
   const isActive   = isPending || isSelected || isNeg;
   const isHired    = quote.status === 'ACCEPTED';
-  const isDone     = ['REJECTED', 'EXPIRED'].includes(quote.status);
+  const isDone     = ['REJECTED', 'EXPIRED', 'WITHDRAWN'].includes(quote.status);
+  const expired    = isActive && isQuoteExpired(quote);
   const turn       = quoteTurn(quote);
   // In BidBoard the viewer is always the REQUESTER
-  const myTurn     = isSelected || (isNeg && turn === 'REQUESTER');
-  const waiting    = isNeg && turn === 'PROVIDER';
+  const myTurn     = !expired && (isSelected || (isNeg && turn === 'REQUESTER'));
+  const waiting    = !expired && isNeg && turn === 'PROVIDER';
 
   // Current effective price — use counterAmount when in negotiation
   const displayAmount = (isNeg || isHired) && quote.counterAmount != null
@@ -131,6 +144,13 @@ function BidCard({ quote, type, onRespond, disabled }) {
       {/* Optional pitch message */}
       {quote.message && <p className="bid-card-message">{quote.message}</p>}
 
+      {/* Expired notice — nothing can be accepted or countered on a timed-out quote */}
+      {expired && (
+        <div className="bid-card-status-bar bid-card-status-bar--rejected">
+          Quote expired{turn === 'REQUESTER' ? ' — reject it to clear it, or select another bid' : ' — waiting on the provider, or select another bid'}
+        </div>
+      )}
+
       {/* Negotiation state bar */}
       {(isSelected || isNeg) && (
         <div className={`bid-card-neg-bar${myTurn ? ' bid-card-neg-bar--mine' : ''}`}>
@@ -150,7 +170,7 @@ function BidCard({ quote, type, onRespond, disabled }) {
       {/* Rejected / expired */}
       {isDone && (
         <div className="bid-card-status-bar bid-card-status-bar--rejected">
-          {quote.status === 'EXPIRED' ? 'Quote expired' : 'Not selected'}
+          {quote.status === 'EXPIRED' ? 'Quote expired' : quote.status === 'WITHDRAWN' ? 'Released' : 'Not selected'}
         </div>
       )}
 
@@ -159,7 +179,7 @@ function BidCard({ quote, type, onRespond, disabled }) {
         <div className="bid-card-actions">
 
           {/* COMPETITION PHASE — PENDING: only action is SELECT */}
-          {isPending && (
+          {isPending && !expired && (
             <button
               type="button"
               className="btn btn-outline btn-sm"
@@ -167,6 +187,19 @@ function BidCard({ quote, type, onRespond, disabled }) {
               onClick={() => handle('SELECT')}
             >
               {busy === 'SELECT' ? 'Selecting…' : 'Select for negotiation'}
+            </button>
+          )}
+
+          {/* Expired quote on the requester's side: the only thing left is to clear it */}
+          {expired && turn === 'REQUESTER' && (
+            <button
+              type="button"
+              className="btn btn-light btn-sm"
+              disabled={!!busy}
+              onClick={() => handle('REJECT')}
+              style={{ marginLeft: 'auto' }}
+            >
+              {busy === 'REJECT' ? 'Rejecting…' : 'Reject'}
             </button>
           )}
 
@@ -248,14 +281,16 @@ export default function BidBoard({ quotes, type, requestId, orderLink, onRespond
   if (!Array.isArray(quotes) || quotes.length === 0) return null;
 
   const active   = quotes.filter((q) => ['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status));
-  const resolved = quotes.filter((q) => !['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status));
 
   // Within each provider's counter-chain keep only the leaf (most recent).
-  // Quotes from different providers have no parent-child link so they are all kept.
-  const leafActive = (() => {
-    const parentIds = new Set(active.map((q) => q.parentQuoteId).filter(Boolean));
-    return active.filter((q) => !parentIds.has(q.id));
-  })();
+  // The parent lookup MUST cover every status: if a rejected/accepted leaf is
+  // left out, its COUNTERED parent looks like a live offer again and the
+  // requester can "act" on a negotiation that already ended.
+  const superseded = supersededIds(quotes);
+  const leafActive = active.filter((q) => !superseded.has(q.id));
+  const resolved   = quotes.filter(
+    (q) => !['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status) && !superseded.has(q.id),
+  );
 
   const sorted = [...leafActive].sort((a, b) => {
     if (sortBy === 'price') return (a.amount || 0) - (b.amount || 0);
