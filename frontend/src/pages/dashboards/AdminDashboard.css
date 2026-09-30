@@ -284,7 +284,7 @@
   box-shadow: 0 0 0 4px rgba(34, 197, 94, .13);
 }
 
-/* ── Metric Cards (Redesigned to match Orders page) ───────── */
+/* ── Metric Cards ───────────────────────────────────────── */
 
 .ac-metrics-grid {
   display: grid;
@@ -327,7 +327,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Tone variations */
 .ac-metric-card.warn { border-left: 4px solid #f59e0b; }
 .ac-metric-card.warn .ac-metric-card-value { color: #a86f10; }
 
@@ -523,6 +522,115 @@
   font-size: 12.5px;
   border-radius: 9px;
   flex: 0 0 auto;
+}
+
+/* ── NEW: User Cards Grid ────────────────────────────────── */
+
+.ac-users-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 15px;
+  align-items: start;
+}
+.ac-users-grid-empty {
+  grid-column: 1 / -1;
+}
+
+.ac-user-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--ac-border);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: var(--ac-shadow);
+  transition: transform .2s var(--ac-ease), box-shadow .2s var(--ac-ease), border-color .2s var(--ac-ease);
+}
+.ac-user-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(30, 158, 90, .28);
+  box-shadow: var(--ac-shadow-hi);
+}
+
+.ac-user-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.ac-user-card-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ac-user-card-name strong {
+  font-size: 15px;
+  letter-spacing: -.01em;
+  overflow-wrap: anywhere;
+}
+.ac-user-card-sub {
+  color: var(--ac-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.ac-user-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.ac-user-card-row:last-child { border-bottom: 0; }
+
+.ac-user-card-row--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px solid #eef1f5;
+}
+
+.ac-user-card-label {
+  flex: 0 0 auto;
+  color: var(--ac-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.ac-user-card-value {
+  min-width: 0;
+  color: var(--ac-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.ac-user-card-select {
+  min-height: 34px;
+  font-size: 12px;
+}
+
+.ac-user-card-actions {
+  display: flex;
+  gap: 8px;
+}
+.ac-user-card-actions .sd-btn {
+  min-height: 34px;
+  font-size: 12px;
+  padding: 0 12px;
 }
 
 /* ── Search ──────────────────────────────────────────────── */
@@ -847,6 +955,7 @@
 @media (max-width: 1050px) {
   .ac-metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ac-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ac-users-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ac-stat-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
@@ -856,6 +965,7 @@
   .ac-grid,
   .ac-module-list,
   .admin-control-center .sd-form-grid { grid-template-columns: 1fr; }
+  .ac-users-grid { grid-template-columns: 1fr; }
   .ac-panel { padding: 17px; border-radius: 18px; }
   .ac-toolbar,
   .ac-panel-header { flex-direction: column; align-items: stretch; }
@@ -912,6 +1022,7 @@
   .ac-metrics-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   .ac-metric-card { padding: 12px; border-radius: 12px; }
   .ac-metric-card-value { font-size: 18px; }
+  .ac-user-card { padding: 16px; border-radius: 16px; }
   .ac-small-stat { padding: 11px; }
   .ac-stat-strip { grid-template-columns: 1fr 1fr; }
   .ac-hero-actions,
