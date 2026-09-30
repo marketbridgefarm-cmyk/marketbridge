@@ -180,6 +180,7 @@ function Metric({ label, value, tone = '', max = 100, rawValue }) {
     <div className={`ac-metric ${tone}`}>
       <div className="ac-metric-label">
         <span>{label}</span>
+        <i className="ac-metric-dot" aria-hidden="true" />
       </div>
       <strong className="ac-metric-value">{value}</strong>
       <div className="ac-metric-chart">
