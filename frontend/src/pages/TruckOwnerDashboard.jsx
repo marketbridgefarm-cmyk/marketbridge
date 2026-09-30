@@ -1333,7 +1333,7 @@ export default function TruckOwnerDashboard() {
                           <td data-label="Action">
                             <Link
                               to={`/orders/${job.orderId}`}
-                              className="sd-mobile-action"
+                              className="sd-table-action"
                             >
                               View order
                               <ArrowIcon />
