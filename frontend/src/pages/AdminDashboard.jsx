@@ -190,6 +190,53 @@ function Metric({ label, value, tone = '', max = 100, rawValue }) {
   );
 }
 
+/**
+ * CombinedChart
+ * One graphic for every count metric, drawn on a single shared scale so the
+ * bars can be compared directly. Paid volume is money, not a count, so it is
+ * shown as a headline figure instead of a bar on the same axis.
+ */
+function CombinedChart({ items, volume }) {
+  const max = Math.max(...items.map((item) => item.value), 1);
+
+  return (
+    <div className="ac-panel ac-glance">
+      <div className="ac-panel-header">
+        <div>
+          <span className="ac-section-label">AT A GLANCE</span>
+          <h2>Marketplace overview</h2>
+          <p>Every activity count on one shared scale, so you can compare them directly.</p>
+        </div>
+
+        <div className="ac-glance-volume">
+          <span>Paid volume</span>
+          <b>
+            {fmt(volume)} <small>ETB</small>
+          </b>
+        </div>
+      </div>
+
+      <div className="ac-bars" role="list">
+        {items.map((item) => {
+          const pct = item.value > 0 ? Math.max((item.value / max) * 100, 1.5) : 0;
+
+          return (
+            <div className="ac-bar-row" role="listitem" key={item.label}>
+              <div className="ac-bar-head">
+                <span>{item.label}</span>
+                <b>{fmt(item.value)}</b>
+              </div>
+              <div className="ac-bar-track" aria-hidden="true">
+                <span className={`ac-bar-fill ac-bar-${item.tone}`} style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Empty({ title, children }) {
   return (
     <div className="ac-empty">
@@ -650,6 +697,17 @@ export default function AdminDashboard() {
       ]
     : [];
 
+  const chartItems = overview
+    ? [
+        { label: 'Users', value: toNumber(overview.users), tone: 'primary' },
+        { label: 'Listings', value: toNumber(overview.listings), tone: 'primary' },
+        { label: 'Orders', value: toNumber(overview.orders), tone: 'primary' },
+        { label: 'Active ads', value: toNumber(overview.activeAds), tone: 'primary' },
+        { label: 'Open disputes', value: toNumber(overview.openDisputes), tone: 'warn' },
+        { label: 'Suspended users', value: toNumber(overview.suspendedUsers), tone: 'danger' },
+      ]
+    : [];
+
   const getMaxForMetric = (label) => {
     if (!overview) return 100;
     const allValues = [overview.users, overview.listings, overview.orders, overview.activeAds]
@@ -809,6 +867,10 @@ export default function AdminDashboard() {
               again.
             </Empty>
           </div>
+        )}
+
+        {overview && chartItems.length > 0 && (
+          <CombinedChart items={chartItems} volume={toNumber(overview.totalPaidVolume)} />
         )}
       </section>
 
