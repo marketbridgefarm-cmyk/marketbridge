@@ -95,3 +95,94 @@
   margin-top: 4px;
   min-height: 36px;
 }
+
+
+/* ── Combined "at a glance" chart ─────────────────────────── */
+
+.admin-control-center .ac-glance {
+  margin-bottom: 24px;
+}
+
+.admin-control-center .ac-glance-volume {
+  flex: 0 0 auto;
+  text-align: right;
+}
+.admin-control-center .ac-glance-volume span {
+  display: block;
+  color: var(--ac-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.admin-control-center .ac-glance-volume b {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 26px;
+  line-height: 1.1;
+  letter-spacing: -.025em;
+  font-variant-numeric: tabular-nums;
+}
+.admin-control-center .ac-glance-volume small {
+  color: var(--ac-muted);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.admin-control-center .ac-bars {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-control-center .ac-bar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.admin-control-center .ac-bar-head span {
+  color: var(--ac-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.admin-control-center .ac-bar-head b {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-control-center .ac-bar-track {
+  height: 14px;
+  border-radius: 999px;
+  background: #eef1f5;
+  overflow: hidden;
+}
+
+.admin-control-center .ac-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transform-origin: left center;
+  animation: acGrowBar 1s var(--ac-ease, ease) both;
+}
+.admin-control-center .ac-bar-primary { background: linear-gradient(90deg, #22c55e, #15803d); }
+.admin-control-center .ac-bar-warn    { background: linear-gradient(90deg, #fbbf24, #d97706); }
+.admin-control-center .ac-bar-danger  { background: linear-gradient(90deg, #f87171, #dc2626); }
+
+@keyframes acGrowBar {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+@media (max-width: 760px) {
+  .admin-control-center .ac-glance-volume { text-align: left; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-control-center .ac-bar-fill { animation: none; }
+}
