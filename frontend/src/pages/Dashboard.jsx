@@ -24,6 +24,8 @@ const TABS = [
 
 const LISTING_STATUSES = ['ACTIVE', 'UNDER_NEGOTIATION', 'SOLD'];
 const ACTIVE_SALE_STATUSES = ['CONFIRMED', 'TRANSPORT_ARRANGED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
+const TRANSPORT_STARTED = ['TRANSPORT_ARRANGED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
+const NO_PROGRESS = ['CANCELLED', 'DISPUTED', 'FROZEN', 'REJECTED', 'FAILED', 'PENDING_PAYMENT'];
 
 function money(value) {
   return `${Number(value || 0).toLocaleString()} ETB`;
@@ -61,6 +63,9 @@ function statusTone(status) {
   return 'muted';
 }
 
+const label = (s) => String(s || '').replace(/_/g, ' ');
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString() : null);
+
 function ArrowIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -68,6 +73,171 @@ function ArrowIcon() {
       <path d="M5 12h14" />
       <path d="M13 6l6 6-6 6" />
     </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Order helpers: extra pills + progress steps (payment / transport)
+// ---------------------------------------------------------------------------
+
+function orderExtras(o) {
+  const payments = o.payments || [];
+  const salePay = payments.find((p) => p.type !== 'TRANSPORT');
+  const transportPay = payments.find((p) => p.type === 'TRANSPORT');
+  const job = o.transportJob;
+
+  const pills = [];
+  if (salePay?.status) {
+    pills.push({ key: 'pay', tone: statusTone(salePay.status), text: `Payment: ${label(salePay.status)}` });
+  }
+  if (job?.status) {
+    const text = `Transport: ${label(job.status)}${transportPay?.status ? ` · ${label(transportPay.status)}` : ''}`;
+    const tone = transportPay?.status && transportPay.status !== 'PAID' ? 'gold' : statusTone(job.status);
+    pills.push({ key: 'tr', tone, text });
+  }
+
+  let steps = null;
+  if (!NO_PROGRESS.includes(o.status)) {
+    const jobStatus = String(job?.status || '').toUpperCase();
+    steps = [
+      { name: 'Confirmed', done: true },
+      { name: 'Transport', done: TRANSPORT_STARTED.includes(o.status) || ['ASSIGNED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'].includes(jobStatus) },
+      { name: 'Delivered', done: ['DELIVERED', 'COMPLETED'].includes(o.status) || jobStatus === 'DELIVERED' },
+      { name: 'Completed', done: o.status === 'COMPLETED' },
+    ];
+  }
+  return { pills, steps };
+}
+
+function Progress({ steps }) {
+  if (!steps) return null;
+  return (
+    <ol className="order-progress" aria-label="Order progress">
+      {steps.map((s) => (
+        <li key={s.name} className={`order-progress-step${s.done ? ' is-done' : ''}`} title={s.name}>
+          <span className="order-progress-dot">{s.done && <CheckIcon />}</span>
+          <span className="sr-only">{s.name}{s.done ? ' — done' : ' — pending'}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Pill({ tone, dot, children }) {
+  return (
+    <span className={`status-pill tone-${tone}`}>
+      {dot && <span className="status-pill-dot" aria-hidden="true" />}
+      {children}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shared card (identical structure to the design screenshot)
+// ---------------------------------------------------------------------------
+
+function RecordCard({
+  eyebrow, selling, title, date,
+  partyRole, partyName, avatar, avatarTone,
+  blockTitle, blockNote, badges, steps,
+  amount, footer, stack, highlight,
+}) {
+  return (
+    <article className={`order-card${highlight ? ' order-card--action' : ''}`}>
+      <div className="order-card-head">
+        <div className="order-card-head-text">
+          <span className={`eyebrow${selling ? ' is-selling' : ''}`}>{eyebrow}</span>
+          <h2 className="order-title">{title}</h2>
+          {date && <p className="order-date">{date}</p>}
+        </div>
+        <div className="order-card-head-party">
+          <div className="order-party-info">
+            <span className="order-party-role">{partyRole}</span>
+            <span className="order-party-name">{partyName}</span>
+          </div>
+          <div className={`order-avatar tone-${avatarTone}`}>{avatar}</div>
+        </div>
+      </div>
+
+      <div className="card-body">
+        <section className="card-block">
+          <div className="card-block-title">
+            <h3>{blockTitle}</h3>
+            {blockNote && <span className="card-block-note">{blockNote}</span>}
+          </div>
+          <div className="card-block-body">
+            <div className="badges">{badges}</div>
+            <Progress steps={steps} />
+          </div>
+        </section>
+
+        {amount != null && (
+          <section className="card-block card-block--amount">
+            <div className="card-block-title"><h3>Amount</h3></div>
+            <div className="card-block-body">
+              <div className="order-price">
+                <span className="price-amount">{Number(amount || 0).toLocaleString()}</span>
+                <span className="price-currency">ETB</span>
+              </div>
+            </div>
+          </section>
+        )}
+
+        <div className={`order-actions${stack ? ' order-actions--stack' : ''}`}>{footer}</div>
+      </div>
+    </article>
+  );
+}
+
+function CardFooter({ date, to, text }) {
+  return (
+    <>
+      <span className="order-time">{date ? `Created ${date}` : 'Recently updated'}</span>
+      <Link className="btn-view" to={to}>
+        {text} <ArrowIcon />
+      </Link>
+    </>
+  );
+}
+
+function OrderCard({ o, footerText = 'View order', eyebrowOverride, blockTitle = 'Order status' }) {
+  const isSeller = o.viewerRole === 'SELLER';
+  const counterparty = isSeller ? o.buyer : o.seller;
+  const tone = statusTone(o.status);
+  const title = listingLabel(o.listing);
+  const { pills, steps } = orderExtras(o);
+  const date = fmtDate(o.createdAt);
+  return (
+    <RecordCard
+      eyebrow={eyebrowOverride || (isSeller ? 'Selling' : 'Buying')}
+      selling={isSeller}
+      title={title}
+      date={date}
+      partyRole={isSeller ? 'Buyer' : 'Seller'}
+      partyName={counterparty?.name || 'Unknown'}
+      avatar={initialsOf(counterparty?.name, title)}
+      avatarTone={tone}
+      blockTitle={blockTitle}
+      blockNote={`ORD ${shortId(o.id)}`}
+      badges={
+        <>
+          <Pill tone={tone} dot>{label(o.status)}</Pill>
+          {pills.map((p) => <Pill key={p.key} tone={p.tone}>{p.text}</Pill>)}
+        </>
+      }
+      steps={steps}
+      amount={o.finalPrice}
+      footer={<CardFooter date={date} to={`/orders/${o.id}`} text={footerText} />}
+    />
   );
 }
 
@@ -410,63 +580,24 @@ export default function Dashboard() {
               <div className="order-list">
                 {offersSent.slice(0, 8).map((o) => {
                   const title = listingLabel(o.listing);
-                  const dateLabel = o.createdAt ? new Date(o.createdAt).toLocaleDateString() : null;
+                  const date = fmtDate(o.createdAt);
                   const tone = statusTone(o.status);
                   return (
-                    <article key={o.id} className="order-card">
-                      <div className="order-card-head">
-                        <div className="order-card-head-text">
-                          <span className="eyebrow">Buying</span>
-                          <h2 className="order-title">{title}</h2>
-                          {dateLabel && <p className="order-date">{dateLabel}</p>}
-                        </div>
-                        <div className="order-card-head-party">
-                          <div className="order-party-info">
-                            <span className="order-party-role">Seller</span>
-                            <span className="order-party-name">{o.seller?.name || 'Unknown'}</span>
-                          </div>
-                          <div className={`order-avatar tone-${tone}`}>
-                            {initialsOf(o.seller?.name, title)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="card-body">
-                        <section className="card-block">
-                          <div className="card-block-title">
-                            <h3>Offer status</h3>
-                            <span className="card-block-note">OFF {shortId(o.id)}</span>
-                          </div>
-                          <div className="card-block-body">
-                            <div className="badges">
-                              <span className={`status-pill tone-${tone}`}>
-                                <span className="status-pill-dot" aria-hidden="true" />
-                                {String(o.status || '').replace(/_/g, ' ')}
-                              </span>
-                            </div>
-                          </div>
-                        </section>
-
-                        <section className="card-block">
-                          <div className="card-block-title"><h3>Amount</h3></div>
-                          <div className="card-block-body">
-                            <div className="order-price">
-                              <span className="price-amount">{Number(o.amount || 0).toLocaleString()}</span>
-                              <span className="price-currency">ETB</span>
-                            </div>
-                          </div>
-                        </section>
-
-                        <div className="order-actions">
-                          <span className="order-time">
-                            {dateLabel ? `Created ${dateLabel}` : 'Recently updated'}
-                          </span>
-                          <Link className="btn-view" to={`/listings/${o.listing?.id}`}>
-                            View listing <ArrowIcon />
-                          </Link>
-                        </div>
-                      </div>
-                    </article>
+                    <RecordCard
+                      key={o.id}
+                      eyebrow="Buying"
+                      title={title}
+                      date={date}
+                      partyRole="Seller"
+                      partyName={o.seller?.name || 'Unknown'}
+                      avatar={initialsOf(o.seller?.name, title)}
+                      avatarTone={tone}
+                      blockTitle="Offer status"
+                      blockNote={`OFF ${shortId(o.id)}`}
+                      badges={<Pill tone={tone} dot>{label(o.status)}</Pill>}
+                      amount={o.amount}
+                      footer={<CardFooter date={date} to={`/listings/${o.listing?.id}`} text="View listing" />}
+                    />
                   );
                 })}
               </div>
@@ -479,7 +610,7 @@ export default function Dashboard() {
           <>
             <header className="tab-head">
               <div className="tab-head-text">
-                <span className="eyebrow">SELLING</span>
+                <span className="eyebrow is-selling">SELLING</span>
                 <h1>My selling activity</h1>
               </div>
               <Link className="btn btn-primary" to="/create-listing">Create a listing</Link>
@@ -538,57 +669,31 @@ export default function Dashboard() {
               <div className="order-list">
                 {myListings.map((l) => {
                   const offersForListing = offersReceived.filter((o) => o.listing?.id === l.id).length;
-                  const dateLabel = l.createdAt ? new Date(l.createdAt).toLocaleDateString() : null;
+                  const date = fmtDate(l.createdAt);
                   const tone = statusTone(l.status);
                   const title = listingLabel(l);
                   return (
-                    <article key={l.id} className="order-card">
-                      <div className="order-card-head">
-                        <div className="order-card-head-text">
-                          <span className="eyebrow">Listing</span>
-                          <h2 className="order-title">{title}</h2>
-                          {dateLabel && <p className="order-date">{dateLabel}</p>}
-                        </div>
-                        <div className="order-card-head-party">
-                          <div className="order-party-info">
-                            <span className="order-party-role">Status</span>
-                            <span className="order-party-name">{l.status}</span>
-                          </div>
-                          <div className={`order-avatar tone-${tone}`}>
-                            {recordTag(title)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="card-body">
-                        <section className="card-block">
-                          <div className="card-block-title">
-                            <h3>Offers received</h3>
-                            <span className="card-block-note">LST {shortId(l.id)}</span>
-                          </div>
-                          <div className="card-block-body">
-                            <div className="badges">
-                              <span className={`status-pill tone-${tone}`}>
-                                <span className="status-pill-dot" aria-hidden="true" />
-                                {String(l.status || '').replace(/_/g, ' ')}
-                              </span>
-                              <span className="status-pill tone-muted">
-                                {offersForListing} offer{offersForListing === 1 ? '' : 's'}
-                              </span>
-                            </div>
-                          </div>
-                        </section>
-
-                        <div className="order-actions">
-                          <span className="order-time">
-                            {dateLabel ? `Created ${dateLabel}` : 'Recently updated'}
-                          </span>
-                          <Link className="btn-view" to={`/listings/${l.id}`}>
-                            Manage <ArrowIcon />
-                          </Link>
-                        </div>
-                      </div>
-                    </article>
+                    <RecordCard
+                      key={l.id}
+                      eyebrow="Listing"
+                      title={title}
+                      date={date}
+                      partyRole="Status"
+                      partyName={l.status}
+                      avatar={recordTag(title)}
+                      avatarTone={tone}
+                      blockTitle="Offers received"
+                      blockNote={`LST ${shortId(l.id)}`}
+                      badges={
+                        <>
+                          <Pill tone={tone} dot>{label(l.status)}</Pill>
+                          <Pill tone="muted">
+                            {offersForListing} offer{offersForListing === 1 ? '' : 's'}
+                          </Pill>
+                        </>
+                      }
+                      footer={<CardFooter date={date} to={`/listings/${l.id}`} text="Manage" />}
+                    />
                   );
                 })}
               </div>
@@ -620,140 +725,99 @@ export default function Dashboard() {
                   const myTurn = myTurnOffers.some((mt) => mt.id === o.id);
                   const isSeller = o.viewerRole === 'SELLER';
                   const counterparty = isSeller ? o.buyer : o.seller;
-                  const counterpartyRole = isSeller ? 'Buyer' : 'Seller';
-                  const dateLabel =
-                    (o.updatedAt || o.createdAt)
-                      ? new Date(o.updatedAt || o.createdAt).toLocaleDateString()
-                      : null;
+                  const date = fmtDate(o.updatedAt || o.createdAt);
                   const tone = statusTone(o.status);
                   const title = listingLabel(o.listing);
+
+                  const isPendingSelect = o.status === 'PENDING' && isSeller;
+                  const acceptAction = isPendingSelect
+                    ? 'SELECT'
+                    : isSeller
+                      ? 'ACCEPT'
+                      : o.status === 'SELECTED'
+                        ? 'ACCEPT_SELECTED'
+                        : 'ACCEPT_COUNTER';
+                  const counterAction = isSeller ? 'COUNTER' : 'RE_COUNTER';
+                  const canCounter = !isPendingSelect;
+
+                  const footer = myTurn ? (
+                    <div className="sd-actions">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        disabled={offerBusy === o.id}
+                        onClick={() => respondToOffer(o.id, acceptAction)}
+                      >
+                        {isPendingSelect ? 'Select buyer' : 'Accept'}
+                      </button>
+                      {isSeller && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline"
+                          disabled={offerBusy === o.id}
+                          onClick={() => respondToOffer(o.id, 'REJECT')}
+                        >
+                          Reject
+                        </button>
+                      )}
+                      {canCounter && (
+                        <>
+                          <input
+                            className="sd-counter-input"
+                            type="number"
+                            placeholder="Counter ETB"
+                            value={counterDrafts[o.id] || ''}
+                            onChange={(e) =>
+                              setCounterDrafts((d) => ({ ...d, [o.id]: e.target.value }))
+                            }
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline"
+                            disabled={offerBusy === o.id || !counterDrafts[o.id]}
+                            onClick={() => respondToOffer(o.id, counterAction, counterDrafts[o.id])}
+                          >
+                            Counter
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="order-time">
+                      {['PENDING', 'SELECTED', 'COUNTERED'].includes(o.status)
+                        ? 'Waiting on the other party'
+                        : '—'}
+                    </span>
+                  );
+
                   return (
-                    <article
+                    <RecordCard
                       key={o.id}
-                      className={`order-card${myTurn ? ' order-card--action' : ''}`}
-                    >
-                      <div className="order-card-head">
-                        <div className="order-card-head-text">
-                          <span className={`eyebrow ${isSeller ? 'is-selling' : ''}`}>
-                            {isSeller ? 'Selling' : 'Buying'}
-                          </span>
-                          <h2 className="order-title">{title}</h2>
-                          {dateLabel && <p className="order-date">{dateLabel}</p>}
-                        </div>
-                        <div className="order-card-head-party">
-                          <div className="order-party-info">
-                            <span className="order-party-role">{counterpartyRole}</span>
-                            <span className="order-party-name">
-                              {counterparty?.name || 'Unknown'}
-                            </span>
-                          </div>
-                          <div className={`order-avatar tone-${isSeller ? 'success' : 'info'}`}>
-                            {initialsOf(counterparty?.name, title)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="card-body">
-                        <section className="card-block">
-                          <div className="card-block-title">
-                            <h3>Offer status</h3>
-                            <span className="card-block-note">OFF {shortId(o.id)}</span>
-                          </div>
-                          <div className="card-block-body">
-                            <div className="badges">
-                              <span className={`status-pill tone-${tone}`}>
-                                <span className="status-pill-dot" aria-hidden="true" />
-                                {String(o.status || '').replace(/_/g, ' ')}
-                              </span>
-                              {o.status === 'COUNTERED' && (
-                                <span className="status-pill tone-gold">
-                                  {o.counteredBy === 'SELLER' ? 'Seller' : 'Buyer'} countered
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </section>
-
-                        <section className="card-block">
-                          <div className="card-block-title"><h3>Amount</h3></div>
-                          <div className="card-block-body">
-                            <div className="order-price">
-                              <span className="price-amount">
-                                {Number(o.amount || 0).toLocaleString()}
-                              </span>
-                              <span className="price-currency">ETB</span>
-                            </div>
-                          </div>
-                        </section>
-
-                        <div className="order-actions order-actions--stack">
-                          {myTurn ? (() => {
-                            const isSellerTurn = o.viewerRole === 'SELLER';
-                            const isPendingSelect = o.status === 'PENDING' && isSellerTurn;
-                            const acceptAction = isPendingSelect
-                              ? 'SELECT'
-                              : isSellerTurn
-                                ? 'ACCEPT'
-                                : o.status === 'SELECTED'
-                                  ? 'ACCEPT_SELECTED'
-                                  : 'ACCEPT_COUNTER';
-                            const counterAction = isSellerTurn ? 'COUNTER' : 'RE_COUNTER';
-                            const canCounter = !isPendingSelect;
-                            return (
-                              <div className="sd-actions">
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-primary"
-                                  disabled={offerBusy === o.id}
-                                  onClick={() => respondToOffer(o.id, acceptAction)}
-                                >
-                                  {isPendingSelect ? 'Select buyer' : 'Accept'}
-                                </button>
-                                {isSellerTurn && (
-                                  <button
-                                    type="button"
-                                    className="btn btn-sm btn-outline"
-                                    disabled={offerBusy === o.id}
-                                    onClick={() => respondToOffer(o.id, 'REJECT')}
-                                  >
-                                    Reject
-                                  </button>
-                                )}
-                                {canCounter && (
-                                  <>
-                                    <input
-                                      className="sd-counter-input"
-                                      type="number"
-                                      placeholder="Counter ETB"
-                                      value={counterDrafts[o.id] || ''}
-                                      onChange={(e) =>
-                                        setCounterDrafts((d) => ({ ...d, [o.id]: e.target.value }))
-                                      }
-                                    />
-                                    <button
-                                      type="button"
-                                      className="btn btn-sm btn-outline"
-                                      disabled={offerBusy === o.id || !counterDrafts[o.id]}
-                                      onClick={() =>
-                                        respondToOffer(o.id, counterAction, counterDrafts[o.id])
-                                      }
-                                    >
-                                      Counter
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            );
-                          })() : (
-                            <span className="order-time">
-                              {['PENDING', 'SELECTED', 'COUNTERED'].includes(o.status)
-                                ? 'Waiting on the other party'
-                                : '—'}
-                            </span>
+                      highlight={myTurn}
+                      stack
+                      eyebrow={isSeller ? 'Selling' : 'Buying'}
+                      selling={isSeller}
+                      title={title}
+                      date={date}
+                      partyRole={isSeller ? 'Buyer' : 'Seller'}
+                      partyName={counterparty?.name || 'Unknown'}
+                      avatar={initialsOf(counterparty?.name, title)}
+                      avatarTone={isSeller ? 'success' : 'info'}
+                      blockTitle="Offer status"
+                      blockNote={`OFF ${shortId(o.id)}`}
+                      badges={
+                        <>
+                          <Pill tone={tone} dot>{label(o.status)}</Pill>
+                          {o.status === 'COUNTERED' && (
+                            <Pill tone="gold">
+                              {o.counteredBy === 'SELLER' ? 'Seller' : 'Buyer'} countered
+                            </Pill>
                           )}
-                        </div>
-                      </div>
-                    </article>
+                        </>
+                      }
+                      amount={o.amount}
+                      footer={footer}
+                    />
                   );
                 })}
               </div>
@@ -776,78 +840,7 @@ export default function Dashboard() {
               <p className="muted">No orders yet.</p>
             ) : (
               <div className="order-list">
-                {ordersTagged.map((o) => {
-                  const isSeller = o.viewerRole === 'SELLER';
-                  const counterparty = isSeller ? o.buyer : o.seller;
-                  const counterpartyRole = isSeller ? 'Buyer' : 'Seller';
-                  const dateLabel = o.createdAt
-                    ? new Date(o.createdAt).toLocaleDateString()
-                    : null;
-                  const tone = statusTone(o.status);
-                  const title = listingLabel(o.listing);
-                  return (
-                    <article key={o.id} className="order-card">
-                      <div className="order-card-head">
-                        <div className="order-card-head-text">
-                          <span className={`eyebrow ${isSeller ? 'is-selling' : ''}`}>
-                            {isSeller ? 'Selling' : 'Buying'}
-                          </span>
-                          <h2 className="order-title">{title}</h2>
-                          {dateLabel && <p className="order-date">{dateLabel}</p>}
-                        </div>
-                        <div className="order-card-head-party">
-                          <div className="order-party-info">
-                            <span className="order-party-role">{counterpartyRole}</span>
-                            <span className="order-party-name">
-                              {counterparty?.name || 'Unknown'}
-                            </span>
-                          </div>
-                          <div className={`order-avatar tone-${tone}`}>
-                            {initialsOf(counterparty?.name, title)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="card-body">
-                        <section className="card-block">
-                          <div className="card-block-title">
-                            <h3>Order status</h3>
-                            <span className="card-block-note">ORD {shortId(o.id)}</span>
-                          </div>
-                          <div className="card-block-body">
-                            <div className="badges">
-                              <span className={`status-pill tone-${tone}`}>
-                                <span className="status-pill-dot" aria-hidden="true" />
-                                {String(o.status || '').replace(/_/g, ' ')}
-                              </span>
-                            </div>
-                          </div>
-                        </section>
-
-                        <section className="card-block">
-                          <div className="card-block-title"><h3>Amount</h3></div>
-                          <div className="card-block-body">
-                            <div className="order-price">
-                              <span className="price-amount">
-                                {Number(o.finalPrice || 0).toLocaleString()}
-                              </span>
-                              <span className="price-currency">ETB</span>
-                            </div>
-                          </div>
-                        </section>
-
-                        <div className="order-actions">
-                          <span className="order-time">
-                            {dateLabel ? `Created ${dateLabel}` : 'Recently updated'}
-                          </span>
-                          <Link className="btn-view" to={`/orders/${o.id}`}>
-                            View order <ArrowIcon />
-                          </Link>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
+                {ordersTagged.map((o) => <OrderCard key={o.id} o={o} />)}
               </div>
             )}
           </>
@@ -939,69 +932,24 @@ export default function Dashboard() {
             ) : (
               <div className="order-list">
                 {allPayments.map((p) => {
-                  const dateLabel = p.createdAt
-                    ? new Date(p.createdAt).toLocaleDateString()
-                    : null;
+                  const date = fmtDate(p.createdAt);
                   const tone = p.status === 'PAID' ? 'success' : 'gold';
                   return (
-                    <article key={p.id} className="order-card">
-                      <div className="order-card-head">
-                        <div className="order-card-head-text">
-                          <span className="eyebrow">Payment</span>
-                          <h2 className="order-title">
-                            {p.type === 'TRANSPORT' ? 'Transport payment' : 'Marketplace payment'}
-                          </h2>
-                          {dateLabel && <p className="order-date">{dateLabel}</p>}
-                        </div>
-                        <div className="order-card-head-party">
-                          <div className="order-party-info">
-                            <span className="order-party-role">Order</span>
-                            <span className="order-party-name">ORD {shortId(p.orderId)}</span>
-                          </div>
-                          <div className={`order-avatar tone-${tone}`}>
-                            {p.type === 'TRANSPORT' ? 'TR' : 'PY'}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="card-body">
-                        <section className="card-block">
-                          <div className="card-block-title">
-                            <h3>Payment status</h3>
-                            <span className="card-block-note">PAY {shortId(p.id)}</span>
-                          </div>
-                          <div className="card-block-body">
-                            <div className="badges">
-                              <span className={`status-pill tone-${tone}`}>
-                                <span className="status-pill-dot" aria-hidden="true" />
-                                {p.status}
-                              </span>
-                            </div>
-                          </div>
-                        </section>
-
-                        <section className="card-block">
-                          <div className="card-block-title"><h3>Amount</h3></div>
-                          <div className="card-block-body">
-                            <div className="order-price">
-                              <span className="price-amount">
-                                {Number(p.amount || 0).toLocaleString()}
-                              </span>
-                              <span className="price-currency">ETB</span>
-                            </div>
-                          </div>
-                        </section>
-
-                        <div className="order-actions">
-                          <span className="order-time">
-                            {dateLabel ? `Created ${dateLabel}` : 'Recently updated'}
-                          </span>
-                          <Link className="btn-view" to={`/orders/${p.order.id}`}>
-                            View order <ArrowIcon />
-                          </Link>
-                        </div>
-                      </div>
-                    </article>
+                    <RecordCard
+                      key={p.id}
+                      eyebrow="Payment"
+                      title={p.type === 'TRANSPORT' ? 'Transport payment' : 'Marketplace payment'}
+                      date={date}
+                      partyRole="Order"
+                      partyName={`ORD ${shortId(p.orderId)}`}
+                      avatar={p.type === 'TRANSPORT' ? 'TR' : 'PY'}
+                      avatarTone={tone}
+                      blockTitle="Payment status"
+                      blockNote={`PAY ${shortId(p.id)}`}
+                      badges={<Pill tone={tone} dot>{p.status}</Pill>}
+                      amount={p.amount}
+                      footer={<CardFooter date={date} to={`/orders/${p.order.id}`} text="View order" />}
+                    />
                   );
                 })}
               </div>
@@ -1014,7 +962,7 @@ export default function Dashboard() {
           <>
             <header className="tab-head">
               <div className="tab-head-text">
-                <span className="eyebrow">EARNINGS</span>
+                <span className="eyebrow is-selling">EARNINGS</span>
                 <h1>Sales &amp; earnings</h1>
               </div>
             </header>
@@ -1041,71 +989,9 @@ export default function Dashboard() {
               <p className="muted">No confirmed sales yet.</p>
             ) : (
               <div className="order-list">
-                {confirmedSales.map((o) => {
-                  const dateLabel = o.createdAt
-                    ? new Date(o.createdAt).toLocaleDateString()
-                    : null;
-                  const tone = statusTone(o.status);
-                  const title = listingLabel(o.listing);
-                  return (
-                    <article key={o.id} className="order-card">
-                      <div className="order-card-head">
-                        <div className="order-card-head-text">
-                          <span className="eyebrow is-selling">Sale</span>
-                          <h2 className="order-title">{title}</h2>
-                          {dateLabel && <p className="order-date">{dateLabel}</p>}
-                        </div>
-                        <div className="order-card-head-party">
-                          <div className="order-party-info">
-                            <span className="order-party-role">Buyer</span>
-                            <span className="order-party-name">{o.buyer?.name || 'Unknown'}</span>
-                          </div>
-                          <div className="order-avatar tone-success">
-                            {initialsOf(o.buyer?.name, title)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="card-body">
-                        <section className="card-block">
-                          <div className="card-block-title">
-                            <h3>Sale status</h3>
-                            <span className="card-block-note">ORD {shortId(o.id)}</span>
-                          </div>
-                          <div className="card-block-body">
-                            <div className="badges">
-                              <span className={`status-pill tone-${tone}`}>
-                                <span className="status-pill-dot" aria-hidden="true" />
-                                {String(o.status || '').replace(/_/g, ' ')}
-                              </span>
-                            </div>
-                          </div>
-                        </section>
-
-                        <section className="card-block">
-                          <div className="card-block-title"><h3>Amount</h3></div>
-                          <div className="card-block-body">
-                            <div className="order-price">
-                              <span className="price-amount">
-                                {Number(o.finalPrice || 0).toLocaleString()}
-                              </span>
-                              <span className="price-currency">ETB</span>
-                            </div>
-                          </div>
-                        </section>
-
-                        <div className="order-actions">
-                          <span className="order-time">
-                            {dateLabel ? `Created ${dateLabel}` : 'Recently updated'}
-                          </span>
-                          <Link className="btn-view" to={`/orders/${o.id}`}>
-                            View order <ArrowIcon />
-                          </Link>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
+                {confirmedSales.map((o) => (
+                  <OrderCard key={o.id} o={o} eyebrowOverride="Sale" blockTitle="Sale status" />
+                ))}
               </div>
             )}
           </>
