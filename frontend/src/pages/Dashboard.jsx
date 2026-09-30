@@ -6,6 +6,7 @@ import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import RecentActivity from '../components/RecentActivity.jsx';
 import MessageThread from '../components/MessageThread.jsx';
 import './dashboards/Dashboard.css';
+
 // ============================================================================
 // UNIFIED DASHBOARD
 // ============================================================================
@@ -186,6 +187,7 @@ export default function Dashboard() {
   const confirmedSales = sellerOrders.filter((o) => ACTIVE_SALE_STATUSES.includes(o.status));
   const grossSales = confirmedSales.reduce((sum, o) => sum + Number(o.finalPrice || 0), 0);
   const pendingSales = sellerOrders.filter((o) => o.status === 'PENDING_PAYMENT');
+  const buyerOrdersCount = ordersTagged.filter((o) => o.viewerRole === 'BUYER').length;
 
   const activityItems = [
     ...allOffers.map((o) => ({
@@ -251,28 +253,42 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <main className="section">
+      <main className="section dashboard-page">
         <div className="container-wide loading">Loading your dashboard…</div>
       </main>
     );
   }
 
   return (
-    <main className="section dashboard-page mb-dashboard-page">
+    <main className="section dashboard-page">
       <div className="container-wide">
-        <DashboardWelcome user={user} subtitle="Buying, selling, and everything in between — all in one place.">
-          <RecentActivity items={activityItems} emptyText="No activity yet — browse listings or create one to get started." />
+        <DashboardWelcome
+          user={user}
+          subtitle="Buying, selling, and everything in between — all in one place."
+        >
+          <RecentActivity
+            items={activityItems}
+            emptyText="No activity yet — browse listings or create one to get started."
+          />
         </DashboardWelcome>
+
+        {/* ==================================================================== */}
+        {/* SERVICE ACCESS                                                     */}
+        {/* ==================================================================== */}
 
         <section className="service-access" aria-labelledby="service-access-title">
           <div className="service-access-header">
             <div>
               <span className="eyebrow">MARKET SERVICES</span>
               <h2 id="service-access-title">Need help with your transaction?</h2>
-              <p className="muted">Buyers and sellers can request transport or inspection directly. You do not need to become a transporter or inspector.</p>
+              <p className="muted">
+                Buyers and sellers can request transport or inspection directly.
+                You do not need to become a transporter or inspector.
+              </p>
             </div>
             <Link className="btn btn-light" to="/services">View all services</Link>
           </div>
+
           <div className="service-access-grid">
             <Link to="/orders" className="service-access-card">
               <span className="service-access-icon" aria-hidden="true">🚛</span>
@@ -282,6 +298,7 @@ export default function Dashboard() {
               </span>
               <span className="service-access-arrow" aria-hidden="true">→</span>
             </Link>
+
             <Link to="/agricultural" className="service-access-card">
               <span className="service-access-icon" aria-hidden="true">🔍</span>
               <span className="service-access-copy">
@@ -295,6 +312,10 @@ export default function Dashboard() {
 
         {error && <div className="alert error">{error}</div>}
         {toastMsg && <div className="sd-toast">{toastMsg}</div>}
+
+        {/* ==================================================================== */}
+        {/* TABS                                                               */}
+        {/* ==================================================================== */}
 
         <div className={`sd-tabs-nav${tabsOpen ? ' sd-tabs-open' : ''}`}>
           <button
@@ -312,7 +333,13 @@ export default function Dashboard() {
             </span>
             <span className="sd-tabs-chevron" aria-hidden="true">⌄</span>
           </button>
-          <div id="dashboard-tabs-list" className="sd-tabs-list" role="tablist" aria-label="Dashboard sections">
+
+          <div
+            id="dashboard-tabs-list"
+            className="sd-tabs-list"
+            role="tablist"
+            aria-label="Dashboard sections"
+          >
             {TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -320,7 +347,10 @@ export default function Dashboard() {
                 role="tab"
                 aria-selected={activeTab === tab.id}
                 className={`sd-tab ${activeTab === tab.id ? 'sd-active' : ''}`}
-                onClick={() => { setActiveTab(tab.id); setTabsOpen(false); }}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setTabsOpen(false);
+                }}
               >
                 {tab.label}
                 {tab.id === 'offers' && myTurnOffers.length > 0 && (
@@ -332,238 +362,466 @@ export default function Dashboard() {
         </div>
 
         {/* ==================================================================== */}
-        {/* BUYING */}
+        {/* BUYING                                                             */}
         {/* ==================================================================== */}
+
         {activeTab === 'buying' && (
           <div className="card">
-            <div className="row-between">
-              <h2>Buying</h2>
+            <header className="card-head">
+              <div className="card-head-text">
+                <span className="eyebrow">BUYING</span>
+                <h2>My buying activity</h2>
+              </div>
               <Link className="btn btn-primary" to="/listings">Browse listings</Link>
+            </header>
+
+            <div className="card-body">
+              <section className="card-block">
+                <div className="card-block-title">
+                  <h3>Summary</h3>
+                  <span className="card-block-note">
+                    {offersSent.length} offer{offersSent.length === 1 ? '' : 's'} sent ·{' '}
+                    {buyerOrdersCount} order{buyerOrdersCount === 1 ? '' : 's'} as buyer
+                  </span>
+                </div>
+                <div className="card-block-body">
+                  {offersSent.length === 0 ? (
+                    <p className="muted">You haven't made an offer yet.</p>
+                  ) : (
+                    <table className="sd-table sd-table--mobile-cards">
+                      <thead>
+                        <tr>
+                          <th>Listing</th>
+                          <th>Amount</th>
+                          <th>Status</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {offersSent.slice(0, 8).map((o) => (
+                          <tr key={o.id}>
+                            <td data-label="Listing">{listingLabel(o.listing)}</td>
+                            <td data-label="Amount">{money(o.amount)}</td>
+                            <td data-label="Status">{o.status}</td>
+                            <td data-label="Action">
+                              <Link className="sd-mobile-action" to={`/listings/${o.listing?.id}`}>
+                                View
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </section>
             </div>
-            <p className="muted">{offersSent.length} offer{offersSent.length === 1 ? '' : 's'} sent · {ordersTagged.filter((o) => o.viewerRole === 'BUYER').length} order{ordersTagged.filter((o) => o.viewerRole === 'BUYER').length === 1 ? '' : 's'} as buyer.</p>
-            {offersSent.length === 0 ? (
-              <p className="muted">You haven't made an offer yet.</p>
-            ) : (
-              <table className="sd-table sd-table--mobile-cards">
-                <thead><tr><th>Listing</th><th>Amount</th><th>Status</th><th /></tr></thead>
-                <tbody>
-                  {offersSent.slice(0, 8).map((o) => (
-                    <tr key={o.id}>
-                      <td data-label="Listing">{listingLabel(o.listing)}</td>
-                      <td data-label="Amount">{money(o.amount)}</td>
-                      <td data-label="Status">{o.status}</td>
-                      <td data-label="Action"><Link className="sd-mobile-action" to={`/listings/${o.listing?.id}`}>View</Link></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
           </div>
         )}
 
         {/* ==================================================================== */}
-        {/* SELLING */}
+        {/* SELLING                                                            */}
         {/* ==================================================================== */}
+
         {activeTab === 'selling' && (
           <div className="card">
-            <div className="row-between">
-              <h2>Selling</h2>
+            <header className="card-head">
+              <div className="card-head-text">
+                <span className="eyebrow">SELLING</span>
+                <h2>My selling activity</h2>
+              </div>
               <Link className="btn btn-primary" to="/create-listing">Create a listing</Link>
-            </div>
-            <p className="muted">
-              {myListings.filter((l) => l.status === 'ACTIVE').length} active listing(s) ·{' '}
-              {offersReceived.length} offer(s) received · {money(grossSales)} in confirmed sales.
-            </p>
-            <div className="sd-actions">
-              <button type="button" className="btn btn-outline" onClick={() => setActiveTab('listings')}>Manage my listings</button>
-              <button type="button" className="btn btn-outline" onClick={() => setActiveTab('offers')}>Review offers</button>
-              <button type="button" className="btn btn-outline" onClick={() => setActiveTab('earnings')}>View earnings</button>
+            </header>
+
+            <div className="card-body">
+              <section className="card-block">
+                <div className="card-block-title">
+                  <h3>Summary</h3>
+                  <span className="card-block-note">
+                    {myListings.filter((l) => l.status === 'ACTIVE').length} active ·{' '}
+                    {offersReceived.length} offer{offersReceived.length === 1 ? '' : 's'} received
+                  </span>
+                </div>
+                <div className="card-block-body">
+                  <p className="muted">
+                    You have {myListings.length} listing{myListings.length === 1 ? '' : 's'} on file.{' '}
+                    Confirmed sales so far: <strong>{money(grossSales)}</strong>.
+                  </p>
+                </div>
+              </section>
+
+              <section className="card-block">
+                <div className="card-block-title">
+                  <h3>Quick actions</h3>
+                </div>
+                <div className="card-block-body">
+                  <div className="sd-actions">
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={() => setActiveTab('listings')}
+                    >
+                      Manage my listings
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={() => setActiveTab('offers')}
+                    >
+                      Review offers
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={() => setActiveTab('earnings')}
+                    >
+                      View earnings
+                    </button>
+                  </div>
+                </div>
+              </section>
             </div>
           </div>
         )}
 
         {/* ==================================================================== */}
-        {/* MY LISTINGS */}
+        {/* MY LISTINGS                                                        */}
         {/* ==================================================================== */}
+
         {activeTab === 'listings' && (
           <div className="card">
-            <div className="row-between">
-              <h2>My Listings</h2>
+            <header className="card-head">
+              <div className="card-head-text">
+                <span className="eyebrow">LISTINGS</span>
+                <h2>My listings</h2>
+              </div>
               <Link className="btn btn-primary" to="/create-listing">Create a listing</Link>
+            </header>
+
+            <div className="card-body">
+              <section className="card-block">
+                <div className="card-block-title">
+                  <h3>All listings</h3>
+                  <span className="card-block-note">{myListings.length} total</span>
+                </div>
+                <div className="card-block-body">
+                  {myListings.length === 0 ? (
+                    <p className="muted">You haven't listed anything yet.</p>
+                  ) : (
+                    <table className="sd-table sd-table--mobile-cards">
+                      <thead>
+                        <tr>
+                          <th>Listing</th>
+                          <th>Status</th>
+                          <th>Offers</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {myListings.map((l) => (
+                          <tr key={l.id}>
+                            <td data-label="Listing">{listingLabel(l)}</td>
+                            <td data-label="Status">
+                              <span className="badge">{l.status}</span>
+                            </td>
+                            <td data-label="Offers">
+                              {offersReceived.filter((o) => o.listing?.id === l.id).length}
+                            </td>
+                            <td data-label="Action">
+                              <Link className="sd-mobile-action" to={`/listings/${l.id}`}>
+                                Manage
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </section>
             </div>
-            {myListings.length === 0 ? (
-              <p className="muted">You haven't listed anything yet.</p>
-            ) : (
-              <table className="sd-table sd-table--mobile-cards">
-                <thead><tr><th>Listing</th><th>Status</th><th>Offers</th><th /></tr></thead>
-                <tbody>
-                  {myListings.map((l) => (
-                    <tr key={l.id}>
-                      <td data-label="Listing">{listingLabel(l)}</td>
-                      <td data-label="Status"><span className="badge">{l.status}</span></td>
-                      <td data-label="Offers">{offersReceived.filter((o) => o.listing?.id === l.id).length}</td>
-                      <td data-label="Action"><Link className="sd-mobile-action" to={`/listings/${l.id}`}>Manage</Link></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
           </div>
         )}
 
         {/* ==================================================================== */}
-        {/* OFFERS */}
+        {/* OFFERS                                                             */}
         {/* ==================================================================== */}
+
         {activeTab === 'offers' && (
           <div className="card">
-            <h2>Offers</h2>
-            {allOffers.length === 0 ? (
-              <p className="muted">No offers yet.</p>
-            ) : (
-              <table className="sd-table sd-table--mobile-cards">
-                <thead><tr><th>Listing</th><th>Role</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
-                <tbody>
-                  {allOffers.map((o) => {
-                    const myTurn = myTurnOffers.some((mt) => mt.id === o.id);
-                    return (
-                      <tr key={o.id}>
-                        <td data-label="Listing">{listingLabel(o.listing)}</td>
-                        <td data-label="Role">{o.viewerRole}</td>
-                        <td data-label="Amount">{money(o.amount)}</td>
-                        <td data-label="Status">{o.status}{o.status === 'COUNTERED' ? ` (${o.counteredBy === 'SELLER' ? 'seller' : 'buyer'} countered)` : ''}</td>
-                        <td data-label="Action">
-                          {myTurn ? (() => {
-                            // Action names must match the offer's exact
-                            // status/role combination — the backend rejects
-                            // ACCEPT/COUNTER from a buyer and only accepts
-                            // them from a seller, and vice versa for
-                            // ACCEPT_SELECTED/ACCEPT_COUNTER/RE_COUNTER.
-                            const isSellerTurn = o.viewerRole === 'SELLER';
-                            const isPendingSelect = o.status === 'PENDING' && isSellerTurn;
-                            const acceptAction = isPendingSelect
-                              ? 'SELECT'
-                              : isSellerTurn
-                                ? 'ACCEPT' // SELECTED, or COUNTERED by BUYER
-                                : o.status === 'SELECTED'
-                                  ? 'ACCEPT_SELECTED'
-                                  : 'ACCEPT_COUNTER'; // COUNTERED by SELLER
-                            const counterAction = isSellerTurn ? 'COUNTER' : 'RE_COUNTER';
-                            // A seller cannot counter a still-PENDING bid —
-                            // it must be selected first.
-                            const canCounter = !isPendingSelect;
-                            return (
-                              <div className="sd-actions">
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-primary"
-                                  disabled={offerBusy === o.id}
-                                  onClick={() => respondToOffer(o.id, acceptAction)}
-                                >
-                                  {isPendingSelect ? 'Select buyer' : 'Accept'}
-                                </button>
-                                {isSellerTurn && (
-                                  <button
-                                    type="button"
-                                    className="btn btn-sm btn-outline"
-                                    disabled={offerBusy === o.id}
-                                    onClick={() => respondToOffer(o.id, 'REJECT')}
-                                  >
-                                    Reject
-                                  </button>
+            <header className="card-head">
+              <div className="card-head-text">
+                <span className="eyebrow">OFFERS</span>
+                <h2>Offers &amp; negotiations</h2>
+              </div>
+              <span className="card-block-note">
+                {allOffers.length} total
+                {myTurnOffers.length > 0 ? ` · ${myTurnOffers.length} need your response` : ''}
+              </span>
+            </header>
+
+            <div className="card-body">
+              <section className="card-block">
+                <div className="card-block-title">
+                  <h3>All active offers</h3>
+                </div>
+                <div className="card-block-body">
+                  {allOffers.length === 0 ? (
+                    <p className="muted">No offers yet.</p>
+                  ) : (
+                    <table className="sd-table sd-table--mobile-cards">
+                      <thead>
+                        <tr>
+                          <th>Listing</th>
+                          <th>Role</th>
+                          <th>Amount</th>
+                          <th>Status</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allOffers.map((o) => {
+                          const myTurn = myTurnOffers.some((mt) => mt.id === o.id);
+                          return (
+                            <tr key={o.id}>
+                              <td data-label="Listing">{listingLabel(o.listing)}</td>
+                              <td data-label="Role">{o.viewerRole}</td>
+                              <td data-label="Amount">{money(o.amount)}</td>
+                              <td data-label="Status">
+                                {o.status}
+                                {o.status === 'COUNTERED'
+                                  ? ` (${o.counteredBy === 'SELLER' ? 'seller' : 'buyer'} countered)`
+                                  : ''}
+                              </td>
+                              <td data-label="Action">
+                                {myTurn ? (() => {
+                                  // Action names must match the offer's exact
+                                  // status/role combination — the backend
+                                  // rejects ACCEPT/COUNTER from a buyer and
+                                  // only accepts them from a seller, and vice
+                                  // versa for ACCEPT_SELECTED /
+                                  // ACCEPT_COUNTER / RE_COUNTER.
+                                  const isSellerTurn = o.viewerRole === 'SELLER';
+                                  const isPendingSelect = o.status === 'PENDING' && isSellerTurn;
+                                  const acceptAction = isPendingSelect
+                                    ? 'SELECT'
+                                    : isSellerTurn
+                                      ? 'ACCEPT' // SELECTED, or COUNTERED by BUYER
+                                      : o.status === 'SELECTED'
+                                        ? 'ACCEPT_SELECTED'
+                                        : 'ACCEPT_COUNTER'; // COUNTERED by SELLER
+                                  const counterAction = isSellerTurn ? 'COUNTER' : 'RE_COUNTER';
+                                  // A seller cannot counter a still-PENDING
+                                  // bid — it must be selected first.
+                                  const canCounter = !isPendingSelect;
+                                  return (
+                                    <div className="sd-actions">
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-primary"
+                                        disabled={offerBusy === o.id}
+                                        onClick={() => respondToOffer(o.id, acceptAction)}
+                                      >
+                                        {isPendingSelect ? 'Select buyer' : 'Accept'}
+                                      </button>
+                                      {isSellerTurn && (
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm btn-outline"
+                                          disabled={offerBusy === o.id}
+                                          onClick={() => respondToOffer(o.id, 'REJECT')}
+                                        >
+                                          Reject
+                                        </button>
+                                      )}
+                                      {canCounter && (
+                                        <>
+                                          <input
+                                            className="sd-counter-input"
+                                            type="number"
+                                            placeholder="Counter ETB"
+                                            value={counterDrafts[o.id] || ''}
+                                            onChange={(e) =>
+                                              setCounterDrafts((d) => ({ ...d, [o.id]: e.target.value }))
+                                            }
+                                          />
+                                          <button
+                                            type="button"
+                                            className="btn btn-sm btn-outline"
+                                            disabled={offerBusy === o.id || !counterDrafts[o.id]}
+                                            onClick={() =>
+                                              respondToOffer(o.id, counterAction, counterDrafts[o.id])
+                                            }
+                                          >
+                                            Counter
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })() : (
+                                  <span className="muted">
+                                    {['PENDING', 'SELECTED', 'COUNTERED'].includes(o.status)
+                                      ? 'Waiting on the other party'
+                                      : '—'}
+                                  </span>
                                 )}
-                                {canCounter && (
-                                  <>
-                                    <input
-                                      className="sd-counter-input"
-                                      type="number"
-                                      placeholder="Counter ETB"
-                                      value={counterDrafts[o.id] || ''}
-                                      onChange={(e) => setCounterDrafts((d) => ({ ...d, [o.id]: e.target.value }))}
-                                    />
-                                    <button
-                                      type="button"
-                                      className="btn btn-sm btn-outline"
-                                      disabled={offerBusy === o.id || !counterDrafts[o.id]}
-                                      onClick={() => respondToOffer(o.id, counterAction, counterDrafts[o.id])}
-                                    >
-                                      Counter
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            );
-                          })() : (
-                            <span className="muted">
-                              {['PENDING', 'SELECTED', 'COUNTERED'].includes(o.status) ? 'Waiting on the other party' : '—'}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </section>
+            </div>
           </div>
         )}
 
         {/* ==================================================================== */}
-        {/* ORDERS */}
+        {/* ORDERS                                                             */}
         {/* ==================================================================== */}
+
         {activeTab === 'orders' && (
           <div className="card">
-            <h2>Orders</h2>
-            {ordersTagged.length === 0 ? (
-              <p className="muted">No orders yet.</p>
-            ) : (
-              <table className="sd-table sd-table--mobile-cards">
-                <thead><tr><th>Order</th><th>Listing</th><th>Role</th><th>Status</th><th /></tr></thead>
-                <tbody>
-                  {ordersTagged.map((o) => (
-                    <tr key={o.id}>
-                      <td data-label="Order">{shortId(o.id)}</td>
-                      <td data-label="Listing">{listingLabel(o.listing)}</td>
-                      <td data-label="Role">{o.viewerRole}</td>
-                      <td data-label="Status"><span className="badge">{o.status}</span></td>
-                      <td data-label="Action"><Link className="sd-mobile-action" to={`/orders/${o.id}`}>Open</Link></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            <header className="card-head">
+              <div className="card-head-text">
+                <span className="eyebrow">ORDERS</span>
+                <h2>Orders</h2>
+              </div>
+              <span className="card-block-note">{ordersTagged.length} total</span>
+            </header>
+
+            <div className="card-body">
+              <section className="card-block">
+                <div className="card-block-title">
+                  <h3>All orders</h3>
+                </div>
+                <div className="card-block-body">
+                  {ordersTagged.length === 0 ? (
+                    <p className="muted">No orders yet.</p>
+                  ) : (
+                    <table className="sd-table sd-table--mobile-cards">
+                      <thead>
+                        <tr>
+                          <th>Order</th>
+                          <th>Listing</th>
+                          <th>Role</th>
+                          <th>Status</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ordersTagged.map((o) => (
+                          <tr key={o.id}>
+                            <td data-label="Order">{shortId(o.id)}</td>
+                            <td data-label="Listing">{listingLabel(o.listing)}</td>
+                            <td data-label="Role">{o.viewerRole}</td>
+                            <td data-label="Status">
+                              <span className="badge">{o.status}</span>
+                            </td>
+                            <td data-label="Action">
+                              <Link className="sd-mobile-action" to={`/orders/${o.id}`}>
+                                Open
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </section>
+            </div>
           </div>
         )}
 
         {/* ==================================================================== */}
-        {/* MESSAGES */}
+        {/* MESSAGES                                                           */}
         {/* ==================================================================== */}
+
         {activeTab === 'messages' && (
           <div className="card-grid two-col">
             <div className="card">
-              <h2>Conversations</h2>
-              {counterparts.length === 0 ? (
-                <p className="muted">Conversations appear once you have an order with someone.</p>
-              ) : (
-                <ul className="sd-list">
-                  {counterparts.map((c) => (
-                    <li key={c.id}>
-                      <button
-                        type="button"
-                        className={`sd-list-item ${selectedCounterpart?.id === c.id ? 'sd-active' : ''}`}
-                        onClick={() => openThread(c)}
-                      >
-                        {c.name || 'User'}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <header className="card-head">
+                <div className="card-head-text">
+                  <span className="eyebrow">CONVERSATIONS</span>
+                  <h2>Your conversations</h2>
+                </div>
+                <span className="card-block-note">{counterparts.length}</span>
+              </header>
+              <div className="card-body">
+                <section className="card-block">
+                  <div className="card-block-title">
+                    <h3>Select a conversation</h3>
+                  </div>
+                  <div className="card-block-body">
+                    {counterparts.length === 0 ? (
+                      <p className="muted">
+                        Conversations appear once you have an order with someone.
+                      </p>
+                    ) : (
+                      <ul className="sd-list">
+                        {counterparts.map((c) => (
+                          <li key={c.id}>
+                            <button
+                              type="button"
+                              className={`sd-list-item ${
+                                selectedCounterpart?.id === c.id ? 'sd-active' : ''
+                              }`}
+                              onClick={() => openThread(c)}
+                            >
+                              {c.name || 'User'}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </section>
+              </div>
             </div>
+
             <div>
               {!selectedCounterpart ? (
-                <div className="card"><p className="muted">Select a conversation to view messages.</p></div>
+                <div className="card">
+                  <header className="card-head">
+                    <div className="card-head-text">
+                      <span className="eyebrow">MESSAGES</span>
+                      <h2>Messages</h2>
+                    </div>
+                  </header>
+                  <div className="card-body">
+                    <section className="card-block">
+                      <div className="card-block-title">
+                        <h3>No conversation open</h3>
+                      </div>
+                      <div className="card-block-body">
+                        <p className="muted">Select a conversation to view messages.</p>
+                      </div>
+                    </section>
+                  </div>
+                </div>
               ) : threadLoading ? (
-                <div className="card"><p className="muted">Loading conversation…</p></div>
+                <div className="card">
+                  <header className="card-head">
+                    <div className="card-head-text">
+                      <span className="eyebrow">MESSAGES</span>
+                      <h2>{selectedCounterpart.name || 'Messages'}</h2>
+                    </div>
+                  </header>
+                  <div className="card-body">
+                    <section className="card-block">
+                      <div className="card-block-title">
+                        <h3>Loading…</h3>
+                      </div>
+                      <div className="card-block-body">
+                        <p className="muted">Fetching the conversation.</p>
+                      </div>
+                    </section>
+                  </div>
+                </div>
               ) : (
                 <MessageThread
                   orderId={selectedCounterpart.lastOrderId}
@@ -579,60 +837,142 @@ export default function Dashboard() {
         )}
 
         {/* ==================================================================== */}
-        {/* PAYMENTS */}
+        {/* PAYMENTS                                                           */}
         {/* ==================================================================== */}
+
         {activeTab === 'payments' && (
           <div className="card">
-            <h2>Payments</h2>
-            {allPayments.length === 0 ? (
-              <p className="muted">No payments yet.</p>
-            ) : (
-              <table className="sd-table sd-table--mobile-cards">
-                <thead><tr><th>Order</th><th>Type</th><th>Amount</th><th>Status</th><th /></tr></thead>
-                <tbody>
-                  {allPayments.map((p) => (
-                    <tr key={p.id}>
-                      <td data-label="Order">{shortId(p.orderId)}</td>
-                      <td data-label="Type">{p.type}</td>
-                      <td data-label="Amount">{money(p.amount)}</td>
-                      <td data-label="Status"><span className={`badge ${p.status === 'PAID' ? 'badge-success' : 'badge-pending'}`}>{p.status}</span></td>
-                      <td data-label="Action"><Link className="sd-mobile-action" to={`/orders/${p.order.id}`}>Open order</Link></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            <header className="card-head">
+              <div className="card-head-text">
+                <span className="eyebrow">PAYMENTS</span>
+                <h2>Payments</h2>
+              </div>
+              <span className="card-block-note">{allPayments.length} total</span>
+            </header>
+
+            <div className="card-body">
+              <section className="card-block">
+                <div className="card-block-title">
+                  <h3>All payments</h3>
+                </div>
+                <div className="card-block-body">
+                  {allPayments.length === 0 ? (
+                    <p className="muted">No payments yet.</p>
+                  ) : (
+                    <table className="sd-table sd-table--mobile-cards">
+                      <thead>
+                        <tr>
+                          <th>Order</th>
+                          <th>Type</th>
+                          <th>Amount</th>
+                          <th>Status</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allPayments.map((p) => (
+                          <tr key={p.id}>
+                            <td data-label="Order">{shortId(p.orderId)}</td>
+                            <td data-label="Type">{p.type}</td>
+                            <td data-label="Amount">{money(p.amount)}</td>
+                            <td data-label="Status">
+                              <span
+                                className={`badge ${
+                                  p.status === 'PAID' ? 'badge-success' : 'badge-pending'
+                                }`}
+                              >
+                                {p.status}
+                              </span>
+                            </td>
+                            <td data-label="Action">
+                              <Link className="sd-mobile-action" to={`/orders/${p.order.id}`}>
+                                Open order
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </section>
+            </div>
           </div>
         )}
 
         {/* ==================================================================== */}
-        {/* EARNINGS */}
+        {/* EARNINGS                                                           */}
         {/* ==================================================================== */}
+
         {activeTab === 'earnings' && (
           <div className="card">
-            <h2>Sales & Earnings</h2>
-            <div className="sd-stat-grid">
-              <div className="sd-stat"><span>Confirmed sales</span><b>{money(grossSales)}</b></div>
-              <div className="sd-stat"><span>Completed / active sales</span><b>{confirmedSales.length}</b></div>
-              <div className="sd-stat"><span>Awaiting buyer payment</span><b>{pendingSales.length}</b></div>
+            <header className="card-head">
+              <div className="card-head-text">
+                <span className="eyebrow">EARNINGS</span>
+                <h2>Sales &amp; earnings</h2>
+              </div>
+            </header>
+
+            <div className="card-body">
+              <section className="card-block">
+                <div className="card-block-title">
+                  <h3>At a glance</h3>
+                </div>
+                <div className="card-block-body">
+                  <div className="sd-stat-grid">
+                    <div className="sd-stat">
+                      <span>Confirmed sales</span>
+                      <b>{money(grossSales)}</b>
+                    </div>
+                    <div className="sd-stat">
+                      <span>Completed / active sales</span>
+                      <b>{confirmedSales.length}</b>
+                    </div>
+                    <div className="sd-stat">
+                      <span>Awaiting buyer payment</span>
+                      <b>{pendingSales.length}</b>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="card-block">
+                <div className="card-block-title">
+                  <h3>Confirmed sales</h3>
+                  <span className="card-block-note">{confirmedSales.length} total</span>
+                </div>
+                <div className="card-block-body">
+                  {confirmedSales.length === 0 ? (
+                    <p className="muted">No confirmed sales yet.</p>
+                  ) : (
+                    <table className="sd-table sd-table--mobile-cards">
+                      <thead>
+                        <tr>
+                          <th>Order</th>
+                          <th>Listing</th>
+                          <th>Amount</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {confirmedSales.map((o) => (
+                          <tr key={o.id}>
+                            <td data-label="Order">
+                              <Link className="sd-mobile-action" to={`/orders/${o.id}`}>
+                                {shortId(o.id)}
+                              </Link>
+                            </td>
+                            <td data-label="Listing">{listingLabel(o.listing)}</td>
+                            <td data-label="Amount">{money(o.finalPrice)}</td>
+                            <td data-label="Status">{o.status}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </section>
             </div>
-            {confirmedSales.length === 0 ? (
-              <p className="muted">No confirmed sales yet.</p>
-            ) : (
-              <table className="sd-table sd-table--mobile-cards">
-                <thead><tr><th>Order</th><th>Listing</th><th>Amount</th><th>Status</th></tr></thead>
-                <tbody>
-                  {confirmedSales.map((o) => (
-                    <tr key={o.id}>
-                      <td data-label="Order"><Link className="sd-mobile-action" to={`/orders/${o.id}`}>{shortId(o.id)}</Link></td>
-                      <td data-label="Listing">{listingLabel(o.listing)}</td>
-                      <td data-label="Amount">{money(o.finalPrice)}</td>
-                      <td data-label="Status">{o.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
           </div>
         )}
       </div>
