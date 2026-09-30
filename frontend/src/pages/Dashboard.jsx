@@ -174,6 +174,7 @@ export default function Dashboard() {
   const grossSales = confirmedSales.reduce((sum, o) => sum + Number(o.finalPrice || 0), 0);
   const pendingSales = sellerOrders.filter((o) => o.status === 'PENDING_PAYMENT');
   const buyerOrdersCount = ordersTagged.filter((o) => o.viewerRole === 'BUYER').length;
+  const activeListings = myListings.filter((l) => l.status === 'ACTIVE').length;
 
   const activityItems = [
     ...allOffers.map((o) => ({
@@ -265,10 +266,7 @@ export default function Dashboard() {
           />
         </DashboardWelcome>
 
-        {/* ==================================================================== */}
-        {/* SERVICE ACCESS                                                     */}
-        {/* ==================================================================== */}
-
+        {/* SERVICE ACCESS */}
         <section className="service-access" aria-labelledby="service-access-title">
           <div className="service-access-header">
             <div>
@@ -306,10 +304,7 @@ export default function Dashboard() {
         {error && <div className="alert error">{error}</div>}
         {toastMsg && <div className="sd-toast">{toastMsg}</div>}
 
-        {/* ==================================================================== */}
-        {/* TABS                                                               */}
-        {/* ==================================================================== */}
-
+        {/* TABS */}
         <nav className={`sd-tabs-nav${tabsOpen ? ' sd-tabs-open' : ''}`}>
           <button
             type="button"
@@ -358,10 +353,7 @@ export default function Dashboard() {
           </div>
         </nav>
 
-        {/* ==================================================================== */}
-        {/* BUYING                                                             */}
-        {/* ==================================================================== */}
-
+        {/* BUYING */}
         {activeTab === 'buying' && (
           <>
             <header className="tab-head">
@@ -412,10 +404,7 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* ==================================================================== */}
-        {/* SELLING                                                            */}
-        {/* ==================================================================== */}
-
+        {/* SELLING */}
         {activeTab === 'selling' && (
           <>
             <header className="tab-head">
@@ -430,21 +419,23 @@ export default function Dashboard() {
               <div className="panel-head">
                 <h3>Summary</h3>
                 <span className="panel-head-note">
-                  {myListings.filter((l) => l.status === 'ACTIVE').length} active ·{' '}
-                  {offersReceived.length} offer{offersReceived.length === 1 ? '' : 's'} received
+                  {activeListings} active · {offersReceived.length} offer
+                  {offersReceived.length === 1 ? '' : 's'} received
                 </span>
               </div>
-              <p className="muted">
-                You have {myListings.length} listing{myListings.length === 1 ? '' : 's'} on file.{' '}
-                Confirmed sales so far: <strong>{money(grossSales)}</strong>.
-              </p>
+              <div className="panel-body">
+                <p className="muted">
+                  You have <strong>{myListings.length} listing{myListings.length === 1 ? '' : 's'}</strong> on file.
+                  Confirmed sales so far: <strong>{money(grossSales)}</strong>.
+                </p>
+              </div>
             </section>
 
             <section className="panel">
               <div className="panel-head">
                 <h3>Quick actions</h3>
               </div>
-              <div className="sd-actions sd-actions--start">
+              <div className="action-grid">
                 <button type="button" className="btn btn-outline" onClick={() => setActiveTab('listings')}>
                   Manage my listings
                 </button>
@@ -459,10 +450,7 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* ==================================================================== */}
-        {/* MY LISTINGS                                                        */}
-        {/* ==================================================================== */}
-
+        {/* MY LISTINGS */}
         {activeTab === 'listings' && (
           <>
             <header className="tab-head">
@@ -512,10 +500,7 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* ==================================================================== */}
-        {/* OFFERS                                                             */}
-        {/* ==================================================================== */}
-
+        {/* OFFERS */}
         {activeTab === 'offers' && (
           <>
             <header className="tab-head">
@@ -644,10 +629,7 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* ==================================================================== */}
-        {/* ORDERS                                                             */}
-        {/* ==================================================================== */}
-
+        {/* ORDERS */}
         {activeTab === 'orders' && (
           <>
             <header className="tab-head">
@@ -698,10 +680,7 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* ==================================================================== */}
-        {/* MESSAGES                                                           */}
-        {/* ==================================================================== */}
-
+        {/* MESSAGES */}
         {activeTab === 'messages' && (
           <>
             <header className="tab-head">
@@ -771,10 +750,7 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* ==================================================================== */}
-        {/* PAYMENTS                                                           */}
-        {/* ==================================================================== */}
-
+        {/* PAYMENTS */}
         {activeTab === 'payments' && (
           <>
             <header className="tab-head">
@@ -827,10 +803,7 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* ==================================================================== */}
-        {/* EARNINGS                                                           */}
-        {/* ==================================================================== */}
-
+        {/* EARNINGS */}
         {activeTab === 'earnings' && (
           <>
             <header className="tab-head">
