@@ -26,10 +26,8 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
   const [regions, setRegions] = useState(FALLBACK_REGIONS);
   const [nearMode, setNearMode] = useState(false);
   const [nearStatus, setNearStatus] = useState('');
-  // "More filters" panel toggle
   const [showMore, setShowMore] = useState(false);
 
-  // Debounce ref for the main search input
   const debounceRef = useRef(null);
 
   useEffect(() => {
@@ -51,8 +49,6 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
         if (readyBy) params.readyBy = readyBy;
       }
       if (agriculture) {
-        // Agricultural listings stay discoverable to competing buyers after
-        // the first offer changes the listing to UNDER_NEGOTIATION.
         const [activeResponse, negotiatingResponse] = await Promise.all([
           api.get('/listings', { params: { ...params, status: 'ACTIVE' } }),
           api.get('/listings', { params: { ...params, status: 'UNDER_NEGOTIATION' } }),
@@ -128,7 +124,6 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
     );
   }
 
-  // Debounced search: fires 400 ms after the last main-query keystroke.
   function handleQueryChange(key, value) {
     const next = { ...filters, [key]: value };
     setFilters(next);
@@ -143,7 +138,6 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
   useEffect(() => {
     fetchListings();
     return () => clearTimeout(debounceRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
   const hasActiveFilters =
@@ -165,27 +159,25 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
   return (
     <main className="section listings-page">
       <div className="container-wide">
-        {/* Page header */}
-        <div className="page-header listings-page-header">
-          <div>
-            <span className="eyebrow">
-              {agriculture ? 'AGRICULTURAL MARKETPLACE' : 'PRODUCT MARKETPLACE'}
-            </span>
-            <h1>{agriculture ? 'Find produce at the source.' : 'Buy and sell physical products.'}</h1>
-            <p>
-              {agriculture
-                ? 'Compare bulk farm listings and prices.'
-                : 'Any member can buy and sell.'}
-            </p>
+        {/* Page header - Matching the new design system */}
+        <div className="ls-page-header">
+          <div className="ls-toolbar-eyebrow">
+            <span className="ls-eyebrow-line" />
+            <span>{agriculture ? 'AGRICULTURAL MARKETPLACE' : 'PRODUCT MARKETPLACE'}</span>
           </div>
+          <h1>{agriculture ? 'Find produce at the source.' : 'Buy and sell physical products.'}</h1>
+          <p className="ls-subtitle">
+            {agriculture
+              ? 'Compare bulk farm listings and prices.'
+              : 'Any member can buy and sell.'}
+          </p>
         </div>
 
         <MarketplaceActions category={category} />
 
-        {/* ---- Filter bar ---- */}
-        <div id="listings-results" className="filter-bar-wrap listings-filter-bar">
-          {/* Main search with debounce */}
-          <div className="filter-bar-search">
+        {/* Filter bar - Clean and floating */}
+        <div id="listings-results" className="ls-filter-bar">
+          <div className="ls-filter-search">
             <input
               type="search"
               value={agriculture ? filters.cropType : filters.title}
@@ -195,34 +187,25 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
               placeholder={agriculture ? 'Search produce — potatoes, wheat, barley…' : 'Search products…'}
               aria-label={agriculture ? 'Search produce' : 'Search products'}
             />
-            <button className="btn btn-primary" style={{ height: 44, whiteSpace: 'nowrap' }} onClick={() => fetchListings()}>
+            <button className="ls-btn ls-btn-primary" onClick={() => fetchListings()}>
               Search
             </button>
           </div>
 
-          {/* Scrollable filter chips */}
-          <div className="filter-bar-scroll" role="group" aria-label="Filters">
-            {/* Location chip */}
-            <label
-              className={`filter-chip${filters.location ? ' active' : ''}`}
-              title="Filter by location"
-            >
-              <svg className="filter-chip-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.3" /></svg>
+          <div className="ls-filter-scroll" role="group" aria-label="Filters">
+            <label className={`ls-filter-chip${filters.location ? ' active' : ''}`} title="Filter by location">
+              <svg className="ls-filter-chip-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.3" /></svg>
               <input
                 type="text"
                 value={filters.location}
                 onChange={(e) => handleFilterChange('location', e.target.value)}
                 placeholder="Location"
                 aria-label="Location filter"
-                style={{ minWidth: 80 }}
+                style={{ minWidth: 80, border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '13px' }}
               />
             </label>
 
-            {/* Region chip */}
-            <label
-              className={`filter-chip${filters.region ? ' active' : ''}`}
-              title="Filter by region"
-            >
+            <label className={`ls-filter-chip${filters.region ? ' active' : ''}`} title="Filter by region">
               <select
                 value={filters.region}
                 onChange={(e) => handleFilterChange('region', e.target.value)}
@@ -233,40 +216,36 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
                   <option key={r.value} value={r.value}>{r.label}</option>
                 ))}
               </select>
-              <span className="filter-chip-caret">▾</span>
+              <span className="ls-filter-chip-caret">▾</span>
             </label>
 
-            {/* More filters chip */}
             <button
               type="button"
-              className={`filter-chip${showMore || hasActiveFilters ? ' active' : ''}`}
+              className={`ls-filter-chip${showMore || hasActiveFilters ? ' active' : ''}`}
               onClick={() => setShowMore((v) => !v)}
               aria-expanded={showMore}
             >
               {showMore ? 'Fewer filters ✕' : 'More filters ⋯'}
             </button>
 
-            {/* Near me chip */}
             <button
               type="button"
-              className={`filter-chip${nearMode ? ' active' : ''}`}
+              className={`ls-filter-chip${nearMode ? ' active' : ''}`}
               onClick={findNearMe}
             >
               Near me
             </button>
 
-            {/* Clear chip (only visible when advanced filters are active) */}
             {hasActiveFilters && (
-              <button type="button" className="filter-chip" onClick={clearFilters}>
+              <button type="button" className="ls-filter-chip" onClick={clearFilters}>
                 Clear ×
               </button>
             )}
           </div>
 
-          {/* Expanded advanced filters */}
           {showMore && (
-            <div className="filter-more-panel">
-              <div>
+            <div className="ls-filter-more-panel">
+              <div className="ls-filter-field">
                 <label>Min quantity</label>
                 <input
                   type="number"
@@ -275,7 +254,7 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
                   placeholder="Any"
                 />
               </div>
-              <div>
+              <div className="ls-filter-field">
                 <label>Min price (ETB)</label>
                 <input
                   type="number" min="0"
@@ -284,7 +263,7 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
                   placeholder="Any"
                 />
               </div>
-              <div>
+              <div className="ls-filter-field">
                 <label>Max price (ETB)</label>
                 <input
                   type="number" min="0"
@@ -295,7 +274,7 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
               </div>
               {agriculture && (
                 <>
-                  <div>
+                  <div className="ls-filter-field">
                     <label>Ready after</label>
                     <input
                       type="date"
@@ -303,7 +282,7 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
                       onChange={(e) => handleFilterChange('readyAfter', e.target.value)}
                     />
                   </div>
-                  <div>
+                  <div className="ls-filter-field">
                     <label>Ready by</label>
                     <input
                       type="date"
@@ -313,12 +292,12 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
                   </div>
                 </>
               )}
-              <div className="filter-actions" style={{ gridColumn: '1 / -1' }}>
-                <button className="btn btn-primary" onClick={() => { fetchListings(); setShowMore(false); }}>
+              <div className="ls-filter-actions">
+                <button className="ls-btn ls-btn-primary" onClick={() => { fetchListings(); setShowMore(false); }}>
                   Apply filters
                 </button>
                 {hasActiveFilters && (
-                  <button className="btn btn-light" onClick={clearFilters}>
+                  <button className="ls-btn ls-btn-light" onClick={clearFilters}>
                     Clear all
                   </button>
                 )}
@@ -326,42 +305,43 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
             </div>
           )}
         </div>
-        {/* ---- /Filter bar ---- */}
 
-        {nearStatus && <p className="small muted">{nearStatus}</p>}
-        {error && <div className="alert error">{error}</div>}
+        {nearStatus && <p className="ls-muted">{nearStatus}</p>}
+        {error && <div className="ls-alert error">{error}</div>}
 
         <AdvertisementBanner />
 
-        {/* Toolbar: result count + context */}
-        <div className="market-toolbar--stitch listings-toolbar">
-          <strong>
-            {loading ? 'Loading…' : `${listings.length} listing${listings.length === 1 ? '' : 's'}`}
-          </strong>
-          <span className="muted">
-            {nearMode
-              ? 'Sorted by distance'
-              : agriculture
-                ? 'Independent inspection supported'
-                : 'Direct buyer and seller deals'}
-          </span>
+        {/* Toolbar - Matching the new design system */}
+        <div className="ls-toolbar">
+          <div>
+            <strong>
+              {loading ? 'Loading…' : `${listings.length} listing${listings.length === 1 ? '' : 's'}`}
+            </strong>
+            <span className="ls-muted">
+              {nearMode
+                ? 'Sorted by distance'
+                : agriculture
+                  ? 'Independent inspection supported'
+                  : 'Direct buyer and seller deals'}
+            </span>
+          </div>
         </div>
 
-        {/* Grid */}
+        {/* Grid - Matching the new design system */}
         {loading ? (
-          <div className="loading">Loading marketplace…</div>
+          <div className="ls-loading">Loading marketplace…</div>
         ) : (
-          <div className="listing-grid listings-grid">
+          <div className="ls-grid">
             {listings.map((l) => (
-              <div key={l.id}>
+              <div key={l.id} className="ls-card-wrapper">
                 <ListingCard listing={l} />
                 {nearMode && typeof l.distanceKm === 'number' && (
-                  <p className="small muted" style={{ marginTop: -6 }}>{l.distanceKm} km away</p>
+                  <p className="ls-muted ls-distance">{l.distanceKm} km away</p>
                 )}
               </div>
             ))}
             {!listings.length && (
-              <div className="empty card">
+              <div className="ls-empty">
                 <h3>No matching listings</h3>
                 <p>Try a broader search{nearMode ? ' or a larger radius' : ''}.</p>
               </div>
