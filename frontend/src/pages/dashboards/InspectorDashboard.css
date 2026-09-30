@@ -1915,3 +1915,109 @@
   .sd-dashboard .sd-card .sd-card-foot { font-size: 14px; }
   .sd-dashboard .sd-amount b { font-size: 26px; }
 }
+
+
+/* ══════════════════════════════════════════════════════════
+   MODALS + TOAST  (always reachable on phones)
+   ══════════════════════════════════════════════════════════ */
+
+/* Height of the app's bottom tab bar (Market / Deals / Orders …).
+   Raise or lower this if your tab bar is taller or shorter. */
+.sd-dashboard { --sd-nav-h: 88px; }
+
+/* Modals sit above the app chrome; toasts sit above modals */
+.sd-dashboard .sd-report-backdrop { z-index: 2000; }
+
+.sd-dashboard .sd-report-modal {
+  --sd-modal-px: 28px;
+  --sd-modal-pb: 24px;
+  overscroll-behavior: contain;
+}
+
+/* The action row stays pinned to the bottom of the modal while the form
+   scrolls, so "Publish / Submit" can never end up off-screen. */
+.sd-dashboard .sd-report-modal .sd-report-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 20px calc(var(--sd-modal-px) * -1) calc(var(--sd-modal-pb) * -1);
+  padding: 16px var(--sd-modal-px) var(--sd-modal-pb);
+  background: #fff;
+  border-top: 1px solid var(--sd-line-soft);
+  border-radius: 0 0 var(--sd-radius) var(--sd-radius);
+}
+
+@media (max-width: 900px) {
+  /* Keep the whole modal clear of the bottom tab bar as a fallback,
+     even if the tab bar renders on top of the backdrop. */
+  .sd-dashboard .sd-report-backdrop {
+    padding: 12px 12px calc(12px + var(--sd-nav-h) + env(safe-area-inset-bottom, 0px));
+    align-items: center;
+  }
+  .sd-dashboard .sd-report-modal {
+    --sd-modal-px: 20px;
+    --sd-modal-pb: 20px;
+    max-height: 100%;
+    padding: 22px var(--sd-modal-px) var(--sd-modal-pb);
+  }
+}
+
+@media (max-width: 720px) {
+  /* Stack the buttons full width with the main action on top */
+  .sd-dashboard .sd-report-modal .sd-report-actions {
+    flex-direction: column-reverse;
+    justify-content: stretch;
+    gap: 10px;
+  }
+  .sd-dashboard .sd-report-modal .sd-report-actions .sd-btn {
+    width: 100%;
+    flex: 0 0 auto;
+    min-height: 48px;
+  }
+}
+
+/* ── Toast ──────────────────────────────────────────────── */
+
+.sd-dashboard .sd-toast {
+  z-index: 3000;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+  border-radius: 16px;
+  padding: 14px 16px 14px 18px;
+}
+.sd-dashboard .sd-toast .sd-toast-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sd-dashboard .sd-toast .sd-toast-close {
+  flex: 0 0 auto;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  margin: -2px -4px 0 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: 500 22px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  cursor: pointer;
+  opacity: .7;
+}
+.sd-dashboard .sd-toast .sd-toast-close:hover { opacity: 1; }
+
+.sd-dashboard .sd-toast--error {
+  border-color: var(--sd-danger-line);
+  background: #fff7f6;
+  color: var(--sd-danger);
+}
+
+/* On phones the toast floats just above the bottom tab bar, so it is
+   never hidden behind it and never scrolls out of view. */
+@media (max-width: 900px) {
+  .sd-dashboard .sd-toast {
+    bottom: calc(var(--sd-nav-h) + env(safe-area-inset-bottom, 0px) + 12px);
+  }
+}
