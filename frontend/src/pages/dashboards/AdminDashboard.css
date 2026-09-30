@@ -526,6 +526,35 @@
   border-bottom: 1px solid var(--ac-green-line);
 }
 
+/* New: Card Row styling to replace tables */
+.ac-card-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ac-green-line);
+}
+.ac-card-row:last-child { border-bottom: 0; }
+
+.ac-card-label {
+  flex: 0 0 auto;
+  color: var(--ac-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.ac-card-value {
+  min-width: 0;
+  color: var(--ac-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
 .ac-actions {
   display: flex;
   align-items: center;
@@ -536,8 +565,7 @@
   border-top: 1px solid var(--ac-green-line);
 }
 .ac-card .ac-actions { margin-top: auto; }
-.ac-card p + .ac-actions,
-.ac-card .ac-financial + .ac-actions { margin-top: 16px; }
+.ac-card .ac-card-row + .ac-actions { margin-top: 16px; }
 .ac-actions .sd-btn {
   margin: 0;
   padding: 0 14px;
@@ -759,7 +787,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Tables ──────────────────────────────────────────────── */
+/* ── Tables (Used for compatibility if needed) ───────────── */
 
 .ac-table-shell {
   overflow-x: auto;
