@@ -4,6 +4,7 @@
    Shares the Truck Owner dashboard's card system.
    Scoped under .sd-dashboard.
 
+
    Every card follows the Orders card system:
      sd-card-head    — eyebrow (green dash) + title on the left,
                        party + avatar on the right
