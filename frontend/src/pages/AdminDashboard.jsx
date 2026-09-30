@@ -921,136 +921,139 @@ export default function AdminDashboard() {
               Showing <strong>{filteredUsers.length}</strong> of {users.length} users.
             </p>
 
-            <div className="ac-table-shell">
-              <table className="sd-table sd-table--stack">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Roles</th>
-                    <th>Rating</th>
-                    <th>Verification</th>
-                    <th>Account</th>
-                    <th>Role control</th>
-                  </tr>
-                </thead>
+            {/* NEW: Responsive Card Grid for Users */}
+            <div className="ac-users-grid">
+              {filteredUsers.map((item) => {
+                const busy = actionLoading.includes(item.id);
+                const suspended = item.accountStatus === 'SUSPENDED';
 
-                <tbody>
-                  {filteredUsers.map((item) => {
-                    const busy = actionLoading.includes(item.id);
-                    const suspended = item.accountStatus === 'SUSPENDED';
+                return (
+                  <div className="ac-user-card" key={item.id}>
+                    {/* Header: Name & Account Status */}
+                    <div className="ac-user-card-header">
+                      <div className="ac-user-card-name">
+                        <strong>{item.name}</strong>
+                        {item.phone && <span className="ac-user-card-sub">{item.phone}</span>}
+                        {item.location && <span className="ac-user-card-sub">{item.location}</span>}
+                      </div>
+                      <span className={statusBadgeClass(item.accountStatus || 'ACTIVE')}>
+                        {item.accountStatus || 'ACTIVE'}
+                      </span>
+                    </div>
 
-                    return (
-                      <tr key={item.id}>
-                        <td data-label="Name">
-                          <strong>{item.name}</strong>
-                          {item.phone && <div className="sd-muted">{item.phone}</div>}
-                          {item.location && <div className="sd-muted">{item.location}</div>}
-                        </td>
+                    {/* Email */}
+                    <div className="ac-user-card-row">
+                      <span className="ac-user-card-label">Email</span>
+                      <span className="ac-user-card-value">{item.email}</span>
+                    </div>
 
-                        <td data-label="Email">{item.email}</td>
+                    {/* Roles */}
+                    <div className="ac-user-card-row">
+                      <span className="ac-user-card-label">Roles</span>
+                      <div className="sd-chip-row">
+                        {(item.roles || []).map((role) => (
+                          <span className="sd-badge" key={role}>
+                            {role}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
 
-                        <td data-label="Roles">
-                          <div className="sd-chip-row">
-                            {(item.roles || []).map((role) => (
-                              <span className="sd-badge" key={role}>
-                                {role}
-                              </span>
+                    {/* Rating */}
+                    <div className="ac-user-card-row">
+                      <span className="ac-user-card-label">Rating</span>
+                      <span className="ac-user-card-value">{Number(item.rating || 0).toFixed(1)}</span>
+                    </div>
+
+                    {/* Verification */}
+                    <div className="ac-user-card-row">
+                      <span className="ac-user-card-label">Verification</span>
+                      <select
+                        value={item.verificationStatus || 'UNVERIFIED'}
+                        onChange={(e) => setVerification(item.id, e.target.value)}
+                        disabled={busy}
+                        className="ac-user-card-select"
+                      >
+                        <option value="UNVERIFIED">UNVERIFIED</option>
+                        {VERIFICATION_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Account Actions */}
+                    <div className="ac-user-card-row">
+                      <span className="ac-user-card-label">Account</span>
+                      <div className="ac-user-card-actions">
+                        <button
+                          type="button"
+                          className={`sd-btn ${suspended ? 'sd-btn-primary' : 'sd-btn-outline'}`}
+                          disabled={busy}
+                          onClick={() => setAccountStatus(item.id, suspended ? 'ACTIVE' : 'SUSPENDED')}
+                        >
+                          {busy ? 'Working…' : suspended ? 'Activate' : 'Suspend'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Role Control */}
+                    <div className="ac-user-card-row ac-user-card-row--stacked">
+                      <span className="ac-user-card-label">Role Control</span>
+                      <div className="ac-role-actions">
+                        <select
+                          value={roleSelections[item.id] || ''}
+                          onChange={(e) =>
+                            setRoleSelections((current) => ({ ...current, [item.id]: e.target.value }))
+                          }
+                          disabled={busy}
+                          className="ac-user-card-select"
+                        >
+                          <option value="">Select role...</option>
+                          {ROLE_OPTIONS.map((role) => (
+                            <option key={role} value={role}>
+                              {role}
+                            </option>
+                          ))}
+                        </select>
+
+                        <button
+                          type="button"
+                          className="sd-btn sd-btn-primary"
+                          disabled={busy || !roleSelections[item.id]}
+                          onClick={() => addRole(item.id)}
+                        >
+                          Add role
+                        </button>
+
+                        {(item.roles || []).length > 0 && (
+                          <div className="sd-chip-row" style={{ marginTop: 4 }}>
+                            {item.roles.map((role) => (
+                              <button
+                                type="button"
+                                key={role}
+                                className="sd-btn sd-btn-outline"
+                                disabled={busy}
+                                onClick={() => removeRole(item.id, role)}
+                                title={`Remove ${role}`}
+                              >
+                                Remove {role}
+                              </button>
                             ))}
                           </div>
-                        </td>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
 
-                        <td data-label="Rating">{Number(item.rating || 0).toFixed(1)}</td>
-
-                        <td data-label="Verification">
-                          <select
-                            value={item.verificationStatus || 'UNVERIFIED'}
-                            onChange={(e) => setVerification(item.id, e.target.value)}
-                            disabled={busy}
-                          >
-                            <option value="UNVERIFIED">UNVERIFIED</option>
-                            {VERIFICATION_OPTIONS.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-
-                        <td data-label="Account">
-                          <div className="sd-account-cell">
-                            <span className={statusBadgeClass(item.accountStatus || 'ACTIVE')}>
-                              {item.accountStatus || 'ACTIVE'}
-                            </span>
-
-                            <button
-                              type="button"
-                              className={`sd-btn ${suspended ? 'sd-btn-primary' : 'sd-btn-outline'}`}
-                              disabled={busy}
-                              onClick={() => setAccountStatus(item.id, suspended ? 'ACTIVE' : 'SUSPENDED')}
-                            >
-                              {busy ? 'Working…' : suspended ? 'Activate' : 'Suspend'}
-                            </button>
-                          </div>
-                        </td>
-
-                        <td data-label="Role control">
-                          <div className="ac-role-actions">
-                            <select
-                              value={roleSelections[item.id] || ''}
-                              onChange={(e) =>
-                                setRoleSelections((current) => ({ ...current, [item.id]: e.target.value }))
-                              }
-                              disabled={busy}
-                            >
-                              <option value="">Select role...</option>
-                              {ROLE_OPTIONS.map((role) => (
-                                <option key={role} value={role}>
-                                  {role}
-                                </option>
-                              ))}
-                            </select>
-
-                            <button
-                              type="button"
-                              className="sd-btn sd-btn-primary"
-                              disabled={busy || !roleSelections[item.id]}
-                              onClick={() => addRole(item.id)}
-                            >
-                              Add role
-                            </button>
-
-                            {(item.roles || []).length > 0 && (
-                              <div className="sd-chip-row">
-                                {item.roles.map((role) => (
-                                  <button
-                                    type="button"
-                                    key={role}
-                                    className="sd-btn sd-btn-outline"
-                                    disabled={busy}
-                                    onClick={() => removeRole(item.id, role)}
-                                    title={`Remove ${role}`}
-                                  >
-                                    Remove {role}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-
-                  {filteredUsers.length === 0 && (
-                    <tr>
-                      <td colSpan="7">
-                        <Empty title="No users found">Try a different name, email, role, or status.</Empty>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+              {filteredUsers.length === 0 && (
+                <div className="ac-users-grid-empty">
+                  <Empty title="No users found">Try a different name, email, role, or status.</Empty>
+                </div>
+              )}
             </div>
           </div>
         )}
