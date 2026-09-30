@@ -73,7 +73,7 @@ async function fetchPayments() {
 }
 
 function statusBadgeClass(status) {
-  if (['VERIFIED', 'ACTIVE', 'APPROVED', 'PUBLISHED', 'SCHEDULED', 'RESOLVED', 'COMPLETED'].includes(status)) {
+  if (['VERIFIED', 'ACTIVE', 'APPROVED', 'PUBLISHED', 'SCHEDULED', 'RESOLVED', 'COMPLETED', 'DELIVERED', 'PAID'].includes(status)) {
     return 'sd-badge sd-good';
   }
   if (['REJECTED', 'SUSPENDED', 'CANCELLED', 'FAILED', 'RECONCILIATION_REQUIRED'].includes(status)) {
@@ -1106,13 +1106,19 @@ export default function AdminDashboard() {
                     <span className={statusBadgeClass(item.status)}>{item.status}</span>
                   </div>
 
-                  <p>
-                    {item.raisedBy?.name}
-                    {item.raisedByRole ? ` (${item.raisedByRole})` : ''} vs {item.against?.name}
-                    {item.againstRole ? ` (${item.againstRole})` : ''}
-                  </p>
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">PARTIES</span>
+                    <span className="ac-card-value">
+                      {item.raisedBy?.name}
+                      {item.raisedByRole ? ` (${item.raisedByRole})` : ''} vs {item.against?.name}
+                      {item.againstRole ? ` (${item.againstRole})` : ''}
+                    </span>
+                  </div>
 
-                  <p>{item.description}</p>
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">DESCRIPTION</span>
+                    <span className="ac-card-value">{item.description}</span>
+                  </div>
 
                   <div className="ac-actions">
                     <button
@@ -1143,44 +1149,32 @@ export default function AdminDashboard() {
               <Toolbar label="HISTORY" title="Recently resolved" />
             </div>
 
-            <div className="ac-panel">
-              <div className="ac-table-shell">
-                <table className="sd-table sd-table--stack">
-                  <thead>
-                    <tr>
-                      <th>Type</th>
-                      <th>Parties</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
+            <div className="ac-grid">
+              {resolvedDisputes.slice(0, 10).map((item) => (
+                <div className="ac-card" key={item.id}>
+                  <div className="ac-card-eyebrow">
+                    <span className="ac-eyebrow-line" />
+                    <span>HISTORY</span>
+                  </div>
+                  <div className="ac-card-header">
+                    <h3>{item.disputeType}</h3>
+                    <span className={statusBadgeClass(item.status)}>{item.status}</span>
+                  </div>
 
-                  <tbody>
-                    {resolvedDisputes.slice(0, 10).map((item) => (
-                      <tr key={item.id}>
-                        <td data-label="Type">
-                          <strong>{item.disputeType}</strong>
-                        </td>
-                        <td data-label="Parties" className="sd-muted">
-                          {item.raisedBy?.name}
-                          {item.raisedByRole ? ` (${item.raisedByRole})` : ''} vs {item.against?.name}
-                          {item.againstRole ? ` (${item.againstRole})` : ''}
-                        </td>
-                        <td data-label="Status">
-                          <span className={statusBadgeClass(item.status)}>{item.status}</span>
-                        </td>
-                      </tr>
-                    ))}
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">PARTIES</span>
+                    <span className="ac-card-value">
+                      {item.raisedBy?.name}
+                      {item.raisedByRole ? ` (${item.raisedByRole})` : ''} vs {item.against?.name}
+                      {item.againstRole ? ` (${item.againstRole})` : ''}
+                    </span>
+                  </div>
+                </div>
+              ))}
 
-                    {resolvedDisputes.length === 0 && (
-                      <tr>
-                        <td colSpan="3" className="sd-muted">
-                          Nothing resolved yet.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              {resolvedDisputes.length === 0 && (
+                <Empty title="No history">Nothing resolved yet.</Empty>
+              )}
             </div>
           </div>
         )}
@@ -1204,14 +1198,23 @@ export default function AdminDashboard() {
                     <span className="sd-badge sd-warn">REVIEW</span>
                   </div>
 
-                  <p>
-                    {item.email} · {(item.disputesAgainst || []).length} open dispute(s)
-                  </p>
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">EMAIL</span>
+                    <span className="ac-card-value">{item.email}</span>
+                  </div>
+
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">OPEN DISPUTES</span>
+                    <span className="ac-card-value">{(item.disputesAgainst || []).length}</span>
+                  </div>
 
                   {(item.disputesAgainst || []).map((dispute) => (
-                    <p key={dispute.id}>
-                      — {dispute.disputeType}: {dispute.description}
-                    </p>
+                    <div className="ac-card-row" key={dispute.id}>
+                      <span className="ac-card-label">DISPUTE</span>
+                      <span className="ac-card-value">
+                        {dispute.disputeType}: {dispute.description}
+                      </span>
+                    </div>
                   ))}
                 </div>
               ))}
@@ -1269,34 +1272,35 @@ export default function AdminDashboard() {
                     )}
 
                     {ad.type === 'TELEGRAM_PROMOTION' && ad.telegramTemplate && (
-                      <p>
-                        <strong>Template:</strong> {humanize(ad.telegramTemplate)}
-                        {ad.telegramImageCount > 0 ? ` · ${ad.telegramImageCount} photos` : ''}
-                      </p>
+                      <div className="ac-card-row">
+                        <span className="ac-card-label">TEMPLATE</span>
+                        <span className="ac-card-value">
+                          {humanize(ad.telegramTemplate)}
+                          {ad.telegramImageCount > 0 ? ` · ${ad.telegramImageCount} photos` : ''}
+                        </span>
+                      </div>
                     )}
 
                     {ad.headline && (
-                      <p>
-                        <strong>{ad.headline}</strong>
-                      </p>
+                      <div className="ac-card-row">
+                        <span className="ac-card-label">HEADLINE</span>
+                        <span className="ac-card-value">{ad.headline}</span>
+                      </div>
                     )}
 
-                    <p>
-                      <strong>Ref:</strong> {ad.campaignReference || ad.id.slice(0, 8)}
-                      {' · '}
-                      <strong>Advertiser:</strong> {ad.advertiser?.name} ({ad.advertiser?.email})
-                    </p>
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">REF / ADVERTISER</span>
+                      <span className="ac-card-value">
+                        {ad.campaignReference || ad.id.slice(0, 8)} · {ad.advertiser?.name} ({ad.advertiser?.email})
+                      </span>
+                    </div>
 
-                    <p>
-                      {ad.listing ? (
-                        <>
-                          Featuring <strong>{ad.listing.title || ad.listing.cropType}</strong> ·{' '}
-                        </>
-                      ) : (
-                        'Platform-wide · '
-                      )}
-                      {shortDate(ad.startDate)} — {shortDate(ad.endDate)}
-                    </p>
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">DATES</span>
+                      <span className="ac-card-value">
+                        {shortDate(ad.startDate)} — {shortDate(ad.endDate)}
+                      </span>
+                    </div>
 
                     <div className="ac-financial">
                       <div className="ac-financial-item">
@@ -1320,7 +1324,10 @@ export default function AdminDashboard() {
                     </div>
 
                     {ad.destinationUrl && (
-                      <p style={{ wordBreak: 'break-word' }}>Destination: {ad.destinationUrl}</p>
+                      <div className="ac-card-row">
+                        <span className="ac-card-label">DESTINATION</span>
+                        <span className="ac-card-value" style={{ wordBreak: 'break-word' }}>{ad.destinationUrl}</span>
+                      </div>
                     )}
 
                     <div className="ac-actions">
@@ -1350,126 +1357,111 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            <div className="ac-panel" style={{ marginTop: 20 }}>
-              <div className="ac-panel-header">
-                <div>
-                  <div className="ac-toolbar-eyebrow">
-                    <span className="ac-eyebrow-line" />
-                    <span>HISTORY</span>
-                  </div>
-                  <h2>Campaign ledger</h2>
-                </div>
-              </div>
+            <div style={{ marginTop: 28 }}>
+              <Toolbar label="HISTORY" title="Campaign ledger" />
+            </div>
 
-              <div className="ac-table-shell">
-                <table className="sd-table sd-table--stack">
-                  <thead>
-                    <tr>
-                      <th>Campaign</th>
-                      <th>Advertiser</th>
-                      <th>Dates</th>
-                      <th>Financials</th>
-                      <th>Analytics</th>
-                      <th>Status</th>
-                      <th />
-                    </tr>
-                  </thead>
+            <div className="ac-grid">
+              {reviewedAds.slice(0, 30).map((ad) => {
+                const { impressions, clicks, ctr } = adAnalytics(ad);
+                const busy = actionLoading === `ad-${ad.id}`;
 
-                  <tbody>
-                    {reviewedAds.slice(0, 30).map((ad) => {
-                      const { impressions, clicks, ctr } = adAnalytics(ad);
-                      const busy = actionLoading === `ad-${ad.id}`;
+                return (
+                  <div className="ac-card" key={ad.id}>
+                    <div className="ac-card-eyebrow">
+                      <span className="ac-eyebrow-line" />
+                      <span>CAMPAIGN</span>
+                    </div>
+                    <div className="ac-card-header">
+                      <h3>{ad.campaignReference || humanize(ad.type)}</h3>
+                      <span className={statusBadgeClass(ad.status)}>{ad.status}</span>
+                    </div>
 
-                      return (
-                        <tr key={ad.id}>
-                          <td data-label="Campaign">
-                            <strong>{ad.campaignReference || humanize(ad.type)}</strong>
-                            <br />
-                            <span className="sd-muted">{humanize(ad.type)}</span>
-
-                            {ad.type === 'TELEGRAM_PROMOTION' && ad.telegramImageUrls?.length > 0 && (
-                              <details className="tg-ledger-photos">
-                                <summary>🎠 {ad.telegramImageUrls.length} carousel photos</summary>
-                                <ImageCarousel
-                                  images={ad.telegramImageUrls}
-                                  alt={ad.headline || 'Carousel photo'}
-                                  openLinks
-                                  className="img-carousel--compact"
-                                />
-                              </details>
-                            )}
-                          </td>
-
-                          <td data-label="Advertiser" className="sd-muted">
-                            {ad.advertiser?.name}
-                          </td>
-
-                          <td data-label="Dates" className="sd-muted">
-                            {shortDate(ad.startDate)} — {shortDate(ad.endDate)}
-                          </td>
-
-                          <td data-label="Financials" className="sd-muted">
-                            {fmt(ad.priceQuoted)} {ad.currency || 'ETB'} quoted
-                            <br />
-                            {fmt(ad.amountPaid)} paid
-                          </td>
-
-                          <td data-label="Analytics" className="sd-muted">
-                            {impressions} imp · {clicks} clicks · {ctr}% CTR
-                          </td>
-
-                          <td data-label="Status">
-                            <span className={statusBadgeClass(ad.status)}>{ad.status}</span>
-                          </td>
-
-                          <td data-label="">
-                            <div className="ac-actions">
-                              {['PUBLISHED', 'ACTIVE'].includes(ad.status) && (
-                                <button
-                                  className="sd-btn sd-btn-outline"
-                                  disabled={busy}
-                                  onClick={() => setAdStatus(ad.id, 'EXPIRED')}
-                                >
-                                  {busy ? 'Working…' : 'End early'}
-                                </button>
-                              )}
-
-                              {['PAID_PENDING_REVIEW', 'APPROVED', 'SCHEDULED'].includes(ad.status) && (
-                                <button
-                                  className="sd-btn sd-btn-outline"
-                                  disabled={busy}
-                                  onClick={() => cancelAdCampaign(ad.id)}
-                                >
-                                  {busy ? 'Working…' : 'Cancel & refund'}
-                                </button>
-                              )}
-
-                              {ad.type === 'TELEGRAM_PROMOTION' &&
-                                ['APPROVED', 'SCHEDULED'].includes(ad.status) && (
-                                  <button
-                                    className="sd-btn sd-btn-primary"
-                                    disabled={busy}
-                                    onClick={() => markTelegramPublished(ad.id)}
-                                  >
-                                    Mark Telegram published
-                                  </button>
-                                )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-
-                    {reviewedAds.length === 0 && (
-                      <tr>
-                        <td colSpan="7" className="sd-muted">
-                          No reviewed campaigns yet.
-                        </td>
-                      </tr>
+                    {ad.type === 'TELEGRAM_PROMOTION' && ad.telegramImageUrls?.length > 0 && (
+                      <details className="tg-ledger-photos">
+                        <summary>🎠 {ad.telegramImageUrls.length} carousel photos</summary>
+                        <ImageCarousel
+                          images={ad.telegramImageUrls}
+                          alt={ad.headline || 'Carousel photo'}
+                          openLinks
+                          className="img-carousel--compact"
+                        />
+                      </details>
                     )}
-                  </tbody>
-                </table>
-              </div>
+
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">ADVERTISER</span>
+                      <span className="ac-card-value">{ad.advertiser?.name}</span>
+                    </div>
+
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">DATES</span>
+                      <span className="ac-card-value">
+                        {shortDate(ad.startDate)} — {shortDate(ad.endDate)}
+                      </span>
+                    </div>
+
+                    <div className="ac-financial">
+                      <div className="ac-financial-item">
+                        <span>Quoted</span>
+                        <b>{fmt(ad.priceQuoted)} {ad.currency || 'ETB'}</b>
+                      </div>
+                      <div className="ac-financial-item">
+                        <span>Paid</span>
+                        <b>{fmt(ad.amountPaid)} {ad.currency || 'ETB'}</b>
+                      </div>
+                      <div className="ac-financial-item">
+                        <span>CTR</span>
+                        <b>{ctr}%</b>
+                      </div>
+                    </div>
+
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">ANALYTICS</span>
+                      <span className="ac-card-value">
+                        {impressions} imp · {clicks} clicks · {ctr}% CTR
+                      </span>
+                    </div>
+
+                    <div className="ac-actions">
+                      {['PUBLISHED', 'ACTIVE'].includes(ad.status) && (
+                        <button
+                          className="sd-btn sd-btn-outline"
+                          disabled={busy}
+                          onClick={() => setAdStatus(ad.id, 'EXPIRED')}
+                        >
+                          {busy ? 'Working…' : 'End early'}
+                        </button>
+                      )}
+
+                      {['PAID_PENDING_REVIEW', 'APPROVED', 'SCHEDULED'].includes(ad.status) && (
+                        <button
+                          className="sd-btn sd-btn-outline"
+                          disabled={busy}
+                          onClick={() => cancelAdCampaign(ad.id)}
+                        >
+                          {busy ? 'Working…' : 'Cancel & refund'}
+                        </button>
+                      )}
+
+                      {ad.type === 'TELEGRAM_PROMOTION' &&
+                        ['APPROVED', 'SCHEDULED'].includes(ad.status) && (
+                          <button
+                            className="sd-btn sd-btn-primary"
+                            disabled={busy}
+                            onClick={() => markTelegramPublished(ad.id)}
+                          >
+                            Mark Telegram published
+                          </button>
+                        )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {reviewedAds.length === 0 && (
+                <Empty title="No history">No reviewed campaigns yet.</Empty>
+              )}
             </div>
           </div>
         )}
@@ -1481,66 +1473,63 @@ export default function AdminDashboard() {
               has started pickup, since goods already in motion need a dispute instead.
             </Toolbar>
 
-            <div className="ac-panel">
-              <div className="ac-table-shell">
-                <table className="sd-table sd-table--stack">
-                  <thead>
-                    <tr>
-                      <th>Order</th>
-                      <th>Listing</th>
-                      <th>Buyer</th>
-                      <th>Seller</th>
-                      <th>Value</th>
-                      <th>Status</th>
-                      <th />
-                    </tr>
-                  </thead>
+            <div className="ac-grid">
+              {orders.map((o) => {
+                const transportInMotion = Boolean(
+                  o.transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(o.transportJob.status)
+                );
+                const cancellable = !['COMPLETED', 'CANCELLED'].includes(o.status) && !transportInMotion;
 
-                  <tbody>
-                    {orders.map((o) => {
-                      const transportInMotion = Boolean(
-                        o.transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(o.transportJob.status)
-                      );
-                      const cancellable = !['COMPLETED', 'CANCELLED'].includes(o.status) && !transportInMotion;
+                return (
+                  <div className="ac-card" key={o.id}>
+                    <div className="ac-card-eyebrow">
+                      <span className="ac-eyebrow-line" />
+                      <span>ORDER</span>
+                    </div>
+                    <div className="ac-card-header">
+                      <h3>{o.listing?.title || o.listing?.cropType || 'Order'}</h3>
+                      <span className={statusBadgeClass(o.status)}>{o.status}</span>
+                    </div>
 
-                      return (
-                        <tr key={o.id}>
-                          <td data-label="Order">
-                            <span className="ac-code">{o.id.slice(0, 8)}</span>
-                          </td>
-                          <td data-label="Listing">{o.listing?.title || o.listing?.cropType || '—'}</td>
-                          <td data-label="Buyer">{o.buyer?.name || '—'}</td>
-                          <td data-label="Seller">{o.seller?.name || '—'}</td>
-                          <td data-label="Value">{fmt(o.finalPrice)} ETB</td>
-                          <td data-label="Status">
-                            <span className={statusBadgeClass(o.status)}>{o.status}</span>
-                          </td>
-                          <td data-label="">
-                            {cancellable && (
-                              <button
-                                type="button"
-                                className="sd-btn sd-btn-outline"
-                                disabled={actionLoading === `order-${o.id}`}
-                                onClick={() => cancelOrder(o)}
-                              >
-                                {actionLoading === `order-${o.id}` ? 'Cancelling…' : 'Cancel order'}
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">ORDER ID</span>
+                      <span className="ac-card-value ac-code">{o.id.slice(0, 8)}</span>
+                    </div>
 
-                    {orders.length === 0 && (
-                      <tr>
-                        <td colSpan="7" className="sd-muted">
-                          No orders yet.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">BUYER</span>
+                      <span className="ac-card-value">{o.buyer?.name || '—'}</span>
+                    </div>
+
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">SELLER</span>
+                      <span className="ac-card-value">{o.seller?.name || '—'}</span>
+                    </div>
+
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">VALUE</span>
+                      <span className="ac-card-value">{fmt(o.finalPrice)} ETB</span>
+                    </div>
+
+                    <div className="ac-actions">
+                      {cancellable && (
+                        <button
+                          type="button"
+                          className="sd-btn sd-btn-outline"
+                          disabled={actionLoading === `order-${o.id}`}
+                          onClick={() => cancelOrder(o)}
+                        >
+                          {actionLoading === `order-${o.id}` ? 'Cancelling…' : 'Cancel order'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {orders.length === 0 && (
+                <Empty title="No orders yet">No orders to display.</Empty>
+              )}
             </div>
           </div>
         )}
@@ -1551,50 +1540,43 @@ export default function AdminDashboard() {
               Payments that are still pending or need reconciliation.
             </Toolbar>
 
-            <div className="ac-panel">
-              <div className="ac-table-shell">
-                <table className="sd-table sd-table--stack">
-                  <thead>
-                    <tr>
-                      <th>Payment</th>
-                      <th>Order</th>
-                      <th>Type</th>
-                      <th>Amount</th>
-                      <th>Provider</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
+            <div className="ac-grid">
+              {payments.map((p) => (
+                <div className="ac-card" key={p.id}>
+                  <div className="ac-card-eyebrow">
+                    <span className="ac-eyebrow-line" />
+                    <span>PAYMENT</span>
+                  </div>
+                  <div className="ac-card-header">
+                    <h3>{String(p.id).slice(0, 8)}</h3>
+                    <span className={statusBadgeClass(p.status)}>{humanize(p.status)}</span>
+                  </div>
 
-                  <tbody>
-                    {payments.map((p) => (
-                      <tr key={p.id}>
-                        <td data-label="Payment">
-                          <span className="ac-code">{String(p.id).slice(0, 8)}</span>
-                        </td>
-                        <td data-label="Order">
-                          <span className="ac-code">{p.orderId ? String(p.orderId).slice(0, 8) : '—'}</span>
-                        </td>
-                        <td data-label="Type">{humanize(p.type) || '—'}</td>
-                        <td data-label="Amount">
-                          {fmt(p.amount)} {p.currency || 'ETB'}
-                        </td>
-                        <td data-label="Provider">{p.provider || '—'}</td>
-                        <td data-label="Status">
-                          <span className={statusBadgeClass(p.status)}>{humanize(p.status)}</span>
-                        </td>
-                      </tr>
-                    ))}
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">ORDER</span>
+                    <span className="ac-card-value ac-code">{p.orderId ? String(p.orderId).slice(0, 8) : '—'}</span>
+                  </div>
 
-                    {payments.length === 0 && (
-                      <tr>
-                        <td colSpan="6" className="sd-muted">
-                          No payments waiting for review.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">TYPE</span>
+                    <span className="ac-card-value">{humanize(p.type) || '—'}</span>
+                  </div>
+
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">AMOUNT</span>
+                    <span className="ac-card-value">{fmt(p.amount)} {p.currency || 'ETB'}</span>
+                  </div>
+
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">PROVIDER</span>
+                    <span className="ac-card-value">{p.provider || '—'}</span>
+                  </div>
+                </div>
+              ))}
+
+              {payments.length === 0 && (
+                <Empty title="No payments">No payments waiting for review.</Empty>
+              )}
             </div>
           </div>
         )}
@@ -1630,100 +1612,80 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="ac-panel">
-              <div className="ac-table-shell">
-                <table className="sd-table sd-table--stack">
-                  <thead>
-                    <tr>
-                      <th>Refund</th>
-                      <th>Payment</th>
-                      <th>Amount</th>
-                      <th>Provider</th>
-                      <th>Status</th>
-                      <th>Chapa refund ID</th>
-                      <th>Chapa tx ref (admin)</th>
-                      <th />
-                    </tr>
-                  </thead>
+            <div className="ac-grid" style={{ marginTop: 18 }}>
+              {refunds.map((refund) => (
+                <div className="ac-card" key={refund.id}>
+                  <div className="ac-card-eyebrow">
+                    <span className="ac-eyebrow-line" />
+                    <span>REFUND</span>
+                  </div>
+                  <div className="ac-card-header">
+                    <h3>{refund.id.slice(0, 8)}</h3>
+                    <span className={statusBadgeClass(refund.status)}>{refund.status}</span>
+                  </div>
 
-                  <tbody>
-                    {refunds.map((refund) => (
-                      <tr key={refund.id}>
-                        <td data-label="Refund">
-                          <span className="ac-code">{refund.id.slice(0, 8)}</span>
-                        </td>
-                        <td data-label="Payment">
-                          <span className="ac-code">{refund.paymentId.slice(0, 8)}</span>
-                        </td>
-                        <td data-label="Amount">
-                          {fmt(refund.amount)} {refund.currency || 'ETB'}
-                        </td>
-                        <td data-label="Provider">{refund.provider || refund.payment?.provider || '—'}</td>
-                        <td data-label="Status">
-                          <span className={statusBadgeClass(refund.status)}>{refund.status}</span>
-                        </td>
-                        <td data-label="Chapa refund ID">
-                          <span className="ac-code">
-                            {refund.providerRefundId ? refund.providerRefundId.slice(0, 18) : '—'}
-                          </span>
-                        </td>
-                        <td data-label="Chapa tx ref (admin)">
-                          {refund.payment?.chapaTxRef ? (
-                            <span className="ac-code">{refund.payment.chapaTxRef}</span>
-                          ) : (
-                            <>
-                              <span className={statusBadgeClass('FAILED')}>missing</span>
-                              {refund.payment?.providerTransactionId && (
-                                <div className="sd-muted" style={{ fontSize: 11, marginTop: 4 }}>
-                                  providerTransactionId:{' '}
-                                  <span className="ac-code">{refund.payment.providerTransactionId}</span>
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </td>
-                        <td data-label="">
-                          <div className="refund-actions">
-                            {refund.status === 'REQUESTED' && (
-                              <button
-                                type="button"
-                                className="sd-btn sd-btn-primary"
-                                disabled={actionLoading === `refund-${refund.id}`}
-                                onClick={() => processRefund(refund)}
-                              >
-                                {actionLoading === `refund-${refund.id}` ? 'Submitting…' : 'Process with Chapa'}
-                              </button>
-                            )}
-                            {refund.status === 'PROCESSING' && (
-                              <span className="sd-muted" style={{ fontSize: 12 }}>
-                                Auto-checking with Chapa…
-                              </span>
-                            )}
-                            {refund.status === 'FAILED' && (
-                              <button
-                                type="button"
-                                className="sd-btn sd-btn-primary"
-                                disabled={actionLoading === `refund-${refund.id}`}
-                                onClick={() => processRefund(refund)}
-                              >
-                                {actionLoading === `refund-${refund.id}` ? 'Retrying…' : 'Retry refund'}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">PAYMENT</span>
+                    <span className="ac-card-value ac-code">{refund.paymentId.slice(0, 8)}</span>
+                  </div>
 
-                    {refunds.length === 0 && (
-                      <tr>
-                        <td colSpan="8" className="sd-muted">
-                          No refunds recorded.
-                        </td>
-                      </tr>
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">AMOUNT</span>
+                    <span className="ac-card-value">{fmt(refund.amount)} {refund.currency || 'ETB'}</span>
+                  </div>
+
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">PROVIDER</span>
+                    <span className="ac-card-value">{refund.provider || refund.payment?.provider || '—'}</span>
+                  </div>
+
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">CHAPA REF ID</span>
+                    <span className="ac-card-value ac-code">
+                      {refund.providerRefundId ? refund.providerRefundId.slice(0, 18) : '—'}
+                    </span>
+                  </div>
+
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">CHAPA TX REF</span>
+                    <span className="ac-card-value ac-code">
+                      {refund.payment?.chapaTxRef || 'missing'}
+                    </span>
+                  </div>
+
+                  <div className="ac-actions">
+                    {refund.status === 'REQUESTED' && (
+                      <button
+                        type="button"
+                        className="sd-btn sd-btn-primary"
+                        disabled={actionLoading === `refund-${refund.id}`}
+                        onClick={() => processRefund(refund)}
+                      >
+                        {actionLoading === `refund-${refund.id}` ? 'Submitting…' : 'Process with Chapa'}
+                      </button>
                     )}
-                  </tbody>
-                </table>
-              </div>
+                    {refund.status === 'PROCESSING' && (
+                      <span className="sd-muted" style={{ fontSize: 12 }}>
+                        Auto-checking with Chapa…
+                      </span>
+                    )}
+                    {refund.status === 'FAILED' && (
+                      <button
+                        type="button"
+                        className="sd-btn sd-btn-primary"
+                        disabled={actionLoading === `refund-${refund.id}`}
+                        onClick={() => processRefund(refund)}
+                      >
+                        {actionLoading === `refund-${refund.id}` ? 'Retrying…' : 'Retry refund'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {refunds.length === 0 && (
+                <Empty title="No refunds">No refunds recorded.</Empty>
+              )}
             </div>
           </div>
         )}
@@ -1757,111 +1719,101 @@ export default function AdminDashboard() {
                   </div>
                 ))}
               </div>
+            </div>
 
-              <div className="ac-table-shell" style={{ marginTop: 16 }}>
-                <table className="sd-table sd-table--stack">
-                  <thead>
-                    <tr>
-                      <th>Order / plan</th>
-                      <th>Buyer</th>
-                      <th>Seller</th>
-                      <th>Progress</th>
-                      <th>Installments</th>
-                      <th>Seller payout</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
+            <div className="ac-grid" style={{ marginTop: 18 }}>
+              {installmentPlans.map((plan) => {
+                const live = (plan.installments || [])
+                  .filter((item) => item.installmentSequence != null)
+                  .sort((a, b) => a.installmentSequence - b.installmentSequence);
+                const progress = plan.installmentProgress || {
+                  paid: live.filter((item) => item.status === 'PAID').length,
+                  total: plan.installmentCount,
+                };
 
-                  <tbody>
-                    {installmentPlans.map((plan) => {
-                      const live = (plan.installments || [])
-                        .filter((item) => item.installmentSequence != null)
-                        .sort((a, b) => a.installmentSequence - b.installmentSequence);
-                      const progress = plan.installmentProgress || {
-                        paid: live.filter((item) => item.status === 'PAID').length,
-                        total: plan.installmentCount,
-                      };
+                return (
+                  <div className="ac-card" key={plan.id}>
+                    <div className="ac-card-eyebrow">
+                      <span className="ac-eyebrow-line" />
+                      <span>INSTALLMENT PLAN</span>
+                    </div>
+                    <div className="ac-card-header">
+                      <h3>
+                        {plan.order?.id ? (
+                          <Link to={`/orders/${plan.order.id}`} className="ac-code">
+                            {plan.order.id.slice(0, 8)}
+                          </Link>
+                        ) : (
+                          <span className="ac-code">{plan.id.slice(0, 8)}</span>
+                        )}
+                      </h3>
+                      <span className={statusBadgeClass(plan.status)}>{plan.status}</span>
+                    </div>
 
-                      return (
-                        <tr key={plan.id}>
-                          <td data-label="Order / plan">
-                            {plan.order?.id ? (
-                              <Link to={`/orders/${plan.order.id}`} className="ac-code">
-                                {plan.order.id.slice(0, 8)}
-                              </Link>
-                            ) : (
-                              <span className="ac-code">{plan.id.slice(0, 8)}</span>
-                            )}
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">AMOUNT</span>
+                      <span className="ac-card-value">{fmt(plan.amount)} {plan.currency || 'ETB'}</span>
+                    </div>
+
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">BUYER</span>
+                      <span className="ac-card-value">{plan.order?.buyer?.name || plan.createdBy?.name || '—'}</span>
+                    </div>
+
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">SELLER</span>
+                      <span className="ac-card-value">{plan.order?.seller?.name || '—'}</span>
+                    </div>
+
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">PROGRESS</span>
+                      <span className="ac-card-value">{progress.paid} / {progress.total}</span>
+                    </div>
+
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">INSTALLMENTS</span>
+                      <div className="ac-card-value" style={{ display: 'grid', gap: 5, minWidth: 220 }}>
+                        {live.map((item) => (
+                          <div
+                            key={item.id}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 8,
+                              alignItems: 'center',
+                            }}
+                          >
+                            <span>
+                              #{item.installmentSequence} · {fmt(item.amount)} {item.currency || 'ETB'}
+                            </span>
+                            <span className={statusBadgeClass(item.status)}>{item.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="ac-card-row">
+                      <span className="ac-card-label">SELLER PAYOUT</span>
+                      <span className="ac-card-value">
+                        {plan.payout ? (
+                          <>
+                            <span className={statusBadgeClass(plan.payout.status)}>{plan.payout.status}</span>
                             <div className="sd-muted" style={{ fontSize: 11, marginTop: 4 }}>
-                              {fmt(plan.amount)} {plan.currency || 'ETB'}
+                              {fmt(plan.payout.amount)} {plan.payout.currency || 'ETB'}
                             </div>
-                          </td>
+                          </>
+                        ) : (
+                          'Not created yet'
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
 
-                          <td data-label="Buyer">{plan.order?.buyer?.name || plan.createdBy?.name || '—'}</td>
-                          <td data-label="Seller">{plan.order?.seller?.name || '—'}</td>
-
-                          <td data-label="Progress">
-                            <strong>
-                              {progress.paid} / {progress.total}
-                            </strong>
-                          </td>
-
-                          <td data-label="Installments">
-                            <div style={{ display: 'grid', gap: 5, minWidth: 220 }}>
-                              {live.map((item) => (
-                                <div
-                                  key={item.id}
-                                  style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    gap: 8,
-                                    alignItems: 'center',
-                                  }}
-                                >
-                                  <span>
-                                    #{item.installmentSequence} · {fmt(item.amount)} {item.currency || 'ETB'}
-                                  </span>
-                                  <span className={statusBadgeClass(item.status)}>{item.status}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-
-                          <td data-label="Seller payout">
-                            {plan.payout ? (
-                              <>
-                                <span className={statusBadgeClass(plan.payout.status)}>{plan.payout.status}</span>
-                                <div className="sd-muted" style={{ fontSize: 11, marginTop: 4 }}>
-                                  {fmt(plan.payout.amount)} {plan.payout.currency || 'ETB'}
-                                </div>
-                              </>
-                            ) : (
-                              <span className="sd-muted">Not created yet</span>
-                            )}
-                          </td>
-
-                          <td data-label="Status">
-                            <span className={statusBadgeClass(plan.status)}>{plan.status}</span>
-                            {plan.order?.status && (
-                              <div className="sd-muted" style={{ fontSize: 11, marginTop: 4 }}>
-                                Order: {plan.order.status}
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-
-                    {installmentPlans.length === 0 && (
-                      <tr>
-                        <td colSpan="7" className="sd-muted">
-                          No installment plans recorded.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              {installmentPlans.length === 0 && (
+                <Empty title="No plans">No installment plans recorded.</Empty>
+              )}
             </div>
           </div>
         )}
@@ -1898,103 +1850,101 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="ac-panel">
-              <Toolbar label="ORDER EVENTS" title="Recent order events">
-                Latest durable OrderEvent records emitted by the workflow engine.
-              </Toolbar>
-
-              <div className="ac-table-shell">
-                <table className="sd-table sd-table--stack">
-                  <thead>
-                    <tr>
-                      <th>Event</th>
-                      <th>Order</th>
-                      <th>Status change</th>
-                      <th>Actor</th>
-                      <th>When</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {orderEvents.map((event) => (
-                      <tr key={event.id}>
-                        <td data-label="Event">
-                          <span className={statusBadgeClass(event.type)}>{event.type || '—'}</span>
-                        </td>
-                        <td data-label="Order">
-                          <span className="ac-code">{event.orderId ? event.orderId.slice(0, 8) : '—'}</span>
-                        </td>
-                        <td data-label="Status change">
-                          {event.fromStatus || event.toStatus
-                            ? `${event.fromStatus || '—'} → ${event.toStatus || '—'}`
-                            : '—'}
-                        </td>
-                        <td data-label="Actor">{event.actor?.name || event.actor?.email || 'System'}</td>
-                        <td data-label="When">
-                          {event.createdAt ? new Date(event.createdAt).toLocaleString() : '—'}
-                        </td>
-                      </tr>
-                    ))}
-
-                    {orderEvents.length === 0 && (
-                      <tr>
-                        <td colSpan="5" className="sd-muted">
-                          No order events recorded.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+            <div style={{ marginTop: 28 }}>
+              <Toolbar label="ORDER EVENTS" title="Recent order events" />
             </div>
 
-            <div className="ac-panel">
-              <Toolbar label="AUDIT TRAIL" title="Admin audit log">
-                Actions taken by admin users, most recent first.
-              </Toolbar>
+            <div className="ac-grid">
+              {orderEvents.map((event) => (
+                <div className="ac-card" key={event.id}>
+                  <div className="ac-card-eyebrow">
+                    <span className="ac-eyebrow-line" />
+                    <span>EVENT</span>
+                  </div>
+                  <div className="ac-card-header">
+                    <h3>{event.type || '—'}</h3>
+                    <span className={statusBadgeClass(event.type)}>{event.type || '—'}</span>
+                  </div>
 
-              <div className="ac-table-shell">
-                <table className="sd-table sd-table--stack">
-                  <thead>
-                    <tr>
-                      <th>Action</th>
-                      <th>Resource</th>
-                      <th>Actor</th>
-                      <th>When</th>
-                      <th>Details</th>
-                    </tr>
-                  </thead>
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">ORDER</span>
+                    <span className="ac-card-value ac-code">{event.orderId ? event.orderId.slice(0, 8) : '—'}</span>
+                  </div>
 
-                  <tbody>
-                    {auditEvents.map((event) => (
-                      <tr key={event.id}>
-                        <td data-label="Action">
-                          <span className={statusBadgeClass(event.action)}>{event.action || '—'}</span>
-                        </td>
-                        <td data-label="Resource">
-                          <span className="ac-code">
-                            {event.resourceType || '—'}
-                            {event.resourceId ? ` · ${event.resourceId.slice(0, 8)}` : ''}
-                          </span>
-                        </td>
-                        <td data-label="Actor">{event.actor?.name || event.actor?.email || 'System'}</td>
-                        <td data-label="When">
-                          {event.createdAt ? new Date(event.createdAt).toLocaleString() : '—'}
-                        </td>
-                        <td data-label="Details">{event.metadata ? JSON.stringify(event.metadata) : '—'}</td>
-                      </tr>
-                    ))}
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">STATUS CHANGE</span>
+                    <span className="ac-card-value">
+                      {event.fromStatus || event.toStatus
+                        ? `${event.fromStatus || '—'} → ${event.toStatus || '—'}`
+                        : '—'}
+                    </span>
+                  </div>
 
-                    {auditEvents.length === 0 && (
-                      <tr>
-                        <td colSpan="5" className="sd-muted">
-                          No audit events recorded.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">ACTOR</span>
+                    <span className="ac-card-value">{event.actor?.name || event.actor?.email || 'System'}</span>
+                  </div>
+
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">WHEN</span>
+                    <span className="ac-card-value">
+                      {event.createdAt ? new Date(event.createdAt).toLocaleString() : '—'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+
+              {orderEvents.length === 0 && (
+                <Empty title="No events">No order events recorded.</Empty>
+              )}
+            </div>
+
+            <div style={{ marginTop: 28 }}>
+              <Toolbar label="AUDIT TRAIL" title="Admin audit log" />
+            </div>
+
+            <div className="ac-grid">
+              {auditEvents.map((event) => (
+                <div className="ac-card" key={event.id}>
+                  <div className="ac-card-eyebrow">
+                    <span className="ac-eyebrow-line" />
+                    <span>AUDIT</span>
+                  </div>
+                  <div className="ac-card-header">
+                    <h3>{event.action || '—'}</h3>
+                    <span className={statusBadgeClass(event.action)}>{event.action || '—'}</span>
+                  </div>
+
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">RESOURCE</span>
+                    <span className="ac-card-value ac-code">
+                      {event.resourceType || '—'}
+                      {event.resourceId ? ` · ${event.resourceId.slice(0, 8)}` : ''}
+                    </span>
+                  </div>
+
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">ACTOR</span>
+                    <span className="ac-card-value">{event.actor?.name || event.actor?.email || 'System'}</span>
+                  </div>
+
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">WHEN</span>
+                    <span className="ac-card-value">
+                      {event.createdAt ? new Date(event.createdAt).toLocaleString() : '—'}
+                    </span>
+                  </div>
+
+                  <div className="ac-card-row">
+                    <span className="ac-card-label">DETAILS</span>
+                    <span className="ac-card-value">{event.metadata ? JSON.stringify(event.metadata) : '—'}</span>
+                  </div>
+                </div>
+              ))}
+
+              {auditEvents.length === 0 && (
+                <Empty title="No audit events">No audit events recorded.</Empty>
+              )}
             </div>
           </div>
         )}
