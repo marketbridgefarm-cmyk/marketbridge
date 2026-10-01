@@ -357,7 +357,7 @@
   max-width: 100%;
 }
 
-/* ── Party avatar (used in PartyBadge and overview) ───── */
+/* ── Party avatar ──────────────────────────────────────── */
 
 .order-detail-page .od-party-avatar {
   width: 42px;
@@ -503,7 +503,6 @@
   overflow-wrap: anywhere;
 }
 
-/* When a Finding flag renders inside a fact, keep it right-aligned */
 .order-detail-page .od-finding-flag {
   font: 700 14px/1.35 var(--mb-font-body, 'DM Sans', sans-serif);
   color: var(--d-ink);
@@ -535,7 +534,7 @@
   font-size: 9.5px;
 }
 
-/* ── Overview card (od-card-overview) ──────────────────── */
+/* ── Overview card ─────────────────────────────────────── */
 
 .order-detail-page .od-card-overview .od-card-title { font-size: 22px; }
 
@@ -1094,8 +1093,15 @@
   .order-detail-page .payout-amount { font-size: 14px; }
   .order-detail-page .payout-due { flex-direction: column; align-items: flex-start; gap: 10px; }
 
+  /* Stacked quote row: let each column size to its own content so
+     the amount and button sit directly under the status pill. */
   .order-detail-page .transporter { flex-direction: column; align-items: stretch; }
-  .order-detail-page .transporter > div:last-child { align-items: flex-start; }
+  .order-detail-page .transporter > div:first-child,
+  .order-detail-page .transporter > div:last-child {
+    flex: 0 0 auto;
+    width: 100%;
+    align-items: flex-start;
+  }
 
   .order-detail-page .od-field-row,
   .order-detail-page .od-quote-actions { width: 100%; }
@@ -1146,4 +1152,32 @@
 
   .order-detail-page .btn-primary:hover:not(:disabled) { transform: none; }
   .order-detail-page .order-detail-toast { animation: none; }
+}
+
+/* ── Band-aid: flatten Payment Center rows ───────────────
+   The rows inside PaymentCenter currently render as bordered
+   boxes with a green left accent. Until PaymentCenter.css is
+   updated to match the flat language of the rest of this page,
+   these overrides strip the boxes back to rules + spacing.
+   Selectors target the common shapes so this works even if the
+   exact class names change. If rows still show boxes, open
+   DevTools on one row and check the outer element's class. */
+
+.order-detail-page .payment-center .payment-row,
+.order-detail-page .payment-center .payment-item,
+.order-detail-page .payment-center [class*="payment-obligation"],
+.order-detail-page .payment-center [class*="obligation"] {
+  border: none;
+  border-bottom: 1px solid var(--d-line-soft);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 14px 0;
+}
+
+.order-detail-page .payment-center .payment-row:last-child,
+.order-detail-page .payment-center .payment-item:last-child,
+.order-detail-page .payment-center [class*="payment-obligation"]:last-child,
+.order-detail-page .payment-center [class*="obligation"]:last-child {
+  border-bottom: none;
 }
