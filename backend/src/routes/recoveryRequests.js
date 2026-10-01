@@ -5,6 +5,7 @@ const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
+const { recordOrderEvent } = require('../services/orderEventService');
 
 const router = express.Router();
 
@@ -60,6 +61,12 @@ router.post('/', async (req, res) => {
       resourceType: 'RecoveryRequest',
       resourceId: created.id,
       metadata: { orderId, type, targetParties },
+    });
+    await recordOrderEvent(prisma, {
+      orderId,
+      actorId: req.user.id,
+      type: 'WORKFLOW_RECOVERY_REQUESTED',
+      metadata: { recoveryRequestId: created.id, recoveryType: type, targetParties, requestedById: req.user.id },
     });
 
     return res.status(201).json({ message: 'Recovery request sent to MarketBridge admin for approval', recoveryRequest: created });
@@ -131,6 +138,12 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
 
       const updated = await tx.recoveryRequest.update({ where: { id: request.id }, data: { status: 'APPROVED', approvedById: req.user.id, approvedAt: now, formReleasedAt: now, adminNote: typeof req.body?.adminNote === 'string' ? req.body.adminNote.trim().slice(0, 1000) : null } });
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'WORKFLOW_RECOVERY_APPROVED', resourceType: 'RecoveryRequest', resourceId: request.id, metadata: { orderId: request.orderId, type: request.type, targetParties: request.targetParties } });
+      await recordOrderEvent(tx, {
+        orderId: request.orderId,
+        actorId: req.user.id,
+        type: 'WORKFLOW_RECOVERY_APPROVED',
+        metadata: { recoveryRequestId: request.id, recoveryType: request.type, targetParties: request.targetParties, requestedById: request.requestedById },
+      });
       return updated;
     }, { maxWait: 10000, timeout: 15000 });
 
@@ -145,7 +158,16 @@ router.patch('/admin/:id/reject', requireRole('ADMIN'), requireMfa(), async (req
   try {
     const updated = await prisma.recoveryRequest.updateMany({ where: { id: req.params.id, status: 'PENDING' }, data: { status: 'REJECTED', rejectedAt: new Date(), adminNote: typeof req.body?.adminNote === 'string' ? req.body.adminNote.trim().slice(0, 1000) : null } });
     if (!updated.count) return res.status(404).json({ error: 'Pending recovery request not found' });
+    const rejected = await prisma.recoveryRequest.findUnique({ where: { id: req.params.id }, select: { orderId: true, requestedById: true, type: true } });
     await recordAuditEvent(prisma, { actorId: req.user.id, action: 'WORKFLOW_RECOVERY_REJECTED', resourceType: 'RecoveryRequest', resourceId: req.params.id, metadata: { adminNote: req.body?.adminNote || null } });
+    if (rejected) {
+      await recordOrderEvent(prisma, {
+        orderId: rejected.orderId,
+        actorId: req.user.id,
+        type: 'WORKFLOW_RECOVERY_REJECTED',
+        metadata: { recoveryRequestId: req.params.id, recoveryType: rejected.type, requestedById: rejected.requestedById, adminNote: req.body?.adminNote || null },
+      });
+    }
     return res.json({ message: 'Recovery request rejected' });
   } catch (error) {
     req.log.error({ err: error }, 'RECOVERY REQUEST REJECT ERROR');
