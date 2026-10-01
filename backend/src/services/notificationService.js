@@ -10,6 +10,18 @@ const EVENT_COPY = {
     body: 'A new order has been created and is ready for the next payment/workflow step.',
     action: 'order',
   },
+  INSPECTION_QUOTE_EXPIRED: {
+    type: 'INSPECTION',
+    title: 'Inspection quote expired',
+    body: 'An inspection quote reached its response deadline and is no longer available. Review the remaining quotes or request admin recovery if needed.',
+    action: 'order',
+  },
+  TRANSPORT_QUOTE_EXPIRED: {
+    type: 'TRANSPORT',
+    title: 'Transport quote expired',
+    body: 'A transport quote reached its response deadline and is no longer available. Review the remaining quotes or request admin recovery if needed.',
+    action: 'order',
+  },
   INSPECTION_ACCEPTED: {
     type: 'INSPECTION',
     title: 'Inspection accepted',
@@ -50,36 +62,6 @@ const EVENT_COPY = {
     type: 'ORDER',
     title: 'Receipt confirmed',
     body: 'The buyer confirmed receipt. The order is now completed.',
-    action: 'order',
-  },
-  WORKFLOW_RECOVERY_REQUESTED: {
-    type: 'ORDER',
-    title: 'Workflow recovery requested',
-    body: 'A recovery request was submitted for a stalled inspection or transport workflow. Review the order for the latest status.',
-    action: 'order',
-  },
-  WORKFLOW_RECOVERY_APPROVED: {
-    type: 'ORDER',
-    title: 'Workflow recovery approved',
-    body: 'MarketBridge approved workflow recovery and released a fresh requesting step to the requested party.',
-    action: 'order',
-  },
-  WORKFLOW_RECOVERY_REJECTED: {
-    type: 'ORDER',
-    title: 'Workflow recovery rejected',
-    body: 'MarketBridge rejected the workflow recovery request. Review the order and admin note for details.',
-    action: 'order',
-  },
-  INSPECTION_QUOTE_WITHDRAWN: {
-    type: 'INSPECTION',
-    title: 'Inspector agreement released',
-    body: 'The provisional inspector agreement was released before payment. Other inspection bids are available again.',
-    action: 'order',
-  },
-  TRANSPORT_QUOTE_WITHDRAWN: {
-    type: 'TRANSPORT',
-    title: 'Transporter agreement released',
-    body: 'The provisional transporter agreement was released before payment. Other transport bids are available again.',
     action: 'order',
   },
   ORDER_CANCELLED: {
@@ -208,25 +190,6 @@ async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) 
       break;
     case 'RECEIPT_CONFIRMED':
       recipients = [order.sellerId];
-      break;
-    case 'WORKFLOW_RECOVERY_REQUESTED':
-      recipients = buyerSeller;
-      break;
-    case 'WORKFLOW_RECOVERY_APPROVED': {
-      const targets = Array.isArray(metadata.targetParties) ? metadata.targetParties.map((v) => String(v).toUpperCase()) : [];
-      recipients = [];
-      if (targets.includes('BUYER')) recipients.push(order.buyerId);
-      if (targets.includes('SELLER')) recipients.push(order.sellerId);
-      break;
-    }
-    case 'WORKFLOW_RECOVERY_REJECTED':
-      recipients = [metadata.requestedById];
-      break;
-    case 'INSPECTION_QUOTE_WITHDRAWN':
-      recipients = [...buyerSeller, ...inspectionUsers];
-      break;
-    case 'TRANSPORT_QUOTE_WITHDRAWN':
-      recipients = [...buyerSeller, ...transportUsers];
       break;
     case 'ORDER_CANCELLED':
     case 'PAYMENT_REFUND_REQUESTED':

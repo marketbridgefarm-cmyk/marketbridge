@@ -42,6 +42,105 @@ async function expireOffers(now = new Date()) {
   return { expired };
 }
 
+
+async function expireInspectionQuotes(now = new Date()) {
+  const quotes = await prisma.inspectionQuote.findMany({
+    where: { status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] }, expiresAt: { lte: now } },
+    select: {
+      id: true,
+      inspectionRequestId: true,
+      status: true,
+      expiresAt: true,
+      inspectionRequest: { select: { orderId: true } },
+    },
+    take: 500,
+  });
+
+  let expired = 0;
+  for (const quote of quotes) {
+    const changed = await prisma.$transaction(async (tx) => {
+      const updated = await tx.inspectionQuote.updateMany({
+        where: {
+          id: quote.id,
+          status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
+          expiresAt: { lte: now },
+        },
+        data: { status: 'EXPIRED' },
+      });
+      if (updated.count !== 1) return false;
+
+      await recordAuditEvent(tx, {
+        actorId: null,
+        action: 'INSPECTION_QUOTE_EXPIRED_AUTOMATICALLY',
+        resourceType: 'InspectionQuote',
+        resourceId: quote.id,
+        metadata: { inspectionRequestId: quote.inspectionRequestId, expiresAt: quote.expiresAt },
+      });
+
+      if (quote.inspectionRequest?.orderId) {
+        await recordOrderEvent(tx, {
+          orderId: quote.inspectionRequest.orderId,
+          actorId: null,
+          type: 'INSPECTION_QUOTE_EXPIRED',
+          metadata: { quoteId: quote.id, inspectionRequestId: quote.inspectionRequestId, expiresAt: quote.expiresAt },
+        });
+      }
+      return true;
+    }, { maxWait: 10000, timeout: 15000 });
+    if (changed) expired += 1;
+  }
+  return { expired };
+}
+
+async function expireTransportQuotes(now = new Date()) {
+  const quotes = await prisma.transportQuote.findMany({
+    where: { status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] }, expiresAt: { lte: now } },
+    select: {
+      id: true,
+      transportJobId: true,
+      status: true,
+      expiresAt: true,
+      transportJob: { select: { orderId: true } },
+    },
+    take: 500,
+  });
+
+  let expired = 0;
+  for (const quote of quotes) {
+    const changed = await prisma.$transaction(async (tx) => {
+      const updated = await tx.transportQuote.updateMany({
+        where: {
+          id: quote.id,
+          status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
+          expiresAt: { lte: now },
+        },
+        data: { status: 'EXPIRED' },
+      });
+      if (updated.count !== 1) return false;
+
+      await recordAuditEvent(tx, {
+        actorId: null,
+        action: 'TRANSPORT_QUOTE_EXPIRED_AUTOMATICALLY',
+        resourceType: 'TransportQuote',
+        resourceId: quote.id,
+        metadata: { transportJobId: quote.transportJobId, expiresAt: quote.expiresAt },
+      });
+
+      if (quote.transportJob?.orderId) {
+        await recordOrderEvent(tx, {
+          orderId: quote.transportJob.orderId,
+          actorId: null,
+          type: 'TRANSPORT_QUOTE_EXPIRED',
+          metadata: { quoteId: quote.id, transportJobId: quote.transportJobId, expiresAt: quote.expiresAt },
+        });
+      }
+      return true;
+    }, { maxWait: 10000, timeout: 15000 });
+    if (changed) expired += 1;
+  }
+  return { expired };
+}
+
 async function expireListings(now = new Date()) {
   const candidates = await prisma.listing.findMany({
     where: { status: { in: ['ACTIVE', 'UNDER_NEGOTIATION'] }, category: 'AGRICULTURAL', pickupWindowEnd: { lte: now } },
@@ -267,10 +366,10 @@ async function runMaintenanceCycle() {
   return withJobLock(async () => {
     const startedAt = Date.now();
     const now = new Date();
-    const [offers, listings, ads, adsActivated, reminders, unpaidOrders, sms, payouts, refundSync] = await Promise.all([
-      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), sendPendingSms(now), releaseDuePayouts(prisma, now), syncProcessingRefunds(),
+    const [offers, inspectionQuotes, transportQuotes, listings, ads, adsActivated, reminders, unpaidOrders, sms, payouts, refundSync] = await Promise.all([
+      expireOffers(now), expireInspectionQuotes(now), expireTransportQuotes(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), sendPendingSms(now), releaseDuePayouts(prisma, now), syncProcessingRefunds(),
     ]);
-    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, unpaidOrders, sms, payouts, refundSync };
+    return { durationMs: Date.now() - startedAt, offers, inspectionQuotes, transportQuotes, listings, ads, adsActivated, reminders, unpaidOrders, sms, payouts, refundSync };
   });
 }
 
@@ -289,4 +388,4 @@ function startMaintenanceScheduler() {
   return setInterval(tick, intervalMs);
 }
 
-module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, sendPendingSms, releaseDuePayouts, syncProcessingRefunds };
+module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireInspectionQuotes, expireTransportQuotes, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, sendPendingSms, releaseDuePayouts, syncProcessingRefunds };
