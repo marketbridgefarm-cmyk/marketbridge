@@ -814,6 +814,7 @@ model InspectionQuote {
   counteredBy QuoteCounterParty?
 
   expiresAt DateTime?
+  withdrawalReason String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1115,6 +1116,7 @@ model TransportQuote {
   counteredBy QuoteCounterParty?
 
   expiresAt DateTime?
+  withdrawalReason String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
