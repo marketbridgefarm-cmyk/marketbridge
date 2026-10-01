@@ -1,0 +1,525 @@
+/* =========================================================
+   MarketBridge — Digital Marketplace
+   Scoped page styling
+   ========================================================= */
+
+.digital-marketplace-page {
+  --dm-primary: var(--mb-primary, #176b3a);
+  --dm-primary-dark: var(--mb-primary-dark, #0e4b29);
+  --dm-bg: var(--mb-bg, #f7f9f6);
+  --dm-border: #dfe7e1;
+  --dm-text: #183025;
+  --dm-muted: #68776e;
+  --dm-card: #ffffff;
+  --dm-shadow: 0 10px 30px rgba(18, 55, 35, 0.07);
+}
+
+/* ---------------------------------------------------------
+   Header
+   --------------------------------------------------------- */
+
+.digital-marketplace-page .page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.digital-marketplace-page .page-header > div {
+  max-width: 760px;
+}
+
+.digital-marketplace-page .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 9px;
+  color: var(--dm-primary);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.digital-marketplace-page .page-header h1 {
+  margin: 0 0 10px;
+  color: var(--dm-text);
+  font-size: clamp(2rem, 4vw, 3.15rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.digital-marketplace-page .page-header p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--dm-muted);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+/* ---------------------------------------------------------
+   Search
+   --------------------------------------------------------- */
+
+.digital-marketplace-page .search-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  margin-bottom: 26px;
+  padding: 18px;
+  border: 1px solid var(--dm-border);
+  border-radius: 18px;
+  background: var(--dm-card);
+  box-shadow: var(--dm-shadow);
+}
+
+.digital-marketplace-page .search-panel > div {
+  min-width: 0;
+}
+
+.digital-marketplace-page label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--dm-text);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.digital-marketplace-page input,
+.digital-marketplace-page select,
+.digital-marketplace-page textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d5dfd8;
+  border-radius: 11px;
+  background: #fff;
+  color: var(--dm-text);
+  font: inherit;
+  outline: none;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+}
+
+.digital-marketplace-page input,
+.digital-marketplace-page select {
+  min-height: 46px;
+  padding: 0 13px;
+}
+
+.digital-marketplace-page textarea {
+  min-height: 125px;
+  margin-bottom: 15px;
+  padding: 12px 13px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.digital-marketplace-page input:focus,
+.digital-marketplace-page select:focus,
+.digital-marketplace-page textarea:focus {
+  border-color: var(--dm-primary);
+  box-shadow: 0 0 0 3px rgba(23, 107, 58, 0.11);
+}
+
+.digital-marketplace-page input[type="file"] {
+  height: auto;
+  min-height: 46px;
+  padding: 9px 10px;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------
+   Buttons
+   --------------------------------------------------------- */
+
+.digital-marketplace-page .btn {
+  min-height: 44px;
+  border-radius: 11px;
+  font-weight: 750;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+}
+
+.digital-marketplace-page .btn-primary {
+  border: 1px solid var(--dm-primary);
+  background: var(--dm-primary);
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(23, 107, 58, 0.16);
+}
+
+.digital-marketplace-page .btn-primary:hover:not(:disabled) {
+  background: var(--dm-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(23, 107, 58, 0.21);
+}
+
+.digital-marketplace-page .btn:disabled {
+  cursor: wait;
+  opacity: 0.62;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ---------------------------------------------------------
+   Cards
+   --------------------------------------------------------- */
+
+.digital-marketplace-page .card {
+  border: 1px solid var(--dm-border);
+  border-radius: 18px;
+  background: var(--dm-card);
+  box-shadow: var(--dm-shadow);
+}
+
+.digital-marketplace-page .form-card {
+  margin-bottom: 28px;
+  padding: 24px;
+}
+
+.digital-marketplace-page .form-card h2 {
+  margin: 0 0 20px;
+  color: var(--dm-text);
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.digital-marketplace-page .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 17px;
+  margin-bottom: 17px;
+}
+
+.digital-marketplace-page .form-grid > div {
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------
+   Purchases / marketplace section headings
+   --------------------------------------------------------- */
+
+.digital-marketplace-page > .container-wide > .card:not(.form-card) {
+  padding: 22px;
+}
+
+.digital-marketplace-page > .container-wide > .card:not(.form-card) > h2 {
+  margin: 0 0 6px;
+  color: var(--dm-text);
+  font-size: 1.35rem;
+}
+
+.digital-marketplace-page > .container-wide > h2 {
+  color: var(--dm-text);
+  font-size: 1.45rem;
+  letter-spacing: -0.02em;
+}
+
+/* ---------------------------------------------------------
+   Payment method bar
+   --------------------------------------------------------- */
+
+.digital-marketplace-page .digital-payment-method {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 15px 17px;
+}
+
+.digital-marketplace-page .digital-payment-method label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.digital-marketplace-page .digital-payment-method select {
+  width: auto;
+  min-width: 210px;
+  max-width: 250px;
+}
+
+/* ---------------------------------------------------------
+   Product grid
+   --------------------------------------------------------- */
+
+.digital-marketplace-page .listing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.digital-marketplace-page .digital-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.digital-marketplace-page .digital-card:hover {
+  transform: translateY(-3px);
+  border-color: #cddbd1;
+  box-shadow: 0 15px 36px rgba(18, 55, 35, 0.11);
+}
+
+.digital-marketplace-page .digital-card > .tag,
+.digital-marketplace-page .digital-card > h3,
+.digital-marketplace-page .digital-card > p,
+.digital-marketplace-page .digital-card > .row-between,
+.digital-marketplace-page .digital-card > .btn,
+.digital-marketplace-page .digital-card > .small {
+  margin-left: 20px;
+  margin-right: 20px;
+}
+
+.digital-marketplace-page .digital-card > .tag {
+  margin-top: 18px;
+}
+
+/* ---------------------------------------------------------
+   Digital icon
+   --------------------------------------------------------- */
+
+.digital-marketplace-page .digital-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 170px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(23, 107, 58, 0.12),
+      rgba(23, 107, 58, 0.025)
+    );
+  color: var(--dm-primary);
+  font-size: 3rem;
+  font-weight: 850;
+  letter-spacing: -0.05em;
+}
+
+.digital-marketplace-page .digital-card > .img-carousel--compact {
+  width: 100%;
+  margin: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------
+   Tags
+   --------------------------------------------------------- */
+
+.digital-marketplace-page .tag {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  max-width: calc(100% - 40px);
+  padding: 6px 9px;
+  border: 1px solid rgba(23, 107, 58, 0.12);
+  border-radius: 999px;
+  background: rgba(23, 107, 58, 0.07);
+  color: var(--dm-primary-dark);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: capitalize;
+}
+
+/* ---------------------------------------------------------
+   Product information
+   --------------------------------------------------------- */
+
+.digital-marketplace-page .digital-card h3 {
+  margin-top: 12px;
+  margin-bottom: 7px;
+  color: var(--dm-text);
+  font-size: 1.16rem;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+
+.digital-marketplace-page .digital-card > p {
+  line-height: 1.55;
+}
+
+.digital-marketplace-page .muted {
+  color: var(--dm-muted);
+}
+
+.digital-marketplace-page .small {
+  font-size: 0.78rem;
+}
+
+.digital-marketplace-page .row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.digital-marketplace-page .row-between strong {
+  color: var(--dm-primary-dark);
+  font-size: 1.12rem;
+}
+
+.digital-marketplace-page .row-between .small {
+  overflow: hidden;
+  color: var(--dm-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Buttons at bottom of cards */
+
+.digital-marketplace-page .digital-card > .btn,
+.digital-marketplace-page .digital-card > a.btn {
+  width: calc(100% - 40px);
+  margin-top: 17px;
+  margin-bottom: 20px;
+  text-align: center;
+  text-decoration: none;
+}
+
+/* ---------------------------------------------------------
+   Purchase status badges
+   --------------------------------------------------------- */
+
+.digital-marketplace-page .sd-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 27px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.71rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.digital-marketplace-page .sd-good {
+  border: 1px solid #bfe3cc;
+  background: #edf9f1;
+  color: #176b3a;
+}
+
+.digital-marketplace-page .sd-warn {
+  border: 1px solid #ead7a7;
+  background: #fff8e8;
+  color: #89650a;
+}
+
+.digital-marketplace-page .sd-red {
+  border: 1px solid #efc4c4;
+  background: #fff0f0;
+  color: #a12626;
+}
+
+/* ---------------------------------------------------------
+   Purchase helper text
+   --------------------------------------------------------- */
+
+.digital-marketplace-page .digital-card .small.muted {
+  margin-top: 14px;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------
+   Empty state
+   --------------------------------------------------------- */
+
+.digital-marketplace-page .empty {
+  padding: 42px 24px;
+  color: var(--dm-muted);
+  text-align: center;
+}
+
+/* ---------------------------------------------------------
+   Responsive
+   --------------------------------------------------------- */
+
+@media (max-width: 1050px) {
+  .digital-marketplace-page .listing-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .digital-marketplace-page .page-header {
+    align-items: flex-start;
+  }
+
+  .digital-marketplace-page .search-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .digital-marketplace-page .search-panel .btn {
+    width: 100%;
+  }
+
+  .digital-marketplace-page .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .digital-marketplace-page .listing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .digital-marketplace-page .digital-payment-method {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .digital-marketplace-page .digital-payment-method select {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .digital-marketplace-page .form-card,
+  .digital-marketplace-page > .container-wide > .card:not(.form-card) {
+    padding: 17px;
+    border-radius: 15px;
+  }
+
+  .digital-marketplace-page .page-header h1 {
+    font-size: 1.9rem;
+  }
+
+  .digital-marketplace-page .digital-card > .tag,
+  .digital-marketplace-page .digital-card > h3,
+  .digital-marketplace-page .digital-card > p,
+  .digital-marketplace-page .digital-card > .row-between,
+  .digital-marketplace-page .digital-card > .btn,
+  .digital-marketplace-page .digital-card > .small {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+
+  .digital-marketplace-page .digital-card > .btn,
+  .digital-marketplace-page .digital-card > a.btn {
+    width: calc(100% - 32px);
+  }
+
+  .digital-marketplace-page .digital-icon {
+    min-height: 145px;
+  }
+
+  .digital-marketplace-page .row-between {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
