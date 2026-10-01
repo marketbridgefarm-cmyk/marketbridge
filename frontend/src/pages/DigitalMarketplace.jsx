@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import ImageCarousel from '../components/ImageCarousel.jsx';
 import { useAuth } from '../context/AuthContext';
@@ -6,14 +6,13 @@ import { useToast } from '../context/ToastContext.jsx';
 import api from '../api/client';
 import { chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 
-import './digital-marketplace/DigitalMarketplace.css';   // ← add this line
+import './DigitalMarketplace.css';
 
-// …rest of the file unchanged
-// Only TELEBIRR and QR route to a configured payment adapter (both go
-// through Chapa's hosted checkout — see
-// backend/src/services/paymentProviders/index.js). CBE and OTHER are
-// deliberately left unconfigured there, so they're not offered as choices
-// here; picking either would always fail at chapa/initialize.
+// Only TELEBIRR and QR route to a configured payment adapter. The
+// selector UI was removed — purchases now always go through TELEBIRR.
+// Kept here (documented) so re-adding a picker is trivial.
+const DEFAULT_PAY_METHOD = 'TELEBIRR';
+// eslint-disable-next-line no-unused-vars
 const PAYMENT_METHODS = [
   { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
   { value: 'QR', label: 'QR Code' },
@@ -31,27 +30,66 @@ const PRODUCT_TYPES = [
 
 const humanize = (value) => String(value || '').replaceAll('_', ' ');
 
+const STAT_TONES = {
+  accent:  { ring: '#1e9e5a', ink: '#0f7a44' },
+  info:    { ring: '#1e5fa8', ink: '#1e5fa8' },
+  gold:    { ring: '#a86f10', ink: '#a86f10' },
+  success: { ring: '#0f7a44', ink: '#0f7a44' },
+};
+
+function StatCard({ label, value, total, tone = 'accent' }) {
+  const pct = total > 0 ? Math.min(1, Math.max(0, value / total)) : 0;
+
+  const R = 16;
+  const C = 2 * Math.PI * R;
+  const offset = C * (1 - pct);
+  const colors = STAT_TONES[tone] || STAT_TONES.accent;
+
+  return (
+    <div className={`dm-stat tone-${tone}`} aria-label={`${label}: ${value}`}>
+      <span className="dm-stat-label">{label}</span>
+
+      <div className="dm-stat-graphic" aria-hidden="true">
+        <svg viewBox="0 0 40 40">
+          <circle cx="20" cy="20" r={R} fill="none" stroke="#e5e9ef" strokeWidth="4" />
+          <circle
+            cx="20"
+            cy="20"
+            r={R}
+            fill="none"
+            stroke={colors.ring}
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeDasharray={C}
+            strokeDashoffset={offset}
+            transform="rotate(-90 20 20)"
+          />
+        </svg>
+        <span className="dm-stat-count" style={{ color: colors.ink }}>{value}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function DigitalMarketplace() {
   const { user } = useAuth();
   const { showToast } = useToast();
+
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
   const [myPurchases, setMyPurchases] = useState([]);
   const [form, setForm] = useState({ title: '', productType: 'ebook', price: '', description: '', file: null, previews: [] });
   const [busyId, setBusyId] = useState('');
-  const [payMethod, setPayMethod] = useState('TELEBIRR');
+  const [publishOpen, setPublishOpen] = useState(false);
+
+  const currentUserId = user?.id || user?.userId || user?._id || null;
 
   const load = useCallback(async () => {
     try {
-      const r = await api.get('/digital-products', {
-        params: { search },
-      });
+      const r = await api.get('/digital-products', { params: { search } });
       setProducts(r.data.products || []);
     } catch (e) {
-      showToast(
-        e.response?.data?.error || 'Could not load products',
-        'error'
-      );
+      showToast(e.response?.data?.error || 'Could not load products', 'error');
     }
   }, [search, showToast]);
 
@@ -60,7 +98,6 @@ export default function DigitalMarketplace() {
       setMyPurchases([]);
       return;
     }
-
     try {
       const r = await api.get('/digital-products/purchases/mine');
       setMyPurchases(r.data.purchases || []);
@@ -69,13 +106,33 @@ export default function DigitalMarketplace() {
     }
   }, [user]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadMyPurchases(); }, [loadMyPurchases]);
 
+  /* Close the publish modal on Escape and lock body scroll while it's open. */
   useEffect(() => {
-    loadMyPurchases();
-  }, [loadMyPurchases]);
+    if (!publishOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setPublishOpen(false); };
+    document.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [publishOpen]);
+
+  const stats = useMemo(() => {
+    const totalProducts = products.length;
+    const purchases = myPurchases.length;
+    const downloads = myPurchases.reduce((sum, pu) => sum + (Number(pu.downloadCount) || 0), 0);
+    const own = products.filter(
+      (p) =>
+        (p.sellerId && p.sellerId === currentUserId) ||
+        (p.seller?.id && p.seller.id === currentUserId)
+    ).length;
+    return { totalProducts, purchases, downloads, own };
+  }, [products, myPurchases, currentUserId]);
 
   async function submit(e) {
     e.preventDefault();
@@ -94,6 +151,7 @@ export default function DigitalMarketplace() {
       await api.post('/digital-products', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setForm({ title: '', productType: 'ebook', price: '', description: '', file: null, previews: [] });
       showToast('Product published securely.', 'success');
+      setPublishOpen(false);
       load();
     } catch (e) {
       showToast(e.response?.data?.error || 'Could not publish product', 'error');
@@ -106,7 +164,7 @@ export default function DigitalMarketplace() {
       const key = `digital-purchase:${p.id}`;
       const r = await api.post(
         `/digital-products/${p.id}/purchase`,
-        { method: payMethod },
+        { method: DEFAULT_PAY_METHOD },
         { headers: { 'Idempotency-Key': key } }
       );
       await chapaInitializeAndRedirect(r.data.payment?.id);
@@ -126,11 +184,6 @@ export default function DigitalMarketplace() {
     }
   }
 
-  // PROCESSING means Chapa checkout already started for this purchase.
-  // Must be checked, never resumed/re-bought — same pattern as
-  // OrderDetail.jsx's checkPaymentStatus. Previously this status had no
-  // rendering branch at all here, so a stuck PROCESSING purchase just
-  // silently showed nothing to do.
   async function checkPurchaseStatus(paymentId, productId) {
     setBusyId(productId);
     try {
@@ -159,7 +212,7 @@ export default function DigitalMarketplace() {
   }
 
   function purchaseFor(productId) {
-    return myPurchases.find(pu => pu.product?.id === productId);
+    return myPurchases.find((pu) => pu.product?.id === productId);
   }
 
   function statusBadgeClass(status) {
@@ -184,7 +237,33 @@ export default function DigitalMarketplace() {
               Files are stored privately and downloads are available only after verified payment.
             </p>
           </div>
+
+          {isSeller && (
+            <div className="page-header-action">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setPublishOpen(true)}
+              >
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 5v14" />
+                  <path d="M5 12h14" />
+                </svg>
+                Publish product
+              </button>
+            </div>
+          )}
         </header>
+
+        {/* ── Stats ───────────────────────────────────────────── */}
+        {user && (products.length > 0 || myPurchases.length > 0) && (
+          <div className="dm-stats">
+            <StatCard label="Products"        value={stats.totalProducts} total={Math.max(stats.totalProducts, 1)} tone="accent"  />
+            <StatCard label="Your purchases"  value={stats.purchases}     total={Math.max(stats.purchases, 1)}     tone="info"    />
+            <StatCard label="Downloads"       value={stats.downloads}     total={Math.max(stats.downloads, 1)}      tone="gold"    />
+            <StatCard label="Your products"   value={stats.own}           total={Math.max(stats.totalProducts, 1)}  tone="success" />
+          </div>
+        )}
 
         {/* ── Search bar ──────────────────────────────────────── */}
         <div className="search-bar" role="search">
@@ -205,111 +284,6 @@ export default function DigitalMarketplace() {
             Search
           </button>
         </div>
-
-        {/* ── Publish form (sellers) ──────────────────────────── */}
-        {isSeller && (
-          <section className="dm-card" id="publish">
-            <header className="dm-card-head">
-              <div className="dm-card-head-main">
-                <span className="eyebrow">For sellers</span>
-                <h2 className="dm-card-title">Publish a digital product</h2>
-                <p className="dm-card-subtitle">
-                  Upload the private file and, optionally, a few preview images so buyers can see what they're getting.
-                </p>
-              </div>
-              <div className="dm-card-head-side">
-                <span className="dm-card-side-label">Visibility</span>
-                <span className="dm-card-side-value">Private</span>
-              </div>
-            </header>
-
-            <form className="publish-form" onSubmit={submit}>
-              <div className="form-grid">
-                <label className="field">
-                  <span className="field-label">Title</span>
-                  <input
-                    type="text"
-                    value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    placeholder="e.g. Farm budget template for 2026"
-                    required
-                  />
-                </label>
-
-                <label className="field">
-                  <span className="field-label">Type</span>
-                  <select
-                    value={form.productType}
-                    onChange={(e) => setForm({ ...form, productType: e.target.value })}
-                  >
-                    {PRODUCT_TYPES.map((x) => (
-                      <option key={x} value={x}>{humanize(x)}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="field">
-                  <span className="field-label">Price</span>
-                  <div className="field-with-suffix">
-                    <input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={form.price}
-                      onChange={(e) => setForm({ ...form, price: e.target.value })}
-                      placeholder="0.00"
-                      required
-                    />
-                    <span className="field-suffix">ETB</span>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span className="field-label">Private file</span>
-                  <input
-                    type="file"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0] || null;
-                      setForm((current) => ({ ...current, file }));
-                    }}
-                    required
-                  />
-                  <span className="field-hint">Stored securely — buyers only see it after payment.</span>
-                </label>
-
-                <label className="field field-span">
-                  <span className="field-label">
-                    Preview images <span className="optional">(up to 5)</span>
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    multiple
-                    onChange={(e) => {
-                      const previews = Array.from(e.target.files || []).slice(0, 5);
-                      setForm((current) => ({ ...current, previews }));
-                    }}
-                  />
-                  <span className="field-hint">Shown on the product card so buyers can preview the work.</span>
-                </label>
-              </div>
-
-              <label className="field field-block">
-                <span className="field-label">Description</span>
-                <textarea
-                  rows={4}
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Describe what the buyer gets, who it's for, and what makes it useful."
-                />
-              </label>
-
-              <div className="form-actions">
-                <button type="submit" className="btn btn-primary">Publish securely</button>
-              </div>
-            </form>
-          </section>
-        )}
 
         {/* ── Your purchases ──────────────────────────────────── */}
         {hasPurchases && (
@@ -430,21 +404,6 @@ export default function DigitalMarketplace() {
                 {search ? ` for “${search}”` : ''}
               </p>
             </div>
-
-            {user && (
-              <label className="pay-method" htmlFor="digital-pay-method">
-                <span className="pay-method-label">Payment method</span>
-                <select
-                  id="digital-pay-method"
-                  value={payMethod}
-                  onChange={(e) => setPayMethod(e.target.value)}
-                >
-                  {PAYMENT_METHODS.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
-              </label>
-            )}
           </header>
 
           {products.length > 0 ? (
@@ -551,6 +510,134 @@ export default function DigitalMarketplace() {
         </section>
 
       </div>
+
+      {/* ── Publish modal ─────────────────────────────────────── */}
+      {publishOpen && (
+        <div
+          className="dm-modal-backdrop"
+          role="presentation"
+          onClick={() => setPublishOpen(false)}
+        >
+          <div
+            className="dm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="publish-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="dm-modal-head">
+              <div className="dm-modal-head-main">
+                <span className="eyebrow">For sellers</span>
+                <h2 id="publish-modal-title" className="dm-modal-title">Publish a digital product</h2>
+                <p className="dm-modal-subtitle">
+                  Upload the private file and, optionally, a few preview images so buyers can see what they're getting.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="dm-modal-close"
+                onClick={() => setPublishOpen(false)}
+                aria-label="Close publish form"
+              >
+                ×
+              </button>
+            </header>
+
+            <form className="publish-form" onSubmit={submit}>
+              <div className="form-grid">
+                <label className="field">
+                  <span className="field-label">Title</span>
+                  <input
+                    type="text"
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    placeholder="e.g. Farm budget template for 2026"
+                    required
+                  />
+                </label>
+
+                <label className="field">
+                  <span className="field-label">Type</span>
+                  <select
+                    value={form.productType}
+                    onChange={(e) => setForm({ ...form, productType: e.target.value })}
+                  >
+                    {PRODUCT_TYPES.map((x) => (
+                      <option key={x} value={x}>{humanize(x)}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span className="field-label">Price</span>
+                  <div className="field-with-suffix">
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={form.price}
+                      onChange={(e) => setForm({ ...form, price: e.target.value })}
+                      placeholder="0.00"
+                      required
+                    />
+                    <span className="field-suffix">ETB</span>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span className="field-label">Private file</span>
+                  <input
+                    type="file"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      setForm((current) => ({ ...current, file }));
+                    }}
+                    required
+                  />
+                  <span className="field-hint">Stored securely — buyers only see it after payment.</span>
+                </label>
+
+                <label className="field field-span">
+                  <span className="field-label">
+                    Preview images <span className="optional">(up to 5)</span>
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    multiple
+                    onChange={(e) => {
+                      const previews = Array.from(e.target.files || []).slice(0, 5);
+                      setForm((current) => ({ ...current, previews }));
+                    }}
+                  />
+                  <span className="field-hint">Shown on the product card so buyers can preview the work.</span>
+                </label>
+              </div>
+
+              <label className="field field-block">
+                <span className="field-label">Description</span>
+                <textarea
+                  rows={4}
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  placeholder="Describe what the buyer gets, who it's for, and what makes it useful."
+                />
+              </label>
+
+              <div className="form-actions">
+                <button type="submit" className="btn btn-primary">Publish securely</button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setPublishOpen(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
