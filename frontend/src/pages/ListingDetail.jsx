@@ -256,7 +256,9 @@ export default function ListingDetail() {
   async function releaseInspectionAgreement(requestId, quoteId) {
     setRejectingQuoteId(quoteId);
     try {
-      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/withdraw`);
+      const reason = window.prompt('Why are you releasing this provisional inspection agreement?');
+      if (!reason || !reason.trim()) return;
+      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/withdraw`, { reason: reason.trim() });
       showToast(
         'Provisional inspector deal released. Other inspector bids are available again.',
         'success'

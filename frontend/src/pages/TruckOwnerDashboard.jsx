@@ -427,7 +427,9 @@ export default function TruckOwnerDashboard() {
   async function releaseTransportAgreement(quoteId) {
     setActionLoading(`quote-${quoteId}`);
     try {
-      await api.patch(`/transport/quotes/${quoteId}`, { action: 'WITHDRAW' });
+      const reason = window.prompt('Why are you releasing this provisional transport agreement?');
+      if (!reason || !reason.trim()) return;
+      await api.patch(`/transport/quotes/${quoteId}`, { action: 'WITHDRAW', reason: reason.trim() });
       toast('Agreement released. The requester can now choose another transporter.');
       await loadAll(false);
     } catch (err) {

@@ -341,7 +341,9 @@ export default function InspectorDashboard() {
     setMsg('');
     setRespondingQuoteId(quoteId);
     try {
-      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/withdraw`);
+      const reason = window.prompt('Why are you releasing this provisional inspection agreement?');
+      if (!reason || !reason.trim()) return;
+      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/withdraw`, { reason: reason.trim() });
       setMsg('Provisional inspection deal released. The buyer can select another inspector bid.');
       await loadAll();
     } catch (err) {
