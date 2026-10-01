@@ -423,7 +423,7 @@ router.get(
             payments: {
               none: {
                 type: 'TRANSPORT',
-                status: { in: ['PENDING', 'PROCESSING', 'PAID'] },
+                status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
               },
             },
           },
@@ -2289,8 +2289,40 @@ router.patch(
       if (isQuoteExpired(quote)) return res.status(409).json({ error: 'This quote has expired' });
 
       const selected = await prisma.$transaction(async (tx) => {
+        // Serialize quote selection against transport-payment creation. Both
+        // operations lock the same job row, so a payment can never bind to a
+        // quote that is simultaneously being replaced.
+        await tx.$queryRawUnsafe(
+          'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
+          job.id
+        );
+
+        const activePayment = await tx.payment.findFirst({
+          where: {
+            transportJobId: job.id,
+            type: 'TRANSPORT',
+            status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
+          },
+          select: { id: true, status: true, transportQuoteId: true },
+        });
+        if (activePayment) {
+          throw quoteError(
+            'Transporter selection is locked because a transport payment has already started. Wait for that payment to fail/cancel before selecting another quote.',
+            409
+          );
+        }
+
+        const freshJob = await tx.transportJob.findUnique({
+          where: { id: job.id },
+          select: { id: true, status: true },
+        });
+        if (!freshJob || !['REQUESTED', 'QUOTED'].includes(freshJob.status)) {
+          throw quoteError('This transport request is no longer accepting bids', 409);
+        }
+
         const fresh = await tx.transportQuote.findUnique({ where: { id: quote.id } });
         if (!fresh || fresh.status !== 'PENDING') throw quoteError('This bid is no longer available', 409);
+        if (isQuoteExpired(fresh)) throw quoteError('This quote has expired', 409);
         // A previously ACCEPTED quote is only provisional until transport
         // payment. Selecting another pending bid therefore releases the old
         // provisional transporter rather than consuming/closing the order.
@@ -2384,6 +2416,23 @@ router.patch(
         const counterAmount = Number(req.body.counterAmount);
 
         const counterQuote = await prisma.$transaction(async (tx) => {
+          await tx.$queryRawUnsafe(
+            'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
+            job.id
+          );
+
+          const activePayment = await tx.payment.findFirst({
+            where: {
+              transportJobId: job.id,
+              type: 'TRANSPORT',
+              status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
+            },
+            select: { id: true },
+          });
+          if (activePayment) {
+            throw quoteError('Transport negotiation is locked because a transport payment has already started', 409);
+          }
+
           const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
           if (!freshQuote) throw quoteError('Quote not found', 404);
           if (!['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
@@ -2460,6 +2509,11 @@ router.patch(
         }
 
         const result = await prisma.$transaction(async (tx) => {
+          await tx.$queryRawUnsafe(
+            'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
+            job.id
+          );
+
           const freshQuote = await tx.transportQuote.findUnique({
             where: { id: quote.id },
             include: { transportJob: { include: { order: true } } },
@@ -2470,7 +2524,7 @@ router.patch(
             where: {
               transportJobId: freshQuote.transportJobId,
               type: 'TRANSPORT',
-              status: { in: ['PENDING', 'PROCESSING', 'PAID'] },
+              status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
             },
             select: { id: true, status: true },
           });
@@ -2538,10 +2592,34 @@ router.patch(
           });
         }
 
-        const updatedQuote = await prisma.transportQuote.update({
-          where: { id: quote.id },
-          data: { status: 'REJECTED' },
-        });
+        const updatedQuote = await prisma.$transaction(async (tx) => {
+          await tx.$queryRawUnsafe(
+            'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
+            job.id
+          );
+
+          const activePayment = await tx.payment.findFirst({
+            where: {
+              transportJobId: job.id,
+              type: 'TRANSPORT',
+              status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
+            },
+            select: { id: true },
+          });
+          if (activePayment) {
+            throw quoteError('Transport negotiation is locked because a transport payment has already started', 409);
+          }
+
+          const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
+          if (!freshQuote || !['PENDING', 'SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
+            throw quoteError('This quote is no longer available for rejection', 409);
+          }
+
+          return tx.transportQuote.update({
+            where: { id: freshQuote.id },
+            data: { status: 'REJECTED' },
+          });
+        }, { maxWait: 10000, timeout: 15000 });
 
         return res.json({
           message: 'Quote rejected',
@@ -2572,6 +2650,23 @@ router.patch(
       const finalAmount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
 
       const result = await prisma.$transaction(async (tx) => {
+        await tx.$queryRawUnsafe(
+          'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
+          job.id
+        );
+
+        const activePayment = await tx.payment.findFirst({
+          where: {
+            transportJobId: job.id,
+            type: 'TRANSPORT',
+            status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
+          },
+          select: { id: true },
+        });
+        if (activePayment) {
+          throw quoteError('Transport negotiation is locked because a transport payment has already started', 409);
+        }
+
         const freshQuote = await tx.transportQuote.findUnique({
           where: { id: quote.id },
           include: { transportJob: { include: { order: true } } },

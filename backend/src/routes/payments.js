@@ -304,6 +304,7 @@ router.post(
       }
 
       let transportJobId = null;
+      let transportQuoteId = null;
 
       // ======================================================================
       // IDEMPOTENCY KEY
@@ -568,6 +569,20 @@ router.post(
             });
           }
 
+          // The quote is the immutable commercial source for this payment.
+          // Do not allow a stale job-level amount/assignment to create a
+          // payment for a different transporter or truck.
+          if (
+            order.transportJob.truckOwnerId !== acceptedTransportQuote.truckOwnerId ||
+            order.transportJob.truckId !== acceptedTransportQuote.truckId ||
+            !moneyEqual(order.transportJob.agreedAmount, acceptedTransportQuote.amount)
+          ) {
+            return res.status(409).json({
+              code: 'TRANSPORT_QUOTE_JOB_MISMATCH',
+              error: 'The selected transporter quote no longer matches the transport agreement. Please reopen negotiation and select the current quote.',
+            });
+          }
+
           if (
             order.transportJob.agreedAmount ==
             null
@@ -611,6 +626,8 @@ router.post(
 
           transportJobId =
             order.transportJob.id;
+          transportQuoteId =
+            acceptedTransportQuote.id;
         }
       }
 
@@ -863,6 +880,14 @@ router.post(
         });
 
       if (duplicate) {
+        if (type === 'TRANSPORT' && transportQuoteId && duplicate.transportQuoteId !== transportQuoteId) {
+          return res.status(409).json({
+            code: 'TRANSPORT_PAYMENT_ALREADY_BOUND',
+            error: 'An active transport payment already exists for a different transporter quote. That payment must fail or be cancelled before another quote can be selected.',
+            payment: duplicate,
+          });
+        }
+
         // If an older UI already created a normal pending marketplace payment
         // for an amount above Chapa's limit, allow the buyer to upgrade that
         // pending payment into the installment parent instead of trapping the
@@ -958,6 +983,8 @@ router.post(
             inspectionRequestId || null,
 
           transportJobId,
+
+          transportQuoteId,
 
           ...(wantsInstallments && {
             installmentCount:
