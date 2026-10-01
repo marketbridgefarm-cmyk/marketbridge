@@ -29,17 +29,11 @@
   --dm-danger-soft: #fef2f2;
   --dm-danger-line: #fecaca;
 
-  --dm-info:        #1e5fa8;
-  --dm-info-soft:   #eff5fd;
-  --dm-info-line:   #cddff5;
-
   --dm-radius:      20px;
   --dm-radius-sm:   12px;
 
   --dm-shadow:      0 1px 2px rgba(15, 30, 45, .04),
                     0 8px 24px rgba(15, 30, 45, .05);
-  --dm-shadow-hi:   0 2px 4px rgba(15, 30, 45, .04),
-                    0 18px 44px rgba(15, 30, 45, .09);
   --dm-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
   --dm-ring:        0 0 0 3px rgba(30, 158, 90, .18);
   --dm-ease:        cubic-bezier(.2, .7, .3, 1);
@@ -89,8 +83,17 @@
 
 /* ── Page header ───────────────────────────────────────── */
 
-.digital-marketplace-page .page-header { margin: 0 0 22px; }
-.digital-marketplace-page .page-header-text { max-width: 60ch; }
+.digital-marketplace-page .page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin: 0 0 22px;
+}
+
+.digital-marketplace-page .page-header-text { max-width: 60ch; min-width: 0; }
+.digital-marketplace-page .page-header-action { flex: 0 0 auto; }
 
 .digital-marketplace-page .page-header h1 {
   margin: 4px 0 8px;
@@ -107,6 +110,70 @@
   font-size: 15px;
   line-height: 1.6;
   color: var(--dm-muted);
+}
+
+/* ── Stats strip ───────────────────────────────────────── */
+
+.digital-marketplace-page .dm-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 22px;
+}
+
+.digital-marketplace-page .dm-stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--dm-line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--dm-shadow-sm);
+  transition: border-color .18s var(--dm-ease), transform .18s var(--dm-ease);
+}
+
+.digital-marketplace-page .dm-stat:hover {
+  border-color: rgba(30, 158, 90, .3);
+  transform: translateY(-1px);
+}
+
+.digital-marketplace-page .dm-stat-label {
+  font: 700 10.5px/1.35 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--dm-muted);
+  min-width: 0;
+}
+
+.digital-marketplace-page .dm-stat-graphic {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.digital-marketplace-page .dm-stat-graphic svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.digital-marketplace-page .dm-stat-count {
+  position: relative;
+  z-index: 1;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -.4px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Search bar ────────────────────────────────────────── */
@@ -133,11 +200,7 @@
   justify-content: center;
 }
 
-.digital-marketplace-page .search-bar-icon svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
+.digital-marketplace-page .search-bar-icon svg { width: 100%; height: 100%; display: block; }
 
 .digital-marketplace-page .search-bar input {
   flex: 1 1 auto;
@@ -217,6 +280,8 @@
   transform: translateY(-1px);
 }
 
+.digital-marketplace-page .btn-primary svg { flex: 0 0 auto; }
+
 /* ── Card primitive ────────────────────────────────────── */
 
 .digital-marketplace-page .dm-card {
@@ -293,7 +358,7 @@
   max-width: 100%;
 }
 
-/* ── Publish form ──────────────────────────────────────── */
+/* ── Publish form (used inside modal) ──────────────────── */
 
 .digital-marketplace-page .publish-form {
   display: flex;
@@ -402,6 +467,105 @@
   gap: 8px;
   flex-wrap: wrap;
   padding-top: 4px;
+}
+
+/* ── Modal ─────────────────────────────────────────────── */
+
+.digital-marketplace-page .dm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(13, 27, 42, .55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: dm-modal-fade .18s ease;
+}
+
+.digital-marketplace-page .dm-modal {
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 26px 28px 28px;
+  border-radius: var(--dm-radius);
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(15, 30, 45, .32);
+  animation: dm-modal-in .22s var(--dm-ease);
+}
+
+.digital-marketplace-page .dm-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 0 18px;
+  margin: 0 0 22px;
+  border-bottom: 1px solid var(--dm-line);
+}
+
+.digital-marketplace-page .dm-modal-head-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.digital-marketplace-page .dm-modal-title {
+  margin: 4px 0 0;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -.4px;
+  line-height: 1.22;
+  color: var(--dm-ink);
+}
+
+.digital-marketplace-page .dm-modal-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--dm-muted);
+  max-width: 60ch;
+}
+
+.digital-marketplace-page .dm-modal-close {
+  appearance: none;
+  border: none;
+  background: transparent;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  color: var(--dm-muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .15s var(--dm-ease), color .15s var(--dm-ease);
+}
+
+.digital-marketplace-page .dm-modal-close:hover {
+  background: var(--dm-line-soft);
+  color: var(--dm-ink);
+}
+
+.digital-marketplace-page .dm-modal-close:focus-visible {
+  outline: none;
+  box-shadow: var(--dm-ring);
+}
+
+@keyframes dm-modal-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes dm-modal-in {
+  from { opacity: 0; transform: translateY(12px) scale(.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* ── Purchases list (flat rows) ────────────────────────── */
@@ -600,50 +764,6 @@
   font-size: 13px;
   line-height: 1.55;
   color: var(--dm-muted);
-}
-
-/* ── Payment method selector ───────────────────────────── */
-
-.digital-marketplace-page .pay-method {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 0 0 auto;
-}
-
-.digital-marketplace-page .pay-method-label {
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--dm-muted);
-  white-space: nowrap;
-}
-
-.digital-marketplace-page .pay-method select {
-  display: block;
-  min-width: 190px;
-  padding: 10px 32px 10px 12px;
-  border: 1px solid var(--dm-line);
-  border-radius: 10px;
-  background: #fff;
-  color: var(--dm-ink);
-  font: inherit;
-  font-size: 13.5px;
-  line-height: 1;
-  cursor: pointer;
-  transition: border-color .18s var(--dm-ease), box-shadow .18s var(--dm-ease);
-  -webkit-appearance: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none'><path d='M1 1l5 5 5-5' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 10px 7px;
-}
-
-.digital-marketplace-page .pay-method select:focus {
-  outline: none;
-  border-color: var(--dm-accent);
-  box-shadow: var(--dm-ring);
 }
 
 /* ── Product grid ──────────────────────────────────────── */
@@ -860,6 +980,12 @@
   .digital-marketplace-page .dm-card-head-side { max-width: 140px; }
   .digital-marketplace-page .dm-card-title { font-size: 17px; }
 
+  .digital-marketplace-page .dm-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .digital-marketplace-page .page-header { align-items: flex-start; }
+  .digital-marketplace-page .page-header-action { width: 100%; }
+  .digital-marketplace-page .page-header-action .btn { width: 100%; justify-content: center; }
+
   .digital-marketplace-page .search-bar {
     padding: 8px 8px 8px 14px;
     flex-wrap: wrap;
@@ -867,19 +993,26 @@
   .digital-marketplace-page .search-bar input { flex: 1 1 140px; }
   .digital-marketplace-page .search-bar .btn { flex: 0 0 auto; }
 
-  .digital-marketplace-page .browse-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .digital-marketplace-page .pay-method { width: 100%; }
-  .digital-marketplace-page .pay-method select { flex: 1 1 auto; min-width: 0; }
+  .digital-marketplace-page .browse-header { align-items: flex-start; flex-direction: column; }
 
-  .digital-marketplace-page .form-actions .btn { width: 100%; justify-content: center; }
+  .digital-marketplace-page .dm-modal-backdrop { padding: 12px; align-items: flex-end; }
+  .digital-marketplace-page .dm-modal {
+    max-height: calc(100vh - 24px);
+    padding: 22px 20px 24px;
+    border-radius: 18px;
+  }
+  .digital-marketplace-page .dm-modal-title { font-size: 17px; }
+
+  .digital-marketplace-page .form-actions .btn { flex: 1 1 auto; }
 }
 
 @media (max-width: 420px) {
   .digital-marketplace-page .page-header h1 { font-size: 24px; }
   .digital-marketplace-page .browse-title { font-size: 19px; }
+
+  .digital-marketplace-page .dm-stat { padding: 12px 14px; gap: 8px; }
+  .digital-marketplace-page .dm-stat-graphic { width: 38px; height: 38px; }
+  .digital-marketplace-page .dm-stat-count { font-size: 13px; }
 
   .digital-marketplace-page .purchase-icon {
     width: 40px;
@@ -903,14 +1036,18 @@
 
 @media (prefers-reduced-motion: reduce) {
   .digital-marketplace-page .btn,
+  .digital-marketplace-page .dm-stat,
   .digital-marketplace-page .product-card,
   .digital-marketplace-page .field input,
   .digital-marketplace-page .field select,
-  .digital-marketplace-page .field textarea,
-  .digital-marketplace-page .pay-method select {
+  .digital-marketplace-page .field textarea {
     transition: none;
   }
 
   .digital-marketplace-page .btn-primary:hover:not(:disabled),
+  .digital-marketplace-page .dm-stat:hover,
   .digital-marketplace-page .product-card:hover { transform: none; }
+
+  .digital-marketplace-page .dm-modal-backdrop,
+  .digital-marketplace-page .dm-modal { animation: none; }
 }
