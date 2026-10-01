@@ -5,7 +5,6 @@ const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
-const { recordOrderEvent } = require('../services/orderEventService');
 
 const router = express.Router();
 
@@ -28,6 +27,61 @@ function participant(order, userId) {
   return Boolean(order && (order.buyerId === userId || order.sellerId === userId));
 }
 
+async function getRecoveryEligibility(orderId) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      status: true,
+      events: { where: { type: 'DISPUTE_RESOLVED' }, orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } },
+      inspectionRequests: {
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true, status: true, updatedAt: true,
+          quotes: { where: { status: 'WITHDRAWN' }, orderBy: { updatedAt: 'desc' }, take: 1, select: { updatedAt: true } },
+        },
+      },
+      transportJob: {
+        select: {
+          status: true, updatedAt: true,
+          quotes: { where: { status: 'WITHDRAWN' }, orderBy: { updatedAt: 'desc' }, take: 1, select: { updatedAt: true } },
+        },
+      },
+      recoveryRequests: {
+        where: { status: 'APPROVED' },
+        orderBy: { formReleasedAt: 'desc' },
+        take: 10,
+        select: { type: true, formReleasedAt: true },
+      },
+    },
+  });
+
+  if (!order) return { INSPECTION: false, TRANSPORT: false };
+
+  const latestApproved = (type) => order.recoveryRequests.find((r) => r.type === type)?.formReleasedAt || null;
+  const disputeResolvedAt = order.events[0]?.createdAt || null;
+  const inspection = order.inspectionRequests[0] || null;
+  const inspectionTriggerAt = [
+    inspection?.status === 'CANCELLED' ? inspection.updatedAt : null,
+    inspection?.quotes?.[0]?.updatedAt || null,
+    disputeResolvedAt,
+  ].filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
+  const transport = order.transportJob;
+  const transportTriggerAt = [
+    transport?.status === 'CANCELLED' ? transport.updatedAt : null,
+    transport?.quotes?.[0]?.updatedAt || null,
+    disputeResolvedAt,
+  ].filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
+
+  const eligible = (triggerAt, releasedAt) => Boolean(
+    triggerAt && (!releasedAt || new Date(triggerAt) > new Date(releasedAt))
+  );
+
+  return {
+    INSPECTION: eligible(inspectionTriggerAt, latestApproved('INSPECTION')),
+    TRANSPORT: eligible(transportTriggerAt, latestApproved('TRANSPORT')),
+  };
+}
+
 router.use(authenticate);
 
 // Buyer/seller asks MarketBridge admin to release a fresh workflow form.
@@ -46,6 +100,11 @@ router.post('/', async (req, res) => {
     if (!participant(order, req.user.id)) return res.status(403).json({ error: 'Only the buyer or seller can request workflow recovery' });
     if (['CANCELLED', 'COMPLETED'].includes(order.status)) return res.status(409).json({ error: 'Recovery is not available for a closed order' });
 
+    const eligibility = await getRecoveryEligibility(orderId);
+    if (!eligibility[type]) {
+      return res.status(409).json({ error: `Admin recovery is only available after a genuine ${type.toLowerCase()} cancellation, provider withdrawal, or resolved dispute.` });
+    }
+
     const existing = await prisma.recoveryRequest.findFirst({
       where: { orderId, type, status: 'PENDING' },
       orderBy: { requestedAt: 'desc' },
@@ -61,12 +120,6 @@ router.post('/', async (req, res) => {
       resourceType: 'RecoveryRequest',
       resourceId: created.id,
       metadata: { orderId, type, targetParties },
-    });
-    await recordOrderEvent(prisma, {
-      orderId,
-      actorId: req.user.id,
-      type: 'WORKFLOW_RECOVERY_REQUESTED',
-      metadata: { recoveryRequestId: created.id, recoveryType: type, targetParties, requestedById: req.user.id },
     });
 
     return res.status(201).json({ message: 'Recovery request sent to MarketBridge admin for approval', recoveryRequest: created });
@@ -87,7 +140,8 @@ router.get('/order/:orderId', async (req, res) => {
       orderBy: { requestedAt: 'desc' },
       take: 20,
     });
-    return res.json({ recoveryRequests });
+    const eligibility = await getRecoveryEligibility(order.id);
+    return res.json({ recoveryRequests, eligibility });
   } catch (error) {
     req.log.error({ err: error }, 'RECOVERY REQUEST LOAD ERROR');
     return res.status(500).json({ error: 'Could not load recovery requests' });
@@ -124,6 +178,18 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
           if (['REQUESTED', 'ACCEPTED'].includes(current.status)) {
             await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: current.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
             await tx.inspectionRequest.update({ where: { id: current.id }, data: { inspectorId: null, fee: null, status: 'REQUESTED' } });
+          } else if (current.status === 'CANCELLED') {
+            const requestedById = request.targetParties?.includes('BUYER') ? request.order.buyerId : request.targetParties?.includes('SELLER') ? request.order.sellerId : request.requestedById;
+            await tx.inspectionRequest.create({
+              data: {
+                orderId: request.orderId,
+                listingId: current.listingId,
+                requestedById,
+                mode: current.mode,
+                location: current.location,
+                status: 'REQUESTED',
+              },
+            });
           }
         }
       } else {
@@ -138,12 +204,6 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
 
       const updated = await tx.recoveryRequest.update({ where: { id: request.id }, data: { status: 'APPROVED', approvedById: req.user.id, approvedAt: now, formReleasedAt: now, adminNote: typeof req.body?.adminNote === 'string' ? req.body.adminNote.trim().slice(0, 1000) : null } });
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'WORKFLOW_RECOVERY_APPROVED', resourceType: 'RecoveryRequest', resourceId: request.id, metadata: { orderId: request.orderId, type: request.type, targetParties: request.targetParties } });
-      await recordOrderEvent(tx, {
-        orderId: request.orderId,
-        actorId: req.user.id,
-        type: 'WORKFLOW_RECOVERY_APPROVED',
-        metadata: { recoveryRequestId: request.id, recoveryType: request.type, targetParties: request.targetParties, requestedById: request.requestedById },
-      });
       return updated;
     }, { maxWait: 10000, timeout: 15000 });
 
@@ -158,16 +218,7 @@ router.patch('/admin/:id/reject', requireRole('ADMIN'), requireMfa(), async (req
   try {
     const updated = await prisma.recoveryRequest.updateMany({ where: { id: req.params.id, status: 'PENDING' }, data: { status: 'REJECTED', rejectedAt: new Date(), adminNote: typeof req.body?.adminNote === 'string' ? req.body.adminNote.trim().slice(0, 1000) : null } });
     if (!updated.count) return res.status(404).json({ error: 'Pending recovery request not found' });
-    const rejected = await prisma.recoveryRequest.findUnique({ where: { id: req.params.id }, select: { orderId: true, requestedById: true, type: true } });
     await recordAuditEvent(prisma, { actorId: req.user.id, action: 'WORKFLOW_RECOVERY_REJECTED', resourceType: 'RecoveryRequest', resourceId: req.params.id, metadata: { adminNote: req.body?.adminNote || null } });
-    if (rejected) {
-      await recordOrderEvent(prisma, {
-        orderId: rejected.orderId,
-        actorId: req.user.id,
-        type: 'WORKFLOW_RECOVERY_REJECTED',
-        metadata: { recoveryRequestId: req.params.id, recoveryType: rejected.type, requestedById: rejected.requestedById, adminNote: req.body?.adminNote || null },
-      });
-    }
     return res.json({ message: 'Recovery request rejected' });
   } catch (error) {
     req.log.error({ err: error }, 'RECOVERY REQUEST REJECT ERROR');
