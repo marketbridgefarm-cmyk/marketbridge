@@ -1118,8 +1118,6 @@ model TransportQuote {
 
   childQuotes TransportQuote[] @relation("TransportQuoteChain")
 
-  payments Payment[]
-
   counterAmount Decimal? @db.Decimal(18, 2)
 
   // REQUESTER = arranging party most recently countered.
@@ -1435,12 +1433,6 @@ model Payment {
   transportJob   TransportJob? @relation(fields: [transportJobId], references: [id])
   transportJobId String?
 
-  // Immutable commercial quote that this hired-transport payment is paying.
-  // Once a transport payment exists, the selected quote must never be swapped
-  // underneath it. Historical/legacy payments may leave this null.
-  transportQuote   TransportQuote? @relation(fields: [transportQuoteId], references: [id], onDelete: Restrict)
-  transportQuoteId String?
-
   // --------------------------------------------------------------------------
   // DIGITAL PURCHASE
   // --------------------------------------------------------------------------
@@ -1555,7 +1547,6 @@ model Payment {
   @@index([inspectionRequestId])
   @@index([advertisementId])
   @@index([transportJobId])
-  @@index([transportQuoteId])
   @@index([type])
   @@index([status])
   @@index([reference])
