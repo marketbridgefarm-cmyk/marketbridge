@@ -6,7 +6,7 @@ import { useToast } from '../context/ToastContext.jsx';
 import api from '../api/client';
 import { chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 
-import './DigitalMarketplace.css';
+import './digital-marketplace/DigitalMarketplace.css';
 
 // Only TELEBIRR and QR route to a configured payment adapter. The
 // selector UI was removed — purchases now always go through TELEBIRR.
