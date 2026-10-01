@@ -19,6 +19,7 @@ import TransportSetup from '../components/TransportSetup.jsx';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
 
 import './order-details/OrderDetail.css';
+
 const shortId = (id) => id?.slice(0, 8) || '—';
 
 const money = (value) =>
@@ -33,10 +34,6 @@ const getError = (error, fallback) =>
   error?.message ||
   fallback;
 
-// Maps a raw order status string to a small set of visual "tones" so the
-// status pill reads at a glance (green = good/moving, gold = waiting on
-// someone, red = problem, grey = closed) without hard-coding every status
-// string the backend might ever send.
 const statusTone = (status) => {
   const value = String(status || '').toUpperCase();
   if (['COMPLETED', 'DELIVERED', 'PAID', 'ACCEPTED', 'CONFIRMED'].includes(value)) return 'good';
@@ -45,11 +42,6 @@ const statusTone = (status) => {
   return 'neutral';
 };
 
-/**
- * Ticks once a second until `targetMs` has passed, then stops. Lets the
- * payout card flip Held -> Released the moment the hold clears, without a
- * page refresh (the backend release job runs on its own schedule).
- */
 function useNowUntil(targetMs) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -69,18 +61,6 @@ function useNowUntil(targetMs) {
 
 const PAYOUT_PAD = (n) => String(n).padStart(2, '0');
 
-/**
- * Order payout card: Parties / Amount / Status table, then one common due
- * date with a live countdown.
- *
- * Status is time-aware. A payout the backend still marks HELD reads
- * "Held" before its release time and "Released" after it. Every other
- * backend status (paid out, dispute hold, cancelled) is shown as-is, since
- * a dispute freezes the payout no matter what the clock says.
- *
- * Hours in the countdown are NOT capped at 24 — a 3-day hold can read up to
- * ~72 hours remaining (e.g. 63:34:48).
- */
 function PayoutStatusCard({
   sellerPayout,
   inspectorPayout,
@@ -106,9 +86,6 @@ function PayoutStatusCard({
     return Number.isNaN(t) ? null : t;
   };
 
-  // The common due is the moment the LAST live payout clears its hold, so
-  // when the clock reaches zero every row reads Released. Frozen (dispute)
-  // and cancelled payouts don't count towards it.
   const dueTimes = parties
     .filter((p) => ['HELD', 'RELEASED', 'PAID_OUT'].includes(p.status))
     .map((p) => releaseMs(p.payout))
@@ -136,7 +113,6 @@ function PayoutStatusCard({
     return { label: status.replace(/_/g, ' '), tone: 'tone-neutral' };
   };
 
-  // Keep amounts aligned: show 2 decimals only when any amount needs them.
   const anyFraction = parties.some(
     (p) => p.payout?.amount != null && Number(p.payout.amount) % 1 !== 0
   );
@@ -159,7 +135,18 @@ function PayoutStatusCard({
 
   return (
     <div className="card payout-summary-card" id="order-payout-status">
-      <h2>Order Payout Status</h2>
+      <div className="card-head">
+        <div className="card-head-main">
+          <span className="eyebrow">PAYOUTS</span>
+          <h2 className="card-title">Order Payout Status</h2>
+        </div>
+        {dueDate && (
+          <div className="card-head-side">
+            <span className="card-side-label">Common due</span>
+            <span className="card-side-value">{dueDate}</span>
+          </div>
+        )}
+      </div>
 
       <p className="payout-intro">
         Buyer payment is separate from each payout below. Once the relevant payment settles, a{' '}
@@ -170,57 +157,64 @@ function PayoutStatusCard({
           : 'No manual action is required.'}
       </p>
 
-      <table className="payout-table">
-        <thead>
-          <tr>
-            <th scope="col">Parties</th>
-            <th scope="col" className="payout-amount-col">Amount (ETB)</th>
-            <th scope="col" className="payout-status-col">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {parties.map((party) => {
-            const { key, label, name, you, payout, status } = party;
-            const badge = statusOf(party);
-            const currency = payout?.currency && payout.currency !== 'ETB' ? payout.currency : null;
-            return (
-              <tr key={key}>
-                <th scope="row" className="payout-party">
-                  <div className="payout-party-body">
-                    <span className="payout-party-line">
-                      <span className="payout-party-role">{label}</span>
-                      {name && <span className="payout-party-name">({name})</span>}
-                      {you && <span className="party-you">You</span>}
-                    </span>
-                    {status === 'RELEASED' && payout?.releasedAt && (
-                      <span className="payout-party-note">Released {formatDateTime(payout.releasedAt)}</span>
+      <div className="card-section">
+        <div className="card-section-head">
+          <h3 className="card-section-title">Parties</h3>
+          <span className="card-section-meta">Amount (ETB)</span>
+        </div>
+
+        <table className="payout-table">
+          <thead>
+            <tr>
+              <th scope="col">Party</th>
+              <th scope="col" className="payout-amount-col">Amount</th>
+              <th scope="col" className="payout-status-col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {parties.map((party) => {
+              const { key, label, name, you, payout, status } = party;
+              const badge = statusOf(party);
+              const currency = payout?.currency && payout.currency !== 'ETB' ? payout.currency : null;
+              return (
+                <tr key={key}>
+                  <th scope="row" className="payout-party">
+                    <div className="payout-party-body">
+                      <span className="payout-party-line">
+                        <span className="payout-party-role">{label}</span>
+                        {name && <span className="payout-party-name">({name})</span>}
+                        {you && <span className="party-you">You</span>}
+                      </span>
+                      {status === 'RELEASED' && payout?.releasedAt && (
+                        <span className="payout-party-note">Released {formatDateTime(payout.releasedAt)}</span>
+                      )}
+                      {status === 'PAID_OUT' && payout?.paidOutAt && (
+                        <span className="payout-party-note">Paid out {formatDateTime(payout.paidOutAt)}</span>
+                      )}
+                      {payout?.payoutReference && (
+                        <span className="payout-party-note">Ref {payout.payoutReference}</span>
+                      )}
+                    </div>
+                  </th>
+                  <td className="payout-amount">
+                    {payout?.amount != null ? (
+                      <>
+                        {amountText(payout.amount)}
+                        {currency && <span className="payout-currency">{currency}</span>}
+                      </>
+                    ) : (
+                      '—'
                     )}
-                    {status === 'PAID_OUT' && payout?.paidOutAt && (
-                      <span className="payout-party-note">Paid out {formatDateTime(payout.paidOutAt)}</span>
-                    )}
-                    {payout?.payoutReference && (
-                      <span className="payout-party-note">Ref {payout.payoutReference}</span>
-                    )}
-                  </div>
-                </th>
-                <td className="payout-amount">
-                  {payout?.amount != null ? (
-                    <>
-                      {amountText(payout.amount)}
-                      {currency && <span className="payout-currency">{currency}</span>}
-                    </>
-                  ) : (
-                    '—'
-                  )}
-                </td>
-                <td className="payout-status">
-                  <span className={`status-pill ${badge.tone}`}>{badge.label}</span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  </td>
+                  <td className="payout-status">
+                    <span className={`status-pill ${badge.tone}`}>{badge.label}</span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {dueMs !== null && (
         <div
@@ -268,21 +262,9 @@ const initials = (name) =>
     .join('')
     .toUpperCase() || '?';
 
-/*
- * These are frontend payment-method labels only.
- *
- * Chapa credentials/secrets MUST remain on the backend.
- * The frontend only sends the selected method to POST /payments.
- */
 const PAYMENT_METHODS = [
-  {
-    value: 'TELEBIRR',
-    label: 'Telebirr via Chapa',
-  },
-  {
-    value: 'QR',
-    label: 'QR Code',
-  },
+  { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
+  { value: 'QR', label: 'QR Code' },
 ];
 
 export default function OrderDetail() {
@@ -321,92 +303,57 @@ export default function OrderDetail() {
 
   const errorToastTimer = useRef(null);
 
-  // Action-triggered errors (e.g. clicking "Pay seller / order now" while
-  // inspection is still pending) surface as a brief popup near the bottom
-  // of the screen rather than a persistent banner pushed into the page,
-  // so they auto-dismiss instead of sticking around after the user has
-  // already read them.
   useEffect(() => {
     if (errorToastTimer.current) {
       window.clearTimeout(errorToastTimer.current);
       errorToastTimer.current = null;
     }
-
     if (error) {
-      errorToastTimer.current = window.setTimeout(() => {
-        setError('');
-      }, 3000);
+      errorToastTimer.current = window.setTimeout(() => setError(''), 3000);
     }
-
     return () => {
-      if (errorToastTimer.current) {
-        window.clearTimeout(errorToastTimer.current);
-      }
+      if (errorToastTimer.current) window.clearTimeout(errorToastTimer.current);
     };
   }, [error]);
-
-  // ==========================================================================
-  // LOAD ORDER
-  // ==========================================================================
 
   const load = useCallback(
     async ({ silent = false } = {}) => {
       if (!orderId) return;
-
-      if (silent) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
+      if (silent) setRefreshing(true);
+      else setLoading(true);
       setError('');
-
       try {
         const [orderResponse, workflowResponse, recoveryResponse] = await Promise.allSettled([
           api.get(`/orders/${orderId}`),
           api.get(`/orders/${orderId}/workflow`),
           api.get(`/recovery-requests/order/${orderId}`),
         ]);
-
         if (orderResponse.status === 'fulfilled') {
           setOrder(orderResponse.value.data?.order || null);
         } else {
           throw orderResponse.reason;
         }
-
-        // The workflow endpoint is a summary of the same order — if it
-        // fails for some reason the page still works from `order` alone,
-        // it just falls back to no Action Center / timeline / payment
-        // summary rather than blocking the whole page.
         setRecoveryRequests(
           recoveryResponse.status === 'fulfilled'
             ? recoveryResponse.value.data?.recoveryRequests || []
             : []
         );
-
         setWorkflow(
           workflowResponse.status === 'fulfilled'
             ? workflowResponse.value.data?.workflow || null
             : null
         );
       } catch (err) {
-        setError(
-          getError(err, 'Could not load order')
-        );
+        setError(getError(err, 'Could not load order'));
       } finally {
-        if (silent) {
-          setRefreshing(false);
-        } else {
-          setLoading(false);
-        }
+        if (silent) setRefreshing(false);
+        else setLoading(false);
       }
     },
     [orderId]
   );
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   async function submitProductOffer(event) {
     event.preventDefault();
@@ -434,13 +381,6 @@ export default function OrderDetail() {
     }
   }
 
-
-  // Cross-page links (e.g. SellerDashboard's "Arrange transport" button) now
-  // point at /orders/:id#transport-section instead of the old dedicated
-  // /orders/:id/transport route. React Router doesn't scroll to a URL hash
-  // on client-side navigation the way a full page load would, and the
-  // target element doesn't exist until `order` has loaded, so this waits
-  // for loading to finish before scrolling.
   useEffect(() => {
     if (loading) return;
     const id = location.hash?.replace('#', '');
@@ -448,52 +388,24 @@ export default function OrderDetail() {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [loading, location.hash]);
 
-  // ==========================================================================
-  // DERIVED DATA
-  // ==========================================================================
-
   const transportJob = order?.transportJob?.status === 'CANCELLED' ? null : (order?.transportJob || null);
   const cancelledTransportJob = order?.transportJob?.status === 'CANCELLED' ? order.transportJob : null;
-  const payments = Array.isArray(order?.payments)
-    ? order.payments
-    : [];
+  const payments = Array.isArray(order?.payments) ? order.payments : [];
 
-  // AuthContext normally exposes user.id. Keep the fallbacks so payment
-  // controls do not disappear if an older session shape is still cached.
   const currentUserId = user?.id || user?.userId || user?._id || null;
   const userRoles = Array.isArray(user?.roles) ? user.roles : [];
-
   const isAdmin = userRoles.includes('ADMIN');
 
-  const isBuyer = Boolean(
-    order &&
-    currentUserId &&
-    currentUserId === order.buyerId
-  );
-
-  const isSeller = Boolean(
-    order &&
-    currentUserId &&
-    currentUserId === order.sellerId
-  );
-
+  const isBuyer = Boolean(order && currentUserId && currentUserId === order.buyerId);
+  const isSeller = Boolean(order && currentUserId && currentUserId === order.sellerId);
   const isParticipant = isBuyer || isSeller;
 
-  // A payment button must only be shown to the authenticated buyer.
-  // If the session is stale/mismatched, show a clear explanation instead of
-  // silently hiding every payment action.
   const buyerIdentityMismatch = Boolean(
-    order &&
-    currentUserId &&
-    !isBuyer &&
-    !isSeller &&
-    !isAdmin
+    order && currentUserId && !isBuyer && !isSeller && !isAdmin
   );
 
-  const isAgricultural =
-    order?.listing?.category === 'AGRICULTURAL';
-  const isProductsMarketplace =
-    order?.listing?.category === 'PRODUCT';
+  const isAgricultural = order?.listing?.category === 'AGRICULTURAL';
+  const isProductsMarketplace = order?.listing?.category === 'PRODUCT';
   const inspectionApplies = isAgricultural || isProductsMarketplace;
 
   const allInspectionRequests = useMemo(
@@ -509,9 +421,6 @@ export default function OrderDetail() {
     [allInspectionRequests]
   );
 
-  // The order has one canonical inspection workflow: the newest active
-  // request. Older requests are retained for audit/history but must not
-  // create a second payment gate or another set of request buttons.
   const currentInspectionRequest = inspectionRequests[0] || null;
 
   const assignedInspection = useMemo(
@@ -524,8 +433,7 @@ export default function OrderDetail() {
 
   const isInspector = Boolean(assignedInspection);
   const isTransporter = Boolean(
-    transportJob?.truckOwnerId &&
-    transportJob.truckOwnerId === currentUserId
+    transportJob?.truckOwnerId && transportJob.truckOwnerId === currentUserId
   );
 
   const inspectionPaymentRows = useMemo(
@@ -541,15 +449,10 @@ export default function OrderDetail() {
   const inspectionPaymentsComplete = inspectionPaymentRows.every(
     (request) =>
       (request.payments || []).some(
-        (payment) =>
-          payment.type === 'INSPECTOR' &&
-          payment.status === 'PAID'
+        (payment) => payment.type === 'INSPECTOR' && payment.status === 'PAID'
       )
   );
 
-  // Row-shaped view of each fee-bearing inspection request for the
-  // PaymentCenter component — same paid/pending lookups the inline JSX used
-  // to do itself, just computed once here instead of per-render inside JSX.
   const inspectionPaymentGroups = useMemo(
     () =>
       inspectionApplies
@@ -601,43 +504,23 @@ export default function OrderDetail() {
     order?.listing?.inspectionRequests?.some(
       (request) =>
         request.payments?.some(
-          (payment) =>
-            payment.type === 'INSPECTOR' &&
-            payment.status === 'PAID'
+          (payment) => payment.type === 'INSPECTOR' && payment.status === 'PAID'
         )
     )
   );
 
-  const title =
-    order?.listing?.title ||
-    order?.listing?.cropType ||
-    'Order';
-
-  // ==========================================================================
-  // PAYMENT GROUPS
-  // ==========================================================================
+  const title = order?.listing?.title || order?.listing?.cropType || 'Order';
 
   const marketplacePayments = useMemo(
-    () =>
-      payments.filter(
-        (payment) =>
-          payment.type === 'MARKETPLACE'
-      ),
+    () => payments.filter((payment) => payment.type === 'MARKETPLACE'),
     [payments]
   );
 
   const transportPayments = useMemo(
-    () =>
-      payments.filter(
-        (payment) =>
-          payment.type === 'TRANSPORT'
-      ),
+    () => payments.filter((payment) => payment.type === 'TRANSPORT'),
     [payments]
   );
 
-  /*
-   * Prefer the most recent active payment.
-   */
   const marketplacePayment = useMemo(() => {
     return (
       marketplacePayments.find((payment) => ['PENDING', 'PROCESSING'].includes(payment.status)) ||
@@ -646,9 +529,6 @@ export default function OrderDetail() {
     );
   }, [marketplacePayments]);
 
-  // Goods paid in installments: the full-price MARKETPLACE payment is the
-  // plan (never sent to the provider) and each MARKETPLACE_INSTALLMENT is one
-  // checkout. The plan settles only once every installment is paid.
   const installmentPlan = useMemo(
     () =>
       marketplacePayments.find(
@@ -672,9 +552,6 @@ export default function OrderDetail() {
     [payments, installmentPlan]
   );
 
-  // Self-heal: every installment is paid but the plan itself was not settled
-  // (for example the server stopped right after the last installment). Asking
-  // the server to verify the plan settles it; it is idempotent.
   const planHealRef = useRef(null);
   useEffect(() => {
     if (
@@ -686,7 +563,6 @@ export default function OrderDetail() {
     ) {
       return;
     }
-
     planHealRef.current = installmentPlan.id;
     api
       .get(`/payments/${installmentPlan.id}/chapa/verify`)
@@ -696,40 +572,17 @@ export default function OrderDetail() {
 
   const transportPayment = useMemo(() => {
     return (
-      transportPayments.find(
-        (payment) =>
-          ['PENDING', 'PROCESSING'].includes(payment.status)
-      ) ||
-      transportPayments.find(
-        (payment) =>
-          payment.status === 'PAID'
-      ) ||
+      transportPayments.find((payment) => ['PENDING', 'PROCESSING'].includes(payment.status)) ||
+      transportPayments.find((payment) => payment.status === 'PAID') ||
       null
     );
   }, [transportPayments]);
 
-  const marketplacePaid =
-    marketplacePayments.some(
-      (payment) =>
-        payment.status === 'PAID'
-    );
+  const marketplacePaid = marketplacePayments.some((payment) => payment.status === 'PAID');
+  const marketplacePending = marketplacePayments.some((payment) => ['PENDING', 'PROCESSING'].includes(payment.status));
+  const marketplaceProcessing = marketplacePayments.some((payment) => payment.status === 'PROCESSING');
+  const transportPaid = transportPayments.some((payment) => payment.status === 'PAID');
 
-  const marketplacePending =
-    marketplacePayments.some((payment) =>
-      ['PENDING', 'PROCESSING'].includes(payment.status)
-    );
-
-  const marketplaceProcessing =
-    marketplacePayments.some((payment) => payment.status === 'PROCESSING');
-
-  const transportPaid =
-    transportPayments.some(
-      (payment) =>
-        payment.status === 'PAID'
-    );
-
-  // An order can carry up to three payout rows — seller, hired transporter,
-  // inspector — whichever of those roles were actually paid on this order.
   const payouts = order?.payouts || [];
   const sellerPayout = payouts.find((p) => p.payeeRole === 'SELLER') || null;
   const transporterPayout = payouts.find((p) => p.payeeRole === 'TRANSPORTER') || null;
@@ -742,66 +595,30 @@ export default function OrderDetail() {
     const date = new Date(value);
     return Number.isNaN(date.getTime())
       ? '—'
-      : date.toLocaleString(undefined, {
-          dateStyle: 'medium',
-          timeStyle: 'short',
-        });
+      : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   };
 
-  const transportPending =
-    transportPayments.some(
-      (payment) =>
-        ['PENDING', 'PROCESSING'].includes(payment.status)
-    );
+  const transportPending = transportPayments.some((payment) => ['PENDING', 'PROCESSING'].includes(payment.status));
+  const transportProcessing = transportPayments.some((payment) => payment.status === 'PROCESSING');
 
-  const transportProcessing =
-    transportPayments.some((payment) => payment.status === 'PROCESSING');
-
-  // ==========================================================================
-  // TRANSPORT PERMISSIONS
-  // ==========================================================================
-
-  /*
-   * Buyer or seller can create a transport job. Joint arrangements
-   * are supported through the transport workflow.
-   */
   const canArrangeTransport =
     Boolean(order) &&
     !transportJob &&
     order.status !== 'CANCELLED' &&
     isParticipant;
 
-  /*
-   * Only the arranging buyer/seller can select a quote.
-   *
-   * The backend accepts:
-   * PATCH /transport/quotes/:quoteId
-   * { action: 'ACCEPT' }
-   */
   const canChooseQuote =
     Boolean(transportJob) &&
     isTransportArranger &&
-    ['REQUESTED', 'QUOTED'].includes(
-      transportJob.status
-    );
+    ['REQUESTED', 'QUOTED'].includes(transportJob.status);
 
-  /*
-   * Transport payment is ONLY for hired transport.
-   *
-   * OWN_TRUCK does not create a separate transport payment.
-   *
-   * Marketplace and transport payments are independent. Both must be
-   * PAID before the transporter can mark the load PICKUP (i.e. before the
-   * truck is allowed to collect the goods).
-   */
   const acceptedTransportQuote = Array.isArray(transportJob?.quotes)
     ? transportJob.quotes.find((quote) => quote.status === 'ACCEPTED')
     : null;
 
   const canStartTransportPayment =
     Boolean(transportJob) &&
-    transportJob.method ===
-      'HIRE_TRANSPORTER' &&
+    transportJob.method === 'HIRE_TRANSPORTER' &&
     Boolean(transportJob.truckOwnerId) &&
     Boolean(acceptedTransportQuote) &&
     transportJob.agreedAmount != null &&
@@ -815,38 +632,16 @@ export default function OrderDetail() {
     ) &&
     isBuyer;
 
-  /*
-   * Resume an existing pending transport payment.
-   */
   const canResumeTransportPayment =
     Boolean(transportPayment) &&
     transportPayment.status === 'PENDING' &&
     isBuyer;
 
-  /*
-   * A transport payment already reached Chapa (PROCESSING) — same shape as
-   * canCheckMarketplacePayment. Don't let the buyer start a second payment;
-   * point them at checking the status of this one instead.
-   */
   const canCheckTransportPayment =
     Boolean(transportPayment) &&
     transportPayment.status === 'PROCESSING' &&
     isBuyer;
 
-  // ==========================================================================
-  // MARKETPLACE PAYMENT PERMISSIONS
-  // ==========================================================================
-
-  /*
-   * Marketplace payment can only be initiated by the buyer.
-   *
-   * Agricultural marketplace payment is independent from transport.
-   * Required payments are separately tracked and the transport state machine
-   * prevents PICKUP until all required payments are PAID.
-   */
-  // Agricultural goods payment becomes available after the current
-  // inspection report is complete. The backend is authoritative and applies
-  // the same gate, so a stale UI can never bypass it.
   const inspectionPurchaseGateMet =
     !inspectionApplies
       ? true
@@ -857,10 +652,8 @@ export default function OrderDetail() {
         );
 
   const buyerDecisionRequired = isAgricultural || isProductsMarketplace;
-  const buyerDecisionGateMet =
-    !buyerDecisionRequired || order?.buyerDecision === 'BUY';
-  const negotiatedProductGateMet =
-    !isProductsMarketplace || Boolean(order?.agreedOfferId);
+  const buyerDecisionGateMet = !buyerDecisionRequired || order?.buyerDecision === 'BUY';
+  const negotiatedProductGateMet = !isProductsMarketplace || Boolean(order?.agreedOfferId);
 
   const canPayMarketplace =
     Boolean(order) &&
@@ -885,9 +678,6 @@ export default function OrderDetail() {
         ? `Choose BUY after reviewing the ${isAgricultural ? 'agricultural ' : ''}inspection report before paying for the goods.`
         : null;
 
-  /*
-   * Resume an already-created pending marketplace payment.
-   */
   const canResumeMarketplacePayment =
     Boolean(marketplacePayment) &&
     !installmentPlan &&
@@ -900,31 +690,11 @@ export default function OrderDetail() {
     marketplacePayment.status === 'PROCESSING' &&
     isBuyer;
 
-  // ==========================================================================
-  // COUNTERPARTY
-  // ==========================================================================
-
-  const counterpartId = isBuyer
-    ? order?.sellerId
-    : isSeller
-      ? order?.buyerId
-      : null;
-
-  const counterpartName = isBuyer
-    ? order?.seller?.name
-    : isSeller
-      ? order?.buyer?.name
-      : null;
-
-  // ==========================================================================
-  // ACCEPT TRANSPORT QUOTE
-  // ==========================================================================
+  const counterpartId = isBuyer ? order?.sellerId : isSeller ? order?.buyerId : null;
+  const counterpartName = isBuyer ? order?.seller?.name : isSeller ? order?.buyer?.name : null;
 
   const scrollToSection = (id) => {
-    document.getElementById(id)?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start',
-    });
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const selectTransportQuote = async (quoteId) => {
@@ -973,7 +743,6 @@ export default function OrderDetail() {
 
   const releaseTransportAgreement = async (quoteId) => {
     if (!quoteId) return;
-
     setBusy(`quote-${quoteId}`);
     setError('');
     try {
@@ -988,39 +757,19 @@ export default function OrderDetail() {
 
   const acceptQuote = async (quoteId) => {
     if (!quoteId) return;
-
     setBusy(`quote-${quoteId}`);
     setError('');
-
     try {
-      /*
-       * Correct backend contract:
-       *
-       * PATCH /transport/quotes/:quoteId
-       * {
-       *   action: 'ACCEPT'
-       * }
-       */
       await api.patch(`/transport/quotes/${quoteId}`, { action: 'ACCEPT' });
       await load({ silent: true });
       window.setTimeout(() => document.getElementById('payment-center')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
     } catch (err) {
-      setError(
-        getError(
-          err,
-          'Could not accept transport quote'
-        )
-      );
+      setError(getError(err, 'Could not accept transport quote'));
     } finally {
       setBusy('');
     }
   };
 
-  // A quote's negotiation thread is only "live" at its leaf: the row that
-  // no later counter-quote points back to as a parent.
-  // Transport negotiations are immutable parent -> child chains. The
-  // actionable quote is every quote with no child; never use the root quote
-  // after a counter has been created.
   const leafTransportQuotes = (quotes) => {
     const list = Array.isArray(quotes) ? quotes : [];
     const parentIds = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
@@ -1034,10 +783,8 @@ export default function OrderDetail() {
       setError('Enter a valid counter amount before sending.');
       return;
     }
-
     setBusy(`quote-${quoteId}`);
     setError('');
-
     try {
       await api.patch(`/transport/quotes/${quoteId}`, { action: 'COUNTER', counterAmount: amount });
       setTransportCounterInputs((q) => ({ ...q, [quoteId]: '' }));
@@ -1051,10 +798,8 @@ export default function OrderDetail() {
 
   const rejectQuote = async (quoteId) => {
     if (!quoteId) return;
-
     setBusy(`quote-${quoteId}`);
     setError('');
-
     try {
       await api.patch(`/transport/quotes/${quoteId}`, { action: 'REJECT' });
       await load({ silent: true });
@@ -1065,90 +810,33 @@ export default function OrderDetail() {
     }
   };
 
-  // ==========================================================================
-  // START MARKETPLACE PAYMENT
-  // ==========================================================================
-
   const payMarketplace = async () => {
     if (!order) return;
-
-    if (!isBuyer) {
-      setError(
-        'Only the buyer can make the marketplace payment'
-      );
-      return;
-    }
-
+    if (!isBuyer) { setError('Only the buyer can make the marketplace payment'); return; }
     const amount = Number(order.finalPrice);
-
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError(
-        'Invalid marketplace payment amount'
-      );
-      return;
-    }
-
+    if (!Number.isFinite(amount) || amount <= 0) { setError('Invalid marketplace payment amount'); return; }
     setBusy('pay-marketplace');
     setError('');
-
     try {
-      /*
-       * startChapaPayment:
-       *
-       * POST /payments
-       * then
-       * POST /payments/:paymentId/chapa/initialize
-       *
-       * Chapa secrets remain on the backend.
-       */
-      await startChapaPayment({
-        type: 'MARKETPLACE',
-        orderId: order.id,
-        amount,
-        method: payMethod,
-      });
-
-      /*
-       * Normally the browser is redirected to Chapa.
-       * This refresh is useful if the backend returns without
-       * navigating, or for future payment providers.
-       */
+      await startChapaPayment({ type: 'MARKETPLACE', orderId: order.id, amount, method: payMethod });
       await load({ silent: true });
     } catch (err) {
-      setError(
-        getError(
-          err,
-          'Could not start marketplace payment'
-        )
-      );
+      setError(getError(err, 'Could not start marketplace payment'));
     } finally {
       setBusy('');
     }
   };
 
-  // ==========================================================================
-  // REQUEST INSPECTION (from the order, once the listing is no longer
-  // reachable from the marketplace because it is reserved/sold)
-  // ==========================================================================
-
   const findInspector = async () => {
     if (!order?.listing) return;
-
     setFindingInspector(true);
     setError('');
-
     try {
       const response = await api.get('/inspections/inspectors', {
         params: { location: order.listing.location },
       });
-
       const options = response.data?.inspectors || [];
-
-      if (!options.length) {
-        setError('No inspectors were found in this area.');
-        return;
-      }
-
+      if (!options.length) { setError('No inspectors were found in this area.'); return; }
       setInspectorId(options[0].id);
     } catch (err) {
       setError(getError(err, 'Could not load inspectors'));
@@ -1176,19 +864,12 @@ export default function OrderDetail() {
 
   const requestInspection = async (mode) => {
     if (!order?.listing) return;
-
     setError('');
-
     setRequestingInspection(true);
-
     try {
-      const body = { orderId: order.id, listingId: order.listing.id, mode };
-
-      await api.post('/inspections', body);
-
+      await api.post('/inspections', { orderId: order.id, listingId: order.listing.id, mode });
       setInspectorId('');
       setInspectionFee('');
-
       await load({ silent: true });
     } catch (err) {
       setError(getError(err, 'Could not request inspection'));
@@ -1227,23 +908,15 @@ export default function OrderDetail() {
     }
   };
 
-
-  // ==========================================================================
-  // TRANSPORT EVIDENCE / MOVEMENT
-  // ==========================================================================
-
   const submitTransportEvidence = async (type, nextStatus) => {
     if (!transportJob || !isTransporter) return;
-
     const { photoKeys, videoKeys } = transportEvidence;
     if (!photoKeys.length && !videoKeys.length && !transportEvidenceNotes.trim()) {
       setError(`Add at least one ${type.toLowerCase()} photo/video or note before continuing.`);
       return;
     }
-
     setTransportEvidenceBusy(true);
     setError('');
-
     try {
       await api.post(`/transport/${transportJob.id}/evidence`, {
         type,
@@ -1251,13 +924,9 @@ export default function OrderDetail() {
         videos: videoKeys,
         notes: transportEvidenceNotes.trim() || undefined,
       });
-
       if (nextStatus) {
-        await api.patch(`/transport/${transportJob.id}/status`, {
-          status: nextStatus,
-        });
+        await api.patch(`/transport/${transportJob.id}/status`, { status: nextStatus });
       }
-
       setTransportEvidence({ photoKeys: [], videoKeys: [] });
       setTransportEvidenceNotes('');
       await load({ silent: true });
@@ -1268,79 +937,27 @@ export default function OrderDetail() {
     }
   };
 
-  // ==========================================================================
-  // START TRANSPORT PAYMENT
-  // ==========================================================================
-
   const payTransport = async () => {
     if (!order || !transportJob) return;
-
-    if (!isParticipant) {
-      setError(
-        'You are not authorized to pay for this transport'
-      );
-      return;
-    }
-
-    if (
-      transportJob.method !==
-      'HIRE_TRANSPORTER'
-    ) {
-      setError(
-        'Transport payment is only required for hired transport'
-      );
-      return;
-    }
-
-    if (!transportJob.truckOwnerId) {
-      setError(
-        'A transporter must be selected before transport payment'
-      );
-      return;
-    }
-
-    const amount = Number(
-      transportJob.agreedAmount
-    );
-
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError(
-        'Invalid transport payment amount'
-      );
-      return;
-    }
-
+    if (!isParticipant) { setError('You are not authorized to pay for this transport'); return; }
+    if (transportJob.method !== 'HIRE_TRANSPORTER') { setError('Transport payment is only required for hired transport'); return; }
+    if (!transportJob.truckOwnerId) { setError('A transporter must be selected before transport payment'); return; }
+    const amount = Number(transportJob.agreedAmount);
+    if (!Number.isFinite(amount) || amount <= 0) { setError('Invalid transport payment amount'); return; }
     setBusy('pay-transport');
     setError('');
-
     try {
-      await startChapaPayment({
-        type: 'TRANSPORT',
-        orderId: order.id,
-        amount,
-        method: payMethod,
-      });
-
+      await startChapaPayment({ type: 'TRANSPORT', orderId: order.id, amount, method: payMethod });
       await load({ silent: true });
     } catch (err) {
-      setError(
-        getError(
-          err,
-          'Could not start transport payment'
-        )
-      );
+      setError(getError(err, 'Could not start transport payment'));
     } finally {
       setBusy('');
     }
   };
 
-  // Pay a fee-bearing inspection request. Extracted from an inline onClick
-  // (previously duplicated the same startChapaPayment shape as
-  // payMarketplace/payTransport) so PaymentCenter can call it directly per
-  // row instead of re-declaring it in JSX.
   const payInspection = async (request) => {
     if (!request?.id || !request.fee) return;
-
     setBusy(`pay-inspection-${request.id}`);
     setError('');
     try {
@@ -1359,13 +976,8 @@ export default function OrderDetail() {
     }
   };
 
-  // ==========================================================================
-  // CHECK PROCESSING PAYMENT
-  // ==========================================================================
-
   const checkMarketplacePayment = async () => {
     if (!marketplacePayment?.id) return;
-
     setBusy('check-marketplace');
     setError('');
     try {
@@ -1382,13 +994,8 @@ export default function OrderDetail() {
     }
   };
 
-  // Same PROCESSING-status check as checkMarketplacePayment above, but for
-  // any payment id (inspection or transport). marketplacePayment used its
-  // own dedicated handler because it's looked up once via useMemo; this one
-  // takes the id directly since inspection payments are found per-row.
   const checkPaymentStatus = async (paymentId, busyKey) => {
     if (!paymentId) return;
-
     setBusy(busyKey);
     setError('');
     try {
@@ -1405,52 +1012,25 @@ export default function OrderDetail() {
     }
   };
 
-  // ==========================================================================
-  // RESUME PAYMENT
-  // ==========================================================================
-
-  const resumePayment = async (
-    paymentId,
-    busyKey
-  ) => {
+  const resumePayment = async (paymentId, busyKey) => {
     if (!paymentId) return;
-
     setBusy(busyKey);
     setError('');
-
     try {
-      await chapaInitializeAndRedirect(
-        paymentId
-      );
-
+      await chapaInitializeAndRedirect(paymentId);
       await load({ silent: true });
     } catch (err) {
-      setError(
-        getError(
-          err,
-          'Could not resume payment'
-        )
-      );
+      setError(getError(err, 'Could not resume payment'));
     } finally {
       setBusy('');
     }
   };
 
-  // ==========================================================================
-  // INSTALLMENTS (goods payment above the online payment limit)
-  // ==========================================================================
-
   const startInstallments = async () => {
     if (!order) return;
-
-    if (!isBuyer) {
-      setError('Only the buyer can make the marketplace payment');
-      return;
-    }
-
+    if (!isBuyer) { setError('Only the buyer can make the marketplace payment'); return; }
     setBusy('start-installments');
     setError('');
-
     try {
       await api.post('/payments', {
         type: 'MARKETPLACE',
@@ -1469,10 +1049,8 @@ export default function OrderDetail() {
 
   const retryInstallment = async (installment) => {
     if (!installment?.id) return;
-
     setBusy(`installment-${installment.id}`);
     setError('');
-
     try {
       await api.post(`/payments/${installment.id}/retry-installment`);
       await load({ silent: true });
@@ -1489,13 +1067,6 @@ export default function OrderDetail() {
   const checkInstallment = (installment) =>
     checkPaymentStatus(installment?.id, `installment-${installment?.id}`);
 
-  // ==========================================================================
-  // ADMIN: SETTLE A REFUND
-  // ==========================================================================
-  // Refunds are durable requests; only an admin can confirm the money went
-  // back (or record that the provider refused). Both call the existing admin
-  // refund endpoints — the Refund card shows the buttons to admins only.
-
   const completeRefundAsAdmin = async (refund) => {
     setBusy(`refund-${refund.id}`);
     setError('');
@@ -1507,7 +1078,7 @@ export default function OrderDetail() {
       } else {
         await api.post(`/admin/financial/refunds/${refund.id}/process`);
       }
-      await loadOrder();
+      await load({ silent: true });
     } catch (err) {
       setError(getError(err, 'Could not process or verify the refund with Chapa'));
     } finally {
@@ -1518,11 +1089,7 @@ export default function OrderDetail() {
   const failRefundAsAdmin = async (refund) => {
     const reason = window.prompt('Why did this refund fail?', '');
     if (reason === null) return;
-    if (!reason.trim()) {
-      setError('Enter a reason before marking a refund as failed.');
-      return;
-    }
-
+    if (!reason.trim()) { setError('Enter a reason before marking a refund as failed.'); return; }
     setBusy(`refund-${refund.id}`);
     setError('');
     try {
@@ -1536,16 +1103,6 @@ export default function OrderDetail() {
       setBusy('');
     }
   };
-
-  // ==========================================================================
-  // RAISE DISPUTE
-  // ==========================================================================
-  // PDF recommendation #5/#18: RAISE_DISPUTE is already reported as an
-  // available action by GET /orders/:id/workflow and POST /disputes already
-  // exists on the backend, but there was previously no UI anywhere to raise
-  // one. Every other participant on this order (buyer, seller, and the
-  // hired truck owner if one is assigned. The assigned inspector is also a
-  // first-class dispute participant and can be the accused or reporting party.
 
   const disputeCounterparties = useMemo(() => {
     if (!order) return [];
@@ -1578,20 +1135,10 @@ export default function OrderDetail() {
   const raiseDispute = async (event) => {
     event.preventDefault();
     if (!order || !canRaiseDispute) return;
-
-    if (!disputeAgainstId) {
-      setError('Choose who the dispute is against');
-      return;
-    }
-
-    if (!disputeDescription.trim()) {
-      setError('Describe what went wrong');
-      return;
-    }
-
+    if (!disputeAgainstId) { setError('Choose who the dispute is against'); return; }
+    if (!disputeDescription.trim()) { setError('Describe what went wrong'); return; }
     setSubmittingDispute(true);
     setError('');
-
     try {
       await api.post('/disputes', {
         orderId: order.id,
@@ -1599,20 +1146,11 @@ export default function OrderDetail() {
         disputeType,
         description: disputeDescription.trim(),
       });
-
       setDisputeSubmitted(true);
       setDisputeDescription('');
       await load({ silent: true });
     } catch (err) {
       const message = getError(err, 'Could not raise dispute');
-
-      // The order can legitimately move to CANCELLED (or already be
-      // DISPUTED) between this page loading and the dispute actually being
-      // submitted — most commonly the other party cancelling it first. That
-      // already triggers its own refund of anything paid, so a bare 400
-      // here would look like a dead end rather than the resolved state it
-      // actually is. Refresh the order so the rest of the page reflects
-      // reality, and say so plainly instead of just repeating the raw error.
       if (/cannot be disputed/i.test(message) || /already has an open dispute/i.test(message)) {
         setError(
           `${message} If the order was cancelled, any payments already made (including an inspection fee) are refunded automatically as part of that cancellation — check the Payment Center below for its status instead of disputing.`
@@ -1626,23 +1164,16 @@ export default function OrderDetail() {
     }
   };
 
-  // ==========================================================================
-  // INSPECTION PURCHASE DECISION
-  // ==========================================================================
-
   const makeBuyerDecision = async (decision) => {
     if (!order || !isBuyer || !(isAgricultural || isProductsMarketplace)) return;
-
     if (decision === 'BUY' && (!currentInspectionRequest?.report || currentInspectionRequest?.status !== 'COMPLETED')) {
       setError('Review the completed inspection report before choosing BUY.');
       return;
     }
-
     if (decision === 'CANCEL') {
       const confirmed = window.confirm('Cancel this purchase after reviewing the inspection report? This cannot be undone.');
       if (!confirmed) return;
     }
-
     setBusy(`buyer-decision-${decision.toLowerCase()}`);
     setError('');
     try {
@@ -1658,69 +1189,28 @@ export default function OrderDetail() {
     }
   };
 
-  // ==========================================================================
-  // CONFIRM RECEIPT
-  // ==========================================================================
-
   const confirmReceipt = async () => {
     if (!order) return;
-
-    if (!isBuyer) {
-      setError(
-        'Only the buyer can confirm receipt'
-      );
+    if (!isBuyer) { setError('Only the buyer can confirm receipt'); return; }
+    if (!marketplacePaid) { setError('Marketplace payment must be confirmed before receipt'); return; }
+    if (transportJob?.method === 'HIRE_TRANSPORTER' && !transportPaid) {
+      setError('Transport payment must be confirmed before receipt');
       return;
     }
-
-    if (!marketplacePaid) {
-      setError(
-        'Marketplace payment must be confirmed before receipt'
-      );
-      return;
-    }
-
-    if (
-      transportJob?.method ===
-        'HIRE_TRANSPORTER' &&
-      !transportPaid
-    ) {
-      setError(
-        'Transport payment must be confirmed before receipt'
-      );
-      return;
-    }
-
     setBusy('receipt');
     setError('');
-
     try {
-      await api.patch(
-        `/orders/${order.id}/confirm-receipt`
-      );
-
+      await api.patch(`/orders/${order.id}/confirm-receipt`);
       await load({ silent: true });
     } catch (err) {
-      setError(
-        getError(
-          err,
-          'Could not confirm receipt'
-        )
-      );
+      setError(getError(err, 'Could not confirm receipt'));
     } finally {
       setBusy('');
     }
   };
 
-  // ==========================================================================
-  // CANCEL ORDER
-  // ==========================================================================
-
-  // Mirrors the backend's rules in routes/orders.js so the button only shows
-  // up when the call is actually going to succeed. The backend is still the
-  // source of truth / re-checks all of this itself.
   const transportInMotion = Boolean(
-    transportJob &&
-    ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status)
+    transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status)
   );
 
   const canCancelOrder = Boolean(
@@ -1737,46 +1227,24 @@ export default function OrderDetail() {
 
   const cancelOrder = async () => {
     if (!order || !canCancelOrder) return;
-
     const confirmed = window.confirm(
       'Cancel this order? This cannot be undone. The listing will become available again and any completed payments will be flagged for refund.'
     );
-
     if (!confirmed) return;
-
     const reason = window.prompt(
       'Optional: add a reason for cancelling (shown in the order history).'
     ) || undefined;
-
     setBusy('cancel');
     setError('');
-
     try {
-      await api.patch(
-        `/orders/${order.id}/cancel`,
-        reason ? { reason } : {}
-      );
-
+      await api.patch(`/orders/${order.id}/cancel`, reason ? { reason } : {});
       await load({ silent: true });
     } catch (err) {
-      setError(
-        getError(
-          err,
-          'Could not cancel order'
-        )
-      );
+      setError(getError(err, 'Could not cancel order'));
     } finally {
       setBusy('');
     }
   };
-
-  // ==========================================================================
-  // PAYMENT CENTER PROPS
-  // ==========================================================================
-  // Package the already-computed gating flags/handlers above into the shape
-  // PaymentCenter expects, one object per obligation. No new gating logic —
-  // this is purely so the render below passes one prop instead of wiring
-  // ~15 individual flags/handlers by hand in JSX.
 
   const marketplaceObligation = {
     amount: order?.finalPrice,
@@ -1822,10 +1290,6 @@ export default function OrderDetail() {
       }
     : null;
 
-  // ==========================================================================
-  // LOADING
-  // ==========================================================================
-
   if (loading) {
     return (
       <main className="section order-detail-page">
@@ -1838,114 +1302,191 @@ export default function OrderDetail() {
     );
   }
 
-  // ==========================================================================
-  // NOT FOUND
-  // ==========================================================================
-
   if (!order) {
     return (
       <main className="section order-detail-page">
         <div className="container-narrow">
-          <button
-            type="button"
-            className="back-link"
-            onClick={() => navigate(-1)}
-          >
+          <button type="button" className="back-link" onClick={() => navigate(-1)}>
             ← Back
           </button>
-
-          <div className="alert error">
-            {error || 'Order not found'}
-          </div>
+          <div className="alert error">{error || 'Order not found'}</div>
         </div>
       </main>
     );
   }
 
-  // ==========================================================================
-  // RENDER
-  // ==========================================================================
-
   return (
     <main className="section order-detail-page">
       <div className="container-narrow">
 
-        {/* ================================================================== */}
-        {/* HEADER */}
-        {/* ================================================================== */}
-
-        <div
-          className="row-between"
-          style={{ marginBottom: 16 }}
-        >
-          <button
-            type="button"
-            className="back-link"
-            onClick={() => navigate(-1)}
-          >
+        <div className="row-between" style={{ marginBottom: 16 }}>
+          <button type="button" className="back-link" onClick={() => navigate(-1)}>
             ← Back
           </button>
-
           <button
             type="button"
             className="btn btn-sm"
             disabled={refreshing}
-            onClick={() =>
-              load({ silent: true })
-            }
+            onClick={() => load({ silent: true })}
           >
-            {refreshing
-              ? 'Refreshing…'
-              : 'Refresh'}
+            {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
 
-        <div className="order-hero">
-          <div className="order-hero-main">
-            <span className="eyebrow order-hero-eyebrow">
-              ORDER {shortId(order.id)}
-            </span>
+        {/* ================================================================== */}
+        {/* ORDER DETAILS — the reference card shape                           */}
+        {/* ================================================================== */}
 
-            <h1 className="order-hero-title">{title}</h1>
+        <div className="card order-overview-card">
+          <div className="card-head">
+            <div className="card-head-main">
+              <span className="eyebrow">ORDER {shortId(order.id)}</span>
+              <h1 className="card-title">{title}</h1>
+              <p className="card-subtitle">
+                {order.listing?.location && (
+                  <>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 21s-7-5.7-7-11a7 7 0 1 1 14 0c0 5.3-7 11-7 11z" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                      <circle cx="12" cy="10" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                    </svg>
+                    <span>{order.listing.location}</span>
+                  </>
+                )}
+                {order.listing?.cropType && (
+                  <>
+                    {order.listing?.location && <span aria-hidden="true">·</span>}
+                    <span>{order.listing.cropType}</span>
+                  </>
+                )}
+                {order.listing?.quantity != null && (
+                  <>
+                    {(order.listing?.location || order.listing?.cropType) && <span aria-hidden="true">·</span>}
+                    <span>{order.listing.quantity} units</span>
+                  </>
+                )}
+              </p>
+            </div>
 
-            <div className="order-hero-meta">
+            <div className="card-head-side">
+              <span className="card-side-label">Seller</span>
+              <div className="card-side-party">
+                <div>
+                  <span className="card-side-value">{order.seller?.name || '—'}</span>
+                </div>
+                <span className="party-avatar party-avatar-seller" aria-hidden="true">
+                  {initials(order.seller?.name)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Order status */}
+          <section className="card-section">
+            <div className="card-section-head">
+              <h3 className="card-section-title">Order status</h3>
+              <span className="card-section-meta">ORD {shortId(order.id)}</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               <span className={`status-pill tone-${statusTone(order.status)}`}>
                 <span className="status-pill-dot" aria-hidden="true" />
                 {String(order.status || '').replace(/_/g, ' ')}
               </span>
-
-              {order.listing?.cropType && (
-                <span className="order-hero-chip">{order.listing.cropType}</span>
+              {marketplacePaid && (
+                <span className="status-pill tone-good">
+                  <span className="status-pill-dot" aria-hidden="true" />
+                  Payment: Paid
+                </span>
               )}
-
-              {order.listing?.quantity != null && (
-                <span className="order-hero-chip">{order.listing.quantity} units</span>
+              {marketplacePending && !marketplacePaid && (
+                <span className="status-pill tone-wait">
+                  <span className="status-pill-dot" aria-hidden="true" />
+                  Payment: Pending
+                </span>
+              )}
+              {transportJob?.status && (
+                <span className="status-pill tone-neutral">
+                  Transport: {String(transportJob.status).replace(/_/g, ' ')}
+                </span>
               )}
             </div>
-          </div>
+          </section>
 
-          <div className="order-hero-side">
-            <span className="order-hero-price-label">Order total</span>
-            <span className="order-hero-price">{money(order.finalPrice)} <small>ETB</small></span>
+          {/* Parties */}
+          <section className="card-section">
+            <div className="card-section-head">
+              <h3 className="card-section-title">Parties</h3>
+              <span className="card-section-meta">Buyer &amp; seller</span>
+            </div>
+            <div className="party-list party-list-inline">
+              <div className="party-row">
+                <span className="party-avatar" aria-hidden="true">{initials(order.buyer?.name)}</span>
+                <div>
+                  <span className="party-role">Buyer</span>
+                  <strong className="party-name">{order.buyer?.name || '—'}</strong>
+                </div>
+                {isBuyer && <span className="party-you">You</span>}
+              </div>
 
-            {canCancelOrder && (
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                disabled={busy === 'cancel'}
-                onClick={cancelOrder}
-              >
-                {busy === 'cancel' ? 'Cancelling…' : 'Cancel order'}
-              </button>
-            )}
-          </div>
+              <div className="party-row">
+                <span className="party-avatar party-avatar-seller" aria-hidden="true">{initials(order.seller?.name)}</span>
+                <div>
+                  <span className="party-role">Seller</span>
+                  <strong className="party-name">{order.seller?.name || '—'}</strong>
+                </div>
+                {isSeller && <span className="party-you">You</span>}
+              </div>
+            </div>
+          </section>
+
+          {/* Amount */}
+          <section className="card-section">
+            <div className="card-section-head">
+              <h3 className="card-section-title">Amount</h3>
+              <span className="card-section-meta">{money(order.finalPrice)} ETB</span>
+            </div>
+            <div className="order-overview-facts">
+              <div className="order-overview-fact">
+                <span>Order</span>
+                <strong>{shortId(order.id)}</strong>
+              </div>
+              <div className="order-overview-fact">
+                <span>Amount</span>
+                <strong>{money(order.finalPrice)} ETB</strong>
+              </div>
+              {order.listing?.cropType && (
+                <div className="order-overview-fact">
+                  <span>Product</span>
+                  <strong>{order.listing.cropType}</strong>
+                </div>
+              )}
+              {order.listing?.quantity != null && (
+                <div className="order-overview-fact">
+                  <span>Quantity</span>
+                  <strong>{order.listing.quantity}</strong>
+                </div>
+              )}
+            </div>
+            <div className="meta-line">
+              <span>Created {formatDateTime(order.createdAt)}</span>
+            </div>
+          </section>
+
+          {canCancelOrder && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ width: '100%', marginTop: 6 }}
+              disabled={busy === 'cancel'}
+              onClick={cancelOrder}
+            >
+              {busy === 'cancel' ? 'Cancelling…' : 'Cancel order'}
+            </button>
+          )}
         </div>
 
         {/* ================================================================== */}
-        {/* NEXT ACTION CENTER */}
+        {/* ACTION CENTER                                                      */}
         {/* ================================================================== */}
-        {/* Driven by GET /orders/:id/workflow (orderWorkflowService.js) rather */}
-        {/* than reconstructing these rules per role here. See ActionCenter.jsx. */}
 
         {workflow ? (
           <ActionCenter
@@ -1956,8 +1497,12 @@ export default function OrderDetail() {
         ) : (
           isInspector && (
             <div className="card next-action-card" id="next-action">
-              <span className="eyebrow">NEXT STEP</span>
-              <h2 style={{ marginBottom: 6 }}>Inspector action</h2>
+              <div className="card-head">
+                <div className="card-head-main">
+                  <span className="eyebrow">NEXT STEP</span>
+                  <h2 className="card-title">Inspector action</h2>
+                </div>
+              </div>
               {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
               {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
               {assignedInspection.status === 'COMPLETED' && <p>Inspection report is published. The buyer can now complete any required inspection payment and continue the order.</p>}
@@ -1969,112 +1514,58 @@ export default function OrderDetail() {
         )}
 
         {/* ================================================================== */}
-        {/* TIMELINE */}
+        {/* TIMELINE                                                           */}
         {/* ================================================================== */}
-        {/* Payment status now lives only in the Payment Center card below — */}
-        {/* it used to also render here (via <PaymentStatus>) and again as a */}
-        {/* flat ledger near the bottom, three places for the same numbers. */}
 
         {workflow && (
           <div className="card">
-            <h2>Order timeline</h2>
+            <div className="card-head">
+              <div className="card-head-main">
+                <span className="eyebrow">HISTORY</span>
+                <h2 className="card-title">Order timeline</h2>
+              </div>
+            </div>
             <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
           </div>
         )}
 
         {/* ================================================================== */}
-        {/* ORDER DETAILS */}
+        {/* INSPECTION                                                         */}
         {/* ================================================================== */}
-
-        <div className="card order-overview-card">
-          <div className="order-section-heading">
-            <div>
-              <span className="eyebrow">ORDER OVERVIEW</span>
-              <h2>Order details</h2>
-            </div>
-            <span className={`status-pill tone-${statusTone(order.status)}`}>
-              <span className="status-pill-dot" aria-hidden="true" />
-              {String(order.status || '').replace(/_/g, ' ')}
-            </span>
-          </div>
-
-          <div className="order-overview-facts">
-            <div className="order-overview-fact">
-              <span>Order</span>
-              <strong>{shortId(order.id)}</strong>
-            </div>
-            <div className="order-overview-fact">
-              <span>Amount</span>
-              <strong>{money(order.finalPrice)} ETB</strong>
-            </div>
-            {order.listing?.cropType && (
-              <div className="order-overview-fact">
-                <span>Product</span>
-                <strong>{order.listing.cropType}</strong>
-              </div>
-            )}
-            {order.listing?.quantity != null && (
-              <div className="order-overview-fact">
-                <span>Quantity</span>
-                <strong>{order.listing.quantity}</strong>
-              </div>
-            )}
-          </div>
-
-          <div className="order-overview-divider" />
-
-          <div className="order-section-heading order-parties-heading">
-            <div>
-              <span className="eyebrow">PARTICIPANTS</span>
-              <h3>Parties</h3>
-            </div>
-            <span className="order-section-note">Buyer &amp; seller</span>
-          </div>
-
-          <div className="party-list party-list-inline">
-            <div className="party-row">
-              <span className="party-avatar" aria-hidden="true">{initials(order.buyer?.name)}</span>
-              <div>
-                <span className="party-role">Buyer</span>
-                <strong className="party-name">{order.buyer?.name || '—'}</strong>
-              </div>
-              {isBuyer && <span className="party-you">You</span>}
-            </div>
-
-            <div className="party-row">
-              <span className="party-avatar party-avatar-seller" aria-hidden="true">{initials(order.seller?.name)}</span>
-              <div>
-                <span className="party-role">Seller</span>
-                <strong className="party-name">{order.seller?.name || '—'}</strong>
-              </div>
-              {isSeller && <span className="party-you">You</span>}
-            </div>
-          </div>
-        </div>
-
-        {/* ================================================================== */}
-        {/* REQUEST INSPECTION */}
-        {/* ================================================================== */}
-        {/* Once an offer is accepted the listing becomes unavailable to new */}
-        {/* buyers, which also hides the "Request inspection" controls on the */}
-        {/* listing page. Buyer and seller can still request an inspection */}
-        {/* from here for as long as the order isn't finished. */}
 
         <div id="inspection-section">
         {inspectionApplies && isParticipant && order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
           currentInspectionRequest ? (
             <div className="card">
-              <h2>{isProductsMarketplace ? 'Product inspection' : 'Inspection'}</h2>
-              <p className="muted">An inspection already exists for this order. Continue with this inspection; a second request is not needed.</p>
-              <div className="detail-facts">
-                <div><span>Status</span><strong>{currentInspectionRequest.status}</strong></div>
-                {currentInspectionRequest.inspector?.name && <div><span>Inspector</span><strong>{currentInspectionRequest.inspector.name}</strong></div>}
-                {currentInspectionRequest.fee != null && <div><span>Fee</span><strong>{money(currentInspectionRequest.fee)} ETB</strong></div>}
+              <div className="card-head">
+                <div className="card-head-main">
+                  <span className="eyebrow">{isProductsMarketplace ? 'PRODUCT INSPECTION' : 'INSPECTION'}</span>
+                  <h2 className="card-title">
+                    {currentInspectionRequest.inspector?.name
+                      ? `Inspected by ${currentInspectionRequest.inspector.name}`
+                      : 'Inspection'}
+                  </h2>
+                  {currentInspectionRequest.fee != null && (
+                    <p className="card-subtitle">Fee: {money(currentInspectionRequest.fee)} ETB</p>
+                  )}
+                </div>
+                <div className="card-head-side">
+                  <span className="card-side-label">Status</span>
+                  <span className={`status-pill tone-${statusTone(currentInspectionRequest.status)}`}>
+                    <span className="status-pill-dot" aria-hidden="true" />
+                    {String(currentInspectionRequest.status || '').replace(/_/g, ' ')}
+                  </span>
+                </div>
               </div>
+
               {['REQUESTED', 'ACCEPTED'].includes(currentInspectionRequest.status) && isParticipant && (
-                <div className="notice" style={{ marginTop: 10 }}>
-                  <strong>Inspection recovery</strong>
-                  <p className="muted">If every inspector bid is closed, you can reopen bidding. If you no longer want this request, cancel it without cancelling the order.</p>
+                <section className="card-section">
+                  <div className="card-section-head">
+                    <h3 className="card-section-title">Inspection recovery</h3>
+                  </div>
+                  <p className="muted">
+                    If every inspector bid is closed, you can reopen bidding. If you no longer want this request, cancel it without cancelling the order.
+                  </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
                     <button type="button" className="btn btn-primary" disabled={Boolean(busy)} onClick={reopenInspectionBidding}>
                       {busy === `reopen-inspection-${currentInspectionRequest.id}` ? 'Reopening…' : 'Reopen inspection bidding'}
@@ -2083,8 +1574,9 @@ export default function OrderDetail() {
                       {busy === `cancel-inspection-${currentInspectionRequest.id}` ? 'Cancelling…' : 'Cancel inspection request'}
                     </button>
                   </div>
-                </div>
+                </section>
               )}
+
               {currentInspectionRequest.status === 'COMPLETED' && currentInspectionRequest.report && (
                 <div className="inspection-purchase-gate">
                   <div className="inspection-report-header">
@@ -2146,7 +1638,16 @@ export default function OrderDetail() {
             </div>
           ) : (
             <div className="card">
-              <h2>{allInspectionRequests.length && !inspectionFormReleased ? 'Inspection request awaiting admin recovery approval' : 'Request inspection'}</h2>
+              <div className="card-head">
+                <div className="card-head-main">
+                  <span className="eyebrow">INSPECTION</span>
+                  <h2 className="card-title">
+                    {allInspectionRequests.length && !inspectionFormReleased
+                      ? 'Request awaiting admin recovery approval'
+                      : 'Request inspection'}
+                  </h2>
+                </div>
+              </div>
               <p className="muted">Request an independent quality check for this order before the purchase is finally committed.</p>
               <p className="muted">All registered inspectors can compete for this request by submitting a sealed fee quote. You compare the bids, select one for negotiation, and only the accepted negotiated quote assigns the inspector. The inspection fee commits the inspector; the completed report is then reviewed before goods payment.</p>
               {allInspectionRequests.length > 0 && !inspectionFormReleased ? (
@@ -2167,28 +1668,28 @@ export default function OrderDetail() {
         </div>
 
         {/* ================================================================== */}
-        {/* TRANSPORT */}
+        {/* TRANSPORT                                                          */}
         {/* ================================================================== */}
 
         <div className="card transport-overview-card" id="transport-section">
-          <div className="transport-card-heading">
-            <div className="transport-card-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" role="presentation">
-                <path d="M3 6.5h11v9H3zM14 9h3.2l3 3.2V15H14z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-                <circle cx="7" cy="17" r="1.7" fill="currentColor" />
-                <circle cx="18" cy="17" r="1.7" fill="currentColor" />
-                <path d="M3 15h2M20 15h1" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-              </svg>
-            </div>
-            <div className="transport-card-title">
+          <div className="card-head">
+            <div className="card-head-main">
               <span className="eyebrow">LOGISTICS</span>
-              <h2>Transport</h2>
-              <p className="muted">
-                The buyer or seller arranges transport. MarketBridge does not automatically assign a transporter.
+              <h2 className="card-title">Transport</h2>
+              <p className="card-subtitle">
+                {transportJob
+                  ? `${transportJob.arrangingParty || '—'} arranged · ${transportJob.method || '—'}`
+                  : 'The buyer or seller arranges transport. MarketBridge does not automatically assign a transporter.'}
               </p>
             </div>
             {transportJob?.status && (
-              <span className="badge transport-status-badge">{String(transportJob.status).replace(/_/g, ' ')}</span>
+              <div className="card-head-side">
+                <span className="card-side-label">Status</span>
+                <span className={`status-pill tone-${statusTone(transportJob.status)}`}>
+                  <span className="status-pill-dot" aria-hidden="true" />
+                  {String(transportJob.status).replace(/_/g, ' ')}
+                </span>
+              </div>
             )}
           </div>
 
@@ -2203,171 +1704,83 @@ export default function OrderDetail() {
                 onCreated={() => load({ silent: true })}
               />
             ) : (
-              <div className="notice">
-                <p>
-                  No transport arrangement recorded
-                  yet.
-                </p>
-              </div>
+              <p className="muted">No transport arrangement recorded yet.</p>
             )
           ) : (
             <>
-              {/* ------------------------------------------------------------ */}
-              {/* TRANSPORT SUMMARY */}
-              {/* ------------------------------------------------------------ */}
-
-              <div className="transport-details-block">
-                <div className="transport-subheading">
-                  <div>
-                    <span className="eyebrow">TRIP DETAILS</span>
-                    <h3>Transport information</h3>
-                  </div>
+              {/* Transport information */}
+              <section className="transport-section">
+                <div className="card-section-head">
+                  <h3 className="card-section-title">Trip details</h3>
+                  <span className="card-section-meta">{transportJob.method || '—'}</span>
                 </div>
-                <div className="detail-facts transport-detail-facts">
-                <div>
-                  <span>Arranged by</span>
-                  <strong>
-                    {transportJob.arrangingParty ||
-                      '—'}
-                  </strong>
+                <div className="detail-facts">
+                  <div><span>Arranged by</span><strong>{transportJob.arrangingParty || '—'}</strong></div>
+                  <div><span>Method</span><strong>{transportJob.method || '—'}</strong></div>
+                  <div><span>Pickup</span><strong>{transportJob.pickupLocation || '—'}</strong></div>
+                  <div><span>Destination</span><strong>{transportJob.destination || '—'}</strong></div>
+                  {transportJob.load && (
+                    <div><span>Load</span><strong>{transportJob.load}</strong></div>
+                  )}
+                  {transportJob.requiredCapacity != null && (
+                    <div><span>Required capacity</span><strong>{transportJob.requiredCapacity}</strong></div>
+                  )}
                 </div>
+              </section>
 
-                <div>
-                  <span>Method</span>
-                  <strong>
-                    {transportJob.method || '—'}
-                  </strong>
-                </div>
-
-                <div>
-                  <span>Status</span>
-                  <strong>
-                    <span className="badge">
-                      {transportJob.status}
-                    </span>
-                  </strong>
-                </div>
-
-                <div>
-                  <span>Pickup</span>
-                  <strong>
-                    {transportJob.pickupLocation ||
-                      '—'}
-                  </strong>
-                </div>
-
-                <div>
-                  <span>Destination</span>
-                  <strong>
-                    {transportJob.destination ||
-                      '—'}
-                  </strong>
-                </div>
-
-                {transportJob.load && (
-                  <div>
-                    <span>Load</span>
-                    <strong>
-                      {transportJob.load}
-                    </strong>
-                  </div>
-                )}
-
-                {transportJob.requiredCapacity !=
-                  null && (
-                  <div>
-                    <span>Required capacity</span>
-                    <strong>
-                      {transportJob.requiredCapacity}
-                    </strong>
-                  </div>
-                )}
-              </div>
-              </div>
-
+              {/* Transport recovery */}
               {isTransportArranger && ['REQUESTED', 'QUOTED', 'ACCEPTED', 'CANCELLED'].includes(transportJob.status) && (
-                <div className="notice" style={{ marginTop: 10 }}>
-                  <strong>Transport recovery</strong>
-                  <p className="muted">If the transport competition has stalled or the previous arrangement was cancelled, request MarketBridge admin approval. Admin approval releases the fresh transport requesting form.</p>
+                <section className="transport-section">
+                  <div className="card-section-head">
+                    <h3 className="card-section-title">Transport recovery</h3>
+                  </div>
+                  <p className="muted">
+                    If the transport competition has stalled or the previous arrangement was cancelled, request MarketBridge admin approval. Admin approval releases the fresh transport requesting form.
+                  </p>
                   {recoveryRequests.filter((r) => r.type === 'TRANSPORT').map((r) => (
-                    <p className="muted small" key={r.id}>Recovery: <strong>{r.status}</strong>{r.formReleasedAt ? ' — fresh form released' : ' — awaiting admin approval'}</p>
+                    <p className="muted small" key={r.id}>
+                      Recovery: <strong>{r.status}</strong>{r.formReleasedAt ? ' — fresh form released' : ' — awaiting admin approval'}
+                    </p>
                   ))}
-                  <button type="button" className="btn btn-primary" disabled={Boolean(busy) || recoveryRequests.some((r) => r.type === 'TRANSPORT' && r.status === 'PENDING')} onClick={() => requestWorkflowRecovery('TRANSPORT', isTransportArranger && isBuyer ? ['BUYER'] : ['SELLER'], 'Transport competition has no usable live bid or the previous transporter arrangement is no longer available.')}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={Boolean(busy) || recoveryRequests.some((r) => r.type === 'TRANSPORT' && r.status === 'PENDING')}
+                    onClick={() => requestWorkflowRecovery('TRANSPORT', isTransportArranger && isBuyer ? ['BUYER'] : ['SELLER'], 'Transport competition has no usable live bid or the previous transporter arrangement is no longer available.')}
+                    style={{ marginTop: 8 }}
+                  >
                     {busy === 'recovery-TRANSPORT' ? 'Requesting…' : 'Request admin to release fresh transport form'}
                   </button>
-                </div>
+                </section>
               )}
 
-              {/* ------------------------------------------------------------ */}
-              {/* ASSIGNED TRANSPORTER */}
-              {/* ------------------------------------------------------------ */}
-
+              {/* Assigned transporter */}
               {transportJob.truckOwner && (
-                <div className="notice transport-info-panel">
-                  <div className="transport-panel-heading">
-                    <span className="transport-panel-icon" aria-hidden="true">👤</span>
-                    <h3>Transporter</h3>
+                <section className="transport-section">
+                  <div className="card-section-head">
+                    <h3 className="card-section-title">Transporter</h3>
+                    {transportJob.agreedAmount != null && (
+                      <span className="card-section-meta is-strong">{money(transportJob.agreedAmount)} ETB</span>
+                    )}
                   </div>
-
-                  <p>
-                    <strong>
-                      {transportJob.truckOwner
-                        .name || '—'}
-                    </strong>
-                  </p>
-
-                  {transportJob.truckOwner
-                    .phone && (
-                    <p className="muted">
-                      Phone:{' '}
-                      {
-                        transportJob
-                          .truckOwner.phone
-                      }
-                    </p>
+                  <p><strong>{transportJob.truckOwner.name || '—'}</strong></p>
+                  {transportJob.truckOwner.phone && (
+                    <p className="muted">Phone: {transportJob.truckOwner.phone}</p>
                   )}
-
                   {transportJob.truck && (
                     <p>
-                      Truck:{' '}
-                      <strong>
-                        {transportJob.truck
-                          .registration ||
-                          '—'}
-                      </strong>
-                      {' · '}
-                      {transportJob.truck
-                        .truckType ||
-                        'Truck'}
-                      {transportJob.truck
-                        .capacity != null &&
-                        ` · ${transportJob.truck.capacity}t`}
+                      Truck: <strong>{transportJob.truck.registration || '—'}</strong>
+                      {' · '}{transportJob.truck.truckType || 'Truck'}
+                      {transportJob.truck.capacity != null && ` · ${transportJob.truck.capacity}t`}
                     </p>
                   )}
-
-                  {transportJob.agreedAmount !=
-                    null && (
-                    <p>
-                      Agreed transport fee:{' '}
-                      <strong>
-                        {money(
-                          transportJob.agreedAmount
-                        )}{' '}
-                        ETB
-                      </strong>
-                    </p>
-                  )}
-                </div>
+                </section>
               )}
 
-              {/* ------------------------------------------------------------ */}
-              {/* TRANSPORT EVIDENCE */}
-              {/* ------------------------------------------------------------ */}
-
-              <div className="notice transport-info-panel">
-                <div className="transport-panel-heading">
-                  <span className="transport-panel-icon" aria-hidden="true">📍</span>
-                  <h3>Pickup / delivery evidence</h3>
+              {/* Pickup / delivery evidence */}
+              <section className="transport-section">
+                <div className="card-section-head">
+                  <h3 className="card-section-title">Pickup / delivery evidence</h3>
                 </div>
                 <p className="muted">
                   Pickup evidence is required before the transporter can move this trip from <strong>PICKUP</strong> to <strong>IN TRANSIT</strong>. Upload a photo or video here, then submit it with the status change.
@@ -2386,13 +1799,11 @@ export default function OrderDetail() {
                         }))
                       }
                     />
-
                     {(transportEvidence.photoKeys.length > 0 || transportEvidence.videoKeys.length > 0) && (
                       <p className="muted small">
                         {transportEvidence.photoKeys.length} photo(s), {transportEvidence.videoKeys.length} video(s) ready.
                       </p>
                     )}
-
                     <textarea
                       value={transportEvidenceNotes}
                       onChange={(event) => setTransportEvidenceNotes(event.target.value)}
@@ -2401,7 +1812,6 @@ export default function OrderDetail() {
                       disabled={transportEvidenceBusy}
                       style={{ width: '100%', marginTop: 8 }}
                     />
-
                     <button
                       type="button"
                       className="btn btn-primary"
@@ -2457,434 +1867,223 @@ export default function OrderDetail() {
                   listUrl={`/transport/${transportJob.id}/evidence`}
                   mediaUrl={(evidenceId) => `/transport/${transportJob.id}/evidence/${evidenceId}/media`}
                 />
-              </div>
+              </section>
 
-              {/* ------------------------------------------------------------ */}
-              {/* TRANSPORT PAYMENT */}
-              {/* ------------------------------------------------------------ */}
-
-              {transportJob.method ===
-                'OWN_TRUCK' && (
-                <div className="notice transport-info-panel">
-                  <div className="transport-panel-heading">
-                    <span className="transport-panel-icon" aria-hidden="true">✓</span>
-                    <h3>Transport payment</h3>
+              {/* OWN_TRUCK note */}
+              {transportJob.method === 'OWN_TRUCK' && (
+                <section className="transport-section">
+                  <div className="card-section-head">
+                    <h3 className="card-section-title">Transport payment</h3>
                   </div>
-
-                  <p>
-                    <strong>
-                      No separate transporter payment
-                      is required.
-                    </strong>
-                  </p>
-
+                  <p><strong>No separate transporter payment is required.</strong></p>
                   <p className="muted">
-                    This order is using the owner's
-                    own truck. OWN_TRUCK transport does
-                    not create a separate transport
-                    payment.
+                    This order is using the owner's own truck. OWN_TRUCK transport does not create a separate transport payment.
                   </p>
-                </div>
+                </section>
               )}
 
-              {transportJob.method ===
-                'HIRE_TRANSPORTER' &&
-                !transportPaid && (
-                  <div className="notice transport-info-panel">
-                    <div className="transport-panel-heading">
-                      <span className="transport-panel-icon" aria-hidden="true">💳</span>
-                      <h3>Transport payment</h3>
-                    </div>
-
-                    <p className="muted">
-                      Transport payment is separate from the seller payment. You may pay it as soon as the transport quote is accepted. The transporter cannot start the trip until every required payment is confirmed.
-                    </p>
-
-                    {transportJob.agreedAmount !=
-                      null && (
-                      <p>
-                        Transport fee:{' '}
-                        <strong>
-                          {money(
-                            transportJob.agreedAmount
-                          )}{' '}
-                          ETB
-                        </strong>
-                      </p>
+              {/* HIRE_TRANSPORTER pre-payment */}
+              {transportJob.method === 'HIRE_TRANSPORTER' && !transportPaid && (
+                <section className="transport-section">
+                  <div className="card-section-head">
+                    <h3 className="card-section-title">Transport payment</h3>
+                    {transportJob.agreedAmount != null && (
+                      <span className="card-section-meta is-strong">{money(transportJob.agreedAmount)} ETB</span>
                     )}
                   </div>
-                )}
-
-              {canStartTransportPayment && (
-                <div className="notice transport-info-panel">
-                  <div className="transport-panel-heading">
-                    <span className="transport-panel-icon" aria-hidden="true">💳</span>
-                    <h3>Transport payment</h3>
-                  </div>
-
-                  <p>
-                    Transport fee due:{' '}
-                    <strong>
-                      {money(
-                        transportJob.agreedAmount
-                      )}{' '}
-                      ETB
-                    </strong>
+                  <p className="muted">
+                    Transport payment is separate from the seller payment. You may pay it as soon as the transport quote is accepted. The transporter cannot start the trip until every required payment is confirmed.
                   </p>
+                </section>
+              )}
 
+              {/* Ready to pay */}
+              {canStartTransportPayment && (
+                <section className="transport-section">
+                  <div className="card-section-head">
+                    <h3 className="card-section-title">Pay transport fee</h3>
+                    <span className="card-section-meta is-strong">{money(transportJob.agreedAmount)} ETB</span>
+                  </div>
                   <p className="muted">
                     Pay the agreed transporter fee. This payment is independent from the seller and inspection payments. All required payments must be PAID before the truck can pick up the goods.
                   </p>
-
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 8,
-                      flexWrap: 'wrap',
-                      alignItems: 'center',
-                    }}
-                  >
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
                     <select
                       value={payMethod}
-                      onChange={(event) =>
-                        setPayMethod(
-                          event.target.value
-                        )
-                      }
-                      disabled={
-                        busy ===
-                        'pay-transport'
-                      }
+                      onChange={(event) => setPayMethod(event.target.value)}
+                      disabled={busy === 'pay-transport'}
                     >
-                      {PAYMENT_METHODS.map(
-                        (method) => (
-                          <option
-                            key={method.value}
-                            value={method.value}
-                          >
-                            {method.label}
-                          </option>
-                        )
-                      )}
+                      {PAYMENT_METHODS.map((method) => (
+                        <option key={method.value} value={method.value}>{method.label}</option>
+                      ))}
                     </select>
-
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"
-                      disabled={
-                        busy ===
-                        'pay-transport'
-                      }
+                      disabled={busy === 'pay-transport'}
                       onClick={payTransport}
                     >
-                      {busy ===
-                      'pay-transport'
-                        ? 'Submitting…'
-                        : 'Pay for transport'}
+                      {busy === 'pay-transport' ? 'Submitting…' : 'Pay for transport'}
                     </button>
                   </div>
-                </div>
+                </section>
               )}
 
-              {/* ------------------------------------------------------------ */}
-              {/* RESUME TRANSPORT PAYMENT */}
-              {/* ------------------------------------------------------------ */}
-
+              {/* Resume */}
               {canResumeTransportPayment && (
-                <div className="notice transport-info-panel">
-                  <div className="transport-panel-heading">
-                    <span className="transport-panel-icon" aria-hidden="true">⏳</span>
-                    <h3>Transport payment pending</h3>
+                <section className="transport-section">
+                  <div className="card-section-head">
+                    <h3 className="card-section-title">Transport payment pending</h3>
+                    <span className="card-section-meta is-strong">{money(transportPayment.amount)} ETB</span>
                   </div>
-
-                  <p>
-                    Amount:{' '}
-                    <strong>
-                      {money(
-                        transportPayment.amount
-                      )}{' '}
-                      ETB
-                    </strong>
-                  </p>
-
-                  <p>
-                    Method:{' '}
-                    <strong>
-                      {transportPayment.method ||
-                        '—'}
-                    </strong>
-                  </p>
-
-                  <p className="muted">
-                    The payment was started but
-                    has not completed yet.
-                  </p>
-
+                  <p>Method: <strong>{transportPayment.method || '—'}</strong></p>
+                  <p className="muted">The payment was started but has not completed yet.</p>
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
-                    disabled={
-                      busy ===
-                      'resume-transport'
-                    }
-                    onClick={() =>
-                      resumePayment(
-                        transportPayment.id,
-                        'resume-transport'
-                      )
-                    }
+                    disabled={busy === 'resume-transport'}
+                    onClick={() => resumePayment(transportPayment.id, 'resume-transport')}
+                    style={{ marginTop: 8 }}
                   >
-                    {busy ===
-                    'resume-transport'
-                      ? 'Redirecting…'
-                      : 'Resume payment'}
+                    {busy === 'resume-transport' ? 'Redirecting…' : 'Resume payment'}
                   </button>
-                </div>
+                </section>
               )}
 
-              {/* ------------------------------------------------------------ */}
-              {/* TRANSPORT PAID */}
-              {/* ------------------------------------------------------------ */}
-
+              {/* Confirmed */}
               {transportPaid && (
-                <div className="notice transport-payment-confirmed">
-                  <div className="transport-panel-heading">
-                    <span className="transport-panel-icon" aria-hidden="true">✓</span>
-                    <h3>Transport payment confirmed</h3>
+                <section className="transport-section">
+                  <div className="card-section-head">
+                    <h3 className="card-section-title">Transport payment confirmed</h3>
+                    <span className="card-section-meta is-strong">
+                      {money(transportPayments.find((payment) => payment.status === 'PAID')?.amount)} ETB
+                    </span>
                   </div>
-                  <p className="muted">
-                    Paid amount:{' '}
-                    {money(
-                      transportPayments.find(
-                        (payment) =>
-                          payment.status ===
-                          'PAID'
-                      )?.amount
-                    )}{' '}
-                    ETB
-                  </p>
-                </div>
+                </section>
               )}
 
-              {/* ------------------------------------------------------------ */}
-              {/* TRANSPORT QUOTES */}
-              {/* ------------------------------------------------------------ */}
-
-              {transportJob.method ===
-                'HIRE_TRANSPORTER' &&
-                !transportPaid && (
-                  <div className="match-box">
-                    <h3>
-                      Transport quotes
-                    </h3>
-
-                    {leafTransportQuotes(transportJob.quotes)
-                      ?.length ? (
-                      leafTransportQuotes(transportJob.quotes).map(
-                        (quote) => {
-                          const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
-                          const isArrangerTurn = quote.status === 'SELECTED' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
-                          const isTransporterQuoteOwner = quote.truckOwnerId === currentUserId;
-                          const isTransporterTurn = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
-                          const isCompetitionBid = quote.status === 'PENDING';
-                          const isWaitingOnTransporter = isTransporterTurn;
-                          return (
-                          <div
-                            className="transporter"
-                            key={quote.id}
-                          >
-                            <div>
-                              <strong>
-                                {quote
-                                  .truckOwner
-                                  ?.name ||
-                                  'Truck owner'}
-                              </strong>
-
-                              <p>
-                                {quote.truck
-                                  ?.truckType ||
-                                  'Truck'}
-                                {' · '}
-                                {quote.truck
-                                  ?.capacity !=
-                                null
-                                  ? `${quote.truck.capacity}t`
-                                  : 'Capacity —'}
-                                {' · '}
-                                {quote.truck
-                                  ?.registration ||
-                                  'Registration —'}
-                                {' · '}
-                                ★{' '}
-                                {typeof quote
-                                  .truckOwner
-                                  ?.rating ===
-                                'number'
-                                  ? quote.truckOwner.rating.toFixed(
-                                      1
-                                    )
-                                  : '—'}
-                              </p>
-
-                              {quote.message && (
-                                <p className="muted">
-                                  {quote.message}
-                                </p>
-                              )}
-
-                              <p>
-                                Status:{' '}
-                                <span className="badge">
-                                  {quote.status ||
-                                    'PENDING'}
-                                </span>
-                              </p>
-                              {isWaitingOnTransporter && (
-                                <p className="muted">
-                                  You countered {money(displayAmount)} ETB — waiting for the transporter to respond.
-                                </p>
-                              )}
-                            </div>
-
-                            <div>
-                              <strong>
-                                {money(
-                                  displayAmount
-                                )}{' '}
-                                ETB
-                              </strong>
-
-                              {canChooseQuote && quote.status === 'ACCEPTED' && (
-                                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                                  <span className="muted small">Provisional transporter agreement. Release it if this transporter becomes unavailable before payment.</span>
-                                  <button type="button" className="btn btn-light btn-sm" disabled={busy === `quote-${quote.id}`} onClick={() => releaseTransportAgreement(quote.id)}>
-                                    {busy === `quote-${quote.id}` ? 'Releasing…' : 'Release transporter'}
-                                  </button>
-                                </div>
-                              )}
-                              {canChooseQuote && isCompetitionBid && (
-                                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                                  <button type="button" className="btn btn-primary btn-sm" disabled={busy === `quote-${quote.id}`} onClick={() => selectTransportQuote(quote.id)}>
-                                    {busy === `quote-${quote.id}` ? 'Selecting…' : 'Select bid for deal'}
-                                  </button>
-                                  <span className="muted small">Competition bid — selecting opens price negotiation.</span>
-                                </div>
-                              )}
-                              {((canChooseQuote && isArrangerTurn) || (isTransporterQuoteOwner && isTransporterTurn)) && (
-                                  <div
-                                    style={{
-                                      marginTop: 8,
-                                      display: 'flex',
-                                      gap: 6,
-                                      flexWrap: 'wrap',
-                                      alignItems: 'center',
-                                    }}
-                                  >
-                                    <button
-                                      type="button"
-                                      className="btn btn-sm"
-                                      disabled={
-                                        busy ===
-                                        `quote-${quote.id}`
-                                      }
-                                      onClick={() =>
-                                        acceptQuote(
-                                          quote.id
-                                        )
-                                      }
-                                    >
-                                      {busy ===
-                                      `quote-${quote.id}`
-                                        ? 'Accepting…'
-                                        : isTransporterTurn
-                                          ? 'Accept buyer counter'
-                                          : 'Accept quote'}
-                                    </button>
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      placeholder="Counter (ETB)"
-                                      style={{ width: 120 }}
-                                      value={transportCounterInputs[quote.id] || ''}
-                                      onChange={(e) =>
-                                        setTransportCounterInputs((q) => ({ ...q, [quote.id]: e.target.value }))
-                                      }
-                                    />
-                                    <button
-                                      type="button"
-                                      className="btn btn-sm btn-light"
-                                      disabled={busy === `quote-${quote.id}`}
-                                      onClick={() => counterQuote(quote.id)}
-                                    >
-                                      {busy === `quote-${quote.id}` ? 'Sending…' : 'Counter'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="btn btn-sm btn-light"
-                                      disabled={busy === `quote-${quote.id}`}
-                                      onClick={() => rejectQuote(quote.id)}
-                                    >
-                                      {busy === `quote-${quote.id}` ? 'Rejecting…' : 'Reject'}
-                                    </button>
-                                  </div>
-                                )}
-                              {quote.status === 'ACCEPTED' && isTransportArranger && !transportPending && (
-                                <div style={{ marginTop: 8 }}>
-                                  <p className="muted small">Provisional agreement — the truck is not committed until transport payment succeeds.</p>
-                                  <button
-                                    type="button"
-                                    className="btn btn-sm btn-light"
-                                    disabled={busy === `quote-${quote.id}`}
-                                    onClick={() => releaseTransportAgreement(quote.id)}
-                                  >
-                                    {busy === `quote-${quote.id}` ? 'Releasing…' : 'Transporter unavailable — choose another'}
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          );
-                        }
-                      )
-                    ) : (
-                      <p className="muted">
-                        Waiting for registered truck
-                        owners to submit quotes.
-                      </p>
-                    )}
+              {/* Quotes */}
+              {transportJob.method === 'HIRE_TRANSPORTER' && !transportPaid && (
+                <section className="match-box">
+                  <div className="card-section-head">
+                    <h3 className="card-section-title">Transport quotes</h3>
+                    <span className="card-section-meta">Bids</span>
                   </div>
-                )}
+                  {leafTransportQuotes(transportJob.quotes)?.length ? (
+                    leafTransportQuotes(transportJob.quotes).map((quote) => {
+                      const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
+                      const isArrangerTurn = quote.status === 'SELECTED' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+                      const isTransporterQuoteOwner = quote.truckOwnerId === currentUserId;
+                      const isTransporterTurn = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
+                      const isCompetitionBid = quote.status === 'PENDING';
+                      const isWaitingOnTransporter = isTransporterTurn;
+                      return (
+                        <div className="transporter" key={quote.id}>
+                          <div>
+                            <strong>{quote.truckOwner?.name || 'Truck owner'}</strong>
+                            <p>
+                              {quote.truck?.truckType || 'Truck'}
+                              {' · '}
+                              {quote.truck?.capacity != null ? `${quote.truck.capacity}t` : 'Capacity —'}
+                              {' · '}
+                              {quote.truck?.registration || 'Registration —'}
+                              {' · '}
+                              ★ {typeof quote.truckOwner?.rating === 'number' ? quote.truckOwner.rating.toFixed(1) : '—'}
+                            </p>
+                            {quote.message && (<p className="muted">{quote.message}</p>)}
+                            <p>Status: <span className="badge">{quote.status || 'PENDING'}</span></p>
+                            {isWaitingOnTransporter && (
+                              <p className="muted">You countered {money(displayAmount)} ETB — waiting for the transporter to respond.</p>
+                            )}
+                          </div>
 
-              {/* ------------------------------------------------------------ */}
-              {/* TRANSPORT STATUS */}
-              {/* ------------------------------------------------------------ */}
+                          <div>
+                            <strong>{money(displayAmount)} ETB</strong>
 
-              {transportJob.status ===
-                'DELIVERED' && (
-                <div className="notice">
-                  <p>
-                    <strong>
-                      ✓ Transport marked as
-                      delivered.
-                    </strong>
-                  </p>
+                            {canChooseQuote && quote.status === 'ACCEPTED' && (
+                              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <span className="muted small">Provisional transporter agreement. Release it if this transporter becomes unavailable before payment.</span>
+                                <button type="button" className="btn btn-light btn-sm" disabled={busy === `quote-${quote.id}`} onClick={() => releaseTransportAgreement(quote.id)}>
+                                  {busy === `quote-${quote.id}` ? 'Releasing…' : 'Release transporter'}
+                                </button>
+                              </div>
+                            )}
 
-                  {transportJob
-                    .deliveredConfirmedAt && (
-                    <p className="muted">
-                      Delivery confirmed.
-                    </p>
+                            {canChooseQuote && isCompetitionBid && (
+                              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <button type="button" className="btn btn-primary btn-sm" disabled={busy === `quote-${quote.id}`} onClick={() => selectTransportQuote(quote.id)}>
+                                  {busy === `quote-${quote.id}` ? 'Selecting…' : 'Select bid for deal'}
+                                </button>
+                                <span className="muted small">Competition bid — selecting opens price negotiation.</span>
+                              </div>
+                            )}
+
+                            {((canChooseQuote && isArrangerTurn) || (isTransporterQuoteOwner && isTransporterTurn)) && (
+                              <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm"
+                                  disabled={busy === `quote-${quote.id}`}
+                                  onClick={() => acceptQuote(quote.id)}
+                                >
+                                  {busy === `quote-${quote.id}` ? 'Accepting…' : isTransporterTurn ? 'Accept buyer counter' : 'Accept quote'}
+                                </button>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  placeholder="Counter (ETB)"
+                                  style={{ width: 120 }}
+                                  value={transportCounterInputs[quote.id] || ''}
+                                  onChange={(e) => setTransportCounterInputs((q) => ({ ...q, [quote.id]: e.target.value }))}
+                                />
+                                <button type="button" className="btn btn-sm btn-light" disabled={busy === `quote-${quote.id}`} onClick={() => counterQuote(quote.id)}>
+                                  {busy === `quote-${quote.id}` ? 'Sending…' : 'Counter'}
+                                </button>
+                                <button type="button" className="btn btn-sm btn-light" disabled={busy === `quote-${quote.id}`} onClick={() => rejectQuote(quote.id)}>
+                                  {busy === `quote-${quote.id}` ? 'Rejecting…' : 'Reject'}
+                                </button>
+                              </div>
+                            )}
+
+                            {quote.status === 'ACCEPTED' && isTransportArranger && !transportPending && (
+                              <div style={{ marginTop: 8 }}>
+                                <p className="muted small">Provisional agreement — the truck is not committed until transport payment succeeds.</p>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-light"
+                                  disabled={busy === `quote-${quote.id}`}
+                                  onClick={() => releaseTransportAgreement(quote.id)}
+                                >
+                                  {busy === `quote-${quote.id}` ? 'Releasing…' : 'Transporter unavailable — choose another'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="muted">Waiting for registered truck owners to submit quotes.</p>
                   )}
-                </div>
+                </section>
+              )}
+
+              {/* Delivered */}
+              {transportJob.status === 'DELIVERED' && (
+                <section className="transport-section">
+                  <div className="card-section-head">
+                    <h3 className="card-section-title">Delivery</h3>
+                  </div>
+                  <p><strong>✓ Transport marked as delivered.</strong></p>
+                  {transportJob.deliveredConfirmedAt && (
+                    <p className="muted">Delivery confirmed.</p>
+                  )}
+                </section>
               )}
 
               {transportJob.incidentNotes && (
                 <div className="alert">
-                  <strong>
-                    Transport notes:
-                  </strong>{' '}
-                  {transportJob.incidentNotes}
+                  <strong>Transport notes:</strong> {transportJob.incidentNotes}
                 </div>
               )}
             </>
@@ -2892,11 +2091,7 @@ export default function OrderDetail() {
         </div>
 
         {/* ================================================================== */}
-        {/* ORDER PAYOUT STATUS                                               */}
-        {/* Seller, transporter and inspector payouts combined into a single */}
-        {/* summary card. Visible to every order participant — not just the  */}
-        {/* payee themselves — since the buyer funded these payouts and      */}
-        {/* should be able to see they're on hold too.                       */}
+        {/* PAYOUT                                                             */}
         {/* ================================================================== */}
 
         {order && (
@@ -2918,9 +2113,7 @@ export default function OrderDetail() {
         )}
 
         {/* ================================================================== */}
-        {/* REFUND STATUS                                                     */}
-        {/* Only renders when a refund exists or a payout is frozen by a      */}
-        {/* dispute — the "what happens to a held payout" follow-up card.     */}
+        {/* REFUND                                                             */}
         {/* ================================================================== */}
 
         {order && (
@@ -2945,16 +2138,20 @@ export default function OrderDetail() {
         )}
 
         {/* ================================================================== */}
-        {/* PRODUCT MARKETPLACE OFFER GATE                                    */}
+        {/* PRODUCT OFFER                                                      */}
         {/* ================================================================== */}
 
         {order && isProductsMarketplace && isBuyer && !order.agreedOfferId && (
-          <section className="card order-product-offer-card" id="make-offer" aria-labelledby="make-offer-title">
-            <div className="order-product-offer-kicker">PRODUCT MARKETPLACE</div>
-            <h2 id="make-offer-title">Make Offer</h2>
-            <p className="muted">
-              Enter the amount you want to offer for this product. Your offer enters the seller's competition process; it does not charge you or reserve the product.
-            </p>
+          <section className="card" id="make-offer" aria-labelledby="make-offer-title">
+            <div className="card-head">
+              <div className="card-head-main">
+                <span className="eyebrow">PRODUCT MARKETPLACE</span>
+                <h2 id="make-offer-title" className="card-title">Make Offer</h2>
+                <p className="card-subtitle">
+                  Your offer enters the seller's competition process; it does not charge you or reserve the product.
+                </p>
+              </div>
+            </div>
             <form onSubmit={submitProductOffer} className="order-product-offer-form">
               <label htmlFor="order-product-offer-amount">Offer amount (ETB)</label>
               <input id="order-product-offer-amount" type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter your offer amount (ETB)" value={offerAmount} onChange={(event) => setOfferAmount(event.target.value)} disabled={submittingOffer} required />
@@ -2967,9 +2164,10 @@ export default function OrderDetail() {
           </section>
         )}
 
-        {/* Payment is hidden while a Product Marketplace order is still in
-         * competition. It becomes visible only after a provisional offer
-         * has been agreed. */}
+        {/* ================================================================== */}
+        {/* PAYMENT CENTER                                                     */}
+        {/* ================================================================== */}
+
         {(!isProductsMarketplace || order?.agreedOfferId) && (
           <PaymentCenter
             workflowPayments={workflow?.payments}
@@ -2988,87 +2186,75 @@ export default function OrderDetail() {
         )}
 
         {/* ================================================================== */}
-        {/* CONFIRM RECEIPT */}
+        {/* CONFIRM RECEIPT                                                    */}
         {/* ================================================================== */}
 
-        {order.status === 'DELIVERED' &&
-          isBuyer && (
-            <div className="card" id="confirm-receipt">
-              <h2>
-                Confirm receipt
-              </h2>
-
-              <p className="muted">
-                Confirm only after you have physically
-                received the produce/product.
-              </p>
-
-              {!marketplacePaid && (
-                <div className="alert error">
-                  Marketplace payment must be
-                  confirmed before receipt can be
-                  completed.
-                </div>
-              )}
-
-              {transportJob?.method ===
-                'HIRE_TRANSPORTER' &&
-                !transportPaid && (
-                  <div className="alert error">
-                    Transport payment must be
-                    confirmed before receipt can be
-                    completed.
-                  </div>
-                )}
-
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={
-                  busy === 'receipt' ||
-                  !marketplacePaid ||
-                  (
-                    transportJob?.method ===
-                      'HIRE_TRANSPORTER' &&
-                    !transportPaid
-                  )
-                }
-                onClick={confirmReceipt}
-              >
-                {busy === 'receipt'
-                  ? 'Confirming…'
-                  : 'Confirm receipt & complete order'}
-              </button>
+        {order.status === 'DELIVERED' && isBuyer && (
+          <div className="card" id="confirm-receipt">
+            <div className="card-head">
+              <div className="card-head-main">
+                <span className="eyebrow">FINAL STEP</span>
+                <h2 className="card-title">Confirm receipt</h2>
+                <p className="card-subtitle">Confirm only after you have physically received the produce/product.</p>
+              </div>
             </div>
-          )}
+
+            {!marketplacePaid && (
+              <div className="alert error">Marketplace payment must be confirmed before receipt can be completed.</div>
+            )}
+
+            {transportJob?.method === 'HIRE_TRANSPORTER' && !transportPaid && (
+              <div className="alert error">Transport payment must be confirmed before receipt can be completed.</div>
+            )}
+
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ width: '100%' }}
+              disabled={
+                busy === 'receipt' ||
+                !marketplacePaid ||
+                (transportJob?.method === 'HIRE_TRANSPORTER' && !transportPaid)
+              }
+              onClick={confirmReceipt}
+            >
+              {busy === 'receipt' ? 'Confirming…' : 'Confirm receipt & complete order'}
+            </button>
+          </div>
+        )}
 
         {/* ================================================================== */}
-        {/* RAISE DISPUTE */}
+        {/* DISPUTE                                                            */}
         {/* ================================================================== */}
 
         {order.status === 'DISPUTED' ? (
           <div className="card card-warning" id="raise-dispute">
-            <h2>Dispute open</h2>
+            <div className="card-head">
+              <div className="card-head-main">
+                <span className="eyebrow">DISPUTE</span>
+                <h2 className="card-title">Dispute open</h2>
+              </div>
+            </div>
             <p className="muted" style={{ marginBottom: 0 }}>
-              An admin is reviewing this order. <strong>Payments, transport, inspection
-              and payouts are paused</strong> while the dispute is open. The order will
-              either resume its previous state or be cancelled and refunded after review.
+              An admin is reviewing this order. <strong>Payments, transport, inspection and payouts are paused</strong> while the dispute is open. The order will either resume its previous state or be cancelled and refunded after review.
             </p>
           </div>
         ) : (
           canRaiseDispute && (
             <div className="card" id="raise-dispute">
-              <h2>Raise a dispute</h2>
-              <p className="muted">
-                Use this if something went wrong with this order — for
-                example goods not delivered, quality issues, or a payment
-                problem. An admin will review it.
-              </p>
+              <div className="card-head">
+                <div className="card-head-main">
+                  <span className="eyebrow">DISPUTE</span>
+                  <h2 className="card-title">Raise a dispute</h2>
+                  <p className="card-subtitle">
+                    Use this if something went wrong — goods not delivered, quality issues, or a payment problem.
+                  </p>
+                </div>
+              </div>
 
               {disputeSubmitted ? (
                 <div className="alert success">
-                  Dispute submitted. The order is now marked as disputed
-                  while an admin reviews it.
+                  Dispute submitted. The order is now marked as disputed while an admin reviews it.
                 </div>
               ) : (
                 <form onSubmit={raiseDispute}>
@@ -3090,10 +2276,7 @@ export default function OrderDetail() {
 
                   <label>
                     Type
-                    <select
-                      value={disputeType}
-                      onChange={(e) => setDisputeType(e.target.value)}
-                    >
+                    <select value={disputeType} onChange={(e) => setDisputeType(e.target.value)}>
                       <option value="NOT_DELIVERED">Goods not delivered</option>
                       <option value="QUALITY_ISSUE">Quality issue</option>
                       <option value="DAMAGED_GOODS">Damaged goods</option>
@@ -3114,11 +2297,7 @@ export default function OrderDetail() {
                     />
                   </label>
 
-                  <button
-                    type="submit"
-                    className="btn btn-outline"
-                    disabled={submittingDispute}
-                  >
+                  <button type="submit" className="btn btn-outline" disabled={submittingDispute}>
                     {submittingDispute ? 'Submitting…' : 'Raise dispute'}
                   </button>
                 </form>
@@ -3128,48 +2307,36 @@ export default function OrderDetail() {
         )}
 
         {/* ================================================================== */}
-        {/* COMPLETED */}
+        {/* COMPLETED                                                          */}
         {/* ================================================================== */}
 
         {order.status === 'COMPLETED' && (
           <div className="card">
-            <h2>
-              Order completed
-            </h2>
-
+            <div className="card-head">
+              <div className="card-head-main">
+                <span className="eyebrow">CLOSED</span>
+                <h2 className="card-title">Order completed</h2>
+              </div>
+            </div>
             <div className="notice">
-              <p>
-                <strong>
-                  ✓ This order has been completed.
-                </strong>
-              </p>
-
-              <p className="muted">
-                Receipt was confirmed by the
-                buyer.
-              </p>
+              <p><strong>✓ This order has been completed.</strong></p>
+              <p className="muted">Receipt was confirmed by the buyer.</p>
             </div>
           </div>
         )}
 
-        {/* Payment records now live inside the Payment Center's expandable */}
-        {/* "Show payment history" toggle above, instead of a separate */}
-        {/* always-visible card repeating the same rows. */}
-
         {/* ================================================================== */}
-        {/* RATING */}
+        {/* RATING                                                             */}
         {/* ================================================================== */}
 
         <RatingBox
           order={order}
           userId={currentUserId}
-          onRated={() =>
-            load({ silent: true })
-          }
+          onRated={() => load({ silent: true })}
         />
 
         {/* ================================================================== */}
-        {/* MESSAGES */}
+        {/* MESSAGES                                                           */}
         {/* ================================================================== */}
 
         {counterpartId && (
@@ -3179,22 +2346,23 @@ export default function OrderDetail() {
             counterpartId={counterpartId}
             counterpartName={counterpartName}
             currentUserId={currentUserId}
-            onSent={() =>
-              load({ silent: true })
-            }
+            onSent={() => load({ silent: true })}
           />
         )}
 
         {/* ================================================================== */}
-        {/* ADMIN INDICATOR */}
+        {/* ADMIN INDICATOR                                                    */}
         {/* ================================================================== */}
 
         {isAdmin && (
           <div className="card">
-            <p className="muted">
-              You are viewing this order with
-              administrator access.
-            </p>
+            <div className="card-head">
+              <div className="card-head-main">
+                <span className="eyebrow">ADMIN</span>
+                <h2 className="card-title">Administrator view</h2>
+                <p className="card-subtitle">You are viewing this order with administrator access.</p>
+              </div>
+            </div>
           </div>
         )}
       </div>
