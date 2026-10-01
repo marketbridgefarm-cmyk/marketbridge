@@ -1340,50 +1340,15 @@ export default function OrderDetail() {
         <div className="card order-overview-card">
           <div className="card-head">
             <div className="card-head-main">
-              <span className="eyebrow">ORDER {shortId(order.id)}</span>
+              <span className="eyebrow" aria-hidden="true" />
               <h1 className="card-title">{title}</h1>
-              <p className="card-subtitle">
-                {order.listing?.location && (
-                  <>
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M12 21s-7-5.7-7-11a7 7 0 1 1 14 0c0 5.3-7 11-7 11z" fill="none" stroke="currentColor" strokeWidth="1.8" />
-                      <circle cx="12" cy="10" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.8" />
-                    </svg>
-                    <span>{order.listing.location}</span>
-                  </>
-                )}
-                {order.listing?.cropType && (
-                  <>
-                    {order.listing?.location && <span aria-hidden="true">·</span>}
-                    <span>{order.listing.cropType}</span>
-                  </>
-                )}
-                {order.listing?.quantity != null && (
-                  <>
-                    {(order.listing?.location || order.listing?.cropType) && <span aria-hidden="true">·</span>}
-                    <span>{order.listing.quantity} units</span>
-                  </>
-                )}
-              </p>
-            </div>
-
-            <div className="card-head-side">
-              <span className="card-side-label">Seller</span>
-              <div className="card-side-party">
-                <div>
-                  <span className="card-side-value">{order.seller?.name || '—'}</span>
-                </div>
-                <span className="party-avatar party-avatar-seller" aria-hidden="true">
-                  {initials(order.seller?.name)}
-                </span>
-              </div>
+              <p className="card-subtitle">Ordered Produce</p>
             </div>
           </div>
 
           <section className="card-section">
             <div className="card-section-head">
               <h3 className="card-section-title">Order status</h3>
-              <span className="card-section-meta">ORD {shortId(order.id)}</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               <span className={`status-pill tone-${statusTone(order.status)}`}>
@@ -1413,58 +1378,43 @@ export default function OrderDetail() {
           <section className="card-section">
             <div className="card-section-head">
               <h3 className="card-section-title">Parties</h3>
-              <span className="card-section-meta">Buyer &amp; seller</span>
             </div>
-            <div className="party-list party-list-inline">
-              <div className="party-row">
-                <span className="party-avatar" aria-hidden="true">{initials(order.buyer?.name)}</span>
-                <div>
-                  <span className="party-role">Buyer</span>
-                  <strong className="party-name">{order.buyer?.name || '—'}</strong>
-                </div>
-                {isBuyer && <span className="party-you">You</span>}
+            <div className="detail-facts">
+              <div>
+                <span>Buyer</span>
+                <strong>
+                  {order.buyer?.name || '—'}
+                  {isBuyer && <span className="party-you party-you-inline">You</span>}
+                </strong>
               </div>
-
-              <div className="party-row">
-                <span className="party-avatar party-avatar-seller" aria-hidden="true">{initials(order.seller?.name)}</span>
-                <div>
-                  <span className="party-role">Seller</span>
-                  <strong className="party-name">{order.seller?.name || '—'}</strong>
-                </div>
-                {isSeller && <span className="party-you">You</span>}
+              <div>
+                <span>Seller</span>
+                <strong>
+                  {order.seller?.name || '—'}
+                  {isSeller && <span className="party-you party-you-inline">You</span>}
+                </strong>
               </div>
             </div>
           </section>
 
           <section className="card-section">
             <div className="card-section-head">
-              <h3 className="card-section-title">Amount</h3>
-              <span className="card-section-meta">{money(order.finalPrice)} ETB</span>
+              <h3 className="card-section-title">Order Details</h3>
             </div>
-            <div className="order-overview-facts">
-              <div className="order-overview-fact">
-                <span>Order</span>
-                <strong>{shortId(order.id)}</strong>
-              </div>
-              <div className="order-overview-fact">
-                <span>Amount</span>
-                <strong>{money(order.finalPrice)} ETB</strong>
-              </div>
+            <div className="detail-facts">
+              <div><span>Amount</span><strong>{money(order.finalPrice)} ETB</strong></div>
               {order.listing?.cropType && (
-                <div className="order-overview-fact">
-                  <span>Product</span>
-                  <strong>{order.listing.cropType}</strong>
-                </div>
+                <div><span>Product</span><strong>{order.listing.cropType}</strong></div>
               )}
               {order.listing?.quantity != null && (
-                <div className="order-overview-fact">
-                  <span>Quantity</span>
-                  <strong>{order.listing.quantity}</strong>
-                </div>
+                <div><span>Quantity</span><strong>{order.listing.quantity} units</strong></div>
               )}
-            </div>
-            <div className="meta-line">
-              <span>Created {formatDateTime(order.createdAt)}</span>
+              <div><span>Ordered from</span><strong>{order.listing?.location || '—'}</strong></div>
+              {order.buyer?.location && (
+                <div><span>Deliver to</span><strong>{order.buyer.location}</strong></div>
+              )}
+              <div><span>Ordered date</span><strong>{formatDateTime(order.createdAt)}</strong></div>
+              <div><span>Order ID</span><strong>{shortId(order.id)}</strong></div>
             </div>
           </section>
 
@@ -1586,8 +1536,16 @@ export default function OrderDetail() {
                   <>
                     <div className="detail-facts">
                       <div><span>Status</span><strong>Completed</strong></div>
+                      <div><span>Product</span><strong>{order.listing?.cropType || title}</strong></div>
+                      <div><span>Quantity</span><strong>{order.listing?.quantity != null ? `${order.listing.quantity} units` : '—'}</strong></div>
+                      <div><span>Location</span><strong>{order.listing?.location || '—'}</strong></div>
+                      <div><span>Requested by</span><strong>{request.mode === 'SELLER_REQUESTED' ? 'Seller' : 'Buyer'}</strong></div>
+                      <div><span>Requested on</span><strong>{formatDateTime(request.createdAt)}</strong></div>
                       <div><span>Inspection date</span><strong>{formatDateTime(inspectionDate)}</strong></div>
                       <div><span>Inspected by</span><strong>{inspectorName || '—'}</strong></div>
+                      {request.fee != null && (
+                        <div><span>Inspection fee</span><strong>{money(request.fee)} ETB</strong></div>
+                      )}
                       <div><span>Visible defects</span><strong>{report.visibleDefects || 'No Defects'}</strong></div>
                       <div><span>Damage notes</span><strong>{report.damageNotes || 'No Damage'}</strong></div>
                       <div><span>Packaging notes</span><strong>{report.packagingNotes || 'Fully packed'}</strong></div>
@@ -2417,7 +2375,6 @@ export default function OrderDetail() {
             onClick={() => setError('')}
             aria-label="Dismiss message"
           >
-            
             ×
           </button>
         </div>
@@ -2425,3 +2382,4 @@ export default function OrderDetail() {
     </main>
   );
 }
+                               
