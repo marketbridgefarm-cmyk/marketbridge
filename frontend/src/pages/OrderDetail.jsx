@@ -956,21 +956,6 @@ export default function OrderDetail() {
     }
   };
 
-  const reopenTransportBidding = async () => {
-    if (!transportJob || !isTransportArranger) return;
-    if (!window.confirm('Reopen transport bidding? Previous truck-owner bids will be expired and fresh bids can be submitted.')) return;
-    setBusy(`reopen-transport-${transportJob.id}`);
-    setError('');
-    try {
-      await api.patch(`/transport/${transportJob.id}/reopen-bidding`);
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not reopen transport bidding'));
-    } finally {
-      setBusy('');
-    }
-  };
-
   const releaseTransportAgreement = async (quoteId) => {
     if (!quoteId) return;
 
@@ -1172,7 +1157,13 @@ export default function OrderDetail() {
     }
   };
 
-  const inspectionFormReleased = recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'APPROVED' && r.formReleasedAt);
+  const recoveryFor = (type) => recoveryRequests.find((r) => r.type === type && r.status === 'APPROVED' && r.formReleasedAt) || null;
+  const partyKeyForCurrentUser = isBuyer ? 'BUYER' : isSeller ? 'SELLER' : null;
+  const inspectionRecovery = recoveryFor('INSPECTION');
+  const transportRecovery = recoveryFor('TRANSPORT');
+  const inspectionFormReleased = Boolean(inspectionRecovery);
+  const inspectionFormReleasedToCurrentUser = Boolean(inspectionRecovery && partyKeyForCurrentUser && (inspectionRecovery.targetParties || []).includes(partyKeyForCurrentUser));
+  const transportFormReleasedToCurrentUser = Boolean(transportRecovery && partyKeyForCurrentUser && (transportRecovery.targetParties || []).includes(partyKeyForCurrentUser));
 
   const requestInspection = async (mode) => {
     if (!order?.listing) return;
@@ -1212,20 +1203,7 @@ export default function OrderDetail() {
     }
   };
 
-  const reopenInspectionBidding = async () => {
-    if (!currentInspectionRequest) return;
-    if (!window.confirm('Reopen inspection bidding? Previous inspection bids will be expired and inspectors can submit fresh bids.')) return;
-    setBusy(`reopen-inspection-${currentInspectionRequest.id}`);
-    setError('');
-    try {
-      await api.patch(`/inspections/${currentInspectionRequest.id}/reopen-bidding`);
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not reopen inspection bidding'));
-    } finally {
-      setBusy('');
-    }
-  };
+
 
 
   // ==========================================================================
@@ -2074,13 +2052,13 @@ export default function OrderDetail() {
               {['REQUESTED', 'ACCEPTED'].includes(currentInspectionRequest.status) && isParticipant && (
                 <div className="notice" style={{ marginTop: 10 }}>
                   <strong>Inspection recovery</strong>
-                  <p className="muted">If every inspector bid is closed, you can reopen bidding. If you no longer want this request, cancel it without cancelling the order.</p>
+                  <p className="muted">If the inspection competition has stalled, request MarketBridge admin approval. Admin controls when a fresh requesting form is released. You may cancel this request without cancelling the order.</p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-                    <button type="button" className="btn btn-primary" disabled={Boolean(busy)} onClick={reopenInspectionBidding}>
-                      {busy === `reopen-inspection-${currentInspectionRequest.id}` ? 'Reopening…' : 'Reopen inspection bidding'}
-                    </button>
                     <button type="button" className="btn btn-light" disabled={Boolean(busy)} onClick={cancelInspectionRequest}>
                       {busy === `cancel-inspection-${currentInspectionRequest.id}` ? 'Cancelling…' : 'Cancel inspection request'}
+                    </button>
+                    <button type="button" className="btn btn-primary" disabled={Boolean(busy) || recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'PENDING')} onClick={() => requestWorkflowRecovery('INSPECTION', isBuyer ? ['BUYER'] : ['SELLER'], 'Inspection competition has no usable live bid or the previous inspection arrangement is no longer available.')}>
+                      {busy === 'recovery-INSPECTION' ? 'Requesting…' : 'Request admin to release fresh inspection form'}
                     </button>
                   </div>
                 </div>
@@ -2150,7 +2128,9 @@ export default function OrderDetail() {
               <p className="muted">Request an independent quality check for this order before the purchase is finally committed.</p>
               <p className="muted">All registered inspectors can compete for this request by submitting a sealed fee quote. You compare the bids, select one for negotiation, and only the accepted negotiated quote assigns the inspector. The inspection fee commits the inspector; the completed report is then reviewed before goods payment.</p>
               {allInspectionRequests.length > 0 && !inspectionFormReleased ? (
-                <p className="muted"><strong>Admin approval required.</strong> Ask MarketBridge admin to release a fresh inspection requesting form before opening another competition.</p>
+                <p className="muted"><strong>Admin approval required.</strong> Request MarketBridge admin to release a fresh inspection requesting form before opening another competition.</p>
+              ) : allInspectionRequests.length > 0 && !inspectionFormReleasedToCurrentUser ? (
+                <p className="muted"><strong>Form released to the requested party only.</strong> This fresh inspection requesting form was not released to your party.</p>
               ) : (
                 <button
                   type="button"
@@ -2193,7 +2173,7 @@ export default function OrderDetail() {
           </div>
 
           {!transportJob ? (
-            canArrangeTransport ? (
+            canArrangeTransport && (!cancelledTransportJob || transportFormReleasedToCurrentUser) ? (
               <TransportSetup
                 orderId={order.id}
                 pickupDefault={order.listing?.location}
@@ -2204,10 +2184,11 @@ export default function OrderDetail() {
               />
             ) : (
               <div className="notice">
-                <p>
-                  No transport arrangement recorded
-                  yet.
-                </p>
+                {cancelledTransportJob && !transportFormReleasedToCurrentUser ? (
+                  <p><strong>Admin approval required.</strong> The previous transport was cancelled. A fresh transport requesting form will appear here only after MarketBridge admin releases it to your party.</p>
+                ) : (
+                  <p>No transport arrangement recorded yet.</p>
+                )}
               </div>
             )
           ) : (
