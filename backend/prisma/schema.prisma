@@ -760,6 +760,10 @@ model InspectionRequest {
 
   status InspectionStatus @default(REQUESTED)
 
+  // Deadline for the open inspection-request/quote competition. Accepted or
+  // in-progress inspections are never auto-expired by maintenance.
+  workflowDueAt DateTime?
+
   fee Decimal? @db.Decimal(18, 2)
 
   createdAt DateTime @default(now())
@@ -779,6 +783,7 @@ model InspectionRequest {
   @@index([inspectorId])
   @@index([status])
   @@index([location])
+  @@index([workflowDueAt])
 }
 
 // ============================================================================
@@ -814,7 +819,6 @@ model InspectionQuote {
   counteredBy QuoteCounterParty?
 
   expiresAt DateTime?
-  withdrawalReason String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1030,6 +1034,10 @@ model TransportJob {
 
   status TransportStatus @default(REQUESTED)
 
+  // Deadline for the open transport-request/quote competition. Accepted,
+  // pickup, transit, and delivered jobs are never auto-expired.
+  workflowDueAt DateTime?
+
   pickupConfirmedAt   DateTime?
   deliveredConfirmedAt DateTime?
 
@@ -1050,6 +1058,7 @@ model TransportJob {
   @@index([truckId])
   @@index([status])
   @@index([method])
+  @@index([workflowDueAt])
 }
 
 // ============================================================================
@@ -1116,7 +1125,6 @@ model TransportQuote {
   counteredBy QuoteCounterParty?
 
   expiresAt DateTime?
-  withdrawalReason String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
