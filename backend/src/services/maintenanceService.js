@@ -42,101 +42,77 @@ async function expireOffers(now = new Date()) {
   return { expired };
 }
 
-
-async function expireInspectionQuotes(now = new Date()) {
-  const quotes = await prisma.inspectionQuote.findMany({
-    where: { status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] }, expiresAt: { lte: now } },
-    select: {
-      id: true,
-      inspectionRequestId: true,
-      status: true,
-      expiresAt: true,
-      inspectionRequest: { select: { orderId: true } },
-    },
-    take: 500,
+async function expireInspectionWorkflows(now = new Date()) {
+  const candidates = await prisma.inspectionRequest.findMany({
+    where: { status: 'REQUESTED', workflowDueAt: { lte: now } },
+    select: { id: true, orderId: true, workflowDueAt: true }, take: 200,
   });
-
   let expired = 0;
-  for (const quote of quotes) {
-    const changed = await prisma.$transaction(async (tx) => {
-      const updated = await tx.inspectionQuote.updateMany({
-        where: {
-          id: quote.id,
-          status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
-          expiresAt: { lte: now },
-        },
-        data: { status: 'EXPIRED' },
-      });
-      if (updated.count !== 1) return false;
-
-      await recordAuditEvent(tx, {
-        actorId: null,
-        action: 'INSPECTION_QUOTE_EXPIRED_AUTOMATICALLY',
-        resourceType: 'InspectionQuote',
-        resourceId: quote.id,
-        metadata: { inspectionRequestId: quote.inspectionRequestId, expiresAt: quote.expiresAt },
-      });
-
-      if (quote.inspectionRequest?.orderId) {
-        await recordOrderEvent(tx, {
-          orderId: quote.inspectionRequest.orderId,
-          actorId: null,
-          type: 'INSPECTION_QUOTE_EXPIRED',
-          metadata: { quoteId: quote.id, inspectionRequestId: quote.inspectionRequestId, expiresAt: quote.expiresAt },
+  for (const candidate of candidates) {
+    try {
+      const changed = await prisma.$transaction(async (tx) => {
+        const request = await tx.inspectionRequest.findUnique({ where: { id: candidate.id } });
+        if (!request || request.status !== 'REQUESTED' || !request.workflowDueAt || request.workflowDueAt > now) return false;
+        await tx.inspectionRequest.update({ where: { id: request.id }, data: { status: 'CANCELLED' } });
+        await tx.inspectionQuote.updateMany({
+          where: { inspectionRequestId: request.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
+          data: { status: 'EXPIRED' },
         });
-      }
-      return true;
-    }, { maxWait: 10000, timeout: 15000 });
-    if (changed) expired += 1;
+        if (request.orderId) {
+          await recordOrderEvent(tx, {
+            orderId: request.orderId, actorId: null, type: 'INSPECTION_WORKFLOW_EXPIRED',
+            fromStatus: 'REQUESTED', toStatus: 'CANCELLED',
+            metadata: { inspectionRequestId: request.id, workflowDueAt: request.workflowDueAt.toISOString() },
+          });
+        }
+        await recordAuditEvent(tx, {
+          actorId: null, action: 'INSPECTION_WORKFLOW_EXPIRED', resourceType: 'InspectionRequest', resourceId: request.id,
+          metadata: { orderId: request.orderId, workflowDueAt: request.workflowDueAt.toISOString() },
+        });
+        return true;
+      }, { maxWait: 10000, timeout: 15000 });
+      if (changed) expired += 1;
+    } catch (error) {
+      logger.error({ err: error, inspectionRequestId: candidate.id }, 'Failed to expire inspection workflow');
+    }
   }
   return { expired };
 }
 
-async function expireTransportQuotes(now = new Date()) {
-  const quotes = await prisma.transportQuote.findMany({
-    where: { status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] }, expiresAt: { lte: now } },
-    select: {
-      id: true,
-      transportJobId: true,
-      status: true,
-      expiresAt: true,
-      transportJob: { select: { orderId: true } },
-    },
-    take: 500,
+async function expireTransportWorkflows(now = new Date()) {
+  const candidates = await prisma.transportJob.findMany({
+    where: { status: { in: ['REQUESTED', 'QUOTED'] }, workflowDueAt: { lte: now } },
+    select: { id: true, orderId: true, status: true, truckId: true, workflowDueAt: true }, take: 200,
   });
-
   let expired = 0;
-  for (const quote of quotes) {
-    const changed = await prisma.$transaction(async (tx) => {
-      const updated = await tx.transportQuote.updateMany({
-        where: {
-          id: quote.id,
-          status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
-          expiresAt: { lte: now },
-        },
-        data: { status: 'EXPIRED' },
-      });
-      if (updated.count !== 1) return false;
-
-      await recordAuditEvent(tx, {
-        actorId: null,
-        action: 'TRANSPORT_QUOTE_EXPIRED_AUTOMATICALLY',
-        resourceType: 'TransportQuote',
-        resourceId: quote.id,
-        metadata: { transportJobId: quote.transportJobId, expiresAt: quote.expiresAt },
-      });
-
-      if (quote.transportJob?.orderId) {
-        await recordOrderEvent(tx, {
-          orderId: quote.transportJob.orderId,
-          actorId: null,
-          type: 'TRANSPORT_QUOTE_EXPIRED',
-          metadata: { quoteId: quote.id, transportJobId: quote.transportJobId, expiresAt: quote.expiresAt },
+  for (const candidate of candidates) {
+    try {
+      const changed = await prisma.$transaction(async (tx) => {
+        const job = await tx.transportJob.findUnique({ where: { id: candidate.id } });
+        if (!job || !['REQUESTED', 'QUOTED'].includes(job.status) || !job.workflowDueAt || job.workflowDueAt > now) return false;
+        await tx.transportJob.update({ where: { id: job.id }, data: { status: 'CANCELLED', workflowDueAt: null } });
+        await tx.transportQuote.updateMany({
+          where: { transportJobId: job.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
+          data: { status: 'EXPIRED' },
         });
-      }
-      return true;
-    }, { maxWait: 10000, timeout: 15000 });
-    if (changed) expired += 1;
+        if (job.truckId) {
+          await tx.truck.updateMany({ where: { id: job.truckId, availability: 'BUSY' }, data: { availability: 'AVAILABLE' } });
+        }
+        await recordOrderEvent(tx, {
+          orderId: job.orderId, actorId: null, type: 'TRANSPORT_WORKFLOW_EXPIRED',
+          fromStatus: job.status, toStatus: 'CANCELLED',
+          metadata: { transportJobId: job.id, workflowDueAt: job.workflowDueAt.toISOString() },
+        });
+        await recordAuditEvent(tx, {
+          actorId: null, action: 'TRANSPORT_WORKFLOW_EXPIRED', resourceType: 'TransportJob', resourceId: job.id,
+          metadata: { orderId: job.orderId, workflowDueAt: job.workflowDueAt.toISOString() },
+        });
+        return true;
+      }, { maxWait: 10000, timeout: 15000 });
+      if (changed) expired += 1;
+    } catch (error) {
+      logger.error({ err: error, transportJobId: candidate.id }, 'Failed to expire transport workflow');
+    }
   }
   return { expired };
 }
@@ -366,10 +342,10 @@ async function runMaintenanceCycle() {
   return withJobLock(async () => {
     const startedAt = Date.now();
     const now = new Date();
-    const [offers, inspectionQuotes, transportQuotes, listings, ads, adsActivated, reminders, unpaidOrders, sms, payouts, refundSync] = await Promise.all([
-      expireOffers(now), expireInspectionQuotes(now), expireTransportQuotes(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), sendPendingSms(now), releaseDuePayouts(prisma, now), syncProcessingRefunds(),
+    const [offers, listings, ads, adsActivated, reminders, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, refundSync] = await Promise.all([
+      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), expireInspectionWorkflows(now), expireTransportWorkflows(now), sendPendingSms(now), releaseDuePayouts(prisma, now), syncProcessingRefunds(),
     ]);
-    return { durationMs: Date.now() - startedAt, offers, inspectionQuotes, transportQuotes, listings, ads, adsActivated, reminders, unpaidOrders, sms, payouts, refundSync };
+    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, refundSync };
   });
 }
 
@@ -388,4 +364,4 @@ function startMaintenanceScheduler() {
   return setInterval(tick, intervalMs);
 }
 
-module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireInspectionQuotes, expireTransportQuotes, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, sendPendingSms, releaseDuePayouts, syncProcessingRefunds };
+module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, expireInspectionWorkflows, expireTransportWorkflows, expireUnpaidOrders, sendPendingSms, releaseDuePayouts, syncProcessingRefunds };
