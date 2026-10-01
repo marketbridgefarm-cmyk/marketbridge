@@ -1129,6 +1129,8 @@ model TransportQuote {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  payments Payment[] @relation("PaymentTransportQuote")
+
   @@index([transportJobId])
   @@index([truckOwnerId])
   @@index([truckId])
@@ -1433,6 +1435,11 @@ model Payment {
   transportJob   TransportJob? @relation(fields: [transportJobId], references: [id])
   transportJobId String?
 
+  // Exact accepted quote a hired-transport payment is bound to
+  // (see migration 202610010004_bind_transport_payment_to_quote).
+  transportQuote   TransportQuote? @relation("PaymentTransportQuote", fields: [transportQuoteId], references: [id])
+  transportQuoteId String?
+
   // --------------------------------------------------------------------------
   // DIGITAL PURCHASE
   // --------------------------------------------------------------------------
@@ -1547,6 +1554,7 @@ model Payment {
   @@index([inspectionRequestId])
   @@index([advertisementId])
   @@index([transportJobId])
+  @@index([transportQuoteId])
   @@index([type])
   @@index([status])
   @@index([reference])
