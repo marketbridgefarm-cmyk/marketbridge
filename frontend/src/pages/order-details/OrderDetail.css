@@ -39,9 +39,9 @@
   --d-info-line:   #cddff5;
 
   /* Shape — one radius family, one shadow */
-  --d-radius:      16px;
-  --d-radius-sm:   10px;
-  --d-shadow:      0 1px 2px rgba(15, 30, 45, .05);
+  --d-radius:      28px;
+  --d-radius-sm:   16px;
+  --d-shadow:      0 1px 2px rgba(15, 30, 45, .04), 0 18px 40px rgba(15, 30, 45, .07);
   --d-ring:        0 0 0 3px rgba(30, 158, 90, .2);
   --d-ease:        cubic-bezier(.2, .7, .3, 1);
 
@@ -51,7 +51,11 @@
 
   min-height: calc(100vh - 72px);
   color: var(--d-ink);
-  background: var(--d-page);
+  background:
+    radial-gradient(circle at 88% 0%, rgba(230, 245, 236, .85), transparent 40%),
+    radial-gradient(circle at 5% 100%, rgba(231, 235, 245, .8), transparent 40%),
+    linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
+  background-attachment: fixed;
   font-family: var(--mb-font-body, 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
   -webkit-font-smoothing: antialiased;
 }
@@ -95,14 +99,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: var(--d-radius-sm);
-  border: 1px solid var(--d-line);
+  gap: 8px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 16px;
+  border: 1.5px solid var(--d-line);
   background: #fff;
   color: var(--d-ink);
-  font: 700 14px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 700 15px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   text-decoration: none;
   cursor: pointer;
   transition: border-color .15s var(--d-ease), background .15s var(--d-ease), color .15s var(--d-ease);
@@ -112,7 +116,7 @@
 .order-detail-page .btn:disabled { opacity: .55; cursor: not-allowed; }
 
 .order-detail-page .btn-sm    { height: 34px; padding: 0 12px; font-size: 13px; }
-.order-detail-page .btn-block { width: 100%; margin-top: 8px; }
+.order-detail-page .btn-block { width: 100%; height: 52px; margin-top: 20px; color: var(--d-ink); }
 
 .order-detail-page .btn-primary,
 .order-detail-page .btn.primary {
@@ -154,7 +158,7 @@
 .order-detail-page .card {
   margin: 0;                    /* gap handled by container */
   padding: var(--d-card-pad);
-  border: 1px solid var(--d-line);
+  border: 1.5px solid var(--d-accent-line);
   border-radius: var(--d-radius);
   background: #fff;
   box-shadow: var(--d-shadow);
@@ -200,10 +204,10 @@
 .order-detail-page .card-title {
   margin: 0;
   font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 19px;
+  font-size: 22px;
   font-weight: 800;
-  letter-spacing: -.3px;
-  line-height: 1.25;
+  letter-spacing: -.4px;
+  line-height: 1.2;
   color: var(--d-ink);
   overflow-wrap: anywhere;
 }
@@ -216,12 +220,14 @@
 }
 
 .order-detail-page .card-side-label {
-  font: 600 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .18em;
+  text-transform: uppercase;
   color: var(--d-muted);
 }
 
 .order-detail-page .card-side-value {
-  font: 700 14px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 700 17px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
   color: var(--d-ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -229,46 +235,44 @@
   max-width: 100%;
 }
 
-.order-detail-page .card-side-party { display: flex; align-items: center; gap: 10px; min-width: 0; }
-
-/* ── Card section ───────────────────────────────────────── */
-
-.order-detail-page .card-section { margin: 0 0 24px; }
-.order-detail-page .card-section:last-child { margin-bottom: 0; }
-
-.order-detail-page .card-section-head {
+.order-detail-page .card-side-party {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 0 0 10px;
-  margin: 0 0 12px;
-  border-bottom: 1px solid var(--d-line-soft);
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  text-align: right;
 }
 
 .order-detail-page .card-section-title {
   margin: 0;
   font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 800;
-  letter-spacing: -.1px;
+  letter-spacing: -.2px;
   line-height: 1.3;
   color: var(--d-ink);
 }
 
 .order-detail-page .card-section-meta {
-  font: 600 13px/1.2 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 800 15px/1.2 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .04em;
+  text-transform: uppercase;
   color: var(--d-muted);
   font-variant-numeric: tabular-nums;
 }
 .order-detail-page .card-section-meta.is-strong { color: var(--d-ink); font-weight: 800; }
 
 /* Legacy support: components that still emit these classes */
+.order-detail-page .eyebrow::before { content: ''; flex: 0 0 28px; height: 3px; border-radius: 3px; background: currentColor; }
 .order-detail-page .eyebrow {
-  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 4px;
   color: var(--d-accent-ink);
-  font: 700 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 800 14px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .26em;
+  text-transform: uppercase;
 }
 .order-detail-page .card > h2 {
   padding: 0 0 14px;
@@ -294,36 +298,20 @@
 .order-detail-page .status-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 26px;
-  padding: 0 10px;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 16px;
   border-radius: 999px;
-  border: 1px solid var(--d-line);
+  border: 1.5px solid var(--d-line);
   background: var(--d-line-soft);
   color: var(--d-muted);
-  font: 700 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 800 14px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .06em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
-.order-detail-page .status-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
-
-.order-detail-page .status-pill.tone-good,
-.order-detail-page .status-pill.tone-success { background: var(--d-accent-soft); border-color: var(--d-accent-line); color: var(--d-accent-ink); }
-.order-detail-page .status-pill.tone-wait,
-.order-detail-page .status-pill.tone-gold    { background: var(--d-gold-soft); border-color: var(--d-gold-line); color: var(--d-gold); }
-.order-detail-page .status-pill.tone-bad,
-.order-detail-page .status-pill.tone-danger  { background: var(--d-danger-soft); border-color: var(--d-danger-line); color: var(--d-danger); }
-.order-detail-page .status-pill.tone-info    { background: var(--d-info-soft); border-color: var(--d-info-line); color: var(--d-info); }
-
-.order-detail-page .badge {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 9px;
-  border-radius: 999px;
-  background: var(--d-line-soft);
-  border: 1px solid var(--d-line);
-  color: var(--d-ink-soft);
-  font: 700 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+.order-detail-page .status-pill-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex: 0 0 auto;
 }
 
 /* ── Text helpers ──────────────────────────────────────── */
@@ -366,16 +354,16 @@
 /* ── Avatars & "You" tag ───────────────────────────────── */
 
 .order-detail-page .party-avatar {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
-  border-radius: 12px;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  border-radius: 18px;
   background: var(--d-info-soft);
   color: var(--d-info);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font: 800 14px/1 var(--mb-font-head, Manrope, sans-serif);
+  font: 800 20px/1 var(--mb-font-head, Manrope, sans-serif);
 }
 
 .order-detail-page .party-you {
@@ -637,4 +625,88 @@
   .order-detail-page .back-link,
   .order-detail-page .field { transition: none; }
   .order-detail-page .order-detail-toast { animation: none; }
+}
+
+/* ── Orders-list card language: progress, amount, created ── */
+
+.order-detail-page .sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+.order-detail-page .card-overview .card-title { font-size: 26px; }
+.order-detail-page .card-overview .card-head { padding-bottom: 20px; }
+
+.order-detail-page .order-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  list-style: none;
+  margin: 22px 0 0;
+  padding: 0;
+}
+.order-detail-page .order-progress-step { position: relative; display: flex; align-items: center; }
+.order-detail-page .order-progress-step:not(:first-child) { margin-left: 70px; }
+.order-detail-page .order-progress-step:not(:first-child)::before {
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  width: 70px;
+  height: 3px;
+  margin-top: -1.5px;
+  background: var(--d-line);
+}
+.order-detail-page .order-progress-step.is-done:not(:first-child)::before,
+.order-detail-page .order-progress-step.is-current:not(:first-child)::before { background: var(--d-accent); }
+
+.order-detail-page .order-progress-dot {
+  position: relative;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--d-line);
+  background: #fff;
+  color: #fff;
+  font: 800 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+}
+.order-detail-page .is-done .order-progress-dot { background: var(--d-accent); border-color: var(--d-accent); }
+.order-detail-page .is-current .order-progress-dot {
+  border: 3px solid var(--d-accent);
+  box-shadow: 0 0 0 6px rgba(30, 158, 90, .14);
+}
+.order-detail-page .is-current .order-progress-dot::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--d-accent);
+}
+
+.order-detail-page .amount-figure {
+  margin: 0;
+  font: 800 40px/1 var(--mb-font-head, Manrope, sans-serif);
+  letter-spacing: -1px;
+  color: var(--d-ink);
+  font-variant-numeric: tabular-nums;
+}
+.order-detail-page .amount-figure span {
+  margin-left: 6px;
+  font: 800 16px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  color: var(--d-muted);
+}
+
+.order-detail-page .card-created { margin: 20px 0 0; font-size: 16px; color: var(--d-muted); }
+
+@media (max-width: 719px) {
+  .order-detail-page .card-overview .card-title { font-size: 24px; }
+  .order-detail-page .order-progress-step:not(:first-child) { margin-left: 56px; }
+  .order-detail-page .order-progress-step:not(:first-child)::before { width: 56px; }
+  .order-detail-page .amount-figure { font-size: 36px; }
 }
