@@ -1,6 +1,7 @@
 'use strict';
 
 const prisma = require('../config/db');
+const { Prisma } = require('@prisma/client');
 const logger = require('../utils/logger');
 const { recordAuditEvent } = require('../utils/audit');
 const {
@@ -117,6 +118,16 @@ async function createPayment(data) {
     });
 
     if (existing) {
+      if (
+        data.type === 'TRANSPORT' &&
+        data.transportQuoteId &&
+        existing.transportQuoteId !== data.transportQuoteId
+      ) {
+        throw Object.assign(
+          new Error('This idempotency key is already bound to a different transport quote'),
+          { status: 409 }
+        );
+      }
       return existing;
     }
   }
@@ -125,6 +136,74 @@ async function createPayment(data) {
     return await prisma.$transaction(
       async (tx) => {
         let obligation = null;
+
+        // --------------------------------------------------------------------
+        // HIRED TRANSPORT PAYMENT INVARIANT
+        // --------------------------------------------------------------------
+        // Serialize payment creation with quote selection/replacement. The
+        // transport job row is the shared lock for both workflows.
+        if (data.type === 'TRANSPORT' && data.transportJobId) {
+          await tx.$queryRaw(
+            Prisma.sql`SELECT "id" FROM "TransportJob" WHERE "id" = ${data.transportJobId} FOR UPDATE`
+          );
+
+          if (!data.transportQuoteId) {
+            throw Object.assign(
+              new Error('Hired transport payment must be bound to the accepted transport quote'),
+              { status: 409 }
+            );
+          }
+
+          const quote = await tx.transportQuote.findUnique({
+            where: { id: data.transportQuoteId },
+            select: {
+              id: true,
+              transportJobId: true,
+              truckOwnerId: true,
+              truckId: true,
+              amount: true,
+              status: true,
+            },
+          });
+
+          const job = await tx.transportJob.findUnique({
+            where: { id: data.transportJobId },
+            select: {
+              id: true,
+              method: true,
+              status: true,
+              truckOwnerId: true,
+              truckId: true,
+              agreedAmount: true,
+            },
+          });
+
+          if (!job || job.method !== 'HIRE_TRANSPORTER') {
+            throw Object.assign(
+              new Error('Transport payment requires a hired-transporter job'),
+              { status: 409 }
+            );
+          }
+
+          if (!quote || quote.transportJobId !== job.id || quote.status !== 'ACCEPTED') {
+            throw Object.assign(
+              new Error('The transport quote is no longer the accepted commercial quote'),
+              { status: 409 }
+            );
+          }
+
+          if (
+            job.truckOwnerId !== quote.truckOwnerId ||
+            job.truckId !== quote.truckId ||
+            !moneyEqual(job.agreedAmount, quote.amount) ||
+            !moneyEqual(amount, quote.amount)
+          ) {
+            throw Object.assign(
+              new Error('Transport payment amount or assignment does not match the accepted quote'),
+              { status: 409 }
+            );
+          }
+        }
 
         // --------------------------------------------------------------------
         // PAYMENT OBLIGATION
@@ -279,6 +358,41 @@ async function createPayment(data) {
     // ------------------------------------------------------------------------
 
     const target = error?.meta?.target;
+
+    // A partial unique index protects against two simultaneous transport
+    // payment attempts for the same job. After the losing transaction rolls
+    // back, inspect the committed payment and return it only if it belongs to
+    // the same negotiated quote. Never silently switch the payment to another
+    // transporter.
+    const isTransportActivePaymentConflict =
+      error?.code === 'P2002' &&
+      data.type === 'TRANSPORT' &&
+      data.transportJobId &&
+      String(target || '').includes('Payment_transportJob_active_unique');
+
+    if (isTransportActivePaymentConflict) {
+      const existingTransportPayment = await prisma.payment.findFirst({
+        where: {
+          transportJobId: data.transportJobId,
+          type: 'TRANSPORT',
+          status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
+        },
+      });
+
+      if (existingTransportPayment) {
+        if (
+          data.transportQuoteId &&
+          existingTransportPayment.transportQuoteId === data.transportQuoteId
+        ) {
+          return existingTransportPayment;
+        }
+
+        throw Object.assign(
+          new Error('An active transport payment already exists for a different transporter quote'),
+          { status: 409 }
+        );
+      }
+    }
 
     const isIdempotencyConflict =
       error?.code === 'P2002' &&
@@ -459,13 +573,15 @@ async function writeLedger(
         job.method === 'HIRE_TRANSPORTER' &&
         job.truckOwnerId
       ) {
+        const transportPayeeId = payment.transportQuote?.truckOwnerId || job.truckOwnerId;
+
         if (net > 0) {
           await createLedgerEntryOnce(tx, {
             paymentId:
               payment.id,
 
             userId:
-              job.truckOwnerId,
+              transportPayeeId,
 
             type:
               'TRANSPORTER_EARNING',
@@ -689,6 +805,7 @@ async function settlePaymentCore({
           include: {
             order: true,
             transportJob: true,
+            transportQuote: true,
             inspectionRequest: true,
             advertisement: true,
             digitalPurchase: true,
@@ -1378,15 +1495,32 @@ async function settlePaymentCore({
           payment.transportJob &&
           payment.transportJob.method === 'HIRE_TRANSPORTER' &&
           payment.transportJob.truckId &&
-          payment.transportJob.truckOwnerId
+          payment.transportJob.truckOwnerId &&
+          payment.transportQuote
         ) {
+          // The quote is the immutable payment target. Never derive the
+          // commercial counterparty from mutable job fields alone.
           const job = await tx.transportJob.findUnique({
             where: { id: payment.transportJob.id },
-            select: { id: true, status: true, truckId: true, truckOwnerId: true, orderId: true },
+            select: { id: true, status: true, truckId: true, truckOwnerId: true, agreedAmount: true, orderId: true },
           });
 
           if (!job || !['REQUESTED', 'QUOTED', 'ACCEPTED'].includes(job.status)) {
             throw Object.assign(new Error('Transport job is no longer available for payment commitment'), { status: 409 });
+          }
+
+          if (
+            payment.transportQuote.transportJobId !== job.id ||
+            payment.transportQuote.status !== 'ACCEPTED' ||
+            payment.transportQuote.truckId !== job.truckId ||
+            payment.transportQuote.truckOwnerId !== job.truckOwnerId ||
+            !moneyEqual(payment.transportQuote.amount, job.agreedAmount) ||
+            !moneyEqual(payment.amount, payment.transportQuote.amount)
+          ) {
+            throw Object.assign(
+              new Error('Transport payment is no longer aligned with its accepted quote'),
+              { status: 409 }
+            );
           }
 
           // New negotiations stay QUOTED until payment. ACCEPTED is retained
@@ -1500,7 +1634,7 @@ async function settlePaymentCore({
           await payoutService.createPayoutHold(tx, {
             orderId: payment.transportJob.orderId,
             payeeRole: 'TRANSPORTER',
-            payeeId: payment.transportJob.truckOwnerId,
+            payeeId: payment.transportQuote?.truckOwnerId || payment.transportJob.truckOwnerId,
             payment,
           });
         }
