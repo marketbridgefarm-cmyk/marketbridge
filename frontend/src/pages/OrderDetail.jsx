@@ -96,12 +96,12 @@ function useNowUntil(targetMs) {
    2. UI primitives — every card on the page is built from these
    ======================================================================== */
 
-function Card({ id, eyebrow, title, subtitle, side, tone, className, children }) {
+function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, className, children }) {
   return (
     <section className={`card${tone ? ` od-card-${tone}` : ''}${className ? ` ${className}` : ''}`} id={id}>
       <header className="od-card-head">
         <div className="od-card-head-main">
-          {eyebrow && <span className="od-eyebrow">{eyebrow}</span>}
+          {eyebrow && <span className={`od-eyebrow${eyebrowClass ? ` ${eyebrowClass}` : ''}`}>{eyebrow}</span>}
           <h2 className="od-card-title">{title}</h2>
           {subtitle && <p className="od-card-subtitle">{subtitle}</p>}
         </div>
@@ -352,7 +352,7 @@ function OrderProgress({ steps }) {
         const state = s.done ? 'done' : idx === current ? 'current' : 'todo';
         return (
           <li key={s.label} className={`order-progress-step is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
-            <span className="order-progress-dot" aria-hidden="true">{s.done ? '✓' : ''}</span>
+            <span className="order-progress-dot" aria-hidden="true" />
             <span className="order-progress-label">{s.label}</span>
           </li>
         );
@@ -380,6 +380,7 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
     <Card
       className="od-card-overview"
       eyebrow={role}
+      eyebrowClass={isSeller ? 'is-selling' : ''}
       title={title}
       side={<PartyBadge role={otherLabel} name={other?.name} />}
     >
@@ -393,12 +394,9 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
         <OrderProgress steps={steps} />
       </Section>
 
-      <Section title="Amount">
-        <p className="od-amount-figure">{money(order.finalPrice)} <span>ETB</span></p>
-      </Section>
-
       <Section title="Details">
         <Facts>
+          <Fact name="Amount">{money(order.finalPrice)} ETB</Fact>
           <Fact name="Buyer">{order.buyer?.name || '—'}{isBuyer && <YouTag inline />}</Fact>
           <Fact name="Seller">{order.seller?.name || '—'}{isSeller && <YouTag inline />}</Fact>
           {order.listing?.cropType && <Fact name="Product">{order.listing.cropType}</Fact>}
@@ -682,16 +680,11 @@ function TransportCard({ order, t }) {
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
 
-  const subtitle = job
-    ? `${job.arrangingParty || '—'} arranged · ${job.method || '—'}`
-    : 'The buyer or seller arranges transport. MarketBridge does not assign a transporter automatically.';
-
   return (
     <Card
       id="transport-section"
       eyebrow="Logistics"
       title="Transport"
-      subtitle={subtitle}
       side={job?.status && <SideLabel name="Status"><Pill tone={statusTone(job.status)}>{label(job.status)}</Pill></SideLabel>}
     >
       {!job ? (
