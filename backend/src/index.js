@@ -39,6 +39,7 @@ const digitalRoutes = require('./routes/digital');
 const messageRoutes = require('./routes/messages');
 const adminRoutes = require('./routes/admin');
 const notificationRoutes = require('./routes/notifications');
+const recoveryRequestRoutes = require('./routes/recoveryRequests');
 const maintenanceRoutes = require('./routes/maintenance');
 const growthRoutes = require('./routes/growth');
 const smsRoutes = require('./routes/sms');
@@ -372,6 +373,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
 
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/recovery-requests', recoveryRequestRoutes);
 
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/growth', growthRoutes);
