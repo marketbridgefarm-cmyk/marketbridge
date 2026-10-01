@@ -958,6 +958,11 @@ router.patch(
         return res.status(400).json({ error: `Only a provisionally accepted quote can be released (current: ${quote.status})` });
       }
 
+      const withdrawalReason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
+      if (!withdrawalReason) {
+        return res.status(400).json({ error: 'A withdrawal reason is required.' });
+      }
+
       const result = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection agreement cannot be released until the order dispute is resolved');
 
@@ -980,7 +985,7 @@ router.patch(
 
         const updatedQuote = await tx.inspectionQuote.update({
           where: { id: quote.id },
-          data: { status: 'WITHDRAWN' },
+          data: { status: 'WITHDRAWN', withdrawalReason },
         });
 
         await tx.inspectionRequest.update({
@@ -993,13 +998,7 @@ router.patch(
           action: 'INSPECTION_QUOTE_WITHDRAWN',
           resourceType: 'InspectionQuote',
           resourceId: updatedQuote.id,
-          metadata: { inspectionRequestId: request.id, inspectorId: quote.inspectorId, releasedBy: actorRole },
-        });
-        await recordOrderEvent(tx, {
-          orderId: request.orderId,
-          actorId: req.user.id,
-          type: 'INSPECTION_QUOTE_WITHDRAWN',
-          metadata: { inspectionRequestId: request.id, quoteId: updatedQuote.id, inspectorId: quote.inspectorId, releasedBy: actorRole },
+          metadata: { inspectionRequestId: request.id, inspectorId: quote.inspectorId, releasedBy: actorRole, withdrawalReason },
         });
 
         return updatedQuote;

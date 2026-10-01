@@ -2296,7 +2296,7 @@ router.patch(
         // provisional transporter rather than consuming/closing the order.
         await tx.transportQuote.updateMany({
           where: { transportJobId: job.id, id: { not: fresh.id }, status: 'ACCEPTED' },
-          data: { status: 'WITHDRAWN' },
+          data: { status: 'WITHDRAWN', withdrawalReason },
         });
         await tx.transportQuote.updateMany({
           where: { transportJobId: job.id, id: { not: fresh.id }, status: 'SELECTED' },
@@ -2459,6 +2459,11 @@ router.patch(
           });
         }
 
+        const withdrawalReason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
+        if (!withdrawalReason) {
+          return res.status(400).json({ error: 'A withdrawal reason is required.' });
+        }
+
         const result = await prisma.$transaction(async (tx) => {
           const freshQuote = await tx.transportQuote.findUnique({
             where: { id: quote.id },
@@ -2509,13 +2514,8 @@ router.patch(
               transportJobId: freshQuote.transportJobId,
               orderId: freshQuote.transportJob.orderId,
               releasedBy: effectiveRole,
+              withdrawalReason,
             },
-          });
-          await recordOrderEvent(tx, {
-            orderId: freshQuote.transportJob.orderId,
-            actorId: req.user.id,
-            type: 'TRANSPORT_QUOTE_WITHDRAWN',
-            metadata: { transportJobId: freshQuote.transportJobId, quoteId: updatedQuote.id, releasedBy: effectiveRole },
           });
 
           return updatedQuote;
