@@ -1334,7 +1334,7 @@ export default function OrderDetail() {
         </div>
 
         {/* ================================================================== */}
-        {/* ORDER DETAILS — the reference card shape                           */}
+        {/* ORDER DETAILS                                                      */}
         {/* ================================================================== */}
 
         <div className="card order-overview-card">
@@ -1380,7 +1380,6 @@ export default function OrderDetail() {
             </div>
           </div>
 
-          {/* Order status */}
           <section className="card-section">
             <div className="card-section-head">
               <h3 className="card-section-title">Order status</h3>
@@ -1411,7 +1410,6 @@ export default function OrderDetail() {
             </div>
           </section>
 
-          {/* Parties */}
           <section className="card-section">
             <div className="card-section-head">
               <h3 className="card-section-title">Parties</h3>
@@ -1438,7 +1436,6 @@ export default function OrderDetail() {
             </div>
           </section>
 
-          {/* Amount */}
           <section className="card-section">
             <div className="card-section-head">
               <h3 className="card-section-title">Amount</h3>
@@ -1535,108 +1532,162 @@ export default function OrderDetail() {
 
         <div id="inspection-section">
         {inspectionApplies && isParticipant && order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
-          currentInspectionRequest ? (
-            <div className="card">
-              <div className="card-head">
-                <div className="card-head-main">
-                  <span className="eyebrow">{isProductsMarketplace ? 'PRODUCT INSPECTION' : 'INSPECTION'}</span>
-                  <h2 className="card-title">
-                    {currentInspectionRequest.inspector?.name
-                      ? `Inspected by ${currentInspectionRequest.inspector.name}`
-                      : 'Inspection'}
-                  </h2>
-                  {currentInspectionRequest.fee != null && (
-                    <p className="card-subtitle">Fee: {money(currentInspectionRequest.fee)} ETB</p>
-                  )}
-                </div>
-                <div className="card-head-side">
-                  <span className="card-side-label">Status</span>
-                  <span className={`status-pill tone-${statusTone(currentInspectionRequest.status)}`}>
-                    <span className="status-pill-dot" aria-hidden="true" />
-                    {String(currentInspectionRequest.status || '').replace(/_/g, ' ')}
-                  </span>
-                </div>
-              </div>
+          currentInspectionRequest ? (() => {
+            const request = currentInspectionRequest;
+            const report = request.report;
+            const reportReady = request.status === 'COMPLETED' && Boolean(report);
+            const inspectorName = request.inspector?.name || null;
+            const inspectionDate =
+              report?.inspectedAt ||
+              report?.completedAt ||
+              request.completedAt ||
+              request.updatedAt ||
+              request.createdAt ||
+              null;
 
-              {['REQUESTED', 'ACCEPTED'].includes(currentInspectionRequest.status) && isParticipant && (
-                <section className="card-section">
-                  <div className="card-section-head">
-                    <h3 className="card-section-title">Inspection recovery</h3>
-                  </div>
-                  <p className="muted">
-                    If every inspector bid is closed, you can reopen bidding. If you no longer want this request, cancel it without cancelling the order.
-                  </p>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-                    <button type="button" className="btn btn-primary" disabled={Boolean(busy)} onClick={reopenInspectionBidding}>
-                      {busy === `reopen-inspection-${currentInspectionRequest.id}` ? 'Reopening…' : 'Reopen inspection bidding'}
-                    </button>
-                    <button type="button" className="btn btn-light" disabled={Boolean(busy)} onClick={cancelInspectionRequest}>
-                      {busy === `cancel-inspection-${currentInspectionRequest.id}` ? 'Cancelling…' : 'Cancel inspection request'}
-                    </button>
-                  </div>
-                </section>
-              )}
-
-              {currentInspectionRequest.status === 'COMPLETED' && currentInspectionRequest.report && (
-                <div className="inspection-purchase-gate">
-                  <div className="inspection-report-header">
-                    <div>
-                      <span className="eyebrow">QUALITY REPORT</span>
-                      <h3>{isAgricultural ? 'Agricultural inspection completed' : 'Product inspection completed'}</h3>
-                      <p className="muted">Review the published inspection findings before the purchase is committed.</p>
-                    </div>
-                    <span className="status-pill tone-good"><span className="status-pill-dot" aria-hidden="true" /> Report published</span>
+            return (
+              <div className="card">
+                <div className="card-head">
+                  <div className="card-head-main">
+                    <span className="eyebrow">
+                      {reportReady
+                        ? 'QUALITY REPORT'
+                        : (isProductsMarketplace ? 'PRODUCT INSPECTION' : 'INSPECTION')}
+                    </span>
+                    <h2 className="card-title">Inspection</h2>
                   </div>
 
-                  <div className="inspection-report-facts">
-                    <div><span>Inspected quantity</span><strong>{currentInspectionRequest.report.quantity ?? '—'}</strong></div>
-                    <div><span>{isProductsMarketplace ? 'Condition / quality' : 'Grade'}</span><strong>{currentInspectionRequest.report.grade || 'Not specified'}</strong></div>
-                    {!isProductsMarketplace && (
-                      <div><span>Moisture</span><strong>{currentInspectionRequest.report.moisture != null ? `${currentInspectionRequest.report.moisture}%` : 'Not recorded'}</strong></div>
+                  <div className="card-head-side">
+                    {reportReady && inspectorName ? (
+                      <>
+                        <span className="card-side-label">Inspector</span>
+                        <div className="card-side-party">
+                          <div>
+                            <span className="card-side-value">{inspectorName}</span>
+                          </div>
+                          <span className="party-avatar party-avatar-seller" aria-hidden="true">
+                            {initials(inspectorName)}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <span className="card-side-label">Status</span>
+                        <span className={`status-pill tone-${statusTone(request.status)}`}>
+                          <span className="status-pill-dot" aria-hidden="true" />
+                          {String(request.status || '').replace(/_/g, ' ')}
+                        </span>
+                      </>
                     )}
-                    <div><span>Inspection status</span><strong>Completed</strong></div>
                   </div>
-
-                  <div className="inspection-findings">
-                    <div><span>Visible defects</span><p>{currentInspectionRequest.report.visibleDefects || 'No visible defects recorded.'}</p></div>
-                    <div><span>Damage notes</span><p>{currentInspectionRequest.report.damageNotes || 'No damage notes recorded.'}</p></div>
-                    <div><span>Packaging notes</span><p>{currentInspectionRequest.report.packagingNotes || 'No packaging notes recorded.'}</p></div>
-                  </div>
-
-                  {buyerDecisionRequired && order.buyerDecision ? (
-                    <div className={`inspection-decision-state ${order.buyerDecision === 'BUY' ? 'is-buy' : 'is-cancel'}`}>
-                      <span className="inspection-decision-icon" aria-hidden="true">{order.buyerDecision === 'BUY' ? '✓' : '×'}</span>
-                      <div>
-                        <strong>{order.buyerDecision === 'BUY' ? 'BUY decision recorded' : 'Purchase cancelled after inspection'}</strong>
-                        <p>{order.buyerDecision === 'BUY' ? 'Goods payment is now unlocked. Transport can proceed only after the required payment gates are satisfied.' : 'The purchase decision is closed.'}</p>
-                      </div>
-                    </div>
-                  ) : buyerDecisionRequired && isBuyer ? (
-                    <div className="inspection-decision-panel">
-                      <div>
-                        <span className="eyebrow">PURCHASE DECISION</span>
-                        <h3>What do you want to do with the inspected goods?</h3>
-                        <p className="muted">Choose <strong>BUY</strong> only after reviewing the report. BUY unlocks goods payment; it does not by itself complete payment or arrange transport.</p>
-                      </div>
-                      <div className="inspection-decision-actions">
-                        <button type="button" className="btn btn-primary" disabled={Boolean(busy)} onClick={() => makeBuyerDecision('BUY')}>
-                          {busy === 'buyer-decision-buy' ? 'Recording…' : 'BUY — continue purchase'}
-                        </button>
-                        <button type="button" className="btn btn-light" disabled={Boolean(busy)} onClick={() => makeBuyerDecision('CANCEL')}>
-                          {busy === 'buyer-decision-cancel' ? 'Cancelling…' : 'Cancel after inspection'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : buyerDecisionRequired ? (
-                    <div className="inspection-waiting-note">
-                      <strong>Awaiting buyer decision</strong>
-                      <span>The buyer must review this report and choose BUY or cancel before the purchase can move to the payment stage.</span>
-                    </div>
-                  ) : null}
                 </div>
-              )}
-            </div>
-          ) : (
+
+                {reportReady ? (
+                  <>
+                    <div className="detail-facts">
+                      <div><span>Status</span><strong>Completed</strong></div>
+                      <div><span>Inspection date</span><strong>{formatDateTime(inspectionDate)}</strong></div>
+                      <div><span>Inspected by</span><strong>{inspectorName || '—'}</strong></div>
+                      <div><span>Visible defects</span><strong>{report.visibleDefects || 'No Defects'}</strong></div>
+                      <div><span>Damage notes</span><strong>{report.damageNotes || 'No Damage'}</strong></div>
+                      <div><span>Packaging notes</span><strong>{report.packagingNotes || 'Fully packed'}</strong></div>
+                    </div>
+
+                    <div className="notice">
+                      <strong>
+                        {isAgricultural ? 'Agricultural inspection completed' : 'Product inspection completed'}
+                      </strong>
+                      <p>Review the published inspection findings before the purchase is committed.</p>
+                    </div>
+
+                    {buyerDecisionRequired && order.buyerDecision ? (
+                      <div className={`inspection-decision-state ${order.buyerDecision === 'BUY' ? 'is-buy' : 'is-cancel'}`}>
+                        <span className="inspection-decision-icon" aria-hidden="true">
+                          {order.buyerDecision === 'BUY' ? '✓' : '×'}
+                        </span>
+                        <div>
+                          <strong>
+                            {order.buyerDecision === 'BUY'
+                              ? 'BUY decision recorded'
+                              : 'Purchase cancelled after inspection'}
+                          </strong>
+                          <p>
+                            {order.buyerDecision === 'BUY'
+                              ? 'Goods payment is now unlocked. Transport can proceed only after the required payment gates are satisfied.'
+                              : 'The purchase decision is closed.'}
+                          </p>
+                        </div>
+                      </div>
+                    ) : buyerDecisionRequired && isBuyer ? (
+                      <div className="inspection-decision-panel">
+                        <div>
+                          <span className="eyebrow">PURCHASE DECISION</span>
+                          <h3>What do you want to do with the inspected goods?</h3>
+                          <p className="muted">
+                            Choose <strong>BUY</strong> only after reviewing the report. BUY unlocks goods payment; it does not by itself complete payment or arrange transport.
+                          </p>
+                        </div>
+                        <div className="inspection-decision-actions">
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={Boolean(busy)}
+                            onClick={() => makeBuyerDecision('BUY')}
+                          >
+                            {busy === 'buyer-decision-buy' ? 'Recording…' : 'BUY — continue purchase'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-light"
+                            disabled={Boolean(busy)}
+                            onClick={() => makeBuyerDecision('CANCEL')}
+                          >
+                            {busy === 'buyer-decision-cancel' ? 'Cancelling…' : 'Cancel after inspection'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : buyerDecisionRequired ? (
+                      <div className="inspection-waiting-note">
+                        <strong>Awaiting buyer decision</strong>
+                        <span>
+                          The buyer must review this report and choose BUY or cancel before the purchase can move to the payment stage.
+                        </span>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  ['REQUESTED', 'ACCEPTED'].includes(request.status) && isParticipant && (
+                    <section className="card-section">
+                      <div className="card-section-head">
+                        <h3 className="card-section-title">Inspection recovery</h3>
+                      </div>
+                      <p className="muted">
+                        If every inspector bid is closed, you can reopen bidding. If you no longer want this request, cancel it without cancelling the order.
+                      </p>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={Boolean(busy)}
+                          onClick={reopenInspectionBidding}
+                        >
+                          {busy === `reopen-inspection-${request.id}` ? 'Reopening…' : 'Reopen inspection bidding'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-light"
+                          disabled={Boolean(busy)}
+                          onClick={cancelInspectionRequest}
+                        >
+                          {busy === `cancel-inspection-${request.id}` ? 'Cancelling…' : 'Cancel inspection request'}
+                        </button>
+                      </div>
+                    </section>
+                  )
+                )}
+              </div>
+            );
+          })() : (
             <div className="card">
               <div className="card-head">
                 <div className="card-head-main">
@@ -1708,7 +1759,6 @@ export default function OrderDetail() {
             )
           ) : (
             <>
-              {/* Transport information */}
               <section className="transport-section">
                 <div className="card-section-head">
                   <h3 className="card-section-title">Trip details</h3>
@@ -1728,7 +1778,6 @@ export default function OrderDetail() {
                 </div>
               </section>
 
-              {/* Transport recovery */}
               {isTransportArranger && ['REQUESTED', 'QUOTED', 'ACCEPTED', 'CANCELLED'].includes(transportJob.status) && (
                 <section className="transport-section">
                   <div className="card-section-head">
@@ -1754,7 +1803,6 @@ export default function OrderDetail() {
                 </section>
               )}
 
-              {/* Assigned transporter */}
               {transportJob.truckOwner && (
                 <section className="transport-section">
                   <div className="card-section-head">
@@ -1777,7 +1825,6 @@ export default function OrderDetail() {
                 </section>
               )}
 
-              {/* Pickup / delivery evidence */}
               <section className="transport-section">
                 <div className="card-section-head">
                   <h3 className="card-section-title">Pickup / delivery evidence</h3>
@@ -1869,7 +1916,6 @@ export default function OrderDetail() {
                 />
               </section>
 
-              {/* OWN_TRUCK note */}
               {transportJob.method === 'OWN_TRUCK' && (
                 <section className="transport-section">
                   <div className="card-section-head">
@@ -1882,7 +1928,6 @@ export default function OrderDetail() {
                 </section>
               )}
 
-              {/* HIRE_TRANSPORTER pre-payment */}
               {transportJob.method === 'HIRE_TRANSPORTER' && !transportPaid && (
                 <section className="transport-section">
                   <div className="card-section-head">
@@ -1897,7 +1942,6 @@ export default function OrderDetail() {
                 </section>
               )}
 
-              {/* Ready to pay */}
               {canStartTransportPayment && (
                 <section className="transport-section">
                   <div className="card-section-head">
@@ -1929,7 +1973,6 @@ export default function OrderDetail() {
                 </section>
               )}
 
-              {/* Resume */}
               {canResumeTransportPayment && (
                 <section className="transport-section">
                   <div className="card-section-head">
@@ -1950,7 +1993,6 @@ export default function OrderDetail() {
                 </section>
               )}
 
-              {/* Confirmed */}
               {transportPaid && (
                 <section className="transport-section">
                   <div className="card-section-head">
@@ -1962,7 +2004,6 @@ export default function OrderDetail() {
                 </section>
               )}
 
-              {/* Quotes */}
               {transportJob.method === 'HIRE_TRANSPORTER' && !transportPaid && (
                 <section className="match-box">
                   <div className="card-section-head">
@@ -2068,7 +2109,6 @@ export default function OrderDetail() {
                 </section>
               )}
 
-              {/* Delivered */}
               {transportJob.status === 'DELIVERED' && (
                 <section className="transport-section">
                   <div className="card-section-head">
