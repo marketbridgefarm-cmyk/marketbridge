@@ -1,6 +1,8 @@
 'use strict';
 
 const DEFAULT_TIMEOUT_HOURS = 48;
+const DEFAULT_INSPECTION_WORKFLOW_TIMEOUT_HOURS = 48;
+const DEFAULT_TRANSPORT_WORKFLOW_TIMEOUT_HOURS = 48;
 
 /**
  * How long a buyer has to pay before an order is automatically cancelled
@@ -19,4 +21,26 @@ function computePaymentDueAt(from = new Date()) {
   return new Date(from.getTime() + paymentTimeoutHours() * 60 * 60 * 1000);
 }
 
-module.exports = { paymentTimeoutHours, computePaymentDueAt };
+module.exports = { paymentTimeoutHours, computePaymentDueAt, inspectionWorkflowTimeoutHours, transportWorkflowTimeoutHours, computeInspectionWorkflowDueAt, computeTransportWorkflowDueAt };
+
+
+function workflowTimeoutHours(envName, fallback) {
+  const configured = Number(process.env[envName]);
+  return Number.isFinite(configured) && configured > 0 ? configured : fallback;
+}
+
+function inspectionWorkflowTimeoutHours() {
+  return workflowTimeoutHours('INSPECTION_WORKFLOW_TIMEOUT_HOURS', DEFAULT_INSPECTION_WORKFLOW_TIMEOUT_HOURS);
+}
+
+function transportWorkflowTimeoutHours() {
+  return workflowTimeoutHours('TRANSPORT_WORKFLOW_TIMEOUT_HOURS', DEFAULT_TRANSPORT_WORKFLOW_TIMEOUT_HOURS);
+}
+
+function computeInspectionWorkflowDueAt(from = new Date()) {
+  return new Date(from.getTime() + inspectionWorkflowTimeoutHours() * 60 * 60 * 1000);
+}
+
+function computeTransportWorkflowDueAt(from = new Date()) {
+  return new Date(from.getTime() + transportWorkflowTimeoutHours() * 60 * 60 * 1000);
+}
