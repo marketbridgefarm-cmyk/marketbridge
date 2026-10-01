@@ -90,6 +90,22 @@ enum InspectionMode {
   JOINT
 }
 
+enum RecoveryRequestType {
+  INSPECTION
+  TRANSPORT
+}
+
+enum RecoveryRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RecoveryTargetParty {
+  BUYER
+  SELLER
+}
+
 enum InspectionStatus {
   REQUESTED
   ACCEPTED
@@ -362,6 +378,9 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  recoveryRequestsCreated RecoveryRequest[] @relation("RecoveryRequestedBy")
+  recoveryRequestsApproved RecoveryRequest[] @relation("RecoveryApprovedBy")
 
   // Listings
   listings Listing[] @relation("SellerListings")
@@ -928,6 +947,8 @@ model Order {
   // Durable customer-facing workflow events.
   events OrderEvent[]
 
+  recoveryRequests RecoveryRequest[]
+
   notifications Notification[]
 
   disputes Dispute[]
@@ -1314,6 +1335,43 @@ model Notification {
   @@index([userId, readAt, createdAt])
   @@index([orderId, createdAt])
   @@index([orderEventId])
+}
+
+// ============================================================================
+// ADMIN-GATED WORKFLOW RECOVERY
+// ============================================================================
+// A buyer/seller can ask MarketBridge to recover a stalled inspection or
+// transport competition. The request itself does not reopen anything. An
+// authenticated admin must approve it; approval releases a fresh requesting
+// form to the requested party/parties and resets the relevant competition.
+// ============================================================================
+model RecoveryRequest {
+  id String @id @default(uuid())
+
+  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+
+  requestedBy   User @relation("RecoveryRequestedBy", fields: [requestedById], references: [id])
+  requestedById String
+
+  approvedBy   User? @relation("RecoveryApprovedBy", fields: [approvedById], references: [id])
+  approvedById String?
+
+  type RecoveryRequestType
+  status RecoveryRequestStatus @default(PENDING)
+  targetParties RecoveryTargetParty[]
+
+  reason String?
+  adminNote String?
+
+  requestedAt DateTime @default(now())
+  approvedAt DateTime?
+  rejectedAt DateTime?
+  formReleasedAt DateTime?
+
+  @@index([orderId, type, status])
+  @@index([requestedById, status])
+  @@index([status, requestedAt])
 }
 
 // ============================================================================
