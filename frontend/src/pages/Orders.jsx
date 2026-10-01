@@ -25,7 +25,6 @@ function initialsOf(name) {
   return parts.map((p) => p[0]).join('').toUpperCase();
 }
 
-// Maps backend order status strings to tone variants.
 function statusTone(status) {
   const s = String(status || '').toUpperCase();
   if (['COMPLETED', 'DELIVERED', 'CONFIRMED', 'PAID'].includes(s)) return 'success';
@@ -52,10 +51,6 @@ const TABS = [
   { id: 'selling', label: 'Selling' },
 ];
 
-/*
- * Marketplace payment status, reduced to a single label.
- * PAID wins over PENDING, which wins over FAILED — mirrors OrderDetail.jsx.
- */
 function summarizePayments(payments, type) {
   const rows = (payments || []).filter((payment) => payment.type === type);
   if (rows.length === 0) return null;
@@ -66,16 +61,11 @@ function summarizePayments(payments, type) {
   return rows[0].status;
 }
 
-/*
- * Derive the four-step progress timeline from an order's state:
- *   Order placed → Payment → Transport → Delivered
- * Cancelled/disputed orders reset to step 1.
- */
 function progressFor(order) {
   const steps = ['Order placed', 'Payment', 'Transport', 'Delivered'];
   const status = String(order.status || '').toUpperCase();
 
-  const paid = order.paymentSummary === 'PAID' || summarizePayments(order.payments, 'MARKETPLACE') === 'PAID';
+  const paid = order.paymentSummary === 'PAID';
   const hasTransport = Boolean(order.transportJob);
   const transportOk = hasTransport && order.transportJob.status !== 'FAILED';
   const delivered = ['DELIVERED', 'COMPLETED'].includes(status);
@@ -93,6 +83,124 @@ function progressFor(order) {
     else if (i === idx) cls = delivered || isTerminal ? 'done' : 'current';
     return { label, cls };
   });
+}
+
+/*
+ * Self-contained tone → color map. Colors live here (not in CSS) so the
+ * ring always renders correctly even if the stylesheet fails to load.
+ */
+const STAT_TONES = {
+  accent:  { ring: '#1e9e5a', ink: '#0f7a44' },
+  info:    { ring: '#1e5fa8', ink: '#1e5fa8' },
+  gold:    { ring: '#a86f10', ink: '#a86f10' },
+  success: { ring: '#0f7a44', ink: '#0f7a44' },
+};
+
+/*
+ * Stat card — a progress ring with the count centered inside.
+ * All geometry / color is expressed as inline SVG attributes + inline
+ * style, so it does NOT depend on any CSS class being present.
+ */
+function StatCard({ label, value, total, tone = 'accent' }) {
+  const pct = total > 0 ? Math.min(1, Math.max(0, value / total)) : 0;
+
+  const R = 16;
+  const C = 2 * Math.PI * R;
+  const offset = C * (1 - pct);
+  const colors = STAT_TONES[tone] || STAT_TONES.accent;
+
+  return (
+    <div
+      className={`stat tone-${tone}`}
+      aria-label={`${label}: ${value}`}
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        padding: '14px 16px',
+        border: '1px solid #e5e9ef',
+        borderRadius: 14,
+        background: '#fff',
+        boxShadow: '0 1px 2px rgba(15, 30, 45, .05)',
+      }}
+    >
+      <span
+        className="stat-label"
+        style={{
+          fontFamily: "'DM Sans', system-ui, sans-serif",
+          fontSize: 10.5,
+          fontWeight: 700,
+          lineHeight: 1,
+          letterSpacing: '.12em',
+          textTransform: 'uppercase',
+          color: '#64748b',
+        }}
+      >
+        {label}
+      </span>
+
+      <div
+        className="stat-graphic"
+        style={{
+          position: 'relative',
+          width: 44,
+          height: 44,
+          flex: '0 0 auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <svg
+          viewBox="0 0 40 40"
+          width="44"
+          height="44"
+          aria-hidden="true"
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}
+        >
+          <circle
+            cx="20"
+            cy="20"
+            r={R}
+            fill="none"
+            stroke="#e5e9ef"
+            strokeWidth="4"
+          />
+          <circle
+            cx="20"
+            cy="20"
+            r={R}
+            fill="none"
+            stroke={colors.ring}
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeDasharray={C}
+            strokeDashoffset={offset}
+            transform="rotate(-90 20 20)"
+          />
+        </svg>
+
+        <span
+          className="stat-count"
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            fontFamily: "'Manrope', system-ui, sans-serif",
+            fontSize: 15,
+            fontWeight: 800,
+            letterSpacing: '-.4px',
+            lineHeight: 1,
+            fontVariantNumeric: 'tabular-nums',
+            color: colors.ink,
+          }}
+        >
+          {value}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function OrderCard({ order, currentUserId }) {
@@ -113,11 +221,11 @@ function OrderCard({ order, currentUserId }) {
 
   const tone = statusTone(order.status);
   const avatarTone = openDispute ? 'danger' : tone;
+
   const steps = progressFor({
     status: order.status,
     transportJob,
     paymentSummary: marketplaceStatus,
-    payments: order.payments,
   });
 
   const createdLabel = order.createdAt
@@ -126,11 +234,6 @@ function OrderCard({ order, currentUserId }) {
 
   return (
     <article className="order-card">
-      {/*
-        Card head — eyebrow + title on the left, party + avatar on the right.
-        Uses <div> + unique class names (not <header>/.card-head) so global or
-        OrderDetail stylesheets can't override the layout.
-      */}
       <div className="order-card-head">
         <div className="order-card-head-text">
           <span className={`eyebrow ${isBuyer ? '' : 'is-selling'}`}>
@@ -159,7 +262,6 @@ function OrderCard({ order, currentUserId }) {
       </div>
 
       <div className="card-body">
-        {/* Block 1 — Order status */}
         <section className="card-block">
           <div className="card-block-title">
             <h3>Order status</h3>
@@ -168,7 +270,7 @@ function OrderCard({ order, currentUserId }) {
 
           <div className="card-block-body">
             <div className="badges">
-              <span className={`status-pill tone-${statusTone(order.status)}`}>
+              <span className={`status-pill tone-${tone}`}>
                 <span className="status-pill-dot" aria-hidden="true" />
                 {String(order.status || '').replace(/_/g, ' ')}
               </span>
@@ -194,9 +296,13 @@ function OrderCard({ order, currentUserId }) {
               )}
             </div>
 
-            <div className="order-progress" aria-label="Order progress">
+            <div className="order-progress" role="list" aria-label="Order progress">
               {steps.map((step) => (
-                <div key={step.label} className={`progress-step ${step.cls}`}>
+                <div
+                  key={step.label}
+                  role="listitem"
+                  className={['progress-step', step.cls].filter(Boolean).join(' ')}
+                >
                   <span className="progress-dot" aria-hidden="true" />
                   <span className="progress-label">{step.label}</span>
                 </div>
@@ -205,7 +311,6 @@ function OrderCard({ order, currentUserId }) {
           </div>
         </section>
 
-        {/* Block 2 — Amount */}
         <section className="card-block">
           <div className="card-block-title">
             <h3>Amount</h3>
@@ -218,7 +323,6 @@ function OrderCard({ order, currentUserId }) {
           </div>
         </section>
 
-        {/* Footer */}
         <div className="order-actions">
           <span className="order-time">
             {createdLabel ? `Created ${createdLabel}` : 'Recently updated'}
@@ -249,6 +353,7 @@ function OrderCard({ order, currentUserId }) {
 export default function Orders() {
   const { user } = useAuth();
   const currentUserId = user?.id || user?.userId || user?._id || null;
+  const authReady = Boolean(currentUserId);
 
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -323,30 +428,16 @@ export default function Orders() {
           </p>
         </div>
 
-        {!loading && !error && orders.length > 0 && (
+        {!loading && !error && orders.length > 0 && authReady && (
           <div className="stats-strip">
-            <div className="stat tone-accent">
-              <span className="stat-label">Total</span>
-              <span className="stat-value">{stats.total}</span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">Buying</span>
-              <span className="stat-value">{stats.buying}</span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">Selling</span>
-              <span className="stat-value">{stats.selling}</span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">Completed</span>
-              <span className="stat-value">{stats.completed}</span>
-            </div>
+            <StatCard label="Total"     value={stats.total}     total={stats.total} tone="accent"  />
+            <StatCard label="Buying"    value={stats.buying}    total={stats.total} tone="info"    />
+            <StatCard label="Selling"   value={stats.selling}   total={stats.total} tone="gold"    />
+            <StatCard label="Completed" value={stats.completed} total={stats.total} tone="success" />
           </div>
         )}
 
-        {error && <div className="alert error">{error}</div>}
-
-        {!loading && !error && orders.length > 0 && (
+        {!loading && !error && orders.length > 0 && authReady && (
           <div className="toolbar">
             <div className="sd-tabs">
               {TABS.map((t) => (
@@ -386,7 +477,7 @@ export default function Orders() {
           </div>
         )}
 
-        {loading ? (
+        {loading || !authReady ? (
           <p className="loading">Loading orders…</p>
         ) : error ? (
           <div className="state-card">
@@ -398,7 +489,7 @@ export default function Orders() {
               </svg>
             </div>
             <h3>Nothing to show</h3>
-            <p>We couldn't reach the orders service. Refresh the page or try again in a moment.</p>
+            <p>{error}</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="state-card">
