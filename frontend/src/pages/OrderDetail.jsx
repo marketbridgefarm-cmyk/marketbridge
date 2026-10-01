@@ -2,12 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import api from '../api/client';
-import {
-  startChapaPayment,
-  chapaInitializeAndRedirect,
-} from '../utils/chapaCheckout';
-
+import { startChapaPayment, chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 import { useAuth } from '../context/AuthContext.jsx';
+
 import RatingBox from '../components/RatingBox.jsx';
 import MessageThread from '../components/MessageThread.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
@@ -20,19 +17,41 @@ import RefundStatusCard from '../components/RefundStatusCard.jsx';
 
 import './order-details/OrderDetail.css';
 
-const shortId = (id) => id?.slice(0, 8) || '—';
+/* ========================================================================
+   1. Constants & pure helpers
+   ======================================================================== */
 
-const money = (value) =>
-  Number(value || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  });
+const PAYMENT_METHODS = [
+  { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
+  { value: 'QR', label: 'QR Code' },
+];
+
+const DISPUTE_TYPES = [
+  ['NOT_DELIVERED', 'Goods not delivered'],
+  ['QUALITY_ISSUE', 'Quality issue'],
+  ['DAMAGED_GOODS', 'Damaged goods'],
+  ['PAYMENT_ISSUE', 'Payment issue'],
+  ['TRANSPORT_ISSUE', 'Transport issue'],
+  ['OTHER', 'Other'],
+];
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const shortId = (id) => id?.slice(0, 8) || '—';
+const label = (value) => String(value || '').replace(/_/g, ' ');
+
+const money = (value, fraction = 2) =>
+  Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: fraction });
+
+const formatDateTime = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+};
 
 const getError = (error, fallback) =>
-  error?.response?.data?.error ||
-  error?.response?.data?.message ||
-  error?.message ||
-  fallback;
+  error?.response?.data?.error || error?.response?.data?.message || error?.message || fallback;
 
 const statusTone = (status) => {
   const value = String(status || '').toUpperCase();
@@ -42,9 +61,23 @@ const statusTone = (status) => {
   return 'neutral';
 };
 
+const initials = (name) =>
+  String(name || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
+
+const scrollToId = (id, delay = 0) => {
+  const go = () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (delay) window.setTimeout(go, delay);
+  else go();
+};
+
+const leafQuotes = (quotes) => {
+  const list = Array.isArray(quotes) ? quotes : [];
+  const parents = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
+  return list.filter((q) => !parents.has(q.id));
+};
+
 function useNowUntil(targetMs) {
   const [now, setNow] = useState(() => Date.now());
-
   useEffect(() => {
     if (!targetMs || Number.isNaN(targetMs)) return undefined;
     setNow(Date.now());
@@ -55,31 +88,100 @@ function useNowUntil(targetMs) {
     }, 1000);
     return () => clearInterval(timer);
   }, [targetMs]);
-
   return now;
 }
 
-const PAYOUT_PAD = (n) => String(n).padStart(2, '0');
+/* ========================================================================
+   2. UI primitives — every card on the page is built from these
+   ======================================================================== */
 
-function PayoutStatusCard({
-  sellerPayout,
-  inspectorPayout,
-  transporterPayout,
-  sellerName,
-  inspectorName,
-  transporterName,
-  isSeller,
-  isInspector,
-  isTransporter,
-  formatDateTime,
-}) {
+function Card({ id, title, subtitle, side, tone, children }) {
+  return (
+    <section className={`card${tone ? ` card-${tone}` : ''}`} id={id}>
+      <header className="card-head">
+        <div className="card-head-main">
+          <h2 className="card-title">{title}</h2>
+          {subtitle && <p className="card-subtitle">{subtitle}</p>}
+        </div>
+        {side && <div className="card-head-side">{side}</div>}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function Section({ title, meta, strong, children }) {
+  return (
+    <div className="card-section">
+      {(title || meta) && (
+        <div className="card-section-head">
+          <h3 className="card-section-title">{title}</h3>
+          {meta != null && <span className={`card-section-meta${strong ? ' is-strong' : ''}`}>{meta}</span>}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+const Facts = ({ children }) => <div className="detail-facts">{children}</div>;
+
+const Fact = ({ name, children }) => (
+  <div>
+    <span>{name}</span>
+    <strong>{children}</strong>
+  </div>
+);
+
+const Pill = ({ tone = 'neutral', dot = true, children }) => (
+  <span className={`status-pill tone-${tone}`}>
+    {dot && <span className="status-pill-dot" aria-hidden="true" />}
+    {children}
+  </span>
+);
+
+const YouTag = ({ inline }) => <span className={`party-you${inline ? ' party-you-inline' : ''}`}>You</span>;
+
+const Actions = ({ children }) => <div className="actions">{children}</div>;
+
+const SideLabel = ({ name, children }) => (
+  <>
+    <span className="card-side-label">{name}</span>
+    {children}
+  </>
+);
+
+function Notice({ title, children }) {
+  return (
+    <div className="notice">
+      {title && <strong>{title}</strong>}
+      {children}
+    </div>
+  );
+}
+
+const Button = ({ variant = 'default', size, busy, busyText, children, ...rest }) => (
+  <button
+    type="button"
+    className={`btn${variant !== 'default' ? ` btn-${variant}` : ''}${size ? ` btn-${size}` : ''}`}
+    {...rest}
+  >
+    {busy ? busyText : children}
+  </button>
+);
+
+/* ========================================================================
+   3. Payout card
+   ======================================================================== */
+
+function PayoutStatusCard({ payouts, names, you }) {
   const parties = [
-    { key: 'seller', label: 'Seller', name: sellerName, you: isSeller, payout: sellerPayout },
-    inspectorPayout && { key: 'inspector', label: 'Inspector', name: inspectorName, you: isInspector, payout: inspectorPayout },
-    transporterPayout && { key: 'transporter', label: 'Transporter', name: transporterName, you: isTransporter, payout: transporterPayout },
+    { key: 'seller', label: 'Seller', name: names.seller, you: you.seller, payout: payouts.seller },
+    payouts.inspector && { key: 'inspector', label: 'Inspector', name: names.inspector, you: you.inspector, payout: payouts.inspector },
+    payouts.transporter && { key: 'transporter', label: 'Transporter', name: names.transporter, you: you.transporter, payout: payouts.transporter },
   ]
     .filter(Boolean)
-    .map((party) => ({ ...party, status: party.payout?.status || null }));
+    .map((p) => ({ ...p, status: p.payout?.status || null }));
 
   const releaseMs = (payout) => {
     const t = payout?.releaseAt ? new Date(payout.releaseAt).getTime() : NaN;
@@ -91,42 +193,34 @@ function PayoutStatusCard({
     .map((p) => releaseMs(p.payout))
     .filter((t) => t !== null);
   const dueMs = dueTimes.length ? Math.max(...dueTimes) : null;
-
   const now = useNowUntil(dueMs);
 
   const anyDispute = parties.some((p) => p.status === 'ON_HOLD_DISPUTE');
   const holdNotStarted = parties.every((p) => !p.payout);
 
-  const statusOf = (party) => {
-    const { status, payout } = party;
-    if (!status) return { label: 'Pending', tone: 'tone-neutral' };
+  const badgeOf = ({ status, payout }) => {
+    if (!status) return { text: 'Pending', tone: 'neutral' };
     if (status === 'HELD') {
       const at = releaseMs(payout);
-      return at !== null && now >= at
-        ? { label: 'Released', tone: 'tone-good' }
-        : { label: 'Held', tone: 'tone-wait' };
+      return at !== null && now >= at ? { text: 'Released', tone: 'good' } : { text: 'Held', tone: 'wait' };
     }
-    if (status === 'RELEASED') return { label: 'Released', tone: 'tone-good' };
-    if (status === 'PAID_OUT') return { label: 'Paid out', tone: 'tone-good' };
-    if (status === 'ON_HOLD_DISPUTE') return { label: 'Dispute hold', tone: 'tone-bad' };
-    if (status === 'CANCELLED') return { label: 'Cancelled', tone: 'tone-bad' };
-    return { label: status.replace(/_/g, ' '), tone: 'tone-neutral' };
+    if (status === 'RELEASED') return { text: 'Released', tone: 'good' };
+    if (status === 'PAID_OUT') return { text: 'Paid out', tone: 'good' };
+    if (status === 'ON_HOLD_DISPUTE') return { text: 'Dispute hold', tone: 'bad' };
+    if (status === 'CANCELLED') return { text: 'Cancelled', tone: 'bad' };
+    return { text: label(status), tone: 'neutral' };
   };
 
-  const anyFraction = parties.some(
-    (p) => p.payout?.amount != null && Number(p.payout.amount) % 1 !== 0
-  );
-  const amountText = (value) =>
-    Number(value || 0).toLocaleString(undefined, {
+  const anyFraction = parties.some((p) => p.payout?.amount != null && Number(p.payout.amount) % 1 !== 0);
+  const amountText = (v) =>
+    Number(v || 0).toLocaleString(undefined, {
       minimumFractionDigits: anyFraction ? 2 : 0,
       maximumFractionDigits: 2,
     });
 
   const remainingMs = dueMs !== null ? Math.max(0, dueMs - now) : 0;
-  const totalSeconds = Math.floor(remainingMs / 1000);
-  const clock = `${PAYOUT_PAD(Math.floor(totalSeconds / 3600))}:${PAYOUT_PAD(
-    Math.floor((totalSeconds % 3600) / 60)
-  )}:${PAYOUT_PAD(totalSeconds % 60)}`;
+  const secs = Math.floor(remainingMs / 1000);
+  const clock = `${pad2(Math.floor(secs / 3600))}:${pad2(Math.floor((secs % 3600) / 60))}:${pad2(secs % 60)}`;
   const dueDate =
     dueMs !== null
       ? new Date(dueMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -134,35 +228,18 @@ function PayoutStatusCard({
   const duePassed = dueMs !== null && remainingMs === 0;
 
   return (
-    <div className="card payout-summary-card" id="order-payout-status">
-      <div className="card-head">
-        <div className="card-head-main">
-          <span className="eyebrow">PAYOUTS</span>
-          <h2 className="card-title">Order Payout Status</h2>
-        </div>
-        {dueDate && (
-          <div className="card-head-side">
-            <span className="card-side-label">Common due</span>
-            <span className="card-side-value">{dueDate}</span>
-          </div>
-        )}
-      </div>
-
-      <p className="payout-intro">
-        Buyer payment is separate from each payout below. Once the relevant payment settles, a{' '}
-        <span className="payout-hold-chip">3-day</span> hold applies to every payout during the
-        post-payment protection window.{' '}
-        {anyDispute
-          ? 'One or more payouts are frozen while a dispute is open.'
-          : 'No manual action is required.'}
+    <Card
+      id="order-payout-status"
+      title="Payouts"
+      subtitle="Each payout is held for 3 days after its payment settles."
+      side={dueDate && <SideLabel name="Common due"><span className="card-side-value">{dueDate}</span></SideLabel>}
+    >
+      <p className="muted">
+        Buyer payment is separate from each payout below.{' '}
+        {anyDispute ? 'One or more payouts are frozen while a dispute is open.' : 'No manual action is required.'}
       </p>
 
-      <div className="card-section">
-        <div className="card-section-head">
-          <h3 className="card-section-title">Parties</h3>
-          <span className="card-section-meta">Amount (ETB)</span>
-        </div>
-
+      <Section title="Parties" meta="Amount (ETB)">
         <table className="payout-table">
           <thead>
             <tr>
@@ -173,17 +250,17 @@ function PayoutStatusCard({
           </thead>
           <tbody>
             {parties.map((party) => {
-              const { key, label, name, you, payout, status } = party;
-              const badge = statusOf(party);
+              const { key, name, payout, status } = party;
+              const badge = badgeOf(party);
               const currency = payout?.currency && payout.currency !== 'ETB' ? payout.currency : null;
               return (
                 <tr key={key}>
                   <th scope="row" className="payout-party">
                     <div className="payout-party-body">
                       <span className="payout-party-line">
-                        <span className="payout-party-role">{label}</span>
-                        {name && <span className="payout-party-name">({name})</span>}
-                        {you && <span className="party-you">You</span>}
+                        <span className="payout-party-role">{party.label}</span>
+                        {name && <span className="payout-party-name">{name}</span>}
+                        {party.you && <YouTag />}
                       </span>
                       {status === 'RELEASED' && payout?.releasedAt && (
                         <span className="payout-party-note">Released {formatDateTime(payout.releasedAt)}</span>
@@ -191,9 +268,7 @@ function PayoutStatusCard({
                       {status === 'PAID_OUT' && payout?.paidOutAt && (
                         <span className="payout-party-note">Paid out {formatDateTime(payout.paidOutAt)}</span>
                       )}
-                      {payout?.payoutReference && (
-                        <span className="payout-party-note">Ref {payout.payoutReference}</span>
-                      )}
+                      {payout?.payoutReference && <span className="payout-party-note">Ref {payout.payoutReference}</span>}
                     </div>
                   </th>
                   <td className="payout-amount">
@@ -207,26 +282,20 @@ function PayoutStatusCard({
                     )}
                   </td>
                   <td className="payout-status">
-                    <span className={`status-pill ${badge.tone}`}>{badge.label}</span>
+                    <Pill tone={badge.tone}>{badge.text}</Pill>
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-      </div>
+      </Section>
 
       {dueMs !== null && (
-        <div
-          className={`payout-due${duePassed ? ' payout-due-done' : ''}`}
-          role="group"
-          aria-label="Common due"
-        >
+        <div className={`payout-due${duePassed ? ' payout-due-done' : ''}`} role="group" aria-label="Common due">
           <div className="payout-due-when">
             <span className="payout-due-label">Common due</span>
-            <time className="payout-due-date" dateTime={new Date(dueMs).toISOString()}>
-              {dueDate}
-            </time>
+            <time className="payout-due-date" dateTime={new Date(dueMs).toISOString()}>{dueDate}</time>
           </div>
           <div className="payout-due-clock" role="timer" aria-live="off">
             {duePassed ? (
@@ -249,23 +318,531 @@ function PayoutStatusCard({
           </div>
         </div>
       )}
+    </Card>
+  );
+}
+
+/* ========================================================================
+   4. Order overview
+   ======================================================================== */
+
+function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
+  const { isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob } = flags;
+  return (
+    <Card title={title} subtitle="Ordered produce">
+      <Section title="Status">
+        <div className="status-row">
+          <Pill tone={statusTone(order.status)}>{label(order.status)}</Pill>
+          {marketplacePaid && <Pill tone="good">Payment: Paid</Pill>}
+          {marketplacePending && !marketplacePaid && <Pill tone="wait">Payment: Pending</Pill>}
+          {transportJob?.status && <Pill tone="neutral" dot={false}>Transport: {label(transportJob.status)}</Pill>}
+        </div>
+      </Section>
+
+      <Section title="Parties">
+        <Facts>
+          <Fact name="Buyer">{order.buyer?.name || '—'}{isBuyer && <YouTag inline />}</Fact>
+          <Fact name="Seller">{order.seller?.name || '—'}{isSeller && <YouTag inline />}</Fact>
+        </Facts>
+      </Section>
+
+      <Section title="Order details">
+        <Facts>
+          <Fact name="Amount">{money(order.finalPrice)} ETB</Fact>
+          {order.listing?.cropType && <Fact name="Product">{order.listing.cropType}</Fact>}
+          {order.listing?.quantity != null && <Fact name="Quantity">{order.listing.quantity} units</Fact>}
+          <Fact name="Ordered from">{order.listing?.location || '—'}</Fact>
+          {order.buyer?.location && <Fact name="Deliver to">{order.buyer.location}</Fact>}
+          <Fact name="Ordered date">{formatDateTime(order.createdAt)}</Fact>
+          <Fact name="Order ID">{shortId(order.id)}</Fact>
+        </Facts>
+      </Section>
+
+      {canCancel && (
+        <Button variant="outline" className="btn btn-outline btn-block" disabled={busy === 'cancel'} onClick={onCancel} busy={busy === 'cancel'} busyText="Cancelling…">
+          Cancel order
+        </Button>
+      )}
+    </Card>
+  );
+}
+
+/* ========================================================================
+   5. Inspection
+   ======================================================================== */
+
+function InspectionCard({ order, title, i }) {
+  const request = i.current;
+
+  if (!request) {
+    const needsApproval = i.all.length > 0 && !i.formReleased;
+    return (
+      <Card id="inspection-section" title={needsApproval ? 'Inspection request awaiting admin approval' : 'Request an inspection'}>
+        <p className="muted">
+          Get an independent quality check before the purchase is committed. Registered inspectors compete by sending a
+          sealed fee quote. You compare bids, pick one to negotiate with, and the accepted quote assigns the inspector.
+          You review the finished report before paying for the goods.
+        </p>
+        {needsApproval ? (
+          <Notice title="Admin approval required">
+            <p>Ask MarketBridge admin to release a fresh inspection form before opening another competition.</p>
+          </Notice>
+        ) : (
+          <Button
+            variant="primary"
+            disabled={i.requesting}
+            busy={i.requesting}
+            busyText="Requesting…"
+            onClick={() => i.request(i.isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}
+          >
+            Open inspection request
+          </Button>
+        )}
+      </Card>
+    );
+  }
+
+  const report = request.report;
+  const reportReady = request.status === 'COMPLETED' && Boolean(report);
+  const inspectorName = request.inspector?.name || null;
+  const inspectionDate =
+    report?.inspectedAt || report?.completedAt || request.completedAt || request.updatedAt || request.createdAt || null;
+  const kind = i.isAgricultural ? 'Agricultural' : 'Product';
+
+  const side =
+    reportReady && inspectorName ? (
+      <SideLabel name="Inspector">
+        <div className="card-side-party">
+          <span className="card-side-value">{inspectorName}</span>
+          <span className="party-avatar" aria-hidden="true">{initials(inspectorName)}</span>
+        </div>
+      </SideLabel>
+    ) : (
+      <SideLabel name="Status">
+        <Pill tone={statusTone(request.status)}>{label(request.status)}</Pill>
+      </SideLabel>
+    );
+
+  return (
+    <Card id="inspection-section" title={reportReady ? 'Inspection report' : 'Inspection'} side={side}>
+      {reportReady ? (
+        <>
+          <Facts>
+            <Fact name="Product">{order.listing?.cropType || title}</Fact>
+            <Fact name="Quantity">{order.listing?.quantity != null ? `${order.listing.quantity} units` : '—'}</Fact>
+            <Fact name="Location">{order.listing?.location || '—'}</Fact>
+            <Fact name="Requested by">{request.mode === 'SELLER_REQUESTED' ? 'Seller' : 'Buyer'}</Fact>
+            <Fact name="Requested on">{formatDateTime(request.createdAt)}</Fact>
+            <Fact name="Inspection date">{formatDateTime(inspectionDate)}</Fact>
+            <Fact name="Inspected by">{inspectorName || '—'}</Fact>
+            {request.fee != null && <Fact name="Inspection fee">{money(request.fee)} ETB</Fact>}
+            <Fact name="Visible defects">{report.visibleDefects || 'No defects'}</Fact>
+            <Fact name="Damage notes">{report.damageNotes || 'No damage'}</Fact>
+            <Fact name="Packaging notes">{report.packagingNotes || 'Fully packed'}</Fact>
+          </Facts>
+
+          <Notice title={`${kind} inspection completed`}>
+            <p>Review the published findings before the purchase is committed.</p>
+          </Notice>
+
+          {i.decisionRequired && order.buyerDecision ? (
+            <div className={`inspection-decision-state ${order.buyerDecision === 'BUY' ? 'is-buy' : 'is-cancel'}`}>
+              <span className="inspection-decision-icon" aria-hidden="true">{order.buyerDecision === 'BUY' ? '✓' : '×'}</span>
+              <div>
+                <strong>{order.buyerDecision === 'BUY' ? 'BUY decision recorded' : 'Purchase cancelled after inspection'}</strong>
+                <p>
+                  {order.buyerDecision === 'BUY'
+                    ? 'Goods payment is unlocked. Transport can proceed once the required payments are confirmed.'
+                    : 'The purchase decision is closed.'}
+                </p>
+              </div>
+            </div>
+          ) : i.decisionRequired && i.isBuyer ? (
+            <div className="inspection-decision-panel">
+              <div>
+                <h3>What do you want to do with the inspected goods?</h3>
+                <p className="muted">
+                  Choose <strong>BUY</strong> only after reviewing the report. BUY unlocks goods payment; it does not
+                  complete payment or arrange transport.
+                </p>
+              </div>
+              <Actions>
+                <Button variant="primary" disabled={Boolean(i.busy)} busy={i.busy === 'buyer-decision-buy'} busyText="Recording…" onClick={() => i.decide('BUY')}>
+                  Buy — continue purchase
+                </Button>
+                <Button variant="light" disabled={Boolean(i.busy)} busy={i.busy === 'buyer-decision-cancel'} busyText="Cancelling…" onClick={() => i.decide('CANCEL')}>
+                  Cancel after inspection
+                </Button>
+              </Actions>
+            </div>
+          ) : i.decisionRequired ? (
+            <div className="inspection-waiting-note">
+              <strong>Awaiting buyer decision</strong>
+              <span>The buyer must review this report and choose Buy or Cancel before payment opens.</span>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        ['REQUESTED', 'ACCEPTED'].includes(request.status) && (
+          <Section title="Inspection recovery">
+            <p className="muted">
+              If every inspector bid is closed, reopen bidding. If you no longer want this request, cancel it without
+              cancelling the order.
+            </p>
+            <Actions>
+              <Button variant="primary" disabled={Boolean(i.busy)} busy={i.busy === `reopen-inspection-${request.id}`} busyText="Reopening…" onClick={i.reopenBidding}>
+                Reopen inspection bidding
+              </Button>
+              <Button variant="light" disabled={Boolean(i.busy)} busy={i.busy === `cancel-inspection-${request.id}`} busyText="Cancelling…" onClick={i.cancel}>
+                Cancel inspection request
+              </Button>
+            </Actions>
+          </Section>
+        )
+      )}
+    </Card>
+  );
+}
+
+/* ========================================================================
+   6. Transport
+   ======================================================================== */
+
+function EvidenceForm({ kind, t }) {
+  const isPickup = kind === 'PICKUP';
+  const { evidence, setEvidence, notes, setNotes, evidenceBusy } = t;
+  const ready = evidence.photoKeys.length || evidence.videoKeys.length || notes.trim();
+  return (
+    <Notice title={isPickup ? 'Pickup evidence required' : 'Delivery evidence'}>
+      {!isPickup && <p className="muted">Upload delivery evidence before marking the trip delivered.</p>}
+      <EvidenceUploader
+        uploadUrl={`/transport/${t.job.id}/evidence/media`}
+        disabled={evidenceBusy}
+        onUploaded={({ photoKeys, videoKeys }) =>
+          setEvidence((prev) => ({
+            photoKeys: [...prev.photoKeys, ...photoKeys],
+            videoKeys: [...prev.videoKeys, ...videoKeys],
+          }))
+        }
+      />
+      {(evidence.photoKeys.length > 0 || evidence.videoKeys.length > 0) && (
+        <p className="muted small">{evidence.photoKeys.length} photo(s), {evidence.videoKeys.length} video(s) ready.</p>
+      )}
+      <textarea
+        className="field"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder={`Optional ${isPickup ? 'pickup' : 'delivery'} condition / handover notes…`}
+        rows={3}
+        disabled={evidenceBusy}
+      />
+      <Button
+        variant="primary"
+        disabled={evidenceBusy || !ready}
+        busy={evidenceBusy}
+        busyText="Submitting…"
+        onClick={() => t.submitEvidence(kind, isPickup ? 'IN_TRANSIT' : 'DELIVERED')}
+      >
+        {isPickup ? 'Submit pickup evidence & mark in transit' : 'Submit delivery evidence & mark delivered'}
+      </Button>
+    </Notice>
+  );
+}
+
+function QuoteRow({ quote, t }) {
+  const key = `quote-${quote.id}`;
+  const working = t.busy === key;
+  const amount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
+  const arrangerTurn = quote.status === 'SELECTED' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+  const isOwner = quote.truckOwnerId === t.currentUserId;
+  const transporterTurn = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
+  const canRespond = (t.canChooseQuote && arrangerTurn) || (isOwner && transporterTurn);
+  const rating = typeof quote.truckOwner?.rating === 'number' ? quote.truckOwner.rating.toFixed(1) : '—';
+
+  return (
+    <div className="transporter">
+      <div>
+        <strong>{quote.truckOwner?.name || 'Truck owner'}</strong>
+        <p>
+          {quote.truck?.truckType || 'Truck'} · {quote.truck?.capacity != null ? `${quote.truck.capacity}t` : 'Capacity —'} ·{' '}
+          {quote.truck?.registration || 'Registration —'} · ★ {rating}
+        </p>
+        {quote.message && <p className="muted">{quote.message}</p>}
+        <p>Status: <span className="badge">{quote.status || 'PENDING'}</span></p>
+        {transporterTurn && <p className="muted">You countered {money(amount)} ETB — waiting for the transporter.</p>}
+      </div>
+
+      <div>
+        <strong>{money(amount)} ETB</strong>
+
+        {t.canChooseQuote && quote.status === 'PENDING' && (
+          <>
+            <Button variant="primary" size="sm" disabled={working} busy={working} busyText="Selecting…" onClick={() => t.selectQuote(quote.id)}>
+              Select bid for deal
+            </Button>
+            <span className="muted small">Selecting opens price negotiation.</span>
+          </>
+        )}
+
+        {canRespond && (
+          <div className="quote-actions">
+            <Button size="sm" disabled={working} busy={working} busyText="Accepting…" onClick={() => t.acceptQuote(quote.id)}>
+              {transporterTurn ? 'Accept buyer counter' : 'Accept quote'}
+            </Button>
+            <input
+              className="field field-inline"
+              type="number"
+              min="1"
+              placeholder="Counter (ETB)"
+              value={t.counterInputs[quote.id] || ''}
+              onChange={(e) => t.setCounterInputs((q) => ({ ...q, [quote.id]: e.target.value }))}
+            />
+            <Button variant="light" size="sm" disabled={working} busy={working} busyText="Sending…" onClick={() => t.counterQuote(quote.id)}>
+              Counter
+            </Button>
+            <Button variant="light" size="sm" disabled={working} busy={working} busyText="Rejecting…" onClick={() => t.rejectQuote(quote.id)}>
+              Reject
+            </Button>
+          </div>
+        )}
+
+        {quote.status === 'ACCEPTED' && t.isArranger && !t.pending && (
+          <>
+            <span className="muted small">Provisional agreement — the truck is not committed until transport payment succeeds.</span>
+            <Button variant="light" size="sm" disabled={working} busy={working} busyText="Releasing…" onClick={() => t.releaseQuote(quote.id)}>
+              Transporter unavailable — choose another
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
-const initials = (name) =>
-  String(name || '?')
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase() || '?';
+function TransportCard({ order, t }) {
+  const job = t.job;
+  const hired = job?.method === 'HIRE_TRANSPORTER';
+  const quotes = leafQuotes(job?.quotes);
 
-const PAYMENT_METHODS = [
-  { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
-  { value: 'QR', label: 'QR Code' },
-];
+  const subtitle = job
+    ? `${job.arrangingParty || '—'} arranged · ${job.method || '—'}`
+    : 'The buyer or seller arranges transport. MarketBridge does not assign a transporter automatically.';
+
+  return (
+    <Card
+      id="transport-section"
+      title="Transport"
+      subtitle={subtitle}
+      side={job?.status && <SideLabel name="Status"><Pill tone={statusTone(job.status)}>{label(job.status)}</Pill></SideLabel>}
+    >
+      {!job ? (
+        t.canArrange ? (
+          <TransportSetup
+            orderId={order.id}
+            pickupDefault={order.listing?.location}
+            destinationDefault={order.buyer?.location}
+            canBuyer={t.isBuyer}
+            canSeller={t.isSeller}
+            onCreated={t.reload}
+          />
+        ) : (
+          <p className="muted">No transport arrangement recorded yet.</p>
+        )
+      ) : (
+        <>
+          <Section title="Trip details" meta={job.method || '—'}>
+            <Facts>
+              <Fact name="Arranged by">{job.arrangingParty || '—'}</Fact>
+              <Fact name="Pickup">{job.pickupLocation || '—'}</Fact>
+              <Fact name="Destination">{job.destination || '—'}</Fact>
+              {job.load && <Fact name="Load">{job.load}</Fact>}
+              {job.requiredCapacity != null && <Fact name="Required capacity">{job.requiredCapacity}</Fact>}
+            </Facts>
+          </Section>
+
+          {job.truckOwner && (
+            <Section title="Transporter" meta={job.agreedAmount != null ? `${money(job.agreedAmount)} ETB` : null} strong>
+              <p><strong>{job.truckOwner.name || '—'}</strong></p>
+              {job.truckOwner.phone && <p className="muted">Phone: {job.truckOwner.phone}</p>}
+              {job.truck && (
+                <p>
+                  Truck: <strong>{job.truck.registration || '—'}</strong> · {job.truck.truckType || 'Truck'}
+                  {job.truck.capacity != null && ` · ${job.truck.capacity}t`}
+                </p>
+              )}
+            </Section>
+          )}
+
+          {hired && !t.paid && (
+            <Section title="Transport quotes" meta="Bids">
+              {quotes.length ? (
+                quotes.map((q) => <QuoteRow key={q.id} quote={q} t={t} />)
+              ) : (
+                <p className="muted">Waiting for registered truck owners to submit quotes.</p>
+              )}
+            </Section>
+          )}
+
+          {job.method === 'OWN_TRUCK' && (
+            <Section title="Transport payment">
+              <p><strong>No separate transporter payment is required.</strong></p>
+              <p className="muted">This order uses the owner's own truck, so no transport payment is created.</p>
+            </Section>
+          )}
+
+          {hired && !t.paid && (
+            <Section title="Transport payment" meta={job.agreedAmount != null ? `${money(job.agreedAmount)} ETB` : null} strong>
+              <p className="muted">
+                Transport payment is separate from the seller payment. You can pay as soon as the quote is accepted. The
+                transporter cannot start the trip until every required payment is confirmed.
+              </p>
+              {t.canStartPayment && (
+                <div className="field-row">
+                  <select className="field field-inline" value={t.payMethod} onChange={(e) => t.setPayMethod(e.target.value)} disabled={t.busy === 'pay-transport'}>
+                    {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                  <Button variant="primary" size="sm" disabled={t.busy === 'pay-transport'} busy={t.busy === 'pay-transport'} busyText="Submitting…" onClick={t.pay}>
+                    Pay for transport
+                  </Button>
+                </div>
+              )}
+              {t.canResumePayment && (
+                <>
+                  <p>Pending payment: <strong>{t.payment.method || '—'}</strong>, {money(t.payment.amount)} ETB. It was started but not completed.</p>
+                  <Button variant="primary" size="sm" disabled={t.busy === 'resume-transport'} busy={t.busy === 'resume-transport'} busyText="Redirecting…" onClick={() => t.resume(t.payment.id, 'resume-transport')}>
+                    Resume payment
+                  </Button>
+                </>
+              )}
+            </Section>
+          )}
+
+          {t.paid && (
+            <Section title="Transport payment confirmed" meta={`${money(t.paidAmount)} ETB`} strong />
+          )}
+
+          {t.isArranger && ['REQUESTED', 'QUOTED', 'ACCEPTED', 'CANCELLED'].includes(job.status) && (
+            <Section title="Transport recovery">
+              <p className="muted">
+                If the competition has stalled or the previous arrangement was cancelled, request admin approval to
+                release a fresh transport form.
+              </p>
+              {t.recoveryRequests.filter((r) => r.type === 'TRANSPORT').map((r) => (
+                <p className="muted small" key={r.id}>
+                  Recovery: <strong>{r.status}</strong>{r.formReleasedAt ? ' — fresh form released' : ' — awaiting admin approval'}
+                </p>
+              ))}
+              <Button
+                variant="primary"
+                disabled={Boolean(t.busy) || t.recoveryRequests.some((r) => r.type === 'TRANSPORT' && r.status === 'PENDING')}
+                busy={t.busy === 'recovery-TRANSPORT'}
+                busyText="Requesting…"
+                onClick={t.requestRecovery}
+              >
+                Request fresh transport form
+              </Button>
+            </Section>
+          )}
+
+          <Section title="Pickup and delivery evidence">
+            <p className="muted">
+              The transporter must upload pickup evidence before moving the trip from Pickup to In transit, and delivery
+              evidence before marking it Delivered.
+            </p>
+            {t.isTransporter && job.status === 'PICKUP' && <EvidenceForm kind="PICKUP" t={t} />}
+            {t.isTransporter && job.status === 'IN_TRANSIT' && <EvidenceForm kind="DELIVERY" t={t} />}
+            <EvidenceGallery
+              listUrl={`/transport/${job.id}/evidence`}
+              mediaUrl={(evidenceId) => `/transport/${job.id}/evidence/${evidenceId}/media`}
+            />
+          </Section>
+
+          {job.status === 'DELIVERED' && (
+            <Section title="Delivery">
+              <p><strong>✓ Transport marked as delivered.</strong></p>
+              {job.deliveredConfirmedAt && <p className="muted">Delivery confirmed.</p>}
+            </Section>
+          )}
+
+          {job.incidentNotes && (
+            <div className="alert"><strong>Transport notes:</strong> {job.incidentNotes}</div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+/* ========================================================================
+   7. Offer, receipt, dispute, completed, admin
+   ======================================================================== */
+
+function OfferCard({ amount, setAmount, message, setMessage, submitting, onSubmit }) {
+  return (
+    <Card id="make-offer" title="Make an offer" subtitle="Your offer enters the seller's competition. It does not charge you or reserve the product.">
+      <form onSubmit={onSubmit} className="form">
+        <label htmlFor="offer-amount">Offer amount (ETB)</label>
+        <input id="offer-amount" className="field" type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter your offer" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={submitting} required />
+        <label htmlFor="offer-message">Message to seller <span className="optional">(optional)</span></label>
+        <textarea id="offer-message" className="field" rows="3" placeholder="Add a message to the seller" value={message} onChange={(e) => setMessage(e.target.value)} disabled={submitting} />
+        <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Submitting…' : 'Make offer'}</button>
+      </form>
+    </Card>
+  );
+}
+
+function ReceiptCard({ marketplacePaid, transportBlocked, busy, onConfirm }) {
+  return (
+    <Card id="confirm-receipt" title="Confirm receipt" subtitle="Confirm only after you have physically received the produce or product.">
+      {!marketplacePaid && <div className="alert error">Marketplace payment must be confirmed before receipt can be completed.</div>}
+      {transportBlocked && <div className="alert error">Transport payment must be confirmed before receipt can be completed.</div>}
+      <Button variant="primary" className="btn btn-primary btn-block" disabled={busy === 'receipt' || !marketplacePaid || transportBlocked} busy={busy === 'receipt'} busyText="Confirming…" onClick={onConfirm}>
+        Confirm receipt & complete order
+      </Button>
+    </Card>
+  );
+}
+
+function DisputeCard({ order, d }) {
+  if (order.status === 'DISPUTED') {
+    return (
+      <Card id="raise-dispute" tone="warning" title="Dispute open">
+        <p className="muted">
+          An admin is reviewing this order. <strong>Payments, transport, inspection and payouts are paused</strong> while
+          the dispute is open. The order will either resume or be cancelled and refunded after review.
+        </p>
+      </Card>
+    );
+  }
+  if (!d.canRaise) return null;
+
+  return (
+    <Card id="raise-dispute" title="Raise a dispute" subtitle="Use this if something went wrong — goods not delivered, quality issues, or a payment problem.">
+      {d.submitted ? (
+        <div className="alert success">Dispute submitted. The order is marked as disputed while an admin reviews it.</div>
+      ) : (
+        <form onSubmit={d.submit} className="form">
+          <label htmlFor="dispute-against">Dispute against</label>
+          <select id="dispute-against" className="field" value={d.againstId} onChange={(e) => d.setAgainstId(e.target.value)} required>
+            <option value="">Select who this is about…</option>
+            {d.counterparties.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.role})</option>)}
+          </select>
+          <label htmlFor="dispute-type">Type</label>
+          <select id="dispute-type" className="field" value={d.type} onChange={(e) => d.setType(e.target.value)}>
+            {DISPUTE_TYPES.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+          </select>
+          <label htmlFor="dispute-description">What happened?</label>
+          <textarea id="dispute-description" className="field" rows={4} placeholder="Describe the issue in detail" value={d.description} onChange={(e) => d.setDescription(e.target.value)} required />
+          <button type="submit" className="btn btn-outline" disabled={d.submitting}>{d.submitting ? 'Submitting…' : 'Raise dispute'}</button>
+        </form>
+      )}
+    </Card>
+  );
+}
+
+/* ========================================================================
+   8. Page
+   ======================================================================== */
 
 export default function OrderDetail() {
   const { orderId } = useParams();
@@ -273,6 +850,7 @@ export default function OrderDetail() {
   const location = useLocation();
   const { user } = useAuth();
 
+  /* ---------- state ---------- */
   const [order, setOrder] = useState(null);
   const [workflow, setWorkflow] = useState(null);
   const [recoveryRequests, setRecoveryRequests] = useState([]);
@@ -280,19 +858,17 @@ export default function OrderDetail() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
-  const [transportCounterInputs, setTransportCounterInputs] = useState({});
-  const [transportEvidence, setTransportEvidence] = useState({ photoKeys: [], videoKeys: [] });
-  const [transportEvidenceNotes, setTransportEvidenceNotes] = useState('');
-  const [transportEvidenceBusy, setTransportEvidenceBusy] = useState(false);
 
   const [payMethod, setPayMethod] = useState('TELEBIRR');
+
+  const [counterInputs, setCounterInputs] = useState({});
+  const [evidence, setEvidence] = useState({ photoKeys: [], videoKeys: [] });
+  const [evidenceNotes, setEvidenceNotes] = useState('');
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
+
   const [offerAmount, setOfferAmount] = useState('');
   const [offerMessage, setOfferMessage] = useState('');
   const [submittingOffer, setSubmittingOffer] = useState(false);
-
-  const [inspectorId, setInspectorId] = useState('');
-  const [inspectionFee, setInspectionFee] = useState('');
-  const [findingInspector, setFindingInspector] = useState(false);
   const [requestingInspection, setRequestingInspection] = useState(false);
 
   const [disputeAgainstId, setDisputeAgainstId] = useState('');
@@ -301,21 +877,14 @@ export default function OrderDetail() {
   const [submittingDispute, setSubmittingDispute] = useState(false);
   const [disputeSubmitted, setDisputeSubmitted] = useState(false);
 
-  const errorToastTimer = useRef(null);
-
+  /* ---------- toast auto-dismiss ---------- */
   useEffect(() => {
-    if (errorToastTimer.current) {
-      window.clearTimeout(errorToastTimer.current);
-      errorToastTimer.current = null;
-    }
-    if (error) {
-      errorToastTimer.current = window.setTimeout(() => setError(''), 3000);
-    }
-    return () => {
-      if (errorToastTimer.current) window.clearTimeout(errorToastTimer.current);
-    };
+    if (!error) return undefined;
+    const timer = window.setTimeout(() => setError(''), 3000);
+    return () => window.clearTimeout(timer);
   }, [error]);
 
+  /* ---------- data loading ---------- */
   const load = useCallback(
     async ({ silent = false } = {}) => {
       if (!orderId) return;
@@ -323,26 +892,15 @@ export default function OrderDetail() {
       else setLoading(true);
       setError('');
       try {
-        const [orderResponse, workflowResponse, recoveryResponse] = await Promise.allSettled([
+        const [orderRes, workflowRes, recoveryRes] = await Promise.allSettled([
           api.get(`/orders/${orderId}`),
           api.get(`/orders/${orderId}/workflow`),
           api.get(`/recovery-requests/order/${orderId}`),
         ]);
-        if (orderResponse.status === 'fulfilled') {
-          setOrder(orderResponse.value.data?.order || null);
-        } else {
-          throw orderResponse.reason;
-        }
-        setRecoveryRequests(
-          recoveryResponse.status === 'fulfilled'
-            ? recoveryResponse.value.data?.recoveryRequests || []
-            : []
-        );
-        setWorkflow(
-          workflowResponse.status === 'fulfilled'
-            ? workflowResponse.value.data?.workflow || null
-            : null
-        );
+        if (orderRes.status !== 'fulfilled') throw orderRes.reason;
+        setOrder(orderRes.value.data?.order || null);
+        setWorkflow(workflowRes.status === 'fulfilled' ? workflowRes.value.data?.workflow || null : null);
+        setRecoveryRequests(recoveryRes.status === 'fulfilled' ? recoveryRes.value.data?.recoveryRequests || [] : []);
       } catch (err) {
         setError(getError(err, 'Could not load order'));
       } finally {
@@ -354,789 +912,452 @@ export default function OrderDetail() {
   );
 
   useEffect(() => { load(); }, [load]);
-
-  async function submitProductOffer(event) {
-    event.preventDefault();
-    const amount = Number(offerAmount);
-    if (!Number.isFinite(amount) || amount <= 0 || !order?.listingId) {
-      setError('Enter a valid offer amount before submitting.');
-      return;
-    }
-    setSubmittingOffer(true);
-    setError('');
-    try {
-      await api.post('/offers', {
-        listingId: order.listingId,
-        amount,
-        message: offerMessage.trim() || undefined,
-      });
-      setOfferAmount('');
-      setOfferMessage('');
-      await load({ silent: true });
-      setError('Offer submitted. The seller can select it and begin negotiation.');
-    } catch (err) {
-      setError(getError(err, 'Could not submit your offer'));
-    } finally {
-      setSubmittingOffer(false);
-    }
-  }
+  const reload = useCallback(() => load({ silent: true }), [load]);
 
   useEffect(() => {
     if (loading) return;
     const id = location.hash?.replace('#', '');
-    if (!id) return;
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (id) scrollToId(id);
   }, [loading, location.hash]);
 
-  const transportJob = order?.transportJob?.status === 'CANCELLED' ? null : (order?.transportJob || null);
-  const cancelledTransportJob = order?.transportJob?.status === 'CANCELLED' ? order.transportJob : null;
-  const payments = Array.isArray(order?.payments) ? order.payments : [];
+  /* One wrapper for the "busy → call → reload → report error" pattern. */
+  const run = async (key, fn, fallback) => {
+    setBusy(key);
+    setError('');
+    try {
+      await fn();
+      await reload();
+      return true;
+    } catch (err) {
+      setError(getError(err, fallback));
+      return false;
+    } finally {
+      setBusy('');
+    }
+  };
 
+  /* ---------- identity & roles ---------- */
   const currentUserId = user?.id || user?.userId || user?._id || null;
-  const userRoles = Array.isArray(user?.roles) ? user.roles : [];
-  const isAdmin = userRoles.includes('ADMIN');
-
+  const isAdmin = (Array.isArray(user?.roles) ? user.roles : []).includes('ADMIN');
   const isBuyer = Boolean(order && currentUserId && currentUserId === order.buyerId);
   const isSeller = Boolean(order && currentUserId && currentUserId === order.sellerId);
   const isParticipant = isBuyer || isSeller;
+  const buyerIdentityMismatch = Boolean(order && currentUserId && !isParticipant && !isAdmin);
 
-  const buyerIdentityMismatch = Boolean(
-    order && currentUserId && !isBuyer && !isSeller && !isAdmin
-  );
-
+  /* ---------- listing kind ---------- */
   const isAgricultural = order?.listing?.category === 'AGRICULTURAL';
-  const isProductsMarketplace = order?.listing?.category === 'PRODUCT';
-  const inspectionApplies = isAgricultural || isProductsMarketplace;
+  const isProduct = order?.listing?.category === 'PRODUCT';
+  const inspectionApplies = isAgricultural || isProduct;
+  const title = order?.listing?.title || order?.listing?.cropType || 'Order';
 
-  const allInspectionRequests = useMemo(
+  /* ---------- inspection ---------- */
+  const allInspections = useMemo(
     () =>
       (order?.inspectionRequests || order?.listing?.inspectionRequests || [])
         .slice()
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [order?.inspectionRequests, order?.listing?.inspectionRequests]
   );
-
-  const inspectionRequests = useMemo(
-    () => allInspectionRequests.filter((request) => request.status !== 'CANCELLED'),
-    [allInspectionRequests]
-  );
-
-  const currentInspectionRequest = inspectionRequests[0] || null;
-
-  const assignedInspection = useMemo(
-    () =>
-      inspectionRequests.find(
-        (request) => request.inspectorId === currentUserId
-      ) || null,
-    [inspectionRequests, currentUserId]
-  );
-
+  const inspections = useMemo(() => allInspections.filter((r) => r.status !== 'CANCELLED'), [allInspections]);
+  const currentInspection = inspections[0] || null;
+  const assignedInspection = inspections.find((r) => r.inspectorId === currentUserId) || null;
   const isInspector = Boolean(assignedInspection);
-  const isTransporter = Boolean(
-    transportJob?.truckOwnerId && transportJob.truckOwnerId === currentUserId
-  );
+  const inspectionFormReleased = recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'APPROVED' && r.formReleasedAt);
+  const inspectorName = (order?.inspectionRequests || inspections).find((r) => r?.inspector?.name)?.inspector?.name || null;
 
-  const inspectionPaymentRows = useMemo(
-    () =>
-      currentInspectionRequest &&
-      currentInspectionRequest.fee != null &&
-      Number(currentInspectionRequest.fee) > 0
-        ? [currentInspectionRequest]
-        : [],
-    [currentInspectionRequest]
-  );
+  const inspectionGateMet =
+    !inspectionApplies || Boolean(currentInspection && currentInspection.status === 'COMPLETED' && currentInspection.report);
+  const decisionRequired = inspectionApplies;
+  const decisionGateMet = !decisionRequired || order?.buyerDecision === 'BUY';
+  const negotiatedGateMet = !isProduct || Boolean(order?.agreedOfferId);
 
-  const inspectionPaymentsComplete = inspectionPaymentRows.every(
-    (request) =>
-      (request.payments || []).some(
-        (payment) => payment.type === 'INSPECTOR' && payment.status === 'PAID'
-      )
-  );
-
-  const inspectionPaymentGroups = useMemo(
-    () =>
-      inspectionApplies
-        ? inspectionPaymentRows.map((request) => {
-            const requestPayment =
-              (request.payments || []).find(
-                (payment) =>
-                  payment.type === 'INSPECTOR' &&
-                  ['PENDING', 'PROCESSING'].includes(payment.status)
-              ) || null;
-            const paid = (request.payments || []).some(
-              (payment) => payment.type === 'INSPECTOR' && payment.status === 'PAID'
-            );
-            const busyKey = `${requestPayment?.status === 'PROCESSING' ? 'check' : requestPayment ? 'resume' : 'pay'}-inspection-${request.id}`;
-
-            return {
-              id: request.id,
-              label: `${request.inspector?.name || 'Inspector'} — inspection fee`,
-              amount: request.fee,
-              paid,
-              pending: Boolean(requestPayment),
-              processing: requestPayment?.status === 'PROCESSING',
-              note:
-                request.status !== 'COMPLETED'
-                  ? `Inspection status: ${request.status}`
-                  : null,
-              busyKey,
-              canCheck: requestPayment?.status === 'PROCESSING',
-              canResume: Boolean(requestPayment) && requestPayment.status !== 'PROCESSING',
-              onCheck: () => checkPaymentStatus(requestPayment?.id, busyKey),
-              onResume: () => resumePayment(requestPayment?.id, busyKey),
-              onPay: () => payInspection(request),
-            };
-          })
-        : [],
-    [inspectionApplies, inspectionPaymentRows]
-  );
-
+  /* ---------- transport ---------- */
+  const rawJob = order?.transportJob || null;
+  const transportJob = rawJob?.status === 'CANCELLED' ? null : rawJob;
+  const isTransporter = Boolean(transportJob?.truckOwnerId && transportJob.truckOwnerId === currentUserId);
   const isTransportArranger = Boolean(
     transportJob &&
-    (
-      (transportJob.arrangingParty === 'BUYER' && isBuyer) ||
-      (transportJob.arrangingParty === 'SELLER' && isSeller) ||
-      (transportJob.arrangingParty === 'JOINT' && isParticipant)
-    )
+      ((transportJob.arrangingParty === 'BUYER' && isBuyer) ||
+        (transportJob.arrangingParty === 'SELLER' && isSeller) ||
+        (transportJob.arrangingParty === 'JOINT' && isParticipant))
   );
+  const transportInMotion = Boolean(transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status));
+  const acceptedQuote = Array.isArray(transportJob?.quotes) ? transportJob.quotes.find((q) => q.status === 'ACCEPTED') : null;
 
-  const inspectionPaid = Boolean(
-    order?.listing?.inspectionRequests?.some(
-      (request) =>
-        request.payments?.some(
-          (payment) => payment.type === 'INSPECTOR' && payment.status === 'PAID'
-        )
-    )
-  );
+  /* ---------- payments ---------- */
+  const payments = Array.isArray(order?.payments) ? order.payments : [];
+  const active = (p) => ['PENDING', 'PROCESSING'].includes(p.status);
+  const pick = (list) => list.find(active) || list.find((p) => p.status === 'PAID') || null;
 
-  const title = order?.listing?.title || order?.listing?.cropType || 'Order';
-
-  const marketplacePayments = useMemo(
-    () => payments.filter((payment) => payment.type === 'MARKETPLACE'),
-    [payments]
-  );
-
-  const transportPayments = useMemo(
-    () => payments.filter((payment) => payment.type === 'TRANSPORT'),
-    [payments]
-  );
-
-  const marketplacePayment = useMemo(() => {
-    return (
-      marketplacePayments.find((payment) => ['PENDING', 'PROCESSING'].includes(payment.status)) ||
-      marketplacePayments.find((payment) => payment.status === 'PAID') ||
-      null
-    );
-  }, [marketplacePayments]);
+  const marketplacePayments = useMemo(() => payments.filter((p) => p.type === 'MARKETPLACE'), [payments]);
+  const transportPayments = useMemo(() => payments.filter((p) => p.type === 'TRANSPORT'), [payments]);
+  const marketplacePayment = useMemo(() => pick(marketplacePayments), [marketplacePayments]); // eslint-disable-line react-hooks/exhaustive-deps
+  const transportPayment = useMemo(() => pick(transportPayments), [transportPayments]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const installmentPlan = useMemo(
     () =>
       marketplacePayments.find(
-        (payment) =>
-          payment.installmentCount != null &&
-          ['PENDING', 'PROCESSING', 'PAID'].includes(payment.status)
+        (p) => p.installmentCount != null && ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
       ) || null,
     [marketplacePayments]
   );
-
   const installmentPayments = useMemo(
     () =>
       payments
         .filter(
-          (payment) =>
-            payment.type === 'MARKETPLACE_INSTALLMENT' &&
-            payment.installmentSequence != null &&
-            (!installmentPlan || payment.parentPaymentId === installmentPlan.id)
+          (p) =>
+            p.type === 'MARKETPLACE_INSTALLMENT' &&
+            p.installmentSequence != null &&
+            (!installmentPlan || p.parentPaymentId === installmentPlan.id)
         )
         .sort((a, b) => (a.installmentSequence || 0) - (b.installmentSequence || 0)),
     [payments, installmentPlan]
   );
 
+  /* Heal a plan whose installments are all paid but whose parent is still pending. */
   const planHealRef = useRef(null);
   useEffect(() => {
     if (
       !installmentPlan ||
       installmentPlan.status !== 'PENDING' ||
       installmentPayments.length !== installmentPlan.installmentCount ||
-      !installmentPayments.every((payment) => payment.status === 'PAID') ||
+      !installmentPayments.every((p) => p.status === 'PAID') ||
       planHealRef.current === installmentPlan.id
-    ) {
-      return;
-    }
+    ) return;
     planHealRef.current = installmentPlan.id;
-    api
-      .get(`/payments/${installmentPlan.id}/chapa/verify`)
-      .then(() => load({ silent: true }))
-      .catch(() => {});
-  }, [installmentPlan, installmentPayments]); // eslint-disable-line react-hooks/exhaustive-deps
+    api.get(`/payments/${installmentPlan.id}/chapa/verify`).then(reload).catch(() => {});
+  }, [installmentPlan, installmentPayments, reload]);
 
-  const transportPayment = useMemo(() => {
-    return (
-      transportPayments.find((payment) => ['PENDING', 'PROCESSING'].includes(payment.status)) ||
-      transportPayments.find((payment) => payment.status === 'PAID') ||
-      null
-    );
-  }, [transportPayments]);
-
-  const marketplacePaid = marketplacePayments.some((payment) => payment.status === 'PAID');
-  const marketplacePending = marketplacePayments.some((payment) => ['PENDING', 'PROCESSING'].includes(payment.status));
-  const marketplaceProcessing = marketplacePayments.some((payment) => payment.status === 'PROCESSING');
-  const transportPaid = transportPayments.some((payment) => payment.status === 'PAID');
-
-  const payouts = order?.payouts || [];
-  const sellerPayout = payouts.find((p) => p.payeeRole === 'SELLER') || null;
-  const transporterPayout = payouts.find((p) => p.payeeRole === 'TRANSPORTER') || null;
-  const inspectorPayout = payouts.find((p) => p.payeeRole === 'INSPECTOR') || null;
-  const payoutStatus = sellerPayout?.status || null;
-  const refunds = order?.refunds || [];
-
-  const formatDateTime = (value) => {
-    if (!value) return '—';
-    const date = new Date(value);
-    return Number.isNaN(date.getTime())
-      ? '—'
-      : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-  };
-
-  const transportPending = transportPayments.some((payment) => ['PENDING', 'PROCESSING'].includes(payment.status));
-  const transportProcessing = transportPayments.some((payment) => payment.status === 'PROCESSING');
-
-  const canArrangeTransport =
-    Boolean(order) &&
-    !transportJob &&
-    order.status !== 'CANCELLED' &&
-    isParticipant;
-
-  const canChooseQuote =
-    Boolean(transportJob) &&
-    isTransportArranger &&
-    ['REQUESTED', 'QUOTED'].includes(transportJob.status);
-
-  const acceptedTransportQuote = Array.isArray(transportJob?.quotes)
-    ? transportJob.quotes.find((quote) => quote.status === 'ACCEPTED')
-    : null;
-
-  const canStartTransportPayment =
-    Boolean(transportJob) &&
-    transportJob.method === 'HIRE_TRANSPORTER' &&
-    Boolean(transportJob.truckOwnerId) &&
-    Boolean(acceptedTransportQuote) &&
-    transportJob.agreedAmount != null &&
-    Number(transportJob.agreedAmount) > 0 &&
-    ['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
-    !transportPayments.some(
-      (payment) =>
-        payment.status === 'PENDING' ||
-        payment.status === 'PROCESSING' ||
-        payment.status === 'PAID'
-    ) &&
-    isBuyer;
-
-  const canResumeTransportPayment =
-    Boolean(transportPayment) &&
-    transportPayment.status === 'PENDING' &&
-    isBuyer;
-
-  const canCheckTransportPayment =
-    Boolean(transportPayment) &&
-    transportPayment.status === 'PROCESSING' &&
-    isBuyer;
-
-  const inspectionPurchaseGateMet =
-    !inspectionApplies
-      ? true
-      : Boolean(
-          currentInspectionRequest &&
-          currentInspectionRequest.status === 'COMPLETED' &&
-          currentInspectionRequest.report
-        );
-
-  const buyerDecisionRequired = isAgricultural || isProductsMarketplace;
-  const buyerDecisionGateMet = !buyerDecisionRequired || order?.buyerDecision === 'BUY';
-  const negotiatedProductGateMet = !isProductsMarketplace || Boolean(order?.agreedOfferId);
+  const marketplacePaid = marketplacePayments.some((p) => p.status === 'PAID');
+  const marketplacePending = marketplacePayments.some(active);
+  const marketplaceProcessing = marketplacePayments.some((p) => p.status === 'PROCESSING');
+  const transportPaid = transportPayments.some((p) => p.status === 'PAID');
+  const transportPending = transportPayments.some(active);
+  const transportProcessing = transportPayments.some((p) => p.status === 'PROCESSING');
+  const hiredTransport = transportJob?.method === 'HIRE_TRANSPORTER';
 
   const canPayMarketplace =
     Boolean(order) &&
-    order.status !== 'COMPLETED' &&
-    order.status !== 'CANCELLED' &&
+    !['COMPLETED', 'CANCELLED'].includes(order.status) &&
     isBuyer &&
-    inspectionPurchaseGateMet &&
-    buyerDecisionGateMet &&
-    negotiatedProductGateMet &&
-    !marketplacePayments.some((payment) =>
-      ['PENDING', 'PROCESSING', 'PAID'].includes(payment.status)
-    );
+    inspectionGateMet &&
+    decisionGateMet &&
+    negotiatedGateMet &&
+    !marketplacePayments.some((p) => ['PENDING', 'PROCESSING', 'PAID'].includes(p.status));
 
   const marketplaceBlockedReason =
-    isProductsMarketplace && !negotiatedProductGateMet
+    isProduct && !negotiatedGateMet
       ? 'This product must first be won through seller bidding and bilateral negotiation before payment.'
-      : inspectionApplies && !inspectionPurchaseGateMet
-      ? (!currentInspectionRequest
+      : inspectionApplies && !inspectionGateMet
+      ? !currentInspection
         ? 'Request and complete the inspection before paying for the goods.'
-        : 'Complete the current inspection and make sure its report is published before paying for the goods.')
-      : buyerDecisionRequired && !buyerDecisionGateMet
-        ? `Choose BUY after reviewing the ${isAgricultural ? 'agricultural ' : ''}inspection report before paying for the goods.`
-        : null;
+        : 'Complete the current inspection and make sure its report is published before paying for the goods.'
+      : decisionRequired && !decisionGateMet
+      ? `Choose BUY after reviewing the ${isAgricultural ? 'agricultural ' : ''}inspection report before paying for the goods.`
+      : null;
 
-  const canResumeMarketplacePayment =
-    Boolean(marketplacePayment) &&
-    !installmentPlan &&
-    marketplacePayment.status === 'PENDING' &&
+  const canStartTransportPayment =
+    Boolean(transportJob) &&
+    hiredTransport &&
+    Boolean(transportJob.truckOwnerId) &&
+    Boolean(acceptedQuote) &&
+    transportJob.agreedAmount != null &&
+    Number(transportJob.agreedAmount) > 0 &&
+    ['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
+    !transportPayments.some((p) => ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)) &&
     isBuyer;
 
-  const canCheckMarketplacePayment =
-    Boolean(marketplacePayment) &&
-    !installmentPlan &&
-    marketplacePayment.status === 'PROCESSING' &&
-    isBuyer;
+  /* ---------- payouts & refunds ---------- */
+  const payouts = order?.payouts || [];
+  const payoutBy = (role) => payouts.find((p) => p.payeeRole === role) || null;
+  const refunds = order?.refunds || [];
 
-  const counterpartId = isBuyer ? order?.sellerId : isSeller ? order?.buyerId : null;
-  const counterpartName = isBuyer ? order?.seller?.name : isSeller ? order?.buyer?.name : null;
+  /* ---------- payment actions ---------- */
+  const checkPayment = (paymentId, key) =>
+    paymentId &&
+    (async () => {
+      setBusy(key);
+      setError('');
+      try {
+        const res = await api.get(`/payments/${paymentId}/chapa/verify`);
+        await reload();
+        if (res.data?.status === 'PENDING') {
+          setError('Chapa has not confirmed this payment yet. If you cancelled or the checkout failed, return to the order and retry once the payment shows FAILED.');
+        }
+      } catch (err) {
+        setError(getError(err, 'Could not check payment status'));
+      } finally {
+        setBusy('');
+      }
+    })();
 
-  const scrollToSection = (id) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  const resumePayment = (paymentId, key) =>
+    paymentId && run(key, () => chapaInitializeAndRedirect(paymentId), 'Could not resume payment');
 
-  const selectTransportQuote = async (quoteId) => {
-    if (!quoteId) return;
-    setBusy(`quote-${quoteId}`);
-    setError('');
-    try {
-      await api.patch(`/transport/quotes/${quoteId}/select`);
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not select transport bid'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const cancelTransportJob = async () => {
-    if (!transportJob || !isTransportArranger) return;
-    if (!window.confirm('Cancel this transport arrangement? This does not cancel the order. You can arrange transport again afterward.')) return;
-    setBusy(`cancel-transport-${transportJob.id}`);
-    setError('');
-    try {
-      await api.patch(`/transport/${transportJob.id}/status`, { status: 'CANCELLED' });
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not cancel transport job'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const reopenTransportBidding = async () => {
-    if (!transportJob || !isTransportArranger) return;
-    if (!window.confirm('Reopen transport bidding? Previous truck-owner bids will be expired and fresh bids can be submitted.')) return;
-    setBusy(`reopen-transport-${transportJob.id}`);
-    setError('');
-    try {
-      await api.patch(`/transport/${transportJob.id}/reopen-bidding`);
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not reopen transport bidding'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const releaseTransportAgreement = async (quoteId) => {
-    if (!quoteId) return;
-    setBusy(`quote-${quoteId}`);
-    setError('');
-    try {
-      await api.patch(`/transport/quotes/${quoteId}`, { action: 'WITHDRAW' });
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not release the transporter agreement'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const acceptQuote = async (quoteId) => {
-    if (!quoteId) return;
-    setBusy(`quote-${quoteId}`);
-    setError('');
-    try {
-      await api.patch(`/transport/quotes/${quoteId}`, { action: 'ACCEPT' });
-      await load({ silent: true });
-      window.setTimeout(() => document.getElementById('payment-center')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
-    } catch (err) {
-      setError(getError(err, 'Could not accept transport quote'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const leafTransportQuotes = (quotes) => {
-    const list = Array.isArray(quotes) ? quotes : [];
-    const parentIds = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
-    return list.filter((q) => !parentIds.has(q.id));
-  };
-
-  const counterQuote = async (quoteId) => {
-    if (!quoteId) return;
-    const amount = Number(transportCounterInputs[quoteId]);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Enter a valid counter amount before sending.');
-      return;
-    }
-    setBusy(`quote-${quoteId}`);
-    setError('');
-    try {
-      await api.patch(`/transport/quotes/${quoteId}`, { action: 'COUNTER', counterAmount: amount });
-      setTransportCounterInputs((q) => ({ ...q, [quoteId]: '' }));
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not send counter-offer'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const rejectQuote = async (quoteId) => {
-    if (!quoteId) return;
-    setBusy(`quote-${quoteId}`);
-    setError('');
-    try {
-      await api.patch(`/transport/quotes/${quoteId}`, { action: 'REJECT' });
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not reject transport quote'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const payMarketplace = async () => {
-    if (!order) return;
-    if (!isBuyer) { setError('Only the buyer can make the marketplace payment'); return; }
+  const payMarketplace = () => {
+    if (!isBuyer) return setError('Only the buyer can make the marketplace payment');
     const amount = Number(order.finalPrice);
-    if (!Number.isFinite(amount) || amount <= 0) { setError('Invalid marketplace payment amount'); return; }
-    setBusy('pay-marketplace');
-    setError('');
-    try {
-      await startChapaPayment({ type: 'MARKETPLACE', orderId: order.id, amount, method: payMethod });
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not start marketplace payment'));
-    } finally {
-      setBusy('');
-    }
+    if (!Number.isFinite(amount) || amount <= 0) return setError('Invalid marketplace payment amount');
+    return run('pay-marketplace', () => startChapaPayment({ type: 'MARKETPLACE', orderId: order.id, amount, method: payMethod }), 'Could not start marketplace payment');
   };
 
-  const findInspector = async () => {
-    if (!order?.listing) return;
-    setFindingInspector(true);
-    setError('');
-    try {
-      const response = await api.get('/inspections/inspectors', {
-        params: { location: order.listing.location },
-      });
-      const options = response.data?.inspectors || [];
-      if (!options.length) { setError('No inspectors were found in this area.'); return; }
-      setInspectorId(options[0].id);
-    } catch (err) {
-      setError(getError(err, 'Could not load inspectors'));
-    } finally {
-      setFindingInspector(false);
-    }
-  };
-
-  const requestWorkflowRecovery = async (type, targetParties, reason) => {
-    if (!order?.id) return;
-    setBusy(`recovery-${type}`);
-    setError('');
-    try {
-      await api.post('/recovery-requests', { orderId: order.id, type, targetParties, reason });
-      await load({ silent: true });
-      setError('Recovery request sent to MarketBridge admin for approval.');
-    } catch (err) {
-      setError(getError(err, 'Could not request workflow recovery'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const inspectionFormReleased = recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'APPROVED' && r.formReleasedAt);
-
-  const requestInspection = async (mode) => {
-    if (!order?.listing) return;
-    setError('');
-    setRequestingInspection(true);
-    try {
-      await api.post('/inspections', { orderId: order.id, listingId: order.listing.id, mode });
-      setInspectorId('');
-      setInspectionFee('');
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not request inspection'));
-    } finally {
-      setRequestingInspection(false);
-    }
-  };
-
-  const cancelInspectionRequest = async () => {
-    if (!currentInspectionRequest) return;
-    if (!window.confirm('Cancel this inspection request without cancelling the order? You can open a new inspection request afterward.')) return;
-    setBusy(`cancel-inspection-${currentInspectionRequest.id}`);
-    setError('');
-    try {
-      await api.patch(`/inspections/${currentInspectionRequest.id}/cancel`);
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not cancel inspection request'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const reopenInspectionBidding = async () => {
-    if (!currentInspectionRequest) return;
-    if (!window.confirm('Reopen inspection bidding? Previous inspection bids will be expired and inspectors can submit fresh bids.')) return;
-    setBusy(`reopen-inspection-${currentInspectionRequest.id}`);
-    setError('');
-    try {
-      await api.patch(`/inspections/${currentInspectionRequest.id}/reopen-bidding`);
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not reopen inspection bidding'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const submitTransportEvidence = async (type, nextStatus) => {
-    if (!transportJob || !isTransporter) return;
-    const { photoKeys, videoKeys } = transportEvidence;
-    if (!photoKeys.length && !videoKeys.length && !transportEvidenceNotes.trim()) {
-      setError(`Add at least one ${type.toLowerCase()} photo/video or note before continuing.`);
-      return;
-    }
-    setTransportEvidenceBusy(true);
-    setError('');
-    try {
-      await api.post(`/transport/${transportJob.id}/evidence`, {
-        type,
-        photos: photoKeys,
-        videos: videoKeys,
-        notes: transportEvidenceNotes.trim() || undefined,
-      });
-      if (nextStatus) {
-        await api.patch(`/transport/${transportJob.id}/status`, { status: nextStatus });
-      }
-      setTransportEvidence({ photoKeys: [], videoKeys: [] });
-      setTransportEvidenceNotes('');
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, `Could not submit ${type.toLowerCase()} evidence`));
-    } finally {
-      setTransportEvidenceBusy(false);
-    }
-  };
-
-  const payTransport = async () => {
-    if (!order || !transportJob) return;
-    if (!isParticipant) { setError('You are not authorized to pay for this transport'); return; }
-    if (transportJob.method !== 'HIRE_TRANSPORTER') { setError('Transport payment is only required for hired transport'); return; }
-    if (!transportJob.truckOwnerId) { setError('A transporter must be selected before transport payment'); return; }
+  const payTransport = () => {
+    if (!isParticipant) return setError('You are not authorized to pay for this transport');
+    if (!hiredTransport) return setError('Transport payment is only required for hired transport');
+    if (!transportJob.truckOwnerId) return setError('A transporter must be selected before transport payment');
     const amount = Number(transportJob.agreedAmount);
-    if (!Number.isFinite(amount) || amount <= 0) { setError('Invalid transport payment amount'); return; }
-    setBusy('pay-transport');
-    setError('');
-    try {
-      await startChapaPayment({ type: 'TRANSPORT', orderId: order.id, amount, method: payMethod });
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not start transport payment'));
-    } finally {
-      setBusy('');
-    }
+    if (!Number.isFinite(amount) || amount <= 0) return setError('Invalid transport payment amount');
+    return run('pay-transport', () => startChapaPayment({ type: 'TRANSPORT', orderId: order.id, amount, method: payMethod }), 'Could not start transport payment');
   };
 
-  const payInspection = async (request) => {
-    if (!request?.id || !request.fee) return;
-    setBusy(`pay-inspection-${request.id}`);
-    setError('');
-    try {
-      await startChapaPayment({
-        type: 'INSPECTOR',
-        inspectionRequestId: request.id,
-        orderId: order.id,
-        amount: Number(request.fee),
-        method: payMethod,
-      });
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not start inspector payment'));
-    } finally {
-      setBusy('');
-    }
+  const payInspection = (request) =>
+    request?.id && request.fee &&
+    run(`pay-inspection-${request.id}`, () =>
+      startChapaPayment({ type: 'INSPECTOR', inspectionRequestId: request.id, orderId: order.id, amount: Number(request.fee), method: payMethod }),
+      'Could not start inspector payment');
+
+  const startInstallments = () => {
+    if (!isBuyer) return setError('Only the buyer can make the marketplace payment');
+    return run('start-installments', () =>
+      api.post('/payments', { type: 'MARKETPLACE', orderId: order.id, amount: Number(order.finalPrice), method: payMethod, installments: true }),
+      'Could not set up installments');
   };
 
-  const checkMarketplacePayment = async () => {
-    if (!marketplacePayment?.id) return;
-    setBusy('check-marketplace');
-    setError('');
-    try {
-      const response = await api.get(`/payments/${marketplacePayment.id}/chapa/verify`);
-      await load({ silent: true });
-      const status = response.data?.status;
-      if (status === 'PENDING') {
-        setError('Chapa has not confirmed the seller payment yet. If you cancelled or the checkout failed, return to the order and retry once the payment shows FAILED.');
+  const retryInstallment = (inst) =>
+    inst?.id && run(`installment-${inst.id}`, () => api.post(`/payments/${inst.id}/retry-installment`), 'Could not retry this installment');
+
+  const marketplaceObligation = {
+    amount: order?.finalPrice,
+    paid: marketplacePaid,
+    pending: marketplacePending,
+    processing: marketplaceProcessing,
+    canPay: canPayMarketplace,
+    canResume: Boolean(marketplacePayment) && !installmentPlan && marketplacePayment.status === 'PENDING' && isBuyer,
+    canCheck: Boolean(marketplacePayment) && !installmentPlan && marketplacePayment.status === 'PROCESSING' && isBuyer,
+    onPay: payMarketplace,
+    onResume: () => resumePayment(marketplacePayment?.id, 'resume-marketplace'),
+    onCheck: () => checkPayment(marketplacePayment?.id, 'check-marketplace'),
+    installmentPlan,
+    installments: installmentPayments,
+    canStartInstallments: canPayMarketplace,
+    onStartInstallments: startInstallments,
+    onPayInstallment: (i) => resumePayment(i?.id, `installment-${i?.id}`),
+    onCheckInstallment: (i) => checkPayment(i?.id, `installment-${i?.id}`),
+    onRetryInstallment: retryInstallment,
+  };
+
+  const transportObligation = transportJob
+    ? {
+        required: hiredTransport,
+        readyToPay: ['QUOTED', 'ACCEPTED'].includes(transportJob.status) && Boolean(acceptedQuote) && transportJob.agreedAmount != null,
+        amount: transportJob.agreedAmount,
+        paid: transportPaid,
+        pending: transportPending,
+        processing: transportProcessing,
+        note:
+          hiredTransport && !['QUOTED', 'ACCEPTED'].includes(transportJob.status) && !transportPaid && !transportPending
+            ? 'Transporter payment becomes available after a provisional transporter agreement is accepted.'
+            : null,
+        canStart: canStartTransportPayment,
+        canResume: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
+        canCheck: Boolean(transportPayment) && transportPayment.status === 'PROCESSING' && isBuyer,
+        onStart: payTransport,
+        onResume: () => resumePayment(transportPayment?.id, 'resume-transport'),
+        onCheck: () => checkPayment(transportPayment?.id, 'check-transport'),
       }
-    } catch (err) {
-      setError(getError(err, 'Could not check seller payment status'));
-    } finally {
-      setBusy('');
-    }
-  };
+    : null;
 
-  const checkPaymentStatus = async (paymentId, busyKey) => {
-    if (!paymentId) return;
-    setBusy(busyKey);
-    setError('');
-    try {
-      const response = await api.get(`/payments/${paymentId}/chapa/verify`);
-      await load({ silent: true });
-      const status = response.data?.status;
-      if (status === 'PENDING') {
-        setError('Chapa has not confirmed this payment yet. If you cancelled or the checkout failed, return to the order and retry once the payment shows FAILED.');
+  const inspectionPaymentGroups = inspectionApplies && currentInspection && Number(currentInspection.fee) > 0
+    ? [currentInspection].map((request) => {
+        const list = request.payments || [];
+        const open = list.find((p) => p.type === 'INSPECTOR' && active(p)) || null;
+        const key = `${open?.status === 'PROCESSING' ? 'check' : open ? 'resume' : 'pay'}-inspection-${request.id}`;
+        return {
+          id: request.id,
+          label: `${request.inspector?.name || 'Inspector'} — inspection fee`,
+          amount: request.fee,
+          paid: list.some((p) => p.type === 'INSPECTOR' && p.status === 'PAID'),
+          pending: Boolean(open),
+          processing: open?.status === 'PROCESSING',
+          note: request.status !== 'COMPLETED' ? `Inspection status: ${request.status}` : null,
+          busyKey: key,
+          canCheck: open?.status === 'PROCESSING',
+          canResume: Boolean(open) && open.status !== 'PROCESSING',
+          onCheck: () => checkPayment(open?.id, key),
+          onResume: () => resumePayment(open?.id, key),
+          onPay: () => payInspection(request),
+        };
+      })
+    : [];
+
+  /* ---------- transport actions ---------- */
+  const transportActions = {
+    selectQuote: (id) => id && run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}/select`), 'Could not select transport bid'),
+    releaseQuote: (id) => id && run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'WITHDRAW' }), 'Could not release the transporter agreement'),
+    rejectQuote: (id) => id && run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'REJECT' }), 'Could not reject transport quote'),
+    acceptQuote: async (id) => {
+      if (!id) return;
+      const ok = await run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'ACCEPT' }), 'Could not accept transport quote');
+      if (ok) scrollToId('payment-center', 150);
+    },
+    counterQuote: async (id) => {
+      if (!id) return;
+      const amount = Number(counterInputs[id]);
+      if (!Number.isFinite(amount) || amount <= 0) return setError('Enter a valid counter amount before sending.');
+      const ok = await run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'COUNTER', counterAmount: amount }), 'Could not send counter-offer');
+      if (ok) setCounterInputs((q) => ({ ...q, [id]: '' }));
+    },
+    requestRecovery: () =>
+      run('recovery-TRANSPORT', async () => {
+        await api.post('/recovery-requests', {
+          orderId: order.id,
+          type: 'TRANSPORT',
+          targetParties: isBuyer ? ['BUYER'] : ['SELLER'],
+          reason: 'Transport competition has no usable live bid or the previous transporter arrangement is no longer available.',
+        });
+        setError('Recovery request sent to MarketBridge admin for approval.');
+      }, 'Could not request workflow recovery'),
+    submitEvidence: async (type, nextStatus) => {
+      if (!transportJob || !isTransporter) return;
+      const { photoKeys, videoKeys } = evidence;
+      if (!photoKeys.length && !videoKeys.length && !evidenceNotes.trim()) {
+        return setError(`Add at least one ${type.toLowerCase()} photo/video or note before continuing.`);
       }
-    } catch (err) {
-      setError(getError(err, 'Could not check payment status'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const resumePayment = async (paymentId, busyKey) => {
-    if (!paymentId) return;
-    setBusy(busyKey);
-    setError('');
-    try {
-      await chapaInitializeAndRedirect(paymentId);
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not resume payment'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const startInstallments = async () => {
-    if (!order) return;
-    if (!isBuyer) { setError('Only the buyer can make the marketplace payment'); return; }
-    setBusy('start-installments');
-    setError('');
-    try {
-      await api.post('/payments', {
-        type: 'MARKETPLACE',
-        orderId: order.id,
-        amount: Number(order.finalPrice),
-        method: payMethod,
-        installments: true,
-      });
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not set up installments'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const retryInstallment = async (installment) => {
-    if (!installment?.id) return;
-    setBusy(`installment-${installment.id}`);
-    setError('');
-    try {
-      await api.post(`/payments/${installment.id}/retry-installment`);
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not retry this installment'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const payInstallment = (installment) =>
-    resumePayment(installment?.id, `installment-${installment?.id}`);
-
-  const checkInstallment = (installment) =>
-    checkPaymentStatus(installment?.id, `installment-${installment?.id}`);
-
-  const completeRefundAsAdmin = async (refund) => {
-    setBusy(`refund-${refund.id}`);
-    setError('');
-    try {
-      if (refund.status === 'PROCESSING') {
-        await api.post(`/admin/financial/refunds/${refund.id}/verify`);
-      } else if (refund.status === 'FAILED') {
-        await api.post(`/admin/financial/refunds/${refund.id}/retry`);
-      } else {
-        await api.post(`/admin/financial/refunds/${refund.id}/process`);
+      setEvidenceBusy(true);
+      setError('');
+      try {
+        await api.post(`/transport/${transportJob.id}/evidence`, {
+          type,
+          photos: photoKeys,
+          videos: videoKeys,
+          notes: evidenceNotes.trim() || undefined,
+        });
+        if (nextStatus) await api.patch(`/transport/${transportJob.id}/status`, { status: nextStatus });
+        setEvidence({ photoKeys: [], videoKeys: [] });
+        setEvidenceNotes('');
+        await reload();
+      } catch (err) {
+        setError(getError(err, `Could not submit ${type.toLowerCase()} evidence`));
+      } finally {
+        setEvidenceBusy(false);
       }
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not process or verify the refund with Chapa'));
-    } finally {
-      setBusy('');
+    },
+  };
+
+  /* ---------- inspection actions ---------- */
+  const inspectionActions = {
+    request: async (mode) => {
+      if (!order?.listing) return;
+      setRequestingInspection(true);
+      setError('');
+      try {
+        await api.post('/inspections', { orderId: order.id, listingId: order.listing.id, mode });
+        await reload();
+      } catch (err) {
+        setError(getError(err, 'Could not request inspection'));
+      } finally {
+        setRequestingInspection(false);
+      }
+    },
+    cancel: () =>
+      currentInspection &&
+      window.confirm('Cancel this inspection request without cancelling the order? You can open a new request afterward.') &&
+      run(`cancel-inspection-${currentInspection.id}`, () => api.patch(`/inspections/${currentInspection.id}/cancel`), 'Could not cancel inspection request'),
+    reopenBidding: () =>
+      currentInspection &&
+      window.confirm('Reopen inspection bidding? Previous bids will expire and inspectors can submit fresh bids.') &&
+      run(`reopen-inspection-${currentInspection.id}`, () => api.patch(`/inspections/${currentInspection.id}/reopen-bidding`), 'Could not reopen inspection bidding'),
+    decide: async (decision) => {
+      if (!order || !isBuyer || !decisionRequired) return;
+      if (decision === 'BUY' && !(currentInspection?.report && currentInspection.status === 'COMPLETED')) {
+        return setError('Review the completed inspection report before choosing BUY.');
+      }
+      if (decision === 'CANCEL' && !window.confirm('Cancel this purchase after reviewing the inspection report? This cannot be undone.')) return;
+      const ok = await run(`buyer-decision-${decision.toLowerCase()}`, () => api.patch(`/orders/${order.id}/buyer-decision`, { decision }), `Could not record ${decision === 'BUY' ? 'BUY' : 'cancellation'} decision`);
+      if (ok) scrollToId(decision === 'BUY' ? 'payment-center' : 'inspection-section', 120);
+    },
+  };
+
+  /* ---------- order actions ---------- */
+  const canCancelOrder = Boolean(
+    order &&
+      !['COMPLETED', 'CANCELLED'].includes(order.status) &&
+      !transportInMotion &&
+      (isAdmin ||
+        (isBuyer && order.status === 'PENDING_PAYMENT') ||
+        (isSeller && ['PENDING_PAYMENT', 'CONFIRMED'].includes(order.status)))
+  );
+
+  const cancelOrder = () => {
+    if (!canCancelOrder) return;
+    if (!window.confirm('Cancel this order? This cannot be undone. The listing becomes available again and completed payments are flagged for refund.')) return;
+    const reason = window.prompt('Optional: add a reason for cancelling (shown in the order history).') || undefined;
+    return run('cancel', () => api.patch(`/orders/${order.id}/cancel`, reason ? { reason } : {}), 'Could not cancel order');
+  };
+
+  const confirmReceipt = () => {
+    if (!isBuyer) return setError('Only the buyer can confirm receipt');
+    if (!marketplacePaid) return setError('Marketplace payment must be confirmed before receipt');
+    if (hiredTransport && !transportPaid) return setError('Transport payment must be confirmed before receipt');
+    return run('receipt', () => api.patch(`/orders/${order.id}/confirm-receipt`), 'Could not confirm receipt');
+  };
+
+  const submitOffer = async (event) => {
+    event.preventDefault();
+    const amount = Number(offerAmount);
+    if (!Number.isFinite(amount) || amount <= 0 || !order?.listingId) {
+      return setError('Enter a valid offer amount before submitting.');
+    }
+    setSubmittingOffer(true);
+    const ok = await run('offer', () => api.post('/offers', { listingId: order.listingId, amount, message: offerMessage.trim() || undefined }), 'Could not submit your offer');
+    setSubmittingOffer(false);
+    if (ok) {
+      setOfferAmount('');
+      setOfferMessage('');
+      setError('Offer submitted. The seller can select it and begin negotiation.');
     }
   };
 
-  const failRefundAsAdmin = async (refund) => {
+  const refundAction = (refund) =>
+    run(`refund-${refund.id}`, () => {
+      const base = `/admin/financial/refunds/${refund.id}`;
+      if (refund.status === 'PROCESSING') return api.post(`${base}/verify`);
+      if (refund.status === 'FAILED') return api.post(`${base}/retry`);
+      return api.post(`${base}/process`);
+    }, 'Could not process or verify the refund with Chapa');
+
+  const failRefund = (refund) => {
     const reason = window.prompt('Why did this refund fail?', '');
     if (reason === null) return;
-    if (!reason.trim()) { setError('Enter a reason before marking a refund as failed.'); return; }
-    setBusy(`refund-${refund.id}`);
-    setError('');
-    try {
-      await api.patch(`/admin/financial/refunds/${refund.id}/fail`, {
-        failureReason: reason.trim(),
-      });
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not mark the refund as failed'));
-    } finally {
-      setBusy('');
-    }
+    if (!reason.trim()) return setError('Enter a reason before marking a refund as failed.');
+    return run(`refund-${refund.id}`, () => api.patch(`/admin/financial/refunds/${refund.id}/fail`, { failureReason: reason.trim() }), 'Could not mark the refund as failed');
   };
 
+  /* ---------- disputes ---------- */
   const disputeCounterparties = useMemo(() => {
     if (!order) return [];
-    const parties = [
+    return [
       order.buyer && { id: order.buyer.id, name: order.buyer.name, role: 'Buyer' },
       order.seller && { id: order.seller.id, name: order.seller.name, role: 'Seller' },
-      ...(inspectionRequests || [])
-        .filter((request) => request.inspector)
-        .map((request) => ({
-          id: request.inspector.id,
-          name: request.inspector.name,
-          role: 'Inspector',
-        })),
-      transportJob?.truckOwner && {
-        id: transportJob.truckOwner.id,
-        name: transportJob.truckOwner.name,
-        role: 'Truck owner',
-      },
-    ].filter(Boolean);
-    return parties.filter((p) => p.id !== currentUserId);
-  }, [order, transportJob, inspectionRequests, currentUserId]);
+      ...inspections.filter((r) => r.inspector).map((r) => ({ id: r.inspector.id, name: r.inspector.name, role: 'Inspector' })),
+      transportJob?.truckOwner && { id: transportJob.truckOwner.id, name: transportJob.truckOwner.name, role: 'Truck owner' },
+    ]
+      .filter(Boolean)
+      .filter((p) => p.id !== currentUserId);
+  }, [order, transportJob, inspections, currentUserId]);
 
   const canRaiseDispute = Boolean(
     order &&
-    !['COMPLETED', 'CANCELLED', 'DISPUTED'].includes(order.status) &&
-    (isBuyer || isSeller || isInspector || isTransporter) &&
-    disputeCounterparties.length > 0
+      !['COMPLETED', 'CANCELLED', 'DISPUTED'].includes(order.status) &&
+      (isBuyer || isSeller || isInspector || isTransporter) &&
+      disputeCounterparties.length > 0
   );
 
-  const raiseDispute = async (event) => {
+  const submitDispute = async (event) => {
     event.preventDefault();
-    if (!order || !canRaiseDispute) return;
-    if (!disputeAgainstId) { setError('Choose who the dispute is against'); return; }
-    if (!disputeDescription.trim()) { setError('Describe what went wrong'); return; }
+    if (!canRaiseDispute) return;
+    if (!disputeAgainstId) return setError('Choose who the dispute is against');
+    if (!disputeDescription.trim()) return setError('Describe what went wrong');
     setSubmittingDispute(true);
     setError('');
     try {
@@ -1148,14 +1369,12 @@ export default function OrderDetail() {
       });
       setDisputeSubmitted(true);
       setDisputeDescription('');
-      await load({ silent: true });
+      await reload();
     } catch (err) {
       const message = getError(err, 'Could not raise dispute');
       if (/cannot be disputed/i.test(message) || /already has an open dispute/i.test(message)) {
-        setError(
-          `${message} If the order was cancelled, any payments already made (including an inspection fee) are refunded automatically as part of that cancellation — check the Payment Center below for its status instead of disputing.`
-        );
-        await load({ silent: true });
+        setError(`${message} If the order was cancelled, any payments already made (including an inspection fee) are refunded automatically — check the Payment Center for its status instead of disputing.`);
+        await reload();
       } else {
         setError(message);
       }
@@ -1164,139 +1383,12 @@ export default function OrderDetail() {
     }
   };
 
-  const makeBuyerDecision = async (decision) => {
-    if (!order || !isBuyer || !(isAgricultural || isProductsMarketplace)) return;
-    if (decision === 'BUY' && (!currentInspectionRequest?.report || currentInspectionRequest?.status !== 'COMPLETED')) {
-      setError('Review the completed inspection report before choosing BUY.');
-      return;
-    }
-    if (decision === 'CANCEL') {
-      const confirmed = window.confirm('Cancel this purchase after reviewing the inspection report? This cannot be undone.');
-      if (!confirmed) return;
-    }
-    setBusy(`buyer-decision-${decision.toLowerCase()}`);
-    setError('');
-    try {
-      await api.patch(`/orders/${order.id}/buyer-decision`, { decision });
-      await load({ silent: true });
-      window.setTimeout(() => {
-        document.getElementById(decision === 'BUY' ? 'payment-center' : 'inspection-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 120);
-    } catch (err) {
-      setError(getError(err, `Could not record ${decision === 'BUY' ? 'BUY' : 'cancellation'} decision`));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const confirmReceipt = async () => {
-    if (!order) return;
-    if (!isBuyer) { setError('Only the buyer can confirm receipt'); return; }
-    if (!marketplacePaid) { setError('Marketplace payment must be confirmed before receipt'); return; }
-    if (transportJob?.method === 'HIRE_TRANSPORTER' && !transportPaid) {
-      setError('Transport payment must be confirmed before receipt');
-      return;
-    }
-    setBusy('receipt');
-    setError('');
-    try {
-      await api.patch(`/orders/${order.id}/confirm-receipt`);
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not confirm receipt'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const transportInMotion = Boolean(
-    transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status)
-  );
-
-  const canCancelOrder = Boolean(
-    order &&
-    order.status !== 'COMPLETED' &&
-    order.status !== 'CANCELLED' &&
-    !transportInMotion &&
-    (
-      isAdmin ||
-      (isBuyer && order.status === 'PENDING_PAYMENT') ||
-      (isSeller && ['PENDING_PAYMENT', 'CONFIRMED'].includes(order.status))
-    )
-  );
-
-  const cancelOrder = async () => {
-    if (!order || !canCancelOrder) return;
-    const confirmed = window.confirm(
-      'Cancel this order? This cannot be undone. The listing will become available again and any completed payments will be flagged for refund.'
-    );
-    if (!confirmed) return;
-    const reason = window.prompt(
-      'Optional: add a reason for cancelling (shown in the order history).'
-    ) || undefined;
-    setBusy('cancel');
-    setError('');
-    try {
-      await api.patch(`/orders/${order.id}/cancel`, reason ? { reason } : {});
-      await load({ silent: true });
-    } catch (err) {
-      setError(getError(err, 'Could not cancel order'));
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const marketplaceObligation = {
-    amount: order?.finalPrice,
-    paid: marketplacePaid,
-    pending: marketplacePending,
-    processing: marketplaceProcessing,
-    canPay: canPayMarketplace,
-    canResume: canResumeMarketplacePayment,
-    canCheck: canCheckMarketplacePayment,
-    onPay: payMarketplace,
-    onResume: () => resumePayment(marketplacePayment?.id, 'resume-marketplace'),
-    onCheck: checkMarketplacePayment,
-    installmentPlan,
-    installments: installmentPayments,
-    canStartInstallments: canPayMarketplace,
-    onStartInstallments: startInstallments,
-    onPayInstallment: payInstallment,
-    onCheckInstallment: checkInstallment,
-    onRetryInstallment: retryInstallment,
-  };
-
-  const transportObligation = transportJob
-    ? {
-        required: transportJob.method === 'HIRE_TRANSPORTER',
-        readyToPay: ['QUOTED', 'ACCEPTED'].includes(transportJob.status) && Boolean(acceptedTransportQuote) && transportJob.agreedAmount != null,
-        amount: transportJob.agreedAmount,
-        paid: transportPaid,
-        pending: transportPending,
-        processing: transportProcessing,
-        note:
-          transportJob.method === 'HIRE_TRANSPORTER' &&
-          !['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
-          !transportPaid &&
-          !transportPending
-            ? 'Transporter payment becomes available after a provisional transporter agreement is accepted.'
-            : null,
-        canStart: canStartTransportPayment,
-        canResume: canResumeTransportPayment,
-        canCheck: canCheckTransportPayment,
-        onStart: payTransport,
-        onResume: () => resumePayment(transportPayment?.id, 'resume-transport'),
-        onCheck: () => checkPaymentStatus(transportPayment?.id, 'check-transport'),
-      }
-    : null;
-
+  /* ---------- early returns ---------- */
   if (loading) {
     return (
       <main className="section order-detail-page">
         <div className="container-narrow">
-          <div className="card loading">
-            <p>Loading order…</p>
-          </div>
+          <div className="card loading"><p>Loading order…</p></div>
         </div>
       </main>
     );
@@ -1306,867 +1398,136 @@ export default function OrderDetail() {
     return (
       <main className="section order-detail-page">
         <div className="container-narrow">
-          <button type="button" className="back-link" onClick={() => navigate(-1)}>
-            ← Back
-          </button>
+          <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
           <div className="alert error">{error || 'Order not found'}</div>
         </div>
       </main>
     );
   }
 
+  /* ---------- grouped props for section components ---------- */
+  const counterpartId = isBuyer ? order.sellerId : isSeller ? order.buyerId : null;
+  const counterpartName = isBuyer ? order.seller?.name : isSeller ? order.buyer?.name : null;
+  const orderOpen = !['COMPLETED', 'CANCELLED'].includes(order.status);
+
+  const inspectionProps = {
+    all: allInspections,
+    current: currentInspection,
+    formReleased: inspectionFormReleased,
+    requesting: requestingInspection,
+    isBuyer,
+    isAgricultural,
+    decisionRequired,
+    busy,
+    ...inspectionActions,
+  };
+
+  const transportProps = {
+    job: transportJob,
+    currentUserId,
+    isBuyer,
+    isSeller,
+    isTransporter,
+    isArranger: isTransportArranger,
+    canArrange: Boolean(!transportJob && order.status !== 'CANCELLED' && isParticipant),
+    canChooseQuote: Boolean(transportJob && isTransportArranger && ['REQUESTED', 'QUOTED'].includes(transportJob.status)),
+    canStartPayment: canStartTransportPayment,
+    canResumePayment: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
+    paid: transportPaid,
+    paidAmount: transportPayments.find((p) => p.status === 'PAID')?.amount,
+    pending: transportPending,
+    payment: transportPayment,
+    payMethod,
+    setPayMethod,
+    pay: payTransport,
+    resume: resumePayment,
+    busy,
+    reload,
+    recoveryRequests,
+    counterInputs,
+    setCounterInputs,
+    evidence,
+    setEvidence,
+    notes: evidenceNotes,
+    setNotes: setEvidenceNotes,
+    evidenceBusy,
+    ...transportActions,
+  };
+
+  const disputeProps = {
+    canRaise: canRaiseDispute,
+    counterparties: disputeCounterparties,
+    againstId: disputeAgainstId,
+    setAgainstId: setDisputeAgainstId,
+    type: disputeType,
+    setType: setDisputeType,
+    description: disputeDescription,
+    setDescription: setDisputeDescription,
+    submitting: submittingDispute,
+    submitted: disputeSubmitted,
+    submit: submitDispute,
+  };
+
+  /* ====================================================================
+     Layout — top to bottom, the order a person works through an order:
+     summary → what to do next → offer → inspection → transport →
+     payments → receipt → payouts/refunds → history → dispute → rating →
+     messages
+     ==================================================================== */
   return (
     <main className="section order-detail-page">
       <div className="container-narrow">
-
-        <div className="row-between" style={{ marginBottom: 16 }}>
-          <button type="button" className="back-link" onClick={() => navigate(-1)}>
-            ← Back
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm"
-            disabled={refreshing}
-            onClick={() => load({ silent: true })}
-          >
-            {refreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
+        <div className="row-between page-bar">
+          <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
+          <Button size="sm" disabled={refreshing} busy={refreshing} busyText="Refreshing…" onClick={reload}>Refresh</Button>
         </div>
 
-        {/* ================================================================== */}
-        {/* ORDER DETAILS                                                      */}
-        {/* ================================================================== */}
+        {/* Summary */}
+        <OverviewCard
+          order={order}
+          title={title}
+          flags={{ isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob }}
+          canCancel={canCancelOrder}
+          busy={busy}
+          onCancel={cancelOrder}
+        />
 
-        <div className="card order-overview-card">
-          <div className="card-head">
-            <div className="card-head-main">
-              <span className="eyebrow" aria-hidden="true" />
-              <h1 className="card-title">{title}</h1>
-              <p className="card-subtitle">Ordered Produce</p>
-            </div>
-          </div>
-
-          <section className="card-section">
-            <div className="card-section-head">
-              <h3 className="card-section-title">Order status</h3>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              <span className={`status-pill tone-${statusTone(order.status)}`}>
-                <span className="status-pill-dot" aria-hidden="true" />
-                {String(order.status || '').replace(/_/g, ' ')}
-              </span>
-              {marketplacePaid && (
-                <span className="status-pill tone-good">
-                  <span className="status-pill-dot" aria-hidden="true" />
-                  Payment: Paid
-                </span>
-              )}
-              {marketplacePending && !marketplacePaid && (
-                <span className="status-pill tone-wait">
-                  <span className="status-pill-dot" aria-hidden="true" />
-                  Payment: Pending
-                </span>
-              )}
-              {transportJob?.status && (
-                <span className="status-pill tone-neutral">
-                  Transport: {String(transportJob.status).replace(/_/g, ' ')}
-                </span>
-              )}
-            </div>
-          </section>
-
-          <section className="card-section">
-            <div className="card-section-head">
-              <h3 className="card-section-title">Parties</h3>
-            </div>
-            <div className="detail-facts">
-              <div>
-                <span>Buyer</span>
-                <strong>
-                  {order.buyer?.name || '—'}
-                  {isBuyer && <span className="party-you party-you-inline">You</span>}
-                </strong>
-              </div>
-              <div>
-                <span>Seller</span>
-                <strong>
-                  {order.seller?.name || '—'}
-                  {isSeller && <span className="party-you party-you-inline">You</span>}
-                </strong>
-              </div>
-            </div>
-          </section>
-
-          <section className="card-section">
-            <div className="card-section-head">
-              <h3 className="card-section-title">Order Details</h3>
-            </div>
-            <div className="detail-facts">
-              <div><span>Amount</span><strong>{money(order.finalPrice)} ETB</strong></div>
-              {order.listing?.cropType && (
-                <div><span>Product</span><strong>{order.listing.cropType}</strong></div>
-              )}
-              {order.listing?.quantity != null && (
-                <div><span>Quantity</span><strong>{order.listing.quantity} units</strong></div>
-              )}
-              <div><span>Ordered from</span><strong>{order.listing?.location || '—'}</strong></div>
-              {order.buyer?.location && (
-                <div><span>Deliver to</span><strong>{order.buyer.location}</strong></div>
-              )}
-              <div><span>Ordered date</span><strong>{formatDateTime(order.createdAt)}</strong></div>
-              <div><span>Order ID</span><strong>{shortId(order.id)}</strong></div>
-            </div>
-          </section>
-
-          {canCancelOrder && (
-            <button
-              type="button"
-              className="btn btn-outline"
-              style={{ width: '100%', marginTop: 6 }}
-              disabled={busy === 'cancel'}
-              onClick={cancelOrder}
-            >
-              {busy === 'cancel' ? 'Cancelling…' : 'Cancel order'}
-            </button>
-          )}
-        </div>
-
-        {/* ================================================================== */}
-        {/* ACTION CENTER                                                      */}
-        {/* ================================================================== */}
-
+        {/* Next step */}
         {workflow ? (
-          <ActionCenter
-            workflow={workflow}
-            onScroll={scrollToSection}
-            onActionComplete={() => load({ silent: true })}
-          />
+          <ActionCenter workflow={workflow} onScroll={scrollToId} onActionComplete={reload} />
         ) : (
           isInspector && (
-            <div className="card next-action-card" id="next-action">
-              <div className="card-head">
-                <div className="card-head-main">
-                  <span className="eyebrow">NEXT STEP</span>
-                  <h2 className="card-title">Inspector action</h2>
-                </div>
-              </div>
+            <Card id="next-action" tone="accent" title="Inspector action" subtitle="Next step">
               {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
               {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
-              {assignedInspection.status === 'COMPLETED' && <p>Inspection report is published. The buyer can now complete any required inspection payment and continue the order.</p>}
-              <div className="next-action-buttons">
-                <Link className="btn btn-primary" to="/dashboard/inspector">Open inspection dashboard</Link>
-              </div>
-            </div>
+              {assignedInspection.status === 'COMPLETED' && <p>The report is published. The buyer can now complete any required inspection payment and continue.</p>}
+              <Actions><Link className="btn btn-primary" to="/dashboard/inspector">Open inspection dashboard</Link></Actions>
+            </Card>
           )
         )}
 
-        {/* ================================================================== */}
-        {/* TIMELINE                                                           */}
-        {/* ================================================================== */}
-
-        {workflow && (
-          <div className="card">
-            <div className="card-head">
-              <div className="card-head-main">
-                <span className="eyebrow">HISTORY</span>
-                <h2 className="card-title">Order timeline</h2>
-              </div>
-            </div>
-            <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
-          </div>
-        )}
-
-        {/* ================================================================== */}
-        {/* INSPECTION                                                         */}
-        {/* ================================================================== */}
-
-        <div id="inspection-section">
-        {inspectionApplies && isParticipant && order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
-          currentInspectionRequest ? (() => {
-            const request = currentInspectionRequest;
-            const report = request.report;
-            const reportReady = request.status === 'COMPLETED' && Boolean(report);
-            const inspectorName = request.inspector?.name || null;
-            const inspectionDate =
-              report?.inspectedAt ||
-              report?.completedAt ||
-              request.completedAt ||
-              request.updatedAt ||
-              request.createdAt ||
-              null;
-
-            return (
-              <div className="card">
-                <div className="card-head">
-                  <div className="card-head-main">
-                    <span className="eyebrow">
-                      {reportReady
-                        ? 'QUALITY REPORT'
-                        : (isProductsMarketplace ? 'PRODUCT INSPECTION' : 'INSPECTION')}
-                    </span>
-                    <h2 className="card-title">Inspection</h2>
-                  </div>
-
-                  <div className="card-head-side">
-                    {reportReady && inspectorName ? (
-                      <>
-                        <span className="card-side-label">Inspector</span>
-                        <div className="card-side-party">
-                          <div>
-                            <span className="card-side-value">{inspectorName}</span>
-                          </div>
-                          <span className="party-avatar party-avatar-seller" aria-hidden="true">
-                            {initials(inspectorName)}
-                          </span>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <span className="card-side-label">Status</span>
-                        <span className={`status-pill tone-${statusTone(request.status)}`}>
-                          <span className="status-pill-dot" aria-hidden="true" />
-                          {String(request.status || '').replace(/_/g, ' ')}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {reportReady ? (
-                  <>
-                    <div className="detail-facts">
-                      <div><span>Status</span><strong>Completed</strong></div>
-                      <div><span>Product</span><strong>{order.listing?.cropType || title}</strong></div>
-                      <div><span>Quantity</span><strong>{order.listing?.quantity != null ? `${order.listing.quantity} units` : '—'}</strong></div>
-                      <div><span>Location</span><strong>{order.listing?.location || '—'}</strong></div>
-                      <div><span>Requested by</span><strong>{request.mode === 'SELLER_REQUESTED' ? 'Seller' : 'Buyer'}</strong></div>
-                      <div><span>Requested on</span><strong>{formatDateTime(request.createdAt)}</strong></div>
-                      <div><span>Inspection date</span><strong>{formatDateTime(inspectionDate)}</strong></div>
-                      <div><span>Inspected by</span><strong>{inspectorName || '—'}</strong></div>
-                      {request.fee != null && (
-                        <div><span>Inspection fee</span><strong>{money(request.fee)} ETB</strong></div>
-                      )}
-                      <div><span>Visible defects</span><strong>{report.visibleDefects || 'No Defects'}</strong></div>
-                      <div><span>Damage notes</span><strong>{report.damageNotes || 'No Damage'}</strong></div>
-                      <div><span>Packaging notes</span><strong>{report.packagingNotes || 'Fully packed'}</strong></div>
-                    </div>
-
-                    <div className="notice">
-                      <strong>
-                        {isAgricultural ? 'Agricultural inspection completed' : 'Product inspection completed'}
-                      </strong>
-                      <p>Review the published inspection findings before the purchase is committed.</p>
-                    </div>
-
-                    {buyerDecisionRequired && order.buyerDecision ? (
-                      <div className={`inspection-decision-state ${order.buyerDecision === 'BUY' ? 'is-buy' : 'is-cancel'}`}>
-                        <span className="inspection-decision-icon" aria-hidden="true">
-                          {order.buyerDecision === 'BUY' ? '✓' : '×'}
-                        </span>
-                        <div>
-                          <strong>
-                            {order.buyerDecision === 'BUY'
-                              ? 'BUY decision recorded'
-                              : 'Purchase cancelled after inspection'}
-                          </strong>
-                          <p>
-                            {order.buyerDecision === 'BUY'
-                              ? 'Goods payment is now unlocked. Transport can proceed only after the required payment gates are satisfied.'
-                              : 'The purchase decision is closed.'}
-                          </p>
-                        </div>
-                      </div>
-                    ) : buyerDecisionRequired && isBuyer ? (
-                      <div className="inspection-decision-panel">
-                        <div>
-                          <span className="eyebrow">PURCHASE DECISION</span>
-                          <h3>What do you want to do with the inspected goods?</h3>
-                          <p className="muted">
-                            Choose <strong>BUY</strong> only after reviewing the report. BUY unlocks goods payment; it does not by itself complete payment or arrange transport.
-                          </p>
-                        </div>
-                        <div className="inspection-decision-actions">
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            disabled={Boolean(busy)}
-                            onClick={() => makeBuyerDecision('BUY')}
-                          >
-                            {busy === 'buyer-decision-buy' ? 'Recording…' : 'BUY — continue purchase'}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-light"
-                            disabled={Boolean(busy)}
-                            onClick={() => makeBuyerDecision('CANCEL')}
-                          >
-                            {busy === 'buyer-decision-cancel' ? 'Cancelling…' : 'Cancel after inspection'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : buyerDecisionRequired ? (
-                      <div className="inspection-waiting-note">
-                        <strong>Awaiting buyer decision</strong>
-                        <span>
-                          The buyer must review this report and choose BUY or cancel before the purchase can move to the payment stage.
-                        </span>
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  ['REQUESTED', 'ACCEPTED'].includes(request.status) && isParticipant && (
-                    <section className="card-section">
-                      <div className="card-section-head">
-                        <h3 className="card-section-title">Inspection recovery</h3>
-                      </div>
-                      <p className="muted">
-                        If every inspector bid is closed, you can reopen bidding. If you no longer want this request, cancel it without cancelling the order.
-                      </p>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          disabled={Boolean(busy)}
-                          onClick={reopenInspectionBidding}
-                        >
-                          {busy === `reopen-inspection-${request.id}` ? 'Reopening…' : 'Reopen inspection bidding'}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-light"
-                          disabled={Boolean(busy)}
-                          onClick={cancelInspectionRequest}
-                        >
-                          {busy === `cancel-inspection-${request.id}` ? 'Cancelling…' : 'Cancel inspection request'}
-                        </button>
-                      </div>
-                    </section>
-                  )
-                )}
-              </div>
-            );
-          })() : (
-            <div className="card">
-              <div className="card-head">
-                <div className="card-head-main">
-                  <span className="eyebrow">INSPECTION</span>
-                  <h2 className="card-title">
-                    {allInspectionRequests.length && !inspectionFormReleased
-                      ? 'Request awaiting admin recovery approval'
-                      : 'Request inspection'}
-                  </h2>
-                </div>
-              </div>
-              <p className="muted">Request an independent quality check for this order before the purchase is finally committed.</p>
-              <p className="muted">All registered inspectors can compete for this request by submitting a sealed fee quote. You compare the bids, select one for negotiation, and only the accepted negotiated quote assigns the inspector. The inspection fee commits the inspector; the completed report is then reviewed before goods payment.</p>
-              {allInspectionRequests.length > 0 && !inspectionFormReleased ? (
-                <p className="muted"><strong>Admin approval required.</strong> Ask MarketBridge admin to release a fresh inspection requesting form before opening another competition.</p>
-              ) : (
-                <button
-                  type="button"
-                  className="btn btn-light"
-                  disabled={requestingInspection}
-                  onClick={() => requestInspection(isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}
-                >
-                  {requestingInspection ? 'Requesting…' : 'Open competitive inspection request'}
-                </button>
-              )}
-            </div>
-          )
-        )}
-        </div>
-
-        {/* ================================================================== */}
-        {/* TRANSPORT                                                          */}
-        {/* ================================================================== */}
-
-        <div className="card transport-overview-card" id="transport-section">
-          <div className="card-head">
-            <div className="card-head-main">
-              <span className="eyebrow">LOGISTICS</span>
-              <h2 className="card-title">Transport</h2>
-              <p className="card-subtitle">
-                {transportJob
-                  ? `${transportJob.arrangingParty || '—'} arranged · ${transportJob.method || '—'}`
-                  : 'The buyer or seller arranges transport. MarketBridge does not automatically assign a transporter.'}
-              </p>
-            </div>
-            {transportJob?.status && (
-              <div className="card-head-side">
-                <span className="card-side-label">Status</span>
-                <span className={`status-pill tone-${statusTone(transportJob.status)}`}>
-                  <span className="status-pill-dot" aria-hidden="true" />
-                  {String(transportJob.status).replace(/_/g, ' ')}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {!transportJob ? (
-            canArrangeTransport ? (
-              <TransportSetup
-                orderId={order.id}
-                pickupDefault={order.listing?.location}
-                destinationDefault={order.buyer?.location}
-                canBuyer={isBuyer}
-                canSeller={isSeller}
-                onCreated={() => load({ silent: true })}
-              />
-            ) : (
-              <p className="muted">No transport arrangement recorded yet.</p>
-            )
-          ) : (
-            <>
-              <section className="transport-section">
-                <div className="card-section-head">
-                  <h3 className="card-section-title">Trip details</h3>
-                  <span className="card-section-meta">{transportJob.method || '—'}</span>
-                </div>
-                <div className="detail-facts">
-                  <div><span>Arranged by</span><strong>{transportJob.arrangingParty || '—'}</strong></div>
-                  <div><span>Method</span><strong>{transportJob.method || '—'}</strong></div>
-                  <div><span>Pickup</span><strong>{transportJob.pickupLocation || '—'}</strong></div>
-                  <div><span>Destination</span><strong>{transportJob.destination || '—'}</strong></div>
-                  {transportJob.load && (
-                    <div><span>Load</span><strong>{transportJob.load}</strong></div>
-                  )}
-                  {transportJob.requiredCapacity != null && (
-                    <div><span>Required capacity</span><strong>{transportJob.requiredCapacity}</strong></div>
-                  )}
-                </div>
-              </section>
-
-              {isTransportArranger && ['REQUESTED', 'QUOTED', 'ACCEPTED', 'CANCELLED'].includes(transportJob.status) && (
-                <section className="transport-section">
-                  <div className="card-section-head">
-                    <h3 className="card-section-title">Transport recovery</h3>
-                  </div>
-                  <p className="muted">
-                    If the transport competition has stalled or the previous arrangement was cancelled, request MarketBridge admin approval. Admin approval releases the fresh transport requesting form.
-                  </p>
-                  {recoveryRequests.filter((r) => r.type === 'TRANSPORT').map((r) => (
-                    <p className="muted small" key={r.id}>
-                      Recovery: <strong>{r.status}</strong>{r.formReleasedAt ? ' — fresh form released' : ' — awaiting admin approval'}
-                    </p>
-                  ))}
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={Boolean(busy) || recoveryRequests.some((r) => r.type === 'TRANSPORT' && r.status === 'PENDING')}
-                    onClick={() => requestWorkflowRecovery('TRANSPORT', isTransportArranger && isBuyer ? ['BUYER'] : ['SELLER'], 'Transport competition has no usable live bid or the previous transporter arrangement is no longer available.')}
-                    style={{ marginTop: 8 }}
-                  >
-                    {busy === 'recovery-TRANSPORT' ? 'Requesting…' : 'Request admin to release fresh transport form'}
-                  </button>
-                </section>
-              )}
-
-              {transportJob.truckOwner && (
-                <section className="transport-section">
-                  <div className="card-section-head">
-                    <h3 className="card-section-title">Transporter</h3>
-                    {transportJob.agreedAmount != null && (
-                      <span className="card-section-meta is-strong">{money(transportJob.agreedAmount)} ETB</span>
-                    )}
-                  </div>
-                  <p><strong>{transportJob.truckOwner.name || '—'}</strong></p>
-                  {transportJob.truckOwner.phone && (
-                    <p className="muted">Phone: {transportJob.truckOwner.phone}</p>
-                  )}
-                  {transportJob.truck && (
-                    <p>
-                      Truck: <strong>{transportJob.truck.registration || '—'}</strong>
-                      {' · '}{transportJob.truck.truckType || 'Truck'}
-                      {transportJob.truck.capacity != null && ` · ${transportJob.truck.capacity}t`}
-                    </p>
-                  )}
-                </section>
-              )}
-
-              <section className="transport-section">
-                <div className="card-section-head">
-                  <h3 className="card-section-title">Pickup / delivery evidence</h3>
-                </div>
-                <p className="muted">
-                  Pickup evidence is required before the transporter can move this trip from <strong>PICKUP</strong> to <strong>IN TRANSIT</strong>. Upload a photo or video here, then submit it with the status change.
-                </p>
-
-                {isTransporter && transportJob.status === 'PICKUP' && (
-                  <div className="notice" style={{ marginTop: 10 }}>
-                    <strong>Pickup evidence required</strong>
-                    <EvidenceUploader
-                      uploadUrl={`/transport/${transportJob.id}/evidence/media`}
-                      disabled={transportEvidenceBusy}
-                      onUploaded={({ photoKeys, videoKeys }) =>
-                        setTransportEvidence((prev) => ({
-                          photoKeys: [...prev.photoKeys, ...photoKeys],
-                          videoKeys: [...prev.videoKeys, ...videoKeys],
-                        }))
-                      }
-                    />
-                    {(transportEvidence.photoKeys.length > 0 || transportEvidence.videoKeys.length > 0) && (
-                      <p className="muted small">
-                        {transportEvidence.photoKeys.length} photo(s), {transportEvidence.videoKeys.length} video(s) ready.
-                      </p>
-                    )}
-                    <textarea
-                      value={transportEvidenceNotes}
-                      onChange={(event) => setTransportEvidenceNotes(event.target.value)}
-                      placeholder="Optional pickup condition / handover notes..."
-                      rows={3}
-                      disabled={transportEvidenceBusy}
-                      style={{ width: '100%', marginTop: 8 }}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      disabled={transportEvidenceBusy || (!transportEvidence.photoKeys.length && !transportEvidence.videoKeys.length && !transportEvidenceNotes.trim())}
-                      onClick={() => submitTransportEvidence('PICKUP', 'IN_TRANSIT')}
-                      style={{ marginTop: 8 }}
-                    >
-                      {transportEvidenceBusy ? 'Submitting…' : 'Submit pickup evidence & mark in transit'}
-                    </button>
-                  </div>
-                )}
-
-                {isTransporter && transportJob.status === 'IN_TRANSIT' && (
-                  <div className="notice" style={{ marginTop: 10 }}>
-                    <strong>Delivery evidence</strong>
-                    <p className="muted">Upload delivery evidence before marking the trip DELIVERED.</p>
-                    <EvidenceUploader
-                      uploadUrl={`/transport/${transportJob.id}/evidence/media`}
-                      disabled={transportEvidenceBusy}
-                      onUploaded={({ photoKeys, videoKeys }) =>
-                        setTransportEvidence((prev) => ({
-                          photoKeys: [...prev.photoKeys, ...photoKeys],
-                          videoKeys: [...prev.videoKeys, ...videoKeys],
-                        }))
-                      }
-                    />
-                    {(transportEvidence.photoKeys.length > 0 || transportEvidence.videoKeys.length > 0) && (
-                      <p className="muted small">
-                        {transportEvidence.photoKeys.length} photo(s), {transportEvidence.videoKeys.length} video(s) ready.
-                      </p>
-                    )}
-                    <textarea
-                      value={transportEvidenceNotes}
-                      onChange={(event) => setTransportEvidenceNotes(event.target.value)}
-                      placeholder="Optional delivery condition / handover notes..."
-                      rows={3}
-                      disabled={transportEvidenceBusy}
-                      style={{ width: '100%', marginTop: 8 }}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      disabled={transportEvidenceBusy || (!transportEvidence.photoKeys.length && !transportEvidence.videoKeys.length && !transportEvidenceNotes.trim())}
-                      onClick={() => submitTransportEvidence('DELIVERY', 'DELIVERED')}
-                      style={{ marginTop: 8 }}
-                    >
-                      {transportEvidenceBusy ? 'Submitting…' : 'Submit delivery evidence & mark delivered'}
-                    </button>
-                  </div>
-                )}
-
-                <EvidenceGallery
-                  listUrl={`/transport/${transportJob.id}/evidence`}
-                  mediaUrl={(evidenceId) => `/transport/${transportJob.id}/evidence/${evidenceId}/media`}
-                />
-              </section>
-
-              {transportJob.method === 'OWN_TRUCK' && (
-                <section className="transport-section">
-                  <div className="card-section-head">
-                    <h3 className="card-section-title">Transport payment</h3>
-                  </div>
-                  <p><strong>No separate transporter payment is required.</strong></p>
-                  <p className="muted">
-                    This order is using the owner's own truck. OWN_TRUCK transport does not create a separate transport payment.
-                  </p>
-                </section>
-              )}
-
-              {transportJob.method === 'HIRE_TRANSPORTER' && !transportPaid && (
-                <section className="transport-section">
-                  <div className="card-section-head">
-                    <h3 className="card-section-title">Transport payment</h3>
-                    {transportJob.agreedAmount != null && (
-                      <span className="card-section-meta is-strong">{money(transportJob.agreedAmount)} ETB</span>
-                    )}
-                  </div>
-                  <p className="muted">
-                    Transport payment is separate from the seller payment. You may pay it as soon as the transport quote is accepted. The transporter cannot start the trip until every required payment is confirmed.
-                  </p>
-                </section>
-              )}
-
-              {canStartTransportPayment && (
-                <section className="transport-section">
-                  <div className="card-section-head">
-                    <h3 className="card-section-title">Pay transport fee</h3>
-                    <span className="card-section-meta is-strong">{money(transportJob.agreedAmount)} ETB</span>
-                  </div>
-                  <p className="muted">
-                    Pay the agreed transporter fee. This payment is independent from the seller and inspection payments. All required payments must be PAID before the truck can pick up the goods.
-                  </p>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
-                    <select
-                      value={payMethod}
-                      onChange={(event) => setPayMethod(event.target.value)}
-                      disabled={busy === 'pay-transport'}
-                    >
-                      {PAYMENT_METHODS.map((method) => (
-                        <option key={method.value} value={method.value}>{method.label}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      disabled={busy === 'pay-transport'}
-                      onClick={payTransport}
-                    >
-                      {busy === 'pay-transport' ? 'Submitting…' : 'Pay for transport'}
-                    </button>
-                  </div>
-                </section>
-              )}
-
-              {canResumeTransportPayment && (
-                <section className="transport-section">
-                  <div className="card-section-head">
-                    <h3 className="card-section-title">Transport payment pending</h3>
-                    <span className="card-section-meta is-strong">{money(transportPayment.amount)} ETB</span>
-                  </div>
-                  <p>Method: <strong>{transportPayment.method || '—'}</strong></p>
-                  <p className="muted">The payment was started but has not completed yet.</p>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    disabled={busy === 'resume-transport'}
-                    onClick={() => resumePayment(transportPayment.id, 'resume-transport')}
-                    style={{ marginTop: 8 }}
-                  >
-                    {busy === 'resume-transport' ? 'Redirecting…' : 'Resume payment'}
-                  </button>
-                </section>
-              )}
-
-              {transportPaid && (
-                <section className="transport-section">
-                  <div className="card-section-head">
-                    <h3 className="card-section-title">Transport payment confirmed</h3>
-                    <span className="card-section-meta is-strong">
-                      {money(transportPayments.find((payment) => payment.status === 'PAID')?.amount)} ETB
-                    </span>
-                  </div>
-                </section>
-              )}
-
-              {transportJob.method === 'HIRE_TRANSPORTER' && !transportPaid && (
-                <section className="match-box">
-                  <div className="card-section-head">
-                    <h3 className="card-section-title">Transport quotes</h3>
-                    <span className="card-section-meta">Bids</span>
-                  </div>
-                  {leafTransportQuotes(transportJob.quotes)?.length ? (
-                    leafTransportQuotes(transportJob.quotes).map((quote) => {
-                      const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
-                      const isArrangerTurn = quote.status === 'SELECTED' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
-                      const isTransporterQuoteOwner = quote.truckOwnerId === currentUserId;
-                      const isTransporterTurn = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
-                      const isCompetitionBid = quote.status === 'PENDING';
-                      const isWaitingOnTransporter = isTransporterTurn;
-                      return (
-                        <div className="transporter" key={quote.id}>
-                          <div>
-                            <strong>{quote.truckOwner?.name || 'Truck owner'}</strong>
-                            <p>
-                              {quote.truck?.truckType || 'Truck'}
-                              {' · '}
-                              {quote.truck?.capacity != null ? `${quote.truck.capacity}t` : 'Capacity —'}
-                              {' · '}
-                              {quote.truck?.registration || 'Registration —'}
-                              {' · '}
-                              ★ {typeof quote.truckOwner?.rating === 'number' ? quote.truckOwner.rating.toFixed(1) : '—'}
-                            </p>
-                            {quote.message && (<p className="muted">{quote.message}</p>)}
-                            <p>Status: <span className="badge">{quote.status || 'PENDING'}</span></p>
-                            {isWaitingOnTransporter && (
-                              <p className="muted">You countered {money(displayAmount)} ETB — waiting for the transporter to respond.</p>
-                            )}
-                          </div>
-
-                          <div>
-                            <strong>{money(displayAmount)} ETB</strong>
-
-                            {canChooseQuote && quote.status === 'ACCEPTED' && (
-                              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                                <span className="muted small">Provisional transporter agreement. Release it if this transporter becomes unavailable before payment.</span>
-                                <button type="button" className="btn btn-light btn-sm" disabled={busy === `quote-${quote.id}`} onClick={() => releaseTransportAgreement(quote.id)}>
-                                  {busy === `quote-${quote.id}` ? 'Releasing…' : 'Release transporter'}
-                                </button>
-                              </div>
-                            )}
-
-                            {canChooseQuote && isCompetitionBid && (
-                              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                                <button type="button" className="btn btn-primary btn-sm" disabled={busy === `quote-${quote.id}`} onClick={() => selectTransportQuote(quote.id)}>
-                                  {busy === `quote-${quote.id}` ? 'Selecting…' : 'Select bid for deal'}
-                                </button>
-                                <span className="muted small">Competition bid — selecting opens price negotiation.</span>
-                              </div>
-                            )}
-
-                            {((canChooseQuote && isArrangerTurn) || (isTransporterQuoteOwner && isTransporterTurn)) && (
-                              <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                                <button
-                                  type="button"
-                                  className="btn btn-sm"
-                                  disabled={busy === `quote-${quote.id}`}
-                                  onClick={() => acceptQuote(quote.id)}
-                                >
-                                  {busy === `quote-${quote.id}` ? 'Accepting…' : isTransporterTurn ? 'Accept buyer counter' : 'Accept quote'}
-                                </button>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  placeholder="Counter (ETB)"
-                                  style={{ width: 120 }}
-                                  value={transportCounterInputs[quote.id] || ''}
-                                  onChange={(e) => setTransportCounterInputs((q) => ({ ...q, [quote.id]: e.target.value }))}
-                                />
-                                <button type="button" className="btn btn-sm btn-light" disabled={busy === `quote-${quote.id}`} onClick={() => counterQuote(quote.id)}>
-                                  {busy === `quote-${quote.id}` ? 'Sending…' : 'Counter'}
-                                </button>
-                                <button type="button" className="btn btn-sm btn-light" disabled={busy === `quote-${quote.id}`} onClick={() => rejectQuote(quote.id)}>
-                                  {busy === `quote-${quote.id}` ? 'Rejecting…' : 'Reject'}
-                                </button>
-                              </div>
-                            )}
-
-                            {quote.status === 'ACCEPTED' && isTransportArranger && !transportPending && (
-                              <div style={{ marginTop: 8 }}>
-                                <p className="muted small">Provisional agreement — the truck is not committed until transport payment succeeds.</p>
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-light"
-                                  disabled={busy === `quote-${quote.id}`}
-                                  onClick={() => releaseTransportAgreement(quote.id)}
-                                >
-                                  {busy === `quote-${quote.id}` ? 'Releasing…' : 'Transporter unavailable — choose another'}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="muted">Waiting for registered truck owners to submit quotes.</p>
-                  )}
-                </section>
-              )}
-
-              {transportJob.status === 'DELIVERED' && (
-                <section className="transport-section">
-                  <div className="card-section-head">
-                    <h3 className="card-section-title">Delivery</h3>
-                  </div>
-                  <p><strong>✓ Transport marked as delivered.</strong></p>
-                  {transportJob.deliveredConfirmedAt && (
-                    <p className="muted">Delivery confirmed.</p>
-                  )}
-                </section>
-              )}
-
-              {transportJob.incidentNotes && (
-                <div className="alert">
-                  <strong>Transport notes:</strong> {transportJob.incidentNotes}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* ================================================================== */}
-        {/* PAYOUT                                                             */}
-        {/* ================================================================== */}
-
-        {order && (
-          <PayoutStatusCard
-            sellerPayout={sellerPayout}
-            inspectorPayout={inspectorPayout}
-            transporterPayout={transporterPayout}
-            sellerName={order.seller?.name || null}
-            inspectorName={
-              (order.inspectionRequests || inspectionRequests).find((r) => r?.inspector?.name)
-                ?.inspector?.name || null
-            }
-            transporterName={transportJob?.truckOwner?.name || null}
-            isSeller={isSeller}
-            isInspector={isInspector}
-            isTransporter={isTransporter}
-            formatDateTime={formatDateTime}
+        {/* Offer (product marketplace, before a deal exists) */}
+        {isProduct && isBuyer && !order.agreedOfferId && (
+          <OfferCard
+            amount={offerAmount}
+            setAmount={setOfferAmount}
+            message={offerMessage}
+            setMessage={setOfferMessage}
+            submitting={submittingOffer}
+            onSubmit={submitOffer}
           />
         )}
 
-        {/* ================================================================== */}
-        {/* REFUND                                                             */}
-        {/* ================================================================== */}
-
-        {order && (
-          <RefundStatusCard
-            refunds={refunds}
-            payouts={payouts}
-            people={{
-              SELLER: { name: order.seller?.name || null, you: isSeller },
-              INSPECTOR: {
-                name:
-                  (order.inspectionRequests || inspectionRequests).find((r) => r?.inspector?.name)
-                    ?.inspector?.name || null,
-                you: isInspector,
-              },
-              TRANSPORTER: { name: transportJob?.truckOwner?.name || null, you: isTransporter },
-            }}
-            isAdmin={isAdmin}
-            busy={busy}
-            onComplete={completeRefundAsAdmin}
-            onFail={failRefundAsAdmin}
-          />
+        {/* Inspection */}
+        {inspectionApplies && isParticipant && orderOpen && (
+          <InspectionCard order={order} title={title} i={inspectionProps} />
         )}
 
-        {/* ================================================================== */}
-        {/* PRODUCT OFFER                                                      */}
-        {/* ================================================================== */}
+        {/* Transport */}
+        <TransportCard order={order} t={transportProps} />
 
-        {order && isProductsMarketplace && isBuyer && !order.agreedOfferId && (
-          <section className="card" id="make-offer" aria-labelledby="make-offer-title">
-            <div className="card-head">
-              <div className="card-head-main">
-                <span className="eyebrow">PRODUCT MARKETPLACE</span>
-                <h2 id="make-offer-title" className="card-title">Make Offer</h2>
-                <p className="card-subtitle">
-                  Your offer enters the seller's competition process; it does not charge you or reserve the product.
-                </p>
-              </div>
-            </div>
-            <form onSubmit={submitProductOffer} className="order-product-offer-form">
-              <label htmlFor="order-product-offer-amount">Offer amount (ETB)</label>
-              <input id="order-product-offer-amount" type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter your offer amount (ETB)" value={offerAmount} onChange={(event) => setOfferAmount(event.target.value)} disabled={submittingOffer} required />
-              <label htmlFor="order-product-offer-message">Message to seller <span>(optional)</span></label>
-              <textarea id="order-product-offer-message" rows="3" placeholder="Add a message to the seller" value={offerMessage} onChange={(event) => setOfferMessage(event.target.value)} disabled={submittingOffer} />
-              <button type="submit" className="btn primary order-product-offer-button" disabled={submittingOffer}>
-                {submittingOffer ? 'Submitting…' : 'Make Offer'}
-              </button>
-            </form>
-          </section>
-        )}
-
-        {/* ================================================================== */}
-        {/* PAYMENT CENTER                                                     */}
-        {/* ================================================================== */}
-
-        {(!isProductsMarketplace || order?.agreedOfferId) && (
+        {/* Payments */}
+        {(!isProduct || order.agreedOfferId) && (
           <PaymentCenter
             workflowPayments={workflow?.payments}
             rawPayments={payments}
@@ -2183,159 +1544,57 @@ export default function OrderDetail() {
           />
         )}
 
-        {/* ================================================================== */}
-        {/* CONFIRM RECEIPT                                                    */}
-        {/* ================================================================== */}
-
+        {/* Receipt */}
         {order.status === 'DELIVERED' && isBuyer && (
-          <div className="card" id="confirm-receipt">
-            <div className="card-head">
-              <div className="card-head-main">
-                <span className="eyebrow">FINAL STEP</span>
-                <h2 className="card-title">Confirm receipt</h2>
-                <p className="card-subtitle">Confirm only after you have physically received the produce/product.</p>
-              </div>
-            </div>
-
-            {!marketplacePaid && (
-              <div className="alert error">Marketplace payment must be confirmed before receipt can be completed.</div>
-            )}
-
-            {transportJob?.method === 'HIRE_TRANSPORTER' && !transportPaid && (
-              <div className="alert error">Transport payment must be confirmed before receipt can be completed.</div>
-            )}
-
-            <button
-              type="button"
-              className="btn btn-primary"
-              style={{ width: '100%' }}
-              disabled={
-                busy === 'receipt' ||
-                !marketplacePaid ||
-                (transportJob?.method === 'HIRE_TRANSPORTER' && !transportPaid)
-              }
-              onClick={confirmReceipt}
-            >
-              {busy === 'receipt' ? 'Confirming…' : 'Confirm receipt & complete order'}
-            </button>
-          </div>
+          <ReceiptCard
+            marketplacePaid={marketplacePaid}
+            transportBlocked={hiredTransport && !transportPaid}
+            busy={busy}
+            onConfirm={confirmReceipt}
+          />
         )}
 
-        {/* ================================================================== */}
-        {/* DISPUTE                                                            */}
-        {/* ================================================================== */}
-
-        {order.status === 'DISPUTED' ? (
-          <div className="card card-warning" id="raise-dispute">
-            <div className="card-head">
-              <div className="card-head-main">
-                <span className="eyebrow">DISPUTE</span>
-                <h2 className="card-title">Dispute open</h2>
-              </div>
-            </div>
-            <p className="muted" style={{ marginBottom: 0 }}>
-              An admin is reviewing this order. <strong>Payments, transport, inspection and payouts are paused</strong> while the dispute is open. The order will either resume its previous state or be cancelled and refunded after review.
-            </p>
-          </div>
-        ) : (
-          canRaiseDispute && (
-            <div className="card" id="raise-dispute">
-              <div className="card-head">
-                <div className="card-head-main">
-                  <span className="eyebrow">DISPUTE</span>
-                  <h2 className="card-title">Raise a dispute</h2>
-                  <p className="card-subtitle">
-                    Use this if something went wrong — goods not delivered, quality issues, or a payment problem.
-                  </p>
-                </div>
-              </div>
-
-              {disputeSubmitted ? (
-                <div className="alert success">
-                  Dispute submitted. The order is now marked as disputed while an admin reviews it.
-                </div>
-              ) : (
-                <form onSubmit={raiseDispute}>
-                  <label>
-                    Dispute against
-                    <select
-                      value={disputeAgainstId}
-                      onChange={(e) => setDisputeAgainstId(e.target.value)}
-                      required
-                    >
-                      <option value="">Select who this is about…</option>
-                      {disputeCounterparties.map((party) => (
-                        <option key={party.id} value={party.id}>
-                          {party.name} ({party.role})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label>
-                    Type
-                    <select value={disputeType} onChange={(e) => setDisputeType(e.target.value)}>
-                      <option value="NOT_DELIVERED">Goods not delivered</option>
-                      <option value="QUALITY_ISSUE">Quality issue</option>
-                      <option value="DAMAGED_GOODS">Damaged goods</option>
-                      <option value="PAYMENT_ISSUE">Payment issue</option>
-                      <option value="TRANSPORT_ISSUE">Transport issue</option>
-                      <option value="OTHER">Other</option>
-                    </select>
-                  </label>
-
-                  <label>
-                    What happened?
-                    <textarea
-                      value={disputeDescription}
-                      onChange={(e) => setDisputeDescription(e.target.value)}
-                      rows={4}
-                      placeholder="Describe the issue in detail"
-                      required
-                    />
-                  </label>
-
-                  <button type="submit" className="btn btn-outline" disabled={submittingDispute}>
-                    {submittingDispute ? 'Submitting…' : 'Raise dispute'}
-                  </button>
-                </form>
-              )}
-            </div>
-          )
-        )}
-
-        {/* ================================================================== */}
-        {/* COMPLETED                                                          */}
-        {/* ================================================================== */}
-
-        {order.status === 'COMPLETED' && (
-          <div className="card">
-            <div className="card-head">
-              <div className="card-head-main">
-                <span className="eyebrow">CLOSED</span>
-                <h2 className="card-title">Order completed</h2>
-              </div>
-            </div>
-            <div className="notice">
-              <p><strong>✓ This order has been completed.</strong></p>
-              <p className="muted">Receipt was confirmed by the buyer.</p>
-            </div>
-          </div>
-        )}
-
-        {/* ================================================================== */}
-        {/* RATING                                                             */}
-        {/* ================================================================== */}
-
-        <RatingBox
-          order={order}
-          userId={currentUserId}
-          onRated={() => load({ silent: true })}
+        {/* Money out */}
+        <PayoutStatusCard
+          payouts={{ seller: payoutBy('SELLER'), inspector: payoutBy('INSPECTOR'), transporter: payoutBy('TRANSPORTER') }}
+          names={{ seller: order.seller?.name || null, inspector: inspectorName, transporter: transportJob?.truckOwner?.name || null }}
+          you={{ seller: isSeller, inspector: isInspector, transporter: isTransporter }}
         />
 
-        {/* ================================================================== */}
-        {/* MESSAGES                                                           */}
-        {/* ================================================================== */}
+        <RefundStatusCard
+          refunds={refunds}
+          payouts={payouts}
+          people={{
+            SELLER: { name: order.seller?.name || null, you: isSeller },
+            INSPECTOR: { name: inspectorName, you: isInspector },
+            TRANSPORTER: { name: transportJob?.truckOwner?.name || null, you: isTransporter },
+          }}
+          isAdmin={isAdmin}
+          busy={busy}
+          onComplete={refundAction}
+          onFail={failRefund}
+        />
+
+        {/* History */}
+        {workflow && (
+          <Card title="Order timeline" subtitle="Everything that has happened on this order">
+            <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
+          </Card>
+        )}
+
+        {/* Problems */}
+        <DisputeCard order={order} d={disputeProps} />
+
+        {/* Closing */}
+        {order.status === 'COMPLETED' && (
+          <Card title="Order completed">
+            <Notice title="✓ This order has been completed.">
+              <p className="muted">Receipt was confirmed by the buyer.</p>
+            </Notice>
+          </Card>
+        )}
+
+        <RatingBox order={order} userId={currentUserId} onRated={reload} />
 
         {counterpartId && (
           <MessageThread
@@ -2344,24 +1603,12 @@ export default function OrderDetail() {
             counterpartId={counterpartId}
             counterpartName={counterpartName}
             currentUserId={currentUserId}
-            onSent={() => load({ silent: true })}
+            onSent={reload}
           />
         )}
 
-        {/* ================================================================== */}
-        {/* ADMIN INDICATOR                                                    */}
-        {/* ================================================================== */}
-
         {isAdmin && (
-          <div className="card">
-            <div className="card-head">
-              <div className="card-head-main">
-                <span className="eyebrow">ADMIN</span>
-                <h2 className="card-title">Administrator view</h2>
-                <p className="card-subtitle">You are viewing this order with administrator access.</p>
-              </div>
-            </div>
-          </div>
+          <Card title="Administrator view" subtitle="You are viewing this order with administrator access." />
         )}
       </div>
 
@@ -2369,17 +1616,9 @@ export default function OrderDetail() {
         <div className="order-detail-toast" role="alert" aria-live="assertive">
           <span className="order-detail-toast-icon" aria-hidden="true">!</span>
           <span className="order-detail-toast-message">{error}</span>
-          <button
-            type="button"
-            className="order-detail-toast-close"
-            onClick={() => setError('')}
-            aria-label="Dismiss message"
-          >
-            ×
-          </button>
+          <button type="button" className="order-detail-toast-close" onClick={() => setError('')} aria-label="Dismiss message">×</button>
         </div>
       )}
     </main>
   );
 }
-                               
