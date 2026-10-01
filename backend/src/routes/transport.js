@@ -14,6 +14,7 @@ const { isOrderParticipant, isAdmin } = require('../utils/authorization');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { idempotency } = require('../middleware/idempotency');
 const { matchTrucks } = require('../services/transportMatchingService');
+const { computeTransportWorkflowDueAt } = require('../utils/orderTiming');
 
 const router = express.Router();
 
@@ -800,6 +801,7 @@ router.post(
                         arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
                         requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
                         truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED',
+                        workflowDueAt: computeTransportWorkflowDueAt(),
                         pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
                       },
                     });
@@ -830,6 +832,7 @@ router.post(
                     truckId: null,
 
                     status: 'REQUESTED',
+                    workflowDueAt: computeTransportWorkflowDueAt(),
                   },
                 });
 
@@ -965,6 +968,7 @@ router.post(
                       arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
                       requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
                       truckOwnerId: truck.ownerId, truckId: truck.id, agreedAmount: null, status: 'ACCEPTED',
+                      workflowDueAt: null,
                       pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
                     },
                   });
@@ -2296,7 +2300,7 @@ router.patch(
         // provisional transporter rather than consuming/closing the order.
         await tx.transportQuote.updateMany({
           where: { transportJobId: job.id, id: { not: fresh.id }, status: 'ACCEPTED' },
-          data: { status: 'WITHDRAWN', withdrawalReason },
+          data: { status: 'WITHDRAWN' },
         });
         await tx.transportQuote.updateMany({
           where: { transportJobId: job.id, id: { not: fresh.id }, status: 'SELECTED' },
@@ -2459,11 +2463,6 @@ router.patch(
           });
         }
 
-        const withdrawalReason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
-        if (!withdrawalReason) {
-          return res.status(400).json({ error: 'A withdrawal reason is required.' });
-        }
-
         const result = await prisma.$transaction(async (tx) => {
           const freshQuote = await tx.transportQuote.findUnique({
             where: { id: quote.id },
@@ -2514,7 +2513,6 @@ router.patch(
               transportJobId: freshQuote.transportJobId,
               orderId: freshQuote.transportJob.orderId,
               releasedBy: effectiveRole,
-              withdrawalReason,
             },
           });
 

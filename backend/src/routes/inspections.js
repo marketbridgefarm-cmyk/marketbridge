@@ -9,6 +9,7 @@ const { syncOrderPaymentObligations } = require('../services/paymentObligationSe
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
+const { computeInspectionWorkflowDueAt } = require('../utils/orderTiming');
 
 const router = express.Router();
 
@@ -151,6 +152,7 @@ router.post(
             location: order.listing.location || null,
             inspectorId: null,
             status: 'REQUESTED',
+            workflowDueAt: computeInspectionWorkflowDueAt(),
             fee: null,
           },
           include: {
@@ -958,11 +960,6 @@ router.patch(
         return res.status(400).json({ error: `Only a provisionally accepted quote can be released (current: ${quote.status})` });
       }
 
-      const withdrawalReason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
-      if (!withdrawalReason) {
-        return res.status(400).json({ error: 'A withdrawal reason is required.' });
-      }
-
       const result = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection agreement cannot be released until the order dispute is resolved');
 
@@ -985,7 +982,7 @@ router.patch(
 
         const updatedQuote = await tx.inspectionQuote.update({
           where: { id: quote.id },
-          data: { status: 'WITHDRAWN', withdrawalReason },
+          data: { status: 'WITHDRAWN' },
         });
 
         await tx.inspectionRequest.update({
@@ -998,7 +995,7 @@ router.patch(
           action: 'INSPECTION_QUOTE_WITHDRAWN',
           resourceType: 'InspectionQuote',
           resourceId: updatedQuote.id,
-          metadata: { inspectionRequestId: request.id, inspectorId: quote.inspectorId, releasedBy: actorRole, withdrawalReason },
+          metadata: { inspectionRequestId: request.id, inspectorId: quote.inspectorId, releasedBy: actorRole },
         });
 
         return updatedQuote;
