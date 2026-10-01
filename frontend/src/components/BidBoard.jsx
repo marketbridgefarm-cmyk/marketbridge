@@ -213,8 +213,10 @@ function BidCard({ quote, type, onRespond, disabled }) {
                 onClick={() => handle('ACCEPT')}
               >
                 {busy === 'ACCEPT'
-                  ? 'Hiring…'
-                  : `Accept provisional deal · ${money(displayAmount)} ETB`}
+                  ? 'Accepting…'
+                  : (type === 'INSPECTION_QUOTE'
+                      ? `Accept inspector offer · ${money(displayAmount)} ETB`
+                      : `Accept provisional deal · ${money(displayAmount)} ETB`)}
               </button>
 
               {!showCounter ? (
@@ -224,7 +226,7 @@ function BidCard({ quote, type, onRespond, disabled }) {
                   disabled={!!busy}
                   onClick={() => setShowCounter(true)}
                 >
-                  {isNeg ? 'Counter again' : 'Negotiate price'}
+                  {isNeg ? 'Counter again' : (type === 'INSPECTION_QUOTE' ? 'Counter inspector' : 'Negotiate price')}
                 </button>
               ) : (
                 <div className="bid-card-counter-row">
