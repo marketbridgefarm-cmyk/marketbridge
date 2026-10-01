@@ -9,7 +9,6 @@ const { syncOrderPaymentObligations } = require('../services/paymentObligationSe
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
-const { computeInspectionWorkflowDueAt } = require('../utils/orderTiming');
 
 const router = express.Router();
 
@@ -152,7 +151,6 @@ router.post(
             location: order.listing.location || null,
             inspectorId: null,
             status: 'REQUESTED',
-            workflowDueAt: computeInspectionWorkflowDueAt(),
             fee: null,
           },
           include: {
@@ -914,7 +912,7 @@ router.post(
             inspectionRequestId: request.id,
             parentQuoteId: freshQuote.id,
             counteredBy: actorRole,
-            previousAmount: freshQuote.counterAmount ?? freshQuote.amount,
+            previousAmount: String(freshQuote.counterAmount ?? freshQuote.amount),
             counterAmount,
           },
         });

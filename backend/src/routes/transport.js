@@ -14,7 +14,6 @@ const { isOrderParticipant, isAdmin } = require('../utils/authorization');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { idempotency } = require('../middleware/idempotency');
 const { matchTrucks } = require('../services/transportMatchingService');
-const { computeTransportWorkflowDueAt } = require('../utils/orderTiming');
 
 const router = express.Router();
 
@@ -801,7 +800,6 @@ router.post(
                         arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
                         requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
                         truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED',
-                        workflowDueAt: computeTransportWorkflowDueAt(),
                         pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
                       },
                     });
@@ -832,7 +830,6 @@ router.post(
                     truckId: null,
 
                     status: 'REQUESTED',
-                    workflowDueAt: computeTransportWorkflowDueAt(),
                   },
                 });
 
@@ -968,7 +965,6 @@ router.post(
                       arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
                       requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
                       truckOwnerId: truck.ownerId, truckId: truck.id, agreedAmount: null, status: 'ACCEPTED',
-                      workflowDueAt: null,
                       pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
                     },
                   });
@@ -2430,7 +2426,7 @@ router.patch(
               transportJobId: freshQuote.transportJobId,
               parentQuoteId: freshQuote.id,
               counteredBy: effectiveRole,
-              previousAmount: freshQuote.counterAmount ?? freshQuote.amount,
+              previousAmount: String(freshQuote.counterAmount ?? freshQuote.amount),
               counterAmount,
             },
           });
