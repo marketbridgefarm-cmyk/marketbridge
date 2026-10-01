@@ -57,6 +57,7 @@ const statusTone = (status) => {
   const value = String(status || '').toUpperCase();
   if (['COMPLETED', 'DELIVERED', 'PAID', 'ACCEPTED', 'CONFIRMED'].includes(value)) return 'good';
   if (['CANCELLED', 'REJECTED', 'FAILED', 'DISPUTED'].includes(value)) return 'bad';
+  if (['TRANSPORT_ARRANGED', 'ARRANGED', 'QUOTED'].includes(value)) return 'info';
   if (['PENDING', 'AWAITING_PAYMENT', 'IN_PROGRESS', 'PROCESSING'].includes(value)) return 'wait';
   return 'neutral';
 };
@@ -95,11 +96,12 @@ function useNowUntil(targetMs) {
    2. UI primitives — every card on the page is built from these
    ======================================================================== */
 
-function Card({ id, title, subtitle, side, tone, children }) {
+function Card({ id, eyebrow, title, subtitle, side, tone, className, children }) {
   return (
-    <section className={`card${tone ? ` card-${tone}` : ''}`} id={id}>
+    <section className={`card${tone ? ` card-${tone}` : ''}${className ? ` ${className}` : ''}`} id={id}>
       <header className="card-head">
         <div className="card-head-main">
+          {eyebrow && <span className="eyebrow">{eyebrow}</span>}
           <h2 className="card-title">{title}</h2>
           {subtitle && <p className="card-subtitle">{subtitle}</p>}
         </div>
@@ -230,7 +232,8 @@ function PayoutStatusCard({ payouts, names, you }) {
   return (
     <Card
       id="order-payout-status"
-      title="Payouts"
+      eyebrow="Payouts"
+      title="Order payout status"
       subtitle="Each payout is held for 3 days after its payment settles."
       side={dueDate && <SideLabel name="Common due"><span className="card-side-value">{dueDate}</span></SideLabel>}
     >
@@ -326,40 +329,82 @@ function PayoutStatusCard({ payouts, names, you }) {
    4. Order overview
    ======================================================================== */
 
+function OrderProgress({ steps }) {
+  const current = steps.findIndex((s) => !s.done);
+  return (
+    <ol className="order-progress" aria-label="Order progress">
+      {steps.map((s, idx) => {
+        const state = s.done ? 'done' : idx === current ? 'current' : 'todo';
+        return (
+          <li key={s.label} className={`order-progress-step is-${state}`}>
+            <span className="order-progress-dot" aria-hidden="true">{s.done ? '✓' : ''}</span>
+            <span className="sr-only">{s.label}: {state === 'done' ? 'complete' : state === 'current' ? 'in progress' : 'not started'}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
   const { isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob } = flags;
+  const role = isBuyer ? 'Buying' : isSeller ? 'Selling' : 'Order';
+  const showBuyer = isSeller;
+  const other = showBuyer ? order.buyer : order.seller;
+  const otherLabel = showBuyer ? 'Buyer' : 'Seller';
+  const delivered = ['DELIVERED', 'COMPLETED'].includes(order.status) || transportJob?.status === 'DELIVERED';
+
+  const steps = [
+    { label: 'Ordered', done: true },
+    { label: 'Paid', done: marketplacePaid },
+    { label: 'Delivered', done: delivered },
+    { label: 'Completed', done: order.status === 'COMPLETED' },
+  ];
+
   return (
-    <Card title={title} subtitle="Ordered produce">
-      <Section title="Status">
+    <Card
+      className="card-overview"
+      eyebrow={role}
+      title={title}
+      side={
+        <div className="card-side-party">
+          <div>
+            <span className="card-side-label">{otherLabel}</span>
+            <span className="card-side-value">{other?.name || '—'}</span>
+          </div>
+          <span className="party-avatar" aria-hidden="true">{initials(other?.name)}</span>
+        </div>
+      }
+    >
+      <Section title="Order status" meta={`ORD ${shortId(order.id).toUpperCase()}`}>
         <div className="status-row">
           <Pill tone={statusTone(order.status)}>{label(order.status)}</Pill>
-          {marketplacePaid && <Pill tone="good">Payment: Paid</Pill>}
-          {marketplacePending && !marketplacePaid && <Pill tone="wait">Payment: Pending</Pill>}
+          {marketplacePaid && <Pill tone="good" dot={false}>Payment: Paid</Pill>}
+          {marketplacePending && !marketplacePaid && <Pill tone="wait" dot={false}>Payment: Pending</Pill>}
           {transportJob?.status && <Pill tone="neutral" dot={false}>Transport: {label(transportJob.status)}</Pill>}
         </div>
+        <OrderProgress steps={steps} />
       </Section>
 
-      <Section title="Parties">
+      <Section title="Amount">
+        <p className="amount-figure">{money(order.finalPrice)} <span>ETB</span></p>
+      </Section>
+
+      <Section title="Details">
         <Facts>
           <Fact name="Buyer">{order.buyer?.name || '—'}{isBuyer && <YouTag inline />}</Fact>
           <Fact name="Seller">{order.seller?.name || '—'}{isSeller && <YouTag inline />}</Fact>
-        </Facts>
-      </Section>
-
-      <Section title="Order details">
-        <Facts>
-          <Fact name="Amount">{money(order.finalPrice)} ETB</Fact>
           {order.listing?.cropType && <Fact name="Product">{order.listing.cropType}</Fact>}
           {order.listing?.quantity != null && <Fact name="Quantity">{order.listing.quantity} units</Fact>}
           <Fact name="Ordered from">{order.listing?.location || '—'}</Fact>
           {order.buyer?.location && <Fact name="Deliver to">{order.buyer.location}</Fact>}
-          <Fact name="Ordered date">{formatDateTime(order.createdAt)}</Fact>
-          <Fact name="Order ID">{shortId(order.id)}</Fact>
         </Facts>
       </Section>
 
+      <p className="card-created">Created {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}</p>
+
       {canCancel && (
-        <Button variant="outline" className="btn btn-outline btn-block" disabled={busy === 'cancel'} onClick={onCancel} busy={busy === 'cancel'} busyText="Cancelling…">
+        <Button className="btn btn-outline btn-block" disabled={busy === 'cancel'} onClick={onCancel} busy={busy === 'cancel'} busyText="Cancelling…">
           Cancel order
         </Button>
       )}
@@ -377,7 +422,7 @@ function InspectionCard({ order, title, i }) {
   if (!request) {
     const needsApproval = i.all.length > 0 && !i.formReleased;
     return (
-      <Card id="inspection-section" title={needsApproval ? 'Inspection request awaiting admin approval' : 'Request an inspection'}>
+      <Card id="inspection-section" eyebrow="Inspection" title={needsApproval ? 'Inspection request awaiting admin approval' : 'Request an inspection'}>
         <p className="muted">
           Get an independent quality check before the purchase is committed. Registered inspectors compete by sending a
           sealed fee quote. You compare bids, pick one to negotiate with, and the accepted quote assigns the inspector.
@@ -424,7 +469,7 @@ function InspectionCard({ order, title, i }) {
     );
 
   return (
-    <Card id="inspection-section" title={reportReady ? 'Inspection report' : 'Inspection'} side={side}>
+    <Card id="inspection-section" eyebrow={reportReady ? 'Quality report' : 'Inspection'} title={reportReady ? 'Inspection report' : 'Inspection'} side={side}>
       {reportReady ? (
         <>
           <Facts>
@@ -631,6 +676,7 @@ function TransportCard({ order, t }) {
   return (
     <Card
       id="transport-section"
+      eyebrow="Logistics"
       title="Transport"
       subtitle={subtitle}
       side={job?.status && <SideLabel name="Status"><Pill tone={statusTone(job.status)}>{label(job.status)}</Pill></SideLabel>}
@@ -779,7 +825,7 @@ function TransportCard({ order, t }) {
 
 function OfferCard({ amount, setAmount, message, setMessage, submitting, onSubmit }) {
   return (
-    <Card id="make-offer" title="Make an offer" subtitle="Your offer enters the seller's competition. It does not charge you or reserve the product.">
+    <Card id="make-offer" eyebrow="Product marketplace" title="Make an offer" subtitle="Your offer enters the seller's competition. It does not charge you or reserve the product.">
       <form onSubmit={onSubmit} className="form">
         <label htmlFor="offer-amount">Offer amount (ETB)</label>
         <input id="offer-amount" className="field" type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter your offer" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={submitting} required />
@@ -793,7 +839,7 @@ function OfferCard({ amount, setAmount, message, setMessage, submitting, onSubmi
 
 function ReceiptCard({ marketplacePaid, transportBlocked, busy, onConfirm }) {
   return (
-    <Card id="confirm-receipt" title="Confirm receipt" subtitle="Confirm only after you have physically received the produce or product.">
+    <Card id="confirm-receipt" eyebrow="Final step" title="Confirm receipt" subtitle="Confirm only after you have physically received the produce or product.">
       {!marketplacePaid && <div className="alert error">Marketplace payment must be confirmed before receipt can be completed.</div>}
       {transportBlocked && <div className="alert error">Transport payment must be confirmed before receipt can be completed.</div>}
       <Button variant="primary" className="btn btn-primary btn-block" disabled={busy === 'receipt' || !marketplacePaid || transportBlocked} busy={busy === 'receipt'} busyText="Confirming…" onClick={onConfirm}>
@@ -806,7 +852,7 @@ function ReceiptCard({ marketplacePaid, transportBlocked, busy, onConfirm }) {
 function DisputeCard({ order, d }) {
   if (order.status === 'DISPUTED') {
     return (
-      <Card id="raise-dispute" tone="warning" title="Dispute open">
+      <Card id="raise-dispute" tone="warning" eyebrow="Dispute" title="Dispute open">
         <p className="muted">
           An admin is reviewing this order. <strong>Payments, transport, inspection and payouts are paused</strong> while
           the dispute is open. The order will either resume or be cancelled and refunded after review.
@@ -817,7 +863,7 @@ function DisputeCard({ order, d }) {
   if (!d.canRaise) return null;
 
   return (
-    <Card id="raise-dispute" title="Raise a dispute" subtitle="Use this if something went wrong — goods not delivered, quality issues, or a payment problem.">
+    <Card id="raise-dispute" eyebrow="Dispute" title="Raise a dispute" subtitle="Use this if something went wrong — goods not delivered, quality issues, or a payment problem.">
       {d.submitted ? (
         <div className="alert success">Dispute submitted. The order is marked as disputed while an admin reviews it.</div>
       ) : (
@@ -1497,7 +1543,7 @@ export default function OrderDetail() {
           <ActionCenter workflow={workflow} onScroll={scrollToId} onActionComplete={reload} />
         ) : (
           isInspector && (
-            <Card id="next-action" tone="accent" title="Inspector action" subtitle="Next step">
+            <Card id="next-action" tone="accent" eyebrow="Next step" title="Inspector action">
               {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
               {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
               {assignedInspection.status === 'COMPLETED' && <p>The report is published. The buyer can now complete any required inspection payment and continue.</p>}
@@ -1577,7 +1623,7 @@ export default function OrderDetail() {
 
         {/* History */}
         {workflow && (
-          <Card title="Order timeline" subtitle="Everything that has happened on this order">
+          <Card eyebrow="History" title="Order timeline" subtitle="Everything that has happened on this order">
             <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
           </Card>
         )}
@@ -1587,7 +1633,7 @@ export default function OrderDetail() {
 
         {/* Closing */}
         {order.status === 'COMPLETED' && (
-          <Card title="Order completed">
+          <Card eyebrow="Closed" title="Order completed">
             <Notice title="✓ This order has been completed.">
               <p className="muted">Receipt was confirmed by the buyer.</p>
             </Notice>
@@ -1608,7 +1654,7 @@ export default function OrderDetail() {
         )}
 
         {isAdmin && (
-          <Card title="Administrator view" subtitle="You are viewing this order with administrator access." />
+          <Card eyebrow="Admin" title="Administrator view" subtitle="You are viewing this order with administrator access." />
         )}
       </div>
 
