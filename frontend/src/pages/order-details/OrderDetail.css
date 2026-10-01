@@ -10,7 +10,6 @@
    Variants change only the border/tint: .card-accent, .card-warning
    No boxes inside cards. Only the outer card has a border.
    ============================================================ */
-
 .order-detail-page {
   /* Brand */
   --d-accent:      #1e9e5a;
@@ -59,7 +58,6 @@
   font-family: var(--mb-font-body, 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
   -webkit-font-smoothing: antialiased;
 }
-
 .order-detail-page .container-narrow {
   max-width: 880px;
   margin: 0 auto;
@@ -70,14 +68,12 @@
 }
 
 /* ── Top bar ────────────────────────────────────────────── */
-
 .order-detail-page .row-between {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
-
 .order-detail-page .back-link {
   appearance: none;
   border: none;
@@ -94,7 +90,6 @@
 .order-detail-page .back-link:focus-visible { outline: none; box-shadow: var(--d-ring); }
 
 /* ── Buttons ────────────────────────────────────────────── */
-
 .order-detail-page .btn {
   display: inline-flex;
   align-items: center;
@@ -114,10 +109,8 @@
 .order-detail-page .btn:hover:not(:disabled) { border-color: var(--d-accent); background: var(--d-accent-soft); color: var(--d-accent-2); }
 .order-detail-page .btn:focus-visible { outline: none; box-shadow: var(--d-ring); }
 .order-detail-page .btn:disabled { opacity: .55; cursor: not-allowed; }
-
-.order-detail-page .btn-sm    { height: 34px; padding: 0 12px; font-size: 13px; }
+.order-detail-page .btn-sm { height: 34px; padding: 0 12px; font-size: 13px; }
 .order-detail-page .btn-block { width: 100%; height: 52px; margin-top: 20px; color: var(--d-ink); }
-
 .order-detail-page .btn-primary,
 .order-detail-page .btn.primary {
   background: var(--d-accent-2);
@@ -130,9 +123,7 @@
   border-color: #0b6135;
   color: #fff;
 }
-
 .order-detail-page .btn-outline { color: var(--d-accent-2); }
-
 .order-detail-page .btn-light {
   background: var(--d-line-soft);
   color: var(--d-ink-soft);
@@ -141,20 +132,26 @@
 
 /* Button groups — replaces the inline flex styles in the JSX */
 .order-detail-page .actions,
+.order-detail-page .od-actions,
 .order-detail-page .status-row,
+.order-detail-page .od-status-row,
 .order-detail-page .field-row,
-.order-detail-page .quote-actions {
+.order-detail-page .od-field-row,
+.order-detail-page .quote-actions,
+.order-detail-page .od-quote-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 .order-detail-page .actions,
+.order-detail-page .od-actions,
 .order-detail-page .field-row,
-.order-detail-page .quote-actions { margin-top: 12px; }
+.order-detail-page .od-field-row,
+.order-detail-page .quote-actions,
+.order-detail-page .od-quote-actions { margin-top: 12px; }
 
 /* ── Card ───────────────────────────────────────────────── */
-
 .order-detail-page .card {
   margin: 0;                    /* gap handled by container */
   padding: var(--d-card-pad);
@@ -164,7 +161,6 @@
   box-shadow: var(--d-shadow);
   min-width: 0;
 }
-
 .order-detail-page .card.loading {
   padding: 40px var(--d-card-pad);
   text-align: center;
@@ -173,13 +169,16 @@
 .order-detail-page .card.loading > p { margin: 0; }
 
 /* Variants — border and tint only */
-.order-detail-page .card-accent  { border-color: var(--d-accent-line); background: linear-gradient(#fff, #fff) padding-box; box-shadow: inset 3px 0 0 var(--d-accent); }
-.order-detail-page .card-warning { border-color: var(--d-gold-line);   box-shadow: inset 3px 0 0 var(--d-gold); }
-.order-detail-page .card-warning .card-title { color: var(--d-gold); }
+.order-detail-page .card-accent,
+.order-detail-page .od-card-accent { border-color: var(--d-accent-line); background: linear-gradient(#fff, #fff) padding-box; box-shadow: inset 3px 0 0 var(--d-accent); }
+.order-detail-page .card-warning,
+.order-detail-page .od-card-warning { border-color: var(--d-gold-line);   box-shadow: inset 3px 0 0 var(--d-gold); }
+.order-detail-page .card-warning .card-title,
+.order-detail-page .od-card-warning .od-card-title { color: var(--d-gold); }
 
 /* ── Card head ──────────────────────────────────────────── */
-
-.order-detail-page .card-head {
+.order-detail-page .card-head,
+.order-detail-page .od-card-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
@@ -188,20 +187,21 @@
   margin: 0 0 20px;
   border-bottom: 1px solid var(--d-line);
 }
-.order-detail-page .card-head:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
-
-.order-detail-page .card-head-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-
-.order-detail-page .card-head-side {
+.order-detail-page .card-head:last-child,
+.order-detail-page .od-card-head:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+.order-detail-page .card-head-main,
+.order-detail-page .od-card-head-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.order-detail-page .card-head-side,
+.order-detail-page .od-card-head-side {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
-  max-width: 220px;
+  gap: 8px;
+  max-width: 260px;
   text-align: right;
 }
-
-.order-detail-page .card-title {
+.order-detail-page .card-title,
+.order-detail-page .od-card-title {
   margin: 0;
   font-family: var(--mb-font-head, Manrope, sans-serif);
   font-size: 22px;
@@ -211,22 +211,22 @@
   color: var(--d-ink);
   overflow-wrap: anywhere;
 }
-
-.order-detail-page .card-subtitle {
+.order-detail-page .card-subtitle,
+.order-detail-page .od-card-subtitle {
   margin: 0;
   font-size: 13.5px;
   line-height: 1.45;
   color: var(--d-muted);
 }
-
-.order-detail-page .card-side-label {
+.order-detail-page .card-side-label,
+.order-detail-page .od-card-side-label {
   font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .18em;
   text-transform: uppercase;
   color: var(--d-muted);
 }
-
-.order-detail-page .card-side-value {
+.order-detail-page .card-side-value,
+.order-detail-page .od-card-side-value {
   font: 700 17px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
   color: var(--d-ink);
   overflow: hidden;
@@ -234,16 +234,16 @@
   white-space: nowrap;
   max-width: 100%;
 }
-
-.order-detail-page .card-side-party {
+.order-detail-page .card-side-party,
+.order-detail-page .od-card-side-party {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
   text-align: right;
 }
-
-.order-detail-page .card-section-title {
+.order-detail-page .card-section-title,
+.order-detail-page .od-card-section-title {
   margin: 0;
   font-family: var(--mb-font-head, Manrope, sans-serif);
   font-size: 18px;
@@ -252,27 +252,31 @@
   line-height: 1.3;
   color: var(--d-ink);
 }
-
-.order-detail-page .card-section-meta {
+.order-detail-page .card-section-meta,
+.order-detail-page .od-card-section-meta {
   font: 800 15px/1.2 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .04em;
   text-transform: uppercase;
   color: var(--d-muted);
   font-variant-numeric: tabular-nums;
 }
-.order-detail-page .card-section-meta.is-strong { color: var(--d-ink); font-weight: 800; }
+.order-detail-page .card-section-meta.is-strong,
+.order-detail-page .od-card-section-meta.is-strong { color: var(--d-ink); font-weight: 800; }
 
 /* Legacy support: components that still emit these classes */
-.order-detail-page .eyebrow::before { content: ''; flex: 0 0 28px; height: 3px; border-radius: 3px; background: currentColor; }
-.order-detail-page .eyebrow {
+.order-detail-page .eyebrow::before,
+.order-detail-page .od-eyebrow::before { content: ''; flex: 0 0 22px; height: 3px; border-radius: 3px; background: currentColor; }
+.order-detail-page .eyebrow,
+.order-detail-page .od-eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   margin: 0 0 4px;
   color: var(--d-accent-ink);
-  font: 800 14px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .26em;
+  font: 800 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .2em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 .order-detail-page .card > h2 {
   padding: 0 0 14px;
@@ -294,8 +298,8 @@
 }
 
 /* ── Status pills & badges ─────────────────────────────── */
-
-.order-detail-page .status-pill {
+.order-detail-page .status-pill,
+.order-detail-page .od-status-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -310,12 +314,12 @@
   text-transform: uppercase;
   white-space: nowrap;
 }
-.order-detail-page .status-pill-dot {
+.order-detail-page .status-pill-dot,
+.order-detail-page .od-status-pill-dot {
   width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex: 0 0 auto;
 }
 
 /* ── Text helpers ──────────────────────────────────────── */
-
 .order-detail-page .muted { margin: 0 0 10px; color: var(--d-muted); font-size: 14px; line-height: 1.6; max-width: 72ch; }
 .order-detail-page .muted:last-child { margin-bottom: 0; }
 .order-detail-page .muted.small,
@@ -323,10 +327,10 @@
 .order-detail-page .card p { overflow-wrap: anywhere; }
 
 /* ── Facts ─────────────────────────────────────────────── */
-
-.order-detail-page .detail-facts { display: flex; flex-direction: column; }
-
-.order-detail-page .detail-facts > div {
+.order-detail-page .detail-facts,
+.order-detail-page .od-detail-facts { display: flex; flex-direction: column; }
+.order-detail-page .detail-facts > div,
+.order-detail-page .od-detail-facts > div {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -335,14 +339,18 @@
   padding: 10px 0;
   border-bottom: 1px solid var(--d-line-soft);
 }
-.order-detail-page .detail-facts > div:last-child { border-bottom: none; }
-
-.order-detail-page .detail-facts > div > span {
+.order-detail-page .detail-facts > div:last-child,
+.order-detail-page .od-detail-facts > div:last-child { border-bottom: none; }
+.order-detail-page .detail-facts > div > span,
+.order-detail-page .od-detail-facts > div > span {
   flex: 0 0 auto;
-  font: 500 13.5px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 700 12px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .14em;
+  text-transform: uppercase;
   color: var(--d-muted);
 }
-.order-detail-page .detail-facts > div > strong {
+.order-detail-page .detail-facts > div > strong,
+.order-detail-page .od-detail-facts > div > strong {
   flex: 1 1 auto;
   min-width: 0;
   text-align: right;
@@ -352,21 +360,21 @@
 }
 
 /* ── Avatars & "You" tag ───────────────────────────────── */
-
-.order-detail-page .party-avatar {
-  width: 56px;
-  height: 56px;
-  flex: 0 0 56px;
-  border-radius: 18px;
+.order-detail-page .party-avatar,
+.order-detail-page .od-party-avatar {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  border-radius: 16px;
   background: var(--d-info-soft);
   color: var(--d-info);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font: 800 20px/1 var(--mb-font-head, Manrope, sans-serif);
+  font: 800 19px/1 var(--mb-font-head, Manrope, sans-serif);
 }
-
-.order-detail-page .party-you {
+.order-detail-page .party-you,
+.order-detail-page .od-party-you {
   display: inline-flex;
   align-items: center;
   height: 22px;
@@ -378,21 +386,26 @@
   color: var(--d-accent-ink);
   font: 700 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
 }
-.order-detail-page .party-you-inline { margin-left: 8px; vertical-align: middle; }
+.order-detail-page .party-you-inline,
+.order-detail-page .od-party-you-inline { margin-left: 8px; vertical-align: middle; }
 
 /* ── Notices & alerts ──────────────────────────────────── */
-
-.order-detail-page .notice {
+.order-detail-page .notice,
+.order-detail-page .od-notice {
   padding: 2px 0 2px 16px;
   margin: 16px 0;
   border-left: 3px solid var(--d-accent-line);
 }
-.order-detail-page .notice:last-child { margin-bottom: 0; }
-.order-detail-page .notice > strong { display: block; margin-bottom: 4px; font: 700 14px/1.3 var(--mb-font-body, 'DM Sans', sans-serif); color: var(--d-ink); }
-.order-detail-page .notice > p { margin: 4px 0; font-size: 14px; line-height: 1.55; color: var(--d-ink-soft); }
-.order-detail-page .notice .field { margin-top: 10px; }
-.order-detail-page .notice .btn { margin-top: 10px; }
-
+.order-detail-page .notice:last-child,
+.order-detail-page .od-notice:last-child { margin-bottom: 0; }
+.order-detail-page .notice > strong,
+.order-detail-page .od-notice > strong { display: block; margin-bottom: 4px; font: 700 14px/1.3 var(--mb-font-body, 'DM Sans', sans-serif); color: var(--d-ink); }
+.order-detail-page .notice > p,
+.order-detail-page .od-notice > p { margin: 4px 0; font-size: 14px; line-height: 1.55; color: var(--d-ink-soft); }
+.order-detail-page .notice .field,
+.order-detail-page .od-notice .field { margin-top: 10px; }
+.order-detail-page .notice .btn,
+.order-detail-page .od-notice .btn { margin-top: 10px; }
 .order-detail-page .alert {
   padding: 12px 16px;
   margin: 12px 0;
@@ -403,11 +416,10 @@
   font-size: 14px;
   line-height: 1.55;
 }
-.order-detail-page .alert.error   { border-color: var(--d-danger-line); background: var(--d-danger-soft); color: var(--d-danger); }
+.order-detail-page .alert.error { border-color: var(--d-danger-line); background: var(--d-danger-soft); color: var(--d-danger); }
 .order-detail-page .alert.success { border-color: var(--d-accent-line); background: var(--d-accent-soft); color: var(--d-accent-ink); }
 
 /* ── Transport quotes ──────────────────────────────────── */
-
 .order-detail-page .transporter {
   display: flex;
   align-items: flex-start;
@@ -423,10 +435,10 @@
 .order-detail-page .transporter strong { font: 800 14.5px/1.3 var(--mb-font-head, Manrope, sans-serif); color: var(--d-ink); }
 .order-detail-page .transporter p { margin: 4px 0; font-size: 13.5px; line-height: 1.55; color: var(--d-ink-soft); }
 .order-detail-page .transporter p.muted { color: var(--d-muted); }
-.order-detail-page .quote-actions { justify-content: flex-end; margin-top: 0; }
+.order-detail-page .quote-actions,
+.order-detail-page .od-quote-actions { justify-content: flex-end; margin-top: 0; }
 
 /* ── Inspection decision ───────────────────────────────── */
-
 .order-detail-page .inspection-decision-panel,
 .order-detail-page .inspection-decision-state,
 .order-detail-page .inspection-waiting-note {
@@ -435,17 +447,18 @@
   border-top: 1px solid var(--d-line-soft);
 }
 .order-detail-page .notice + .inspection-decision-panel,
+.order-detail-page .od-notice + .inspection-decision-panel,
 .order-detail-page .notice + .inspection-decision-state,
-.order-detail-page .notice + .inspection-waiting-note { margin-top: 0; padding-top: 0; border-top: none; }
-
+.order-detail-page .od-notice + .inspection-decision-state,
+.order-detail-page .notice + .inspection-waiting-note,
+.order-detail-page .od-notice + .inspection-waiting-note { margin-top: 0; padding-top: 0; border-top: none; }
 .order-detail-page .inspection-decision-panel { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
 .order-detail-page .inspection-decision-panel h3 { margin: 0 0 6px; font: 800 15px/1.3 var(--mb-font-head, Manrope, sans-serif); color: var(--d-ink); }
-.order-detail-page .inspection-decision-panel .actions { margin-top: 0; }
-
+.order-detail-page .inspection-decision-panel .actions,
+.order-detail-page .inspection-decision-panel .od-actions { margin-top: 0; }
 .order-detail-page .inspection-decision-state { display: flex; align-items: center; gap: 14px; }
 .order-detail-page .inspection-decision-state strong { display: block; margin-bottom: 2px; font: 700 14px/1.3 var(--mb-font-body, 'DM Sans', sans-serif); }
 .order-detail-page .inspection-decision-state p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--d-muted); }
-
 .order-detail-page .inspection-decision-icon {
   width: 38px;
   height: 38px;
@@ -458,14 +471,12 @@
   border: 1px solid var(--d-line);
   font: 800 18px/1 var(--mb-font-head, Manrope, sans-serif);
 }
-.order-detail-page .is-buy .inspection-decision-icon    { background: var(--d-accent-soft); border-color: var(--d-accent-line); color: var(--d-accent-2); }
+.order-detail-page .is-buy .inspection-decision-icon { background: var(--d-accent-soft); border-color: var(--d-accent-line); color: var(--d-accent-2); }
 .order-detail-page .is-cancel .inspection-decision-icon { background: var(--d-danger-soft); border-color: var(--d-danger-line); color: var(--d-danger); }
-
 .order-detail-page .inspection-waiting-note { display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 1.55; color: var(--d-ink-soft); }
 .order-detail-page .inspection-waiting-note strong { color: var(--d-ink); }
 
 /* ── Payout ────────────────────────────────────────────── */
-
 .order-detail-page .payout-hold-chip {
   display: inline-flex;
   align-items: center;
@@ -477,9 +488,7 @@
   color: var(--d-gold);
   font: 700 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
 }
-
 .order-detail-page .payout-table { width: 100%; border-collapse: collapse; }
-
 .order-detail-page .payout-table thead th {
   padding: 0 0 10px;
   text-align: left;
@@ -489,23 +498,19 @@
 }
 .order-detail-page .payout-table thead th.payout-amount-col,
 .order-detail-page .payout-table thead th.payout-status-col { text-align: right; }
-
 .order-detail-page .payout-table tbody th,
 .order-detail-page .payout-table tbody td { padding: 14px 0; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--d-line-soft); }
 .order-detail-page .payout-table tbody tr:last-child th,
 .order-detail-page .payout-table tbody tr:last-child td { border-bottom: none; }
 .order-detail-page .payout-table .payout-amount,
 .order-detail-page .payout-table .payout-status { text-align: right; }
-
 .order-detail-page .payout-party-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .order-detail-page .payout-party-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .order-detail-page .payout-party-role { font: 800 14px/1.3 var(--mb-font-head, Manrope, sans-serif); color: var(--d-ink); }
 .order-detail-page .payout-party-name { font: 500 13.5px/1.3 var(--mb-font-body, 'DM Sans', sans-serif); color: var(--d-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 .order-detail-page .payout-party-note { font-size: 12.5px; line-height: 1.4; color: var(--d-muted); }
-
 .order-detail-page .payout-amount { font: 800 15px/1 var(--mb-font-head, Manrope, sans-serif); color: var(--d-ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .order-detail-page .payout-currency { margin-left: 6px; font-size: 12px; font-weight: 700; color: var(--d-muted); }
-
 .order-detail-page .payout-due {
   display: flex;
   align-items: center;
@@ -528,9 +533,7 @@
 .order-detail-page .payout-due-unit { font: 500 13px/1 var(--mb-font-body, 'DM Sans', sans-serif); color: var(--d-muted); }
 
 /* ── Forms ─────────────────────────────────────────────── */
-
 .order-detail-page .form { display: flex; flex-direction: column; gap: 6px; }
-
 .order-detail-page .form label {
   margin-top: 8px;
   font: 700 13px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
@@ -538,7 +541,6 @@
 }
 .order-detail-page .form label .optional { color: var(--d-muted); font-weight: 500; }
 .order-detail-page .form .btn { align-self: flex-start; margin-top: 12px; }
-
 .order-detail-page .field {
   display: block;
   width: 100%;
@@ -558,7 +560,6 @@
 .order-detail-page .field:focus { outline: none; border-color: var(--d-accent); box-shadow: var(--d-ring); }
 
 /* ── Toast ─────────────────────────────────────────────── */
-
 .order-detail-page .order-detail-toast {
   position: fixed;
   left: 50%;
@@ -601,112 +602,112 @@
 /* ── Responsive ────────────────────────────────────────── */
 
 @media (max-width: 719px) {
-  .order-detail-page { --d-card-pad: 18px; --d-gap: 12px; }
-  .order-detail-page .container-narrow { padding: 20px 14px 56px; }
-  .order-detail-page .card-head { column-gap: 12px; }
-  .order-detail-page .card-head-side { max-width: 150px; }
-  .order-detail-page .card-title { font-size: 17px; }
-  .order-detail-page .payout-party-name { max-width: 140px; }
-  .order-detail-page .payout-due { flex-direction: column; align-items: flex-start; gap: 10px; }
-  .order-detail-page .transporter { flex-direction: column; align-items: stretch; }
-  .order-detail-page .transporter > div:last-child { align-items: flex-start; }
-  .order-detail-page .quote-actions { justify-content: flex-start; }
-  .order-detail-page .form .btn { align-self: stretch; }
+.order-detail-page { --d-card-pad: 18px; --d-gap: 12px; }
+.order-detail-page .container-narrow { padding: 20px 14px 56px; }
+.order-detail-page .card-head,
+.order-detail-page .od-card-head { column-gap: 12px; }
+.order-detail-page .card-head-side,
+.order-detail-page .od-card-head-side { max-width: 150px; }
+.order-detail-page .card-title,
+.order-detail-page .od-card-title { font-size: 17px; }
+.order-detail-page .payout-party-name { max-width: 140px; }
+.order-detail-page .payout-due { flex-direction: column; align-items: flex-start; gap: 10px; }
+.order-detail-page .transporter { flex-direction: column; align-items: stretch; }
+.order-detail-page .transporter > div:last-child { align-items: flex-start; }
+.order-detail-page .quote-actions,
+.order-detail-page .od-quote-actions { justify-content: flex-start; }
+.order-detail-page .form .btn { align-self: stretch; }
 }
 
 @media (max-width: 420px) {
-  .order-detail-page .card-title { font-size: 16px; }
-  .order-detail-page .party-avatar { width: 36px; height: 36px; flex-basis: 36px; font-size: 13px; }
-  .order-detail-page .order-detail-toast { bottom: 12px; }
+.order-detail-page .card-title,
+.order-detail-page .od-card-title { font-size: 16px; }
+.order-detail-page .party-avatar,
+.order-detail-page .od-party-avatar { width: 36px; height: 36px; flex-basis: 36px; font-size: 13px; }
+.order-detail-page .order-detail-toast { bottom: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .order-detail-page .btn,
-  .order-detail-page .back-link,
-  .order-detail-page .field { transition: none; }
-  .order-detail-page .order-detail-toast { animation: none; }
+.order-detail-page .btn,
+.order-detail-page .back-link,
+.order-detail-page .field { transition: none; }
+.order-detail-page .order-detail-toast { animation: none; }
 }
 
-/* ── Orders-list card language: progress, amount, created ── */
 
+/* ── Orders-list card language ─────────────────────────── */
 .order-detail-page .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
-.order-detail-page .card-overview .card-title { font-size: 26px; }
-.order-detail-page .card-overview .card-head { padding-bottom: 20px; }
+/* avatar area: label above name, text column right-aligned, tile on the far right */
+.order-detail-page .card-side-party > div,
+.order-detail-page .od-card-side-party > div { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; }
+.order-detail-page .card-side-party .card-side-value,
+.order-detail-page .od-card-side-party .od-card-side-value { font-size: 17px; }
+.order-detail-page .card-overview .card-title,
+.order-detail-page .od-card-overview .od-card-title { font-size: 26px; }
+.order-detail-page .card-overview .card-head,
+.order-detail-page .od-card-overview .od-card-head { padding-bottom: 20px; }
 
-.order-detail-page .order-progress {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  list-style: none;
-  margin: 22px 0 0;
-  padding: 0;
+/* progress */
+.order-detail-page .order-progress { display: flex; list-style: none; margin: 26px 0 0; padding: 0; }
+.order-detail-page .order-progress-step {
+  position: relative; flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
 }
-.order-detail-page .order-progress-step { position: relative; display: flex; align-items: center; }
-.order-detail-page .order-progress-step:not(:first-child) { margin-left: 70px; }
 .order-detail-page .order-progress-step:not(:first-child)::before {
-  content: '';
-  position: absolute;
-  right: 100%;
-  top: 50%;
-  width: 70px;
-  height: 3px;
-  margin-top: -1.5px;
-  background: var(--d-line);
+  content: ''; position: absolute; top: 11px; left: -50%; width: 100%; height: 3px; background: var(--d-line);
 }
 .order-detail-page .order-progress-step.is-done:not(:first-child)::before,
 .order-detail-page .order-progress-step.is-current:not(:first-child)::before { background: var(--d-accent); }
-
 .order-detail-page .order-progress-dot {
-  position: relative;
-  z-index: 1;
-  width: 24px;
-  height: 24px;
-  box-sizing: border-box;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid var(--d-line);
-  background: #fff;
-  color: #fff;
+  position: relative; z-index: 1; width: 25px; height: 25px; box-sizing: border-box; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 2px solid var(--d-line); background: #fff; color: #fff;
   font: 800 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
 }
 .order-detail-page .is-done .order-progress-dot { background: var(--d-accent); border-color: var(--d-accent); }
-.order-detail-page .is-current .order-progress-dot {
-  border: 3px solid var(--d-accent);
-  box-shadow: 0 0 0 6px rgba(30, 158, 90, .14);
-}
-.order-detail-page .is-current .order-progress-dot::after {
-  content: '';
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--d-accent);
-}
+.order-detail-page .is-current .order-progress-dot { border: 3px solid var(--d-accent); box-shadow: 0 0 0 6px rgba(30, 158, 90, .14); }
+.order-detail-page .is-current .order-progress-dot::after { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--d-accent); }
+.order-detail-page .order-progress-label { font: 600 13px/1.2 var(--mb-font-body, 'DM Sans', sans-serif); color: var(--d-muted); }
+.order-detail-page .is-done .order-progress-label,
+.order-detail-page .is-current .order-progress-label { color: var(--d-ink); }
 
-.order-detail-page .amount-figure {
-  margin: 0;
-  font: 800 40px/1 var(--mb-font-head, Manrope, sans-serif);
-  letter-spacing: -1px;
-  color: var(--d-ink);
-  font-variant-numeric: tabular-nums;
-}
-.order-detail-page .amount-figure span {
-  margin-left: 6px;
-  font: 800 16px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .12em;
-  color: var(--d-muted);
-}
+/* amount */
+.order-detail-page .amount-figure,
+.order-detail-page .od-amount-figure { margin: 0; font: 800 40px/1 var(--mb-font-head, Manrope, sans-serif); letter-spacing: -1px; color: var(--d-ink); font-variant-numeric: tabular-nums; }
+.order-detail-page .amount-figure span,
+.order-detail-page .od-amount-figure span { margin-left: 8px; font: 800 16px/1 var(--mb-font-body, 'DM Sans', sans-serif); letter-spacing: .14em; color: var(--d-muted); }
+.order-detail-page .card-created,
+.order-detail-page .od-card-created { margin: 4px 0 0; font-size: 15px; color: var(--d-muted); }
 
-.order-detail-page .card-created { margin: 20px 0 0; font-size: 16px; color: var(--d-muted); }
+/* findings */
+.order-detail-page .finding-flag,
+.order-detail-page .od-finding-flag { color: var(--d-gold); font-weight: 700; }
+
+/* decision blocks sit inside a titled section: no extra rule */
+.order-detail-page .card-section .inspection-decision-state,
+.order-detail-page .od-card-section .inspection-decision-state,
+.order-detail-page .card-section .inspection-decision-panel,
+.order-detail-page .od-card-section .inspection-decision-panel { margin: 0; padding: 0; border-top: none; }
+.order-detail-page .card-section > p.muted:last-child,
+.order-detail-page .od-card-section > p.muted:last-child { margin-bottom: 0; }
+.order-detail-page .card-section > .btn,
+.order-detail-page .od-card-section > .btn { margin-top: 4px; }
 
 @media (max-width: 719px) {
-  .order-detail-page .card-overview .card-title { font-size: 24px; }
-  .order-detail-page .order-progress-step:not(:first-child) { margin-left: 56px; }
-  .order-detail-page .order-progress-step:not(:first-child)::before { width: 56px; }
-  .order-detail-page .amount-figure { font-size: 36px; }
+.order-detail-page .card-overview .card-title,
+.order-detail-page .od-card-overview .od-card-title { font-size: 24px; }
+.order-detail-page .amount-figure,
+.order-detail-page .od-amount-figure { font-size: 36px; }
+.order-detail-page .party-avatar,
+.order-detail-page .od-party-avatar { width: 46px; height: 46px; flex-basis: 46px; font-size: 17px; border-radius: 14px; }
+.order-detail-page .card-side-party,
+.order-detail-page .od-card-side-party { gap: 10px; }
+.order-detail-page .card-side-party .card-side-value,
+.order-detail-page .od-card-side-party .od-card-side-value { font-size: 16px; }
+.order-detail-page .eyebrow,
+.order-detail-page .od-eyebrow { letter-spacing: .16em; font-size: 12px; }
 }
