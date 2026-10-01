@@ -1600,6 +1600,18 @@ router.patch(
       const current = job.status;
       const next = req.body.status;
 
+      // HIRE_TRANSPORTER uses the competitive quote/payment workflow.
+      // ACCEPTED is deliberately NOT a client-settable transport status for
+      // hired transport: quote acceptance is provisional and payment
+      // settlement is the commitment boundary. OWN_TRUCK may retain its
+      // direct ACCEPTED lifecycle.
+      if (job.method === 'HIRE_TRANSPORTER' && next === 'ACCEPTED') {
+        return res.status(409).json({
+          code: 'PAYMENT_BACKED_ACCEPTANCE_REQUIRED',
+          error: 'Hired transport becomes committed only through the accepted quote and transport payment workflow.',
+        });
+      }
+
       if (job.order?.status === 'DISPUTED') {
         return res.status(409).json({
           code: 'ORDER_DISPUTED',
@@ -1638,12 +1650,10 @@ router.patch(
 
         PICKUP: [
           'IN_TRANSIT',
-          'CANCELLED',
         ],
 
         IN_TRANSIT: [
           'DELIVERED',
-          'CANCELLED',
         ],
 
         DELIVERED: [
@@ -1662,6 +1672,35 @@ router.patch(
           error:
             `Invalid status transition from ${current} to ${next}`,
         });
+      }
+
+      // Once physical pickup has occurred, ordinary buyer/seller cancellation
+      // is no longer a valid transport transition. Dispute/admin intervention
+      // is the recovery path because the truck may already be carrying goods.
+      if (next === 'CANCELLED' && ['PICKUP', 'IN_TRANSIT'].includes(current) && !isAdmin(req.user)) {
+        return res.status(409).json({
+          code: 'TRANSPORT_MOVEMENT_STARTED',
+          error: 'Transport cannot be cancelled after pickup has started. Open or resolve a dispute instead.',
+        });
+      }
+
+      // A hired transport quote is only provisional until payment. Once a
+      // transport payment exists, the selected quote/payment pair is locked.
+      if (next === 'CANCELLED' && job.method === 'HIRE_TRANSPORTER') {
+        const activePayment = await prisma.payment.findFirst({
+          where: {
+            transportJobId: job.id,
+            type: 'TRANSPORT',
+            status: { in: ['PENDING', 'PROCESSING', 'PAID'] },
+          },
+          select: { id: true, status: true },
+        });
+        if (activePayment && !isAdmin(req.user)) {
+          return res.status(409).json({
+            code: 'TRANSPORT_PAYMENT_ACTIVE',
+            error: 'Transport cannot be cancelled while the transport payment is pending, processing, or paid. Resolve the payment/dispute first.',
+          });
+        }
       }
 
       // Perishable agricultural loads must be picked up within the seller's
