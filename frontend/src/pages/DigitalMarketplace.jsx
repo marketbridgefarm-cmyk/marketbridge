@@ -6,6 +6,9 @@ import { useToast } from '../context/ToastContext.jsx';
 import api from '../api/client';
 import { chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 
+import './DigitalMarketplace.css';   // ← add this line
+
+// …rest of the file unchanged
 // Only TELEBIRR and QR route to a configured payment adapter (both go
 // through Chapa's hosted checkout — see
 // backend/src/services/paymentProviders/index.js). CBE and OTHER are
