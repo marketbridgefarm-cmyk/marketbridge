@@ -270,9 +270,11 @@
   text-align: right; gap: 2px; min-width: 0; max-width: 160px;
 }
 
+/* "Seller" / "Buyer" role label — green */
 .orders-page .order-card .order-party-role {
   font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .12em; text-transform: uppercase; color: var(--o-muted);
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--o-accent-2);
 }
 
 .orders-page .order-card .order-party-name {
@@ -322,10 +324,11 @@
   padding: 0 0 10px; margin: 0 0 14px; border-bottom: 1px solid var(--o-line-soft);
 }
 
+/* "Order status" / "Amount" headings — green */
 .orders-page .order-card .card-block-title h3 {
   font-family: var(--mb-font-head, Manrope, sans-serif);
   font-size: 14px; font-weight: 800; letter-spacing: -.1px; line-height: 1.3;
-  color: var(--o-ink); margin: 0;
+  color: var(--o-accent-2); margin: 0;
 }
 
 .orders-page .order-card .card-block-note {
@@ -453,10 +456,12 @@
 
 .orders-page .order-time { font-size: 12px; color: var(--o-muted); }
 
+/* "View order" button — green text */
 .orders-page .btn-view {
   display: inline-flex; align-items: center; gap: 6px;
   height: 38px; padding: 0 16px; border-radius: 10px;
-  border: 1px solid var(--o-line); background: #fff; color: var(--o-ink);
+  border: 1px solid var(--o-line); background: #fff;
+  color: var(--o-accent-2);
   font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .01em; cursor: pointer; text-decoration: none;
   transition: border-color .15s var(--o-ease),
@@ -506,7 +511,7 @@
   color: var(--o-muted); text-align: center; font-size: 14.5px; margin: 0;
 }
 
-/* ── Responsive: tablet ────────────────────────────────── */
+/* ── Responsive: phone ─────────────────────────────────── */
 
 @media (max-width: 719px) {
   .orders-page .container-narrow { padding: 24px 16px 56px; }
