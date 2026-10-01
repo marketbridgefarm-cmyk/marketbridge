@@ -9,7 +9,7 @@ const { syncOrderPaymentObligations } = require('../services/paymentObligationSe
 const { transitionOrderStatus, lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { authenticate } = require('../middleware/auth');
-const { requireRole } = require('../middleware/roleCheck');
+const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { isOrderParticipant, isAdmin } = require('../utils/authorization');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { idempotency } = require('../middleware/idempotency');
@@ -84,29 +84,6 @@ function isQuoteExpired(quote) {
 
 function quoteExpiry(hours = 24) {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
-}
-
-// Prisma filter: a quote that has not timed out. Expired quotes must never
-// block a truck owner from re-bidding or freeze the competition.
-function notExpiredFilter() {
-  return { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] };
-}
-
-// Ids of every ancestor in a counter chain (nearest parent first).
-async function ancestorTransportQuoteIds(tx, quote) {
-  const ids = [];
-  let parentId = quote.parentQuoteId;
-  let guard = 0;
-  while (parentId && guard < 100) {
-    ids.push(parentId);
-    const parent = await tx.transportQuote.findUnique({
-      where: { id: parentId },
-      select: { parentQuoteId: true },
-    });
-    parentId = parent?.parentQuoteId || null;
-    guard += 1;
-  }
-  return ids;
 }
 
 function isArrangingParty(job, order, userId) {
@@ -688,7 +665,7 @@ router.post(
         });
       }
 
-      if (order.transportJob) {
+      if (order.transportJob && order.transportJob.status !== 'CANCELLED') {
         return res.status(409).json({
           error:
             'A transport job already exists for this order',
@@ -806,7 +783,7 @@ router.post(
 
               await lockOrderAndAssertNotClosed(tx, freshOrder.id, 'transport cannot be arranged until that is resolved');
 
-              if (freshOrder.transportJob) {
+              if (freshOrder.transportJob && freshOrder.transportJob.status !== 'CANCELLED') {
                 const error = new Error(
                   'A transport job already exists for this order'
                 );
@@ -814,8 +791,20 @@ router.post(
                 throw error;
               }
 
-              const transportJob =
-                await tx.transportJob.create({
+              const transportJob = freshOrder.transportJob?.status === 'CANCELLED'
+                ? await (async () => {
+                    await tx.transportQuote.deleteMany({ where: { transportJobId: freshOrder.transportJob.id } });
+                    return tx.transportJob.update({
+                      where: { id: freshOrder.transportJob.id },
+                      data: {
+                        arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
+                        requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
+                        truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED',
+                        pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
+                      },
+                    });
+                  })()
+                : await tx.transportJob.create({
                   data: {
                     orderId:
                       freshOrder.id,
@@ -922,7 +911,7 @@ router.post(
 
             await lockOrderAndAssertNotClosed(tx, freshOrder.id, 'transport cannot be arranged until that is resolved');
 
-            if (freshOrder.transportJob) {
+            if (freshOrder.transportJob && freshOrder.transportJob.status !== 'CANCELLED') {
               const error = new Error(
                 'A transport job already exists for this order'
               );
@@ -967,8 +956,20 @@ router.post(
               truck.id
             );
 
-            const transportJob =
-              await tx.transportJob.create({
+            const transportJob = freshOrder.transportJob?.status === 'CANCELLED'
+              ? await (async () => {
+                  await tx.transportQuote.deleteMany({ where: { transportJobId: freshOrder.transportJob.id } });
+                  return tx.transportJob.update({
+                    where: { id: freshOrder.transportJob.id },
+                    data: {
+                      arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
+                      requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
+                      truckOwnerId: truck.ownerId, truckId: truck.id, agreedAmount: null, status: 'ACCEPTED',
+                      pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
+                    },
+                  });
+                })()
+              : await tx.transportJob.create({
                 data: {
                   orderId:
                     freshOrder.id,
@@ -1482,6 +1483,34 @@ async function getTransportPaymentGate(client, jobId) {
 }
 
 // ============================================================================
+// REOPEN TRANSPORT BIDDING
+// ============================================================================
+router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
+  try {
+    const job = await prisma.transportJob.findUnique({ where: { id: req.params.id }, include: { order: true } });
+    if (!job) return res.status(404).json({ error: 'Transport job not found' });
+    if (!['REQUESTED', 'QUOTED'].includes(job.status)) return res.status(409).json({ error: `Transport bidding cannot be reopened while the job is ${job.status.toLowerCase()}` });
+    const activePayment = await prisma.payment.findFirst({ where: { transportJobId: job.id, type: 'TRANSPORT', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true, status: true } });
+    if (activePayment) return res.status(409).json({ error: 'Bidding cannot be reopened after transport payment has started or completed' });
+
+    const reopened = await prisma.$transaction(async (tx) => {
+      await lockOrderAndAssertNotClosed(tx, job.orderId, 'transport bidding cannot be reopened until the order dispute is resolved');
+      const fresh = await tx.transportJob.findUnique({ where: { id: job.id } });
+      if (!fresh) throw Object.assign(new Error('Transport job not found'), { statusCode: 404 });
+      if (!['REQUESTED', 'QUOTED'].includes(fresh.status)) throw Object.assign(new Error(`Transport bidding cannot be reopened while the job is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
+      await tx.transportQuote.updateMany({ where: { transportJobId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
+      const updated = await tx.transportJob.update({ where: { id: fresh.id }, data: { truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED' } });
+      await recordAuditEvent(tx, { actorId: req.user.id, action: 'TRANSPORT_BIDDING_REOPENED', resourceType: 'TransportJob', resourceId: fresh.id, metadata: { orderId: fresh.orderId } });
+      return updated;
+    }, { maxWait: 10000, timeout: 15000 });
+    return res.json({ message: 'Transport bidding reopened. Previous bids were expired.', transportJob: reopened });
+  } catch (error) {
+    req.log.error({ err: error }, 'REOPEN TRANSPORT BIDDING ERROR:');
+    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not reopen transport bidding' });
+  }
+});
+
+// ============================================================================
 // UPDATE TRANSPORT JOB STATUS
 // ============================================================================
 
@@ -1880,14 +1909,6 @@ router.post(
         where: {
           transportJobId: job.id,
           status: { in: ['SELECTED', 'COUNTERED', 'ACCEPTED'] },
-          childQuotes: { none: {} },
-          // ACCEPTED is provisional and never times out on its own; only
-          // in-progress negotiation threads can go stale.
-          OR: [
-            { status: 'ACCEPTED' },
-            { expiresAt: null },
-            { expiresAt: { gt: new Date() } },
-          ],
         },
         select: { id: true, truckOwnerId: true, status: true },
       });
@@ -1964,13 +1985,11 @@ router.post(
             status: {
               in: [
                 'PENDING',
-                'SELECTED',
                 'COUNTERED',
                 'ACCEPTED',
               ],
             },
             childQuotes: { none: {} },
-            ...notExpiredFilter(),
           },
         });
 
@@ -2159,8 +2178,7 @@ router.get(
 
       const isTruckOwner =
         job.truckOwnerId ===
-        req.user.id ||
-        (req.user.roles || []).includes('TRUCK_OWNER');
+        req.user.id;
 
       if (
         !isArranging &&
@@ -2173,16 +2191,10 @@ router.get(
         });
       }
 
-      // Bids are sealed: a truck owner only ever sees their OWN quotes (every
-      // row of their counter chain), never competitors' amounts. Only the
-      // arranging party and admins see the full list.
       const quotes =
         await prisma.transportQuote.findMany({
           where: {
             transportJobId: job.id,
-            ...(isArranging || isAdmin(req.user)
-              ? {}
-              : { truckOwnerId: req.user.id }),
           },
 
           include: {
@@ -2248,18 +2260,6 @@ async function loadTransportQuoteForNegotiation(req, res) {
     return null;
   }
 
-  // Only the newest row of a counter chain is live. An older row that a
-  // later counter points back to is history; acting on it would fork the
-  // negotiation or resurrect an offer that was already answered.
-  const supersededBy = await prisma.transportQuote.count({ where: { parentQuoteId: quote.id } });
-  if (supersededBy > 0) {
-    res.status(409).json({
-      code: 'QUOTE_SUPERSEDED',
-      error: 'This offer was already answered with a newer counter-offer. Refresh to see the latest.',
-    });
-    return null;
-  }
-
   return {
     quote,
     job,
@@ -2302,9 +2302,7 @@ router.patch(
           where: { transportJobId: job.id, id: { not: fresh.id }, status: 'SELECTED' },
           data: { status: 'PENDING' },
         });
-        // Give the negotiation a fresh window; otherwise a bid selected late
-        // in its original 24h life expires mid-negotiation.
-        const selected = await tx.transportQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED', expiresAt: quoteExpiry(24) } });
+        const selected = await tx.transportQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
         await tx.transportJob.update({
           where: { id: job.id },
           data: { truckOwnerId: null, truckId: null, agreedAmount: null, status: 'QUOTED' },
@@ -2540,42 +2538,10 @@ router.patch(
           });
         }
 
-        const updatedQuote = await prisma.$transaction(async (tx) => {
-          const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
-          if (!freshQuote || !['PENDING', 'SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
-            throw quoteError(`This quote is already ${String(freshQuote?.status || 'unavailable').toLowerCase()}`, 409);
-          }
-          if (quoteTurn(freshQuote) !== effectiveRole && !isAdmin(req.user)) {
-            throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
-          }
-
-          const rejected = await tx.transportQuote.update({
-            where: { id: quote.id },
-            data: { status: 'REJECTED' },
-          });
-
-          // Rejecting a counter ends the WHOLE negotiation with this truck
-          // owner. Earlier rows of the chain were left COUNTERED when each
-          // counter was made; without closing them they look like live
-          // offers again as soon as the rejected leaf is hidden.
-          const ancestors = await ancestorTransportQuoteIds(tx, freshQuote);
-          if (ancestors.length) {
-            await tx.transportQuote.updateMany({
-              where: { id: { in: ancestors }, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
-              data: { status: 'REJECTED' },
-            });
-          }
-
-          await recordAuditEvent(tx, {
-            actorId: req.user.id,
-            action: 'TRANSPORT_QUOTE_REJECTED',
-            resourceType: 'TransportQuote',
-            resourceId: rejected.id,
-            metadata: { transportJobId: rejected.transportJobId, rejectedBy: effectiveRole },
-          });
-
-          return rejected;
-        }, { maxWait: 10000, timeout: 15000 });
+        const updatedQuote = await prisma.transportQuote.update({
+          where: { id: quote.id },
+          data: { status: 'REJECTED' },
+        });
 
         return res.json({
           message: 'Quote rejected',

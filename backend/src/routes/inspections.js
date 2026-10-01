@@ -2,7 +2,7 @@ const express = require('express');
 const { body, param, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
-const { requireRole } = require('../middleware/roleCheck');
+const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
@@ -55,42 +55,6 @@ function isQuoteExpired(quote) {
 
 function quoteExpiry(hours = 24) {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
-}
-
-// Prisma filter: a quote that has not timed out. Expired quotes must never
-// block a provider from re-bidding or freeze the competition.
-function notExpiredFilter() {
-  return { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] };
-}
-
-// Ids of every ancestor in a counter chain (nearest parent first).
-async function ancestorQuoteIds(tx, quote) {
-  const ids = [];
-  let parentId = quote.parentQuoteId;
-  let guard = 0;
-  while (parentId && guard < 100) {
-    ids.push(parentId);
-    const parent = await tx.inspectionQuote.findUnique({
-      where: { id: parentId },
-      select: { parentQuoteId: true },
-    });
-    parentId = parent?.parentQuoteId || null;
-    guard += 1;
-  }
-  return ids;
-}
-
-// Map a thrown error to the right HTTP response (quoteError, order lock
-// failures and the generic fallback).
-function sendQuoteError(req, res, error, label, fallback) {
-  if (error?.code === 'ORDER_NOT_ACTIONABLE') {
-    return res.status(error.status || 409).json({ error: error.message });
-  }
-  if (error?.statusCode) {
-    return res.status(error.statusCode).json({ error: error.message });
-  }
-  req.log.error({ err: error }, label);
-  return res.status(500).json({ error: fallback });
 }
 
 // ============================================================================
@@ -233,6 +197,67 @@ router.post(
 );
 
 // ============================================================================
+// CANCEL INSPECTION REQUEST (WITHOUT CANCELLING THE ORDER)
+// ============================================================================
+router.patch('/:id/cancel', authenticate, async (req, res) => {
+  try {
+    const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { order: true } });
+    if (!request) return res.status(404).json({ error: 'Inspection request not found' });
+    if (!request.order) return res.status(409).json({ error: 'This inspection is not attached to an order' });
+    if (request.order.buyerId !== req.user.id && request.order.sellerId !== req.user.id && !isAdmin(req.user)) return res.status(403).json({ error: 'Only an order participant can cancel this inspection request' });
+    if (request.status === 'CANCELLED') return res.json({ message: 'Inspection request is already cancelled', request });
+    if (['COMPLETED', 'IN_PROGRESS'].includes(request.status)) return res.status(409).json({ error: `An inspection cannot be cancelled while it is ${request.status.toLowerCase()}` });
+
+    const activePayment = await prisma.payment.findFirst({ where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true, status: true } });
+    if (activePayment) return res.status(409).json({ error: 'This inspection cannot be cancelled after inspection payment has started or completed' });
+
+    const cancelled = await prisma.$transaction(async (tx) => {
+      await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection cannot be cancelled until the order dispute is resolved');
+      const fresh = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
+      if (!fresh) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
+      if (['COMPLETED', 'IN_PROGRESS'].includes(fresh.status)) throw Object.assign(new Error(`An inspection cannot be cancelled while it is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
+      const updated = await tx.inspectionRequest.update({ where: { id: fresh.id }, data: { inspectorId: null, fee: null, status: 'CANCELLED' } });
+      await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } }, data: { status: 'EXPIRED' } });
+      await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_REQUEST_CANCELLED', resourceType: 'InspectionRequest', resourceId: fresh.id, metadata: { orderId: fresh.orderId } });
+      return updated;
+    }, { maxWait: 10000, timeout: 15000 });
+    return res.json({ message: 'Inspection request cancelled. You can open a new inspection request for this order.', request: cancelled });
+  } catch (error) {
+    req.log.error({ err: error }, 'CANCEL INSPECTION REQUEST ERROR:');
+    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not cancel inspection request' });
+  }
+});
+
+// ============================================================================
+// REOPEN INSPECTION BIDDING
+// ============================================================================
+router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
+  try {
+    const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { order: true } });
+    if (!request) return res.status(404).json({ error: 'Inspection request not found' });
+    if (!['REQUESTED', 'ACCEPTED'].includes(request.status)) return res.status(409).json({ error: `Inspection bidding cannot be reopened while the request is ${request.status.toLowerCase()}` });
+
+    const activePayment = await prisma.payment.findFirst({ where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true, status: true } });
+    if (activePayment) return res.status(409).json({ error: 'Bidding cannot be reopened after inspection payment has started or completed' });
+
+    const reopened = await prisma.$transaction(async (tx) => {
+      await lockOrderAndAssertNotClosed(tx, request.orderId, 'inspection bidding cannot be reopened until the order dispute is resolved');
+      const fresh = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
+      if (!fresh) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
+      if (!['REQUESTED', 'ACCEPTED'].includes(fresh.status)) throw Object.assign(new Error(`Inspection bidding cannot be reopened while the request is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
+      await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
+      const updated = await tx.inspectionRequest.update({ where: { id: fresh.id }, data: { inspectorId: null, fee: null, status: 'REQUESTED' } });
+      await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_BIDDING_REOPENED', resourceType: 'InspectionRequest', resourceId: fresh.id, metadata: { orderId: fresh.orderId } });
+      return updated;
+    }, { maxWait: 10000, timeout: 15000 });
+    return res.json({ message: 'Inspection bidding reopened. Previous bids were expired.', request: reopened });
+  } catch (error) {
+    req.log.error({ err: error }, 'REOPEN INSPECTION BIDDING ERROR:');
+    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not reopen inspection bidding' });
+  }
+});
+
+// ============================================================================
 // FIND INSPECTORS
 // ============================================================================
 
@@ -339,10 +364,7 @@ router.get(
           // GET /:id/quotes route below.
           quotes: {
             where: {
-              // SELECTED must be included: it is the state an inspector's
-              // bid is in after the requester picks it, and without it the
-              // inspector sees nothing and can even file a duplicate bid.
-              status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN', 'EXPIRED'] },
+              status: { in: ['PENDING', 'COUNTERED', 'ACCEPTED', 'REJECTED'] },
               inspectorId: req.user.id,
             },
 
@@ -357,7 +379,6 @@ router.get(
               counteredBy: true,
               expiresAt: true,
               createdAt: true,
-              updatedAt: true,
             },
 
             orderBy: { createdAt: 'asc' },
@@ -440,9 +461,8 @@ router.post(
         where: {
           inspectionRequestId: request.id,
           inspectorId: req.user.id,
-          status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
+          status: { in: ['PENDING', 'COUNTERED'] },
           childQuotes: { none: {} },
-          ...notExpiredFilter(),
         },
       });
 
@@ -622,18 +642,6 @@ async function loadQuoteForNegotiation(req, res) {
     return null;
   }
 
-  // Only the newest row of a counter chain is live. An older row that a
-  // later counter points back to is history; acting on it would fork the
-  // negotiation or resurrect an offer that was already answered.
-  const supersededBy = await prisma.inspectionQuote.count({ where: { parentQuoteId: quote.id } });
-  if (supersededBy > 0) {
-    res.status(409).json({
-      code: 'QUOTE_SUPERSEDED',
-      error: 'This offer was already answered with a newer counter-offer. Refresh to see the latest.',
-    });
-    return null;
-  }
-
   return { request, quote, actorRole: isRequester ? 'REQUESTER' : 'PROVIDER' };
 }
 
@@ -663,13 +671,12 @@ router.patch(
           where: { inspectionRequestId: request.id, id: { not: fresh.id }, status: 'SELECTED' },
           data: { status: 'PENDING' },
         });
-        // Give the negotiation a fresh window; otherwise a bid selected
-        // late in its original 24h life expires mid-negotiation.
-        return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED', expiresAt: quoteExpiry(24) } });
+        return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
       }, { maxWait: 10000, timeout: 15000 });
       return res.json({ message: 'Inspector bid selected for price negotiation', quote: selected });
     } catch (error) {
-      return sendQuoteError(req, res, error, 'SELECT INSPECTION QUOTE ERROR:', 'Could not select inspection bid');
+      req.log.error({ err: error }, 'SELECT INSPECTION QUOTE ERROR:');
+      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not select inspection bid' });
     }
   }
 );
@@ -808,7 +815,11 @@ router.patch(
         });
       }
 
-      return sendQuoteError(req, res, error, 'ACCEPT INSPECTION QUOTE ERROR:', 'Could not accept inspection quote');
+      req.log.error({ err: error }, 'ACCEPT INSPECTION QUOTE ERROR:');
+
+      return res.status(500).json({
+        error: 'Could not accept inspection quote',
+      });
     }
   }
 );
@@ -916,7 +927,13 @@ router.post(
         quote: counterQuote,
       });
     } catch (error) {
-      return sendQuoteError(req, res, error, 'COUNTER INSPECTION QUOTE ERROR:', 'Could not counter inspection quote');
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+
+      req.log.error({ err: error }, 'COUNTER INSPECTION QUOTE ERROR:');
+
+      return res.status(500).json({ error: 'Could not counter inspection quote' });
     }
   }
 );
@@ -984,7 +1001,9 @@ router.patch(
 
       return res.json({ message: 'Provisional inspector agreement released. Other inspector bids are available again.', quote: result });
     } catch (error) {
-      return sendQuoteError(req, res, error, 'WITHDRAW INSPECTION QUOTE ERROR:', 'Could not release inspection agreement');
+      if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+      req.log.error({ err: error }, 'WITHDRAW INSPECTION QUOTE ERROR:');
+      return res.status(500).json({ error: 'Could not release inspection agreement' });
     }
   }
 );
@@ -1016,30 +1035,10 @@ router.patch(
       const updated = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, loaded.request.orderId, 'an inspection quote cannot be rejected until the order dispute is resolved');
 
-        const freshQuote = await tx.inspectionQuote.findUnique({ where: { id: quote.id } });
-        if (!freshQuote || !['PENDING', 'SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
-          throw quoteError(`Quote cannot be rejected because it is ${freshQuote?.status || 'unavailable'}`, 409);
-        }
-        if (quoteTurn(freshQuote) !== actorRole) {
-          throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
-        }
-
         const rejected = await tx.inspectionQuote.update({
           where: { id: quote.id },
           data: { status: 'REJECTED' },
         });
-
-        // Rejecting a counter ends the WHOLE negotiation with this
-        // inspector. The earlier rows of the chain were left COUNTERED when
-        // each counter was made; without closing them they look like live
-        // offers again the moment the rejected leaf is hidden.
-        const ancestors = await ancestorQuoteIds(tx, freshQuote);
-        if (ancestors.length) {
-          await tx.inspectionQuote.updateMany({
-            where: { id: { in: ancestors }, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
-            data: { status: 'REJECTED' },
-          });
-        }
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
@@ -1054,7 +1053,8 @@ router.patch(
 
       return res.json({ message: 'Quote rejected', quote: updated });
     } catch (error) {
-      return sendQuoteError(req, res, error, 'REJECT INSPECTION QUOTE ERROR:', 'Could not reject inspection quote');
+      req.log.error({ err: error }, 'REJECT INSPECTION QUOTE ERROR:');
+      return res.status(500).json({ error: 'Could not reject inspection quote' });
     }
   }
 );
