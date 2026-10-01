@@ -294,7 +294,6 @@ export default function OrderDetail() {
   const [order, setOrder] = useState(null);
   const [workflow, setWorkflow] = useState(null);
   const [recoveryRequests, setRecoveryRequests] = useState([]);
-  const [recoveryEligibility, setRecoveryEligibility] = useState({ INSPECTION: false, TRANSPORT: false });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -383,11 +382,6 @@ export default function OrderDetail() {
           recoveryResponse.status === 'fulfilled'
             ? recoveryResponse.value.data?.recoveryRequests || []
             : []
-        );
-        setRecoveryEligibility(
-          recoveryResponse.status === 'fulfilled'
-            ? recoveryResponse.value.data?.eligibility || { INSPECTION: false, TRANSPORT: false }
-            : { INSPECTION: false, TRANSPORT: false }
         );
 
         setWorkflow(
@@ -1178,10 +1172,7 @@ export default function OrderDetail() {
     }
   };
 
-  const inspectionRecoveryPending = recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'PENDING');
-  const transportRecoveryPending = recoveryRequests.some((r) => r.type === 'TRANSPORT' && r.status === 'PENDING');
-  const inspectionRecoveryVisible = Boolean(recoveryEligibility.INSPECTION) && !inspectionRecoveryPending;
-  const transportRecoveryVisible = Boolean(recoveryEligibility.TRANSPORT) && !transportRecoveryPending;
+  const inspectionFormReleased = recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'APPROVED' && r.formReleasedAt);
 
   const requestInspection = async (mode) => {
     if (!order?.listing) return;
@@ -1216,6 +1207,21 @@ export default function OrderDetail() {
       await load({ silent: true });
     } catch (err) {
       setError(getError(err, 'Could not cancel inspection request'));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const reopenInspectionBidding = async () => {
+    if (!currentInspectionRequest) return;
+    if (!window.confirm('Reopen inspection bidding? Previous inspection bids will be expired and inspectors can submit fresh bids.')) return;
+    setBusy(`reopen-inspection-${currentInspectionRequest.id}`);
+    setError('');
+    try {
+      await api.patch(`/inspections/${currentInspectionRequest.id}/reopen-bidding`);
+      await load({ silent: true });
+    } catch (err) {
+      setError(getError(err, 'Could not reopen inspection bidding'));
     } finally {
       setBusy('');
     }
@@ -2067,18 +2073,16 @@ export default function OrderDetail() {
               </div>
               {['REQUESTED', 'ACCEPTED'].includes(currentInspectionRequest.status) && isParticipant && (
                 <div className="notice" style={{ marginTop: 10 }}>
-                  {inspectionRecoveryVisible && (
-                    <>
-                      <strong>Inspection recovery</strong>
-                      <p className="muted">The previous inspection competition has a recovery trigger. Request MarketBridge admin approval to release a fresh inspection competition.</p>
-                      <button type="button" className="btn btn-primary" disabled={Boolean(busy)} onClick={() => requestWorkflowRecovery('INSPECTION', [isBuyer ? 'BUYER' : 'SELLER'], 'The previous inspection competition is no longer available and requires a fresh provider competition.')}>
-                        {busy === 'recovery-INSPECTION' ? 'Requesting…' : 'Request admin to release fresh inspection form'}
-                      </button>
-                    </>
-                  )}
-                  <button type="button" className="btn btn-light" disabled={Boolean(busy)} onClick={cancelInspectionRequest}>
-                    {busy === `cancel-inspection-${currentInspectionRequest.id}` ? 'Cancelling…' : 'Cancel inspection request'}
-                  </button>
+                  <strong>Inspection recovery</strong>
+                  <p className="muted">If every inspector bid is closed, you can reopen bidding. If you no longer want this request, cancel it without cancelling the order.</p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                    <button type="button" className="btn btn-primary" disabled={Boolean(busy)} onClick={reopenInspectionBidding}>
+                      {busy === `reopen-inspection-${currentInspectionRequest.id}` ? 'Reopening…' : 'Reopen inspection bidding'}
+                    </button>
+                    <button type="button" className="btn btn-light" disabled={Boolean(busy)} onClick={cancelInspectionRequest}>
+                      {busy === `cancel-inspection-${currentInspectionRequest.id}` ? 'Cancelling…' : 'Cancel inspection request'}
+                    </button>
+                  </div>
                 </div>
               )}
               {currentInspectionRequest.status === 'COMPLETED' && currentInspectionRequest.report && (
@@ -2142,16 +2146,11 @@ export default function OrderDetail() {
             </div>
           ) : (
             <div className="card">
-              <h2>{inspectionRecoveryVisible ? 'Inspection recovery' : 'Request inspection'}</h2>
+              <h2>{allInspectionRequests.length && !inspectionFormReleased ? 'Inspection request awaiting admin recovery approval' : 'Request inspection'}</h2>
               <p className="muted">Request an independent quality check for this order before the purchase is finally committed.</p>
               <p className="muted">All registered inspectors can compete for this request by submitting a sealed fee quote. You compare the bids, select one for negotiation, and only the accepted negotiated quote assigns the inspector. The inspection fee commits the inspector; the completed report is then reviewed before goods payment.</p>
-              {inspectionRecoveryVisible ? (
-                <>
-                  <p className="muted"><strong>Admin recovery is available.</strong> The previous inspection workflow has a genuine recovery trigger. Submit the request to release a fresh competition.</p>
-                  <button type="button" className="btn btn-primary" disabled={Boolean(busy)} onClick={() => requestWorkflowRecovery('INSPECTION', [isBuyer ? 'BUYER' : 'SELLER'], 'The previous inspection competition is no longer available and requires a fresh provider competition.')}>
-                    {busy === 'recovery-INSPECTION' ? 'Requesting…' : 'Request admin to release fresh inspection form'}
-                  </button>
-                </>
+              {allInspectionRequests.length > 0 && !inspectionFormReleased ? (
+                <p className="muted"><strong>Admin approval required.</strong> Ask MarketBridge admin to release a fresh inspection requesting form before opening another competition.</p>
               ) : (
                 <button
                   type="button"
@@ -2194,23 +2193,7 @@ export default function OrderDetail() {
           </div>
 
           {!transportJob ? (
-            cancelledTransportJob ? (
-              <div className="notice">
-                {transportRecoveryPending ? (
-                  <p><strong>Admin recovery requested.</strong> Waiting for MarketBridge admin to release the fresh transport competition.</p>
-                ) : transportRecoveryVisible ? (
-                  <>
-                    <strong>Transport recovery</strong>
-                    <p className="muted">The previous transport workflow has a genuine recovery trigger. Admin approval is required before a fresh transporter competition can be opened.</p>
-                    <button type="button" className="btn btn-primary" disabled={Boolean(busy)} onClick={() => requestWorkflowRecovery('TRANSPORT', isTransportArranger && isBuyer ? ['BUYER'] : ['SELLER'], 'The previous transport competition is no longer available and requires a fresh transporter competition.')}>
-                      {busy === 'recovery-TRANSPORT' ? 'Requesting…' : 'Request admin to release fresh transport form'}
-                    </button>
-                  </>
-                ) : (
-                  <p><strong>Transport recovery is being processed.</strong> Wait for the fresh transport request to be released.</p>
-                )}
-              </div>
-            ) : canArrangeTransport ? (
+            canArrangeTransport ? (
               <TransportSetup
                 orderId={order.id}
                 pickupDefault={order.listing?.location}
@@ -2221,7 +2204,10 @@ export default function OrderDetail() {
               />
             ) : (
               <div className="notice">
-                <p>No transport arrangement recorded yet.</p>
+                <p>
+                  No transport arrangement recorded
+                  yet.
+                </p>
               </div>
             )
           ) : (
@@ -2299,7 +2285,7 @@ export default function OrderDetail() {
               </div>
               </div>
 
-              {isTransportArranger && transportRecoveryVisible && ['REQUESTED', 'QUOTED', 'ACCEPTED', 'CANCELLED'].includes(transportJob.status) && (
+              {isTransportArranger && ['REQUESTED', 'QUOTED', 'ACCEPTED', 'CANCELLED'].includes(transportJob.status) && (
                 <div className="notice" style={{ marginTop: 10 }}>
                   <strong>Transport recovery</strong>
                   <p className="muted">If the transport competition has stalled or the previous arrangement was cancelled, request MarketBridge admin approval. Admin approval releases the fresh transport requesting form.</p>
@@ -2698,8 +2684,10 @@ export default function OrderDetail() {
                         (quote) => {
                           const displayAmount = quote.status === 'COUNTERED' ? (quote.counterAmount ?? quote.amount) : quote.amount;
                           const isArrangerTurn = quote.status === 'SELECTED' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+                          const isTransporterQuoteOwner = quote.truckOwnerId === currentUserId;
+                          const isTransporterTurn = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
                           const isCompetitionBid = quote.status === 'PENDING';
-                          const isWaitingOnTransporter = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
+                          const isWaitingOnTransporter = isTransporterTurn;
                           return (
                           <div
                             className="transporter"
@@ -2783,8 +2771,7 @@ export default function OrderDetail() {
                                   <span className="muted small">Competition bid — selecting opens price negotiation.</span>
                                 </div>
                               )}
-                              {canChooseQuote &&
-                                isArrangerTurn && (
+                              {((canChooseQuote && isArrangerTurn) || (isTransporterQuoteOwner && isTransporterTurn)) && (
                                   <div
                                     style={{
                                       marginTop: 8,
@@ -2810,7 +2797,9 @@ export default function OrderDetail() {
                                       {busy ===
                                       `quote-${quote.id}`
                                         ? 'Accepting…'
-                                        : 'Accept quote'}
+                                        : isTransporterTurn
+                                          ? 'Accept buyer counter'
+                                          : 'Accept quote'}
                                     </button>
                                     <input
                                       type="number"
