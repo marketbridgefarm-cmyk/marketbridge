@@ -341,9 +341,7 @@ export default function InspectorDashboard() {
     setMsg('');
     setRespondingQuoteId(quoteId);
     try {
-      const reason = window.prompt('Why are you releasing this provisional inspection agreement?');
-      if (!reason || !reason.trim()) return;
-      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/withdraw`, { reason: reason.trim() });
+      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/withdraw`);
       setMsg('Provisional inspection deal released. The buyer can select another inspector bid.');
       await loadAll();
     } catch (err) {
@@ -816,7 +814,7 @@ export default function InspectorDashboard() {
                                     disabled={responding}
                                     onClick={() => acceptInspectionQuote(r.id, myLeaf.id)}
                                   >
-                                    {responding ? 'Accepting…' : 'Accept'}
+                                    {responding ? 'Accepting…' : (myLeaf?.status === 'COUNTERED' && myLeaf?.counteredBy === 'REQUESTER' ? 'Accept buyer counter' : 'Accept quote')}
                                   </button>
                                   <button
                                     type="button"
@@ -824,7 +822,7 @@ export default function InspectorDashboard() {
                                     disabled={responding}
                                     onClick={() => counterInspectionQuote(r.id, myLeaf.id)}
                                   >
-                                    {responding ? 'Sending…' : 'Counter'}
+                                    {responding ? 'Sending…' : (myLeaf?.status === 'COUNTERED' ? 'Counter again' : 'Counter buyer')}
                                   </button>
                                   <button
                                     type="button"
