@@ -1,12 +1,8 @@
 /* ============================================================
    MarketBridge — Digital marketplace
-   pages/digital-marketplace/DigitalMarketplace.css
+   pages/DigitalMarketplace.css
 
-   Matches the design language of Orders, Order Detail and Listings:
-   · DM Sans body, Manrope headings
-   · Green accent, hairline rules, restrained shadows
-   · Card heads with eyebrow + title + subtitle + side stack
-   · No boxes inside cards — purchases render as flat rows
+   Matches the design language of Orders, Order Detail and Listings.
    All selectors are scoped under .digital-marketplace-page.
    ============================================================ */
 
@@ -48,6 +44,7 @@
   --dm-ring:        0 0 0 3px rgba(30, 158, 90, .18);
   --dm-ease:        cubic-bezier(.2, .7, .3, 1);
 
+  box-sizing: border-box;
   min-height: calc(100vh - 72px);
   color: var(--dm-ink);
   font-family: var(--mb-font-body, 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif);
@@ -59,6 +56,10 @@
     linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
   background-attachment: fixed;
 }
+
+.digital-marketplace-page *,
+.digital-marketplace-page *::before,
+.digital-marketplace-page *::after { box-sizing: inherit; }
 
 .digital-marketplace-page .container-wide {
   max-width: 1240px;
@@ -88,10 +89,7 @@
 
 /* ── Page header ───────────────────────────────────────── */
 
-.digital-marketplace-page .page-header {
-  margin: 0 0 22px;
-}
-
+.digital-marketplace-page .page-header { margin: 0 0 22px; }
 .digital-marketplace-page .page-header-text { max-width: 60ch; }
 
 .digital-marketplace-page .page-header h1 {
@@ -357,9 +355,7 @@
 }
 
 .digital-marketplace-page .field input::placeholder,
-.digital-marketplace-page .field textarea::placeholder {
-  color: var(--dm-muted-2);
-}
+.digital-marketplace-page .field textarea::placeholder { color: var(--dm-muted-2); }
 
 .digital-marketplace-page .field input:focus,
 .digital-marketplace-page .field select:focus,
@@ -379,10 +375,7 @@
   min-height: 100px;
 }
 
-.digital-marketplace-page .field-with-suffix {
-  position: relative;
-}
-
+.digital-marketplace-page .field-with-suffix { position: relative; }
 .digital-marketplace-page .field-with-suffix input { padding-right: 48px; }
 
 .digital-marketplace-page .field-suffix {
@@ -411,7 +404,7 @@
   padding-top: 4px;
 }
 
-/* ── Purchases list (flat rows, no boxes) ──────────────── */
+/* ── Purchases list (flat rows) ────────────────────────── */
 
 .digital-marketplace-page .purchase-list {
   list-style: none;
@@ -575,7 +568,7 @@
   color: var(--dm-danger);
 }
 
-/* ── Browse section header ─────────────────────────────── */
+/* ── Browse section ────────────────────────────────────── */
 
 .digital-marketplace-page .browse-section { margin: 34px 0 0; }
 
@@ -692,7 +685,6 @@
   transform: translateY(-1px);
 }
 
-/* Carousel breaks out of the card padding slightly */
 .digital-marketplace-page .product-card .img-carousel,
 .digital-marketplace-page .product-card .img-carousel--compact {
   margin: -6px -6px 4px;
@@ -796,11 +788,8 @@
   min-width: 0;
 }
 
-/* Push the action button to the bottom of the card */
 .digital-marketplace-page .product-card > .btn,
-.digital-marketplace-page .product-card > a.btn {
-  margin-top: auto;
-}
+.digital-marketplace-page .product-card > a.btn { margin-top: auto; }
 
 /* ── Empty state ───────────────────────────────────────── */
 
@@ -828,11 +817,7 @@
   justify-content: center;
 }
 
-.digital-marketplace-page .empty-icon svg {
-  width: 26px;
-  height: 26px;
-  display: block;
-}
+.digital-marketplace-page .empty-icon svg { width: 26px; height: 26px; display: block; }
 
 .digital-marketplace-page .empty-state h3 {
   margin: 0;
@@ -913,7 +898,6 @@
   }
 
   .digital-marketplace-page .product-title { font-size: 15px; }
-
   .digital-marketplace-page .purchase-actions { flex-wrap: wrap; }
 }
 
