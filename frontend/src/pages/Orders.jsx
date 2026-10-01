@@ -25,6 +25,56 @@ function initialsOf(name) {
   return parts.map((p) => p[0]).join('').toUpperCase();
 }
 
+/*
+ * Best-effort location extractor. Tries the listing first (that's where
+ * the produce is), then falls back to the counterparty. Handles both
+ * `location: "Adama"` and `location: { city, region }` shapes.
+ */
+function locationOf(order) {
+  const listing = order?.listing || {};
+  const seller = order?.seller || {};
+  const buyer = order?.buyer || {};
+
+  const fromListing = readLocation(listing);
+  if (fromListing) return fromListing;
+
+  const fromSeller = readLocation(seller);
+  if (fromSeller) return fromSeller;
+
+  const fromBuyer = readLocation(buyer);
+  if (fromBuyer) return fromBuyer;
+
+  return null;
+}
+
+function readLocation(source) {
+  if (!source) return null;
+
+  const loc = source.location;
+
+  // `location` as a plain string — "Adama, Oromia"
+  if (typeof loc === 'string' && loc.trim()) return loc.trim();
+
+  // `location` as an object — { city, region, country }
+  if (loc && typeof loc === 'object') {
+    const joined = [loc.city || loc.town, loc.region || loc.state, loc.country]
+      .filter(Boolean)
+      .join(', ');
+    if (joined) return joined;
+  }
+
+  // Flat fields directly on the listing / party object
+  const parts = [
+    source.city || source.town,
+    source.woreda || source.district || source.zone,
+    source.region || source.state,
+  ].filter(Boolean);
+
+  if (parts.length) return parts.join(', ');
+
+  return source.address || null;
+}
+
 function statusTone(status) {
   const s = String(status || '').toUpperCase();
   if (['COMPLETED', 'DELIVERED', 'CONFIRMED', 'PAID'].includes(s)) return 'success';
@@ -85,10 +135,6 @@ function progressFor(order) {
   });
 }
 
-/*
- * Self-contained tone → color map. Colors live here (not in CSS) so the
- * ring always renders correctly even if the stylesheet fails to load.
- */
 const STAT_TONES = {
   accent:  { ring: '#1e9e5a', ink: '#0f7a44' },
   info:    { ring: '#1e5fa8', ink: '#1e5fa8' },
@@ -96,11 +142,6 @@ const STAT_TONES = {
   success: { ring: '#0f7a44', ink: '#0f7a44' },
 };
 
-/*
- * Stat card — a progress ring with the count centered inside.
- * All geometry / color is expressed as inline SVG attributes + inline
- * style, so it does NOT depend on any CSS class being present.
- */
 function StatCard({ label, value, total, tone = 'accent' }) {
   const pct = total > 0 ? Math.min(1, Math.max(0, value / total)) : 0;
 
@@ -160,14 +201,7 @@ function StatCard({ label, value, total, tone = 'accent' }) {
           aria-hidden="true"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}
         >
-          <circle
-            cx="20"
-            cy="20"
-            r={R}
-            fill="none"
-            stroke="#e5e9ef"
-            strokeWidth="4"
-          />
+          <circle cx="20" cy="20" r={R} fill="none" stroke="#e5e9ef" strokeWidth="4" />
           <circle
             cx="20"
             cy="20"
@@ -228,6 +262,7 @@ function OrderCard({ order, currentUserId }) {
     paymentSummary: marketplaceStatus,
   });
 
+  const locationLabel = locationOf(order);
   const createdLabel = order.createdAt
     ? new Date(order.createdAt).toLocaleDateString()
     : null;
@@ -240,8 +275,30 @@ function OrderCard({ order, currentUserId }) {
             {isBuyer ? 'Buying' : 'Selling'}
           </span>
           <h2 className="order-title" title={title}>{title}</h2>
-          {createdLabel && (
-            <p className="order-date">{createdLabel}</p>
+
+          {/* Location replaces the old created-date line. The
+              `order-date` class is reused purely for its muted small-text
+              styling — the class name is now slightly misnamed but the
+              visual is exactly what we want here. */}
+          {locationLabel && (
+            <p className="order-date" title={locationLabel}>
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                style={{ verticalAlign: '-1px', marginRight: 4 }}
+              >
+                <path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z" />
+                <circle cx="12" cy="10" r="2.6" />
+              </svg>
+              {locationLabel}
+            </p>
           )}
         </div>
 
@@ -409,7 +466,14 @@ export default function Orders() {
         const buyer = (order.buyer?.name || '').toLowerCase();
         const seller = (order.seller?.name || '').toLowerCase();
         const id = String(order.id || '').toLowerCase();
-        return title.includes(q) || buyer.includes(q) || seller.includes(q) || id.includes(q);
+        const loc = (locationOf(order) || '').toLowerCase();
+        return (
+          title.includes(q) ||
+          buyer.includes(q) ||
+          seller.includes(q) ||
+          id.includes(q) ||
+          loc.includes(q)
+        );
       });
     }
 
