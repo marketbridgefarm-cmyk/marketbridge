@@ -27,10 +27,48 @@ const NON_CANCELLABLE_STATUSES = ['COMPLETED', 'CANCELLED'];
  * the current transaction rather than a possibly-stale earlier read.
  */
 async function promoteNextWaitingBuyer(tx, listingId, actorId = null) {
+  // Expire stale waiting bids before choosing the next buyer. Otherwise an
+  // old/high bid can be promoted even though its negotiation window ended.
+  const expiredWaiting = await tx.offer.findMany({
+    where: {
+      listingId,
+      status: 'PENDING',
+      expiresAt: { lte: new Date() },
+    },
+    select: { id: true, buyerId: true, expiresAt: true },
+  });
+
+  for (const expired of expiredWaiting) {
+    const claim = await tx.offer.updateMany({
+      where: { id: expired.id, status: 'PENDING' },
+      data: { status: 'EXPIRED' },
+    });
+
+    if (claim.count === 1) {
+      await recordAuditEvent(tx, {
+        actorId,
+        action: 'OFFER_EXPIRED',
+        resourceType: 'Offer',
+        resourceId: expired.id,
+        metadata: {
+          listingId,
+          buyerId: expired.buyerId,
+          previousStatus: 'PENDING',
+          expiresAt: expired.expiresAt,
+          expiredDuringPromotion: true,
+        },
+      });
+    }
+  }
+
   const next = await tx.offer.findFirst({
     where: {
       listingId,
       status: 'PENDING',
+      OR: [
+        { expiresAt: null },
+        { expiresAt: { gt: new Date() } },
+      ],
     },
     orderBy: [
       { amount: 'desc' },
@@ -46,10 +84,25 @@ async function promoteNextWaitingBuyer(tx, listingId, actorId = null) {
     return null;
   }
 
-  const selected = await tx.offer.update({
-    where: { id: next.id },
+  const selectedClaim = await tx.offer.updateMany({
+    where: {
+      id: next.id,
+      status: 'PENDING',
+      OR: [
+        { expiresAt: null },
+        { expiresAt: { gt: new Date() } },
+      ],
+    },
     data: { status: 'SELECTED' },
   });
+
+  if (selectedClaim.count !== 1) {
+    // Another concurrent workflow claimed or expired this bid. Do not leave
+    // the listing in an incorrect state; the caller may retry promotion.
+    return null;
+  }
+
+  const selected = await tx.offer.findUnique({ where: { id: next.id } });
 
   await tx.listing.update({
     where: { id: listingId },
@@ -192,9 +245,21 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
     refundRequests.push(refund);
   }
 
-  // A buyer who cancels before payment was only a provisional winner. Keep
-  // the listing public and immediately promote the next waiting buyer so the
-  // seller does not have to restart the competition manually.
+  // A buyer who cancels before payment was only a provisional winner. Close
+  // that accepted negotiation thread so it cannot block the buyer from
+  // submitting a fresh offer later. Historical parent offers remain intact.
+  if (previousOrderStatus === 'PENDING_PAYMENT' && order.agreedOfferId) {
+    await tx.offer.updateMany({
+      where: {
+        id: order.agreedOfferId,
+        status: 'ACCEPTED',
+      },
+      data: { status: 'WITHDRAWN' },
+    });
+  }
+
+  // Keep the listing public and immediately promote the next valid waiting
+  // buyer so the seller does not have to restart the competition manually.
   if (previousOrderStatus === 'PENDING_PAYMENT') {
     await promoteNextWaitingBuyer(tx, order.listingId, actorId);
   }
