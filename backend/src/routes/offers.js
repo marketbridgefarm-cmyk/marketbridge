@@ -169,17 +169,18 @@ router.post(
         ? availableQuantity
         : requestedQuantity;
 
-      if (listing.category === 'AGRICULTURAL') {
-        if (!Number.isFinite(availableQuantity) || availableQuantity <= 0) {
-          return res.status(409).json({ error: 'No agricultural quantity remains available for negotiation' });
-        }
+      if (!Number.isFinite(availableQuantity) || availableQuantity <= 0) {
+        return res.status(409).json({
+          error: 'No listing quantity remains available for negotiation',
+          availableQuantity,
+        });
+      }
 
-        if (offerQuantity > availableQuantity + 1e-9) {
-          return res.status(409).json({
-            error: 'Requested quantity exceeds the currently available quantity',
-            availableQuantity,
-          });
-        }
+      if (offerQuantity > availableQuantity + 1e-9) {
+        return res.status(409).json({
+          error: 'Requested quantity exceeds the currently available quantity',
+          availableQuantity,
+        });
       }
 
       if (
@@ -436,6 +437,13 @@ async function acceptOfferAndCreateOrder(
     throw offerError('Offers can only create orders for physical goods listings', 400);
   }
 
+  // Re-check expiry at the mutation point. The request-level check can race
+  // with the transaction: an offer may expire after the HTTP handler first
+  // reads it but before the order is created.
+  if (isOfferExpired(offer)) {
+    throw offerError('Offer has expired and can no longer be accepted', 409);
+  }
+
   const requestedQuantity = Number(offer.quantity);
   if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
     throw offerError('Offer has no valid quantity', 400);
@@ -677,6 +685,9 @@ router.patch(
         const selected = await prisma.$transaction(async (tx) => {
           const fresh = await tx.offer.findUnique({ where: { id: offer.id }, include: { listing: true } });
           if (!fresh) throw offerError('Offer not found', 404);
+          if (await expireOfferIfNeeded(tx, fresh, req.user.id)) {
+            throw offerError('Offer has expired and can no longer be selected', 409);
+          }
           if (fresh.status !== 'PENDING') throw offerError(`Only a pending bid can be selected (current: ${fresh.status})`, 409);
           // One seller-selected buyer at a time. Other independent bids remain
           // in the competition pool and can still be reviewed/rejected.
@@ -704,7 +715,11 @@ router.patch(
         if (offer.status !== 'SELECTED') return res.status(400).json({ error: `Offer must be SELECTED before acceptance (current: ${offer.status})` });
         const result = await prisma.$transaction(async (tx) => {
           const fresh = await tx.offer.findUnique({ where: { id: offer.id }, include: { listing: true } });
-          if (!fresh || fresh.status !== 'SELECTED') throw offerError('This selected bid is no longer available', 409);
+          if (!fresh) throw offerError('This selected bid is no longer available', 409);
+          if (await expireOfferIfNeeded(tx, fresh, req.user.id)) {
+            throw offerError('This selected bid has expired and can no longer be accepted', 409);
+          }
+          if (fresh.status !== 'SELECTED') throw offerError('This selected bid is no longer available', 409);
           return acceptOfferAndCreateOrder(tx, fresh, Number(fresh.amount), fresh.listing.sellerId, req.user.id);
         }, { maxWait: 10000, timeout: 15000 });
         return res.json({ message: 'Selected buyer bid accepted and order created successfully', offer: result.offer, order: result.order, transportAutomaticallyAssigned: false });
@@ -1009,6 +1024,10 @@ router.patch(
                 );
               }
 
+              if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
+                throw offerError('Offer has expired and can no longer be accepted', 409);
+              }
+
               if (!['SELECTED', 'COUNTERED'].includes(freshOffer.status)) {
                 throw offerError(
                   `Offer cannot be accepted because it is ${freshOffer.status}`,
@@ -1256,6 +1275,10 @@ router.patch(
                   'Offer not found',
                   404
                 );
+              }
+
+              if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
+                throw offerError('Offer has expired and can no longer be countered', 409);
               }
 
               if (
