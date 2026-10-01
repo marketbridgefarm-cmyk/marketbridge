@@ -32,6 +32,11 @@ const TITLES = {
     PAYMENT_REFUND_FAILED: 'Refund could not be completed',
     PAYMENT_RECONCILIATION_REQUIRED: 'Payment requires review',
     PAYMENT_RECONCILIATION_RESOLVED: 'Payment reconciliation resolved',
+    WORKFLOW_RECOVERY_REQUESTED: 'Workflow recovery requested',
+    WORKFLOW_RECOVERY_APPROVED: 'Workflow recovery approved',
+    WORKFLOW_RECOVERY_REJECTED: 'Workflow recovery rejected',
+    INSPECTION_QUOTE_WITHDRAWN: 'Inspector agreement released',
+    TRANSPORT_QUOTE_WITHDRAWN: 'Transporter agreement released',
   },
 
   // Amharic — draft, needs native-speaker review (see header).
