@@ -913,7 +913,7 @@ router.post(
             parentQuoteId: freshQuote.id,
             counteredBy: actorRole,
             previousAmount: String(freshQuote.counterAmount ?? freshQuote.amount),
-            counterAmount,
+            counterAmount: String(counterAmount),
           },
         });
 

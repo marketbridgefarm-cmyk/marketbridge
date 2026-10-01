@@ -2427,7 +2427,7 @@ router.patch(
               parentQuoteId: freshQuote.id,
               counteredBy: effectiveRole,
               previousAmount: String(freshQuote.counterAmount ?? freshQuote.amount),
-              counterAmount,
+              counterAmount: String(counterAmount),
             },
           });
 
