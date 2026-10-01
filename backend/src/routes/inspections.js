@@ -112,6 +112,28 @@ router.post(
 
       const resolvedListingId = order.listingId;
 
+      const latestCancelledInspection = await prisma.inspectionRequest.findFirst({
+        where: { orderId: order.id, status: 'CANCELLED' },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, createdAt: true },
+      });
+      if (latestCancelledInspection) {
+        const releasedRecovery = await prisma.recoveryRequest.findFirst({
+          where: {
+            orderId: order.id,
+            type: 'INSPECTION',
+            status: 'APPROVED',
+            formReleasedAt: { not: null },
+            targetParties: { has: order.buyerId === req.user.id ? 'BUYER' : 'SELLER' },
+            requestedAt: { gte: latestCancelledInspection.createdAt },
+          },
+          orderBy: { formReleasedAt: 'desc' },
+        });
+        if (!releasedRecovery) {
+          return res.status(403).json({ code: 'ADMIN_RECOVERY_REQUIRED', error: 'A fresh inspection request requires MarketBridge admin approval and release to your party.' });
+        }
+      }
+
       if (req.body?.inspectorId || req.body?.fee) {
         return res.status(400).json({
           code: 'COMPETITIVE_INSPECTION_REQUIRED',

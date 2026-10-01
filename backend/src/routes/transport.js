@@ -672,6 +672,24 @@ router.post(
         });
       }
 
+      if (order.transportJob?.status === 'CANCELLED') {
+        const targetParty = order.buyerId === req.user.id ? 'BUYER' : order.sellerId === req.user.id ? 'SELLER' : null;
+        const releasedRecovery = await prisma.recoveryRequest.findFirst({
+          where: {
+            orderId: order.id,
+            type: 'TRANSPORT',
+            status: 'APPROVED',
+            formReleasedAt: { not: null },
+            ...(targetParty ? { targetParties: { has: targetParty } } : {}),
+            requestedAt: { gte: order.transportJob.updatedAt },
+          },
+          orderBy: { formReleasedAt: 'desc' },
+        });
+        if (!releasedRecovery) {
+          return res.status(403).json({ code: 'ADMIN_RECOVERY_REQUIRED', error: 'A fresh transport request requires MarketBridge admin approval and release to your party.' });
+        }
+      }
+
       const isAgricultural = order.listing?.category === 'AGRICULTURAL';
       const isPhysicalGoods = ['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category);
 
