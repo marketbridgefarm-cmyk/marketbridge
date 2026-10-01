@@ -8,9 +8,6 @@ import { chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 
 import './digital-marketplace/DigitalMarketplace.css';
 
-// Only TELEBIRR and QR route to a configured payment adapter. The
-// selector UI was removed — purchases now always go through TELEBIRR.
-// Kept here (documented) so re-adding a picker is trivial.
 const DEFAULT_PAY_METHOD = 'TELEBIRR';
 // eslint-disable-next-line no-unused-vars
 const PAYMENT_METHODS = [
@@ -28,7 +25,29 @@ const PRODUCT_TYPES = [
   'document',
 ];
 
+const LANGUAGES = [
+  'English',
+  'Amharic',
+  'Afaan Oromoo',
+  'Tigrinya',
+  'Somali',
+  'Arabic',
+  'French',
+  'Other',
+];
+
 const humanize = (value) => String(value || '').replaceAll('_', ' ');
+
+/* Accepts either an array (backend returns array) or a comma-separated
+   string (form input) and returns a clean string[]. */
+const parseList = (value, separator = ',') => {
+  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+  if (typeof value === 'string') return value.split(separator).map((v) => v.trim()).filter(Boolean);
+  return [];
+};
+
+const tagsOf = (product) => parseList(product?.tags, ',');
+const includedOf = (product) => parseList(product?.whatsIncluded, '\n');
 
 const STAT_TONES = {
   accent:  { ring: '#1e9e5a', ink: '#0f7a44' },
@@ -39,7 +58,6 @@ const STAT_TONES = {
 
 function StatCard({ label, value, total, tone = 'accent' }) {
   const pct = total > 0 ? Math.min(1, Math.max(0, value / total)) : 0;
-
   const R = 16;
   const C = 2 * Math.PI * R;
   const offset = C * (1 - pct);
@@ -48,20 +66,13 @@ function StatCard({ label, value, total, tone = 'accent' }) {
   return (
     <div className={`dm-stat tone-${tone}`} aria-label={`${label}: ${value}`}>
       <span className="dm-stat-label">{label}</span>
-
       <div className="dm-stat-graphic" aria-hidden="true">
         <svg viewBox="0 0 40 40">
           <circle cx="20" cy="20" r={R} fill="none" stroke="#e5e9ef" strokeWidth="4" />
           <circle
-            cx="20"
-            cy="20"
-            r={R}
-            fill="none"
-            stroke={colors.ring}
-            strokeWidth="4"
-            strokeLinecap="round"
-            strokeDasharray={C}
-            strokeDashoffset={offset}
+            cx="20" cy="20" r={R} fill="none"
+            stroke={colors.ring} strokeWidth="4" strokeLinecap="round"
+            strokeDasharray={C} strokeDashoffset={offset}
             transform="rotate(-90 20 20)"
           />
         </svg>
@@ -71,6 +82,21 @@ function StatCard({ label, value, total, tone = 'accent' }) {
   );
 }
 
+const EMPTY_FORM = {
+  title: '',
+  tagline: '',
+  productType: 'ebook',
+  price: '',
+  language: 'English',
+  fileFormat: '',
+  version: '',
+  tags: '',
+  description: '',
+  whatsIncluded: '',
+  file: null,
+  previews: [],
+};
+
 export default function DigitalMarketplace() {
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -78,7 +104,7 @@ export default function DigitalMarketplace() {
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
   const [myPurchases, setMyPurchases] = useState([]);
-  const [form, setForm] = useState({ title: '', productType: 'ebook', price: '', description: '', file: null, previews: [] });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [busyId, setBusyId] = useState('');
   const [publishOpen, setPublishOpen] = useState(false);
 
@@ -94,22 +120,18 @@ export default function DigitalMarketplace() {
   }, [search, showToast]);
 
   const loadMyPurchases = useCallback(async () => {
-    if (!user) {
-      setMyPurchases([]);
-      return;
-    }
+    if (!user) { setMyPurchases([]); return; }
     try {
       const r = await api.get('/digital-products/purchases/mine');
       setMyPurchases(r.data.purchases || []);
     } catch (e) {
-      // Non-fatal: the marketplace remains usable if purchase history fails.
+      // Non-fatal: marketplace remains usable if purchase history fails.
     }
   }, [user]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadMyPurchases(); }, [loadMyPurchases]);
 
-  /* Close the publish modal on Escape and lock body scroll while it's open. */
   useEffect(() => {
     if (!publishOpen) return undefined;
     const onKey = (e) => { if (e.key === 'Escape') setPublishOpen(false); };
@@ -134,22 +156,47 @@ export default function DigitalMarketplace() {
     return { totalProducts, purchases, downloads, own };
   }, [products, myPurchases, currentUserId]);
 
+  function setField(key, value) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
   async function submit(e) {
     e.preventDefault();
+
+    if (!form.title.trim()) {
+      showToast('Give your product a title', 'error');
+      return;
+    }
     if (!(form.file instanceof File) || form.file.size <= 0) {
       showToast('Choose a valid private product file', 'error');
       return;
     }
+
     const fd = new FormData();
-    fd.append('title', form.title);
+    fd.append('title', form.title.trim());
     fd.append('productType', form.productType);
     fd.append('price', form.price);
-    fd.append('description', form.description);
+
+    // New: enrich the card with structured metadata. If your backend
+    // does not yet accept these fields they will be silently dropped —
+    // see the note under the code for how to add support.
+    if (form.tagline.trim()) fd.append('tagline', form.tagline.trim());
+    if (form.language) fd.append('language', form.language);
+    if (form.fileFormat.trim()) fd.append('fileFormat', form.fileFormat.trim());
+    if (form.version.trim()) fd.append('version', form.version.trim());
+    if (form.description.trim()) fd.append('description', form.description.trim());
+    if (form.whatsIncluded.trim()) fd.append('whatsIncluded', form.whatsIncluded.trim());
+
+    parseList(form.tags, ',').forEach((tag) => fd.append('tags', tag));
+
     fd.append('file', form.file);
     form.previews.forEach((img) => fd.append('previews', img));
+
     try {
-      await api.post('/digital-products', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setForm({ title: '', productType: 'ebook', price: '', description: '', file: null, previews: [] });
+      await api.post('/digital-products', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setForm(EMPTY_FORM);
       showToast('Product published securely.', 'success');
       setPublishOpen(false);
       load();
@@ -169,7 +216,12 @@ export default function DigitalMarketplace() {
       );
       await chapaInitializeAndRedirect(r.data.payment?.id);
     } catch (e) {
-      showToast(e.response?.data?.error === 'You cannot purchase your own product' ? 'You cannot purchase your own product.' : (e.response?.data?.error || e.message || 'Could not create purchase'), 'error');
+      showToast(
+        e.response?.data?.error === 'You cannot purchase your own product'
+          ? 'You cannot purchase your own product.'
+          : (e.response?.data?.error || e.message || 'Could not create purchase'),
+        'error'
+      );
       setBusyId('');
     }
   }
@@ -258,10 +310,10 @@ export default function DigitalMarketplace() {
         {/* ── Stats ───────────────────────────────────────────── */}
         {user && (products.length > 0 || myPurchases.length > 0) && (
           <div className="dm-stats">
-            <StatCard label="Products"        value={stats.totalProducts} total={Math.max(stats.totalProducts, 1)} tone="accent"  />
-            <StatCard label="Your purchases"  value={stats.purchases}     total={Math.max(stats.purchases, 1)}     tone="info"    />
-            <StatCard label="Downloads"       value={stats.downloads}     total={Math.max(stats.downloads, 1)}      tone="gold"    />
-            <StatCard label="Your products"   value={stats.own}           total={Math.max(stats.totalProducts, 1)}  tone="success" />
+            <StatCard label="Products"       value={stats.totalProducts} total={Math.max(stats.totalProducts, 1)} tone="accent"  />
+            <StatCard label="Your purchases" value={stats.purchases}     total={Math.max(stats.purchases, 1)}     tone="info"    />
+            <StatCard label="Downloads"      value={stats.downloads}     total={Math.max(stats.downloads, 1)}      tone="gold"    />
+            <StatCard label="Your products"  value={stats.own}           total={Math.max(stats.totalProducts, 1)}  tone="success" />
           </div>
         )}
 
@@ -317,7 +369,6 @@ export default function DigitalMarketplace() {
                 return (
                   <li className="purchase-row" key={pu.id}>
                     <span className="purchase-icon" aria-hidden="true">{initial}</span>
-
                     <div className="purchase-body">
                       <div className="purchase-title-row">
                         <h3 className="purchase-title">
@@ -334,57 +385,34 @@ export default function DigitalMarketplace() {
                         {pu.downloadCount > 0 && ` · Downloaded ${pu.downloadCount}×`}
                       </p>
                       {paymentStatus === 'RECONCILIATION_REQUIRED' && (
-                        <p className="purchase-note">
-                          Payment is being reconciled by our team — check back shortly.
-                        </p>
+                        <p className="purchase-note">Payment is being reconciled by our team — check back shortly.</p>
                       )}
                       {(paymentStatus === 'FAILED' || paymentStatus === 'REFUNDED') && (
                         <p className="purchase-note">
-                          {paymentStatus === 'FAILED'
-                            ? 'This payment was not completed.'
-                            : 'This purchase was refunded.'}
+                          {paymentStatus === 'FAILED' ? 'This payment was not completed.' : 'This purchase was refunded.'}
                         </p>
                       )}
                     </div>
-
                     <div className="purchase-actions">
                       <span className="purchase-price">
                         {Number(pu.product?.price || 0).toLocaleString()} <small>ETB</small>
                       </span>
-
                       {paymentStatus === 'PAID' && (
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          disabled={busyId === productId}
-                          onClick={() => download(pu.id, productId)}
-                        >
+                        <button type="button" className="btn btn-primary btn-sm" disabled={busyId === productId} onClick={() => download(pu.id, productId)}>
                           {busyId === productId ? 'Getting link…' : 'Download again'}
                         </button>
                       )}
                       {paymentStatus === 'PENDING' && (
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          disabled={busyId === productId}
-                          onClick={() => resumePurchase(pu.payment.id, productId)}
-                        >
+                        <button type="button" className="btn btn-primary btn-sm" disabled={busyId === productId} onClick={() => resumePurchase(pu.payment.id, productId)}>
                           {busyId === productId ? 'Redirecting…' : 'Resume payment'}
                         </button>
                       )}
                       {paymentStatus === 'PROCESSING' && (
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          disabled={busyId === productId}
-                          onClick={() => checkPurchaseStatus(pu.payment.id, productId)}
-                        >
+                        <button type="button" className="btn btn-primary btn-sm" disabled={busyId === productId} onClick={() => checkPurchaseStatus(pu.payment.id, productId)}>
                           {busyId === productId ? 'Checking…' : 'Check status'}
                         </button>
                       )}
-                      {!canAct && (
-                        <span className="purchase-actions-note">No action needed</span>
-                      )}
+                      {!canAct && <span className="purchase-actions-note">No action needed</span>}
                     </div>
                   </li>
                 );
@@ -411,15 +439,14 @@ export default function DigitalMarketplace() {
               {products.map((p) => {
                 const existingPurchase = purchaseFor(p.id);
                 const paymentStatus = existingPurchase?.payment?.status;
+                const tags = tagsOf(p);
+                const included = includedOf(p);
+                const metaParts = [p.fileFormat, p.language, p.version && `v${String(p.version).replace(/^v/i, '')}`].filter(Boolean);
 
                 return (
                   <article className="product-card" key={p.id}>
                     {p.previewImages?.length ? (
-                      <ImageCarousel
-                        images={p.previewImages}
-                        alt={p.title}
-                        className="img-carousel--compact"
-                      />
+                      <ImageCarousel images={p.previewImages} alt={p.title} className="img-carousel--compact" />
                     ) : (
                       <div className="product-icon" aria-hidden="true">
                         {p.productType?.slice(0, 1).toUpperCase()}
@@ -428,9 +455,42 @@ export default function DigitalMarketplace() {
 
                     <span className="product-type">{humanize(p.productType)}</span>
                     <h3 className="product-title">{p.title}</h3>
+
+                    {p.tagline && <p className="product-tagline">{p.tagline}</p>}
+
                     <p className="product-description">
                       {p.description || 'Digital product from an independent seller.'}
                     </p>
+
+                    {metaParts.length > 0 && (
+                      <div className="product-meta">
+                        {metaParts.map((part, i) => (
+                          <React.Fragment key={part}>
+                            {i > 0 && <span className="product-meta-sep" aria-hidden="true">·</span>}
+                            <span className="product-meta-item">{part}</span>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    )}
+
+                    {included.length > 0 && (
+                      <p className="product-includes">
+                        <span className="product-includes-label">Includes</span>{' '}
+                        {included.slice(0, 2).join(' · ')}
+                        {included.length > 2 && ` · +${included.length - 2} more`}
+                      </p>
+                    )}
+
+                    {tags.length > 0 && (
+                      <div className="product-tags" aria-label="Tags">
+                        {tags.slice(0, 4).map((tag) => (
+                          <span className="product-tag" key={tag}>{tag}</span>
+                        ))}
+                        {tags.length > 4 && (
+                          <span className="product-tag product-tag--more">+{tags.length - 4}</span>
+                        )}
+                      </div>
+                    )}
 
                     <div className="product-footer">
                       <span className="product-price">
@@ -442,32 +502,17 @@ export default function DigitalMarketplace() {
                     </div>
 
                     {user && paymentStatus === 'PAID' && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-block"
-                        disabled={busyId === p.id}
-                        onClick={() => download(existingPurchase.id, p.id)}
-                      >
+                      <button type="button" className="btn btn-primary btn-block" disabled={busyId === p.id} onClick={() => download(existingPurchase.id, p.id)}>
                         {busyId === p.id ? 'Getting link…' : 'Download'}
                       </button>
                     )}
                     {user && paymentStatus === 'PENDING' && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-block"
-                        disabled={busyId === p.id}
-                        onClick={() => resumePurchase(existingPurchase.payment.id, p.id)}
-                      >
+                      <button type="button" className="btn btn-primary btn-block" disabled={busyId === p.id} onClick={() => resumePurchase(existingPurchase.payment.id, p.id)}>
                         {busyId === p.id ? 'Redirecting…' : 'Resume payment'}
                       </button>
                     )}
                     {user && paymentStatus === 'PROCESSING' && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-block"
-                        disabled={busyId === p.id}
-                        onClick={() => checkPurchaseStatus(existingPurchase.payment.id, p.id)}
-                      >
+                      <button type="button" className="btn btn-primary btn-block" disabled={busyId === p.id} onClick={() => checkPurchaseStatus(existingPurchase.payment.id, p.id)}>
                         {busyId === p.id ? 'Checking…' : 'Check payment status'}
                       </button>
                     )}
@@ -477,17 +522,10 @@ export default function DigitalMarketplace() {
                       </Link>
                     )}
                     {user && (!paymentStatus || ['FAILED', 'REFUNDED', 'CANCELLED'].includes(paymentStatus)) && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-block"
-                        disabled={busyId === p.id}
-                        onClick={() => purchase(p)}
-                      >
+                      <button type="button" className="btn btn-primary btn-block" disabled={busyId === p.id} onClick={() => purchase(p)}>
                         {busyId === p.id
                           ? 'Starting…'
-                          : (paymentStatus
-                              ? 'Try again'
-                              : `Buy · ${Number(p.price).toLocaleString()} ETB`)}
+                          : (paymentStatus ? 'Try again' : `Buy · ${Number(p.price).toLocaleString()} ETB`)}
                       </button>
                     )}
                   </article>
@@ -508,16 +546,11 @@ export default function DigitalMarketplace() {
             </div>
           )}
         </section>
-
       </div>
 
       {/* ── Publish modal ─────────────────────────────────────── */}
       {publishOpen && (
-        <div
-          className="dm-modal-backdrop"
-          role="presentation"
-          onClick={() => setPublishOpen(false)}
-        >
+        <div className="dm-modal-backdrop" role="presentation" onClick={() => setPublishOpen(false)}>
           <div
             className="dm-modal"
             role="dialog"
@@ -530,7 +563,7 @@ export default function DigitalMarketplace() {
                 <span className="eyebrow">For sellers</span>
                 <h2 id="publish-modal-title" className="dm-modal-title">Publish a digital product</h2>
                 <p className="dm-modal-subtitle">
-                  Upload the private file and, optionally, a few preview images so buyers can see what they're getting.
+                  Everything you fill in here appears on the product card buyers see in the catalog.
                 </p>
               </div>
               <button
@@ -544,95 +577,167 @@ export default function DigitalMarketplace() {
             </header>
 
             <form className="publish-form" onSubmit={submit}>
-              <div className="form-grid">
-                <label className="field">
-                  <span className="field-label">Title</span>
-                  <input
-                    type="text"
-                    value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    placeholder="e.g. Farm budget template for 2026"
-                    required
-                  />
-                </label>
 
-                <label className="field">
-                  <span className="field-label">Type</span>
-                  <select
-                    value={form.productType}
-                    onChange={(e) => setForm({ ...form, productType: e.target.value })}
-                  >
-                    {PRODUCT_TYPES.map((x) => (
-                      <option key={x} value={x}>{humanize(x)}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="field">
-                  <span className="field-label">Price</span>
-                  <div className="field-with-suffix">
+              {/* ── Section: Product details ───────────────────── */}
+              <section className="form-section">
+                <h3 className="form-section-title">Product details</h3>
+                <div className="form-grid">
+                  <label className="field field-span">
+                    <span className="field-label">Title <em>*</em></span>
                     <input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={form.price}
-                      onChange={(e) => setForm({ ...form, price: e.target.value })}
-                      placeholder="0.00"
+                      type="text"
+                      value={form.title}
+                      onChange={(e) => setField('title', e.target.value)}
+                      placeholder="e.g. Farm budget template for 2026"
                       required
                     />
-                    <span className="field-suffix">ETB</span>
-                  </div>
-                </label>
+                  </label>
 
-                <label className="field">
-                  <span className="field-label">Private file</span>
-                  <input
-                    type="file"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0] || null;
-                      setForm((current) => ({ ...current, file }));
-                    }}
-                    required
+                  <label className="field field-span">
+                    <span className="field-label">Tagline</span>
+                    <input
+                      type="text"
+                      value={form.tagline}
+                      onChange={(e) => setField('tagline', e.target.value)}
+                      placeholder="One short line that sells it — e.g. Plan your season in 10 minutes"
+                      maxLength={120}
+                    />
+                    <span className="field-hint">Shown right under the title. Keep it under 120 characters.</span>
+                  </label>
+
+                  <label className="field">
+                    <span className="field-label">Type</span>
+                    <select value={form.productType} onChange={(e) => setField('productType', e.target.value)}>
+                      {PRODUCT_TYPES.map((x) => (
+                        <option key={x} value={x}>{humanize(x)}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="field">
+                    <span className="field-label">Language</span>
+                    <select value={form.language} onChange={(e) => setField('language', e.target.value)}>
+                      {LANGUAGES.map((l) => (
+                        <option key={l} value={l}>{l}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="field">
+                    <span className="field-label">Price <em>*</em></span>
+                    <div className="field-with-suffix">
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={form.price}
+                        onChange={(e) => setField('price', e.target.value)}
+                        placeholder="0.00"
+                        required
+                      />
+                      <span className="field-suffix">ETB</span>
+                    </div>
+                  </label>
+                </div>
+              </section>
+
+              {/* ── Section: Files ─────────────────────────────── */}
+              <section className="form-section">
+                <h3 className="form-section-title">Files</h3>
+                <div className="form-grid">
+                  <label className="field">
+                    <span className="field-label">File format</span>
+                    <input
+                      type="text"
+                      value={form.fileFormat}
+                      onChange={(e) => setField('fileFormat', e.target.value)}
+                      placeholder="e.g. PDF, EPUB, ZIP, MP4"
+                    />
+                    <span className="field-hint">Helps buyers know what they'll download.</span>
+                  </label>
+
+                  <label className="field">
+                    <span className="field-label">Version</span>
+                    <input
+                      type="text"
+                      value={form.version}
+                      onChange={(e) => setField('version', e.target.value)}
+                      placeholder="e.g. 1.0"
+                    />
+                    <span className="field-hint">Bump this when you upload a new revision.</span>
+                  </label>
+
+                  <label className="field field-span">
+                    <span className="field-label">Private file <em>*</em></span>
+                    <input
+                      type="file"
+                      onChange={(e) => setField('file', e.target.files?.[0] || null)}
+                      required
+                    />
+                    <span className="field-hint">Stored securely — buyers only see it after payment clears.</span>
+                  </label>
+
+                  <label className="field field-span">
+                    <span className="field-label">Preview images <span className="optional">(up to 5)</span></span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      onChange={(e) => setField('previews', Array.from(e.target.files || []).slice(0, 5))}
+                    />
+                    <span className="field-hint">Shown on the product card so buyers can preview the work.</span>
+                  </label>
+                </div>
+              </section>
+
+              {/* ── Section: Description & discovery ───────────── */}
+              <section className="form-section">
+                <h3 className="form-section-title">Description &amp; discovery</h3>
+
+                <div className="field field-block">
+                  <label className="field-label" htmlFor="publish-description">Description</label>
+                  <textarea
+                    id="publish-description"
+                    rows={5}
+                    value={form.description}
+                    onChange={(e) => setField('description', e.target.value)}
+                    placeholder="Describe what the buyer gets, who it's for, and what makes it useful."
                   />
-                  <span className="field-hint">Stored securely — buyers only see it after payment.</span>
-                </label>
+                  <span className="field-hint">A few sentences is plenty. Buyers see the first 3 lines on the card.</span>
+                </div>
 
-                <label className="field field-span">
-                  <span className="field-label">
-                    Preview images <span className="optional">(up to 5)</span>
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    multiple
-                    onChange={(e) => {
-                      const previews = Array.from(e.target.files || []).slice(0, 5);
-                      setForm((current) => ({ ...current, previews }));
-                    }}
+                <div className="field field-block">
+                  <label className="field-label" htmlFor="publish-includes">
+                    What's included <span className="optional">(one item per line)</span>
+                  </label>
+                  <textarea
+                    id="publish-includes"
+                    rows={4}
+                    value={form.whatsIncluded}
+                    onChange={(e) => setField('whatsIncluded', e.target.value)}
+                    placeholder={'Editable Excel workbook\nPrintable PDF\nShort how-to guide'}
                   />
-                  <span className="field-hint">Shown on the product card so buyers can preview the work.</span>
-                </label>
-              </div>
+                  <span className="field-hint">A short list of what the buyer actually receives. The first two show on the card.</span>
+                </div>
 
-              <label className="field field-block">
-                <span className="field-label">Description</span>
-                <textarea
-                  rows={4}
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Describe what the buyer gets, who it's for, and what makes it useful."
-                />
-              </label>
+                <div className="field field-block">
+                  <label className="field-label" htmlFor="publish-tags">
+                    Tags <span className="optional">(comma separated)</span>
+                  </label>
+                  <input
+                    id="publish-tags"
+                    type="text"
+                    value={form.tags}
+                    onChange={(e) => setField('tags', e.target.value)}
+                    placeholder="budget, farming, excel, template"
+                  />
+                  <span className="field-hint">Helps buyers find this in search. Up to 5 tags work best.</span>
+                </div>
+              </section>
 
               <div className="form-actions">
                 <button type="submit" className="btn btn-primary">Publish securely</button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setPublishOpen(false)}
-                >
-                  Cancel
-                </button>
+                <button type="button" className="btn" onClick={() => setPublishOpen(false)}>Cancel</button>
               </div>
             </form>
           </div>
