@@ -5,12 +5,10 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext.jsx';
 import api from '../api/client';
 import { chapaInitializeAndRedirect } from '../utils/chapaCheckout';
+import './DigitalMarketplace.css';
 
-// Only TELEBIRR and QR route to a configured payment adapter (both go
-// through Chapa's hosted checkout — see
-// backend/src/services/paymentProviders/index.js). CBE and OTHER are
-// deliberately left unconfigured there, so they're not offered as choices
-// here; picking either would always fail at chapa/initialize.
+// Only TELEBIRR and QR route to a configured payment adapter.
+// Both go through Chapa's hosted checkout.
 const PAYMENT_METHODS = [
   { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
   { value: 'QR', label: 'QR Code' },
@@ -19,96 +17,182 @@ const PAYMENT_METHODS = [
 export default function DigitalMarketplace() {
   const { user } = useAuth();
   const { showToast } = useToast();
+
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
   const [myPurchases, setMyPurchases] = useState([]);
-  const [form, setForm] = useState({ title: '', productType: 'ebook', price: '', description: '', file: null, previews: [] });
+
+  const [form, setForm] = useState({
+    title: '',
+    productType: 'ebook',
+    price: '',
+    description: '',
+    file: null,
+    previews: [],
+  });
+
   const [busyId, setBusyId] = useState('');
   const [payMethod, setPayMethod] = useState('TELEBIRR');
 
   async function load() {
     try {
-      const r = await api.get('/digital-products', { params: { search } });
+      const r = await api.get('/digital-products', {
+        params: { search },
+      });
+
       setProducts(r.data.products || []);
     } catch (e) {
-      showToast(e.response?.data?.error || 'Could not load products', 'error');
+      showToast(
+        e.response?.data?.error || 'Could not load products',
+        'error'
+      );
     }
   }
 
   async function loadMyPurchases() {
     if (!user) return;
+
     try {
       const r = await api.get('/digital-products/purchases/mine');
       setMyPurchases(r.data.purchases || []);
-    } catch (e) { /* non-fatal */ }
+    } catch (e) {
+      // Non-fatal.
+    }
   }
 
-  useEffect(() => { load(); loadMyPurchases(); }, []);
+  useEffect(() => {
+    load();
+    loadMyPurchases();
+  }, []);
 
   async function submit(e) {
     e.preventDefault();
+
     if (!(form.file instanceof File) || form.file.size <= 0) {
       showToast('Choose a valid private product file', 'error');
       return;
     }
+
     const fd = new FormData();
+
     fd.append('title', form.title);
     fd.append('productType', form.productType);
     fd.append('price', form.price);
     fd.append('description', form.description);
     fd.append('file', form.file);
-    form.previews.forEach((img) => fd.append('previews', img));
+
+    form.previews.forEach((img) => {
+      fd.append('previews', img);
+    });
+
     try {
-      await api.post('/digital-products', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setForm({ title: '', productType: 'ebook', price: '', description: '', file: null, previews: [] });
+      await api.post('/digital-products', fd, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      setForm({
+        title: '',
+        productType: 'ebook',
+        price: '',
+        description: '',
+        file: null,
+        previews: [],
+      });
+
       showToast('Product published securely.', 'success');
+
       load();
     } catch (e) {
-      showToast(e.response?.data?.error || 'Could not publish product', 'error');
+      showToast(
+        e.response?.data?.error || 'Could not publish product',
+        'error'
+      );
     }
   }
 
   async function purchase(p) {
     setBusyId(p.id);
+
     try {
       const key = `digital-purchase:${p.id}`;
+
       const r = await api.post(
         `/digital-products/${p.id}/purchase`,
-        { method: payMethod },
-        { headers: { 'Idempotency-Key': key } }
+        {
+          method: payMethod,
+        },
+        {
+          headers: {
+            'Idempotency-Key': key,
+          },
+        }
       );
+
       await chapaInitializeAndRedirect(r.data.payment?.id);
     } catch (e) {
-      showToast(e.response?.data?.error === 'You cannot purchase your own product' ? 'You cannot purchase your own product.' : (e.response?.data?.error || e.message || 'Could not create purchase'), 'error');
+      showToast(
+        e.response?.data?.error ===
+          'You cannot purchase your own product'
+          ? 'You cannot purchase your own product.'
+          : (
+              e.response?.data?.error ||
+              e.message ||
+              'Could not create purchase'
+            ),
+        'error'
+      );
+
       setBusyId('');
     }
   }
 
   async function resumePurchase(paymentId, productId) {
     setBusyId(productId);
+
     try {
       await chapaInitializeAndRedirect(paymentId);
     } catch (e) {
-      showToast(e.response?.data?.error || e.message || 'Could not resume payment', 'error');
+      showToast(
+        e.response?.data?.error ||
+          e.message ||
+          'Could not resume payment',
+        'error'
+      );
+
       setBusyId('');
     }
   }
 
-  // PROCESSING means Chapa checkout already started for this purchase.
-  // Must be checked, never resumed/re-bought — same pattern as
-  // OrderDetail.jsx's checkPaymentStatus. Previously this status had no
-  // rendering branch at all here, so a stuck PROCESSING purchase just
-  // silently showed nothing to do.
+  // PROCESSING means Chapa checkout already started.
+  // Verify the payment instead of starting another purchase.
   async function checkPurchaseStatus(paymentId, productId) {
     setBusyId(productId);
+
     try {
-      const r = await api.get(`/payments/${paymentId}/chapa/verify`);
-      await Promise.all([load(), loadMyPurchases()]);
+      const r = await api.get(
+        `/payments/${paymentId}/chapa/verify`
+      );
+
+      await Promise.all([
+        load(),
+        loadMyPurchases(),
+      ]);
+
       if (r.data?.status === 'PENDING') {
-        showToast('Chapa has not confirmed this payment yet. Try again shortly, or retry once it shows FAILED.', 'info');
+        showToast(
+          'Chapa has not confirmed this payment yet. Try again shortly, or retry once it shows FAILED.',
+          'info'
+        );
       }
     } catch (e) {
-      showToast(e.response?.data?.error || e.message || 'Could not check payment status', 'error');
+      showToast(
+        e.response?.data?.error ||
+          e.message ||
+          'Could not check payment status',
+        'error'
+      );
     } finally {
       setBusyId('');
     }
@@ -116,103 +200,402 @@ export default function DigitalMarketplace() {
 
   async function download(purchaseId, productId) {
     setBusyId(productId);
+
     try {
-      const r = await api.get(`/digital-products/${purchaseId}/download`);
-      window.open(r.data.downloadUrl, '_blank', 'noopener');
+      const r = await api.get(
+        `/digital-products/${purchaseId}/download`
+      );
+
+      window.open(
+        r.data.downloadUrl,
+        '_blank',
+        'noopener'
+      );
     } catch (e) {
-      showToast(e.response?.data?.error || e.message || 'Could not get download link', 'error');
+      showToast(
+        e.response?.data?.error ||
+          e.message ||
+          'Could not get download link',
+        'error'
+      );
     } finally {
       setBusyId('');
     }
   }
 
   function purchaseFor(productId) {
-    return myPurchases.find(pu => pu.product?.id === productId);
+    return myPurchases.find(
+      (pu) => pu.product?.id === productId
+    );
   }
 
   function statusBadgeClass(status) {
-    if (status === 'PAID' || status === 'COMPLETED') return 'sd-badge sd-good';
-    if (status === 'RECONCILIATION_REQUIRED' || status === 'FAILED') return 'sd-badge sd-red';
+    if (status === 'PAID' || status === 'COMPLETED') {
+      return 'sd-badge sd-good';
+    }
+
+    if (
+      status === 'RECONCILIATION_REQUIRED' ||
+      status === 'FAILED'
+    ) {
+      return 'sd-badge sd-red';
+    }
+
     return 'sd-badge sd-warn';
   }
 
   return (
-    <main className="section">
+    <main className="section digital-marketplace-page">
       <div className="container-wide">
+
+        {/* -------------------------------------------------
+            PAGE HEADER
+        -------------------------------------------------- */}
         <div className="page-header">
           <div>
-            <span className="eyebrow">DIGITAL MARKETPLACE</span>
-            <h1>Useful products, delivered digitally.</h1>
-            <p>Files are stored privately and downloads are available only after verified payment.</p>
+            <span className="eyebrow">
+              DIGITAL MARKETPLACE
+            </span>
+
+            <h1>
+              Useful products, delivered digitally.
+            </h1>
+
+            <p>
+              Files are stored privately and downloads are
+              available only after verified payment.
+            </p>
           </div>
         </div>
+
+        {/* -------------------------------------------------
+            SEARCH
+        -------------------------------------------------- */}
         <div className="search-panel">
           <div>
-            <label>Search digital products</label>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by title" />
+            <label htmlFor="digital-search">
+              Search digital products
+            </label>
+
+            <input
+              id="digital-search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by title"
+            />
           </div>
-          <button className="btn btn-primary" onClick={load}>Search</button>
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={load}
+          >
+            Search
+          </button>
         </div>
+
+        {/* -------------------------------------------------
+            SELLER PUBLISH FORM
+        -------------------------------------------------- */}
         {user?.roles?.includes('SELLER') && (
           <div className="card form-card">
-            <h2>Publish a digital product</h2>
+            <h2>
+              Publish a digital product
+            </h2>
+
             <div className="form-grid">
-              <div><label>Title</label><input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
-              <div><label>Type</label><select value={form.productType} onChange={e => setForm({ ...form, productType: e.target.value })}>{['ebook', 'template', 'graphic', 'photo', 'software_license', 'course', 'document'].map(x => <option key={x}>{x}</option>)}</select></div>
-              <div><label>Price (ETB)</label><input type="number" min="0.01" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} /></div>
-              <div><label htmlFor="digital-private-file">Private file</label><input id="digital-private-file" type="file" onChange={e => { const file = e.target.files?.[0] || null; setForm(current => ({ ...current, file })); }} /></div>
-              <div><label htmlFor="digital-preview-files">Preview images (up to 5, shown on the product card)</label><input id="digital-preview-files" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e => { const previews = Array.from(e.target.files || []).slice(0, 5); setForm(current => ({ ...current, previews })); }} /></div>
+
+              <div>
+                <label htmlFor="digital-title">
+                  Title
+                </label>
+
+                <input
+                  id="digital-title"
+                  value={form.title}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      title: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div>
+                <label htmlFor="digital-product-type">
+                  Type
+                </label>
+
+                <select
+                  id="digital-product-type"
+                  value={form.productType}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      productType: e.target.value,
+                    })
+                  }
+                >
+                  {[
+                    'ebook',
+                    'template',
+                    'graphic',
+                    'photo',
+                    'software_license',
+                    'course',
+                    'document',
+                  ].map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="digital-price">
+                  Price (ETB)
+                </label>
+
+                <input
+                  id="digital-price"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.price}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      price: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div>
+                <label htmlFor="digital-private-file">
+                  Private file
+                </label>
+
+                <input
+                  id="digital-private-file"
+                  type="file"
+                  onChange={(e) => {
+                    const file =
+                      e.target.files?.[0] || null;
+
+                    setForm((current) => ({
+                      ...current,
+                      file,
+                    }));
+                  }}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="digital-preview-files">
+                  Preview images (up to 5, shown on the
+                  product card)
+                </label>
+
+                <input
+                  id="digital-preview-files"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  onChange={(e) => {
+                    const previews = Array.from(
+                      e.target.files || []
+                    ).slice(0, 5);
+
+                    setForm((current) => ({
+                      ...current,
+                      previews,
+                    }));
+                  }}
+                />
+              </div>
+
             </div>
-            <label>Description</label>
-            <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
-            <button className="btn btn-primary" onClick={submit}>Publish securely</button>
+
+            <label htmlFor="digital-description">
+              Description
+            </label>
+
+            <textarea
+              id="digital-description"
+              value={form.description}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  description: e.target.value,
+                })
+              }
+            />
+
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={submit}
+            >
+              Publish securely
+            </button>
           </div>
         )}
 
+        {/* -------------------------------------------------
+            MY PURCHASES
+        -------------------------------------------------- */}
         {user && myPurchases.length > 0 && (
-          <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card digital-purchases-section">
             <h2>Your purchases</h2>
+
             <p className="muted">
-              Everything you've bought stays here and stays downloadable — independent of
-              whether a listing is still active in the catalog below.
+              Everything you've bought stays here and stays
+              downloadable — independent of whether a listing
+              is still active in the catalog below.
             </p>
+
             <div className="listing-grid">
               {myPurchases.map((pu) => {
                 const productId = pu.product?.id;
-                const paymentStatus = pu.payment?.status;
+                const paymentStatus =
+                  pu.payment?.status;
+
                 return (
-                  <article className="digital-card card" key={pu.id}>
-                    <div className="digital-icon">{pu.product?.productType?.slice(0, 1).toUpperCase() || '?'}</div>
-                    <span className="tag">{pu.product?.productType?.replaceAll('_', ' ') || 'digital product'}</span>
-                    <h3>{pu.product?.title || 'Digital product'}</h3>
-                    <p className="muted">
-                      Purchased {new Date(pu.createdAt).toLocaleDateString()}
-                      {pu.downloadCount > 0 && ` · Downloaded ${pu.downloadCount} time${pu.downloadCount === 1 ? '' : 's'}`}
-                    </p>
-                    <div className="row-between">
-                      <strong>{Number(pu.product?.price || 0).toLocaleString()} ETB</strong>
-                      <span className={statusBadgeClass(paymentStatus)}>{paymentStatus?.replaceAll('_', ' ')}</span>
+                  <article
+                    className="digital-card card"
+                    key={pu.id}
+                  >
+                    <div className="digital-icon">
+                      {pu.product?.productType
+                        ?.slice(0, 1)
+                        .toUpperCase() || '?'}
                     </div>
+
+                    <span className="tag">
+                      {pu.product?.productType
+                        ?.replaceAll('_', ' ') ||
+                        'digital product'}
+                    </span>
+
+                    <h3>
+                      {pu.product?.title ||
+                        'Digital product'}
+                    </h3>
+
+                    <p className="muted">
+                      Purchased{' '}
+                      {new Date(
+                        pu.createdAt
+                      ).toLocaleDateString()}
+
+                      {pu.downloadCount > 0 &&
+                        ` · Downloaded ${
+                          pu.downloadCount
+                        } time${
+                          pu.downloadCount === 1
+                            ? ''
+                            : 's'
+                        }`}
+                    </p>
+
+                    <div className="row-between">
+                      <strong>
+                        {Number(
+                          pu.product?.price || 0
+                        ).toLocaleString()}{' '}
+                        ETB
+                      </strong>
+
+                      <span
+                        className={statusBadgeClass(
+                          paymentStatus
+                        )}
+                      >
+                        {paymentStatus?.replaceAll(
+                          '_',
+                          ' '
+                        )}
+                      </span>
+                    </div>
+
                     {paymentStatus === 'PAID' && (
-                      <button className="btn btn-primary" disabled={busyId === productId} onClick={() => download(pu.id, productId)}>
-                        {busyId === productId ? 'Getting link…' : 'Download again'}
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={
+                          busyId === productId
+                        }
+                        onClick={() =>
+                          download(
+                            pu.id,
+                            productId
+                          )
+                        }
+                      >
+                        {busyId === productId
+                          ? 'Getting link…'
+                          : 'Download again'}
                       </button>
                     )}
+
                     {paymentStatus === 'PENDING' && (
-                      <button className="btn btn-primary" disabled={busyId === productId} onClick={() => resumePurchase(pu.payment.id, productId)}>
-                        {busyId === productId ? 'Redirecting…' : 'Resume payment'}
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={
+                          busyId === productId
+                        }
+                        onClick={() =>
+                          resumePurchase(
+                            pu.payment.id,
+                            productId
+                          )
+                        }
+                      >
+                        {busyId === productId
+                          ? 'Redirecting…'
+                          : 'Resume payment'}
                       </button>
                     )}
+
                     {paymentStatus === 'PROCESSING' && (
-                      <button className="btn btn-primary" disabled={busyId === productId} onClick={() => checkPurchaseStatus(pu.payment.id, productId)}>
-                        {busyId === productId ? 'Checking…' : 'Check payment status'}
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={
+                          busyId === productId
+                        }
+                        onClick={() =>
+                          checkPurchaseStatus(
+                            pu.payment.id,
+                            productId
+                          )
+                        }
+                      >
+                        {busyId === productId
+                          ? 'Checking…'
+                          : 'Check payment status'}
                       </button>
                     )}
-                    {paymentStatus === 'RECONCILIATION_REQUIRED' && (
-                      <p className="small muted">Payment is being reconciled by our team — check back shortly.</p>
+
+                    {paymentStatus ===
+                      'RECONCILIATION_REQUIRED' && (
+                      <p className="small muted">
+                        Payment is being reconciled by
+                        our team — check back shortly.
+                      </p>
                     )}
-                    {(paymentStatus === 'FAILED' || paymentStatus === 'REFUNDED') && (
-                      <p className="small muted">{paymentStatus === 'FAILED' ? 'This payment was not completed.' : 'This purchase was refunded.'}</p>
+
+                    {(paymentStatus === 'FAILED' ||
+                      paymentStatus === 'REFUNDED') && (
+                      <p className="small muted">
+                        {paymentStatus === 'FAILED'
+                          ? 'This payment was not completed.'
+                          : 'This purchase was refunded.'}
+                      </p>
                     )}
                   </article>
                 );
@@ -221,56 +604,239 @@ export default function DigitalMarketplace() {
           </div>
         )}
 
-        {(user && myPurchases.length > 0) && <h2 style={{ marginTop: 8 }}>Browse the marketplace</h2>}
+        {/* -------------------------------------------------
+            MARKETPLACE HEADING
+        -------------------------------------------------- */}
+        {user && myPurchases.length > 0 && (
+          <h2 className="digital-marketplace-heading">
+            Browse the marketplace
+          </h2>
+        )}
 
+        {/* -------------------------------------------------
+            PAYMENT METHOD
+        -------------------------------------------------- */}
         {user && (
-          <div className="card" style={{ marginBottom: 16, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label htmlFor="digital-pay-method" style={{ marginBottom: 0 }}>Payment method</label>
-            <select id="digital-pay-method" value={payMethod} onChange={(e) => setPayMethod(e.target.value)} style={{ maxWidth: 220 }}>
-              {PAYMENT_METHODS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
+          <div className="card digital-payment-method">
+            <label
+              htmlFor="digital-pay-method"
+            >
+              Payment method
+            </label>
+
+            <select
+              id="digital-pay-method"
+              value={payMethod}
+              onChange={(e) =>
+                setPayMethod(e.target.value)
+              }
+            >
+              {PAYMENT_METHODS.map((method) => (
+                <option
+                  key={method.value}
+                  value={method.value}
+                >
+                  {method.label}
+                </option>
               ))}
             </select>
-            <span className="muted small">Applies to purchases below.</span>
+
+            <span className="muted small">
+              Applies to purchases below.
+            </span>
           </div>
         )}
 
+        {/* -------------------------------------------------
+            MARKETPLACE PRODUCTS
+        -------------------------------------------------- */}
         <div className="listing-grid">
-          {products.map(p => {
-            const existingPurchase = purchaseFor(p.id);
-            const paymentStatus = existingPurchase?.payment?.status;
+          {products.map((p) => {
+            const existingPurchase =
+              purchaseFor(p.id);
+
+            const paymentStatus =
+              existingPurchase?.payment?.status;
+
             return (
-              <article className="digital-card card" key={p.id}>
-                {p.previewImages?.length
-                  ? <ImageCarousel images={p.previewImages} alt={p.title} className="img-carousel--compact" />
-                  : <div className="digital-icon">{p.productType?.slice(0, 1).toUpperCase()}</div>}
-                <span className="tag">{p.productType?.replaceAll('_', ' ')}</span>
-                <h3>{p.title}</h3>
-                <p className="muted">{p.description || 'Digital product from an independent seller.'}</p>
-                <div className="row-between"><strong>{Number(p.price).toLocaleString()} ETB</strong><span className="small">By {p.seller?.name || 'Seller'}</span></div>
-                {user && paymentStatus === 'PAID' && (
-                  <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => download(existingPurchase.id, p.id)}>{busyId === p.id ? 'Getting link…' : 'Download'}</button>
+              <article
+                className="digital-card card"
+                key={p.id}
+              >
+                {p.previewImages?.length ? (
+                  <ImageCarousel
+                    images={p.previewImages}
+                    alt={p.title}
+                    className="img-carousel--compact"
+                  />
+                ) : (
+                  <div className="digital-icon">
+                    {p.productType
+                      ?.slice(0, 1)
+                      .toUpperCase()}
+                  </div>
                 )}
-                {user && paymentStatus === 'PENDING' && (
-                  <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => resumePurchase(existingPurchase.payment.id, p.id)}>{busyId === p.id ? 'Redirecting…' : 'Resume payment'}</button>
-                )}
-                {user && paymentStatus === 'PROCESSING' && (
-                  <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => checkPurchaseStatus(existingPurchase.payment.id, p.id)}>{busyId === p.id ? 'Checking…' : 'Check payment status'}</button>
-                )}
+
+                <span className="tag">
+                  {p.productType?.replaceAll(
+                    '_',
+                    ' '
+                  )}
+                </span>
+
+                <h3>
+                  {p.title}
+                </h3>
+
+                <p className="muted">
+                  {p.description ||
+                    'Digital product from an independent seller.'}
+                </p>
+
+                <div className="row-between">
+                  <strong>
+                    {Number(
+                      p.price
+                    ).toLocaleString()}{' '}
+                    ETB
+                  </strong>
+
+                  <span className="small">
+                    By {p.seller?.name || 'Seller'}
+                  </span>
+                </div>
+
+                {/* PAID */}
+                {user &&
+                  paymentStatus === 'PAID' && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={
+                        busyId === p.id
+                      }
+                      onClick={() =>
+                        download(
+                          existingPurchase.id,
+                          p.id
+                        )
+                      }
+                    >
+                      {busyId === p.id
+                        ? 'Getting link…'
+                        : 'Download'}
+                    </button>
+                  )}
+
+                {/* PENDING */}
+                {user &&
+                  paymentStatus === 'PENDING' && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={
+                        busyId === p.id
+                      }
+                      onClick={() =>
+                        resumePurchase(
+                          existingPurchase
+                            .payment.id,
+                          p.id
+                        )
+                      }
+                    >
+                      {busyId === p.id
+                        ? 'Redirecting…'
+                        : 'Resume payment'}
+                    </button>
+                  )}
+
+                {/* PROCESSING */}
+                {user &&
+                  paymentStatus === 'PROCESSING' && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={
+                        busyId === p.id
+                      }
+                      onClick={() =>
+                        checkPurchaseStatus(
+                          existingPurchase
+                            .payment.id,
+                          p.id
+                        )
+                      }
+                    >
+                      {busyId === p.id
+                        ? 'Checking…'
+                        : 'Check payment status'}
+                    </button>
+                  )}
+
+                {/* NOT SIGNED IN */}
                 {!user && (
-                  <Link className="btn btn-primary" to="/login">Sign in to buy · {Number(p.price).toLocaleString()} ETB</Link>
+                  <Link
+                    className="btn btn-primary"
+                    to="/login"
+                  >
+                    Sign in to buy ·{' '}
+                    {Number(
+                      p.price
+                    ).toLocaleString()}{' '}
+                    ETB
+                  </Link>
                 )}
-                {user && (!paymentStatus || ['FAILED', 'REFUNDED', 'CANCELLED'].includes(paymentStatus)) && (
-                  <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => purchase(p)}>
-                    {busyId === p.id ? 'Starting…' : (paymentStatus ? 'Try again' : `Buy · ${Number(p.price).toLocaleString()} ETB`)}
-                  </button>
-                )}
+
+                {/* NEW / RETRY PURCHASE */}
+                {user &&
+                  (!paymentStatus ||
+                    [
+                      'FAILED',
+                      'REFUNDED',
+                      'CANCELLED',
+                    ].includes(
+                      paymentStatus
+                    )) && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={
+                        busyId === p.id
+                      }
+                      onClick={() =>
+                        purchase(p)
+                      }
+                    >
+                      {busyId === p.id
+                        ? 'Starting…'
+                        : paymentStatus
+                          ? 'Try again'
+                          : `Buy · ${Number(
+                              p.price
+                            ).toLocaleString()} ETB`}
+                    </button>
+                  )}
               </article>
             );
           })}
         </div>
-        {!products.length && <div className="empty card">No digital products found.</div>}
+
+        {/* -------------------------------------------------
+            EMPTY STATE
+        -------------------------------------------------- */}
+        {!products.length && (
+          <div className="empty card">
+            No digital products found.
+          </div>
+        )}
       </div>
     </main>
   );
 }
+
+Important: this JSX expects the CSS file at exactly:
+
+"frontend/src/pages/digital-marketplace/DigitalMarketplace.css"
+
+The payment logic, Chapa initialization, idempotency key, "PROCESSING" verification, retry behavior, seller publishing, private-file upload, preview images, and download flow are retained.
