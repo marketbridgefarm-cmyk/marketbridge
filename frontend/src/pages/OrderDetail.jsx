@@ -98,14 +98,14 @@ function useNowUntil(targetMs) {
 
 function Card({ id, eyebrow, title, subtitle, side, tone, className, children }) {
   return (
-    <section className={`card${tone ? ` card-${tone}` : ''}${className ? ` ${className}` : ''}`} id={id}>
-      <header className="card-head">
-        <div className="card-head-main">
-          {eyebrow && <span className="eyebrow">{eyebrow}</span>}
-          <h2 className="card-title">{title}</h2>
-          {subtitle && <p className="card-subtitle">{subtitle}</p>}
+    <section className={`card${tone ? ` od-card-${tone}` : ''}${className ? ` ${className}` : ''}`} id={id}>
+      <header className="od-card-head">
+        <div className="od-card-head-main">
+          {eyebrow && <span className="od-eyebrow">{eyebrow}</span>}
+          <h2 className="od-card-title">{title}</h2>
+          {subtitle && <p className="od-card-subtitle">{subtitle}</p>}
         </div>
-        {side && <div className="card-head-side">{side}</div>}
+        {side && <div className="od-card-head-side">{side}</div>}
       </header>
       {children}
     </section>
@@ -114,11 +114,11 @@ function Card({ id, eyebrow, title, subtitle, side, tone, className, children })
 
 function Section({ title, meta, strong, children }) {
   return (
-    <div className="card-section">
+    <div className="od-card-section">
       {(title || meta) && (
-        <div className="card-section-head">
-          <h3 className="card-section-title">{title}</h3>
-          {meta != null && <span className={`card-section-meta${strong ? ' is-strong' : ''}`}>{meta}</span>}
+        <div className="od-card-section-head">
+          <h3 className="od-card-section-title">{title}</h3>
+          {meta != null && <span className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>{meta}</span>}
         </div>
       )}
       {children}
@@ -126,7 +126,22 @@ function Section({ title, meta, strong, children }) {
   );
 }
 
-const Facts = ({ children }) => <div className="detail-facts">{children}</div>;
+function PartyBadge({ role, name }) {
+  return (
+    <div className="od-card-side-party">
+      <div>
+        <span className="od-card-side-label">{role}</span>
+        <span className="od-card-side-value">{name || '—'}</span>
+      </div>
+      <span className="od-party-avatar" aria-hidden="true">{initials(name)}</span>
+    </div>
+  );
+}
+
+const Finding = ({ text, empty }) =>
+  text ? <span className="od-finding-flag">{text}</span> : <Pill tone="good" dot={false}>{empty}</Pill>;
+
+const Facts = ({ children }) => <div className="od-detail-facts">{children}</div>;
 
 const Fact = ({ name, children }) => (
   <div>
@@ -136,26 +151,26 @@ const Fact = ({ name, children }) => (
 );
 
 const Pill = ({ tone = 'neutral', dot = true, children }) => (
-  <span className={`status-pill tone-${tone}`}>
-    {dot && <span className="status-pill-dot" aria-hidden="true" />}
+  <span className={`od-status-pill od-tone-${tone}`}>
+    {dot && <span className="od-status-pill-dot" aria-hidden="true" />}
     {children}
   </span>
 );
 
-const YouTag = ({ inline }) => <span className={`party-you${inline ? ' party-you-inline' : ''}`}>You</span>;
+const YouTag = ({ inline }) => <span className={`od-party-you${inline ? ' od-party-you-inline' : ''}`}>You</span>;
 
-const Actions = ({ children }) => <div className="actions">{children}</div>;
+const Actions = ({ children }) => <div className="od-actions">{children}</div>;
 
 const SideLabel = ({ name, children }) => (
   <>
-    <span className="card-side-label">{name}</span>
+    <span className="od-card-side-label">{name}</span>
     {children}
   </>
 );
 
 function Notice({ title, children }) {
   return (
-    <div className="notice">
+    <div className="od-notice">
       {title && <strong>{title}</strong>}
       {children}
     </div>
@@ -235,7 +250,7 @@ function PayoutStatusCard({ payouts, names, you }) {
       eyebrow="Payouts"
       title="Order payout status"
       subtitle="Each payout is held for 3 days after its payment settles."
-      side={dueDate && <SideLabel name="Common due"><span className="card-side-value">{dueDate}</span></SideLabel>}
+      side={dueDate && <SideLabel name="Common due"><span className="od-card-side-value">{dueDate}</span></SideLabel>}
     >
       <p className="muted">
         Buyer payment is separate from each payout below.{' '}
@@ -336,9 +351,9 @@ function OrderProgress({ steps }) {
       {steps.map((s, idx) => {
         const state = s.done ? 'done' : idx === current ? 'current' : 'todo';
         return (
-          <li key={s.label} className={`order-progress-step is-${state}`}>
+          <li key={s.label} className={`order-progress-step is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
             <span className="order-progress-dot" aria-hidden="true">{s.done ? '✓' : ''}</span>
-            <span className="sr-only">{s.label}: {state === 'done' ? 'complete' : state === 'current' ? 'in progress' : 'not started'}</span>
+            <span className="order-progress-label">{s.label}</span>
           </li>
         );
       })}
@@ -363,21 +378,13 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
 
   return (
     <Card
-      className="card-overview"
+      className="od-card-overview"
       eyebrow={role}
       title={title}
-      side={
-        <div className="card-side-party">
-          <div>
-            <span className="card-side-label">{otherLabel}</span>
-            <span className="card-side-value">{other?.name || '—'}</span>
-          </div>
-          <span className="party-avatar" aria-hidden="true">{initials(other?.name)}</span>
-        </div>
-      }
+      side={<PartyBadge role={otherLabel} name={other?.name} />}
     >
       <Section title="Order status" meta={`ORD ${shortId(order.id).toUpperCase()}`}>
-        <div className="status-row">
+        <div className="od-status-row">
           <Pill tone={statusTone(order.status)}>{label(order.status)}</Pill>
           {marketplacePaid && <Pill tone="good" dot={false}>Payment: Paid</Pill>}
           {marketplacePending && !marketplacePaid && <Pill tone="wait" dot={false}>Payment: Pending</Pill>}
@@ -387,7 +394,7 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
       </Section>
 
       <Section title="Amount">
-        <p className="amount-figure">{money(order.finalPrice)} <span>ETB</span></p>
+        <p className="od-amount-figure">{money(order.finalPrice)} <span>ETB</span></p>
       </Section>
 
       <Section title="Details">
@@ -401,7 +408,7 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
         </Facts>
       </Section>
 
-      <p className="card-created">Created {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}</p>
+      <p className="od-card-created">Created {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}</p>
 
       {canCancel && (
         <Button className="btn btn-outline btn-block" disabled={busy === 'cancel'} onClick={onCancel} busy={busy === 'cancel'} busyText="Cancelling…">
@@ -423,11 +430,13 @@ function InspectionCard({ order, title, i }) {
     const needsApproval = i.all.length > 0 && !i.formReleased;
     return (
       <Card id="inspection-section" eyebrow="Inspection" title={needsApproval ? 'Inspection request awaiting admin approval' : 'Request an inspection'}>
-        <p className="muted">
-          Get an independent quality check before the purchase is committed. Registered inspectors compete by sending a
-          sealed fee quote. You compare bids, pick one to negotiate with, and the accepted quote assigns the inspector.
-          You review the finished report before paying for the goods.
-        </p>
+        <Section title="How it works">
+          <p className="muted">
+            Get an independent quality check before the purchase is committed. Registered inspectors compete by sending a
+            sealed fee quote. You compare bids, pick one to negotiate with, and the accepted quote assigns the inspector.
+            You review the finished report before paying for the goods.
+          </p>
+        </Section>
         {needsApproval ? (
           <Notice title="Admin approval required">
             <p>Ask MarketBridge admin to release a fresh inspection form before opening another competition.</p>
@@ -452,16 +461,10 @@ function InspectionCard({ order, title, i }) {
   const inspectorName = request.inspector?.name || null;
   const inspectionDate =
     report?.inspectedAt || report?.completedAt || request.completedAt || request.updatedAt || request.createdAt || null;
-  const kind = i.isAgricultural ? 'Agricultural' : 'Product';
 
   const side =
     reportReady && inspectorName ? (
-      <SideLabel name="Inspector">
-        <div className="card-side-party">
-          <span className="card-side-value">{inspectorName}</span>
-          <span className="party-avatar" aria-hidden="true">{initials(inspectorName)}</span>
-        </div>
-      </SideLabel>
+      <PartyBadge role="Inspector" name={inspectorName} />
     ) : (
       <SideLabel name="Status">
         <Pill tone={statusTone(request.status)}>{label(request.status)}</Pill>
@@ -469,63 +472,73 @@ function InspectionCard({ order, title, i }) {
     );
 
   return (
-    <Card id="inspection-section" eyebrow={reportReady ? 'Quality report' : 'Inspection'} title={reportReady ? 'Inspection report' : 'Inspection'} side={side}>
+    <Card
+      id="inspection-section"
+      eyebrow="Inspection"
+      title={reportReady ? 'Quality report' : 'Inspection status'}
+      subtitle={reportReady ? 'Review the findings before the purchase is committed.' : null}
+      side={side}
+    >
+      <Section title="Inspection details" meta={`INS ${shortId(request.id).toUpperCase()}`}>
+        <Facts>
+          {reportReady && <Fact name="Product">{order.listing?.cropType || title}</Fact>}
+          {reportReady && <Fact name="Quantity">{order.listing?.quantity != null ? `${order.listing.quantity} units` : '—'}</Fact>}
+          {reportReady && <Fact name="Location">{order.listing?.location || '—'}</Fact>}
+          <Fact name="Requested by">{request.mode === 'SELLER_REQUESTED' ? 'Seller' : 'Buyer'}</Fact>
+          <Fact name="Requested on">{formatDateTime(request.createdAt)}</Fact>
+          {reportReady && <Fact name="Inspection date">{formatDateTime(inspectionDate)}</Fact>}
+          {inspectorName && <Fact name="Inspected by">{inspectorName}</Fact>}
+          {request.fee != null && <Fact name="Inspection fee">{money(request.fee)} ETB</Fact>}
+        </Facts>
+      </Section>
+
       {reportReady ? (
         <>
-          <Facts>
-            <Fact name="Product">{order.listing?.cropType || title}</Fact>
-            <Fact name="Quantity">{order.listing?.quantity != null ? `${order.listing.quantity} units` : '—'}</Fact>
-            <Fact name="Location">{order.listing?.location || '—'}</Fact>
-            <Fact name="Requested by">{request.mode === 'SELLER_REQUESTED' ? 'Seller' : 'Buyer'}</Fact>
-            <Fact name="Requested on">{formatDateTime(request.createdAt)}</Fact>
-            <Fact name="Inspection date">{formatDateTime(inspectionDate)}</Fact>
-            <Fact name="Inspected by">{inspectorName || '—'}</Fact>
-            {request.fee != null && <Fact name="Inspection fee">{money(request.fee)} ETB</Fact>}
-            <Fact name="Visible defects">{report.visibleDefects || 'No defects'}</Fact>
-            <Fact name="Damage notes">{report.damageNotes || 'No damage'}</Fact>
-            <Fact name="Packaging notes">{report.packagingNotes || 'Fully packed'}</Fact>
-          </Facts>
+          <Section title="Findings">
+            <Facts>
+              <Fact name="Visible defects"><Finding text={report.visibleDefects} empty="No defects" /></Fact>
+              <Fact name="Damage notes"><Finding text={report.damageNotes} empty="No damage" /></Fact>
+              <Fact name="Packaging"><Finding text={report.packagingNotes} empty="Fully packed" /></Fact>
+            </Facts>
+          </Section>
 
-          <Notice title={`${kind} inspection completed`}>
-            <p>Review the published findings before the purchase is committed.</p>
-          </Notice>
-
-          {i.decisionRequired && order.buyerDecision ? (
-            <div className={`inspection-decision-state ${order.buyerDecision === 'BUY' ? 'is-buy' : 'is-cancel'}`}>
-              <span className="inspection-decision-icon" aria-hidden="true">{order.buyerDecision === 'BUY' ? '✓' : '×'}</span>
-              <div>
-                <strong>{order.buyerDecision === 'BUY' ? 'BUY decision recorded' : 'Purchase cancelled after inspection'}</strong>
-                <p>
-                  {order.buyerDecision === 'BUY'
-                    ? 'Goods payment is unlocked. Transport can proceed once the required payments are confirmed.'
-                    : 'The purchase decision is closed.'}
-                </p>
-              </div>
-            </div>
-          ) : i.decisionRequired && i.isBuyer ? (
-            <div className="inspection-decision-panel">
-              <div>
-                <h3>What do you want to do with the inspected goods?</h3>
+          {i.decisionRequired && (
+            <Section title="Purchase decision">
+              {order.buyerDecision ? (
+                <div className={`inspection-decision-state ${order.buyerDecision === 'BUY' ? 'is-buy' : 'is-cancel'}`}>
+                  <span className="inspection-decision-icon" aria-hidden="true">{order.buyerDecision === 'BUY' ? '✓' : '×'}</span>
+                  <div>
+                    <strong>{order.buyerDecision === 'BUY' ? 'BUY decision recorded' : 'Purchase cancelled after inspection'}</strong>
+                    <p>
+                      {order.buyerDecision === 'BUY'
+                        ? 'Goods payment is unlocked. Transport can proceed once the required payments are confirmed.'
+                        : 'The purchase decision is closed.'}
+                    </p>
+                  </div>
+                </div>
+              ) : i.isBuyer ? (
+                <>
+                  <p className="muted">
+                    Choose <strong>Buy</strong> only after reviewing the findings. Buy unlocks goods payment; it does not
+                    complete payment or arrange transport.
+                  </p>
+                  <Actions>
+                    <Button variant="primary" disabled={Boolean(i.busy)} busy={i.busy === 'buyer-decision-buy'} busyText="Recording…" onClick={() => i.decide('BUY')}>
+                      Buy — continue purchase
+                    </Button>
+                    <Button variant="light" disabled={Boolean(i.busy)} busy={i.busy === 'buyer-decision-cancel'} busyText="Cancelling…" onClick={() => i.decide('CANCEL')}>
+                      Cancel after inspection
+                    </Button>
+                  </Actions>
+                </>
+              ) : (
                 <p className="muted">
-                  Choose <strong>BUY</strong> only after reviewing the report. BUY unlocks goods payment; it does not
-                  complete payment or arrange transport.
+                  <strong>Awaiting buyer decision.</strong> The buyer must review this report and choose Buy or Cancel
+                  before payment opens.
                 </p>
-              </div>
-              <Actions>
-                <Button variant="primary" disabled={Boolean(i.busy)} busy={i.busy === 'buyer-decision-buy'} busyText="Recording…" onClick={() => i.decide('BUY')}>
-                  Buy — continue purchase
-                </Button>
-                <Button variant="light" disabled={Boolean(i.busy)} busy={i.busy === 'buyer-decision-cancel'} busyText="Cancelling…" onClick={() => i.decide('CANCEL')}>
-                  Cancel after inspection
-                </Button>
-              </Actions>
-            </div>
-          ) : i.decisionRequired ? (
-            <div className="inspection-waiting-note">
-              <strong>Awaiting buyer decision</strong>
-              <span>The buyer must review this report and choose Buy or Cancel before payment opens.</span>
-            </div>
-          ) : null}
+              )}
+            </Section>
+          )}
         </>
       ) : (
         ['REQUESTED', 'ACCEPTED'].includes(request.status) && (
@@ -630,7 +643,7 @@ function QuoteRow({ quote, t }) {
         )}
 
         {canRespond && (
-          <div className="quote-actions">
+          <div className="od-quote-actions">
             <Button size="sm" disabled={working} busy={working} busyText="Accepting…" onClick={() => t.acceptQuote(quote.id)}>
               {transporterTurn ? 'Accept buyer counter' : 'Accept quote'}
             </Button>
@@ -743,7 +756,7 @@ function TransportCard({ order, t }) {
                 transporter cannot start the trip until every required payment is confirmed.
               </p>
               {t.canStartPayment && (
-                <div className="field-row">
+                <div className="od-field-row">
                   <select className="field field-inline" value={t.payMethod} onChange={(e) => t.setPayMethod(e.target.value)} disabled={t.busy === 'pay-transport'}>
                     {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select>
