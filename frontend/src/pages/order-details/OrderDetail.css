@@ -637,6 +637,12 @@
   text-transform: uppercase;
 }
 
+/* "You" chip sitting right after a name inside a key-value row */
+.order-detail-page .party-you-inline {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
 /* ── Notices / alerts ──────────────────────────────────── */
 
 .order-detail-page .notice {
