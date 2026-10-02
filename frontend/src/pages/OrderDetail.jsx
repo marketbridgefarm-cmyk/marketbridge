@@ -189,7 +189,10 @@ const Button = ({ variant = 'default', size, busy, busyText, children, ...rest }
 
 /* ========================================================================
    3. Payout card
-   ======================================================================== */
+   ========================================================================
+   The countdown strip and numbered notice use inline styles so they
+   render flat (no background, no box) regardless of what the stylesheet
+   contains or what global CSS is loaded. */
 
 function PayoutStatusCard({ payouts, names, you }) {
   const parties = [
@@ -243,6 +246,120 @@ function PayoutStatusCard({ payouts, names, you }) {
       ? new Date(dueMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
       : null;
   const duePassed = dueMs !== null && remainingMs === 0;
+
+  /* ── Inline styles ─────────────────────────────────────── */
+
+  const dueStripStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+    flexWrap: 'wrap',
+    padding: '14px 0 0',
+    margin: '14px 0 0',
+    border: 'none',
+    borderTop: '1px solid #e5e9ef',
+    borderRadius: 0,
+    background: 'transparent',
+    backgroundColor: 'transparent',
+    backgroundImage: 'none',
+    boxShadow: 'none',
+  };
+
+  const dueLabelStyle = {
+    fontFamily: "'DM Sans', system-ui, sans-serif",
+    fontSize: 10.5,
+    fontWeight: 700,
+    letterSpacing: '.14em',
+    textTransform: 'uppercase',
+    color: '#64748b',
+  };
+
+  const dueDateStyle = {
+    fontFamily: "'Manrope', system-ui, sans-serif",
+    fontSize: 14,
+    fontWeight: 700,
+    letterSpacing: '-.2px',
+    color: 'inherit',
+  };
+
+  const dueClockStyle = {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: 6,
+    fontVariantNumeric: 'tabular-nums',
+  };
+
+  const dueDigitsStyle = {
+    fontFamily: "'Manrope', system-ui, sans-serif",
+    fontSize: 22,
+    fontWeight: 800,
+    letterSpacing: '-.6px',
+    color: '#0d1b2a',
+    lineHeight: 1,
+  };
+
+  const dueUnitStyle = {
+    fontFamily: "'DM Sans', system-ui, sans-serif",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: '.12em',
+    textTransform: 'uppercase',
+    color: '#64748b',
+  };
+
+  const noticeWrapStyle = {
+    marginTop: 18,
+    paddingTop: 14,
+    border: 'none',
+    borderTop: '1px solid #e5e9ef',
+    borderRadius: 0,
+    background: 'transparent',
+    backgroundColor: 'transparent',
+    backgroundImage: 'none',
+    boxShadow: 'none',
+  };
+
+  const noticePrefixStyle = {
+    display: 'block',
+    margin: '0 0 8px',
+    fontFamily: "'Manrope', system-ui, sans-serif",
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: '.14em',
+    textTransform: 'uppercase',
+    color: '#0f7a44',
+  };
+
+  const noticeListStyle = {
+    listStyle: 'none',
+    margin: 0,
+    padding: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+  };
+
+  const noticeItemStyle = {
+    position: 'relative',
+    paddingLeft: 24,
+    fontFamily: "'DM Sans', system-ui, sans-serif",
+    fontSize: 13,
+    lineHeight: 1.6,
+    color: '#2c3a4a',
+  };
+
+  const noticeNumStyle = {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    fontFamily: "'Manrope', system-ui, sans-serif",
+    fontSize: 12,
+    fontWeight: 800,
+    color: '#0f7a44',
+  };
+
+  /* ── Render ─────────────────────────────────────────────── */
 
   return (
     <Card
@@ -306,24 +423,22 @@ function PayoutStatusCard({ payouts, names, you }) {
       </Section>
 
       {dueMs !== null && (
-        <div
-          className={`payout-due${duePassed ? ' payout-due-done' : ''}`}
-          role="group"
-          aria-label="Due date"
-        >
-          <div className="payout-due-when">
-            <span className="payout-due-label">Due Date</span>
-            <time className="payout-due-date" dateTime={new Date(dueMs).toISOString()}>
+        <div style={dueStripStyle} role="group" aria-label="Due date">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+            <span style={dueLabelStyle}>Due Date</span>
+            <time style={dueDateStyle} dateTime={new Date(dueMs).toISOString()}>
               {dueDate}
             </time>
           </div>
-          <div className="payout-due-clock" role="timer" aria-live="off">
+          <div style={dueClockStyle} role="timer" aria-live="off">
             {duePassed ? (
-              <span className="payout-due-digits payout-due-digits-now">Hold cleared</span>
+              <span style={{ ...dueDigitsStyle, fontSize: 15, letterSpacing: '-.2px', color: '#0f7a44' }}>
+                Hold cleared
+              </span>
             ) : (
               <>
-                <span className="payout-due-digits">{clock}</span>
-                <span className="payout-due-unit">left</span>
+                <span style={dueDigitsStyle}>{clock}</span>
+                <span style={dueUnitStyle}>left</span>
               </>
             )}
           </div>
@@ -331,26 +446,44 @@ function PayoutStatusCard({ payouts, names, you }) {
       )}
 
       {dueMs === null && holdNotStarted && (
-        <div className="payout-due payout-due-idle" role="group" aria-label="Due date">
-          <div className="payout-due-when">
-            <span className="payout-due-label">Due Date</span>
-            <span className="payout-due-date">Starts after payment settles</span>
+        <div style={dueStripStyle} role="group" aria-label="Due date">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+            <span style={dueLabelStyle}>Due Date</span>
+            <span style={{ ...dueDateStyle, color: '#64748b' }}>Starts after payment settles</span>
           </div>
         </div>
       )}
 
       {anyDispute && (
-        <p className="payout-dispute-note">
+        <p
+          style={{
+            marginTop: 12,
+            padding: '8px 0 8px 12px',
+            borderLeft: '3px solid #fecaca',
+            fontSize: 12.5,
+            lineHeight: 1.55,
+            color: '#b42318',
+          }}
+        >
           One or more payouts are frozen while a dispute is open.
         </p>
       )}
 
-      <div className="od-notice od-notice--footer">
-        <span className="od-notice-prefix">Notice:</span>
-        <ol className="od-notice-list">
-          <li>Each payout is held for 3 days after its payment settles.</li>
-          <li>Buyer payment is separate from each payout below.</li>
-          <li>No manual action is required.</li>
+      <div style={noticeWrapStyle}>
+        <span style={noticePrefixStyle}>Notice:</span>
+        <ol style={noticeListStyle}>
+          <li style={noticeItemStyle}>
+            <span style={noticeNumStyle}>1)</span>
+            Each payout is held for 3 days after its payment settles.
+          </li>
+          <li style={noticeItemStyle}>
+            <span style={noticeNumStyle}>2)</span>
+            Buyer payment is separate from each payout below.
+          </li>
+          <li style={noticeItemStyle}>
+            <span style={noticeNumStyle}>3)</span>
+            No manual action is required.
+          </li>
         </ol>
       </div>
     </Card>
