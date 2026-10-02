@@ -1779,10 +1779,12 @@ export default function OrderDetail() {
   };
 
   /* ====================================================================
-     Layout — top to bottom, the order a person works through an order:
-     summary → what to do next → offer → inspection → transport grid →
-     payments → receipt → payouts/refunds → history → dispute → rating →
-     messages
+     Layout — cards flow into a responsive grid:
+       · phone (default)     → 1 card per row
+       · tablet (≥640px)     → 2 cards per row
+       · desktop (≥1000px)   → 3 cards per row
+     Wide cards (Overview, Transport, Payment, Payout, Timeline,
+     Messages) span all columns; everything else flows naturally.
      ==================================================================== */
   return (
     <main className="section order-detail-page">
@@ -1792,134 +1794,152 @@ export default function OrderDetail() {
           <Button size="sm" disabled={refreshing} busy={refreshing} busyText="Refreshing…" onClick={reload}>Refresh</Button>
         </div>
 
-        {/* Summary */}
-        <OverviewCard
-          order={order}
-          title={title}
-          flags={{ isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob }}
-          canCancel={canCancelOrder}
-          busy={busy}
-          onCancel={cancelOrder}
-        />
+        <div className="od-page-grid">
+          {/* Summary — full width */}
+          <div className="od-span-all">
+            <OverviewCard
+              order={order}
+              title={title}
+              flags={{ isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob }}
+              canCancel={canCancelOrder}
+              busy={busy}
+              onCancel={cancelOrder}
+            />
+          </div>
 
-        {/* Next step */}
-        {workflow ? (
-          <ActionCenter workflow={workflow} onScroll={scrollToId} onActionComplete={reload} />
-        ) : (
-          isInspector && (
-            <Card id="next-action" tone="accent" eyebrow="Next step" title="Inspector action">
-              {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
-              {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
-              {assignedInspection.status === 'COMPLETED' && <p>The report is published. The buyer can now complete any required inspection payment and continue.</p>}
-              <Actions><Link className="btn btn-primary" to="/dashboard/inspector">Open inspection dashboard</Link></Actions>
+          {/* Next step — natural width */}
+          {workflow ? (
+            <ActionCenter workflow={workflow} onScroll={scrollToId} onActionComplete={reload} />
+          ) : (
+            isInspector && (
+              <Card id="next-action" tone="accent" eyebrow="Next step" title="Inspector action">
+                {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
+                {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
+                {assignedInspection.status === 'COMPLETED' && <p>The report is published. The buyer can now complete any required inspection payment and continue.</p>}
+                <Actions><Link className="btn btn-primary" to="/dashboard/inspector">Open inspection dashboard</Link></Actions>
+              </Card>
+            )
+          )}
+
+          {/* Offer (product marketplace, before a deal exists) */}
+          {isProduct && isBuyer && !order.agreedOfferId && (
+            <OfferCard
+              amount={offerAmount}
+              setAmount={setOfferAmount}
+              message={offerMessage}
+              setMessage={setOfferMessage}
+              submitting={submittingOffer}
+              onSubmit={submitOffer}
+            />
+          )}
+
+          {/* Inspection */}
+          {inspectionApplies && isParticipant && orderOpen && (
+            <InspectionCard order={order} title={title} i={inspectionProps} />
+          )}
+
+          {/* Transport — full width; it renders its own inner grid */}
+          <div className="od-span-all">
+            <TransportCard order={order} t={transportProps} />
+          </div>
+
+          {/* Payments — full width */}
+          {(!isProduct || order.agreedOfferId) && (
+            <div className="od-span-all">
+              <PaymentCenter
+                workflowPayments={workflow?.payments}
+                rawPayments={payments}
+                isBuyer={isBuyer}
+                buyerIdentityMismatch={buyerIdentityMismatch}
+                marketplaceBlockedReason={marketplaceBlockedReason}
+                payMethod={payMethod}
+                setPayMethod={setPayMethod}
+                paymentMethods={PAYMENT_METHODS}
+                busy={busy}
+                marketplace={marketplaceObligation}
+                inspections={inspectionPaymentGroups}
+                transport={transportObligation}
+              />
+            </div>
+          )}
+
+          {/* Receipt */}
+          {order.status === 'DELIVERED' && isBuyer && (
+            <ReceiptCard
+              marketplacePaid={marketplacePaid}
+              transportBlocked={hiredTransport && !transportPaid}
+              busy={busy}
+              onConfirm={confirmReceipt}
+            />
+          )}
+
+          {/* Payout — full width (has a table) */}
+          <div className="od-span-all">
+            <PayoutStatusCard
+              payouts={{ seller: payoutBy('SELLER'), inspector: payoutBy('INSPECTOR'), transporter: payoutBy('TRANSPORTER') }}
+              names={{ seller: order.seller?.name || null, inspector: inspectorName, transporter: transportJob?.truckOwner?.name || null }}
+              you={{ seller: isSeller, inspector: isInspector, transporter: isTransporter }}
+            />
+          </div>
+
+          {/* Refund */}
+          <RefundStatusCard
+            refunds={refunds}
+            payouts={payouts}
+            people={{
+              SELLER: { name: order.seller?.name || null, you: isSeller },
+              INSPECTOR: { name: inspectorName, you: isInspector },
+              TRANSPORTER: { name: transportJob?.truckOwner?.name || null, you: isTransporter },
+            }}
+            isAdmin={isAdmin}
+            busy={busy}
+            onComplete={refundAction}
+            onFail={failRefund}
+          />
+
+          {/* Timeline — full width */}
+          {workflow && (
+            <div className="od-span-all">
+              <Card eyebrow="History" title="Order timeline" subtitle="Everything that has happened on this order">
+                <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
+              </Card>
+            </div>
+          )}
+
+          {/* Problems */}
+          <DisputeCard order={order} d={disputeProps} />
+
+          {/* Closing */}
+          {order.status === 'COMPLETED' && (
+            <Card eyebrow="Closed" title="Order completed">
+              <Notice title="✓ This order has been completed.">
+                <p className="muted">Receipt was confirmed by the buyer.</p>
+              </Notice>
             </Card>
-          )
-        )}
+          )}
 
-        {/* Offer (product marketplace, before a deal exists) */}
-        {isProduct && isBuyer && !order.agreedOfferId && (
-          <OfferCard
-            amount={offerAmount}
-            setAmount={setOfferAmount}
-            message={offerMessage}
-            setMessage={setOfferMessage}
-            submitting={submittingOffer}
-            onSubmit={submitOffer}
-          />
-        )}
+          {/* Rating */}
+          <RatingBox order={order} userId={currentUserId} onRated={reload} />
 
-        {/* Inspection */}
-        {inspectionApplies && isParticipant && orderOpen && (
-          <InspectionCard order={order} title={title} i={inspectionProps} />
-        )}
+          {/* Messages — full width */}
+          {counterpartId && (
+            <div className="od-span-all">
+              <MessageThread
+                orderId={order.id}
+                messages={order.messages || []}
+                counterpartId={counterpartId}
+                counterpartName={counterpartName}
+                currentUserId={currentUserId}
+                onSent={reload}
+              />
+            </div>
+          )}
 
-        {/* Transport — three cards laid out responsively via .od-card-grid */}
-        <TransportCard order={order} t={transportProps} />
-
-        {/* Payments */}
-        {(!isProduct || order.agreedOfferId) && (
-          <PaymentCenter
-            workflowPayments={workflow?.payments}
-            rawPayments={payments}
-            isBuyer={isBuyer}
-            buyerIdentityMismatch={buyerIdentityMismatch}
-            marketplaceBlockedReason={marketplaceBlockedReason}
-            payMethod={payMethod}
-            setPayMethod={setPayMethod}
-            paymentMethods={PAYMENT_METHODS}
-            busy={busy}
-            marketplace={marketplaceObligation}
-            inspections={inspectionPaymentGroups}
-            transport={transportObligation}
-          />
-        )}
-
-        {/* Receipt */}
-        {order.status === 'DELIVERED' && isBuyer && (
-          <ReceiptCard
-            marketplacePaid={marketplacePaid}
-            transportBlocked={hiredTransport && !transportPaid}
-            busy={busy}
-            onConfirm={confirmReceipt}
-          />
-        )}
-
-        {/* Money out */}
-        <PayoutStatusCard
-          payouts={{ seller: payoutBy('SELLER'), inspector: payoutBy('INSPECTOR'), transporter: payoutBy('TRANSPORTER') }}
-          names={{ seller: order.seller?.name || null, inspector: inspectorName, transporter: transportJob?.truckOwner?.name || null }}
-          you={{ seller: isSeller, inspector: isInspector, transporter: isTransporter }}
-        />
-
-        <RefundStatusCard
-          refunds={refunds}
-          payouts={payouts}
-          people={{
-            SELLER: { name: order.seller?.name || null, you: isSeller },
-            INSPECTOR: { name: inspectorName, you: isInspector },
-            TRANSPORTER: { name: transportJob?.truckOwner?.name || null, you: isTransporter },
-          }}
-          isAdmin={isAdmin}
-          busy={busy}
-          onComplete={refundAction}
-          onFail={failRefund}
-        />
-
-        {/* History */}
-        {workflow && (
-          <Card eyebrow="History" title="Order timeline" subtitle="Everything that has happened on this order">
-            <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
-          </Card>
-        )}
-
-        {/* Problems */}
-        <DisputeCard order={order} d={disputeProps} />
-
-        {/* Closing */}
-        {order.status === 'COMPLETED' && (
-          <Card eyebrow="Closed" title="Order completed">
-            <Notice title="✓ This order has been completed.">
-              <p className="muted">Receipt was confirmed by the buyer.</p>
-            </Notice>
-          </Card>
-        )}
-
-        <RatingBox order={order} userId={currentUserId} onRated={reload} />
-
-        {counterpartId && (
-          <MessageThread
-            orderId={order.id}
-            messages={order.messages || []}
-            counterpartId={counterpartId}
-            counterpartName={counterpartName}
-            currentUserId={currentUserId}
-            onSent={reload}
-          />
-        )}
-
-        {isAdmin && (
-          <Card eyebrow="Admin" title="Administrator view" subtitle="You are viewing this order with administrator access." />
-        )}
+          {/* Admin indicator */}
+          {isAdmin && (
+            <Card eyebrow="Admin" title="Administrator view" subtitle="You are viewing this order with administrator access." />
+          )}
+        </div>
       </div>
 
       {error && (
