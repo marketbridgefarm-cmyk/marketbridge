@@ -1,811 +1,859 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import api from '../api/client';
-import { useAuth } from '../context/AuthContext.jsx';
-import './negotiations/Negotiations.css';
+/* ============================================================
+   MarketBridge — Negotiations
+   pages/negotiations/Negotiations.css
 
-// ============================================================================
-// NEGOTIATIONS — unified hub for all three negotiation types
-// ============================================================================
-//
-// 1. LISTING_OFFER      many buyers → seller selection → bilateral negotiation
-// 2. TRANSPORT_QUOTE    arranging party ↔ truck owners
-// 3. INSPECTION_QUOTE   requester ↔ inspectors
-//
-// Competition groups render inline as flat sections inside one card.
-// Bilateral deals render as NegotiationRow cards.
-// ============================================================================
+   One card per competition group; bilateral deals render as
+   their own cards. No boxes inside cards — every section is a
+   flat block with a green heading and a hairline under.
+   ============================================================ */
 
-const SELLER_LISTING_STATUSES = ['ACTIVE', 'UNDER_NEGOTIATION', 'SOLD'];
+.neg-page {
+  --ng-accent:      #1e9e5a;
+  --ng-accent-2:    #0f7a44;
+  --ng-accent-ink:  #12734a;
+  --ng-accent-soft: #ecfdf3;
+  --ng-accent-line: #c6eccf;
 
-const ACTIVE_QUOTE_STATUSES   = ['PENDING', 'SELECTED', 'COUNTERED'];
-const PREVIOUS_QUOTE_STATUSES = ['ACCEPTED', 'REJECTED', 'WITHDRAWN', 'EXPIRED'];
+  --ng-ink:         #0d1b2a;
+  --ng-ink-soft:    #2c3a4a;
+  --ng-muted:       #64748b;
+  --ng-muted-2:     #94a3b8;
 
-function quoteTurn(quote) {
-  if (quote.status === 'PENDING')   return 'REQUESTER';
-  if (quote.status === 'SELECTED')  return 'REQUESTER';
-  if (quote.status === 'COUNTERED') {
-    return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
+  --ng-line:        #e5e9ef;
+  --ng-line-soft:   #eef1f5;
+
+  --ng-gold:        #a86f10;
+  --ng-gold-soft:   #fdf6e7;
+  --ng-gold-line:   #f4e0b6;
+
+  --ng-danger:      #b42318;
+  --ng-danger-soft: #fef2f2;
+  --ng-danger-line: #fecaca;
+
+  --ng-radius:      20px;
+  --ng-radius-sm:   12px;
+
+  --ng-shadow:      0 1px 2px rgba(15, 30, 45, .04),
+                    0 8px 24px rgba(15, 30, 45, .05);
+  --ng-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
+  --ng-ring:        0 0 0 3px rgba(30, 158, 90, .18);
+  --ng-ease:        cubic-bezier(.2, .7, .3, 1);
+
+  min-height: calc(100vh - 72px);
+  color: var(--ng-ink);
+  font-family: var(--mb-font-body, 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif);
+  -webkit-font-smoothing: antialiased;
+
+  background:
+    radial-gradient(circle at 88% 0%,  rgba(230, 245, 236, .85), transparent 40%),
+    radial-gradient(circle at 5% 100%, rgba(231, 235, 245, .8),  transparent 40%),
+    linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
+  background-attachment: fixed;
+}
+
+.neg-page .container-narrow {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+/* ── Page header ───────────────────────────────────────── */
+
+.neg-page .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--ng-accent-ink);
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.neg-page .eyebrow::before {
+  content: '';
+  flex: 0 0 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.neg-page h1 {
+  margin: 0 0 8px;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: clamp(24px, 2.6vw, 32px);
+  font-weight: 800;
+  letter-spacing: -.7px;
+  line-height: 1.15;
+  color: var(--ng-ink);
+}
+
+.neg-page .lead {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ng-muted);
+}
+
+/* ── Filter tabs — single-line, no wrap, swipe on overflow ── */
+
+.neg-page .sd-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--ng-line);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: var(--ng-shadow-sm);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  max-width: 100%;
+}
+
+.neg-page .sd-tabs::-webkit-scrollbar { display: none; }
+
+.neg-page .sd-tab {
+  flex: 0 0 auto;
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent !important;
+  background-image: none !important;
+  padding: 8px 16px;
+  border-radius: 999px;
+  color: var(--ng-muted);
+  font: 600 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s var(--ng-ease), background .15s var(--ng-ease);
+}
+
+.neg-page .sd-tab:hover {
+  color: var(--ng-ink);
+  background: var(--ng-line-soft) !important;
+  background-image: none !important;
+}
+
+.neg-page .sd-tab:focus-visible { outline: none; box-shadow: var(--ng-ring); }
+
+.neg-page .sd-tab.sd-active {
+  background: var(--ng-accent-soft) !important;
+  background-image: none !important;
+  color: var(--ng-accent-ink) !important;
+  font-weight: 700;
+  border: 1px solid var(--ng-accent-line) !important;
+  box-shadow: none !important;
+}
+
+/* ── Sections ──────────────────────────────────────────── */
+
+.neg-page .neg-section { margin: 28px 0 0; }
+
+.neg-page .neg-section-title {
+  margin: 0 0 18px;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--ng-line);
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -.3px;
+  line-height: 1.3;
+  color: var(--ng-ink);
+}
+
+.neg-page .neg-section-sub {
+  display: block;
+  margin: 6px 0 0;
+  font-family: var(--mb-font-body, 'DM Sans', sans-serif);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ng-muted);
+  line-height: 1.55;
+  max-width: 70ch;
+}
+
+/* ── Competition group (one card per request / job) ────── */
+
+.neg-page .neg-group {
+  margin: 0 0 20px;
+  padding: 22px 24px 24px;
+  border: 1px solid var(--ng-line);
+  border-radius: var(--ng-radius);
+  background: #fff;
+  box-shadow: var(--ng-shadow);
+}
+
+.neg-page .neg-group:last-child { margin-bottom: 0; }
+
+.neg-page .neg-group-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 16px;
+  padding: 0 0 14px;
+  margin: 0 0 16px;
+  border-bottom: 1px solid var(--ng-line);
+  background: transparent;
+}
+
+.neg-page .neg-group-head-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.neg-page .neg-group-head-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+  max-width: 180px;
+  text-align: right;
+}
+
+.neg-page .neg-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ng-accent-ink);
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.neg-page .neg-eyebrow::before {
+  content: '';
+  flex: 0 0 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.neg-page .neg-group-title {
+  margin: 0;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -.3px;
+  line-height: 1.25;
+  color: var(--ng-ink);
+  overflow-wrap: anywhere;
+}
+
+.neg-page .neg-side-label {
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ng-accent-2);
+}
+
+.neg-page .neg-side-value {
+  font: 700 14px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
+  color: var(--ng-ink);
+  letter-spacing: -.1px;
+  white-space: nowrap;
+}
+
+/* ── Subsection head ───────────────────────────────────── */
+
+.neg-page .neg-subsection { margin: 0 0 4px; }
+
+.neg-page .neg-subsection-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 0 0 10px;
+  margin: 0 0 6px;
+  border-bottom: 1px solid var(--ng-line-soft);
+}
+
+.neg-page .neg-subsection-title {
+  margin: 0;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -.1px;
+  color: var(--ng-accent-2);
+}
+
+.neg-page .neg-subsection-meta {
+  font: 700 11.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ng-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.neg-page .neg-empty {
+  margin: 12px 0 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ng-muted);
+}
+
+/* ── Quote list (flat rows) ────────────────────────────── */
+
+.neg-page .neg-quote-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.neg-page .neg-quote-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--ng-line-soft);
+}
+
+.neg-page .neg-quote-row:last-child { border-bottom: none; }
+.neg-page .neg-quote-row--muted { padding: 12px 0; }
+
+.neg-page .neg-quote-main { min-width: 0; }
+
+.neg-page .neg-quote-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.neg-page .neg-quote-name {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 14.5px;
+  font-weight: 800;
+  letter-spacing: -.15px;
+  color: var(--ng-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.neg-page .neg-quote-amount {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -.2px;
+  color: var(--ng-ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.neg-page .neg-quote-amount small {
+  margin-left: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--ng-muted);
+  text-transform: uppercase;
+}
+
+.neg-page .neg-quote-meta {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ng-muted);
+}
+
+.neg-page .neg-quote-message {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ng-ink-soft);
+  font-style: italic;
+}
+
+.neg-page .neg-quote-waiting {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ng-gold);
+}
+
+.neg-page .neg-quote-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 0 0;
+}
+
+/* ── Previous bids (details / summary) ─────────────────── */
+
+.neg-page .neg-previous {
+  margin: 14px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--ng-line-soft);
+}
+
+.neg-page .neg-previous-summary {
+  display: block;
+  padding: 12px 0 4px;
+  font: 700 12.5px/1.4 var(--mb-font-body, 'DM Sans', sans-serif);
+  color: var(--ng-muted);
+  cursor: pointer;
+  list-style: none;
+  transition: color .15s var(--ng-ease);
+}
+
+.neg-page .neg-previous-summary::-webkit-details-marker { display: none; }
+
+.neg-page .neg-previous-summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 14px;
+  margin-right: 4px;
+  color: var(--ng-muted-2);
+  transition: transform .15s var(--ng-ease);
+}
+
+.neg-page .neg-previous[open] .neg-previous-summary::before { transform: rotate(90deg); }
+.neg-page .neg-previous-summary:hover { color: var(--ng-ink); }
+
+.neg-page .neg-quote-list--muted .neg-quote-name,
+.neg-page .neg-quote-list--muted .neg-quote-amount { color: var(--ng-muted); }
+.neg-page .neg-quote-list--muted .role-chip { opacity: .8; }
+
+/* ── Group footer (notice + action) ────────────────────── */
+
+.neg-page .neg-group-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 0 0;
+  margin: 14px 0 0;
+  border-top: 1px solid var(--ng-line-soft);
+}
+
+/* ── Notice line (numbered) ────────────────────────────── */
+
+.neg-page .neg-notice {
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ng-ink-soft);
+}
+
+.neg-page .neg-notice-prefix {
+  display: inline-block;
+  margin: 0 0 8px;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ng-accent-2);
+}
+
+.neg-page .neg-notice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: notice;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.neg-page .neg-notice-list li {
+  position: relative;
+  padding-left: 24px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ng-ink-soft);
+}
+
+.neg-page .neg-notice-list li::before {
+  counter-increment: notice;
+  content: counter(notice) ")";
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ng-accent-2);
+}
+
+/* ── Bilateral deal list ───────────────────────────────── */
+
+.neg-page .neg-deal-list { display: grid; gap: 14px; }
+
+.neg-page .neg-card {
+  position: relative;
+  padding: 20px 22px 22px;
+  border: 1px solid var(--ng-line);
+  border-radius: var(--ng-radius);
+  background: #fff;
+  box-shadow: var(--ng-shadow-sm);
+  transition: border-color .18s var(--ng-ease), box-shadow .18s var(--ng-ease);
+}
+
+.neg-page .neg-card:hover {
+  border-color: rgba(30, 158, 90, .28);
+  box-shadow: var(--ng-shadow);
+}
+
+.neg-page .neg-card--my-turn {
+  border-color: var(--ng-accent-line);
+  box-shadow: 0 0 0 3px rgba(30, 158, 90, .08), var(--ng-shadow-sm);
+}
+
+.neg-page .neg-turn-label {
+  position: absolute;
+  top: -10px;
+  left: 20px;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--ng-accent-soft);
+  border: 1px solid var(--ng-accent-line);
+  color: var(--ng-accent-ink);
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.neg-page .neg-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 16px;
+  padding: 0 0 14px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid var(--ng-line);
+}
+
+.neg-page .neg-card-head-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.neg-page .neg-card-head-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+  max-width: 180px;
+  text-align: right;
+}
+
+.neg-page .neg-title {
+  margin: 0;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -.25px;
+  line-height: 1.3;
+  color: var(--ng-ink);
+  overflow-wrap: anywhere;
+}
+
+.neg-page .neg-card-subtitle {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ng-muted);
+}
+
+.neg-page .neg-deal-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+
+.neg-page .role-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--ng-line-soft);
+  border: 1px solid var(--ng-line);
+  color: var(--ng-ink-soft);
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.neg-page .neg-card--my-turn .role-chip:first-child {
+  background: var(--ng-accent-soft);
+  border-color: var(--ng-accent-line);
+  color: var(--ng-accent-ink);
+}
+
+.neg-page .neg-deal-context {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ng-ink-soft);
+}
+
+.neg-page .neg-deal-context strong { color: var(--ng-ink); font-weight: 800; }
+
+.neg-page .neg-waiting {
+  margin: 10px 0 0;
+  padding: 8px 0 8px 12px;
+  border-left: 3px solid var(--ng-line);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ng-muted);
+}
+
+/* ── Action rows ───────────────────────────────────────── */
+
+.neg-page .neg-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--ng-line-soft);
+}
+
+.neg-page .neg-counter-input {
+  width: 120px;
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border: 1px solid var(--ng-line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ng-ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: border-color .18s var(--ng-ease), box-shadow .18s var(--ng-ease);
+}
+
+.neg-page .neg-counter-input::placeholder { color: var(--ng-muted-2); }
+.neg-page .neg-counter-input:focus {
+  outline: none;
+  border-color: var(--ng-accent);
+  box-shadow: var(--ng-ring);
+}
+
+/* ── Card footer ───────────────────────────────────────── */
+
+.neg-page .neg-card-footer {
+  padding: 14px 0 0;
+  margin: 12px 0 0;
+  border-top: 1px solid var(--ng-line-soft);
+}
+
+/* ── Buttons — white bg, green outline ─────────────────── */
+
+.neg-page .sd-btn,
+.neg-page .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--ng-line);
+  background: #fff;
+  color: var(--ng-ink);
+  font: 700 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s var(--ng-ease),
+              background .15s var(--ng-ease),
+              color .15s var(--ng-ease),
+              box-shadow .15s var(--ng-ease);
+}
+
+.neg-page .sd-btn:hover:not(:disabled),
+.neg-page .btn:hover:not(:disabled) {
+  border-color: var(--ng-accent);
+  background: var(--ng-accent-soft);
+  color: var(--ng-accent-2);
+}
+
+.neg-page .sd-btn:focus-visible,
+.neg-page .btn:focus-visible { outline: none; box-shadow: var(--ng-ring); }
+.neg-page .sd-btn:disabled,
+.neg-page .btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.neg-page .sd-btn-primary,
+.neg-page .btn-primary,
+.neg-page .btn-outline {
+  background: #fff;
+  color: var(--ng-accent-2);
+  border-color: var(--ng-accent-line);
+}
+
+.neg-page .sd-btn-primary:hover:not(:disabled),
+.neg-page .btn-primary:hover:not(:disabled),
+.neg-page .btn-outline:hover:not(:disabled) {
+  background: var(--ng-accent-soft);
+  color: var(--ng-accent-ink);
+  border-color: var(--ng-accent);
+  box-shadow: 0 1px 2px rgba(30, 158, 90, .12);
+}
+
+.neg-page .sd-btn-outline {
+  background: #fff;
+  color: var(--ng-ink-soft);
+  border-color: var(--ng-line);
+}
+
+.neg-page .sd-btn-outline:hover:not(:disabled) {
+  background: var(--ng-line-soft);
+  color: var(--ng-ink);
+  border-color: var(--ng-line);
+}
+
+/* ── Empty state / alerts / toast ──────────────────────── */
+
+.neg-page .card.notice {
+  padding: 40px 24px;
+  margin: 24px 0 0;
+  border: 1px dashed var(--ng-line);
+  border-radius: var(--ng-radius);
+  background: rgba(255, 255, 255, .7);
+  color: var(--ng-muted);
+  text-align: center;
+  font-size: 14.5px;
+  box-shadow: none;
+}
+
+.neg-page .alert {
+  padding: 12px 16px;
+  margin: 14px 0;
+  border-radius: var(--ng-radius-sm);
+  border: 1px solid var(--ng-gold-line);
+  background: var(--ng-gold-soft);
+  color: #7c4f0b;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.neg-page .alert.error {
+  border-color: var(--ng-danger-line);
+  background: var(--ng-danger-soft);
+  color: var(--ng-danger);
+}
+
+.neg-page .sd-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: #0d1b2a;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, .08);
+  box-shadow: 0 12px 30px rgba(15, 30, 45, .35);
+  font-size: 13.5px;
+  line-height: 1.45;
+  animation: neg-toast-in .22s var(--ng-ease);
+  max-width: min(480px, calc(100vw - 32px));
+}
+
+@keyframes neg-toast-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.neg-page .loading,
+.neg-page > .container-narrow > p {
+  font-size: 14px;
+  color: var(--ng-muted);
+}
+
+/* ── Responsive ────────────────────────────────────────── */
+
+@media (max-width: 719px) {
+  .neg-page .container-narrow { padding: 24px 16px 56px; }
+
+  /* Keep tab strips single-line: scroll horizontally instead of wrapping */
+  .neg-page .sd-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: 4px;
   }
-  return null;
-}
+  .neg-page .sd-tabs::-webkit-scrollbar { display: none; }
 
-function isExpired(item) {
-  return Boolean(item.expiresAt && new Date(item.expiresAt).getTime() <= Date.now());
-}
-
-function leavesOnly(items, parentKey) {
-  const parentIds = new Set(items.map((i) => i[parentKey]).filter(Boolean));
-  return items.filter((i) => !parentIds.has(i.id));
-}
-
-function humanStatus(status) {
-  return ({
-    PENDING:   'Bid pending',
-    SELECTED:  'Selected',
-    COUNTERED: 'Counter-offer',
-    ACCEPTED:  'Accepted',
-    REJECTED:  'Rejected',
-    WITHDRAWN: 'Released',
-    EXPIRED:   'Expired',
-  }[status] || String(status || '').replaceAll('_', ' '));
-}
-
-function amountOf(item) {
-  const v = item.status === 'COUNTERED' ? (item.counterAmount ?? item.amount) : item.amount;
-  return Number(v);
-}
-
-function providerOf(quote) {
-  return quote.truckOwner || quote.inspector || quote.provider || {};
-}
-
-function initialsOf(name) {
-  const parts = String(name || '?').trim().split(/\s+/).slice(0, 2);
-  return parts.map((p) => p[0]).join('').toUpperCase() || '?';
-}
-
-// ============================================================================
-// CompetitionGroup — one card per inspection request / transport job
-// ============================================================================
-function CompetitionGroup({ group, busyKey, onRespond }) {
-  const providerLabel =
-    group.type === 'INSPECTION_QUOTE' ? 'inspectors' : 'truck owners';
-
-  const activeQuotes = (group.quotes || []).filter((q) =>
-    ACTIVE_QUOTE_STATUSES.includes(q.status)
-  );
-  const previousQuotes = (group.quotes || []).filter((q) =>
-    PREVIOUS_QUOTE_STATUSES.includes(q.status)
-  );
-
-  const typeLabel =
-    group.type === 'INSPECTION_QUOTE' ? 'Inspection' : 'Transport';
-
-  return (
-    <article className="neg-group">
-      <header className="neg-group-head">
-        <div className="neg-group-head-main">
-          <span className="neg-eyebrow">{typeLabel.toUpperCase()}</span>
-          <h2 className="neg-group-title">{group.label}</h2>
-        </div>
-        <div className="neg-group-head-side">
-          <span className="neg-side-label">Status</span>
-          <span className="neg-side-value">
-            {activeQuotes.length > 0 ? 'Open' : 'Awaiting bids'}
-          </span>
-        </div>
-      </header>
-
-      {/* ── Active bids ────────────────────────────────────── */}
-      <section className="neg-subsection">
-        <div className="neg-subsection-head">
-          <h3 className="neg-subsection-title">Active bids</h3>
-          <span className="neg-subsection-meta">{activeQuotes.length}</span>
-        </div>
-
-        {activeQuotes.length === 0 ? (
-          <p className="neg-empty">
-            No bids yet. Registered {providerLabel} on the platform can view this
-            request and submit a quote.
-          </p>
-        ) : (
-          <ul className="neg-quote-list">
-            {activeQuotes.map((quote) => (
-              <QuoteRow
-                key={quote.id}
-                quote={quote}
-                group={group}
-                busyKey={busyKey}
-                onRespond={onRespond}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* ── Previous bids ──────────────────────────────────── */}
-      {previousQuotes.length > 0 && (
-        <details className="neg-previous">
-          <summary className="neg-previous-summary">
-            Previous bids ({previousQuotes.length}) — hired or not selected
-          </summary>
-          <ul className="neg-quote-list neg-quote-list--muted">
-            {previousQuotes.map((quote) => (
-              <PreviousQuoteRow key={quote.id} quote={quote} />
-            ))}
-          </ul>
-        </details>
-      )}
-
-      {/* ── Notice + footer action ─────────────────────────── */}
-      <footer className="neg-group-footer">
-        <div className="neg-notice">
-          <span className="neg-notice-prefix">Notice:</span>
-          <ol className="neg-notice-list">
-            <li>Competition stays open until commitment.</li>
-            <li>
-              Selection is not commitment. Selecting a provider opens negotiation.
-              Payment is the commercial commitment.
-            </li>
-          </ol>
-        </div>
-
-        {group.orderLink && (
-          <Link className="btn btn-outline" to={group.orderLink}>
-            View order →
-          </Link>
-        )}
-      </footer>
-    </article>
-  );
-}
-
-// ============================================================================
-// QuoteRow — one active bid (competitive or in negotiation)
-// ============================================================================
-function QuoteRow({ quote, group, busyKey, onRespond }) {
-  const provider = providerOf(quote);
-  const amount = amountOf(quote);
-  const busy = (action) => busyKey === `bid:${quote.id}:${action}`;
-  const anyBusy = Boolean(busyKey) && busyKey.startsWith(`bid:${quote.id}:`);
-
-  const turn = quoteTurn(quote);
-  const myTurn = turn === 'REQUESTER' && ACTIVE_QUOTE_STATUSES.includes(quote.status);
-  const isPending = quote.status === 'PENDING';
-  const waitingOnProvider = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
-
-  const [counterDraft, setCounterDraft] = React.useState('');
-  const counterValue = Number(counterDraft);
-  const counterValid = Number.isFinite(counterValue) && counterValue > 0;
-
-  const metaParts = [
-    provider.location,
-    provider.rating != null && `★ ${Number(provider.rating).toFixed(1)}`,
-    provider.verificationStatus,
-  ].filter(Boolean);
-
-  return (
-    <li className="neg-quote-row">
-      <div className="neg-quote-main">
-        <div className="neg-quote-head">
-          <strong className="neg-quote-name">{provider.name || 'Provider'}</strong>
-          <span className="neg-quote-amount">
-            {Number.isFinite(amount) ? amount.toLocaleString() : '—'}{' '}
-            <small>ETB</small>
-          </span>
-          <span className="role-chip">{humanStatus(quote.status)}</span>
-        </div>
-
-        {metaParts.length > 0 && (
-          <p className="neg-quote-meta">{metaParts.join(' · ')}</p>
-        )}
-
-        {quote.message && (
-          <p className="neg-quote-message">"{quote.message}"</p>
-        )}
-
-        {waitingOnProvider && (
-          <p className="neg-quote-waiting">
-            You countered {Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB
-            {' — waiting for the provider to respond.'}
-          </p>
-        )}
-      </div>
-
-      {myTurn && (
-        <div className="neg-quote-actions">
-          {isPending && (
-            <button
-              type="button"
-              className="sd-btn sd-btn-primary"
-              disabled={anyBusy}
-              onClick={() => onRespond(quote, 'SELECT')}
-            >
-              {busy('SELECT') ? 'Selecting…' : 'Select for negotiation'}
-            </button>
-          )}
-
-          {!isPending && (
-            <>
-              <button
-                type="button"
-                className="sd-btn sd-btn-primary"
-                disabled={anyBusy}
-                onClick={() => onRespond(quote, 'ACCEPT')}
-              >
-                {busy('ACCEPT') ? 'Accepting…' : 'Accept deal'}
-              </button>
-
-              <button
-                type="button"
-                className="sd-btn sd-btn-outline"
-                disabled={anyBusy}
-                onClick={() => onRespond(quote, 'REJECT')}
-              >
-                {busy('REJECT') ? 'Rejecting…' : 'Reject'}
-              </button>
-
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                className="neg-counter-input"
-                placeholder="Counter ETB"
-                value={counterDraft}
-                disabled={anyBusy}
-                onChange={(e) => setCounterDraft(e.target.value)}
-              />
-
-              <button
-                type="button"
-                className="sd-btn sd-btn-outline"
-                disabled={!counterValid || anyBusy}
-                onClick={() => onRespond(quote, 'COUNTER', counterValue)}
-              >
-                {busy('COUNTER') ? 'Sending…' : 'Counter'}
-              </button>
-            </>
-          )}
-        </div>
-      )}
-    </li>
-  );
-}
-
-function PreviousQuoteRow({ quote }) {
-  const provider = providerOf(quote);
-  const amount = amountOf(quote);
-  const metaParts = [
-    provider.location,
-    provider.rating != null && `★ ${Number(provider.rating).toFixed(1)}`,
-  ].filter(Boolean);
-
-  return (
-    <li className="neg-quote-row neg-quote-row--muted">
-      <div className="neg-quote-main">
-        <div className="neg-quote-head">
-          <strong className="neg-quote-name">{provider.name || 'Provider'}</strong>
-          <span className="neg-quote-amount">
-            {Number.isFinite(amount) ? amount.toLocaleString() : '—'}{' '}
-            <small>ETB</small>
-          </span>
-          <span className="role-chip">{humanStatus(quote.status)}</span>
-        </div>
-        {metaParts.length > 0 && (
-          <p className="neg-quote-meta">{metaParts.join(' · ')}</p>
-        )}
-      </div>
-    </li>
-  );
-}
-
-// ============================================================================
-// NegotiationRow — bilateral card for listing offers + provider-side quotes
-// ============================================================================
-function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onRespond }) {
-  const amount       = item.amount;
-  const busy         = (action) => busyKey === `${item.id}:${action}`;
-  const anyBusy      = Boolean(busyKey) && busyKey.startsWith(`${item.id}:`);
-  const expired      = isExpired(item);
-  const counterValue = Number(counterDraft);
-  const counterValid = Number.isFinite(counterValue) && counterValue > 0;
-
-  let canAct        = false;
-  let acceptAction  = 'ACCEPT';
-  let counterAction = 'COUNTER';
-  let waitingMessage = null;
-
-  if (item.type === 'LISTING_OFFER') {
-    if (item.viewerRole === 'SELLER') {
-      if (item.status === 'PENDING') {
-        canAct = true;
-        acceptAction = 'SELECT';
-      } else {
-        canAct = item.status === 'SELECTED' || (item.status === 'COUNTERED' && item.counteredBy === 'BUYER');
-        if (!canAct && item.status === 'COUNTERED' && item.counteredBy === 'SELLER')
-          waitingMessage = 'You made the latest counter. Waiting for the buyer.';
-      }
-    } else {
-      acceptAction  = item.status === 'SELECTED' ? 'ACCEPT_SELECTED' : 'ACCEPT_COUNTER';
-      counterAction = 'RE_COUNTER';
-      canAct = item.status === 'SELECTED' || (item.status === 'COUNTERED' && item.counteredBy === 'SELLER');
-      if (!canAct && item.status === 'PENDING') waitingMessage = 'Your offer is competing with other buyer offers. Waiting for the seller to select a buyer.';
-      if (!canAct && item.status === 'COUNTERED' && item.counteredBy === 'BUYER')
-        waitingMessage = 'You made the latest counter. Waiting for the seller.';
-    }
-  } else {
-    const turn = quoteTurn(item);
-    canAct = turn === item.viewerRole && ['SELECTED', 'COUNTERED'].includes(item.status);
-    if (!canAct && turn) {
-      const other = item.viewerRole === 'PROVIDER'
-        ? (item.type === 'TRANSPORT_QUOTE' ? 'arranging party' : 'requester')
-        : (item.type === 'TRANSPORT_QUOTE' ? 'truck owner' : 'inspector');
-      waitingMessage = `Waiting for the ${other} to respond.`;
-    }
+  .neg-page .sd-tab {
+    flex: 0 0 auto;
+    padding: 8px 14px;
+    font-size: 12.5px;
   }
 
-  if (expired && ['PENDING', 'SELECTED', 'COUNTERED'].includes(item.status)) {
-    canAct = false;
-    waitingMessage = 'This quote has expired.';
-  }
+  .neg-page .neg-group { padding: 18px 18px 20px; }
+  .neg-page .neg-card { padding: 18px 18px 20px; }
 
-  const myTurn = canAct && !waitingMessage;
+  .neg-page .neg-group-head,
+  .neg-page .neg-card-head { column-gap: 12px; }
+  .neg-page .neg-group-head-side,
+  .neg-page .neg-card-head-side { max-width: 130px; }
 
-  return (
-    <article className={`neg-card${myTurn ? ' neg-card--my-turn' : ''}`}>
-      {myTurn && <span className="neg-turn-label" aria-label="Your turn">⚡ Your turn</span>}
+  .neg-page .neg-actions,
+  .neg-page .neg-quote-actions { flex-direction: column; align-items: stretch; }
 
-      <header className="neg-card-head">
-        <div className="neg-card-head-main">
-          <span className="neg-eyebrow">
-            {item.type === 'LISTING_OFFER' ? 'LISTING OFFER'
-              : item.type === 'TRANSPORT_QUOTE' ? 'TRANSPORT'
-              : 'INSPECTION'}
-          </span>
-          <h3 className="neg-title">{item.title}</h3>
-          <p className="neg-card-subtitle">{item.subtitle}</p>
-        </div>
-        <div className="neg-card-head-side">
-          <span className="neg-side-label">Current</span>
-          <span className="neg-side-value">
-            {Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB
-          </span>
-        </div>
-      </header>
-
-      <div className="neg-deal-status">
-        <span className="role-chip">{humanStatus(item.status)}</span>
-        {item.viewerRole && <span className="role-chip">You are the {item.viewerRole.toLowerCase()}</span>}
-      </div>
-
-      {item.message && <p className="neg-deal-context">{item.message}</p>}
-
-      {waitingMessage && <p className="neg-waiting">{waitingMessage}</p>}
-
-      {item.status === 'REJECTED' && (
-        <p className="neg-waiting">This negotiation was rejected.</p>
-      )}
-
-      {item.status === 'ACCEPTED' && (
-        <p className="neg-deal-context">
-          Provisional agreement at <strong>{Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB</strong>.
-        </p>
-      )}
-
-      {canAct && (
-        <div className="neg-actions">
-          <button
-            type="button"
-            className="sd-btn sd-btn-primary"
-            disabled={anyBusy}
-            onClick={() => onRespond(item, acceptAction)}
-          >
-            {busy(acceptAction)
-              ? (acceptAction === 'SELECT' ? 'Selecting…' : 'Accepting…')
-              : (acceptAction === 'SELECT' ? 'Select buyer for negotiation' : 'Accept provisional deal')}
-          </button>
-
-          {!(item.type === 'LISTING_OFFER' && item.viewerRole === 'BUYER') && (
-            <button
-              type="button"
-              className="sd-btn sd-btn-outline"
-              disabled={anyBusy}
-              onClick={() => onRespond(item, 'REJECT')}
-            >
-              {busy('REJECT') ? 'Rejecting…' : 'Reject'}
-            </button>
-          )}
-
-          <input
-            type="number"
-            min="0.01"
-            step="0.01"
-            className="neg-counter-input"
-            placeholder="Counter ETB"
-            value={counterDraft}
-            disabled={anyBusy}
-            onChange={(e) => onCounterDraftChange(e.target.value)}
-          />
-
-          <button
-            type="button"
-            className="sd-btn sd-btn-outline"
-            disabled={!counterValid || anyBusy}
-            onClick={() => onRespond(item, counterAction, counterValue)}
-          >
-            {busy(counterAction) ? 'Sending…' : 'Counter'}
-          </button>
-        </div>
-      )}
-
-      {item.linkTo && (
-        <footer className="neg-card-footer">
-          <Link className="btn btn-outline" to={item.linkTo}>Open listing →</Link>
-        </footer>
-      )}
-    </article>
-  );
+  .neg-page .neg-actions .sd-btn,
+  .neg-page .neg-actions .neg-counter-input,
+  .neg-page .neg-quote-actions .sd-btn,
+  .neg-page .neg-quote-actions .neg-counter-input { width: 100%; }
 }
 
-// ============================================================================
-// Main page
-// ============================================================================
-export default function Negotiations() {
-  const { user } = useAuth();
+@media (max-width: 420px) {
+  .neg-page h1 { font-size: 22px; }
+  .neg-page .neg-section-title { font-size: 16px; }
+  .neg-page .neg-group-title { font-size: 15px; }
+  .neg-page .neg-title { font-size: 15px; }
+  .neg-page .neg-quote-amount { font-size: 14px; }
+  .neg-page .sd-toast { bottom: 12px; padding: 10px 14px; font-size: 13px; }
+}
 
-  const [compGroups,    setCompGroups]    = useState([]);
-  const [items,         setItems]         = useState([]);
+@media (prefers-reduced-motion: reduce) {
+  .neg-page .sd-btn,
+  .neg-page .btn,
+  .neg-page .sd-tab,
+  .neg-page .neg-card,
+  .neg-page .neg-previous-summary { transition: none; }
 
-  const [loading,       setLoading]       = useState(true);
-  const [error,         setError]         = useState('');
-  const [filter,        setFilter]        = useState('active');
-  const [typeFilter,    setTypeFilter]    = useState('all');
-  const [busyKey,       setBusyKey]       = useState('');
-  const [counterDrafts, setCounterDrafts] = useState({});
-  const [toastMsg,      setToastMsg]      = useState('');
-
-  const toast = useCallback((msg) => {
-    setToastMsg(msg);
-    window.setTimeout(() => setToastMsg(''), 2500);
-  }, []);
-
-  // --------------------------------------------------------------------------
-  const loadAll = useCallback(async () => {
-    if (!user?.id) return;
-    setError('');
-    const roles     = user.roles || [];
-    const collected = [];
-    const groups    = [];
-
-    try {
-      // ---- 1. Listing offers ---------------------------------------------
-      const [mineRes, listingResults] = await Promise.all([
-        api.get('/offers/mine'),
-        Promise.all(
-          SELLER_LISTING_STATUSES.map((s) =>
-            api.get('/listings', { params: { sellerId: user.id, status: s } })
-          )
-        ),
-      ]);
-
-      const buyerOffers = (mineRes.data?.offers || []).map((o) => ({ ...o, viewerRole: 'BUYER' }));
-      const myListings  = listingResults.flatMap((r) => r.data?.listings || []);
-      const sellerOfferResults = await Promise.all(
-        myListings.map((l) => api.get(`/offers/listing/${l.id}`))
-      );
-      const sellerOffers = myListings.flatMap((l, i) =>
-        (sellerOfferResults[i].data?.offers || []).map((o) => ({ ...o, listing: l, viewerRole: 'SELLER' }))
-      );
-
-      leavesOnly([...buyerOffers, ...sellerOffers], 'parentOfferId').forEach((offer) => {
-        collected.push({
-          type:        'LISTING_OFFER',
-          id:          offer.id,
-          status:      offer.status,
-          counteredBy: offer.counteredBy,
-          amount:      amountOf(offer),
-          message:     offer.message,
-          viewerRole:  offer.viewerRole,
-          title:       offer.listing?.title || offer.listing?.cropType || 'Agricultural listing',
-          subtitle:    offer.viewerRole === 'SELLER'
-            ? 'Listing offer · you are the seller'
-            : 'Listing offer · you are the buyer',
-          linkTo:    offer.listingId ? `/listings/${offer.listingId}` : null,
-          expiresAt: offer.expiresAt,
-          raw:       offer,
-        });
-      });
-
-      // ---- 2. Transport & inspection, REQUESTER side ---------------------
-      const ordersRes = await api.get('/orders');
-      const orders    = ordersRes.data?.orders || [];
-
-      orders.forEach((order) => {
-        const job = order.transportJob;
-        if (job && job.method === 'HIRE_TRANSPORTER' && Array.isArray(job.quotes)) {
-          const isRequester =
-            (job.arrangingParty === 'SELLER' && order.sellerId === user.id) ||
-            (job.arrangingParty === 'BUYER'  && order.buyerId  === user.id) ||
-            (job.arrangingParty === 'JOINT'  &&
-              (order.buyerId === user.id || order.sellerId === user.id));
-
-          if (isRequester) {
-            const visible = job.quotes.filter((q) =>
-              ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'].includes(q.status)
-            );
-            if (visible.length > 0) {
-              groups.push({
-                key:       `transport:${job.id}`,
-                type:      'TRANSPORT_QUOTE',
-                jobId:     job.id,
-                requestId: null,
-                label:     `Transport — ${order.listing?.cropType || order.listing?.title || 'order'}`,
-                quotes:    visible,
-                orderLink: `/orders/${order.id}`,
-              });
-            }
-          }
-        }
-
-        (order.inspectionRequests || []).forEach((request) => {
-          if (request.requestedById !== user.id) return;
-          if (!Array.isArray(request.quotes))   return;
-
-          const visible = request.quotes.filter((q) =>
-            ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'].includes(q.status)
-          );
-          if (visible.length > 0) {
-            groups.push({
-              key:       `inspection:${request.id}`,
-              type:      'INSPECTION_QUOTE',
-              requestId: request.id,
-              jobId:     null,
-              label:     `Inspection — ${order.listing?.cropType || order.listing?.title || 'listing'}`,
-              quotes:    visible,
-              orderLink: `/orders/${order.id}`,
-            });
-          }
-        });
-      });
-
-      // ---- 3. Transport quotes, PROVIDER side ----------------------------
-      if (roles.includes('TRUCK_OWNER')) {
-        const openRes = await api.get('/transport/open');
-        (openRes.data?.jobs || []).forEach((job) => {
-          const myQuotes = leavesOnly(job.quotes || [], 'parentQuoteId').filter((q) =>
-            ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'].includes(q.status)
-          );
-          myQuotes.forEach((quote) => {
-            collected.push({
-              type:        'TRANSPORT_QUOTE',
-              id:          quote.id,
-              status:      quote.status,
-              counteredBy: quote.counteredBy,
-              amount:      amountOf(quote),
-              message:     quote.message,
-              viewerRole:  'PROVIDER',
-              title:       `Transport bid — order for ${job.order?.buyer?.name || job.order?.seller?.name || 'buyer'}`,
-              subtitle:    'You submitted this quote',
-              linkTo:      null,
-              expiresAt:   quote.expiresAt,
-              raw:         { quoteId: quote.id },
-            });
-          });
-        });
-      }
-
-      // ---- 4. Inspection quotes, PROVIDER side ---------------------------
-      if (roles.includes('INSPECTOR')) {
-        const availableRes = await api.get('/inspections/available');
-        (availableRes.data?.requests || []).forEach((request) => {
-          const myQuotes = leavesOnly(request.quotes || [], 'parentQuoteId').filter((q) =>
-            ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'].includes(q.status)
-          );
-          myQuotes.forEach((quote) => {
-            collected.push({
-              type:        'INSPECTION_QUOTE',
-              id:          quote.id,
-              status:      quote.status,
-              counteredBy: quote.counteredBy,
-              amount:      amountOf(quote),
-              message:     quote.message,
-              viewerRole:  'PROVIDER',
-              title:       `Inspection bid — ${request.listing?.cropType || request.listing?.title || 'listing'}`,
-              subtitle:    `Requested by ${request.requestedBy?.name || 'buyer'}`,
-              linkTo:      null,
-              expiresAt:   quote.expiresAt,
-              raw:         { requestId: request.id, quoteId: quote.id },
-            });
-          });
-        });
-      }
-
-      setItems(collected);
-      setCompGroups(groups);
-    } catch (err) {
-      setError(err?.response?.data?.error || 'Could not load negotiations');
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id, user?.roles]);
-
-  useEffect(() => { loadAll(); }, [loadAll]);
-
-  // ---- Respond: bilateral NegotiationRow ---------------------------------
-  const respond = useCallback(async (item, action, counterAmount) => {
-    const key = `${item.id}:${action}`;
-    setBusyKey(key);
-    try {
-      let response;
-      if (item.type === 'LISTING_OFFER') {
-        const payload = { action };
-        if (action === 'COUNTER' || action === 'RE_COUNTER') payload.counterAmount = Number(counterAmount);
-        response = await api.patch(`/offers/${item.raw.id}`, payload);
-      } else if (item.type === 'TRANSPORT_QUOTE') {
-        if (action === 'SELECT') {
-          response = await api.patch(`/transport/quotes/${item.raw.quoteId}/select`);
-        } else {
-          const payload = { action };
-          if (action === 'COUNTER') payload.counterAmount = Number(counterAmount);
-          response = await api.patch(`/transport/quotes/${item.raw.quoteId}`, payload);
-        }
-      } else if (item.type === 'INSPECTION_QUOTE') {
-        const { requestId, quoteId } = item.raw;
-        if      (action === 'SELECT')  response = await api.patch(`/inspections/${requestId}/quotes/${quoteId}/select`);
-        else if (action === 'ACCEPT')  response = await api.patch(`/inspections/${requestId}/quotes/${quoteId}/accept`);
-        else if (action === 'REJECT')  response = await api.patch(`/inspections/${requestId}/quotes/${quoteId}/reject`);
-        else if (action === 'COUNTER') response = await api.post(`/inspections/${requestId}/quotes/${quoteId}/counter`, { counterAmount: Number(counterAmount) });
-      }
-      toast(response?.data?.message || 'Updated.');
-      setCounterDrafts((prev) => ({ ...prev, [item.id]: '' }));
-      await loadAll();
-    } catch (err) {
-      toast(err?.response?.data?.error || 'Could not update this negotiation.');
-    } finally {
-      setBusyKey('');
-    }
-  }, [loadAll, toast]);
-
-  // ---- Respond: competition group (inline BidBoard actions) --------------
-  const respondBid = useCallback(async (group, quote, action, counterAmount) => {
-    const key = `bid:${quote.id}:${action}`;
-    setBusyKey(key);
-    try {
-      let response;
-      if (group.type === 'INSPECTION_QUOTE') {
-        const { requestId } = group;
-        if      (action === 'SELECT')  response = await api.patch(`/inspections/${requestId}/quotes/${quote.id}/select`);
-        else if (action === 'ACCEPT')  response = await api.patch(`/inspections/${requestId}/quotes/${quote.id}/accept`);
-        else if (action === 'REJECT')  response = await api.patch(`/inspections/${requestId}/quotes/${quote.id}/reject`);
-        else if (action === 'COUNTER') response = await api.post(`/inspections/${requestId}/quotes/${quote.id}/counter`, { counterAmount: Number(counterAmount) });
-      } else if (group.type === 'TRANSPORT_QUOTE') {
-        if (action === 'SELECT') {
-          response = await api.patch(`/transport/quotes/${quote.id}/select`);
-        } else {
-          const payload = { action };
-          if (action === 'COUNTER') payload.counterAmount = Number(counterAmount);
-          response = await api.patch(`/transport/quotes/${quote.id}`, payload);
-        }
-      }
-      toast(
-        response?.data?.message ||
-        (action === 'ACCEPT' ? '✓ Provider hired!'
-          : action === 'SELECT' ? 'Bid selected — negotiation opened.'
-          : 'Offer sent.')
-      );
-      await loadAll();
-    } catch (err) {
-      toast(err?.response?.data?.error || 'Could not update this bid.');
-    } finally {
-      setBusyKey('');
-    }
-  }, [loadAll, toast]);
-
-  // ---- Filters -----------------------------------------------------------
-  const visible = useMemo(() => {
-    let list = [...items].sort((a, b) =>
-      ['PENDING', 'SELECTED', 'COUNTERED'].includes(a.status) ? -1 : 1
-    );
-    if (filter === 'active') list = list.filter((i) => ['PENDING', 'SELECTED', 'COUNTERED'].includes(i.status));
-    if (typeFilter !== 'all') list = list.filter((i) => i.type === typeFilter);
-    return list;
-  }, [items, filter, typeFilter]);
-
-  const visibleGroups = compGroups.filter((g) =>
-    typeFilter === 'all' || g.type === typeFilter
-  );
-
-  const hasAnything = visibleGroups.length > 0 || visible.length > 0;
-
-  return (
-    <main className="section neg-page">
-      <div className="container-narrow">
-        <span className="eyebrow">NEGOTIATIONS</span>
-        <h1>Your negotiations</h1>
-        <p className="lead">
-          Agree on price and terms for listings, transport, and inspections — as either party.
-        </p>
-
-        <div className="sd-tabs" style={{ margin: '20px 0 8px' }}>
-          <button type="button" className={`sd-tab${filter === 'active' ? ' sd-active' : ''}`}
-            onClick={() => setFilter('active')}>Active</button>
-          <button type="button" className={`sd-tab${filter === 'all' ? ' sd-active' : ''}`}
-            onClick={() => setFilter('all')}>All</button>
-        </div>
-        <div className="sd-tabs" style={{ margin: '0 0 20px' }}>
-          {[
-            { id: 'all',              label: 'All types'       },
-            { id: 'LISTING_OFFER',    label: 'Listing offers'  },
-            { id: 'TRANSPORT_QUOTE',  label: 'Transport'       },
-            { id: 'INSPECTION_QUOTE', label: 'Inspection'      },
-          ].map(({ id, label }) => (
-            <button key={id} type="button"
-              className={`sd-tab${typeFilter === id ? ' sd-active' : ''}`}
-              onClick={() => setTypeFilter(id)}>{label}</button>
-          ))}
-        </div>
-
-        {error   && <div className="alert error">{error}</div>}
-        {loading && <p>Loading negotiations…</p>}
-
-        {!loading && (
-          <>
-            {visibleGroups.length > 0 && (
-              <section className="neg-section" aria-labelledby="comp-heading">
-                <h2 className="neg-section-title" id="comp-heading">
-                  Select a service provider
-                  <span className="neg-section-sub">
-                    Review every competing quote, select one provider for bilateral negotiation, then confirm payment when you are ready to commit.
-                  </span>
-                </h2>
-
-                {visibleGroups.map((group) => (
-                  <CompetitionGroup
-                    key={group.key}
-                    group={group}
-                    busyKey={busyKey}
-                    onRespond={(quote, action, amount) => respondBid(group, quote, action, amount)}
-                  />
-                ))}
-              </section>
-            )}
-
-            {visible.length > 0 && (
-              <section className="neg-section" aria-labelledby="bilat-heading">
-                {visibleGroups.length > 0 && (
-                  <h2 className="neg-section-title" id="bilat-heading">
-                    Active deals & negotiations
-                    <span className="neg-section-sub">
-                      Offers and counters are provisional. Payment is what commits the agreed transaction or service.
-                    </span>
-                  </h2>
-                )}
-                <div className="neg-deal-list">
-                  {visible.map((item) => (
-                    <NegotiationRow
-                      key={`${item.type}:${item.id}`}
-                      item={item}
-                      busyKey={busyKey}
-                      counterDraft={counterDrafts[item.id] || ''}
-                      onCounterDraftChange={(val) =>
-                        setCounterDrafts((prev) => ({ ...prev, [item.id]: val }))
-                      }
-                      onRespond={respond}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {!hasAnything && (
-              <div className="card notice">No negotiations here yet.</div>
-            )}
-          </>
-        )}
-
-        {toastMsg && <div className="sd-toast">{toastMsg}</div>}
-      </div>
-    </main>
-  );
+  .neg-page .sd-toast { animation: none; }
 }
