@@ -128,7 +128,11 @@ function Section({ title, meta, strong, children }) {
       {(title || meta) && (
         <div className="od-card-section-head">
           <h3 className="od-card-section-title">{title}</h3>
-          {meta != null && <span className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>{meta}</span>}
+          {meta != null && (
+            <div className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>
+              {meta}
+            </div>
+          )}
         </div>
       )}
       {children}
@@ -898,7 +902,6 @@ function TransportCard({ order, t }) {
         {job.truckOwner && (
           <Section
             title="Transporter"
-            // Put name and avatar directly in the meta prop, side-by-side
             meta={
               <>
                 <strong>{job.truckOwner.name || '—'}</strong>
@@ -907,7 +910,6 @@ function TransportCard({ order, t }) {
             }
             strong
           >
-            {/* Removed the name wrapper div from the body, pushing these lines up */}
             {job.truckOwner.phone && (
               <p className="muted">Phone: {job.truckOwner.phone}</p>
             )}
