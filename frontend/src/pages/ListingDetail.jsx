@@ -9,6 +9,10 @@ import './listing-detail/ListingDetail.css';
 
 const money = (n) => Number(n || 0).toLocaleString();
 
+/* First defined, non-empty value wins. Use for fields that may be
+   named slightly differently across listing kinds. */
+const pick = (...values) => values.find((v) => v != null && v !== '');
+
 /* ─────────────────────────────────────────────────────────
    Card head primitive — the same shape used across Orders,
    OrderDetail and the Digital Marketplace.
@@ -382,6 +386,18 @@ export default function ListingDetail() {
 
   const myOrder = (listing.orders || []).find((o) => o.buyerId === user?.id);
 
+  const categoryLabel = listing.cropType
+    ? listing.cropType
+    : listing.productType
+    ? String(listing.productType).replace(/_/g, ' ')
+    : isAgricultural
+    ? 'Agricultural produce'
+    : 'Physical product';
+
+  const minimumPrice = pick(listing.minimumPrice, listing.listingMinimumPrice);
+  const region = pick(listing.region, listing.listingRegion);
+  const totalBids = Array.isArray(listing.offers) ? listing.offers.length : 0;
+
   return (
     <main className="detail-page section">
       <div className="container-wide">
@@ -444,9 +460,8 @@ export default function ListingDetail() {
                 title={listing.title || listing.cropType}
                 subtitle={
                   <>
-                    {Number(listing.quantity).toLocaleString()} {listing.unit}
-                    {' · '}
-                    {listing.location}
+                    {Number(listing.quantity || 0).toLocaleString()} {listing.unit || 'units'}
+                    {listing.location ? ` · ${listing.location}` : ''}
                   </>
                 }
                 side={
@@ -465,11 +480,51 @@ export default function ListingDetail() {
                   : 'This listing is currently reserved / unavailable to new buyers.'}
               </p>
 
+              {listing.description && (
+                <div className="listing-description">{listing.description}</div>
+              )}
+
+              <SectionHead title="Listing details" />
+
               <div className="detail-facts">
                 <div>
                   <span>Asking price</span>
                   <strong>{money(listing.askingPrice)} ETB</strong>
                 </div>
+
+                {minimumPrice != null && (
+                  <div>
+                    <span>Minimum price</span>
+                    <strong>{money(minimumPrice)} ETB</strong>
+                  </div>
+                )}
+
+                <div>
+                  <span>Quantity</span>
+                  <strong>
+                    {Number(listing.quantity || 0).toLocaleString()} {listing.unit || 'units'}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Category</span>
+                  <strong>{categoryLabel}</strong>
+                </div>
+
+                {region && (
+                  <div>
+                    <span>Region</span>
+                    <strong>{region}</strong>
+                  </div>
+                )}
+
+                {listing.location && (
+                  <div>
+                    <span>Location</span>
+                    <strong>{listing.location}</strong>
+                  </div>
+                )}
+
                 <div>
                   <span>Ready</span>
                   <strong>
@@ -478,11 +533,34 @@ export default function ListingDetail() {
                       : 'To be agreed'}
                   </strong>
                 </div>
+
+                {listing.createdAt && (
+                  <div>
+                    <span>Published</span>
+                    <strong>{new Date(listing.createdAt).toLocaleDateString()}</strong>
+                  </div>
+                )}
+
                 <div>
                   <span>Seller</span>
                   <strong>{listing.seller?.name || '—'}</strong>
                 </div>
               </div>
+
+              {totalBids > 0 && (
+                <>
+                  <SectionHead
+                    title="Bids received"
+                    meta={`${totalBids} bid${totalBids === 1 ? '' : 's'}`}
+                    strong
+                  />
+                  <p className="muted">
+                    {isOwner
+                      ? 'Open the Seller controls card to review and respond to individual bids.'
+                      : 'Bids are sealed. The seller selects one buyer to open price negotiation.'}
+                  </p>
+                </>
+              )}
 
               {myOrder && (
                 <p className="detail-order-link">
@@ -1080,6 +1158,68 @@ export default function ListingDetail() {
                     )}
                   </>
                 )}
+              </div>
+            )}
+
+            {/* ── About the seller ──────────────────────────── */}
+            {listing.seller && (
+              <div className="card">
+                <CardHead
+                  eyebrow="SELLER"
+                  title={listing.seller.name || 'Seller'}
+                  side={
+                    listing.seller.rating != null ? (
+                      <>
+                        <span className="ld-card-side-label">Rating</span>
+                        <span className="ld-card-side-value">
+                          ★ {Number(listing.seller.rating).toFixed(1)}
+                        </span>
+                      </>
+                    ) : null
+                  }
+                />
+
+                <div className="detail-facts">
+                  {listing.seller.verificationStatus && (
+                    <div>
+                      <span>Verification</span>
+                      <strong>{String(listing.seller.verificationStatus).replace(/_/g, ' ')}</strong>
+                    </div>
+                  )}
+
+                  {listing.seller.location && (
+                    <div>
+                      <span>Based in</span>
+                      <strong>{listing.seller.location}</strong>
+                    </div>
+                  )}
+
+                  {listing.seller.createdAt && (
+                    <div>
+                      <span>Member since</span>
+                      <strong>
+                        {new Date(listing.seller.createdAt).toLocaleDateString(undefined, {
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </strong>
+                    </div>
+                  )}
+
+                  {listing.seller.listingCount != null && (
+                    <div>
+                      <span>Listings</span>
+                      <strong>{listing.seller.listingCount}</strong>
+                    </div>
+                  )}
+
+                  {listing.seller.phone && (
+                    <div>
+                      <span>Phone</span>
+                      <strong>{listing.seller.phone}</strong>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
