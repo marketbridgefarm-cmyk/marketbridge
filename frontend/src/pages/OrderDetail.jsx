@@ -533,15 +533,11 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
       eyebrow={role}
       eyebrowClass={isSeller ? 'is-selling' : ''}
       title={title}
-      side={<PartyBadge role={otherLabel} name={other?.name} />}
+      // 1. Changed side to only render the Avatar, moving it cleanly to the top right.
+      side={<Avatar name={other?.name} />}
     >
       <Section title="Order status" meta={`ORD ${shortId(order.id).toUpperCase()}`}>
-        <div className="od-status-row">
-          <Pill tone={statusTone(order.status)}>{label(order.status)}</Pill>
-          {marketplacePaid && <Pill tone="good" dot={false}>Payment: Paid</Pill>}
-          {marketplacePending && !marketplacePaid && <Pill tone="wait" dot={false}>Payment: Pending</Pill>}
-          {transportJob?.status && <Pill tone="neutral" dot={false}>Transport: {label(transportJob.status)}</Pill>}
-        </div>
+        {/* 2. Removed the od-status-row div with the text pills (COMPLETED, PAYMENT, TRANSPORT) */}
         <OrderProgress steps={steps} />
       </Section>
 
@@ -902,17 +898,21 @@ function TransportCard({ order, t }) {
         {job.truckOwner && (
           <Section
             title="Transporter"
-            meta={<Avatar name={job.truckOwner.name} />}
+            // Changed meta to include both the name and avatar side-by-side
+            meta={
+              <div className="od-person" style={{ margin: 0 }}>
+                <strong>{job.truckOwner.name || '—'}</strong>
+                <Avatar name={job.truckOwner.name} />
+              </div>
+            }
             strong
           >
-            <div className="od-person">
-              <strong>{job.truckOwner.name || '—'}</strong>
-            </div>
+            {/* Removed the separate name div here, pushing phone and truck up */}
             {job.truckOwner.phone && (
-              <p className="muted">Phone: {job.truckOwner.phone}</p>
+              <p className="muted" style={{ marginTop: 0 }}>Phone: {job.truckOwner.phone}</p>
             )}
             {job.truck && (
-              <p>
+              <p style={{ marginTop: 0 }}>
                 Truck: <strong>{job.truck.registration || '—'}</strong> ·{' '}
                 {job.truck.truckType || 'Truck'}
                 {job.truck.capacity != null && ` · ${job.truck.capacity}t`}
