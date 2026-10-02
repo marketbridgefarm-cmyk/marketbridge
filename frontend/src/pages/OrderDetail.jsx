@@ -694,13 +694,15 @@ function InspectionCard({ order, title, i }) {
 }
 
 /* ========================================================================
-   6. Transport — two cards
+   6. Transport — three cards
    ========================================================================
-   Card A (Logistics)    — the physical trip: route, transporter, evidence,
-                           delivery confirmation, incident notes.
-   Card B (Payment)      — quotes, fee due, pay/resume, confirmed, recovery.
-   Both use the standard Card / Section / Facts / Pill primitives so they
-   match every other card on the page. */
+   Card A (Logistics · Transport)          — the physical trip.
+   Card B (Evidence · Pickup & delivery)   — transporter uploads, gallery,
+                                             delivery confirmation, incident notes.
+   Card C (Payment · Transport payment)    — quotes, fee due, pay/resume,
+                                             confirmed, recovery.
+   All three use the standard Card / Section / Facts / Pill primitives so
+   they match every other card on the page. */
 
 function EvidenceForm({ kind, t }) {
   const isPickup = kind === 'PICKUP';
@@ -843,6 +845,11 @@ function TransportCard({ order, t }) {
     );
   }
 
+  const evidenceAvailable =
+    t.isTransporter && (job.status === 'PICKUP' || job.status === 'IN_TRANSIT');
+  const hasEvidenceContent =
+    evidenceAvailable || job.status === 'DELIVERED' || job.incidentNotes;
+
   return (
     <>
       {/* ── Card A — Logistics: the physical trip ──────────── */}
@@ -850,7 +857,7 @@ function TransportCard({ order, t }) {
         id="transport-section"
         eyebrow="Logistics"
         title="Transport"
-        subtitle="The physical trip — who drives, where from, where to, and handover evidence."
+        subtitle="The physical trip — who drives, where from, and where to."
         side={
           job?.status && (
             <SideLabel name="Status">
@@ -890,37 +897,57 @@ function TransportCard({ order, t }) {
             )}
           </Section>
         )}
-
-        <Section title="Pickup and delivery evidence">
-          <p className="muted">
-            The transporter must upload pickup evidence before moving the trip from Pickup to In transit, and delivery
-            evidence before marking it Delivered.
-          </p>
-          {t.isTransporter && job.status === 'PICKUP' && <EvidenceForm kind="PICKUP" t={t} />}
-          {t.isTransporter && job.status === 'IN_TRANSIT' && <EvidenceForm kind="DELIVERY" t={t} />}
-          <EvidenceGallery
-            listUrl={`/transport/${job.id}/evidence`}
-            mediaUrl={(evidenceId) => `/transport/${job.id}/evidence/${evidenceId}/media`}
-          />
-        </Section>
-
-        {job.status === 'DELIVERED' && (
-          <Section title="Delivery">
-            <p><strong>✓ Transport marked as delivered.</strong></p>
-            {job.deliveredConfirmedAt && (
-              <p className="muted">Delivery confirmed.</p>
-            )}
-          </Section>
-        )}
-
-        {job.incidentNotes && (
-          <div className="alert">
-            <strong>Transport notes:</strong> {job.incidentNotes}
-          </div>
-        )}
       </Card>
 
-      {/* ── Card B — Transport payment ─────────────────────── */}
+      {/* ── Card B — Pickup and delivery evidence ──────────── */}
+      {hasEvidenceContent && (
+        <Card
+          id="transport-evidence-section"
+          eyebrow="Evidence"
+          title="Pickup & delivery evidence"
+          subtitle="Photos, videos and handover notes uploaded by the transporter at pickup and delivery."
+          side={
+            job.status === 'DELIVERED' ? (
+              <SideLabel name="Delivery">
+                <Pill tone="good">Delivered</Pill>
+              </SideLabel>
+            ) : null
+          }
+        >
+          <Section title="Evidence requirements">
+            <p className="muted">
+              The transporter must upload pickup evidence before moving the trip from Pickup to In transit, and delivery
+              evidence before marking it Delivered.
+            </p>
+            {t.isTransporter && job.status === 'PICKUP' && <EvidenceForm kind="PICKUP" t={t} />}
+            {t.isTransporter && job.status === 'IN_TRANSIT' && <EvidenceForm kind="DELIVERY" t={t} />}
+          </Section>
+
+          <Section title="Evidence gallery">
+            <EvidenceGallery
+              listUrl={`/transport/${job.id}/evidence`}
+              mediaUrl={(evidenceId) => `/transport/${job.id}/evidence/${evidenceId}/media`}
+            />
+          </Section>
+
+          {job.status === 'DELIVERED' && (
+            <Section title="Delivery">
+              <p><strong>✓ Transport marked as delivered.</strong></p>
+              {job.deliveredConfirmedAt && (
+                <p className="muted">Delivery confirmed.</p>
+              )}
+            </Section>
+          )}
+
+          {job.incidentNotes && (
+            <div className="alert">
+              <strong>Transport notes:</strong> {job.incidentNotes}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* ── Card C — Transport payment ─────────────────────── */}
       <Card
         id="transport-payment-section"
         eyebrow="Payment"
@@ -1045,7 +1072,7 @@ function TransportCard({ order, t }) {
                     (r) => r.type === 'TRANSPORT' && r.status === 'PENDING'
                   )
                 }
-                busy={t.busy === 'recovery-TRANSPORT'}
+                busy={t.busy === 'recovery-transport'}
                 busyText="Requesting…"
                 onClick={t.requestRecovery}
               >
@@ -1756,8 +1783,8 @@ export default function OrderDetail() {
   /* ====================================================================
      Layout — top to bottom, the order a person works through an order:
      summary → what to do next → offer → inspection → transport (trip) →
-     transport (payment) → payments → receipt → payouts/refunds →
-     history → dispute → rating → messages
+     transport (evidence) → transport (payment) → payments → receipt →
+     payouts/refunds → history → dispute → rating → messages
      ==================================================================== */
   return (
     <main className="section order-detail-page">
@@ -1808,7 +1835,7 @@ export default function OrderDetail() {
           <InspectionCard order={order} title={title} i={inspectionProps} />
         )}
 
-        {/* Transport — Logistics card + Transport payment card */}
+        {/* Transport — three cards: Logistics · Evidence · Payment */}
         <TransportCard order={order} t={transportProps} />
 
         {/* Payments */}
