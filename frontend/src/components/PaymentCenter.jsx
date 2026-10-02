@@ -1,27 +1,505 @@
 import React, { useState } from 'react';
-import './PaymentCenter.css';   // ← add this line
 
 // ============================================================================
 // PAYMENT CENTER
 // ============================================================================
 // Single source of truth for "what does this order still owe, and how do I
-// pay it" — replaces three previously-separate renderings on OrderDetail.jsx
-// (the workflow-driven summary card, the buyer's interactive payment
-// actions, and a flat "payment records" ledger at the bottom of the page)
-// with one card: a status/action row per obligation (goods, each fee-bearing
-// inspection, hired transport), plus an optional expandable ledger of the
-// underlying payment attempts.
+// pay it". Presentational only — every gating decision is computed in
+// OrderDetail.jsx; this file renders the result and wires up the handlers.
 //
-// This component is presentational only. Every gating decision (who can pay,
-// when, how much) is still computed in OrderDetail.jsx from the same order/
-// workflow data the backend uses to enforce the equivalent rule server-side
-// — this file just renders the result and wires up the provided handlers.
+// Styles are inlined below as a <style> block so this component is
+// self-contained and doesn't depend on PaymentCenter.css.
 // ============================================================================
 
 const money = (value) =>
   value == null
     ? '—'
     : Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+const PAYMENT_CENTER_CSS = `
+  .payment-center {
+    --pc-accent:      #1e9e5a;
+    --pc-accent-2:    #0f7a44;
+    --pc-accent-ink:  #12734a;
+    --pc-accent-soft: #ecfdf3;
+    --pc-accent-line: #c6eccf;
+
+    --pc-ink:         #0d1b2a;
+    --pc-ink-soft:    #2c3a4a;
+    --pc-muted:       #64748b;
+    --pc-muted-2:     #94a3b8;
+
+    --pc-line:        #e5e9ef;
+    --pc-line-soft:   #eef1f5;
+
+    --pc-gold:        #a86f10;
+    --pc-gold-soft:   #fdf6e7;
+    --pc-gold-line:   #f4e0b6;
+
+    --pc-danger:      #b42318;
+    --pc-danger-soft: #fef2f2;
+    --pc-danger-line: #fecaca;
+
+    --pc-info:        #1e5fa8;
+    --pc-info-soft:   #eff5fd;
+    --pc-info-line:   #cddff5;
+
+    --pc-ring:        0 0 0 3px rgba(30, 158, 90, .18);
+    --pc-ease:        cubic-bezier(.2, .7, .3, 1);
+  }
+
+  .payment-center .pc-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    column-gap: 16px;
+    padding: 0 0 16px;
+    margin: 0 0 18px;
+    border-bottom: 1px solid var(--pc-line);
+  }
+
+  .payment-center .pc-head-main {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .payment-center .pc-head-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    min-width: 0;
+    max-width: 180px;
+    text-align: right;
+  }
+
+  .payment-center .pc-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--pc-accent-ink);
+    font: 700 11px/1 var(--mb-font-body, 'DM Sans', system-ui, sans-serif);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+
+  .payment-center .pc-eyebrow::before {
+    content: '';
+    flex: 0 0 18px;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+  }
+
+  .payment-center .pc-title {
+    margin: 0;
+    font-family: var(--mb-font-head, Manrope, sans-serif);
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: -.4px;
+    line-height: 1.22;
+    color: var(--pc-ink);
+    overflow-wrap: anywhere;
+  }
+
+  .payment-center .pc-side-label {
+    font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', system-ui, sans-serif);
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--pc-accent-2);
+  }
+
+  .payment-center .pc-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: var(--pc-line-soft);
+    color: var(--pc-ink-soft);
+    font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', system-ui, sans-serif);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+
+  .payment-center .pc-chip--good {
+    background: var(--pc-accent-soft);
+    border-color: var(--pc-accent-line);
+    color: var(--pc-accent-ink);
+  }
+
+  .payment-center .pc-chip--wait {
+    background: var(--pc-gold-soft);
+    border-color: var(--pc-gold-line);
+    color: var(--pc-gold);
+  }
+
+  .payment-center .pc-chip--bad {
+    background: var(--pc-danger-soft);
+    border-color: var(--pc-danger-line);
+    color: var(--pc-danger);
+  }
+
+  .payment-center .pc-chip--neutral {
+    background: var(--pc-line-soft);
+    border-color: var(--pc-line);
+    color: var(--pc-muted);
+  }
+
+  .payment-center .pc-rows {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+  }
+
+  .payment-center .pc-row {
+    padding: 16px 0;
+    margin: 0;
+    border-bottom: 1px solid var(--pc-line-soft);
+    background: transparent;
+  }
+
+  .payment-center .pc-row:last-child { border-bottom: none; }
+
+  .payment-center .pc-row-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .payment-center .pc-row-head-main {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .payment-center .pc-row-title {
+    font-family: var(--mb-font-head, Manrope, sans-serif);
+    font-size: 14.5px;
+    font-weight: 800;
+    letter-spacing: -.15px;
+    line-height: 1.3;
+    color: var(--pc-ink);
+    overflow-wrap: anywhere;
+  }
+
+  .payment-center .pc-row-sub {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--pc-muted);
+  }
+
+  .payment-center .pc-row-note {
+    margin: 8px 0 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--pc-muted);
+  }
+
+  .payment-center .pc-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 12px 0 0;
+  }
+
+  .payment-center .pc-installments {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 12px 0 0;
+    border-top: 1px solid var(--pc-line-soft);
+  }
+
+  .payment-center .pc-installment {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--pc-line-soft);
+  }
+
+  .payment-center .pc-installment:last-child { border-bottom: none; }
+
+  .payment-center .pc-installment-info {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .payment-center .pc-installment-info strong {
+    font-family: var(--mb-font-body, 'DM Sans', sans-serif);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--pc-ink);
+    letter-spacing: -.05em;
+  }
+
+  .payment-center .pc-installment-amount {
+    font-family: var(--mb-font-head, Manrope, sans-serif);
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--pc-ink);
+    letter-spacing: -.15px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .payment-center .pc-alert {
+    padding: 12px 0 12px 14px;
+    margin: 12px 0;
+    border: none;
+    border-left: 3px solid var(--pc-accent-line);
+    background: transparent;
+    color: var(--pc-ink-soft);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .payment-center .pc-alert p {
+    margin: 6px 0 0;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--pc-ink-soft);
+  }
+
+  .payment-center .pc-alert strong {
+    display: block;
+    font-weight: 800;
+    color: var(--pc-ink);
+  }
+
+  .payment-center .pc-alert--info { border-left-color: var(--pc-info); }
+  .payment-center .pc-alert--error {
+    border-left-color: var(--pc-danger);
+    color: var(--pc-danger);
+  }
+  .payment-center .pc-alert--error strong { color: var(--pc-danger); }
+
+  .payment-center .pc-field {
+    display: block;
+    min-width: 180px;
+    max-width: 240px;
+    height: 40px;
+    padding: 0 34px 0 14px;
+    border: 1px solid var(--pc-line);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--pc-ink);
+    font: inherit;
+    font-size: 13.5px;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    transition: border-color .18s var(--pc-ease), box-shadow .18s var(--pc-ease);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none'><path d='M1 1l5 5 5-5' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 10px 7px;
+  }
+
+  .payment-center .pc-field:focus {
+    outline: none;
+    border-color: var(--pc-accent);
+    box-shadow: var(--pc-ring);
+  }
+
+  .payment-center .pc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 38px;
+    padding: 0 16px;
+    border-radius: 10px;
+    border: 1px solid var(--pc-line);
+    background: #fff;
+    color: var(--pc-ink);
+    font: 700 13px/1 var(--mb-font-body, 'DM Sans', system-ui, sans-serif);
+    letter-spacing: .01em;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color .15s var(--pc-ease),
+                background .15s var(--pc-ease),
+                color .15s var(--pc-ease),
+                box-shadow .15s var(--pc-ease);
+  }
+
+  .payment-center .pc-btn:hover:not(:disabled) {
+    border-color: var(--pc-accent);
+    background: var(--pc-accent-soft);
+    color: var(--pc-accent-2);
+  }
+
+  .payment-center .pc-btn:focus-visible { outline: none; box-shadow: var(--pc-ring); }
+  .payment-center .pc-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+  .payment-center .pc-btn--primary {
+    background: #fff;
+    color: var(--pc-accent-2);
+    border-color: var(--pc-accent-line);
+  }
+
+  .payment-center .pc-btn--primary:hover:not(:disabled) {
+    background: var(--pc-accent-soft);
+    color: var(--pc-accent-ink);
+    border-color: var(--pc-accent);
+    box-shadow: 0 1px 2px rgba(30, 158, 90, .12);
+  }
+
+  .payment-center .pc-btn--outline {
+    background: #fff;
+    color: var(--pc-accent-2);
+    border-color: var(--pc-line);
+  }
+
+  .payment-center .pc-btn--outline:hover:not(:disabled) {
+    background: var(--pc-accent-soft);
+    color: var(--pc-accent-ink);
+    border-color: var(--pc-accent);
+  }
+
+  .payment-center .pc-own-truck,
+  .payment-center .pc-not-buyer {
+    margin: 4px 0 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--pc-muted);
+  }
+
+  .payment-center .pc-history {
+    margin: 18px 0 0;
+    padding: 16px 0 0;
+    border-top: 1px solid var(--pc-line);
+  }
+
+  .payment-center .pc-history-list {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .payment-center .pc-history-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--pc-line-soft);
+  }
+
+  .payment-center .pc-history-row:last-child { border-bottom: none; }
+
+  .payment-center .pc-history-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .payment-center .pc-history-type {
+    font-family: var(--mb-font-head, Manrope, sans-serif);
+    font-size: 13.5px;
+    font-weight: 800;
+    letter-spacing: -.1px;
+    color: var(--pc-ink);
+    text-transform: capitalize;
+  }
+
+  .payment-center .pc-history-meta {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--pc-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .payment-center .pc-history-side {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+  }
+
+  .payment-center .pc-history-amount {
+    font-family: var(--mb-font-head, Manrope, sans-serif);
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: -.15px;
+    color: var(--pc-ink);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .payment-center .pc-notice {
+    margin: 18px 0 0;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--pc-line);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--pc-ink-soft);
+  }
+
+  .payment-center .pc-notice-prefix {
+    font-family: var(--mb-font-head, Manrope, sans-serif);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--pc-accent-2);
+    margin-right: 4px;
+  }
+
+  @media (max-width: 719px) {
+    .payment-center .pc-head { column-gap: 12px; }
+    .payment-center .pc-head-side { max-width: 140px; }
+    .payment-center .pc-title { font-size: 17px; }
+    .payment-center .pc-row { padding: 14px 0; }
+    .payment-center .pc-row-actions,
+    .payment-center .pc-history { width: 100%; }
+    .payment-center .pc-row-actions .pc-btn,
+    .payment-center .pc-row-actions .pc-field,
+    .payment-center .pc-history .pc-btn { width: 100%; max-width: none; }
+    .payment-center .pc-installment {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
+    .payment-center .pc-installment .pc-btn { width: 100%; }
+  }
+
+  @media (max-width: 420px) {
+    .payment-center .pc-title { font-size: 16px; }
+    .payment-center .pc-chip { font-size: 10px; padding: 0 8px; }
+    .payment-center .pc-history-row { padding: 10px 0; }
+    .payment-center .pc-history-type { font-size: 12.5px; }
+    .payment-center .pc-history-amount { font-size: 13px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .payment-center .pc-btn,
+    .payment-center .pc-field { transition: none; }
+  }
+`;
 
 function StatusBadge({ paid, pending, processing }) {
   const label = paid ? 'PAID' : processing ? 'PROCESSING' : pending ? 'PENDING' : 'NOT PAID';
@@ -76,27 +554,18 @@ function PaymentMethodPicker({ methods, value, onChange, disabled }) {
 }
 
 export default function PaymentCenter({
-  // Workflow-derived summary (GET /orders/:id/workflow) — used only for the
-  // "N outstanding" header count so it always matches the backend's own
-  // accounting of what's required.
   workflowPayments,
-
-  // Raw payment attempts (order.payments) — used for the expandable history
-  // ledger only.
   rawPayments = [],
-
   isBuyer,
   buyerIdentityMismatch,
   marketplaceBlockedReason,
-
   payMethod,
   setPayMethod,
   paymentMethods,
   busy,
-
-  marketplace, // { amount, paid, pending, canPay, canResume, canCheck, onPay, onResume, onCheck }
-  inspections, // [{ id, label, amount, paid, pending, processing, note, canPay, canResume, canCheck, onPay, onResume, onCheck }]
-  transport, // null, or { required, amount, paid, pending, processing, note, canStart, canResume, canCheck, onStart, onResume, onCheck }
+  marketplace,
+  inspections,
+  transport,
 }) {
   const [showHistory, setShowHistory] = useState(false);
 
@@ -120,6 +589,8 @@ export default function PaymentCenter({
       className="card payment-center payment-action-center mb-payment-center"
       id="payment-center"
     >
+      <style>{PAYMENT_CENTER_CSS}</style>
+
       <header className="pc-head">
         <div className="pc-head-main">
           <span className="pc-eyebrow">PAYMENT CENTER</span>
@@ -405,20 +876,19 @@ export default function PaymentCenter({
         )}
 
         {transport && !transport.required && (
-          <p className="pc-row-sub pc-own-truck">
+          <p className="pc-own-truck">
             Own-truck transport — no separate transport payment required.
           </p>
         )}
 
         {!isBuyer && (
-          <p className="pc-row-sub pc-not-buyer">
+          <p className="pc-not-buyer">
             Only the buyer can make these payments. The statuses above stay up to date for
             everyone on the order.
           </p>
         )}
       </div>
 
-      {/* ── Payment history ────────────────────────────────── */}
       {rawPayments.length > 0 && (
         <div className="pc-history">
           <button
@@ -461,7 +931,6 @@ export default function PaymentCenter({
         </div>
       )}
 
-      {/* ── Notice ─────────────────────────────────────────── */}
       <div className="pc-notice">
         <strong className="pc-notice-prefix">Notice:</strong>{' '}
         Payments are separate. The buyer pays the seller, any required inspector, and a
