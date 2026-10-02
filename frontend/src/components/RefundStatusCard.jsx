@@ -19,7 +19,8 @@ import React from 'react';
 //
 // Visual note: the card head, the 4-step track, and the reason footnote are
 // inline-styled so the card renders flat and correctly even when only the
-// page-level stylesheet is loaded.
+// page-level stylesheet is loaded. OrderDetail.css adds the per-card accent
+// colour and the accent bar under the header (see section 17).
 // ============================================================================
 
 const ROLE_ORDER = { SELLER: 0, INSPECTOR: 1, TRANSPORTER: 2 };
@@ -34,6 +35,9 @@ const statusBadge = (status) => {
     default:           return { label: String(status || '').replace(/_/g, ' '), tone: 'neutral' };
   }
 };
+
+const initials = (name) =>
+  String(name || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
 
 const shortDate = (value) => {
   if (!value) return null;
@@ -409,11 +413,16 @@ export default function RefundStatusCard({
                   <th scope="row" className="payout-party">
                     <div className="payout-party-body">
                       <span className="payout-party-line">
+                        {person.name && (
+                          <span className="od-party-avatar od-party-avatar--sm" aria-hidden="true">
+                            {initials(person.name)}
+                          </span>
+                        )}
                         <span className="payout-party-role">
                           {ROLE_LABEL[refund.payeeRole] || 'Payment'}
                         </span>
                         {person.name && <span className="payout-party-name">({person.name})</span>}
-                        {person.you && <span className="party-you">You</span>}
+                        {person.you && <span className="od-party-you">You</span>}
                       </span>
 
                       {refund.status === 'COMPLETED' && refund.completedAt ? (
