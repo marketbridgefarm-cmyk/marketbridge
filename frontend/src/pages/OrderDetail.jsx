@@ -126,6 +126,13 @@ function Section({ title, meta, strong, children }) {
   );
 }
 
+/* Round initials avatar. `small` = compact version for tables and lists. */
+const Avatar = ({ name, small }) => (
+  <span className={`od-party-avatar${small ? ' od-party-avatar--sm' : ''}`} aria-hidden="true">
+    {initials(name)}
+  </span>
+);
+
 function PartyBadge({ role, name }) {
   return (
     <div className="od-card-side-party">
@@ -133,7 +140,7 @@ function PartyBadge({ role, name }) {
         <span className="od-card-side-label">{role}</span>
         <span className="od-card-side-value">{name || '—'}</span>
       </div>
-      <span className="od-party-avatar" aria-hidden="true">{initials(name)}</span>
+      <Avatar name={name} />
     </div>
   );
 }
@@ -375,6 +382,7 @@ function PayoutStatusCard({ payouts, names, you }) {
                   <th scope="row" className="payout-party">
                     <div className="payout-party-body">
                       <span className="payout-party-line">
+                        {name && <Avatar small name={name} />}
                         <span className="payout-party-role">{party.label}</span>
                         {name && <span className="payout-party-name">{name}</span>}
                         {party.you && <YouTag />}
@@ -593,14 +601,14 @@ function InspectionCard({ order, title, i }) {
   const inspectionDate =
     report?.inspectedAt || report?.completedAt || request.completedAt || request.updatedAt || request.createdAt || null;
 
-  const side =
-    reportReady && inspectorName ? (
-      <PartyBadge role="Inspector" name={inspectorName} />
-    ) : (
-      <SideLabel name="Status">
-        <Pill tone={statusTone(request.status)}>{label(request.status)}</Pill>
-      </SideLabel>
-    );
+  /* Show the inspector avatar as soon as one is assigned, not only after the report. */
+  const side = inspectorName ? (
+    <PartyBadge role="Inspector" name={inspectorName} />
+  ) : (
+    <SideLabel name="Status">
+      <Pill tone={statusTone(request.status)}>{label(request.status)}</Pill>
+    </SideLabel>
+  );
 
   return (
     <Card
@@ -620,6 +628,7 @@ function InspectionCard({ order, title, i }) {
           {reportReady && <Fact name="Inspection date">{formatDateTime(inspectionDate)}</Fact>}
           {inspectorName && <Fact name="Inspected by">{inspectorName}</Fact>}
           {request.fee != null && <Fact name="Inspection fee">{money(request.fee)} ETB</Fact>}
+          {!inspectorName && <Fact name="Status">{label(request.status)}</Fact>}
         </Facts>
       </Section>
 
@@ -752,11 +761,15 @@ function QuoteRow({ quote, t }) {
   const transporterTurn = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
   const canRespond = (t.canChooseQuote && arrangerTurn) || (isOwner && transporterTurn);
   const rating = typeof quote.truckOwner?.rating === 'number' ? quote.truckOwner.rating.toFixed(1) : '—';
+  const ownerName = quote.truckOwner?.name || 'Truck owner';
 
   return (
     <div className="transporter">
       <div>
-        <strong>{quote.truckOwner?.name || 'Truck owner'}</strong>
+        <div className="od-person">
+          <Avatar small name={ownerName} />
+          <strong>{ownerName}</strong>
+        </div>
         <p>
           {quote.truck?.truckType || 'Truck'} · {quote.truck?.capacity != null ? `${quote.truck.capacity}t` : 'Capacity —'} ·{' '}
           {quote.truck?.registration || 'Registration —'} · ★ {rating}
@@ -882,7 +895,10 @@ function TransportCard({ order, t }) {
             meta={job.agreedAmount != null ? `${money(job.agreedAmount)} ETB` : null}
             strong
           >
-            <p><strong>{job.truckOwner.name || '—'}</strong></p>
+            <div className="od-person">
+              <Avatar name={job.truckOwner.name} />
+              <strong>{job.truckOwner.name || '—'}</strong>
+            </div>
             {job.truckOwner.phone && (
               <p className="muted">Phone: {job.truckOwner.phone}</p>
             )}
