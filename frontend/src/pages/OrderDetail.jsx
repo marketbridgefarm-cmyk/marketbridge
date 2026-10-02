@@ -694,15 +694,13 @@ function InspectionCard({ order, title, i }) {
 }
 
 /* ========================================================================
-   6. Transport — three cards
+   6. Transport — three cards, laid out responsively
    ========================================================================
-   Card A (Logistics · Transport)          — the physical trip.
-   Card B (Evidence · Pickup & delivery)   — transporter uploads, gallery,
-                                             delivery confirmation, incident notes.
-   Card C (Payment · Transport payment)    — quotes, fee due, pay/resume,
-                                             confirmed, recovery.
-   All three use the standard Card / Section / Facts / Pill primitives so
-   they match every other card on the page. */
+   · Phone (default)      → one card per row
+   · Tablet (≥640px)      → two cards per row
+   · Desktop (≥1000px)    → three cards per row
+   The grid class (.od-card-grid) does the layout; the cards themselves
+   keep the same shape as every other card on the page. */
 
 function EvidenceForm({ kind, t }) {
   const isPickup = kind === 'PICKUP';
@@ -820,7 +818,7 @@ function TransportCard({ order, t }) {
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
 
-  /* ── No job yet: single setup card ─────────────────────── */
+  /* ── No job yet: single setup card, full width ─────────── */
   if (!job) {
     return (
       <Card
@@ -851,7 +849,7 @@ function TransportCard({ order, t }) {
     evidenceAvailable || job.status === 'DELIVERED' || job.incidentNotes;
 
   return (
-    <>
+    <div className="od-card-grid">
       {/* ── Card A — Logistics: the physical trip ──────────── */}
       <Card
         id="transport-section"
@@ -1081,7 +1079,7 @@ function TransportCard({ order, t }) {
             </Section>
           )}
       </Card>
-    </>
+    </div>
   );
 }
 
@@ -1782,9 +1780,9 @@ export default function OrderDetail() {
 
   /* ====================================================================
      Layout — top to bottom, the order a person works through an order:
-     summary → what to do next → offer → inspection → transport (trip) →
-     transport (evidence) → transport (payment) → payments → receipt →
-     payouts/refunds → history → dispute → rating → messages
+     summary → what to do next → offer → inspection → transport grid →
+     payments → receipt → payouts/refunds → history → dispute → rating →
+     messages
      ==================================================================== */
   return (
     <main className="section order-detail-page">
@@ -1835,7 +1833,7 @@ export default function OrderDetail() {
           <InspectionCard order={order} title={title} i={inspectionProps} />
         )}
 
-        {/* Transport — three cards: Logistics · Evidence · Payment */}
+        {/* Transport — three cards laid out responsively via .od-card-grid */}
         <TransportCard order={order} t={transportProps} />
 
         {/* Payments */}
