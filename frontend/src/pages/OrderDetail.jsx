@@ -247,17 +247,11 @@ function PayoutStatusCard({ payouts, names, you }) {
   return (
     <Card
       id="order-payout-status"
-      eyebrow="Payouts"
-      title="Order payout status"
-      subtitle="Each payout is held for 3 days after its payment settles."
-      side={dueDate && <SideLabel name="Common due"><span className="od-card-side-value">{dueDate}</span></SideLabel>}
+      eyebrow="Order Payout"
+      title="After Buyer Paid"
+      side={dueDate && <SideLabel name="Due Date"><span className="od-card-side-value">{dueDate}</span></SideLabel>}
     >
-      <p className="muted">
-        Buyer payment is separate from each payout below.{' '}
-        {anyDispute ? 'One or more payouts are frozen while a dispute is open.' : 'No manual action is required.'}
-      </p>
-
-      <Section title="Parties" meta="Amount (ETB)">
+      <Section title="Order Payout Status">
         <table className="payout-table">
           <thead>
             <tr>
@@ -286,7 +280,9 @@ function PayoutStatusCard({ payouts, names, you }) {
                       {status === 'PAID_OUT' && payout?.paidOutAt && (
                         <span className="payout-party-note">Paid out {formatDateTime(payout.paidOutAt)}</span>
                       )}
-                      {payout?.payoutReference && <span className="payout-party-note">Ref {payout.payoutReference}</span>}
+                      {payout?.payoutReference && (
+                        <span className="payout-party-note">Ref {payout.payoutReference}</span>
+                      )}
                     </div>
                   </th>
                   <td className="payout-amount">
@@ -310,10 +306,16 @@ function PayoutStatusCard({ payouts, names, you }) {
       </Section>
 
       {dueMs !== null && (
-        <div className={`payout-due${duePassed ? ' payout-due-done' : ''}`} role="group" aria-label="Common due">
+        <div
+          className={`payout-due${duePassed ? ' payout-due-done' : ''}`}
+          role="group"
+          aria-label="Due date"
+        >
           <div className="payout-due-when">
-            <span className="payout-due-label">Common due</span>
-            <time className="payout-due-date" dateTime={new Date(dueMs).toISOString()}>{dueDate}</time>
+            <span className="payout-due-label">Due Date</span>
+            <time className="payout-due-date" dateTime={new Date(dueMs).toISOString()}>
+              {dueDate}
+            </time>
           </div>
           <div className="payout-due-clock" role="timer" aria-live="off">
             {duePassed ? (
@@ -329,13 +331,28 @@ function PayoutStatusCard({ payouts, names, you }) {
       )}
 
       {dueMs === null && holdNotStarted && (
-        <div className="payout-due payout-due-idle" role="group" aria-label="Common due">
+        <div className="payout-due payout-due-idle" role="group" aria-label="Due date">
           <div className="payout-due-when">
-            <span className="payout-due-label">Common due</span>
+            <span className="payout-due-label">Due Date</span>
             <span className="payout-due-date">Starts after payment settles</span>
           </div>
         </div>
       )}
+
+      {anyDispute && (
+        <p className="payout-dispute-note">
+          One or more payouts are frozen while a dispute is open.
+        </p>
+      )}
+
+      <div className="od-notice od-notice--footer">
+        <span className="od-notice-prefix">Notice:</span>
+        <ol className="od-notice-list">
+          <li>Each payout is held for 3 days after its payment settles.</li>
+          <li>Buyer payment is separate from each payout below.</li>
+          <li>No manual action is required.</li>
+        </ol>
+      </div>
     </Card>
   );
 }
