@@ -122,13 +122,18 @@ function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, classNam
   );
 }
 
+// FIXED: Changed <span> to <div> so complex elements (like Avatars) don't crash React
 function Section({ title, meta, strong, children }) {
   return (
     <div className="od-card-section">
       {(title || meta) && (
         <div className="od-card-section-head">
           <h3 className="od-card-section-title">{title}</h3>
-          {meta != null && <span className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>{meta}</span>}
+          {meta != null && (
+            <div className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>
+              {meta}
+            </div>
+          )}
         </div>
       )}
       {children}
@@ -142,18 +147,6 @@ const Avatar = ({ name, small }) => (
     {initials(name)}
   </span>
 );
-
-function PartyBadge({ role, name }) {
-  return (
-    <div className="od-card-side-party">
-      <div>
-        <span className="od-card-side-label">{role}</span>
-        <span className="od-card-side-value">{name || '—'}</span>
-      </div>
-      <Avatar name={name} />
-    </div>
-  );
-}
 
 const Finding = ({ text, empty }) =>
   text ? <span className="od-finding-flag">{text}</span> : <Pill tone="good" dot={false}>{empty}</Pill>;
@@ -206,10 +199,7 @@ const Button = ({ variant = 'default', size, busy, busyText, children, ...rest }
 
 /* ========================================================================
    3. Payout card
-   ========================================================================
-   Party labels are abbreviated (SR / IR / TR). The countdown strip shows
-   "Due Date" and the timer on one horizontal row; the date itself is not
-   repeated here because it already appears in the card head. */
+   ======================================================================== */
 
 function PayoutStatusCard({ payouts, names, you }) {
   const parties = [
@@ -513,11 +503,10 @@ function OrderProgress({ steps }) {
 }
 
 function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
-  const { isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob } = flags;
+  const { isBuyer, isSeller, marketplacePaid, transportJob } = flags;
   const role = isBuyer ? 'Buying' : isSeller ? 'Selling' : 'Order';
   const showBuyer = isSeller;
   const other = showBuyer ? order.buyer : order.seller;
-  const otherLabel = showBuyer ? 'Buyer' : 'Seller';
   const delivered = ['DELIVERED', 'COMPLETED'].includes(order.status) || transportJob?.status === 'DELIVERED';
 
   const steps = [
@@ -533,15 +522,11 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
       eyebrow={role}
       eyebrowClass={isSeller ? 'is-selling' : ''}
       title={title}
-      side={<PartyBadge role={otherLabel} name={other?.name} />}
+      // CHANGED: Only the Avatar is passed to the side prop, moving it to the top right.
+      side={<Avatar name={other?.name} />}
     >
       <Section title="Order status" meta={`ORD ${shortId(order.id).toUpperCase()}`}>
-        <div className="od-status-row">
-          <Pill tone={statusTone(order.status)}>{label(order.status)}</Pill>
-          {marketplacePaid && <Pill tone="good" dot={false}>Payment: Paid</Pill>}
-          {marketplacePending && !marketplacePaid && <Pill tone="wait" dot={false}>Payment: Pending</Pill>}
-          {transportJob?.status && <Pill tone="neutral" dot={false}>Transport: {label(transportJob.status)}</Pill>}
-        </div>
+        {/* REMOVED: The status pills (COMPLETED, PAYMENT, TRANSPORT) */}
         <OrderProgress steps={steps} />
       </Section>
 
@@ -611,7 +596,6 @@ function InspectionCard({ order, title, i }) {
   const inspectionDate =
     report?.inspectedAt || report?.completedAt || request.completedAt || request.updatedAt || request.createdAt || null;
 
-  /* Show the inspector avatar as soon as one is assigned, not only after the report. */
   const side = inspectorName ? (
     <PartyBadge role="Inspector" name={inspectorName} />
   ) : (
@@ -714,12 +698,7 @@ function InspectionCard({ order, title, i }) {
 
 /* ========================================================================
    6. Transport — three cards, laid out responsively
-   ========================================================================
-   · Phone (default)      → one card per row
-   · Tablet (≥640px)      → two cards per row
-   · Desktop (≥1000px)    → three cards per row
-   The grid class (.od-card-grid) does the layout; the cards themselves
-   keep the same shape as every other card on the page. */
+   ======================================================================== */
 
 function EvidenceForm({ kind, t }) {
   const isPickup = kind === 'PICKUP';
@@ -902,12 +881,16 @@ function TransportCard({ order, t }) {
         {job.truckOwner && (
           <Section
             title="Transporter"
-            meta={<Avatar name={job.truckOwner.name} />}
+            // CHANGED: Name and Avatar are placed side-by-side here in the meta prop
+            meta={
+              <>
+                <strong>{job.truckOwner.name || '—'}</strong>
+                <Avatar name={job.truckOwner.name} />
+              </>
+            }
             strong
           >
-            <div className="od-person">
-              <strong>{job.truckOwner.name || '—'}</strong>
-            </div>
+            {/* REMOVED: The separate name div that was here, pushing phone and truck up */}
             {job.truckOwner.phone && (
               <p className="muted">Phone: {job.truckOwner.phone}</p>
             )}
@@ -1255,7 +1238,6 @@ export default function OrderDetail() {
     if (id) scrollToId(id);
   }, [loading, location.hash]);
 
-  /* One wrapper for the "busy → call → reload → report error" pattern. */
   const run = async (key, fn, fallback) => {
     setBusy(key);
     setError('');
@@ -1349,7 +1331,6 @@ export default function OrderDetail() {
     [payments, installmentPlan]
   );
 
-  /* Heal a plan whose installments are all paid but whose parent is still pending. */
   const planHealRef = useRef(null);
   useEffect(() => {
     if (
@@ -1803,14 +1784,6 @@ export default function OrderDetail() {
     submit: submitDispute,
   };
 
-  /* ====================================================================
-     Layout — cards flow into a responsive grid:
-       · phone (default)     → 1 card per row
-       · tablet (≥640px)     → 2 cards per row
-       · desktop (≥1000px)   → 3 cards per row
-     Wide cards (Overview, Transport, Payment, Payout, Timeline,
-     Messages) span all columns; everything else flows naturally.
-     ==================================================================== */
   return (
     <main className="section order-detail-page">
       <div className="container-narrow">
