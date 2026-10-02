@@ -16,7 +16,7 @@ export default function EvidenceGallery({ listUrl, mediaUrl }) {
     setLoading(true);
     api.get(listUrl)
       .then((res) => {
-        if (!cancelled) setEvidence(res.data?.evidence || []);
+        if (!cancelled) setEvidence(Array.isArray(res.data?.evidence) ? res.data.evidence.filter((item) => item && typeof item === 'object') : []);
       })
       .catch(() => {
         if (!cancelled) setError('Could not load evidence.');
@@ -31,7 +31,13 @@ export default function EvidenceGallery({ listUrl, mediaUrl }) {
     setSigning(item.id);
     try {
       const res = await api.get(mediaUrl(item.id));
-      setSigned((prev) => ({ ...prev, [item.id]: res.data?.media }));
+      setSigned((prev) => ({
+        ...prev,
+        [item.id]: {
+          photos: Array.isArray(res.data?.media?.photos) ? res.data.media.photos : [],
+          videos: Array.isArray(res.data?.media?.videos) ? res.data.media.videos : [],
+        },
+      }));
     } catch (err) {
       setError(err.response?.data?.error || 'Could not load media.');
     } finally {

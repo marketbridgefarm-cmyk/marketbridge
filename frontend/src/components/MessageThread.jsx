@@ -51,8 +51,9 @@ export default function MessageThread({
 
   if (!counterpartId) return null;
 
+  const safeMessages = Array.isArray(messages) ? messages.filter((message) => message && typeof message === 'object') : [];
   const partyName = counterpartName || 'the other party';
-  const count = messages?.length || 0;
+  const count = safeMessages.length;
 
   return (
     <section className="card message-thread-card">
@@ -85,11 +86,11 @@ export default function MessageThread({
           </summary>
 
           <div className="message-thread">
-            {(!messages || messages.length === 0) && (
+            {safeMessages.length === 0 && (
               <p className="muted">No messages yet — say hello.</p>
             )}
 
-            {(messages || []).map((m) => (
+            {safeMessages.map((m) => (
               <div
                 key={m.id}
                 className={`message-bubble ${

@@ -212,7 +212,7 @@ export default function TransportSetup({
     // no own-truck option is offered.
     api
       .get('/transport/trucks/mine')
-      .then((r) => setOwnTrucks(r.data.trucks || []))
+      .then((r) => setOwnTrucks(Array.isArray(r.data?.trucks) ? r.data.trucks : []))
       .catch(() => {});
   }, []);
 
@@ -223,7 +223,7 @@ export default function TransportSetup({
       const response = await api.get('/transport/match', {
         params: { minCapacity: form.requiredCapacity, area: form.pickupLocation },
       });
-      setMatches(response.data.trucks || []);
+      setMatches(Array.isArray(response.data?.trucks) ? response.data.trucks : []);
     } catch (err) {
       setError('Could not find matching transporters.');
     }

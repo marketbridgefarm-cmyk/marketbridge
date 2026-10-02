@@ -69,8 +69,8 @@ function DotRecorded() {
 const sideClass = (index) => (index % 2 === 0 ? 'is-left' : 'is-right');
 
 export default function OrderTimeline({ steps, events = [] }) {
-  const milestoneSteps = Array.isArray(steps) ? steps : [];
-  const durableEvents = Array.isArray(events) ? events : [];
+  const milestoneSteps = Array.isArray(steps) ? steps.filter((step) => step && typeof step === 'object') : [];
+  const durableEvents = Array.isArray(events) ? events.filter((event) => event && typeof event === 'object') : [];
 
   if (milestoneSteps.length === 0 && durableEvents.length === 0) return null;
 
@@ -98,7 +98,7 @@ export default function OrderTimeline({ steps, events = [] }) {
 
         return (
           <li
-            key={step.code}
+            key={step.code || `milestone-${index}`}
             className={`order-timeline-step ${stateClass} ${sideClass(index)}`}
           >
             <span className="order-timeline-dot" role="img" aria-label={label}>
@@ -132,7 +132,7 @@ export default function OrderTimeline({ steps, events = [] }) {
 
               <ul className="order-timeline-events-list">
                 {durableEvents.map((event) => (
-                  <li key={event.id} className="order-timeline-event">
+                  <li key={event.id || `${event.type || 'event'}-${event.at || ''}`} className="order-timeline-event">
                     <span className="order-timeline-event-type">
                       {String(event.type || '').replace(/_/g, ' ')}
                     </span>

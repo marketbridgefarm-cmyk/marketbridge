@@ -103,7 +103,7 @@ function RatingForm({ orderId, target, onDone }) {
 
 export default function RatingBox({ order, userId, onRated }) {
   const canRateAtAll = ['DELIVERED', 'COMPLETED'].includes(order.status);
-  const existing = order.ratings || [];
+  const existing = Array.isArray(order?.ratings) ? order.ratings : [];
   const alreadyRated = (toUserId, role) =>
     existing.some(
       (r) => r.fromUserId === userId && r.toUserId === toUserId && r.role === role

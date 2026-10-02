@@ -58,6 +58,7 @@ function ObligationRow({
 }
 
 function PaymentMethodPicker({ methods, value, onChange, disabled }) {
+  const safeMethods = Array.isArray(methods) ? methods : [];
   return (
     <select
       className="pc-field"
@@ -65,7 +66,7 @@ function PaymentMethodPicker({ methods, value, onChange, disabled }) {
       onChange={(event) => onChange(event.target.value)}
       disabled={disabled}
     >
-      {methods.map((method) => (
+      {safeMethods.map((method) => (
         <option key={method.value} value={method.value}>
           {method.label}
         </option>
@@ -99,19 +100,28 @@ export default function PaymentCenter({
 }) {
   const [showHistory, setShowHistory] = useState(false);
 
+  const methods = Array.isArray(paymentMethods) ? paymentMethods : [];
+  const installmentRows = Array.isArray(marketplace?.installments)
+    ? marketplace.installments.filter((row) => row && typeof row === 'object')
+    : [];
+  const inspectionRows = Array.isArray(inspections)
+    ? inspections.filter((row) => row && typeof row === 'object')
+    : [];
+  const historyRows = Array.isArray(rawPayments)
+    ? rawPayments.filter((payment) => payment && typeof payment === 'object')
+    : [];
   const maxOnlineAmount = Number(workflowPayments?.marketplace?.maxOnlineAmount) || 0;
   const marketplaceOverLimit =
     maxOnlineAmount > 0 && Number(marketplace?.amount) > maxOnlineAmount;
 
   const plan = marketplace?.installmentPlan || null;
-  const installmentRows = marketplace?.installments || [];
   const paidInstallments = installmentRows.filter((row) => row.status === 'PAID').length;
   const installmentCountNeeded =
     maxOnlineAmount > 0 ? Math.ceil(Number(marketplace?.amount) / maxOnlineAmount) : 0;
 
   const outstanding =
     (marketplace?.paid ? 0 : 1) +
-    (inspections || []).filter((row) => !row.paid).length +
+    inspectionRows.filter((row) => !row.paid).length +
     (transport?.required && !transport.paid ? 1 : 0);
 
   return (
@@ -298,7 +308,7 @@ export default function PaymentCenter({
           </ObligationRow>
         )}
 
-        {(inspections || []).map((row) => (
+        {inspectionRows.map((row) => (
           <ObligationRow
             key={row.id}
             title={row.label}
@@ -432,7 +442,7 @@ export default function PaymentCenter({
 
           {showHistory && (
             <ul className="pc-history-list">
-              {rawPayments.map((payment) => (
+              {historyRows.map((payment) => (
                 <li className="pc-history-row" key={payment.id}>
                   <div className="pc-history-main">
                     <strong className="pc-history-type">

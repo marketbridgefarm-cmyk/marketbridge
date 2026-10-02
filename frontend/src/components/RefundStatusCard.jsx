@@ -1,4 +1,5 @@
 import React from 'react';
+
 // ============================================================================
 // REFUND STATUS CARD
 // ============================================================================
@@ -246,7 +247,7 @@ export default function RefundStatusCard({
   onFail,
 }) {
   const rows = (Array.isArray(refunds) ? refunds : [])
-    .filter((refund) => refund.status !== 'CANCELLED')
+    .filter((refund) => refund && typeof refund === 'object' && refund.status !== 'CANCELLED')
     .sort(
       (a, b) =>
         (ROLE_ORDER[a.payeeRole] ?? 9) - (ROLE_ORDER[b.payeeRole] ?? 9) ||
