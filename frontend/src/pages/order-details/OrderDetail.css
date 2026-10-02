@@ -18,8 +18,8 @@
        uniform gutter (--d-indent) so the data reads as a block
        distinct from its heading.
      · Responsive: phone (≤719px) tightens spacing; small phone
-       (≤420px) tightens again. The indent stays consistent at
-       every breakpoint.
+       (≤420px) tightens again. The indent scales with the
+       breakpoint for consistency.
    ============================================================ */
 
 .order-detail-page {
@@ -59,7 +59,7 @@
   --d-ease:        cubic-bezier(.2, .7, .3, 1);
 
   /* One gutter value used everywhere below. */
-  --d-indent:      12px;
+  --d-indent:      16px;
 
   min-height: calc(100vh - 72px);
   color: var(--d-ink);
@@ -1191,7 +1191,7 @@
    ============================================================ */
 
 @media (max-width: 719px) {
-  .order-detail-page { --d-indent: 10px; }
+  .order-detail-page { --d-indent: 13px; }
 
   .order-detail-page .container-narrow {
     padding: 20px 14px 64px;
@@ -1334,7 +1334,7 @@
    ============================================================ */
 
 @media (max-width: 420px) {
-  .order-detail-page { --d-indent: 8px; }
+  .order-detail-page { --d-indent: 11px; }
 
   .order-detail-page .container-narrow { padding: 16px 12px 56px; }
 
