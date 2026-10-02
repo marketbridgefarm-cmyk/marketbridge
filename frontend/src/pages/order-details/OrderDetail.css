@@ -749,3 +749,19 @@
   .order-detail-page .od-card-grid { display: block; }
   .order-detail-page .card { box-shadow: none; break-inside: avoid; margin-bottom: 12px; }
 }
+
+/* ==========================================================================
+   16. Hard overrides (win over any older/global stylesheet)
+   ========================================================================== */
+.order-detail-page .card,
+.order-detail-page .card.od-card-overview,
+.order-detail-page .card.od-card-warning,
+.order-detail-page .card.od-card-accent {
+  box-shadow: none !important;
+}
+.order-detail-page .card.od-card-overview {
+  border-top: 1px solid var(--od-line) !important;
+}
+.order-detail-page .card > .od-card-head {
+  flex-wrap: nowrap !important;
+}
