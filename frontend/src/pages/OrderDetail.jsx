@@ -902,11 +902,10 @@ function TransportCard({ order, t }) {
         {job.truckOwner && (
           <Section
             title="Transporter"
-            meta={job.agreedAmount != null ? `${money(job.agreedAmount)} ETB` : null}
+            meta={<Avatar name={job.truckOwner.name} />}
             strong
           >
             <div className="od-person">
-              <Avatar name={job.truckOwner.name} />
               <strong>{job.truckOwner.name || '—'}</strong>
             </div>
             {job.truckOwner.phone && (
