@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import './PaymentCenter.css';   // ← add this line
 
 // ============================================================================
 // PAYMENT CENTER
