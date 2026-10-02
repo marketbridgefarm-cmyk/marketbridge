@@ -7,8 +7,16 @@
      · od-detail-facts                 — flat key/value rows
      · od-status-pill                  — pills with od-tone-*
      · od-eyebrow, od-card-side-*      — head furniture
+
    No boxes inside cards. Only the outer .card has a border.
    Buttons are white with a green outline — no green fills.
+
+   Responsive strategy:
+     · Desktop: generous spacing, facts rows full-width with value
+       right-aligned.
+     · Phone (≤719px): every container, head, section, and fact row
+       is compressed ~30–40%. Same layout, just tighter rhythm.
+     · Small phone (≤420px): a further pass for narrow viewports.
    ============================================================ */
 
 .order-detail-page {
@@ -729,12 +737,7 @@
 .order-detail-page .payout-due.payout-due-done { color: var(--d-accent-2); }
 .order-detail-page .payout-due.payout-due-idle { color: var(--d-muted); }
 
-.order-detail-page .payout-due-when {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
+.order-detail-page .payout-due-when { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 
 .order-detail-page .payout-due-label {
   font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
@@ -775,7 +778,7 @@
   color: var(--d-muted);
 }
 
-/* ── Dispute note (only when a payout is frozen) ──────── */
+/* ── Dispute note ──────────────────────────────────────── */
 
 .order-detail-page .payout-dispute-note {
   margin: 12px 0 0;
@@ -1135,53 +1138,209 @@
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* ── Responsive ────────────────────────────────────────── */
+/* ============================================================
+   RESPONSIVE — Tablet
+   ============================================================ */
+
+@media (max-width: 960px) {
+  /* Payout table amounts get a little more breathing room when the
+     third column (Status) is the widest it can be. */
+  .order-detail-page .payout-party-name { max-width: 180px; }
+}
+
+/* ============================================================
+   RESPONSIVE — Phone (≤719px)
+   ============================================================
+   Tightens every container, head, section, and fact row so the page
+   reads with the same hierarchy on a phone as it does on desktop,
+   but about 30–40% shorter vertically. */
 
 @media (max-width: 719px) {
-  .order-detail-page .container-narrow { padding: 24px 16px 56px; }
-  .order-detail-page .card { padding: 18px 18px 20px; }
-  .order-detail-page .od-card-head { column-gap: 12px; }
-  .order-detail-page .od-card-head-side { max-width: 150px; }
-  .order-detail-page .od-card-title { font-size: 17px; }
-  .order-detail-page .od-card-overview .od-card-title { font-size: 20px; }
+  /* Container */
+  .order-detail-page .container-narrow {
+    padding: 20px 14px 64px;
+  }
 
-  .order-detail-page .payout-party-name { font-size: 13px; max-width: 140px; }
-  .order-detail-page .payout-amount { font-size: 14px; }
-  .order-detail-page .payout-due { flex-direction: column; align-items: flex-start; gap: 10px; }
+  /* Cards */
+  .order-detail-page .card {
+    padding: 16px 16px 18px;
+    margin: 0 0 14px;
+    border-radius: 16px;
+  }
+  .order-detail-page .card.loading { padding: 32px 20px; }
 
-  .order-detail-page .transporter { flex-direction: column; align-items: stretch; }
+  /* Page bar */
+  .order-detail-page .page-bar { margin-bottom: 12px; }
+  .order-detail-page .back-link { padding: 6px 4px; font-size: 13px; }
+
+  /* Card head — tighter and smaller */
+  .order-detail-page .od-card-head {
+    column-gap: 10px;
+    padding: 0 0 12px;
+    margin: 0 0 14px;
+  }
+  .order-detail-page .od-card-head-side { max-width: 130px; gap: 4px; }
+
+  .order-detail-page .od-card-title { font-size: 16px; letter-spacing: -.3px; line-height: 1.2; }
+  .order-detail-page .od-card-overview .od-card-title { font-size: 19px; letter-spacing: -.5px; }
+
+  .order-detail-page .od-card-subtitle { font-size: 12px; line-height: 1.4; margin-top: 1px; }
+  .order-detail-page .od-card-created { margin-top: 12px; padding-top: 12px; font-size: 11.5px; }
+
+  .order-detail-page .od-eyebrow { font-size: 10px; letter-spacing: .14em; gap: 6px; }
+  .order-detail-page .od-eyebrow::before { flex-basis: 14px; height: 1.5px; }
+
+  /* Sections — tighter rhythm */
+  .order-detail-page .od-card-section { margin: 0 0 16px; }
+  .order-detail-page .od-card-section-head {
+    padding: 0 0 8px;
+    margin: 0 0 10px;
+  }
+  .order-detail-page .od-card-section-title { font-size: 13.5px; letter-spacing: -.1px; }
+  .order-detail-page .od-card-section-meta { font-size: 10.5px; letter-spacing: .08em; }
+
+  /* Facts — compressed rows */
+  .order-detail-page .od-detail-facts > div {
+    padding: 8px 0;
+    gap: 12px;
+  }
+  .order-detail-page .od-detail-facts > div > span {
+    font-size: 10px;
+    letter-spacing: .1em;
+  }
+  .order-detail-page .od-detail-facts > div > strong { font-size: 13.5px; }
+
+  /* Card-side party / stack */
+  .order-detail-page .od-card-side-party { gap: 8px; }
+  .order-detail-page .od-card-side-label { font-size: 10px; letter-spacing: .12em; }
+  .order-detail-page .od-card-side-value { font-size: 13px; }
+
+  /* Party avatar */
+  .order-detail-page .od-party-avatar {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+    font-size: 12px;
+    border-radius: 10px;
+  }
+
+  /* Status row — tighter, smaller pills */
+  .order-detail-page .od-status-row { gap: 6px; margin: 0 0 12px; }
+  .order-detail-page .od-status-pill {
+    min-height: 22px;
+    padding: 0 8px;
+    font-size: 10px;
+    letter-spacing: .03em;
+  }
+  .order-detail-page .od-status-pill-dot { width: 5px; height: 5px; }
+  .order-detail-page .badge { height: 20px; padding: 0 8px; font-size: 10px; }
+
+  /* Muted text */
+  .order-detail-page .muted { font-size: 13px; line-height: 1.55; }
+  .order-detail-page .muted.small,
+  .order-detail-page .small { font-size: 12px; }
+
+  /* Order progress — compact */
+  .order-detail-page .order-progress { margin-top: 2px; padding: 0 2px; }
+  .order-detail-page .order-progress-step { gap: 6px; }
+  .order-detail-page .order-progress-dot { width: 14px; height: 14px; }
+  .order-detail-page .order-progress-step::before { top: 6px; }
+  .order-detail-page .order-progress-label { font-size: 9.5px; }
+  .order-detail-page .order-progress-step.is-done .order-progress-dot::after { width: 8px; height: 8px; }
+
+  /* Payout table — compressed rows */
+  .order-detail-page .payout-table thead th {
+    padding: 0 0 10px;
+    font-size: 10px;
+    letter-spacing: .1em;
+  }
+  .order-detail-page .payout-table tbody th,
+  .order-detail-page .payout-table tbody td { padding: 10px 0; }
+
+  .order-detail-page .payout-party-role { font-size: 10px; letter-spacing: .1em; }
+  .order-detail-page .payout-party-name { font-size: 12.5px; max-width: 110px; }
+  .order-detail-page .payout-party-note { font-size: 11px; }
+  .order-detail-page .payout-amount { font-size: 13.5px; }
+  .order-detail-page .payout-currency { font-size: 10px; }
+
+  /* Countdown — smaller digits, still flat */
+  .order-detail-page .payout-due { padding: 12px 0 0 !important; margin: 12px 0 0 !important; gap: 8px; }
+  .order-detail-page .payout-due-digits { font-size: 18px; letter-spacing: -.4px; }
+  .order-detail-page .payout-due-digits-now { font-size: 13px; }
+  .order-detail-page .payout-due-label { font-size: 10px; }
+  .order-detail-page .payout-due-date { font-size: 13px; }
+  .order-detail-page .payout-due-unit { font-size: 10px; }
+
+  /* Footer notice */
+  .order-detail-page .od-notice--footer { padding-top: 12px; margin-top: 14px; }
+  .order-detail-page .od-notice-prefix { font-size: 10.5px; margin-bottom: 6px; }
+  .order-detail-page .od-notice-list { gap: 5px; }
+  .order-detail-page .od-notice-list li { font-size: 12.5px; line-height: 1.55; padding-left: 22px; }
+  .order-detail-page .od-notice-list li::before { font-size: 11.5px; }
+
+  /* Transporter / quote rows — stack */
+  .order-detail-page .transporter {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px 0;
+  }
   .order-detail-page .transporter > div:first-child,
   .order-detail-page .transporter > div:last-child {
     flex: 0 0 auto;
     width: 100%;
     align-items: flex-start;
   }
+  .order-detail-page .transporter strong { font-size: 13.5px; }
+  .order-detail-page .transporter p { font-size: 12.5px; }
 
+  /* Form actions fill */
   .order-detail-page .od-field-row,
   .order-detail-page .od-quote-actions { width: 100%; }
-
   .order-detail-page .od-notice .btn,
   .order-detail-page .form .btn,
   .order-detail-page .od-actions .btn { width: 100%; justify-content: center; }
+
+  /* Toast */
+  .order-detail-page .order-detail-toast {
+    bottom: 16px;
+    padding: 11px 13px;
+    font-size: 13px;
+  }
 }
 
+/* ============================================================
+   RESPONSIVE — Small phone (≤420px)
+   ============================================================ */
+
 @media (max-width: 420px) {
-  .order-detail-page .od-card-title { font-size: 16px; }
-  .order-detail-page .od-card-overview .od-card-title { font-size: 18px; }
-  .order-detail-page .od-card-side-value { font-size: 13px; }
+  .order-detail-page .container-narrow { padding: 16px 12px 56px; }
+
+  .order-detail-page .card { padding: 14px 14px 16px; border-radius: 14px; margin-bottom: 12px; }
+
+  .order-detail-page .od-card-head { padding-bottom: 10px; margin-bottom: 12px; }
+  .order-detail-page .od-card-head-side { max-width: 110px; }
+  .order-detail-page .od-card-title { font-size: 15px; }
+  .order-detail-page .od-card-overview .od-card-title { font-size: 17px; }
+  .order-detail-page .od-card-subtitle { font-size: 11.5px; }
+  .order-detail-page .od-card-side-value { font-size: 12.5px; }
+
+  .order-detail-page .od-detail-facts > div { padding: 7px 0; }
+  .order-detail-page .od-detail-facts > div > strong { font-size: 13px; }
+  .order-detail-page .od-detail-facts > div > span { font-size: 9.5px; }
+
+  .order-detail-page .od-card-section { margin-bottom: 14px; }
+  .order-detail-page .od-card-section-title { font-size: 13px; }
 
   .order-detail-page .od-party-avatar {
-    width: 38px;
-    height: 38px;
-    flex-basis: 38px;
-    font-size: 12.5px;
-    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+    font-size: 11px;
+    border-radius: 9px;
   }
 
-  .order-detail-page .payout-due-digits { font-size: 20px; }
-  .order-detail-page .payout-due-digits-now { font-size: 14px; }
-
-  .order-detail-page .order-detail-toast { bottom: 12px; padding: 10px 12px; font-size: 13px; }
+  .order-detail-page .od-status-pill { font-size: 9.5px; padding: 0 7px; min-height: 20px; }
 
   .order-detail-page .order-progress-label {
     position: absolute;
@@ -1194,7 +1353,24 @@
     border: 0;
   }
   .order-detail-page .order-progress-step { gap: 0; }
+  .order-detail-page .order-progress { margin: 10px 0 0; }
+
+  .order-detail-page .payout-party-name { max-width: 90px; font-size: 12px; }
+  .order-detail-page .payout-amount { font-size: 13px; }
+
+  .order-detail-page .payout-due-digits { font-size: 16px; }
+  .order-detail-page .payout-due-digits-now { font-size: 12px; }
+
+  .order-detail-page .order-detail-toast {
+    bottom: 12px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+  }
 }
+
+/* ============================================================
+   Reduced motion
+   ============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
   .order-detail-page .btn,
@@ -1206,10 +1382,9 @@
   .order-detail-page .order-detail-toast { animation: none; }
 }
 
-/* ── Band-aid: flatten Payment Center rows ───────────────
-   The Payment Center renders its own bordered boxes for each
-   obligation. These overrides strip those back to flat rules
-   so the whole card reads as one consistent section. */
+/* ============================================================
+   Band-aid: flatten Payment Center rows
+   ============================================================ */
 
 .order-detail-page .payment-center .payment-row,
 .order-detail-page .payment-center .payment-item,
