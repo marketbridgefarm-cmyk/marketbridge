@@ -128,11 +128,7 @@ function Section({ title, meta, strong, children }) {
       {(title || meta) && (
         <div className="od-card-section-head">
           <h3 className="od-card-section-title">{title}</h3>
-          {meta != null && (
-            <div className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>
-              {meta}
-            </div>
-          )}
+          {meta != null && <span className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>{meta}</span>}
         </div>
       )}
       {children}
@@ -537,11 +533,15 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
       eyebrow={role}
       eyebrowClass={isSeller ? 'is-selling' : ''}
       title={title}
-      // 1. Changed side to only render the Avatar, moving it cleanly to the top right.
-      side={<Avatar name={other?.name} />}
+      side={<PartyBadge role={otherLabel} name={other?.name} />}
     >
       <Section title="Order status" meta={`ORD ${shortId(order.id).toUpperCase()}`}>
-        {/* 2. Removed the od-status-row div with the text pills (COMPLETED, PAYMENT, TRANSPORT) */}
+        <div className="od-status-row">
+          <Pill tone={statusTone(order.status)}>{label(order.status)}</Pill>
+          {marketplacePaid && <Pill tone="good" dot={false}>Payment: Paid</Pill>}
+          {marketplacePending && !marketplacePaid && <Pill tone="wait" dot={false}>Payment: Pending</Pill>}
+          {transportJob?.status && <Pill tone="neutral" dot={false}>Transport: {label(transportJob.status)}</Pill>}
+        </div>
         <OrderProgress steps={steps} />
       </Section>
 
@@ -902,14 +902,12 @@ function TransportCard({ order, t }) {
         {job.truckOwner && (
           <Section
             title="Transporter"
-            meta={
-              <>
-                <strong>{job.truckOwner.name || '—'}</strong>
-                <Avatar name={job.truckOwner.name} />
-              </>
-            }
+            meta={<Avatar name={job.truckOwner.name} />}
             strong
           >
+            <div className="od-person">
+              <strong>{job.truckOwner.name || '—'}</strong>
+            </div>
             {job.truckOwner.phone && (
               <p className="muted">Phone: {job.truckOwner.phone}</p>
             )}
