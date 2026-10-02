@@ -195,6 +195,7 @@
   flex-direction: column;
   align-items: flex-end;
   justify-self: end;
+  align-self: start; /* Pin to the very top of the card header */
   width: max-content;
   max-width: none;
   min-width: 0;
@@ -1041,6 +1042,7 @@
 /* A) Right block (Status / Delivery / Seller / Due date …) hugs the right edge */
 .order-detail-page .od-card-head .od-card-head-side {
   justify-self: end !important;
+  align-self: start !important;
   margin-left: auto !important;
   margin-right: 0 !important;
   padding-right: 0 !important;
