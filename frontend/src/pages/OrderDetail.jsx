@@ -10,6 +10,7 @@ import MessageThread from '../components/MessageThread.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import ActionCenter from '../components/ActionCenter.jsx';
+import NextStepCard from '../components/NextStepCard.jsx';
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
@@ -66,7 +67,16 @@ const initials = (name) =>
   String(name || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
 
 const scrollToId = (id, delay = 0) => {
-  const go = () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const go = () => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    /* brief outline so the buyer sees where they landed */
+    el.classList.remove('od-flash');
+    void el.offsetWidth;
+    el.classList.add('od-flash');
+    window.setTimeout(() => el.classList.remove('od-flash'), 1800);
+  };
   if (delay) window.setTimeout(go, delay);
   else go();
 };
@@ -1823,8 +1833,26 @@ export default function OrderDetail() {
             />
           </div>
 
-          {/* Next step — natural width */}
-          {workflow ? (
+          {/* Next step — the buyer's guided lead card; everyone else keeps the workflow card */}
+          {isBuyer ? (
+            <div className="od-span-all">
+              <NextStepCard
+                order={order}
+                onGo={scrollToId}
+                flags={{
+                  isProduct,
+                  inspectionApplies,
+                  inspectionGateMet,
+                  decisionGateMet,
+                  marketplacePaid,
+                  transportJob,
+                  hiredTransport,
+                  acceptedQuote,
+                  transportPaid,
+                }}
+              />
+            </div>
+          ) : workflow ? (
             <ActionCenter workflow={workflow} onScroll={scrollToId} onActionComplete={reload} />
           ) : (
             isInspector && (
