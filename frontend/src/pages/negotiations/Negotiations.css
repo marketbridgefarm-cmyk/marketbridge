@@ -263,9 +263,11 @@
   white-space: nowrap;
 }
 
-/* ── Subsection head ───────────────────────────────────── */
+/* ── Subsection head (Active bids / Previous bids) ─────── */
 
 .neg-page .neg-subsection { margin: 0 0 4px; }
+
+.neg-page .neg-subsection--previous { margin-top: 14px; }
 
 .neg-page .neg-subsection-head {
   display: flex;
@@ -395,17 +397,17 @@
   padding: 4px 0 0;
 }
 
-/* ── Previous bids (details / summary) ─────────────────── */
+/* ── Previous bids (collapsible details) ───────────────── */
 
 .neg-page .neg-previous {
-  margin: 14px 0 0;
+  margin: 0;
   padding: 0;
-  border-top: 1px solid var(--ng-line-soft);
+  border-top: none;
 }
 
 .neg-page .neg-previous-summary {
   display: block;
-  padding: 12px 0 4px;
+  padding: 6px 0 4px;
   font: 700 12.5px/1.4 var(--mb-font-body, 'DM Sans', sans-serif);
   color: var(--ng-muted);
   cursor: pointer;
