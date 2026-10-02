@@ -1,6 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import api from '../api/client';
 
+// ============================================================================
+// ACTION CENTER — the lead card ("what do I do now?")
+// ============================================================================
+// Server-driven: the backend's workflow.actions decides what is ready, and
+// this card runs / routes the first ready action exactly as before.
+//
+// New: when OrderDetail passes `buyerGuide` (buyers only) the card also shows
+// a progress row and an "All steps" list so the buyer always knows where they
+// are, and falls back to the guided next step if the workflow has no ready
+// action. Styles live in OrderDetail.css, section 19 (.od-next-*).
+// ============================================================================
+
 const ACTION_LABELS = {
   BUYER_DECISION_BUY: 'BUY – continue purchase',
   BUYER_DECISION_CANCEL: 'Cancel after inspection',
@@ -21,6 +33,26 @@ const ACTION_LABELS = {
   RAISE_DISPUTE: 'Raise a dispute',
 };
 
+const ACTION_HELP = {
+  BUYER_DECISION_BUY: 'Review the completed inspection, then choose BUY to unlock the seller payment.',
+  BUYER_DECISION_CANCEL: 'Cancel the purchase after reviewing the inspection report.',
+  REQUEST_INSPECTION: 'An independent inspector checks the quality before you commit.',
+  PAY_MARKETPLACE: 'BUY is recorded. Choose a payment method and start the seller payment checkout.',
+  PAY_INSPECTION: 'Pay the inspector’s fee. It is separate from the goods payment.',
+  ARRANGE_TRANSPORT: 'Set up how the goods will travel: your own truck or a hired transporter.',
+  REVIEW_INSPECTION_QUOTES: 'Compare inspector bids and pick one to negotiate with.',
+  REVIEW_TRANSPORT_QUOTES: 'Compare transport bids, select one and agree on the price.',
+  PAY_TRANSPORT: 'The trip can only start once the transport fee is confirmed.',
+  START_PICKUP: 'Begin the pickup and upload your pickup evidence.',
+  MARK_IN_TRANSIT: 'Upload pickup evidence, then mark the trip as in transit.',
+  MARK_DELIVERED: 'Upload delivery evidence, then mark the trip as delivered.',
+  CONFIRM_RECEIPT: 'Confirm only after you have physically received the goods. This completes the order.',
+  CANCEL_ORDER: 'Cancel this order. This cannot be undone.',
+  START_INSPECTION: 'Start the accepted inspection.',
+  SUBMIT_INSPECTION_REPORT: 'Complete the inspection and publish the evidence report.',
+  RAISE_DISPUTE: 'Something went wrong? Open a dispute and an admin will review the order.',
+};
+
 const scrollTarget = (code) => {
   if (code === 'PAY_MARKETPLACE' || code === 'PAY_INSPECTION' || code === 'PAY_TRANSPORT') return 'payment-center';
   if (code === 'ARRANGE_TRANSPORT' || code === 'REVIEW_TRANSPORT_QUOTES' || code === 'START_PICKUP' || code === 'MARK_IN_TRANSIT' || code === 'MARK_DELIVERED') return 'transport-section';
@@ -30,7 +62,77 @@ const scrollTarget = (code) => {
   return 'next-action';
 };
 
-export default function ActionCenter({ workflow, onScroll, onActionComplete }) {
+/* ── Buyer guide: ordered steps derived from OrderDetail's own gate flags ── */
+function buildBuyerSteps({ order, flags: f }) {
+  const steps = [];
+
+  if (f.isProduct) {
+    steps.push({
+      key: 'offer', label: 'Win the deal', done: Boolean(order.agreedOfferId),
+      target: 'make-offer', title: 'Make your offer',
+      text: 'Send an offer to the seller. The seller picks the winning offer and opens negotiation.',
+      cta: 'Make an offer',
+    });
+  }
+
+  if (f.inspectionApplies) {
+    steps.push({
+      key: 'inspect', label: 'Inspection', done: f.inspectionGateMet,
+      target: 'inspection-section', title: 'Get the goods inspected',
+      text: 'An independent inspector checks the quality before you commit. Open a request or review the bids.',
+      cta: 'Open inspection',
+    });
+    steps.push({
+      key: 'decide', label: 'Decision', done: f.decisionGateMet,
+      target: 'inspection-section', title: 'Review the report and choose Buy',
+      text: 'Read the findings. Choosing Buy unlocks payment; you can also cancel the purchase here.',
+      cta: 'Review report',
+    });
+  }
+
+  steps.push({
+    key: 'pay', label: 'Pay seller', done: f.marketplacePaid,
+    target: 'payment-center', title: 'Pay the seller',
+    text: 'Pay the order amount. The seller, any inspector and a hired transporter are each paid separately.',
+    cta: 'Go to seller payment',
+  });
+
+  const transportArranged =
+    Boolean(f.transportJob) && (!f.hiredTransport || Boolean(f.acceptedQuote) || f.transportPaid);
+  steps.push({
+    key: 'transport', label: 'Transport', done: transportArranged,
+    target: 'transport-section',
+    title: f.transportJob ? 'Choose a transporter' : 'Arrange transport',
+    text: f.transportJob
+      ? 'Select a bid, agree on the price and accept the quote.'
+      : 'Set up how the goods will travel: your own truck or a hired transporter.',
+    cta: f.transportJob ? 'See transport bids' : 'Arrange transport',
+  });
+
+  if (f.hiredTransport) {
+    steps.push({
+      key: 'pay-transport', label: 'Pay transport', done: f.transportPaid,
+      target: 'payment-center', title: 'Pay the transporter',
+      text: 'The trip can only start once the transport fee is confirmed.',
+      cta: 'Go to transport payment',
+    });
+  }
+
+  const delivered = order.status === 'DELIVERED';
+  steps.push({
+    key: 'receive', label: 'Receive goods', done: order.status === 'COMPLETED',
+    target: delivered ? 'confirm-receipt' : 'transport-section',
+    title: delivered ? 'Confirm you received the goods' : 'Track your delivery',
+    text: delivered
+      ? 'Confirm only after you have physically received the goods. This completes the order.'
+      : 'The transporter will pick up and deliver. You confirm receipt once the goods arrive.',
+    cta: delivered ? 'Confirm receipt' : 'Track delivery',
+  });
+
+  return steps;
+}
+
+export default function ActionCenter({ workflow, onScroll, onActionComplete, buyerGuide = null }) {
   const [working, setWorking] = useState('');
   const [error, setError] = useState('');
 
@@ -38,10 +140,13 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete }) {
   const readyActions = useMemo(() => actions.filter((action) => action?.ready), [actions]);
   const next = readyActions[0] || null;
 
-  if (!workflow) return null;
+  const steps = useMemo(() => (buyerGuide ? buildBuyerSteps(buyerGuide) : []), [buyerGuide]);
+  const currentIndex = steps.findIndex((s) => !s.done);
+  const guideCurrent = currentIndex >= 0 ? steps[currentIndex] : null;
 
-  const doScroll = (code) => {
-    const target = scrollTarget(code);
+  if (!workflow && !buyerGuide) return null;
+
+  const doScroll = (target) => {
     if (onScroll) onScroll(target);
     else document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -57,14 +162,14 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete }) {
 
     // Payment controls have their own provider/session handling in OrderDetail.
     if (['PAY_INSPECTION', 'PAY_TRANSPORT'].includes(action.code)) {
-      doScroll(action.code);
+      doScroll(scrollTarget(action.code));
       return;
     }
 
     // Review/operational actions are intentionally routed to the relevant
     // section. The dedicated section owns the detailed controls and evidence.
     if (!action.route || action.code === 'REQUEST_INSPECTION' || action.code === 'ARRANGE_TRANSPORT' || action.code === 'REVIEW_INSPECTION_QUOTES' || action.code === 'REVIEW_TRANSPORT_QUOTES' || action.code === 'RAISE_DISPUTE') {
-      doScroll(action.code);
+      doScroll(scrollTarget(action.code));
       return;
     }
 
@@ -102,62 +207,124 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete }) {
     }
   };
 
-  const nextLabel = ACTION_LABELS[next?.code] || next?.label || 'Continue';
-  const displayedNext = next;
+  /* ---- What does the card say? ----------------------------------------- */
+  const status = String(buyerGuide?.order?.status || workflow?.currentStage || '').toUpperCase();
+  const stageLabel = workflow?.currentStage ? String(workflow.currentStage).replaceAll('_', ' ') : null;
+
+  let mode = 'active';
+  let title;
+  let text;
+  let primary = null;
+
+  if (next) {
+    title = ACTION_LABELS[next.code] || next.label || 'Continue';
+    text = ACTION_HELP[next.code] || '';
+    primary = {
+      label: working === next.code ? 'Working…' : title,
+      onClick: () => run(next),
+    };
+  } else if (status === 'CANCELLED') {
+    mode = 'closed';
+    title = 'This order was cancelled';
+    text = 'Nothing more to do here. Any payment already made is refunded — check the payment status below.';
+    primary = { label: 'View payments', onClick: () => doScroll('payment-center') };
+  } else if (status === 'DISPUTED') {
+    mode = 'paused';
+    title = 'Dispute under review';
+    text = 'An admin is reviewing this order. Payments, transport and payouts are paused until it is resolved.';
+    primary = { label: 'View dispute', onClick: () => doScroll('raise-dispute') };
+  } else if (status === 'COMPLETED' || (buyerGuide && !guideCurrent)) {
+    mode = 'done';
+    title = 'Order complete';
+    text = buyerGuide
+      ? 'You confirmed receipt. Thank you — you can rate the seller below.'
+      : 'This order is complete. No further action is needed.';
+  } else if (guideCurrent) {
+    title = guideCurrent.title;
+    text = guideCurrent.text;
+    primary = { label: guideCurrent.cta, onClick: () => doScroll(guideCurrent.target) };
+  } else {
+    title = 'Nothing to do right now';
+    text = 'The next step will appear here as soon as something needs you.';
+  }
+
+  const stepNumber = guideCurrent ? currentIndex + 1 : steps.length;
+  const showCount = buyerGuide && mode === 'active';
+  const others = readyActions.slice(1);
 
   return (
-    <div className="card next-action-card" id="next-action">
-      <span className="eyebrow">NEXT STEP</span>
-      <h2 style={{ marginBottom: 6 }}>
-        {next ? nextLabel : 'Order workflow'}
-      </h2>
-
-      {workflow.currentStage && (
-        <p className="muted" style={{ marginBottom: 10 }}>
-          Stage: <strong>{String(workflow.currentStage).replaceAll('_', ' ')}</strong>
-        </p>
-      )}
-
-      {next?.code === 'BUYER_DECISION_BUY' && (
-        <p className="muted">
-          Review the completed agricultural inspection, then choose BUY to unlock the seller payment.
-        </p>
-      )}
-
-      {next?.code === 'PAY_MARKETPLACE' && (
-        <p className="muted">
-          BUY has been recorded. Choose the payment method below and start the seller payment checkout.
-        </p>
-      )}
-
-      {error && <div className="alert error" style={{ marginTop: 10 }}>{error}</div>}
-
-      <div className="next-action-buttons" style={{ marginTop: 12 }}>
-        {displayedNext ? (
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={Boolean(working)}
-            onClick={() => run(displayedNext)}
-          >
-            {working === displayedNext.code ? 'Working…' : (ACTION_LABELS[displayedNext.code] || displayedNext.label || 'Continue')}
-          </button>
+    <section className={`card od-next od-next--${mode} next-action-card`} id="next-action" aria-labelledby="od-next-title">
+      <div className="od-next-top">
+        <span className="od-eyebrow">{buyerGuide ? 'Your next step' : 'Next step'}</span>
+        {showCount ? (
+          <span className="od-next-count">Step {stepNumber} of {steps.length}</span>
         ) : (
-          <button type="button" className="btn btn-primary" onClick={() => doScroll('payment-center')}>
-            Go to seller payment
-          </button>
+          stageLabel && <span className="od-next-count">{stageLabel}</span>
         )}
       </div>
 
-      {readyActions.length > 1 && (
-        <details style={{ marginTop: 12 }}>
-          <summary>Other available actions</summary>
-          <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
-            {readyActions.slice(1).map((action) => (
+      <h2 className="od-next-title" id="od-next-title">{title}</h2>
+      {text && <p className="od-next-text">{text}</p>}
+
+      {error && <div className="od-next-error" role="alert">{error}</div>}
+
+      {primary && (
+        <button type="button" className="od-next-cta" disabled={Boolean(working)} onClick={primary.onClick}>
+          {primary.label}
+          <span aria-hidden="true" className="od-next-cta-arrow">↓</span>
+        </button>
+      )}
+
+      {/* Progress (buyers) */}
+      {steps.length > 0 && (
+        <ol className="od-next-track" aria-label="Purchase progress">
+          {steps.map((step, i) => {
+            const state = step.done ? 'done' : i === currentIndex ? 'current' : 'todo';
+            return (
+              <li key={step.key} className={`od-next-step is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
+                <span className="od-next-dot" aria-hidden="true">{state === 'done' ? '✓' : ''}</span>
+                <span className="od-next-step-label">{step.label}</span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+
+      {steps.length > 0 && (
+        <details className="od-next-all">
+          <summary>All steps</summary>
+          <ol className="od-next-list">
+            {steps.map((step, i) => {
+              const state = step.done ? 'done' : i === currentIndex ? 'current' : 'todo';
+              return (
+                <li key={step.key} className={`od-next-item is-${state}`}>
+                  <span className="od-next-item-icon" aria-hidden="true">{state === 'done' ? '✓' : i + 1}</span>
+                  <span className="od-next-item-body">
+                    <strong>{step.label}</strong>
+                    <span>{state === 'done' ? 'Done' : state === 'current' ? 'Do this now' : 'Coming up'}</span>
+                  </span>
+                  {state !== 'done' && (
+                    <button type="button" className="od-next-item-go" onClick={() => doScroll(step.target)}>
+                      Go
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </details>
+      )}
+
+      {/* Other ready actions from the workflow */}
+      {others.length > 0 && (
+        <details className="od-next-all">
+          <summary>Other available actions ({others.length})</summary>
+          <div className="od-next-others">
+            {others.map((action) => (
               <button
                 key={`${action.code}-${action.inspectionRequestId || ''}`}
                 type="button"
-                className="btn btn-light"
+                className="od-next-item-go od-next-other"
                 disabled={Boolean(working)}
                 onClick={() => run(action)}
               >
@@ -167,6 +334,6 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete }) {
           </div>
         </details>
       )}
-    </div>
+    </section>
   );
 }
