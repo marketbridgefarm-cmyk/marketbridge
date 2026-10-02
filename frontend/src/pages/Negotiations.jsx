@@ -9,17 +9,16 @@ import './negotiations/Negotiations.css';
 // ============================================================================
 //
 // 1. LISTING_OFFER      many buyers → seller selection → bilateral negotiation
-// 2. TRANSPORT_QUOTE    arranging party ↔ truck owners (competition → bilateral)
-// 3. INSPECTION_QUOTE   requester ↔ inspectors        (competition → bilateral)
+// 2. TRANSPORT_QUOTE    arranging party ↔ truck owners
+// 3. INSPECTION_QUOTE   requester ↔ inspectors
 //
-// Competition groups render inline as flat sections inside one card. Bilateral
-// deals render as NegotiationRow cards. Every API call is unchanged from the
-// previous version of this file.
+// Competition groups render inline as flat sections inside one card.
+// Bilateral deals render as NegotiationRow cards.
 // ============================================================================
 
 const SELLER_LISTING_STATUSES = ['ACTIVE', 'UNDER_NEGOTIATION', 'SOLD'];
 
-const ACTIVE_QUOTE_STATUSES = ['PENDING', 'SELECTED', 'COUNTERED'];
+const ACTIVE_QUOTE_STATUSES   = ['PENDING', 'SELECTED', 'COUNTERED'];
 const PREVIOUS_QUOTE_STATUSES = ['ACCEPTED', 'REJECTED', 'WITHDRAWN', 'EXPIRED'];
 
 function quoteTurn(quote) {
@@ -42,13 +41,13 @@ function leavesOnly(items, parentKey) {
 
 function humanStatus(status) {
   return ({
-    PENDING:  'Bid pending',
-    SELECTED: 'Selected',
-    COUNTERED:'Counter-offer',
-    ACCEPTED: 'Accepted',
-    REJECTED: 'Rejected',
-    WITHDRAWN:'Released',
-    EXPIRED:  'Expired',
+    PENDING:   'Bid pending',
+    SELECTED:  'Selected',
+    COUNTERED: 'Counter-offer',
+    ACCEPTED:  'Accepted',
+    REJECTED:  'Rejected',
+    WITHDRAWN: 'Released',
+    EXPIRED:   'Expired',
   }[status] || String(status || '').replaceAll('_', ' '));
 }
 
@@ -57,8 +56,17 @@ function amountOf(item) {
   return Number(v);
 }
 
+function providerOf(quote) {
+  return quote.truckOwner || quote.inspector || quote.provider || {};
+}
+
+function initialsOf(name) {
+  const parts = String(name || '?').trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]).join('').toUpperCase() || '?';
+}
+
 // ============================================================================
-// Competition group — one card per inspection request / transport job
+// CompetitionGroup — one card per inspection request / transport job
 // ============================================================================
 function CompetitionGroup({ group, busyKey, onRespond }) {
   const providerLabel =
@@ -80,10 +88,6 @@ function CompetitionGroup({ group, busyKey, onRespond }) {
         <div className="neg-group-head-main">
           <span className="neg-eyebrow">{typeLabel.toUpperCase()}</span>
           <h2 className="neg-group-title">{group.label}</h2>
-          <p className="neg-group-subtitle">
-            {activeQuotes.length} active quote{activeQuotes.length === 1 ? '' : 's'}
-            {' · competition stays open until commitment'}
-          </p>
         </div>
         <div className="neg-group-head-side">
           <span className="neg-side-label">Status</span>
@@ -92,11 +96,6 @@ function CompetitionGroup({ group, busyKey, onRespond }) {
           </span>
         </div>
       </header>
-
-      <p className="neg-notice">
-        <strong>Notice:</strong> Selection is not commitment. Selecting a provider
-        opens negotiation. Payment is the commercial commitment.
-      </p>
 
       {/* ── Active bids ────────────────────────────────────── */}
       <section className="neg-subsection">
@@ -139,21 +138,32 @@ function CompetitionGroup({ group, busyKey, onRespond }) {
         </details>
       )}
 
-      {group.orderLink && (
-        <footer className="neg-group-footer">
+      {/* ── Notice + footer action ─────────────────────────── */}
+      <footer className="neg-group-footer">
+        <div className="neg-notice">
+          <span className="neg-notice-prefix">Notice:</span>
+          <ol className="neg-notice-list">
+            <li>Competition stays open until commitment.</li>
+            <li>
+              Selection is not commitment. Selecting a provider opens negotiation.
+              Payment is the commercial commitment.
+            </li>
+          </ol>
+        </div>
+
+        {group.orderLink && (
           <Link className="btn btn-outline" to={group.orderLink}>
             View order →
           </Link>
-        </footer>
-      )}
+        )}
+      </footer>
     </article>
   );
 }
 
-function providerOf(quote) {
-  return quote.truckOwner || quote.inspector || quote.provider || {};
-}
-
+// ============================================================================
+// QuoteRow — one active bid (competitive or in negotiation)
+// ============================================================================
 function QuoteRow({ quote, group, busyKey, onRespond }) {
   const provider = providerOf(quote);
   const amount = amountOf(quote);
@@ -657,7 +667,7 @@ export default function Negotiations() {
     }
   }, [loadAll, toast]);
 
-  // ---- Respond: competition group (BidBoard actions) ---------------------
+  // ---- Respond: competition group (inline BidBoard actions) --------------
   const respondBid = useCallback(async (group, quote, action, counterAmount) => {
     const key = `bid:${quote.id}:${action}`;
     setBusyKey(key);
