@@ -12,13 +12,14 @@
    Buttons are white with a green outline — no green fills.
 
    Layout rules:
-     · Card head and section headings sit flush left.
-     · Section bodies and any direct card content are nudged
-       right by one uniform gutter (--d-indent) so the data
-       reads as a block distinct from its heading.
-     · Responsive: phone (≤719px) tightens spacing; small phone
-       (≤420px) tightens again. The indent scales with the
-       breakpoint for consistency.
+     · Card head, eyebrow, title, and section headings sit
+       flush left.
+     · Section bodies, the card subtitle (description), and any
+       direct card content are nudged right by one uniform
+       gutter (--d-indent) so the data reads as a block
+       distinct from its heading.
+     · Responsive: phone (≤719px) and small phone (≤420px)
+       tighten the gutter proportionally.
    ============================================================ */
 
 .order-detail-page {
@@ -58,7 +59,7 @@
   --d-ease:        cubic-bezier(.2, .7, .3, 1);
 
   /* One gutter value used everywhere below. */
-  --d-indent:      16px;
+  --d-indent:      24px;
 
   min-height: calc(100vh - 72px);
   color: var(--d-ink);
@@ -257,8 +258,10 @@
   overflow-wrap: anywhere;
 }
 
+/* The subtitle (description) sits indented, matching the
+   section bodies. Eyebrow and title above stay flush. */
 .order-detail-page .od-card-subtitle {
-  margin: 2px 0 0;
+  margin: 2px 0 0 var(--d-indent);
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--d-muted);
@@ -1146,10 +1149,10 @@
 /* ============================================================
    CONTENT INDENT
    ============================================================
-   Card head and section headings stay flush left. Everything
-   inside them — fact rows, pills, tables, evidence items,
-   action rows, notices, forms — shifts right by one uniform
-   gutter so the data reads as a distinct block. */
+   Card head, eyebrow, title, and section headings stay flush
+   left. Everything inside a section body, the card subtitle
+   (description), and any direct card content all shift right
+   by one uniform gutter (--d-indent). */
 
 /* Section bodies: pad the whole section, pull the heading back
    so it stays flush with the card head. */
@@ -1190,7 +1193,7 @@
    ============================================================ */
 
 @media (max-width: 719px) {
-  .order-detail-page { --d-indent: 13px; }
+  .order-detail-page { --d-indent: 19px; }
 
   .order-detail-page .container-narrow {
     padding: 20px 14px 64px;
@@ -1333,7 +1336,7 @@
    ============================================================ */
 
 @media (max-width: 420px) {
-  .order-detail-page { --d-indent: 11px; }
+  .order-detail-page { --d-indent: 16px; }
 
   .order-detail-page .container-narrow { padding: 16px 12px 56px; }
 
