@@ -18,6 +18,9 @@
        direct card content are nudged right by one uniform
        gutter (--d-indent) so the data reads as a block
        distinct from its heading.
+     · Every card carries a slightly wider right padding so
+       right-aligned values (amounts, statuses, dates) have
+       more breathing room from the card edge.
      · Responsive: phone (≤719px) and small phone (≤420px)
        tighten the gutter proportionally.
    ============================================================ */
@@ -186,10 +189,13 @@
   color: var(--d-accent-2);
 }
 
-/* ── Card ──────────────────────────────────────────────── */
+/* ── Card ──────────────────────────────────────────────
+   Right padding is wider than the left so right-aligned
+   values (amounts, statuses, dates) have more room from the
+   card edge. */
 
 .order-detail-page .card {
-  padding: 24px 26px 28px;
+  padding: 24px 36px 28px 26px;
   margin: 0 0 20px;
   border: 1px solid var(--d-line);
   border-radius: var(--d-radius);
@@ -1154,8 +1160,6 @@
    (description), and any direct card content all shift right
    by one uniform gutter (--d-indent). */
 
-/* Section bodies: pad the whole section, pull the heading back
-   so it stays flush with the card head. */
 .order-detail-page .od-card-section {
   padding-left: var(--d-indent);
 }
@@ -1164,17 +1168,11 @@
   margin-left: calc(-1 * var(--d-indent));
 }
 
-/* Direct content children of a card (anything that isn't the
-   head, a section wrapper, or a full-width button) also get
-   the indent so blocks outside sections line up with those
-   inside them. */
 .order-detail-page .card:not(.loading) > *:not(.od-card-head):not(.od-card-section):not(.btn) {
   margin-left: var(--d-indent);
   margin-right: var(--d-indent);
 }
 
-/* The countdown strip and its inline-set margins need a heavier
-   hand so the indent lands. */
 .order-detail-page .card > .payout-due {
   margin-left: var(--d-indent) !important;
   margin-right: var(--d-indent) !important;
@@ -1199,8 +1197,10 @@
     padding: 20px 14px 64px;
   }
 
+  /* Right padding stays wider than the left so right-aligned
+     values keep room from the card edge on phones too. */
   .order-detail-page .card {
-    padding: 20px 20px 22px;
+    padding: 20px 28px 22px 20px;
     margin: 0 0 14px;
     border-radius: 16px;
   }
@@ -1340,7 +1340,11 @@
 
   .order-detail-page .container-narrow { padding: 16px 12px 56px; }
 
-  .order-detail-page .card { padding: 16px 16px 18px; border-radius: 14px; margin-bottom: 12px; }
+  .order-detail-page .card {
+    padding: 16px 22px 18px 16px;
+    border-radius: 14px;
+    margin-bottom: 12px;
+  }
 
   .order-detail-page .od-card-head { padding-bottom: 10px; margin-bottom: 12px; }
   .order-detail-page .od-card-head-side { max-width: 110px; }
