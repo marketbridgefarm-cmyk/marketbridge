@@ -4,13 +4,17 @@ import api from '../api/client';
 // ============================================================================
 // ACTION CENTER — the lead card ("what do I do now?")
 // ============================================================================
-// Server-driven: the backend's workflow.actions decides what is ready, and
-// this card runs / routes the first ready action exactly as before.
+// Used by every role. Server-driven: the backend's workflow.actions decides
+// what is ready. Buyers additionally get `buyerGuide` (gate flags from
+// OrderDetail) so they follow the guided steps and see an "All steps" list.
 //
-// New: when OrderDetail passes `buyerGuide` (buyers only) the card also shows
-// a progress row and an "All steps" list so the buyer always knows where they
-// are, and falls back to the guided next step if the workflow has no ready
-// action. Styles live in OrderDetail.css, section 19 (.od-next-*).
+// Priority of what the card says:
+//   1. CANCELLED / DISPUTED / COMPLETED  (terminal states always win)
+//   2. buyer guide step                  (buyers only)
+//   3. first ready workflow action       (everyone else)
+//   4. fallback text
+//
+// Styles live in OrderDetail.css, section 19 (.od-next-*).
 // ============================================================================
 
 const ACTION_LABELS = {
@@ -132,7 +136,15 @@ function buildBuyerSteps({ order, flags: f }) {
   return steps;
 }
 
-export default function ActionCenter({ workflow, onScroll, onActionComplete, buyerGuide = null }) {
+export default function ActionCenter({
+  workflow,
+  onScroll,
+  onActionComplete,
+  buyerGuide = null,
+  orderStatus: orderStatusProp,
+  marketplacePaid = false,
+  transportDelivered = false,
+}) {
   const [working, setWorking] = useState('');
   const [error, setError] = useState('');
 
@@ -146,6 +158,20 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete, buy
 
   if (!workflow && !buyerGuide) return null;
 
+  /* Real order status first; workflow stage can lag behind it. */
+  const status = String(orderStatusProp || buyerGuide?.order?.status || workflow?.currentStage || '').toUpperCase();
+  const terminal = ['COMPLETED', 'CANCELLED', 'DISPUTED'].includes(status);
+
+  /* Order progress shown to every role: Ordered → Paid → Delivered → Completed */
+  const delivered = ['DELIVERED', 'COMPLETED'].includes(status) || Boolean(transportDelivered);
+  const stages = [
+    { label: 'Ordered', done: true },
+    { label: 'Paid', done: Boolean(marketplacePaid) },
+    { label: 'Delivered', done: delivered },
+    { label: 'Completed', done: status === 'COMPLETED' },
+  ];
+  const stageCurrent = stages.findIndex((s) => !s.done);
+
   const doScroll = (target) => {
     if (onScroll) onScroll(target);
     else document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -155,20 +181,22 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete, buy
     if (!action || working) return;
     setError('');
 
-    // The agricultural BUY action is a real server-side decision. It must
-    // execute PATCH /orders/:id/buyer-decision before seller payment becomes
-    // available. Do not merely scroll to Payment Center: /payments correctly
-    // rejects a goods payment while buyerDecision is still null.
-
     // Payment controls have their own provider/session handling in OrderDetail.
     if (['PAY_INSPECTION', 'PAY_TRANSPORT'].includes(action.code)) {
       doScroll(scrollTarget(action.code));
       return;
     }
 
-    // Review/operational actions are intentionally routed to the relevant
-    // section. The dedicated section owns the detailed controls and evidence.
-    if (!action.route || action.code === 'REQUEST_INSPECTION' || action.code === 'ARRANGE_TRANSPORT' || action.code === 'REVIEW_INSPECTION_QUOTES' || action.code === 'REVIEW_TRANSPORT_QUOTES' || action.code === 'RAISE_DISPUTE') {
+    // Review/operational actions are routed to the relevant section. The
+    // dedicated section owns the detailed controls and evidence.
+    if (
+      !action.route ||
+      action.code === 'REQUEST_INSPECTION' ||
+      action.code === 'ARRANGE_TRANSPORT' ||
+      action.code === 'REVIEW_INSPECTION_QUOTES' ||
+      action.code === 'REVIEW_TRANSPORT_QUOTES' ||
+      action.code === 'RAISE_DISPUTE'
+    ) {
       doScroll(scrollTarget(action.code));
       return;
     }
@@ -208,7 +236,6 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete, buy
   };
 
   /* ---- What does the card say? ----------------------------------------- */
-  const status = String(buyerGuide?.order?.status || workflow?.currentStage || '').toUpperCase();
   const stageLabel = workflow?.currentStage ? String(workflow.currentStage).replaceAll('_', ' ') : null;
 
   let mode = 'active';
@@ -216,17 +243,10 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete, buy
   let text;
   let primary = null;
 
-  if (next) {
-    title = ACTION_LABELS[next.code] || next.label || 'Continue';
-    text = ACTION_HELP[next.code] || '';
-    primary = {
-      label: working === next.code ? 'Working…' : title,
-      onClick: () => run(next),
-    };
-  } else if (status === 'CANCELLED') {
+  if (status === 'CANCELLED') {
     mode = 'closed';
     title = 'This order was cancelled';
-    text = 'Nothing more to do here. Any payment already made is refunded — check the payment status below.';
+    text = 'Nothing more to do here. Any payment already made is refunded. Check the payment status below.';
     primary = { label: 'View payments', onClick: () => doScroll('payment-center') };
   } else if (status === 'DISPUTED') {
     mode = 'paused';
@@ -237,12 +257,19 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete, buy
     mode = 'done';
     title = 'Order complete';
     text = buyerGuide
-      ? 'You confirmed receipt. Thank you — you can rate the seller below.'
+      ? 'You confirmed receipt. Thank you. You can rate the seller below.'
       : 'This order is complete. No further action is needed.';
-  } else if (guideCurrent) {
+  } else if (buyerGuide && guideCurrent) {
     title = guideCurrent.title;
     text = guideCurrent.text;
     primary = { label: guideCurrent.cta, onClick: () => doScroll(guideCurrent.target) };
+  } else if (next) {
+    title = ACTION_LABELS[next.code] || next.label || 'Continue';
+    text = ACTION_HELP[next.code] || '';
+    primary = {
+      label: working === next.code ? 'Working…' : title,
+      onClick: () => run(next),
+    };
   } else {
     title = 'Nothing to do right now';
     text = 'The next step will appear here as soon as something needs you.';
@@ -250,7 +277,7 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete, buy
 
   const stepNumber = guideCurrent ? currentIndex + 1 : steps.length;
   const showCount = buyerGuide && mode === 'active';
-  const others = readyActions.slice(1);
+  const others = terminal || buyerGuide ? [] : readyActions.slice(1);
 
   return (
     <section className={`card od-next od-next--${mode} next-action-card`} id="next-action" aria-labelledby="od-next-title">
@@ -275,21 +302,20 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete, buy
         </button>
       )}
 
-      {/* Progress (buyers) */}
-      {steps.length > 0 && (
-        <ol className="od-next-track" aria-label="Purchase progress">
-          {steps.map((step, i) => {
-            const state = step.done ? 'done' : i === currentIndex ? 'current' : 'todo';
-            return (
-              <li key={step.key} className={`od-next-step is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
-                <span className="od-next-dot" aria-hidden="true">{state === 'done' ? '✓' : ''}</span>
-                <span className="od-next-step-label">{step.label}</span>
-              </li>
-            );
-          })}
-        </ol>
-      )}
+      {/* Order progress (all roles) */}
+      <ol className="od-next-track od-next-track--stages" aria-label="Order progress">
+        {stages.map((s, i) => {
+          const state = s.done ? 'done' : i === stageCurrent ? 'current' : 'todo';
+          return (
+            <li key={s.label} className={`od-next-step is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
+              <span className="od-next-dot" aria-hidden="true">{state === 'done' ? '✓' : ''}</span>
+              <span className="od-next-step-label">{s.label}</span>
+            </li>
+          );
+        })}
+      </ol>
 
+      {/* Detailed purchase steps (buyers) */}
       {steps.length > 0 && (
         <details className="od-next-all">
           <summary>All steps</summary>
@@ -315,7 +341,7 @@ export default function ActionCenter({ workflow, onScroll, onActionComplete, buy
         </details>
       )}
 
-      {/* Other ready actions from the workflow */}
+      {/* Other ready actions from the workflow (not for buyers / closed orders) */}
       {others.length > 0 && (
         <details className="od-next-all">
           <summary>Other available actions ({others.length})</summary>
