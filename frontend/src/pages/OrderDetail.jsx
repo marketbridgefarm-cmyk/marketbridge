@@ -190,15 +190,19 @@ const Button = ({ variant = 'default', size, busy, busyText, children, ...rest }
 /* ========================================================================
    3. Payout card
    ========================================================================
-   The countdown strip and numbered notice use inline styles so they
-   render flat (no background, no box) regardless of what the stylesheet
-   contains or what global CSS is loaded. */
+   Party labels are abbreviated (SR / IR / TR). The countdown strip shows
+   "Due Date" and the timer on one horizontal row; the date itself is not
+   repeated here because it already appears in the card head.
+
+   The countdown strip and numbered notice use inline styles so they render
+   flat regardless of what the stylesheet contains or what global CSS is
+   loaded. */
 
 function PayoutStatusCard({ payouts, names, you }) {
   const parties = [
-    { key: 'seller', label: 'Seller', name: names.seller, you: you.seller, payout: payouts.seller },
-    payouts.inspector && { key: 'inspector', label: 'Inspector', name: names.inspector, you: you.inspector, payout: payouts.inspector },
-    payouts.transporter && { key: 'transporter', label: 'Transporter', name: names.transporter, you: you.transporter, payout: payouts.transporter },
+    { key: 'seller', label: 'SR', name: names.seller, you: you.seller, payout: payouts.seller },
+    payouts.inspector && { key: 'inspector', label: 'IR', name: names.inspector, you: you.inspector, payout: payouts.inspector },
+    payouts.transporter && { key: 'transporter', label: 'TR', name: names.transporter, you: you.transporter, payout: payouts.transporter },
   ]
     .filter(Boolean)
     .map((p) => ({ ...p, status: p.payout?.status || null }));
@@ -273,14 +277,6 @@ function PayoutStatusCard({ payouts, names, you }) {
     letterSpacing: '.14em',
     textTransform: 'uppercase',
     color: '#64748b',
-  };
-
-  const dueDateStyle = {
-    fontFamily: "'Manrope', system-ui, sans-serif",
-    fontSize: 14,
-    fontWeight: 700,
-    letterSpacing: '-.2px',
-    color: 'inherit',
   };
 
   const dueClockStyle = {
@@ -424,12 +420,7 @@ function PayoutStatusCard({ payouts, names, you }) {
 
       {dueMs !== null && (
         <div style={dueStripStyle} role="group" aria-label="Due date">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-            <span style={dueLabelStyle}>Due Date</span>
-            <time style={dueDateStyle} dateTime={new Date(dueMs).toISOString()}>
-              {dueDate}
-            </time>
-          </div>
+          <span style={dueLabelStyle}>Due Date</span>
           <div style={dueClockStyle} role="timer" aria-live="off">
             {duePassed ? (
               <span style={{ ...dueDigitsStyle, fontSize: 15, letterSpacing: '-.2px', color: '#0f7a44' }}>
@@ -447,10 +438,10 @@ function PayoutStatusCard({ payouts, names, you }) {
 
       {dueMs === null && holdNotStarted && (
         <div style={dueStripStyle} role="group" aria-label="Due date">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-            <span style={dueLabelStyle}>Due Date</span>
-            <span style={{ ...dueDateStyle, color: '#64748b' }}>Starts after payment settles</span>
-          </div>
+          <span style={dueLabelStyle}>Due Date</span>
+          <span style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: 13, color: '#64748b' }}>
+            Starts after payment settles
+          </span>
         </div>
       )}
 
