@@ -8,6 +8,7 @@
    .order-detail-page when inside it.
    ========================================================================== */
 
+
 .payment-center {
   --pc-ink: var(--od-ink, #0d1b2a);
   --pc-text: var(--od-text, #2c3a4a);
