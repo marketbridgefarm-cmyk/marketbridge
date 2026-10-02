@@ -1,1970 +1,842 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+/* ==========================================================================
+   OrderDetail.css  →  src/pages/order-details/OrderDetail.css
+   --------------------------------------------------------------------------
+   Responsive layout (mobile-first):
+     · phones   (default)  → 1 card per row
+     · tablets  (≥ 640px)  → 2 cards per row
+     · desktops (≥ 1000px) → 3 cards per row
+   .od-span-all always spans every column (Overview, Transport, Payments,
+   Payout, Timeline, Messages).
+   Everything is scoped under .order-detail-page so it can't leak.
+   ========================================================================== */
 
-import api from '../api/client';
-import { startChapaPayment, chapaInitializeAndRedirect } from '../utils/chapaCheckout';
-import { useAuth } from '../context/AuthContext.jsx';
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Manrope:wght@600;700;800&display=swap');
 
-import RatingBox from '../components/RatingBox.jsx';
-import MessageThread from '../components/MessageThread.jsx';
-import EvidenceGallery from '../components/EvidenceGallery.jsx';
-import EvidenceUploader from '../components/EvidenceUploader.jsx';
-import ActionCenter from '../components/ActionCenter.jsx';
-import OrderTimeline from '../components/OrderTimeline.jsx';
-import PaymentCenter from '../components/PaymentCenter.jsx';
-import TransportSetup from '../components/TransportSetup.jsx';
-import RefundStatusCard from '../components/RefundStatusCard.jsx';
+/* ---------- 1. Tokens ---------- */
+.order-detail-page {
+  --od-ink: #0d1b2a;
+  --od-text: #2c3a4a;
+  --od-muted: #64748b;
+  --od-line: #e5e9ef;
+  --od-line-strong: #d3dae3;
+  --od-surface: #ffffff;
+  --od-page: #f4f6f9;
+  --od-soft: #f8fafc;
 
-import './order-details/OrderDetail.css';
+  --od-brand: #0f7a44;
+  --od-brand-dark: #0b5f35;
+  --od-brand-soft: #e7f5ed;
 
-/* ========================================================================
-   1. Constants & pure helpers
-   ======================================================================== */
+  --od-good: #0f7a44;
+  --od-good-bg: #e7f5ed;
+  --od-bad: #b42318;
+  --od-bad-bg: #fef0ee;
+  --od-bad-line: #fecaca;
+  --od-wait: #9a6700;
+  --od-wait-bg: #fff6df;
+  --od-info: #1d5fb4;
+  --od-info-bg: #e8f0fb;
+  --od-neutral: #475569;
+  --od-neutral-bg: #eef1f5;
 
-const PAYMENT_METHODS = [
-  { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
-  { value: 'QR', label: 'QR Code' },
-];
+  --od-radius-lg: 16px;
+  --od-radius: 12px;
+  --od-radius-sm: 8px;
+  --od-shadow: none;
+  --od-indent: 14px; /* body content is pushed in by this much; titles/headers stay flush */
 
-const DISPUTE_TYPES = [
-  ['NOT_DELIVERED', 'Goods not delivered'],
-  ['QUALITY_ISSUE', 'Quality issue'],
-  ['DAMAGED_GOODS', 'Damaged goods'],
-  ['PAYMENT_ISSUE', 'Payment issue'],
-  ['TRANSPORT_ISSUE', 'Transport issue'],
-  ['OTHER', 'Other'],
-];
+  --od-gap: 14px;
+  --od-pad: 18px;
 
-const pad2 = (n) => String(n).padStart(2, '0');
-const shortId = (id) => id?.slice(0, 8) || '—';
-const label = (value) => String(value || '').replace(/_/g, ' ');
+  --od-font-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --od-font-head: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-const money = (value, fraction = 2) =>
-  Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: fraction });
-
-const formatDateTime = (value) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? '—'
-    : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-};
-
-const getError = (error, fallback) =>
-  error?.response?.data?.error || error?.response?.data?.message || error?.message || fallback;
-
-const statusTone = (status) => {
-  const value = String(status || '').toUpperCase();
-  if (['COMPLETED', 'DELIVERED', 'PAID', 'ACCEPTED', 'CONFIRMED'].includes(value)) return 'good';
-  if (['CANCELLED', 'REJECTED', 'FAILED', 'DISPUTED'].includes(value)) return 'bad';
-  if (['TRANSPORT_ARRANGED', 'ARRANGED', 'QUOTED'].includes(value)) return 'info';
-  if (['PENDING', 'AWAITING_PAYMENT', 'IN_PROGRESS', 'PROCESSING'].includes(value)) return 'wait';
-  return 'neutral';
-};
-
-const initials = (name) =>
-  String(name || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
-
-const scrollToId = (id, delay = 0) => {
-  const go = () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  if (delay) window.setTimeout(go, delay);
-  else go();
-};
-
-const leafQuotes = (quotes) => {
-  const list = Array.isArray(quotes) ? quotes : [];
-  const parents = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
-  return list.filter((q) => !parents.has(q.id));
-};
-
-function useNowUntil(targetMs) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!targetMs || Number.isNaN(targetMs)) return undefined;
-    setNow(Date.now());
-    const timer = setInterval(() => {
-      const current = Date.now();
-      setNow(current);
-      if (current >= targetMs) clearInterval(timer);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [targetMs]);
-  return now;
+  font-family: var(--od-font-body);
+  color: var(--od-text);
+  background: var(--od-page);
+  min-height: 100vh;
+  padding: 14px 0 88px;
+  -webkit-text-size-adjust: 100%;
 }
 
-/* ========================================================================
-   2. UI primitives — every card on the page is built from these
-   ======================================================================== */
-
-function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, className, children }) {
-  return (
-    <section className={`card${tone ? ` od-card-${tone}` : ''}${className ? ` ${className}` : ''}`} id={id}>
-      <header className="od-card-head">
-        <div className="od-card-head-main">
-          {eyebrow && <span className={`od-eyebrow${eyebrowClass ? ` ${eyebrowClass}` : ''}`}>{eyebrow}</span>}
-          <h2 className="od-card-title">{title}</h2>
-          {subtitle && <p className="od-card-subtitle">{subtitle}</p>}
-        </div>
-        {side && <div className="od-card-head-side">{side}</div>}
-      </header>
-      {children}
-    </section>
-  );
+.order-detail-page *,
+.order-detail-page *::before,
+.order-detail-page *::after {
+  box-sizing: border-box;
 }
 
-function Section({ title, meta, strong, children }) {
-  return (
-    <div className="od-card-section">
-      {(title || meta) && (
-        <div className="od-card-section-head">
-          <h3 className="od-card-section-title">{title}</h3>
-          {meta != null && <span className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>{meta}</span>}
-        </div>
-      )}
-      {children}
-    </div>
-  );
+.order-detail-page .container-narrow {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-inline: max(14px, env(safe-area-inset-left)) max(14px, env(safe-area-inset-right));
 }
 
-/* Round initials avatar. `small` = compact version for tables and lists. */
-const Avatar = ({ name, small }) => (
-  <span className={`od-party-avatar${small ? ' od-party-avatar--sm' : ''}`} aria-hidden="true">
-    {initials(name)}
-  </span>
-);
+.order-detail-page p { margin: 0 0 8px; line-height: 1.6; }
+.order-detail-page p:last-child { margin-bottom: 0; }
+.order-detail-page strong { color: var(--od-ink); font-weight: 700; }
+.order-detail-page .muted { color: var(--od-muted); }
+.order-detail-page .small { font-size: 12.5px; }
+.order-detail-page .optional { color: var(--od-muted); font-weight: 400; }
 
-function PartyBadge({ role, name }) {
-  return (
-    <div className="od-card-side-party">
-      <div>
-        <span className="od-card-side-label">{role}</span>
-        <span className="od-card-side-value">{name || '—'}</span>
-      </div>
-      <Avatar name={name} />
-    </div>
-  );
+/* ---------- 2. Page bar & grid ---------- */
+.order-detail-page .row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-const Finding = ({ text, empty }) =>
-  text ? <span className="od-finding-flag">{text}</span> : <Pill tone="good" dot={false}>{empty}</Pill>;
+.order-detail-page .page-bar { margin-bottom: 14px; }
 
-const Facts = ({ children }) => <div className="od-detail-facts">{children}</div>;
+.order-detail-page .back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font: 600 14px var(--od-font-body);
+  color: var(--od-muted);
+  cursor: pointer;
+}
+.order-detail-page .back-link:hover { color: var(--od-ink); }
 
-const Fact = ({ name, children }) => (
-  <div>
-    <span>{name}</span>
-    <strong>{children}</strong>
-  </div>
-);
-
-const Pill = ({ tone = 'neutral', dot = true, children }) => (
-  <span className={`od-status-pill od-tone-${tone}`}>
-    {dot && <span className="od-status-pill-dot" aria-hidden="true" />}
-    {children}
-  </span>
-);
-
-const YouTag = ({ inline }) => <span className={`od-party-you${inline ? ' od-party-you-inline' : ''}`}>You</span>;
-
-const Actions = ({ children }) => <div className="od-actions">{children}</div>;
-
-const SideLabel = ({ name, children }) => (
-  <>
-    <span className="od-card-side-label">{name}</span>
-    {children}
-  </>
-);
-
-function Notice({ title, children }) {
-  return (
-    <div className="od-notice">
-      {title && <strong>{title}</strong>}
-      {children}
-    </div>
-  );
+.order-detail-page .od-page-grid,
+.order-detail-page .od-card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--od-gap);
+  align-items: start;
 }
 
-const Button = ({ variant = 'default', size, busy, busyText, children, ...rest }) => (
-  <button
-    type="button"
-    className={`btn${variant !== 'default' ? ` btn-${variant}` : ''}${size ? ` btn-${size}` : ''}`}
-    {...rest}
-  >
-    {busy ? busyText : children}
-  </button>
-);
+.order-detail-page .od-span-all { grid-column: 1 / -1; min-width: 0; }
 
-/* ========================================================================
-   3. Payout card
-   ========================================================================
-   Party labels are abbreviated (SR / IR / TR). The countdown strip shows
-   "Due Date" and the timer on one horizontal row; the date itself is not
-   repeated here because it already appears in the card head. */
-
-function PayoutStatusCard({ payouts, names, you }) {
-  const parties = [
-    { key: 'seller', label: 'SR', name: names.seller, you: you.seller, payout: payouts.seller },
-    payouts.inspector && { key: 'inspector', label: 'IR', name: names.inspector, you: you.inspector, payout: payouts.inspector },
-    payouts.transporter && { key: 'transporter', label: 'TR', name: names.transporter, you: you.transporter, payout: payouts.transporter },
-  ]
-    .filter(Boolean)
-    .map((p) => ({ ...p, status: p.payout?.status || null }));
-
-  const releaseMs = (payout) => {
-    const t = payout?.releaseAt ? new Date(payout.releaseAt).getTime() : NaN;
-    return Number.isNaN(t) ? null : t;
-  };
-
-  const dueTimes = parties
-    .filter((p) => ['HELD', 'RELEASED', 'PAID_OUT'].includes(p.status))
-    .map((p) => releaseMs(p.payout))
-    .filter((t) => t !== null);
-  const dueMs = dueTimes.length ? Math.max(...dueTimes) : null;
-  const now = useNowUntil(dueMs);
-
-  const anyDispute = parties.some((p) => p.status === 'ON_HOLD_DISPUTE');
-  const holdNotStarted = parties.every((p) => !p.payout);
-
-  const badgeOf = ({ status, payout }) => {
-    if (!status) return { text: 'Pending', tone: 'neutral' };
-    if (status === 'HELD') {
-      const at = releaseMs(payout);
-      return at !== null && now >= at ? { text: 'Released', tone: 'good' } : { text: 'Held', tone: 'wait' };
-    }
-    if (status === 'RELEASED') return { text: 'Released', tone: 'good' };
-    if (status === 'PAID_OUT') return { text: 'Paid out', tone: 'good' };
-    if (status === 'ON_HOLD_DISPUTE') return { text: 'Dispute hold', tone: 'bad' };
-    if (status === 'CANCELLED') return { text: 'Cancelled', tone: 'bad' };
-    return { text: label(status), tone: 'neutral' };
-  };
-
-  const anyFraction = parties.some((p) => p.payout?.amount != null && Number(p.payout.amount) % 1 !== 0);
-  const amountText = (v) =>
-    Number(v || 0).toLocaleString(undefined, {
-      minimumFractionDigits: anyFraction ? 2 : 0,
-      maximumFractionDigits: 2,
-    });
-
-  const remainingMs = dueMs !== null ? Math.max(0, dueMs - now) : 0;
-  const secs = Math.floor(remainingMs / 1000);
-  const clock = `${pad2(Math.floor(secs / 3600))}:${pad2(Math.floor((secs % 3600) / 60))}:${pad2(secs % 60)}`;
-  const dueDate =
-    dueMs !== null
-      ? new Date(dueMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-      : null;
-  const duePassed = dueMs !== null && remainingMs === 0;
-
-  const dueStripStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 14,
-    flexWrap: 'wrap',
-    padding: '14px 0 0',
-    margin: '14px 0 0',
-    border: 'none',
-    borderTop: '1px solid #e5e9ef',
-    borderRadius: 0,
-    background: 'transparent',
-    backgroundColor: 'transparent',
-    backgroundImage: 'none',
-    boxShadow: 'none',
-  };
-
-  const dueLabelStyle = {
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 10.5,
-    fontWeight: 700,
-    letterSpacing: '.14em',
-    textTransform: 'uppercase',
-    color: '#64748b',
-  };
-
-  const dueClockStyle = {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: 6,
-    fontVariantNumeric: 'tabular-nums',
-  };
-
-  const dueDigitsStyle = {
-    fontFamily: "'Manrope', system-ui, sans-serif",
-    fontSize: 22,
-    fontWeight: 800,
-    letterSpacing: '-.6px',
-    color: '#0d1b2a',
-    lineHeight: 1,
-  };
-
-  const dueUnitStyle = {
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 11,
-    fontWeight: 700,
-    letterSpacing: '.12em',
-    textTransform: 'uppercase',
-    color: '#64748b',
-  };
-
-  const noticeWrapStyle = {
-    marginTop: 18,
-    paddingTop: 14,
-    border: 'none',
-    borderTop: '1px solid #e5e9ef',
-    borderRadius: 0,
-    background: 'transparent',
-    backgroundColor: 'transparent',
-    backgroundImage: 'none',
-    boxShadow: 'none',
-  };
-
-  const noticePrefixStyle = {
-    display: 'block',
-    margin: '0 0 8px',
-    fontFamily: "'Manrope', system-ui, sans-serif",
-    fontSize: 11,
-    fontWeight: 800,
-    letterSpacing: '.14em',
-    textTransform: 'uppercase',
-    color: '#0f7a44',
-  };
-
-  const noticeListStyle = {
-    listStyle: 'none',
-    margin: 0,
-    padding: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-  };
-
-  const noticeItemStyle = {
-    position: 'relative',
-    paddingLeft: 24,
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 13,
-    lineHeight: 1.6,
-    color: '#2c3a4a',
-  };
-
-  const noticeNumStyle = {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    fontFamily: "'Manrope', system-ui, sans-serif",
-    fontSize: 12,
-    fontWeight: 800,
-    color: '#0f7a44',
-  };
-
-  return (
-    <Card
-      id="order-payout-status"
-      eyebrow="Order Payout"
-      title="After Buyer Paid"
-      side={dueDate && <SideLabel name="Due Date"><span className="od-card-side-value">{dueDate}</span></SideLabel>}
-    >
-      <Section title="Order Payout Status">
-        <table className="payout-table">
-          <thead>
-            <tr>
-              <th scope="col">Party</th>
-              <th scope="col" className="payout-amount-col">Amount</th>
-              <th scope="col" className="payout-status-col">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {parties.map((party) => {
-              const { key, name, payout, status } = party;
-              const badge = badgeOf(party);
-              const currency = payout?.currency && payout.currency !== 'ETB' ? payout.currency : null;
-              return (
-                <tr key={key}>
-                  <th scope="row" className="payout-party">
-                    <div className="payout-party-body">
-                      <span className="payout-party-line">
-                        {name && <Avatar small name={name} />}
-                        <span className="payout-party-role">{party.label}</span>
-                        {name && <span className="payout-party-name">{name}</span>}
-                        {party.you && <YouTag />}
-                      </span>
-                      {status === 'RELEASED' && payout?.releasedAt && (
-                        <span className="payout-party-note">Released {formatDateTime(payout.releasedAt)}</span>
-                      )}
-                      {status === 'PAID_OUT' && payout?.paidOutAt && (
-                        <span className="payout-party-note">Paid out {formatDateTime(payout.paidOutAt)}</span>
-                      )}
-                      {payout?.payoutReference && (
-                        <span className="payout-party-note">Ref {payout.payoutReference}</span>
-                      )}
-                    </div>
-                  </th>
-                  <td className="payout-amount">
-                    {payout?.amount != null ? (
-                      <>
-                        {amountText(payout.amount)}
-                        {currency && <span className="payout-currency">{currency}</span>}
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="payout-status">
-                    <Pill tone={badge.tone}>{badge.text}</Pill>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </Section>
-
-      {dueMs !== null && (
-        <div style={dueStripStyle} role="group" aria-label="Due date">
-          <span style={dueLabelStyle}>Due Date</span>
-          <div style={dueClockStyle} role="timer" aria-live="off">
-            {duePassed ? (
-              <span style={{ ...dueDigitsStyle, fontSize: 15, letterSpacing: '-.2px', color: '#0f7a44' }}>
-                Hold cleared
-              </span>
-            ) : (
-              <>
-                <span style={dueDigitsStyle}>{clock}</span>
-                <span style={dueUnitStyle}>left</span>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {dueMs === null && holdNotStarted && (
-        <div style={dueStripStyle} role="group" aria-label="Due date">
-          <span style={dueLabelStyle}>Due Date</span>
-          <span style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: 13, color: '#64748b' }}>
-            Starts after payment settles
-          </span>
-        </div>
-      )}
-
-      {anyDispute && (
-        <p
-          style={{
-            marginTop: 12,
-            padding: '8px 0 8px 12px',
-            borderLeft: '3px solid #fecaca',
-            fontSize: 12.5,
-            lineHeight: 1.55,
-            color: '#b42318',
-          }}
-        >
-          One or more payouts are frozen while a dispute is open.
-        </p>
-      )}
-
-      <div style={noticeWrapStyle}>
-        <span style={noticePrefixStyle}>Notice:</span>
-        <ol style={noticeListStyle}>
-          <li style={noticeItemStyle}>
-            <span style={noticeNumStyle}>1)</span>
-            Each payout is held for 3 days after its payment settles.
-          </li>
-          <li style={noticeItemStyle}>
-            <span style={noticeNumStyle}>2)</span>
-            Buyer payment is separate from each payout below.
-          </li>
-          <li style={noticeItemStyle}>
-            <span style={noticeNumStyle}>3)</span>
-            No manual action is required.
-          </li>
-        </ol>
-      </div>
-    </Card>
-  );
+/* ---------- 3. Card ---------- */
+.order-detail-page .card {
+  min-width: 0;
+  background: var(--od-surface);
+  border: 1px solid var(--od-line);
+  border-radius: var(--od-radius-lg);
+  padding: var(--od-pad);
+  scroll-margin-top: 16px;
 }
 
-/* ========================================================================
-   4. Order overview
-   ======================================================================== */
+.order-detail-page .card.loading { text-align: center; padding: 40px 18px; color: var(--od-muted); }
 
-function OrderProgress({ steps }) {
-  const current = steps.findIndex((s) => !s.done);
-  return (
-    <ol className="order-progress" aria-label="Order progress">
-      {steps.map((s, idx) => {
-        const state = s.done ? 'done' : idx === current ? 'current' : 'todo';
-        return (
-          <li key={s.label} className={`order-progress-step is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
-            <span className="order-progress-dot" aria-hidden="true" />
-            <span className="order-progress-label">{s.label}</span>
-          </li>
-        );
-      })}
-    </ol>
-  );
+.order-detail-page .od-card-warning { border-color: #f1d9a0; background: #fffdf6; }
+.order-detail-page .od-card-accent { border-color: #bfe3cd; background: var(--od-brand-soft); }
+
+.order-detail-page .od-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 12px;
+  margin-bottom: 14px;
+}
+.order-detail-page .od-card-head-main { display: contents; }
+.order-detail-page .od-card-head .od-eyebrow { grid-column: 1; grid-row: 1; }
+.order-detail-page .od-card-head .od-card-title { grid-column: 1; grid-row: 2; min-width: 0; }
+.order-detail-page .od-card-head .od-card-head-side { grid-column: 2; grid-row: 1 / span 2; }
+
+/* divider under the title row: hairline + short accent bar, sits ABOVE the description */
+.order-detail-page .od-card-head::before {
+  content: '';
+  grid-column: 1 / -1;
+  grid-row: 3;
+  height: 3px;
+  margin-top: 12px;
+  background:
+    linear-gradient(var(--od-accent, var(--od-brand)), var(--od-accent, var(--od-brand))) left center / 28px 3px no-repeat,
+    linear-gradient(var(--od-line), var(--od-line)) left center / 100% 1px no-repeat;
+}
+.order-detail-page .od-card-head .od-card-subtitle { grid-column: 1 / -1; grid-row: 4; margin-top: 12px; }
+
+.order-detail-page .od-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font: 800 11px / 1.2 var(--od-font-head);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--od-accent, var(--od-brand));
+}
+.order-detail-page .od-eyebrow::before {
+  content: '';
+  flex: none;
+  width: 22px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.order-detail-page .od-eyebrow.is-selling { color: var(--od-info); }
+
+.order-detail-page .od-card-title {
+  margin: 0;
+  font: 800 clamp(18px, 4.6vw, 22px) / 1.25 var(--od-font-head);
+  letter-spacing: -0.3px;
+  color: var(--od-ink);
+  overflow-wrap: anywhere;
 }
 
-function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
-  const { isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob } = flags;
-  const role = isBuyer ? 'Buying' : isSeller ? 'Selling' : 'Order';
-  const showBuyer = isSeller;
-  const other = showBuyer ? order.buyer : order.seller;
-  const otherLabel = showBuyer ? 'Buyer' : 'Seller';
-  const delivered = ['DELIVERED', 'COMPLETED'].includes(order.status) || transportJob?.status === 'DELIVERED';
-
-  const steps = [
-    { label: 'Ordered', done: true },
-    { label: 'Paid', done: marketplacePaid },
-    { label: 'Delivered', done: delivered },
-    { label: 'Completed', done: order.status === 'COMPLETED' },
-  ];
-
-  return (
-    <Card
-      className="od-card-overview"
-      eyebrow={role}
-      eyebrowClass={isSeller ? 'is-selling' : ''}
-      title={title}
-      side={<PartyBadge role={otherLabel} name={other?.name} />}
-    >
-      <Section title="Order status" meta={`ORD ${shortId(order.id).toUpperCase()}`}>
-        <div className="od-status-row">
-          <Pill tone={statusTone(order.status)}>{label(order.status)}</Pill>
-          {marketplacePaid && <Pill tone="good" dot={false}>Payment: Paid</Pill>}
-          {marketplacePending && !marketplacePaid && <Pill tone="wait" dot={false}>Payment: Pending</Pill>}
-          {transportJob?.status && <Pill tone="neutral" dot={false}>Transport: {label(transportJob.status)}</Pill>}
-        </div>
-        <OrderProgress steps={steps} />
-      </Section>
-
-      <Section title="Details">
-        <Facts>
-          <Fact name="Amount">{money(order.finalPrice)} ETB</Fact>
-          <Fact name="Buyer">{order.buyer?.name || '—'}{isBuyer && <YouTag inline />}</Fact>
-          <Fact name="Seller">{order.seller?.name || '—'}{isSeller && <YouTag inline />}</Fact>
-          {order.listing?.cropType && <Fact name="Product">{order.listing.cropType}</Fact>}
-          {order.listing?.quantity != null && <Fact name="Quantity">{order.listing.quantity} units</Fact>}
-          <Fact name="Ordered from">{order.listing?.location || '—'}</Fact>
-          {order.buyer?.location && <Fact name="Deliver to">{order.buyer.location}</Fact>}
-        </Facts>
-      </Section>
-
-      <p className="od-card-created">Created {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}</p>
-
-      {canCancel && (
-        <Button className="btn btn-outline btn-block" disabled={busy === 'cancel'} onClick={onCancel} busy={busy === 'cancel'} busyText="Cancelling…">
-          Cancel order
-        </Button>
-      )}
-    </Card>
-  );
+.order-detail-page .od-card-subtitle {
+  margin: 12px 0 0 var(--od-indent);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--od-muted);
 }
 
-/* ========================================================================
-   5. Inspection
-   ======================================================================== */
+.order-detail-page .od-card-head-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: 48%;
+  min-width: 0;
+  text-align: right;
+}
 
-function InspectionCard({ order, title, i }) {
-  const request = i.current;
+.order-detail-page .od-card-side-label {
+  font: 800 11px var(--od-font-head);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--od-accent, var(--od-brand));
+}
 
-  if (!request) {
-    const needsApproval = i.all.length > 0 && !i.formReleased;
-    return (
-      <Card id="inspection-section" eyebrow="Inspection" title={needsApproval ? 'Inspection request awaiting admin approval' : 'Request an inspection'}>
-        <Section title="How it works">
-          <p className="muted">
-            Get an independent quality check before the purchase is committed. Registered inspectors compete by sending a
-            sealed fee quote. You compare bids, pick one to negotiate with, and the accepted quote assigns the inspector.
-            You review the finished report before paying for the goods.
-          </p>
-        </Section>
-        {needsApproval ? (
-          <Notice title="Admin approval required">
-            <p>Ask MarketBridge admin to release a fresh inspection form before opening another competition.</p>
-          </Notice>
-        ) : (
-          <Button
-            variant="primary"
-            disabled={i.requesting}
-            busy={i.requesting}
-            busyText="Requesting…"
-            onClick={() => i.request(i.isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}
-          >
-            Open inspection request
-          </Button>
-        )}
-      </Card>
-    );
+.order-detail-page .od-card-side-value {
+  display: block;
+  font: 700 14px var(--od-font-head);
+  color: var(--od-ink);
+  overflow-wrap: anywhere;
+}
+
+.order-detail-page .od-card-side-party {
+  display: flex;
+  flex-direction: row; /* text, then avatar at the far right */
+  align-items: center;
+  gap: 10px;
+}
+.order-detail-page .od-card-side-party > div { display: flex; flex: 0 1 auto; flex-direction: column; align-items: flex-end; min-width: 0; }
+.order-detail-page .od-card-side-label { white-space: nowrap; }
+
+.order-detail-page .od-party-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--od-ink);
+  color: #fff;
+  font: 800 13px var(--od-font-head);
+}
+
+/* ---------- 4. Sections inside cards ---------- */
+.order-detail-page .od-card-section { padding: 18px 0; border-top: 1px solid var(--od-line); }
+.order-detail-page .od-card-head + .od-card-section,
+.order-detail-page .od-card-head + .od-card-section:first-of-type { border-top: 0; padding-top: 0; }
+.order-detail-page .od-card-section:last-child { padding-bottom: 0; }
+
+.order-detail-page .od-card-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 14px;
+}
+
+.order-detail-page .od-card-section-title {
+  margin: 0;
+  font: 800 14px var(--od-font-head);
+  color: var(--od-accent, var(--od-brand));
+}
+
+.order-detail-page .od-card-section-meta {
+  font: 600 12px var(--od-font-body);
+  color: var(--od-muted);
+  font-variant-numeric: tabular-nums;
+}
+.order-detail-page .od-card-section-meta.is-strong {
+  font: 800 15px var(--od-font-head);
+  color: var(--od-ink);
+}
+
+.order-detail-page .od-card-created { margin-top: 12px; font-size: 12.5px; color: var(--od-muted); }
+
+/* ---------- 4b. Body indent ----------
+   Titles and section headers stay flush left; everything else is pushed in.
+   !important is needed because some cards set margin via inline styles. */
+.order-detail-page .card:not(.payment-center) > :not(.od-card-head):not(.od-card-section):not(header) {
+  margin-left: var(--od-indent) !important;
+}
+.order-detail-page .od-card-section > :not(.od-card-section-head) {
+  margin-left: var(--od-indent);
+}
+.order-detail-page .od-card-section > .payout-table,
+.order-detail-page .od-card-section > .field,
+.order-detail-page .od-card-section > .alert {
+  width: calc(100% - var(--od-indent));
+}
+
+/* ---------- 5. Facts (label / value pairs) ---------- */
+.order-detail-page .od-detail-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 16px;
+}
+.order-detail-page .od-detail-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.order-detail-page .od-detail-facts span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--od-muted);
+}
+.order-detail-page .od-detail-facts strong {
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.order-detail-page .od-finding-flag {
+  display: inline-block;
+  padding: 4px 9px;
+  border-radius: var(--od-radius-sm);
+  background: var(--od-bad-bg);
+  color: var(--od-bad);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.order-detail-page .od-party-you {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--od-brand-soft);
+  color: var(--od-brand-dark);
+  font: 700 10.5px var(--od-font-head);
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+/* ---------- 6. Status pills & progress ---------- */
+.order-detail-page .od-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.order-detail-page .od-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 999px;
+  font: 700 11.5px / 1.3 var(--od-font-body);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--od-neutral-bg);
+  color: var(--od-neutral);
+}
+.order-detail-page .od-status-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.order-detail-page .od-tone-good { background: var(--od-good-bg); color: var(--od-good); }
+.order-detail-page .od-tone-bad { background: var(--od-bad-bg); color: var(--od-bad); }
+.order-detail-page .od-tone-wait { background: var(--od-wait-bg); color: var(--od-wait); }
+.order-detail-page .od-tone-info { background: var(--od-info-bg); color: var(--od-info); }
+.order-detail-page .od-tone-neutral { background: var(--od-neutral-bg); color: var(--od-neutral); }
+
+.order-detail-page .badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--od-neutral-bg);
+  color: var(--od-neutral);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.order-detail-page .order-progress {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.order-detail-page .order-progress-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.order-detail-page .order-progress-step::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--od-line-strong);
+}
+.order-detail-page .order-progress-step:first-child::before { display: none; }
+.order-detail-page .order-progress-step.is-done::before,
+.order-detail-page .order-progress-step.is-current::before { background: var(--od-brand); }
+
+.order-detail-page .order-progress-dot {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--od-surface);
+  border: 2px solid var(--od-line-strong);
+}
+.order-detail-page .is-done .order-progress-dot { background: var(--od-brand); border-color: var(--od-brand); }
+.order-detail-page .is-current .order-progress-dot {
+  border-color: var(--od-brand);
+  box-shadow: 0 0 0 4px var(--od-brand-soft);
+}
+
+.order-detail-page .order-progress-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--od-muted);
+}
+.order-detail-page .is-done .order-progress-label,
+.order-detail-page .is-current .order-progress-label { color: var(--od-ink); }
+
+/* ---------- 7. Buttons & actions ---------- */
+.order-detail-page .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--od-line-strong);
+  border-radius: var(--od-radius);
+  background: var(--od-surface);
+  color: var(--od-ink);
+  font: 700 14px / 1.2 var(--od-font-body);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.order-detail-page .btn:hover:not(:disabled) { background: var(--od-soft); border-color: var(--od-muted); }
+.order-detail-page .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.order-detail-page .btn-primary { background: var(--od-brand); border-color: var(--od-brand); color: #fff; }
+.order-detail-page .btn-primary:hover:not(:disabled) { background: var(--od-brand-dark); border-color: var(--od-brand-dark); }
+
+.order-detail-page .btn-light { background: var(--od-neutral-bg); border-color: transparent; }
+.order-detail-page .btn-outline { background: transparent; border-color: var(--od-bad-line); color: var(--od-bad); }
+.order-detail-page .btn-outline:hover:not(:disabled) { background: var(--od-bad-bg); border-color: var(--od-bad); }
+
+.order-detail-page .btn-sm { min-height: 38px; padding: 0 14px; font-size: 13px; border-radius: var(--od-radius-sm); }
+.order-detail-page .btn-block { display: flex; width: calc(100% - var(--od-indent)); margin-top: 14px; }
+
+.order-detail-page .od-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+.order-detail-page .od-actions .btn { width: 100%; }
+
+/* ---------- 8. Forms ---------- */
+.order-detail-page .form { display: flex; flex-direction: column; gap: 8px; }
+.order-detail-page .form label { font-size: 13px; font-weight: 700; color: var(--od-ink); margin-top: 4px; }
+.order-detail-page .form .btn { margin-top: 8px; }
+
+.order-detail-page .field {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--od-line-strong);
+  border-radius: var(--od-radius-sm);
+  background: var(--od-surface);
+  color: var(--od-ink);
+  font: 500 16px / 1.4 var(--od-font-body); /* 16px stops iOS zoom-on-focus */
+}
+.order-detail-page textarea.field { resize: vertical; min-height: 88px; }
+.order-detail-page .field::placeholder { color: #94a3b8; }
+.order-detail-page .field:disabled { background: var(--od-soft); }
+
+.order-detail-page .od-field-row { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+
+/* ---------- 9. Notices & alerts ---------- */
+.order-detail-page .od-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--od-line);
+  border-left: 3px solid var(--od-brand);
+  border-radius: var(--od-radius);
+  background: var(--od-soft);
+}
+.order-detail-page .od-notice > strong { font: 700 14px var(--od-font-head); }
+.order-detail-page .od-notice p { margin: 0; font-size: 13.5px; }
+
+.order-detail-page .alert {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--od-line);
+  border-radius: var(--od-radius);
+  background: var(--od-soft);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.order-detail-page .alert.error { background: var(--od-bad-bg); border-color: var(--od-bad-line); color: var(--od-bad); }
+.order-detail-page .alert.success { background: var(--od-good-bg); border-color: #bfe3cd; color: var(--od-good); }
+
+/* ---------- 10. Inspection decision ---------- */
+.order-detail-page .inspection-decision-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--od-radius);
+}
+.order-detail-page .inspection-decision-state.is-buy { background: var(--od-good-bg); }
+.order-detail-page .inspection-decision-state.is-cancel { background: var(--od-bad-bg); }
+.order-detail-page .inspection-decision-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 800;
+}
+.order-detail-page .is-buy .inspection-decision-icon { background: var(--od-good); }
+.order-detail-page .is-cancel .inspection-decision-icon { background: var(--od-bad); }
+.order-detail-page .inspection-decision-state p { margin-top: 2px; font-size: 13px; color: var(--od-text); }
+
+/* ---------- 11. Transport quotes ---------- */
+.order-detail-page .transporter {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+  border: 1px solid var(--od-line);
+  border-radius: var(--od-radius);
+  background: var(--od-soft);
+}
+.order-detail-page .transporter:last-child { margin-bottom: 0; }
+.order-detail-page .transporter > div { min-width: 0; }
+.order-detail-page .transporter > div:last-child {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--od-line-strong);
+}
+.order-detail-page .transporter > div:last-child > strong { font: 800 18px var(--od-font-head); }
+.order-detail-page .transporter .btn,
+.order-detail-page .transporter .field-inline { width: 100%; }
+
+.order-detail-page .od-quote-actions { display: flex; flex-direction: column; gap: 8px; }
+
+/* ---------- 12. Payout table ---------- */
+.order-detail-page .payout-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.order-detail-page .payout-table th,
+.order-detail-page .payout-table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--od-line);
+  text-align: left;
+  vertical-align: middle;
+}
+.order-detail-page .payout-table thead th {
+  padding-top: 0;
+  font: 700 11px var(--od-font-head);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--od-muted);
+}
+.order-detail-page .payout-table tbody tr:last-child th,
+.order-detail-page .payout-table tbody tr:last-child td { border-bottom: 0; }
+
+.order-detail-page .payout-amount-col,
+.order-detail-page .payout-amount { text-align: right; white-space: nowrap; }
+.order-detail-page .payout-status-col,
+.order-detail-page .payout-status { text-align: right; }
+.order-detail-page .payout-amount { font: 800 14px var(--od-font-head); color: var(--od-ink); font-variant-numeric: tabular-nums; }
+.order-detail-page .payout-currency { margin-left: 4px; font-size: 11px; font-weight: 600; color: var(--od-muted); }
+
+.order-detail-page .payout-party { font-weight: 500; }
+.order-detail-page .payout-party-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.order-detail-page .payout-party-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.order-detail-page .payout-party-role {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--od-ink);
+  color: #fff;
+  font: 800 11px var(--od-font-head);
+  letter-spacing: 0.04em;
+}
+.order-detail-page .payout-party-name { font-weight: 700; color: var(--od-ink); overflow-wrap: anywhere; }
+.order-detail-page .payout-party-note { font-size: 12px; color: var(--od-muted); overflow-wrap: anywhere; }
+
+/* ---------- 13. Toast ---------- */
+.order-detail-toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: calc(100% - 28px);
+  max-width: 480px;
+  padding: 12px 12px 12px 14px;
+  border-radius: var(--od-radius);
+  background: #0d1b2a;
+  color: #fff;
+  font: 500 13.5px / 1.5 'DM Sans', system-ui, sans-serif;
+  box-shadow: 0 12px 32px rgba(13, 27, 42, 0.3);
+  animation: od-toast-in 0.2s ease-out;
+}
+.order-detail-toast-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: #0d1b2a;
+  font-weight: 800;
+  font-size: 13px;
+}
+.order-detail-toast-message { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.order-detail-toast-close {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: -6px -2px -6px 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.order-detail-toast-close:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+
+@keyframes od-toast-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ---------- 14. Accessibility ---------- */
+.order-detail-page a:focus-visible,
+.order-detail-page button:focus-visible,
+.order-detail-page .field:focus-visible,
+.order-detail-toast button:focus-visible {
+  outline: 3px solid rgba(15, 122, 68, 0.45);
+  outline-offset: 2px;
+}
+.order-detail-page .field:focus { border-color: var(--od-brand); }
+
+@media (prefers-reduced-motion: reduce) {
+  .order-detail-page *,
+  .order-detail-toast { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* ==========================================================================
+   15. Responsive breakpoints
+   ========================================================================== */
+
+/* Very small phones (≤ 380px) */
+@media (max-width: 380px) {
+  .order-detail-page { --od-pad: 14px; --od-gap: 12px; }
+  .order-detail-page .order-progress-label { font-size: 10.5px; }
+  .order-detail-page .payout-table th,
+  .order-detail-page .payout-table td { padding: 10px 4px; }
+  .order-detail-page .payout-table { font-size: 12.5px; }
+  .order-detail-page .od-status-pill { white-space: normal; }
+}
+
+/* Phones (< 640px): stack the payout cell so status doesn't squeeze the name */
+@media (max-width: 639px) {
+  .order-detail-page .od-detail-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Tablets (≥ 640px): 2 columns */
+@media (min-width: 640px) {
+  .order-detail-page { --od-pad: 22px; --od-gap: 18px; --od-indent: 18px; padding-top: 22px; }
+  .order-detail-page .container-narrow { padding-inline: 22px; }
+
+  .order-detail-page .od-page-grid,
+  .order-detail-page .od-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .order-detail-page .od-actions { flex-direction: row; flex-wrap: wrap; }
+  .order-detail-page .od-actions .btn { width: auto; }
+  .order-detail-page .btn-block { width: auto; display: inline-flex; }
+
+  .order-detail-page .od-field-row { flex-direction: row; align-items: center; }
+  .order-detail-page .od-field-row .field { flex: 1 1 200px; width: auto; }
+  .order-detail-page .od-field-row .btn { flex: none; width: auto; }
+
+  .order-detail-page .field { font-size: 14.5px; }
+
+  .order-detail-page .transporter {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+  }
+  .order-detail-page .transporter > div:first-child { flex: 1 1 55%; }
+  .order-detail-page .transporter > div:last-child {
+    flex: 1 1 40%;
+    padding: 0 0 0 20px;
+    border-top: 0;
+    border-left: 1px dashed var(--od-line-strong);
   }
 
-  const report = request.report;
-  const reportReady = request.status === 'COMPLETED' && Boolean(report);
-  const inspectorName = request.inspector?.name || null;
-  const inspectionDate =
-    report?.inspectedAt || report?.completedAt || request.completedAt || request.updatedAt || request.createdAt || null;
+  .order-detail-page .od-quote-actions { flex-direction: row; flex-wrap: wrap; }
+  .order-detail-page .od-quote-actions .btn { width: auto; }
+  .order-detail-page .od-quote-actions .field-inline { flex: 1 1 120px; width: auto; }
 
-  /* Show the inspector avatar as soon as one is assigned, not only after the report. */
-  const side = inspectorName ? (
-    <PartyBadge role="Inspector" name={inspectorName} />
-  ) : (
-    <SideLabel name="Status">
-      <Pill tone={statusTone(request.status)}>{label(request.status)}</Pill>
-    </SideLabel>
-  );
+  .order-detail-page .payout-table th,
+  .order-detail-page .payout-table td { padding: 14px 12px; }
+  .order-detail-page .payout-table { font-size: 14px; }
 
-  return (
-    <Card
-      id="inspection-section"
-      eyebrow="Inspection"
-      title={reportReady ? 'Quality report' : 'Inspection status'}
-      subtitle={reportReady ? 'Review the findings before the purchase is committed.' : null}
-      side={side}
-    >
-      <Section title="Inspection details" meta={`INS ${shortId(request.id).toUpperCase()}`}>
-        <Facts>
-          {reportReady && <Fact name="Product">{order.listing?.cropType || title}</Fact>}
-          {reportReady && <Fact name="Quantity">{order.listing?.quantity != null ? `${order.listing.quantity} units` : '—'}</Fact>}
-          {reportReady && <Fact name="Location">{order.listing?.location || '—'}</Fact>}
-          <Fact name="Requested by">{request.mode === 'SELLER_REQUESTED' ? 'Seller' : 'Buyer'}</Fact>
-          <Fact name="Requested on">{formatDateTime(request.createdAt)}</Fact>
-          {reportReady && <Fact name="Inspection date">{formatDateTime(inspectionDate)}</Fact>}
-          {inspectorName && <Fact name="Inspected by">{inspectorName}</Fact>}
-          {request.fee != null && <Fact name="Inspection fee">{money(request.fee)} ETB</Fact>}
-          {!inspectorName && <Fact name="Status">{label(request.status)}</Fact>}
-        </Facts>
-      </Section>
-
-      {reportReady ? (
-        <>
-          <Section title="Findings">
-            <Facts>
-              <Fact name="Visible defects"><Finding text={report.visibleDefects} empty="No defects" /></Fact>
-              <Fact name="Damage notes"><Finding text={report.damageNotes} empty="No damage" /></Fact>
-              <Fact name="Packaging"><Finding text={report.packagingNotes} empty="Fully packed" /></Fact>
-            </Facts>
-          </Section>
-
-          {i.decisionRequired && (
-            <Section title="Purchase decision">
-              {order.buyerDecision ? (
-                <div className={`inspection-decision-state ${order.buyerDecision === 'BUY' ? 'is-buy' : 'is-cancel'}`}>
-                  <span className="inspection-decision-icon" aria-hidden="true">{order.buyerDecision === 'BUY' ? '✓' : '×'}</span>
-                  <div>
-                    <strong>{order.buyerDecision === 'BUY' ? 'BUY decision recorded' : 'Purchase cancelled after inspection'}</strong>
-                    <p>
-                      {order.buyerDecision === 'BUY'
-                        ? 'Goods payment is unlocked. Transport can proceed once the required payments are confirmed.'
-                        : 'The purchase decision is closed.'}
-                    </p>
-                  </div>
-                </div>
-              ) : i.isBuyer ? (
-                <>
-                  <p className="muted">
-                    Choose <strong>Buy</strong> only after reviewing the findings. Buy unlocks goods payment; it does not
-                    complete payment or arrange transport.
-                  </p>
-                  <Actions>
-                    <Button variant="primary" disabled={Boolean(i.busy)} busy={i.busy === 'buyer-decision-buy'} busyText="Recording…" onClick={() => i.decide('BUY')}>
-                      Buy — continue purchase
-                    </Button>
-                    <Button variant="light" disabled={Boolean(i.busy)} busy={i.busy === 'buyer-decision-cancel'} busyText="Cancelling…" onClick={() => i.decide('CANCEL')}>
-                      Cancel after inspection
-                    </Button>
-                  </Actions>
-                </>
-              ) : (
-                <p className="muted">
-                  <strong>Awaiting buyer decision.</strong> The buyer must review this report and choose Buy or Cancel
-                  before payment opens.
-                </p>
-              )}
-            </Section>
-          )}
-        </>
-      ) : (
-        ['REQUESTED', 'ACCEPTED'].includes(request.status) && (
-          <Section title="Inspection recovery">
-            <p className="muted">
-              If every inspector bid is closed, reopen bidding. If you no longer want this request, cancel it without
-              cancelling the order.
-            </p>
-            <Actions>
-              <Button variant="primary" disabled={Boolean(i.busy)} busy={i.busy === `reopen-inspection-${request.id}`} busyText="Reopening…" onClick={i.reopenBidding}>
-                Reopen inspection bidding
-              </Button>
-              <Button variant="light" disabled={Boolean(i.busy)} busy={i.busy === `cancel-inspection-${request.id}`} busyText="Cancelling…" onClick={i.cancel}>
-                Cancel inspection request
-              </Button>
-            </Actions>
-          </Section>
-        )
-      )}
-    </Card>
-  );
-}
-
-/* ========================================================================
-   6. Transport — three cards, laid out responsively
-   ========================================================================
-   · Phone (default)      → one card per row
-   · Tablet (≥640px)      → two cards per row
-   · Desktop (≥1000px)    → three cards per row
-   The grid class (.od-card-grid) does the layout; the cards themselves
-   keep the same shape as every other card on the page. */
-
-function EvidenceForm({ kind, t }) {
-  const isPickup = kind === 'PICKUP';
-  const { evidence, setEvidence, notes, setNotes, evidenceBusy } = t;
-  const ready = evidence.photoKeys.length || evidence.videoKeys.length || notes.trim();
-  return (
-    <Notice title={isPickup ? 'Pickup evidence required' : 'Delivery evidence'}>
-      {!isPickup && <p className="muted">Upload delivery evidence before marking the trip delivered.</p>}
-      <EvidenceUploader
-        uploadUrl={`/transport/${t.job.id}/evidence/media`}
-        disabled={evidenceBusy}
-        onUploaded={({ photoKeys, videoKeys }) =>
-          setEvidence((prev) => ({
-            photoKeys: [...prev.photoKeys, ...photoKeys],
-            videoKeys: [...prev.videoKeys, ...videoKeys],
-          }))
-        }
-      />
-      {(evidence.photoKeys.length > 0 || evidence.videoKeys.length > 0) && (
-        <p className="muted small">{evidence.photoKeys.length} photo(s), {evidence.videoKeys.length} video(s) ready.</p>
-      )}
-      <textarea
-        className="field"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        placeholder={`Optional ${isPickup ? 'pickup' : 'delivery'} condition / handover notes…`}
-        rows={3}
-        disabled={evidenceBusy}
-      />
-      <Button
-        variant="primary"
-        disabled={evidenceBusy || !ready}
-        busy={evidenceBusy}
-        busyText="Submitting…"
-        onClick={() => t.submitEvidence(kind, isPickup ? 'IN_TRANSIT' : 'DELIVERED')}
-      >
-        {isPickup ? 'Submit pickup evidence & mark in transit' : 'Submit delivery evidence & mark delivered'}
-      </Button>
-    </Notice>
-  );
-}
-
-function QuoteRow({ quote, t }) {
-  const key = `quote-${quote.id}`;
-  const working = t.busy === key;
-  const amount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
-  const arrangerTurn = quote.status === 'SELECTED' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
-  const isOwner = quote.truckOwnerId === t.currentUserId;
-  const transporterTurn = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
-  const canRespond = (t.canChooseQuote && arrangerTurn) || (isOwner && transporterTurn);
-  const rating = typeof quote.truckOwner?.rating === 'number' ? quote.truckOwner.rating.toFixed(1) : '—';
-  const ownerName = quote.truckOwner?.name || 'Truck owner';
-
-  return (
-    <div className="transporter">
-      <div>
-        <div className="od-person">
-          <Avatar small name={ownerName} />
-          <strong>{ownerName}</strong>
-        </div>
-        <p>
-          {quote.truck?.truckType || 'Truck'} · {quote.truck?.capacity != null ? `${quote.truck.capacity}t` : 'Capacity —'} ·{' '}
-          {quote.truck?.registration || 'Registration —'} · ★ {rating}
-        </p>
-        {quote.message && <p className="muted">{quote.message}</p>}
-        <p>Status: <span className="badge">{quote.status || 'PENDING'}</span></p>
-        {transporterTurn && <p className="muted">You countered {money(amount)} ETB — waiting for the transporter.</p>}
-      </div>
-
-      <div>
-        <strong>{money(amount)} ETB</strong>
-
-        {t.canChooseQuote && quote.status === 'PENDING' && (
-          <>
-            <Button variant="primary" size="sm" disabled={working} busy={working} busyText="Selecting…" onClick={() => t.selectQuote(quote.id)}>
-              Select bid for deal
-            </Button>
-            <span className="muted small">Selecting opens price negotiation.</span>
-          </>
-        )}
-
-        {canRespond && (
-          <div className="od-quote-actions">
-            <Button size="sm" disabled={working} busy={working} busyText="Accepting…" onClick={() => t.acceptQuote(quote.id)}>
-              {transporterTurn ? 'Accept buyer counter' : 'Accept quote'}
-            </Button>
-            <input
-              className="field field-inline"
-              type="number"
-              min="1"
-              placeholder="Counter (ETB)"
-              value={t.counterInputs[quote.id] || ''}
-              onChange={(e) => t.setCounterInputs((q) => ({ ...q, [quote.id]: e.target.value }))}
-            />
-            <Button variant="light" size="sm" disabled={working} busy={working} busyText="Sending…" onClick={() => t.counterQuote(quote.id)}>
-              Counter
-            </Button>
-            <Button variant="light" size="sm" disabled={working} busy={working} busyText="Rejecting…" onClick={() => t.rejectQuote(quote.id)}>
-              Reject
-            </Button>
-          </div>
-        )}
-
-        {quote.status === 'ACCEPTED' && t.isArranger && !t.pending && (
-          <>
-            <span className="muted small">Provisional agreement — the truck is not committed until transport payment succeeds.</span>
-            <Button variant="light" size="sm" disabled={working} busy={working} busyText="Releasing…" onClick={() => t.releaseQuote(quote.id)}>
-              Transporter unavailable — choose another
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function TransportCard({ order, t }) {
-  const job = t.job;
-  const hired = job?.method === 'HIRE_TRANSPORTER';
-  const quotes = leafQuotes(job?.quotes);
-
-  /* ── No job yet: single setup card, full width ─────────── */
-  if (!job) {
-    return (
-      <Card
-        id="transport-section"
-        eyebrow="Logistics"
-        title="Transport"
-        subtitle="The buyer or seller arranges transport. MarketBridge does not assign a transporter automatically."
-      >
-        {t.canArrange ? (
-          <TransportSetup
-            orderId={order.id}
-            pickupDefault={order.listing?.location}
-            destinationDefault={order.buyer?.location}
-            canBuyer={t.isBuyer}
-            canSeller={t.isSeller}
-            onCreated={t.reload}
-          />
-        ) : (
-          <p className="muted">No transport arrangement recorded yet.</p>
-        )}
-      </Card>
-    );
+  .order-detail-toast { left: auto; right: 22px; transform: none; width: auto; min-width: 320px; animation-name: od-toast-in-side; }
+  @keyframes od-toast-in-side {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
   }
-
-  const evidenceAvailable =
-    t.isTransporter && (job.status === 'PICKUP' || job.status === 'IN_TRANSIT');
-  const hasEvidenceContent =
-    evidenceAvailable || job.status === 'DELIVERED' || job.incidentNotes;
-
-  return (
-    <div className="od-card-grid">
-      {/* ── Card A — Logistics: the physical trip ──────────── */}
-      <Card
-        id="transport-section"
-        eyebrow="Logistics"
-        title="Transport"
-        subtitle="The physical trip — who drives, where from, and where to."
-        side={
-          job?.status && (
-            <SideLabel name="Status">
-              <Pill tone={statusTone(job.status)}>{label(job.status)}</Pill>
-            </SideLabel>
-          )
-        }
-      >
-        <Section title="Trip details" meta={job.method || '—'}>
-          <Facts>
-            <Fact name="Arranged by">{job.arrangingParty || '—'}</Fact>
-            <Fact name="Pickup">{job.pickupLocation || '—'}</Fact>
-            <Fact name="Destination">{job.destination || '—'}</Fact>
-            {job.load && <Fact name="Load">{job.load}</Fact>}
-            {job.requiredCapacity != null && (
-              <Fact name="Required capacity">{job.requiredCapacity}</Fact>
-            )}
-          </Facts>
-        </Section>
-
-        {job.truckOwner && (
-          <Section
-            title="Transporter"
-            meta={job.agreedAmount != null ? `${money(job.agreedAmount)} ETB` : null}
-            strong
-          >
-            <div className="od-person">
-              <Avatar name={job.truckOwner.name} />
-              <strong>{job.truckOwner.name || '—'}</strong>
-            </div>
-            {job.truckOwner.phone && (
-              <p className="muted">Phone: {job.truckOwner.phone}</p>
-            )}
-            {job.truck && (
-              <p>
-                Truck: <strong>{job.truck.registration || '—'}</strong> ·{' '}
-                {job.truck.truckType || 'Truck'}
-                {job.truck.capacity != null && ` · ${job.truck.capacity}t`}
-              </p>
-            )}
-          </Section>
-        )}
-      </Card>
-
-      {/* ── Card B — Pickup and delivery evidence ──────────── */}
-      {hasEvidenceContent && (
-        <Card
-          id="transport-evidence-section"
-          eyebrow="Evidence"
-          title="Pickup & delivery evidence"
-          subtitle="Photos, videos and handover notes uploaded by the transporter at pickup and delivery."
-          side={
-            job.status === 'DELIVERED' ? (
-              <SideLabel name="Delivery">
-                <Pill tone="good">Delivered</Pill>
-              </SideLabel>
-            ) : null
-          }
-        >
-          <Section title="Evidence requirements">
-            <p className="muted">
-              The transporter must upload pickup evidence before moving the trip from Pickup to In transit, and delivery
-              evidence before marking it Delivered.
-            </p>
-            {t.isTransporter && job.status === 'PICKUP' && <EvidenceForm kind="PICKUP" t={t} />}
-            {t.isTransporter && job.status === 'IN_TRANSIT' && <EvidenceForm kind="DELIVERY" t={t} />}
-          </Section>
-
-          <Section title="Evidence gallery">
-            <EvidenceGallery
-              listUrl={`/transport/${job.id}/evidence`}
-              mediaUrl={(evidenceId) => `/transport/${job.id}/evidence/${evidenceId}/media`}
-            />
-          </Section>
-
-          {job.status === 'DELIVERED' && (
-            <Section title="Delivery">
-              <p><strong>✓ Transport marked as delivered.</strong></p>
-              {job.deliveredConfirmedAt && (
-                <p className="muted">Delivery confirmed.</p>
-              )}
-            </Section>
-          )}
-
-          {job.incidentNotes && (
-            <div className="alert">
-              <strong>Transport notes:</strong> {job.incidentNotes}
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* ── Card C — Transport payment ─────────────────────── */}
-      <Card
-        id="transport-payment-section"
-        eyebrow="Payment"
-        title="Transport payment"
-        subtitle="Select and pay the transporter. Separate from the seller payment and any inspection fee."
-        side={
-          hired && job.agreedAmount != null ? (
-            <SideLabel name="Fee">
-              <span className="od-card-side-value">{money(job.agreedAmount)} ETB</span>
-            </SideLabel>
-          ) : null
-        }
-      >
-        {hired && !t.paid && (
-          <Section title="Transport quotes" meta="Bids">
-            {quotes.length ? (
-              quotes.map((q) => <QuoteRow key={q.id} quote={q} t={t} />)
-            ) : (
-              <p className="muted">
-                Waiting for registered truck owners to submit quotes.
-              </p>
-            )}
-          </Section>
-        )}
-
-        {job.method === 'OWN_TRUCK' && (
-          <Section title="Transport payment">
-            <p><strong>No separate transporter payment is required.</strong></p>
-            <p className="muted">
-              This order uses the owner's own truck, so no transport payment is created.
-            </p>
-          </Section>
-        )}
-
-        {hired && !t.paid && (
-          <Section
-            title="Fee due"
-            meta={job.agreedAmount != null ? `${money(job.agreedAmount)} ETB` : null}
-            strong
-          >
-            <p className="muted">
-              Transport payment is separate from the seller payment. You can pay as soon as the quote is accepted. The
-              transporter cannot start the trip until every required payment is confirmed.
-            </p>
-
-            {t.canStartPayment && (
-              <div className="od-field-row">
-                <select
-                  className="field field-inline"
-                  value={t.payMethod}
-                  onChange={(e) => t.setPayMethod(e.target.value)}
-                  disabled={t.busy === 'pay-transport'}
-                >
-                  {PAYMENT_METHODS.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  disabled={t.busy === 'pay-transport'}
-                  busy={t.busy === 'pay-transport'}
-                  busyText="Submitting…"
-                  onClick={t.pay}
-                >
-                  Pay for transport
-                </Button>
-              </div>
-            )}
-
-            {t.canResumePayment && (
-              <>
-                <p>
-                  Pending payment: <strong>{t.payment.method || '—'}</strong>,{' '}
-                  {money(t.payment.amount)} ETB. It was started but not completed.
-                </p>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  disabled={t.busy === 'resume-transport'}
-                  busy={t.busy === 'resume-transport'}
-                  busyText="Redirecting…"
-                  onClick={() => t.resume(t.payment.id, 'resume-transport')}
-                >
-                  Resume payment
-                </Button>
-              </>
-            )}
-          </Section>
-        )}
-
-        {t.paid && (
-          <Section
-            title="Transport payment confirmed"
-            meta={`${money(t.paidAmount)} ETB`}
-            strong
-          />
-        )}
-
-        {t.isArranger &&
-          ['REQUESTED', 'QUOTED', 'ACCEPTED', 'CANCELLED'].includes(job.status) && (
-            <Section title="Transport recovery">
-              <p className="muted">
-                If the competition has stalled or the previous arrangement was cancelled, request admin approval to
-                release a fresh transport form.
-              </p>
-              {t.recoveryRequests
-                .filter((r) => r.type === 'TRANSPORT')
-                .map((r) => (
-                  <p className="muted small" key={r.id}>
-                    Recovery: <strong>{r.status}</strong>
-                    {r.formReleasedAt
-                      ? ' — fresh form released'
-                      : ' — awaiting admin approval'}
-                  </p>
-                ))}
-              <Button
-                variant="primary"
-                disabled={
-                  Boolean(t.busy) ||
-                  t.recoveryRequests.some(
-                    (r) => r.type === 'TRANSPORT' && r.status === 'PENDING'
-                  )
-                }
-                busy={t.busy === 'recovery-transport'}
-                busyText="Requesting…"
-                onClick={t.requestRecovery}
-              >
-                Request fresh transport form
-              </Button>
-            </Section>
-          )}
-      </Card>
-    </div>
-  );
 }
 
-/* ========================================================================
-   7. Offer, receipt, dispute, completed, admin
-   ======================================================================== */
+/* Desktops (≥ 1000px): 3 columns */
+@media (min-width: 1000px) {
+  .order-detail-page { --od-pad: 24px; --od-gap: 20px; --od-indent: 22px; padding-top: 28px; }
+  .order-detail-page .container-narrow { padding-inline: 32px; }
 
-function OfferCard({ amount, setAmount, message, setMessage, submitting, onSubmit }) {
-  return (
-    <Card id="make-offer" eyebrow="Product marketplace" title="Make an offer" subtitle="Your offer enters the seller's competition. It does not charge you or reserve the product.">
-      <form onSubmit={onSubmit} className="form">
-        <label htmlFor="offer-amount">Offer amount (ETB)</label>
-        <input id="offer-amount" className="field" type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter your offer" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={submitting} required />
-        <label htmlFor="offer-message">Message to seller <span className="optional">(optional)</span></label>
-        <textarea id="offer-message" className="field" rows="3" placeholder="Add a message to the seller" value={message} onChange={(e) => setMessage(e.target.value)} disabled={submitting} />
-        <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Submitting…' : 'Make offer'}</button>
-      </form>
-    </Card>
-  );
+  .order-detail-page .od-page-grid,
+  .order-detail-page .od-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  .order-detail-page .od-card-title { font-size: 22px; }
+  .order-detail-page .order-progress-label { font-size: 12.5px; }
 }
 
-function ReceiptCard({ marketplacePaid, transportBlocked, busy, onConfirm }) {
-  return (
-    <Card id="confirm-receipt" eyebrow="Final step" title="Confirm receipt" subtitle="Confirm only after you have physically received the produce or product.">
-      {!marketplacePaid && <div className="alert error">Marketplace payment must be confirmed before receipt can be completed.</div>}
-      {transportBlocked && <div className="alert error">Transport payment must be confirmed before receipt can be completed.</div>}
-      <Button variant="primary" className="btn btn-primary btn-block" disabled={busy === 'receipt' || !marketplacePaid || transportBlocked} busy={busy === 'receipt'} busyText="Confirming…" onClick={onConfirm}>
-        Confirm receipt & complete order
-      </Button>
-    </Card>
-  );
+/* Large desktops (≥ 1400px) */
+@media (min-width: 1400px) {
+  .order-detail-page .container-narrow { max-width: 1320px; }
 }
 
-function DisputeCard({ order, d }) {
-  if (order.status === 'DISPUTED') {
-    return (
-      <Card id="raise-dispute" tone="warning" eyebrow="Dispute" title="Dispute open">
-        <p className="muted">
-          An admin is reviewing this order. <strong>Payments, transport, inspection and payouts are paused</strong> while
-          the dispute is open. The order will either resume or be cancelled and refunded after review.
-        </p>
-      </Card>
-    );
-  }
-  if (!d.canRaise) return null;
-
-  return (
-    <Card id="raise-dispute" eyebrow="Dispute" title="Raise a dispute" subtitle="Use this if something went wrong — goods not delivered, quality issues, or a payment problem.">
-      {d.submitted ? (
-        <div className="alert success">Dispute submitted. The order is marked as disputed while an admin reviews it.</div>
-      ) : (
-        <form onSubmit={d.submit} className="form">
-          <label htmlFor="dispute-against">Dispute against</label>
-          <select id="dispute-against" className="field" value={d.againstId} onChange={(e) => d.setAgainstId(e.target.value)} required>
-            <option value="">Select who this is about…</option>
-            {d.counterparties.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.role})</option>)}
-          </select>
-          <label htmlFor="dispute-type">Type</label>
-          <select id="dispute-type" className="field" value={d.type} onChange={(e) => d.setType(e.target.value)}>
-            {DISPUTE_TYPES.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
-          </select>
-          <label htmlFor="dispute-description">What happened?</label>
-          <textarea id="dispute-description" className="field" rows={4} placeholder="Describe the issue in detail" value={d.description} onChange={(e) => d.setDescription(e.target.value)} required />
-          <button type="submit" className="btn btn-outline" disabled={d.submitting}>{d.submitting ? 'Submitting…' : 'Raise dispute'}</button>
-        </form>
-      )}
-    </Card>
-  );
+/* Landscape phones: keep the toast out of the way */
+@media (max-height: 480px) and (orientation: landscape) {
+  .order-detail-toast { bottom: 8px; }
 }
 
-/* ========================================================================
-   8. Page
-   ======================================================================== */
-
-export default function OrderDetail() {
-  const { orderId } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { user } = useAuth();
-
-  /* ---------- state ---------- */
-  const [order, setOrder] = useState(null);
-  const [workflow, setWorkflow] = useState(null);
-  const [recoveryRequests, setRecoveryRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState('');
-
-  const [payMethod, setPayMethod] = useState('TELEBIRR');
-
-  const [counterInputs, setCounterInputs] = useState({});
-  const [evidence, setEvidence] = useState({ photoKeys: [], videoKeys: [] });
-  const [evidenceNotes, setEvidenceNotes] = useState('');
-  const [evidenceBusy, setEvidenceBusy] = useState(false);
-
-  const [offerAmount, setOfferAmount] = useState('');
-  const [offerMessage, setOfferMessage] = useState('');
-  const [submittingOffer, setSubmittingOffer] = useState(false);
-  const [requestingInspection, setRequestingInspection] = useState(false);
-
-  const [disputeAgainstId, setDisputeAgainstId] = useState('');
-  const [disputeType, setDisputeType] = useState('NOT_DELIVERED');
-  const [disputeDescription, setDisputeDescription] = useState('');
-  const [submittingDispute, setSubmittingDispute] = useState(false);
-  const [disputeSubmitted, setDisputeSubmitted] = useState(false);
-
-  /* ---------- toast auto-dismiss ---------- */
-  useEffect(() => {
-    if (!error) return undefined;
-    const timer = window.setTimeout(() => setError(''), 3000);
-    return () => window.clearTimeout(timer);
-  }, [error]);
-
-  /* ---------- data loading ---------- */
-  const load = useCallback(
-    async ({ silent = false } = {}) => {
-      if (!orderId) return;
-      if (silent) setRefreshing(true);
-      else setLoading(true);
-      setError('');
-      try {
-        const [orderRes, workflowRes, recoveryRes] = await Promise.allSettled([
-          api.get(`/orders/${orderId}`),
-          api.get(`/orders/${orderId}/workflow`),
-          api.get(`/recovery-requests/order/${orderId}`),
-        ]);
-        if (orderRes.status !== 'fulfilled') throw orderRes.reason;
-        setOrder(orderRes.value.data?.order || null);
-        setWorkflow(workflowRes.status === 'fulfilled' ? workflowRes.value.data?.workflow || null : null);
-        setRecoveryRequests(recoveryRes.status === 'fulfilled' ? recoveryRes.value.data?.recoveryRequests || [] : []);
-      } catch (err) {
-        setError(getError(err, 'Could not load order'));
-      } finally {
-        if (silent) setRefreshing(false);
-        else setLoading(false);
-      }
-    },
-    [orderId]
-  );
-
-  useEffect(() => { load(); }, [load]);
-  const reload = useCallback(() => load({ silent: true }), [load]);
-
-  useEffect(() => {
-    if (loading) return;
-    const id = location.hash?.replace('#', '');
-    if (id) scrollToId(id);
-  }, [loading, location.hash]);
-
-  /* One wrapper for the "busy → call → reload → report error" pattern. */
-  const run = async (key, fn, fallback) => {
-    setBusy(key);
-    setError('');
-    try {
-      await fn();
-      await reload();
-      return true;
-    } catch (err) {
-      setError(getError(err, fallback));
-      return false;
-    } finally {
-      setBusy('');
-    }
-  };
-
-  /* ---------- identity & roles ---------- */
-  const currentUserId = user?.id || user?.userId || user?._id || null;
-  const isAdmin = (Array.isArray(user?.roles) ? user.roles : []).includes('ADMIN');
-  const isBuyer = Boolean(order && currentUserId && currentUserId === order.buyerId);
-  const isSeller = Boolean(order && currentUserId && currentUserId === order.sellerId);
-  const isParticipant = isBuyer || isSeller;
-  const buyerIdentityMismatch = Boolean(order && currentUserId && !isParticipant && !isAdmin);
-
-  /* ---------- listing kind ---------- */
-  const isAgricultural = order?.listing?.category === 'AGRICULTURAL';
-  const isProduct = order?.listing?.category === 'PRODUCT';
-  const inspectionApplies = isAgricultural || isProduct;
-  const title = order?.listing?.title || order?.listing?.cropType || 'Order';
-
-  /* ---------- inspection ---------- */
-  const allInspections = useMemo(
-    () =>
-      (order?.inspectionRequests || order?.listing?.inspectionRequests || [])
-        .slice()
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    [order?.inspectionRequests, order?.listing?.inspectionRequests]
-  );
-  const inspections = useMemo(() => allInspections.filter((r) => r.status !== 'CANCELLED'), [allInspections]);
-  const currentInspection = inspections[0] || null;
-  const assignedInspection = inspections.find((r) => r.inspectorId === currentUserId) || null;
-  const isInspector = Boolean(assignedInspection);
-  const inspectionFormReleased = recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'APPROVED' && r.formReleasedAt);
-  const inspectorName = (order?.inspectionRequests || inspections).find((r) => r?.inspector?.name)?.inspector?.name || null;
-
-  const inspectionGateMet =
-    !inspectionApplies || Boolean(currentInspection && currentInspection.status === 'COMPLETED' && currentInspection.report);
-  const decisionRequired = inspectionApplies;
-  const decisionGateMet = !decisionRequired || order?.buyerDecision === 'BUY';
-  const negotiatedGateMet = !isProduct || Boolean(order?.agreedOfferId);
-
-  /* ---------- transport ---------- */
-  const rawJob = order?.transportJob || null;
-  const transportJob = rawJob?.status === 'CANCELLED' ? null : rawJob;
-  const isTransporter = Boolean(transportJob?.truckOwnerId && transportJob.truckOwnerId === currentUserId);
-  const isTransportArranger = Boolean(
-    transportJob &&
-      ((transportJob.arrangingParty === 'BUYER' && isBuyer) ||
-        (transportJob.arrangingParty === 'SELLER' && isSeller) ||
-        (transportJob.arrangingParty === 'JOINT' && isParticipant))
-  );
-  const transportInMotion = Boolean(transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status));
-  const acceptedQuote = Array.isArray(transportJob?.quotes) ? transportJob.quotes.find((q) => q.status === 'ACCEPTED') : null;
-
-  /* ---------- payments ---------- */
-  const payments = Array.isArray(order?.payments) ? order.payments : [];
-  const active = (p) => ['PENDING', 'PROCESSING'].includes(p.status);
-  const pick = (list) => list.find(active) || list.find((p) => p.status === 'PAID') || null;
-
-  const marketplacePayments = useMemo(() => payments.filter((p) => p.type === 'MARKETPLACE'), [payments]);
-  const transportPayments = useMemo(() => payments.filter((p) => p.type === 'TRANSPORT'), [payments]);
-  const marketplacePayment = useMemo(() => pick(marketplacePayments), [marketplacePayments]); // eslint-disable-line react-hooks/exhaustive-deps
-  const transportPayment = useMemo(() => pick(transportPayments), [transportPayments]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const installmentPlan = useMemo(
-    () =>
-      marketplacePayments.find(
-        (p) => p.installmentCount != null && ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
-      ) || null,
-    [marketplacePayments]
-  );
-  const installmentPayments = useMemo(
-    () =>
-      payments
-        .filter(
-          (p) =>
-            p.type === 'MARKETPLACE_INSTALLMENT' &&
-            p.installmentSequence != null &&
-            (!installmentPlan || p.parentPaymentId === installmentPlan.id)
-        )
-        .sort((a, b) => (a.installmentSequence || 0) - (b.installmentSequence || 0)),
-    [payments, installmentPlan]
-  );
-
-  /* Heal a plan whose installments are all paid but whose parent is still pending. */
-  const planHealRef = useRef(null);
-  useEffect(() => {
-    if (
-      !installmentPlan ||
-      installmentPlan.status !== 'PENDING' ||
-      installmentPayments.length !== installmentPlan.installmentCount ||
-      !installmentPayments.every((p) => p.status === 'PAID') ||
-      planHealRef.current === installmentPlan.id
-    ) return;
-    planHealRef.current = installmentPlan.id;
-    api.get(`/payments/${installmentPlan.id}/chapa/verify`).then(reload).catch(() => {});
-  }, [installmentPlan, installmentPayments, reload]);
-
-  const marketplacePaid = marketplacePayments.some((p) => p.status === 'PAID');
-  const marketplacePending = marketplacePayments.some(active);
-  const marketplaceProcessing = marketplacePayments.some((p) => p.status === 'PROCESSING');
-  const transportPaid = transportPayments.some((p) => p.status === 'PAID');
-  const transportPending = transportPayments.some(active);
-  const transportProcessing = transportPayments.some((p) => p.status === 'PROCESSING');
-  const hiredTransport = transportJob?.method === 'HIRE_TRANSPORTER';
-
-  const canPayMarketplace =
-    Boolean(order) &&
-    !['COMPLETED', 'CANCELLED'].includes(order.status) &&
-    isBuyer &&
-    inspectionGateMet &&
-    decisionGateMet &&
-    negotiatedGateMet &&
-    !marketplacePayments.some((p) => ['PENDING', 'PROCESSING', 'PAID'].includes(p.status));
-
-  const marketplaceBlockedReason =
-    isProduct && !negotiatedGateMet
-      ? 'This product must first be won through seller bidding and bilateral negotiation before payment.'
-      : inspectionApplies && !inspectionGateMet
-      ? !currentInspection
-        ? 'Request and complete the inspection before paying for the goods.'
-        : 'Complete the current inspection and make sure its report is published before paying for the goods.'
-      : decisionRequired && !decisionGateMet
-      ? `Choose BUY after reviewing the ${isAgricultural ? 'agricultural ' : ''}inspection report before paying for the goods.`
-      : null;
-
-  const canStartTransportPayment =
-    Boolean(transportJob) &&
-    hiredTransport &&
-    Boolean(transportJob.truckOwnerId) &&
-    Boolean(acceptedQuote) &&
-    transportJob.agreedAmount != null &&
-    Number(transportJob.agreedAmount) > 0 &&
-    ['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
-    !transportPayments.some((p) => ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)) &&
-    isBuyer;
-
-  /* ---------- payouts & refunds ---------- */
-  const payouts = order?.payouts || [];
-  const payoutBy = (role) => payouts.find((p) => p.payeeRole === role) || null;
-  const refunds = order?.refunds || [];
-
-  /* ---------- payment actions ---------- */
-  const checkPayment = (paymentId, key) =>
-    paymentId &&
-    (async () => {
-      setBusy(key);
-      setError('');
-      try {
-        const res = await api.get(`/payments/${paymentId}/chapa/verify`);
-        await reload();
-        if (res.data?.status === 'PENDING') {
-          setError('Chapa has not confirmed this payment yet. If you cancelled or the checkout failed, return to the order and retry once the payment shows FAILED.');
-        }
-      } catch (err) {
-        setError(getError(err, 'Could not check payment status'));
-      } finally {
-        setBusy('');
-      }
-    })();
-
-  const resumePayment = (paymentId, key) =>
-    paymentId && run(key, () => chapaInitializeAndRedirect(paymentId), 'Could not resume payment');
-
-  const payMarketplace = () => {
-    if (!isBuyer) return setError('Only the buyer can make the marketplace payment');
-    const amount = Number(order.finalPrice);
-    if (!Number.isFinite(amount) || amount <= 0) return setError('Invalid marketplace payment amount');
-    return run('pay-marketplace', () => startChapaPayment({ type: 'MARKETPLACE', orderId: order.id, amount, method: payMethod }), 'Could not start marketplace payment');
-  };
-
-  const payTransport = () => {
-    if (!isParticipant) return setError('You are not authorized to pay for this transport');
-    if (!hiredTransport) return setError('Transport payment is only required for hired transport');
-    if (!transportJob.truckOwnerId) return setError('A transporter must be selected before transport payment');
-    const amount = Number(transportJob.agreedAmount);
-    if (!Number.isFinite(amount) || amount <= 0) return setError('Invalid transport payment amount');
-    return run('pay-transport', () => startChapaPayment({ type: 'TRANSPORT', orderId: order.id, amount, method: payMethod }), 'Could not start transport payment');
-  };
-
-  const payInspection = (request) =>
-    request?.id && request.fee &&
-    run(`pay-inspection-${request.id}`, () =>
-      startChapaPayment({ type: 'INSPECTOR', inspectionRequestId: request.id, orderId: order.id, amount: Number(request.fee), method: payMethod }),
-      'Could not start inspector payment');
-
-  const startInstallments = () => {
-    if (!isBuyer) return setError('Only the buyer can make the marketplace payment');
-    return run('start-installments', () =>
-      api.post('/payments', { type: 'MARKETPLACE', orderId: order.id, amount: Number(order.finalPrice), method: payMethod, installments: true }),
-      'Could not set up installments');
-  };
-
-  const retryInstallment = (inst) =>
-    inst?.id && run(`installment-${inst.id}`, () => api.post(`/payments/${inst.id}/retry-installment`), 'Could not retry this installment');
-
-  const marketplaceObligation = {
-    amount: order?.finalPrice,
-    paid: marketplacePaid,
-    pending: marketplacePending,
-    processing: marketplaceProcessing,
-    canPay: canPayMarketplace,
-    canResume: Boolean(marketplacePayment) && !installmentPlan && marketplacePayment.status === 'PENDING' && isBuyer,
-    canCheck: Boolean(marketplacePayment) && !installmentPlan && marketplacePayment.status === 'PROCESSING' && isBuyer,
-    onPay: payMarketplace,
-    onResume: () => resumePayment(marketplacePayment?.id, 'resume-marketplace'),
-    onCheck: () => checkPayment(marketplacePayment?.id, 'check-marketplace'),
-    installmentPlan,
-    installments: installmentPayments,
-    canStartInstallments: canPayMarketplace,
-    onStartInstallments: startInstallments,
-    onPayInstallment: (i) => resumePayment(i?.id, `installment-${i?.id}`),
-    onCheckInstallment: (i) => checkPayment(i?.id, `installment-${i?.id}`),
-    onRetryInstallment: retryInstallment,
-  };
-
-  const transportObligation = transportJob
-    ? {
-        required: hiredTransport,
-        readyToPay: ['QUOTED', 'ACCEPTED'].includes(transportJob.status) && Boolean(acceptedQuote) && transportJob.agreedAmount != null,
-        amount: transportJob.agreedAmount,
-        paid: transportPaid,
-        pending: transportPending,
-        processing: transportProcessing,
-        note:
-          hiredTransport && !['QUOTED', 'ACCEPTED'].includes(transportJob.status) && !transportPaid && !transportPending
-            ? 'Transporter payment becomes available after a provisional transporter agreement is accepted.'
-            : null,
-        canStart: canStartTransportPayment,
-        canResume: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
-        canCheck: Boolean(transportPayment) && transportPayment.status === 'PROCESSING' && isBuyer,
-        onStart: payTransport,
-        onResume: () => resumePayment(transportPayment?.id, 'resume-transport'),
-        onCheck: () => checkPayment(transportPayment?.id, 'check-transport'),
-      }
-    : null;
-
-  const inspectionPaymentGroups = inspectionApplies && currentInspection && Number(currentInspection.fee) > 0
-    ? [currentInspection].map((request) => {
-        const list = request.payments || [];
-        const open = list.find((p) => p.type === 'INSPECTOR' && active(p)) || null;
-        const key = `${open?.status === 'PROCESSING' ? 'check' : open ? 'resume' : 'pay'}-inspection-${request.id}`;
-        return {
-          id: request.id,
-          label: `${request.inspector?.name || 'Inspector'} — inspection fee`,
-          amount: request.fee,
-          paid: list.some((p) => p.type === 'INSPECTOR' && p.status === 'PAID'),
-          pending: Boolean(open),
-          processing: open?.status === 'PROCESSING',
-          note: request.status !== 'COMPLETED' ? `Inspection status: ${request.status}` : null,
-          busyKey: key,
-          canCheck: open?.status === 'PROCESSING',
-          canResume: Boolean(open) && open.status !== 'PROCESSING',
-          onCheck: () => checkPayment(open?.id, key),
-          onResume: () => resumePayment(open?.id, key),
-          onPay: () => payInspection(request),
-        };
-      })
-    : [];
-
-  /* ---------- transport actions ---------- */
-  const transportActions = {
-    selectQuote: (id) => id && run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}/select`), 'Could not select transport bid'),
-    releaseQuote: (id) => id && run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'WITHDRAW' }), 'Could not release the transporter agreement'),
-    rejectQuote: (id) => id && run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'REJECT' }), 'Could not reject transport quote'),
-    acceptQuote: async (id) => {
-      if (!id) return;
-      const ok = await run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'ACCEPT' }), 'Could not accept transport quote');
-      if (ok) scrollToId('payment-center', 150);
-    },
-    counterQuote: async (id) => {
-      if (!id) return;
-      const amount = Number(counterInputs[id]);
-      if (!Number.isFinite(amount) || amount <= 0) return setError('Enter a valid counter amount before sending.');
-      const ok = await run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'COUNTER', counterAmount: amount }), 'Could not send counter-offer');
-      if (ok) setCounterInputs((q) => ({ ...q, [id]: '' }));
-    },
-    requestRecovery: () =>
-      run('recovery-TRANSPORT', async () => {
-        await api.post('/recovery-requests', {
-          orderId: order.id,
-          type: 'TRANSPORT',
-          targetParties: isBuyer ? ['BUYER'] : ['SELLER'],
-          reason: 'Transport competition has no usable live bid or the previous transporter arrangement is no longer available.',
-        });
-        setError('Recovery request sent to MarketBridge admin for approval.');
-      }, 'Could not request workflow recovery'),
-    submitEvidence: async (type, nextStatus) => {
-      if (!transportJob || !isTransporter) return;
-      const { photoKeys, videoKeys } = evidence;
-      if (!photoKeys.length && !videoKeys.length && !evidenceNotes.trim()) {
-        return setError(`Add at least one ${type.toLowerCase()} photo/video or note before continuing.`);
-      }
-      setEvidenceBusy(true);
-      setError('');
-      try {
-        await api.post(`/transport/${transportJob.id}/evidence`, {
-          type,
-          photos: photoKeys,
-          videos: videoKeys,
-          notes: evidenceNotes.trim() || undefined,
-        });
-        if (nextStatus) await api.patch(`/transport/${transportJob.id}/status`, { status: nextStatus });
-        setEvidence({ photoKeys: [], videoKeys: [] });
-        setEvidenceNotes('');
-        await reload();
-      } catch (err) {
-        setError(getError(err, `Could not submit ${type.toLowerCase()} evidence`));
-      } finally {
-        setEvidenceBusy(false);
-      }
-    },
-  };
-
-  /* ---------- inspection actions ---------- */
-  const inspectionActions = {
-    request: async (mode) => {
-      if (!order?.listing) return;
-      setRequestingInspection(true);
-      setError('');
-      try {
-        await api.post('/inspections', { orderId: order.id, listingId: order.listing.id, mode });
-        await reload();
-      } catch (err) {
-        setError(getError(err, 'Could not request inspection'));
-      } finally {
-        setRequestingInspection(false);
-      }
-    },
-    cancel: () =>
-      currentInspection &&
-      window.confirm('Cancel this inspection request without cancelling the order? You can open a new request afterward.') &&
-      run(`cancel-inspection-${currentInspection.id}`, () => api.patch(`/inspections/${currentInspection.id}/cancel`), 'Could not cancel inspection request'),
-    reopenBidding: () =>
-      currentInspection &&
-      window.confirm('Reopen inspection bidding? Previous bids will expire and inspectors can submit fresh bids.') &&
-      run(`reopen-inspection-${currentInspection.id}`, () => api.patch(`/inspections/${currentInspection.id}/reopen-bidding`), 'Could not reopen inspection bidding'),
-    decide: async (decision) => {
-      if (!order || !isBuyer || !decisionRequired) return;
-      if (decision === 'BUY' && !(currentInspection?.report && currentInspection.status === 'COMPLETED')) {
-        return setError('Review the completed inspection report before choosing BUY.');
-      }
-      if (decision === 'CANCEL' && !window.confirm('Cancel this purchase after reviewing the inspection report? This cannot be undone.')) return;
-      const ok = await run(`buyer-decision-${decision.toLowerCase()}`, () => api.patch(`/orders/${order.id}/buyer-decision`, { decision }), `Could not record ${decision === 'BUY' ? 'BUY' : 'cancellation'} decision`);
-      if (ok) scrollToId(decision === 'BUY' ? 'payment-center' : 'inspection-section', 120);
-    },
-  };
-
-  /* ---------- order actions ---------- */
-  const canCancelOrder = Boolean(
-    order &&
-      !['COMPLETED', 'CANCELLED'].includes(order.status) &&
-      !transportInMotion &&
-      (isAdmin ||
-        (isBuyer && order.status === 'PENDING_PAYMENT') ||
-        (isSeller && ['PENDING_PAYMENT', 'CONFIRMED'].includes(order.status)))
-  );
-
-  const cancelOrder = () => {
-    if (!canCancelOrder) return;
-    if (!window.confirm('Cancel this order? This cannot be undone. The listing becomes available again and completed payments are flagged for refund.')) return;
-    const reason = window.prompt('Optional: add a reason for cancelling (shown in the order history).') || undefined;
-    return run('cancel', () => api.patch(`/orders/${order.id}/cancel`, reason ? { reason } : {}), 'Could not cancel order');
-  };
-
-  const confirmReceipt = () => {
-    if (!isBuyer) return setError('Only the buyer can confirm receipt');
-    if (!marketplacePaid) return setError('Marketplace payment must be confirmed before receipt');
-    if (hiredTransport && !transportPaid) return setError('Transport payment must be confirmed before receipt');
-    return run('receipt', () => api.patch(`/orders/${order.id}/confirm-receipt`), 'Could not confirm receipt');
-  };
-
-  const submitOffer = async (event) => {
-    event.preventDefault();
-    const amount = Number(offerAmount);
-    if (!Number.isFinite(amount) || amount <= 0 || !order?.listingId) {
-      return setError('Enter a valid offer amount before submitting.');
-    }
-    setSubmittingOffer(true);
-    const ok = await run('offer', () => api.post('/offers', { listingId: order.listingId, amount, message: offerMessage.trim() || undefined }), 'Could not submit your offer');
-    setSubmittingOffer(false);
-    if (ok) {
-      setOfferAmount('');
-      setOfferMessage('');
-      setError('Offer submitted. The seller can select it and begin negotiation.');
-    }
-  };
-
-  const refundAction = (refund) =>
-    run(`refund-${refund.id}`, () => {
-      const base = `/admin/financial/refunds/${refund.id}`;
-      if (refund.status === 'PROCESSING') return api.post(`${base}/verify`);
-      if (refund.status === 'FAILED') return api.post(`${base}/retry`);
-      return api.post(`${base}/process`);
-    }, 'Could not process or verify the refund with Chapa');
-
-  const failRefund = (refund) => {
-    const reason = window.prompt('Why did this refund fail?', '');
-    if (reason === null) return;
-    if (!reason.trim()) return setError('Enter a reason before marking a refund as failed.');
-    return run(`refund-${refund.id}`, () => api.patch(`/admin/financial/refunds/${refund.id}/fail`, { failureReason: reason.trim() }), 'Could not mark the refund as failed');
-  };
-
-  /* ---------- disputes ---------- */
-  const disputeCounterparties = useMemo(() => {
-    if (!order) return [];
-    return [
-      order.buyer && { id: order.buyer.id, name: order.buyer.name, role: 'Buyer' },
-      order.seller && { id: order.seller.id, name: order.seller.name, role: 'Seller' },
-      ...inspections.filter((r) => r.inspector).map((r) => ({ id: r.inspector.id, name: r.inspector.name, role: 'Inspector' })),
-      transportJob?.truckOwner && { id: transportJob.truckOwner.id, name: transportJob.truckOwner.name, role: 'Truck owner' },
-    ]
-      .filter(Boolean)
-      .filter((p) => p.id !== currentUserId);
-  }, [order, transportJob, inspections, currentUserId]);
-
-  const canRaiseDispute = Boolean(
-    order &&
-      !['COMPLETED', 'CANCELLED', 'DISPUTED'].includes(order.status) &&
-      (isBuyer || isSeller || isInspector || isTransporter) &&
-      disputeCounterparties.length > 0
-  );
-
-  const submitDispute = async (event) => {
-    event.preventDefault();
-    if (!canRaiseDispute) return;
-    if (!disputeAgainstId) return setError('Choose who the dispute is against');
-    if (!disputeDescription.trim()) return setError('Describe what went wrong');
-    setSubmittingDispute(true);
-    setError('');
-    try {
-      await api.post('/disputes', {
-        orderId: order.id,
-        againstId: disputeAgainstId,
-        disputeType,
-        description: disputeDescription.trim(),
-      });
-      setDisputeSubmitted(true);
-      setDisputeDescription('');
-      await reload();
-    } catch (err) {
-      const message = getError(err, 'Could not raise dispute');
-      if (/cannot be disputed/i.test(message) || /already has an open dispute/i.test(message)) {
-        setError(`${message} If the order was cancelled, any payments already made (including an inspection fee) are refunded automatically — check the Payment Center for its status instead of disputing.`);
-        await reload();
-      } else {
-        setError(message);
-      }
-    } finally {
-      setSubmittingDispute(false);
-    }
-  };
-
-  /* ---------- early returns ---------- */
-  if (loading) {
-    return (
-      <main className="section order-detail-page">
-        <div className="container-narrow">
-          <div className="card loading"><p>Loading order…</p></div>
-        </div>
-      </main>
-    );
-  }
-
-  if (!order) {
-    return (
-      <main className="section order-detail-page">
-        <div className="container-narrow">
-          <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
-          <div className="alert error">{error || 'Order not found'}</div>
-        </div>
-      </main>
-    );
-  }
-
-  /* ---------- grouped props for section components ---------- */
-  const counterpartId = isBuyer ? order.sellerId : isSeller ? order.buyerId : null;
-  const counterpartName = isBuyer ? order.seller?.name : isSeller ? order.buyer?.name : null;
-  const orderOpen = !['COMPLETED', 'CANCELLED'].includes(order.status);
-
-  const inspectionProps = {
-    all: allInspections,
-    current: currentInspection,
-    formReleased: inspectionFormReleased,
-    requesting: requestingInspection,
-    isBuyer,
-    isAgricultural,
-    decisionRequired,
-    busy,
-    ...inspectionActions,
-  };
-
-  const transportProps = {
-    job: transportJob,
-    currentUserId,
-    isBuyer,
-    isSeller,
-    isTransporter,
-    isArranger: isTransportArranger,
-    canArrange: Boolean(!transportJob && order.status !== 'CANCELLED' && isParticipant),
-    canChooseQuote: Boolean(transportJob && isTransportArranger && ['REQUESTED', 'QUOTED'].includes(transportJob.status)),
-    canStartPayment: canStartTransportPayment,
-    canResumePayment: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
-    paid: transportPaid,
-    paidAmount: transportPayments.find((p) => p.status === 'PAID')?.amount,
-    pending: transportPending,
-    payment: transportPayment,
-    payMethod,
-    setPayMethod,
-    pay: payTransport,
-    resume: resumePayment,
-    busy,
-    reload,
-    recoveryRequests,
-    counterInputs,
-    setCounterInputs,
-    evidence,
-    setEvidence,
-    notes: evidenceNotes,
-    setNotes: setEvidenceNotes,
-    evidenceBusy,
-    ...transportActions,
-  };
-
-  const disputeProps = {
-    canRaise: canRaiseDispute,
-    counterparties: disputeCounterparties,
-    againstId: disputeAgainstId,
-    setAgainstId: setDisputeAgainstId,
-    type: disputeType,
-    setType: setDisputeType,
-    description: disputeDescription,
-    setDescription: setDisputeDescription,
-    submitting: submittingDispute,
-    submitted: disputeSubmitted,
-    submit: submitDispute,
-  };
-
-  /* ====================================================================
-     Layout — cards flow into a responsive grid:
-       · phone (default)     → 1 card per row
-       · tablet (≥640px)     → 2 cards per row
-       · desktop (≥1000px)   → 3 cards per row
-     Wide cards (Overview, Transport, Payment, Payout, Timeline,
-     Messages) span all columns; everything else flows naturally.
-     ==================================================================== */
-  return (
-    <main className="section order-detail-page">
-      <div className="container-narrow">
-        <div className="row-between page-bar">
-          <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
-          <Button size="sm" disabled={refreshing} busy={refreshing} busyText="Refreshing…" onClick={reload}>Refresh</Button>
-        </div>
-
-        <div className="od-page-grid">
-          {/* Summary — full width */}
-          <div className="od-span-all">
-            <OverviewCard
-              order={order}
-              title={title}
-              flags={{ isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob }}
-              canCancel={canCancelOrder}
-              busy={busy}
-              onCancel={cancelOrder}
-            />
-          </div>
-
-          {/* Next step — natural width */}
-          {workflow ? (
-            <ActionCenter workflow={workflow} onScroll={scrollToId} onActionComplete={reload} />
-          ) : (
-            isInspector && (
-              <Card id="next-action" tone="accent" eyebrow="Next step" title="Inspector action">
-                {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
-                {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
-                {assignedInspection.status === 'COMPLETED' && <p>The report is published. The buyer can now complete any required inspection payment and continue.</p>}
-                <Actions><Link className="btn btn-primary" to="/dashboard/inspector">Open inspection dashboard</Link></Actions>
-              </Card>
-            )
-          )}
-
-          {/* Offer (product marketplace, before a deal exists) */}
-          {isProduct && isBuyer && !order.agreedOfferId && (
-            <OfferCard
-              amount={offerAmount}
-              setAmount={setOfferAmount}
-              message={offerMessage}
-              setMessage={setOfferMessage}
-              submitting={submittingOffer}
-              onSubmit={submitOffer}
-            />
-          )}
-
-          {/* Inspection */}
-          {inspectionApplies && isParticipant && orderOpen && (
-            <InspectionCard order={order} title={title} i={inspectionProps} />
-          )}
-
-          {/* Transport — full width; it renders its own inner grid */}
-          <div className="od-span-all">
-            <TransportCard order={order} t={transportProps} />
-          </div>
-
-          {/* Payments — full width */}
-          {(!isProduct || order.agreedOfferId) && (
-            <div className="od-span-all">
-              <PaymentCenter
-                workflowPayments={workflow?.payments}
-                rawPayments={payments}
-                isBuyer={isBuyer}
-                buyerIdentityMismatch={buyerIdentityMismatch}
-                marketplaceBlockedReason={marketplaceBlockedReason}
-                payMethod={payMethod}
-                setPayMethod={setPayMethod}
-                paymentMethods={PAYMENT_METHODS}
-                busy={busy}
-                marketplace={marketplaceObligation}
-                inspections={inspectionPaymentGroups}
-                transport={transportObligation}
-              />
-            </div>
-          )}
-
-          {/* Receipt */}
-          {order.status === 'DELIVERED' && isBuyer && (
-            <ReceiptCard
-              marketplacePaid={marketplacePaid}
-              transportBlocked={hiredTransport && !transportPaid}
-              busy={busy}
-              onConfirm={confirmReceipt}
-            />
-          )}
-
-          {/* Payout — full width (has a table) */}
-          <div className="od-span-all">
-            <PayoutStatusCard
-              payouts={{ seller: payoutBy('SELLER'), inspector: payoutBy('INSPECTOR'), transporter: payoutBy('TRANSPORTER') }}
-              names={{ seller: order.seller?.name || null, inspector: inspectorName, transporter: transportJob?.truckOwner?.name || null }}
-              you={{ seller: isSeller, inspector: isInspector, transporter: isTransporter }}
-            />
-          </div>
-
-          {/* Refund */}
-          <RefundStatusCard
-            refunds={refunds}
-            payouts={payouts}
-            people={{
-              SELLER: { name: order.seller?.name || null, you: isSeller },
-              INSPECTOR: { name: inspectorName, you: isInspector },
-              TRANSPORTER: { name: transportJob?.truckOwner?.name || null, you: isTransporter },
-            }}
-            isAdmin={isAdmin}
-            busy={busy}
-            onComplete={refundAction}
-            onFail={failRefund}
-          />
-
-          {/* Timeline — full width */}
-          {workflow && (
-            <div className="od-span-all">
-              <Card eyebrow="History" title="Order timeline" subtitle="Everything that has happened on this order">
-                <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
-              </Card>
-            </div>
-          )}
-
-          {/* Problems */}
-          <DisputeCard order={order} d={disputeProps} />
-
-          {/* Closing */}
-          {order.status === 'COMPLETED' && (
-            <Card eyebrow="Closed" title="Order completed">
-              <Notice title="✓ This order has been completed.">
-                <p className="muted">Receipt was confirmed by the buyer.</p>
-              </Notice>
-            </Card>
-          )}
-
-          {/* Rating */}
-          <RatingBox order={order} userId={currentUserId} onRated={reload} />
-
-          {/* Messages — full width */}
-          {counterpartId && (
-            <div className="od-span-all">
-              <MessageThread
-                orderId={order.id}
-                messages={order.messages || []}
-                counterpartId={counterpartId}
-                counterpartName={counterpartName}
-                currentUserId={currentUserId}
-                onSent={reload}
-              />
-            </div>
-          )}
-
-          {/* Admin indicator */}
-          {isAdmin && (
-            <Card eyebrow="Admin" title="Administrator view" subtitle="You are viewing this order with administrator access." />
-          )}
-        </div>
-      </div>
-
-      {error && (
-        <div className="order-detail-toast" role="alert" aria-live="assertive">
-          <span className="order-detail-toast-icon" aria-hidden="true">!</span>
-          <span className="order-detail-toast-message">{error}</span>
-          <button type="button" className="order-detail-toast-close" onClick={() => setError('')} aria-label="Dismiss message">×</button>
-        </div>
-      )}
-    </main>
-  );
+/* Print: clean, single column, no chrome */
+@media print {
+  .order-detail-page { background: #fff; padding: 0; }
+  .order-detail-page .page-bar,
+  .order-detail-page .btn,
+  .order-detail-toast { display: none !important; }
+  .order-detail-page .od-page-grid,
+  .order-detail-page .od-card-grid { display: block; }
+  .order-detail-page .card { box-shadow: none; break-inside: avoid; margin-bottom: 12px; }
 }
+
+/* ==========================================================================
+   16. Hard overrides (win over any older/global stylesheet)
+   ========================================================================== */
+.order-detail-page .card,
+.order-detail-page .card.od-card-overview,
+.order-detail-page .card.od-card-warning,
+.order-detail-page .card.od-card-accent {
+  box-shadow: none !important;
+}
+.order-detail-page .card.od-card-overview {
+  border-top: 1px solid var(--od-line) !important;
+}
+.order-detail-page .card > .od-card-head {
+  flex-wrap: nowrap !important;
+}
+
+
+/* ==========================================================================
+   17. Title underline + per-card accent colour
+   --------------------------------------------------------------------------
+   Each card gets an accent (eyebrow, small underline, side label, section
+   headers). Change a colour here and every part of that card follows.
+   ========================================================================== */
+.order-detail-page .card { --od-accent: var(--od-brand); }
+.order-detail-page #make-offer { --od-accent: #4f46e5; }
+.order-detail-page #inspection-section { --od-accent: #b45309; }
+.order-detail-page #transport-section { --od-accent: #1d5fb4; }
+.order-detail-page #transport-evidence-section { --od-accent: #6d3fc0; }
+.order-detail-page #transport-payment-section,
+.order-detail-page #payment-center { --od-accent: #0f7a44; }
+.order-detail-page #order-payout-status { --od-accent: #0e7490; }
+.order-detail-page #order-refund-status { --od-accent: #b42318; }
+.order-detail-page #raise-dispute { --od-accent: #c2410c; }
+
+/* Refund card header is inline-styled: same accent bar, anchored to its bottom rule */
+.order-detail-page #order-refund-status > header { position: relative; }
+.order-detail-page #order-refund-status > header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 28px;
+  height: 3px;
+  background: var(--od-accent);
+}
+
+/* Refund card is inline-styled: recolour its eyebrow and fit its table */
+.order-detail-page #order-refund-status > header span { color: var(--od-accent) !important; }
+.order-detail-page #order-refund-status > header { margin-bottom: 14px !important; }
+.order-detail-page #order-refund-status > .refund-table {
+  width: calc(100% - var(--od-indent));
+}
+
+
+/* ==========================================================================
+   18. Avatars (initials) — reuse .od-party-avatar anywhere a person appears
+   ========================================================================== */
+.order-detail-page .od-person { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; min-width: 0; }
+.order-detail-page .od-person strong { overflow-wrap: anywhere; }
+.order-detail-page .od-party-avatar--sm {
+  width: 26px;
+  height: 26px;
+  font-size: 10.5px;
+  background: var(--od-accent, var(--od-ink));
+}
+.order-detail-page .payout-party-line .od-party-avatar--sm { order: -1; }
