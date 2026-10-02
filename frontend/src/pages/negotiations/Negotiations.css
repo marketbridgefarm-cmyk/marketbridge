@@ -1,50 +1,56 @@
 /* ============================================================
-   MarketBridge — Negotiations  (pages/negotiations/Negotiations.css)
-   Redesigned: light surfaces, consistent headings, scrollable
-   filters, wide 2-column desktop grid.
+   MarketBridge — Negotiations
+   pages/negotiations/Negotiations.css
+
+   Unified hub for listing offers, transport quotes and
+   inspection quotes. Two visual modes on the same page:
+     · Competition groups — a BidBoard per request (rendered by
+       the BidBoard component; styles live in its own file).
+     · Bilateral deals — a list of neg-card rows, one per offer
+       or quote that's been selected for one-to-one negotiation.
+
+   Same design language as Orders / Order Detail / Listings /
+   Digital Marketplace.
    ============================================================ */
 
 .neg-page {
-  --n-accent:      #1e9e5a;
-  --n-accent-2:    #0f7a44;
-  --n-accent-ink:  #12734a;
-  --n-accent-soft: #ecfdf3;
-  --n-accent-line: #c6eccf;
+  --ng-accent:      #1e9e5a;
+  --ng-accent-2:    #0f7a44;
+  --ng-accent-ink:  #12734a;
+  --ng-accent-soft: #ecfdf3;
+  --ng-accent-line: #c6eccf;
 
-  --n-ink:         #0d1b2a;
-  --n-ink-soft:    #2c3a4a;
-  --n-muted:       #64748b;
-  --n-muted-2:     #94a3b8;
+  --ng-ink:         #0d1b2a;
+  --ng-ink-soft:    #2c3a4a;
+  --ng-muted:       #64748b;
+  --ng-muted-2:     #94a3b8;
 
-  --n-card:        #ffffff;
-  --n-tint-a:      #eefbf3;
-  --n-tint-b:      #eff3fb;
+  --ng-line:        #e5e9ef;
+  --ng-line-soft:   #eef1f5;
 
-  --n-line:        #e5e9ef;
-  --n-line-soft:   #eef1f5;
-  --n-surface:     #fbfcfd;
+  --ng-gold:        #a86f10;
+  --ng-gold-soft:   #fdf6e7;
+  --ng-gold-line:   #f4e0b6;
 
-  --n-gold:        #a86f10;
-  --n-gold-soft:   #fdf6e7;
-  --n-gold-line:   #f4e0b6;
+  --ng-danger:      #b42318;
+  --ng-danger-soft: #fef2f2;
+  --ng-danger-line: #fecaca;
 
-  --n-danger:      #b42318;
-  --n-danger-soft: #fef2f2;
-  --n-danger-line: #fecaca;
+  --ng-info:        #1e5fa8;
+  --ng-info-soft:   #eff5fd;
+  --ng-info-line:   #cddff5;
 
-  --n-info:        #1e5fa8;
-  --n-info-soft:   #eff5fd;
-  --n-info-line:   #cddff5;
+  --ng-radius:      20px;
+  --ng-radius-sm:   12px;
 
-  --n-radius:      20px;
-  --n-shadow:      0 1px 2px rgba(15, 30, 45, .04), 0 8px 24px rgba(15, 30, 45, .05);
-  --n-shadow-hi:   0 2px 4px rgba(15, 30, 45, .04), 0 18px 44px rgba(15, 30, 45, .09);
-  --n-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
-  --n-ring:        0 0 0 3px rgba(30, 158, 90, .18);
-  --n-ease:        cubic-bezier(.2, .7, .3, 1);
+  --ng-shadow:      0 1px 2px rgba(15, 30, 45, .04),
+                    0 8px 24px rgba(15, 30, 45, .05);
+  --ng-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
+  --ng-ring:        0 0 0 3px rgba(30, 158, 90, .18);
+  --ng-ease:        cubic-bezier(.2, .7, .3, 1);
 
   min-height: calc(100vh - 72px);
-  color: var(--n-ink);
+  color: var(--ng-ink);
   font-family: var(--mb-font-body, 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif);
   -webkit-font-smoothing: antialiased;
 
@@ -55,26 +61,25 @@
   background-attachment: fixed;
 }
 
-/* Wider container than the mobile-first default so desktop
-   doesn't strand the content in a narrow ribbon. */
 .neg-page .container-narrow {
-  max-width: 1200px;
+  max-width: 960px;
   margin: 0 auto;
-  padding: 40px 24px 96px;
+  padding: 40px 24px 80px;
 }
 
-/* ── Page header ──────────────────────────────────────── */
+/* ── Page header ───────────────────────────────────────── */
 
 .neg-page .eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--n-accent-ink);
+  margin: 0 0 12px;
+  color: var(--ng-accent-ink);
   font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .16em;
   text-transform: uppercase;
-  margin-bottom: 12px;
 }
+
 .neg-page .eyebrow::before {
   content: '';
   flex: 0 0 20px;
@@ -84,307 +89,219 @@
 }
 
 .neg-page h1 {
-  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: clamp(26px, 4vw, 34px);
+  margin: 0 0 8px;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: clamp(24px, 2.6vw, 32px);
   font-weight: 800;
   letter-spacing: -.7px;
-  line-height: 1.1;
-  color: var(--n-ink);
-  margin: 0 0 10px;
+  line-height: 1.15;
+  color: var(--ng-ink);
 }
 
 .neg-page .lead {
-  color: var(--n-muted);
+  margin: 0;
+  max-width: 62ch;
   font-size: 15px;
   line-height: 1.6;
-  max-width: 60ch;
-  margin: 0 0 8px;
+  color: var(--ng-muted);
 }
 
-/* ── Filters ──────────────────────────────────────────── */
+/* ── Filter tabs ───────────────────────────────────────── */
 
 .neg-page .sd-tabs {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid var(--n-line);
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--ng-line);
   border-radius: 999px;
   background: #fff;
-  box-shadow: var(--n-shadow-sm);
+  box-shadow: var(--ng-shadow-sm);
+  flex-wrap: wrap;
 }
 
 .neg-page .sd-tab {
   appearance: none;
   border: none;
   background: transparent;
-  padding: 7px 16px;
+  padding: 8px 16px;
   border-radius: 999px;
-  color: var(--n-muted);
-  font: 600 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  cursor: pointer;
-  transition: color .15s var(--n-ease), background .15s var(--n-ease);
-}
-.neg-page .sd-tab:hover { color: var(--n-ink); background: var(--n-line-soft); }
-.neg-page .sd-tab:focus-visible { outline: none; box-shadow: var(--n-ring); }
-.neg-page .sd-tab.sd-active {
-  background: linear-gradient(150deg, var(--n-accent) 0%, var(--n-accent-2) 100%);
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(30, 158, 90, .24);
-}
-
-/* Horizontal scroll chip row (if JSX uses .neg-filter-row) */
-.neg-page .neg-filter-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 24px;
-  padding: 4px 2px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-.neg-page .neg-filter-row::-webkit-scrollbar { display: none; }
-
-.neg-page .neg-filter-chip {
-  flex: 0 0 auto;
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  height: 32px;
-  padding: 0 14px;
-  border: 1px solid var(--n-line);
-  border-radius: 999px;
-  background: #fff;
-  color: var(--n-ink-soft);
-  font: 600 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  color: var(--ng-muted);
+  font: 600 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color .15s var(--n-ease),
-              background .15s var(--n-ease),
-              color .15s var(--n-ease);
-}
-.neg-page .neg-filter-chip:hover {
-  border-color: rgba(30, 158, 90, .35);
-  background: var(--n-accent-soft);
-  color: var(--n-accent-2);
-}
-.neg-page .neg-filter-chip:focus-visible { outline: none; box-shadow: var(--n-ring); }
-.neg-page .neg-filter-chip.is-active {
-  background: var(--n-accent-soft);
-  border-color: var(--n-accent-line);
-  color: var(--n-accent-ink);
-  font-weight: 700;
+  transition: color .15s var(--ng-ease), background .15s var(--ng-ease);
 }
 
-/* ── Sections ─────────────────────────────────────────── */
+.neg-page .sd-tab:hover { color: var(--ng-ink); background: var(--ng-line-soft); }
+.neg-page .sd-tab:focus-visible { outline: none; box-shadow: var(--ng-ring); }
+
+.neg-page .sd-tab.sd-active {
+  background: var(--ng-accent-soft);
+  color: var(--ng-accent-ink);
+  font-weight: 700;
+  border: 1px solid var(--ng-accent-line);
+}
+
+/* ── Sections ──────────────────────────────────────────── */
 
 .neg-page .neg-section {
-  margin-bottom: 36px;
+  margin: 28px 0 0;
 }
-.neg-page .neg-section:last-child { margin-bottom: 0; }
 
 .neg-page .neg-section-title {
-  position: relative;
-  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 16px;
+  margin: 0 0 18px;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--ng-line);
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 17px;
   font-weight: 800;
-  letter-spacing: -.25px;
+  letter-spacing: -.3px;
   line-height: 1.3;
-  color: var(--n-ink);
-  text-align: left;
-  margin: 0 0 16px;
-  padding: 0 0 12px 28px;
-  border-bottom: 1px solid var(--n-line-soft);
-}
-.neg-page .neg-section-title::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 8px;
-  width: 20px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--n-accent-ink);
+  color: var(--ng-ink);
 }
 
 .neg-page .neg-section-sub {
   display: block;
+  margin: 6px 0 0;
   font-family: var(--mb-font-body, 'DM Sans', sans-serif);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   letter-spacing: 0;
+  color: var(--ng-muted);
   line-height: 1.55;
-  color: var(--n-muted);
-  margin-top: 6px;
+  max-width: 70ch;
 }
 
-/* ── Competition group wrapper ────────────────────────── */
+/* ── Competition group wrapper (one per request / job) ─── */
 
 .neg-page .neg-group {
-  padding: 18px 20px;
-  margin-bottom: 14px;
-  border: 1px solid var(--n-line);
-  border-radius: var(--n-radius);
-  background-color: #fff;
-  background-image:
-    radial-gradient(120% 100% at 0% 0%,  var(--n-tint-a) 0%, transparent 55%),
-    radial-gradient(90%  90%  at 100% 100%, var(--n-tint-b) 0%, transparent 55%);
-  background-repeat: no-repeat;
-  box-shadow: var(--n-shadow);
-  transition: border-color .18s var(--n-ease), box-shadow .18s var(--n-ease);
-}
-.neg-page .neg-group:hover {
-  border-color: rgba(30, 158, 90, .22);
-  box-shadow: var(--n-shadow-hi);
+  margin: 0 0 20px;
+  padding: 22px 24px 24px;
+  border: 1px solid var(--ng-line);
+  border-radius: var(--ng-radius);
+  background: #fff;
+  box-shadow: var(--ng-shadow);
 }
 
-/* In the desktop grid, the last-child margin reset causes double gaps — let
-   the grid gap do the spacing instead. */
-.neg-page .neg-group:last-child { margin-bottom: 14px; }
-
-/* Kill any solid green header surfaces */
-.neg-page .neg-group-header,
-.neg-page [class*="bid-board"],
-.neg-page [class*="bidboard"],
-.neg-page [class*="bidBoard"],
-.neg-page [class*="group-header"] {
-  background: transparent !important;
-  background-image: none !important;
-  box-shadow: none !important;
-  color: inherit !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  padding: 0 !important;
-  margin: 0 0 12px !important;
-}
+.neg-page .neg-group:last-child { margin-bottom: 0; }
 
 .neg-page .neg-group-header {
-  display: flex !important;
-  align-items: flex-start !important;
-  justify-content: space-between !important;
-  gap: 12px !important;
-  flex-wrap: wrap !important;
-}
-
-.neg-page .neg-group-title,
-.neg-page .neg-group-header h2,
-.neg-page .neg-group-header h3 {
-  color: var(--n-ink) !important;
-  background: transparent !important;
-}
-
-.neg-page .neg-group-meta,
-.neg-page .neg-group-meta span {
-  color: var(--n-muted) !important;
-  background: transparent !important;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 0 0 14px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid var(--ng-line);
 }
 
 .neg-page .neg-group-heading { min-width: 0; flex: 1 1 auto; }
 
 .neg-page .neg-group-title {
-  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 15px;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 17px;
   font-weight: 800;
-  letter-spacing: -.2px;
-  line-height: 1.35;
-  color: var(--n-ink);
-  margin: 0 0 4px;
+  letter-spacing: -.3px;
+  line-height: 1.25;
+  color: var(--ng-ink);
   overflow-wrap: anywhere;
 }
 
 .neg-page .neg-group-meta {
   display: flex;
   align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
-  gap: 6px;
+  margin: 6px 0 0;
   font-size: 12.5px;
-  color: var(--n-muted);
+  line-height: 1.4;
+  color: var(--ng-muted);
   font-variant-numeric: tabular-nums;
 }
 
+.neg-page .neg-group-meta > span:last-child { color: var(--ng-muted-2); }
+
 .neg-page .neg-group-link {
-  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--n-line);
-  background: #fff;
-  color: var(--n-ink-soft);
-  font: 700 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--ng-accent-2);
+  font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
   text-decoration: none;
-  transition: border-color .15s var(--n-ease),
-              background .15s var(--n-ease),
-              color .15s var(--n-ease);
+  transition: background .15s var(--ng-ease), color .15s var(--ng-ease);
 }
+
 .neg-page .neg-group-link:hover {
-  border-color: rgba(30, 158, 90, .35);
-  background: var(--n-accent-soft);
-  color: var(--n-accent-2);
-  text-decoration: none;
+  background: var(--ng-accent-soft);
+  color: var(--ng-accent);
 }
 
 .neg-page .neg-commit-note {
-  margin: 12px 0 14px;
+  margin: 0 0 16px;
   padding: 10px 14px;
-  border: 1px solid var(--n-line-soft);
-  border-left: 3px solid rgba(30, 158, 90, .35);
-  border-radius: 4px 10px 10px 4px;
-  background: var(--n-surface);
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--n-muted);
+  border-left: 3px solid var(--ng-accent-line);
+  background: transparent;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ng-ink-soft);
 }
-.neg-page .neg-commit-note strong { color: var(--n-ink-soft); font-weight: 700; }
 
-/* ── Bilateral deal list ──────────────────────────────── */
+.neg-page .neg-commit-note strong {
+  color: var(--ng-ink);
+  font-weight: 800;
+}
+
+/* ── Bilateral deal list ───────────────────────────────── */
 
 .neg-page .neg-deal-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: grid;
+  gap: 14px;
 }
+
+/* ── Negotiation row card ──────────────────────────────── */
 
 .neg-page .neg-card {
   position: relative;
-  padding: 18px 20px;
-  border: 1px solid var(--n-line);
-  border-radius: var(--n-radius);
+  padding: 20px 22px 22px;
+  border: 1px solid var(--ng-line);
+  border-radius: var(--ng-radius);
   background: #fff;
-  box-shadow: var(--n-shadow);
-  transition: border-color .2s var(--n-ease),
-              box-shadow .2s var(--n-ease),
-              transform .2s var(--n-ease);
+  box-shadow: var(--ng-shadow-sm);
+  transition: border-color .18s var(--ng-ease), box-shadow .18s var(--ng-ease);
 }
+
 .neg-page .neg-card:hover {
-  border-color: rgba(30, 158, 90, .22);
-  box-shadow: var(--n-shadow-hi);
+  border-color: rgba(30, 158, 90, .28);
+  box-shadow: var(--ng-shadow);
 }
 
 .neg-page .neg-card--my-turn {
-  border-color: var(--n-accent-line);
-  background: linear-gradient(180deg, #f0fdf5, #eafaf0);
+  border-color: var(--ng-accent-line);
+  box-shadow: 0 0 0 3px rgba(30, 158, 90, .08), var(--ng-shadow-sm);
 }
 
 .neg-page .neg-turn-label {
   position: absolute;
   top: -10px;
-  right: 20px;
+  left: 20px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   height: 22px;
   padding: 0 10px;
   border-radius: 999px;
-  background: linear-gradient(150deg, var(--n-accent) 0%, var(--n-accent-2) 100%);
+  background: linear-gradient(150deg, var(--ng-accent) 0%, var(--ng-accent-2) 100%);
   color: #fff;
-  font: 800 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .08em;
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .12em;
   text-transform: uppercase;
-  box-shadow: 0 4px 12px rgba(30, 158, 90, .28);
+  box-shadow: 0 4px 10px rgba(30, 158, 90, .28);
 }
 
 .neg-page .neg-card-top {
@@ -392,400 +309,344 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
 }
-.neg-page .neg-card-top > div:first-child { min-width: 0; flex: 1 1 auto; }
-.neg-page .neg-card-top > .btn-outline,
-.neg-page .neg-card-top > .btn { flex: 0 0 auto; align-self: flex-start; }
 
+.neg-page .neg-card-top > div { min-width: 0; flex: 1 1 auto; }
+
+.neg-page .neg-card-top .btn { flex: 0 0 auto; }
+
+/* Chip row inside a card */
 .neg-page .neg-deal-status {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  margin: 0 0 8px;
 }
 
 .neg-page .role-chip {
   display: inline-flex;
   align-items: center;
   height: 22px;
-  padding: 0 10px;
+  padding: 0 9px;
   border-radius: 999px;
-  background: var(--n-line-soft);
-  border: 1px solid var(--n-line);
-  color: var(--n-ink-soft);
+  background: var(--ng-line-soft);
+  border: 1px solid var(--ng-line);
+  color: var(--ng-ink-soft);
   font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .06em;
+  letter-spacing: .08em;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
+.neg-page .neg-card--my-turn .role-chip:first-child {
+  background: var(--ng-accent-soft);
+  border-color: var(--ng-accent-line);
+  color: var(--ng-accent-ink);
+}
+
 .neg-page .neg-title {
-  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 15px;
+  margin: 0 0 8px;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 16px;
   font-weight: 800;
-  letter-spacing: -.2px;
+  letter-spacing: -.25px;
   line-height: 1.3;
-  color: var(--n-ink);
-  margin: 0 0 6px;
+  color: var(--ng-ink);
   overflow-wrap: anywhere;
 }
 
 .neg-page .neg-amount {
-  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
+  margin: 0;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -.5px;
-  color: var(--n-ink);
-  font-variant-numeric: tabular-nums;
   line-height: 1;
-  margin: 0;
+  color: var(--ng-ink);
+  font-variant-numeric: tabular-nums;
 }
+
 .neg-page .neg-amount-unit {
+  margin-left: 4px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: .12em;
-  color: var(--n-muted);
+  color: var(--ng-muted);
   text-transform: uppercase;
-  margin-left: 4px;
 }
 
 .neg-page .neg-deal-context {
   margin: 10px 0 0;
   font-size: 13px;
-  line-height: 1.5;
-  color: var(--n-ink-soft);
-  padding: 9px 13px;
-  border-radius: 10px;
-  background: var(--n-surface);
-  border: 1px solid var(--n-line-soft);
+  line-height: 1.6;
+  color: var(--ng-ink-soft);
 }
-.neg-page .neg-deal-context strong { color: var(--n-ink); font-weight: 700; }
+
+.neg-page .neg-deal-context strong { color: var(--ng-ink); font-weight: 800; }
 
 .neg-page .neg-waiting {
   margin: 10px 0 0;
+  padding: 8px 0 8px 12px;
+  border-left: 3px solid var(--ng-line);
   font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--n-muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  line-height: 1.55;
+  color: var(--ng-muted);
 }
-.neg-page .neg-waiting::before {
-  content: '';
-  flex: 0 0 6px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--n-muted-2);
-}
+
+/* ── Action row ────────────────────────────────────────── */
 
 .neg-page .neg-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--n-line-soft);
+  margin: 16px 0 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--ng-line-soft);
 }
-.neg-page .neg-card--my-turn .neg-actions { border-top-color: var(--n-accent-line); }
 
 .neg-page .neg-actions input[type="number"] {
+  width: 120px;
   flex: 0 0 auto;
-  width: 130px !important;
-  min-width: 110px;
-  max-width: 160px;
-  height: 40px;
-  padding: 0 12px;
-  border: 1px solid var(--n-line);
+  padding: 8px 10px;
+  border: 1px solid var(--ng-line);
   border-radius: 10px;
   background: #fff;
-  color: var(--n-ink);
-  font: 400 14px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  font-variant-numeric: tabular-nums;
-  transition: border-color .18s var(--n-ease), box-shadow .18s var(--n-ease);
+  color: var(--ng-ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  transition: border-color .18s var(--ng-ease), box-shadow .18s var(--ng-ease);
   -webkit-appearance: none;
   appearance: none;
 }
+
+.neg-page .neg-actions input[type="number"]::placeholder { color: var(--ng-muted-2); }
+
 .neg-page .neg-actions input[type="number"]:focus {
   outline: none;
-  border-color: var(--n-accent);
-  box-shadow: var(--n-ring);
+  border-color: var(--ng-accent);
+  box-shadow: var(--ng-ring);
 }
 
-/* ── Buttons ──────────────────────────────────────────── */
-
-.neg-page .btn,
-.neg-page .btn-outline {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 0 18px;
-  border-radius: 10px;
-  border: 1px solid var(--n-line);
-  background: #fff;
-  color: var(--n-ink);
-  font: 700 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  cursor: pointer;
-  text-decoration: none;
-  transition: border-color .15s var(--n-ease), background .15s var(--n-ease),
-              color .15s var(--n-ease), transform .12s var(--n-ease);
-}
-.neg-page .btn:hover,
-.neg-page .btn-outline:hover {
-  border-color: rgba(30, 158, 90, .35);
-  background: var(--n-accent-soft);
-  color: var(--n-accent-2);
-  text-decoration: none;
-}
-.neg-page .btn:focus-visible,
-.neg-page .btn-outline:focus-visible { outline: none; box-shadow: var(--n-ring); }
+/* ── Buttons (outline treatment used by this page) ─────── */
 
 .neg-page .sd-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 40px;
+  height: 38px;
   padding: 0 16px;
   border-radius: 10px;
-  border: 1px solid var(--n-line);
+  border: 1px solid var(--ng-line);
   background: #fff;
-  color: var(--n-ink);
+  color: var(--ng-ink);
   font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
   cursor: pointer;
-  transition: border-color .15s var(--n-ease), background .15s var(--n-ease),
-              color .15s var(--n-ease), transform .12s var(--n-ease),
-              box-shadow .15s var(--n-ease), filter .12s var(--n-ease);
+  white-space: nowrap;
+  transition: border-color .15s var(--ng-ease),
+              background .15s var(--ng-ease),
+              color .15s var(--ng-ease),
+              box-shadow .15s var(--ng-ease);
 }
+
 .neg-page .sd-btn:hover:not(:disabled) {
-  border-color: rgba(30, 158, 90, .35);
-  background: var(--n-accent-soft);
-  color: var(--n-accent-2);
+  border-color: var(--ng-accent);
+  background: var(--ng-accent-soft);
+  color: var(--ng-accent-2);
 }
-.neg-page .sd-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
-.neg-page .sd-btn:focus-visible { outline: none; box-shadow: var(--n-ring); }
+
+.neg-page .sd-btn:focus-visible { outline: none; box-shadow: var(--ng-ring); }
+.neg-page .sd-btn:disabled { opacity: .55; cursor: not-allowed; }
 
 .neg-page .sd-btn-primary {
-  border: none;
-  color: #fff;
-  background: linear-gradient(150deg, var(--n-accent) 0%, var(--n-accent-2) 100%);
-  box-shadow: 0 4px 12px rgba(30, 158, 90, .22);
+  background: #fff;
+  color: var(--ng-accent-2);
+  border-color: var(--ng-accent-line);
 }
+
 .neg-page .sd-btn-primary:hover:not(:disabled) {
-  filter: brightness(1.03);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(30, 158, 90, .28);
-  color: #fff;
-  border: none;
+  background: var(--ng-accent-soft);
+  color: var(--ng-accent-ink);
+  border-color: var(--ng-accent);
+  box-shadow: 0 1px 2px rgba(30, 158, 90, .12);
 }
 
 .neg-page .sd-btn-outline {
-  border: 1px solid var(--n-line);
   background: #fff;
-  color: var(--n-ink);
+  color: var(--ng-ink-soft);
+  border-color: var(--ng-line);
 }
+
 .neg-page .sd-btn-outline:hover:not(:disabled) {
-  border-color: rgba(30, 158, 90, .35);
-  background: var(--n-accent-soft);
-  color: var(--n-accent-2);
+  background: var(--ng-line-soft);
+  color: var(--ng-ink);
+  border-color: var(--ng-line);
 }
 
-/* ── Alerts + states ──────────────────────────────────── */
-
-.neg-page .alert {
-  padding: 12px 14px;
-  margin-bottom: 12px;
+/* Generic `.btn` / `.btn-outline` — used on the "Open" link */
+.neg-page .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
   border-radius: 10px;
-  font-size: 14px;
-  line-height: 1.5;
-  background: var(--n-line-soft);
-  color: var(--n-ink-soft);
-}
-.neg-page .alert.error {
-  background: var(--n-danger-soft);
-  border: 1px solid var(--n-danger-line);
-  color: var(--n-danger);
+  border: 1px solid var(--ng-line);
+  background: #fff;
+  color: var(--ng-ink);
+  font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .01em;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s var(--ng-ease),
+              background .15s var(--ng-ease),
+              color .15s var(--ng-ease);
 }
 
-.neg-page > .container-narrow > p:not([class]) {
-  padding: 24px;
-  border: 1px dashed var(--n-line);
-  border-radius: var(--n-radius);
-  background: rgba(255, 255, 255, .7);
-  color: var(--n-muted);
-  text-align: center;
-  font-size: 14.5px;
-  margin: 0;
+.neg-page .btn:hover:not(:disabled) {
+  border-color: var(--ng-accent);
+  background: var(--ng-accent-soft);
+  color: var(--ng-accent-2);
 }
+
+.neg-page .btn-outline {
+  background: #fff;
+  color: var(--ng-accent-2);
+  border-color: var(--ng-accent-line);
+}
+
+.neg-page .btn-outline:hover:not(:disabled) {
+  background: var(--ng-accent-soft);
+  color: var(--ng-accent-ink);
+  border-color: var(--ng-accent);
+}
+
+/* ── Empty state / notices ─────────────────────────────── */
 
 .neg-page .card.notice {
-  padding: 48px 24px;
-  text-align: center;
-  border: 1px dashed var(--n-line);
-  border-radius: var(--n-radius);
+  padding: 40px 24px;
+  margin: 24px 0 0;
+  border: 1px dashed var(--ng-line);
+  border-radius: var(--ng-radius);
   background: rgba(255, 255, 255, .7);
-  color: var(--n-muted);
+  color: var(--ng-muted);
+  text-align: center;
   font-size: 14.5px;
-  line-height: 1.55;
   box-shadow: none;
 }
 
-/* ── Toast ────────────────────────────────────────────── */
+/* ── Alerts (loading errors) ───────────────────────────── */
+
+.neg-page .alert {
+  padding: 12px 16px;
+  margin: 14px 0;
+  border-radius: var(--ng-radius-sm);
+  border: 1px solid var(--ng-gold-line);
+  background: var(--ng-gold-soft);
+  color: #7c4f0b;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.neg-page .alert.error {
+  border-color: var(--ng-danger-line);
+  background: var(--ng-danger-soft);
+  color: var(--ng-danger);
+}
+
+/* ── Toast ─────────────────────────────────────────────── */
 
 .neg-page .sd-toast {
   position: fixed;
   left: 50%;
   bottom: 24px;
   transform: translateX(-50%);
-  z-index: 60;
-  max-width: min(520px, calc(100vw - 32px));
+  z-index: 9999;
   padding: 12px 18px;
-  border: 1px solid var(--n-accent-line);
   border-radius: 12px;
-  background: #fff;
-  color: var(--n-accent-ink);
-  font: 600 14px/1.45 var(--mb-font-body, 'DM Sans', sans-serif);
-  text-align: center;
-  box-shadow: 0 1px 2px rgba(15, 30, 45, .06), 0 18px 44px rgba(15, 30, 45, .16);
-  animation: neg-toast-in .22s var(--n-ease);
+  background: #0d1b2a;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, .08);
+  box-shadow: 0 12px 30px rgba(15, 30, 45, .35);
+  font-size: 13.5px;
+  line-height: 1.45;
+  animation: neg-toast-in .22s var(--ng-ease);
+  max-width: min(480px, calc(100vw - 32px));
 }
+
 @keyframes neg-toast-in {
-  from { opacity: 0; transform: translate(-50%, 12px); }
+  from { opacity: 0; transform: translate(-50%, 8px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* ============================================================
-   DESKTOP GRID — 2 columns above 1024px
-   ============================================================ */
+/* ── Loading ───────────────────────────────────────────── */
 
-@media (min-width: 1024px) {
-  /* Section becomes a 2-column grid. Items with fewer than 2
-     cards will stretch to fill the row (auto-fit). */
-  .neg-page .neg-section {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
-    gap: 16px;
-    align-items: start;
-    margin-bottom: 40px;
-  }
-
-  /* Section title spans both columns */
-  .neg-page .neg-section-title {
-    grid-column: 1 / -1;
-    margin-bottom: 4px; /* gap handles the rest */
-  }
-
-  /* The bilateral list wrapper also spans, then lays out
-     internally as its own 2-column grid. */
-  .neg-page .neg-section > .neg-deal-list {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
-    gap: 16px;
-  }
-
-  /* Remove per-item bottom margins — gap handles spacing */
-  .neg-page .neg-section .neg-group {
-    margin-bottom: 0;
-  }
-  .neg-page .neg-section .neg-group:last-child {
-    margin-bottom: 0;
-  }
+.neg-page .loading,
+.neg-page > .container-narrow > p {
+  font-size: 14px;
+  color: var(--ng-muted);
 }
 
-/* ============================================================
-   TABLET — 721 to 1023px, single column but wider
-   ============================================================ */
+/* ── Responsive ────────────────────────────────────────── */
 
-@media (min-width: 721px) and (max-width: 1023px) {
-  .neg-page .container-narrow {
-    max-width: 880px;
-    padding: 32px 24px 80px;
+@media (max-width: 719px) {
+  .neg-page .container-narrow { padding: 24px 16px 56px; }
+
+  .neg-page .sd-tabs {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
   }
-}
+  .neg-page .sd-tab { flex: 1 1 auto; text-align: center; padding: 8px 10px; }
 
-/* ============================================================
-   MOBILE — up to 720px
-   ============================================================ */
+  .neg-page .neg-group { padding: 18px 18px 20px; }
 
-@media (max-width: 720px) {
-  .neg-page .container-narrow { padding: 24px 16px 72px; }
-  .neg-page h1 { font-size: 24px; }
+  .neg-page .neg-group-header { gap: 10px; }
+  .neg-page .neg-group-link { padding: 6px 8px; }
 
-  .neg-page .sd-tabs { width: 100%; justify-content: stretch; }
-  .neg-page .sd-tab  { flex: 1 1 0; text-align: center; }
+  .neg-page .neg-card { padding: 18px 18px 20px; }
 
-  .neg-page .neg-filter-row { margin-bottom: 20px; }
-
-  .neg-page .neg-section-title { font-size: 15px; }
-
-  .neg-page .neg-group { padding: 16px; }
-  .neg-page .neg-card  { padding: 16px; }
-
-  .neg-page .neg-card-top {
+  .neg-page .neg-actions {
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
-  }
-  .neg-page .neg-card-top > .btn-outline,
-  .neg-page .neg-card-top > .btn { align-self: flex-start; }
-
-  .neg-page .neg-turn-label {
-    top: -9px;
-    right: 14px;
-    font-size: 10px;
-    height: 20px;
-    padding: 0 8px;
   }
 
-  .neg-page .neg-amount { font-size: 20px; }
-
-  .neg-page .neg-actions > .sd-btn { flex: 1 1 auto; min-height: 42px; }
+  .neg-page .neg-actions .sd-btn,
   .neg-page .neg-actions input[type="number"] {
-    flex: 1 1 100%;
-    width: 100% !important;
-    max-width: none;
-    height: 42px;
-  }
-
-  .neg-page .sd-toast {
-    bottom: 16px;
-    left: 16px;
-    right: 16px;
-    transform: none;
-    max-width: none;
-  }
-  @keyframes neg-toast-in {
-    from { opacity: 0; transform: translateY(12px); }
-    to   { opacity: 1; transform: translateY(0); }
+    width: 100%;
   }
 }
 
 @media (max-width: 420px) {
-  .neg-page .neg-group { padding: 14px; }
-  .neg-page .neg-card  { padding: 15px; }
-  .neg-page .neg-title { font-size: 14.5px; }
-  .neg-page .neg-amount { font-size: 19px; }
-  .neg-page .neg-group-title { font-size: 14.5px; }
+  .neg-page h1 { font-size: 22px; }
+  .neg-page .neg-section-title { font-size: 16px; }
+  .neg-page .neg-group-title { font-size: 15px; }
+  .neg-page .neg-title { font-size: 15px; }
+  .neg-page .neg-amount { font-size: 20px; }
+
+  .neg-page .sd-toast {
+    bottom: 12px;
+    padding: 10px 14px;
+    font-size: 13px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .neg-page .sd-tab,
-  .neg-page .neg-filter-chip,
   .neg-page .sd-btn,
   .neg-page .btn,
-  .neg-page .btn-outline,
+  .neg-page .sd-tab,
   .neg-page .neg-card,
-  .neg-page .neg-group,
-  .neg-page .neg-group-link,
-  .neg-page .neg-actions input[type="number"] { transition: none; }
-  .neg-page .neg-card:hover,
-  .neg-page .neg-group:hover,
-  .neg-page .sd-btn-primary:hover:not(:disabled) { transform: none; }
+  .neg-page .neg-group-link {
+    transition: none;
+  }
+
   .neg-page .sd-toast { animation: none; }
 }
