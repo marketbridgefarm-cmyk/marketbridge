@@ -135,7 +135,6 @@
 .order-detail-page .btn-sm { height: 34px; padding: 0 12px; font-size: 12.5px; }
 .order-detail-page .btn-block { width: 100%; }
 
-/* Primary CTA — outline treatment, no green fill */
 .order-detail-page .btn-primary {
   background: #fff;
   color: var(--d-accent-2);
@@ -321,7 +320,7 @@
 
 .order-detail-page .od-card-section-meta.is-strong { color: var(--d-ink); font-weight: 800; }
 
-/* ── Card-side party / value ───────────────────────────── */
+/* ── Card-side party ───────────────────────────────────── */
 
 .order-detail-page .od-card-side-party {
   display: flex;
@@ -708,7 +707,7 @@
   color: var(--d-muted);
 }
 
-/* ── Payout due countdown ─────────────────────────────── */
+/* ── Payout countdown (flat — no box) ──────────────────── */
 
 .order-detail-page .payout-due {
   display: flex;
@@ -716,32 +715,47 @@
   justify-content: space-between;
   gap: 14px;
   flex-wrap: wrap;
-  padding: 16px 0 0;
-  margin: 16px 0 0;
-  border-top: 1px solid var(--d-line);
+  padding: 14px 0 0 !important;
+  margin: 14px 0 0 !important;
+  border: none !important;
+  border-top: 1px solid var(--d-line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
   color: var(--d-ink-soft);
 }
+
 .order-detail-page .payout-due.payout-due-done { color: var(--d-accent-2); }
 .order-detail-page .payout-due.payout-due-idle { color: var(--d-muted); }
 
-.order-detail-page .payout-due-when { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.order-detail-page .payout-due-when {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
 .order-detail-page .payout-due-label {
   font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--d-muted);
 }
+
 .order-detail-page .payout-due-date {
   font: 700 14px/1.2 var(--mb-font-head, Manrope, sans-serif);
   color: inherit;
   letter-spacing: -.2px;
 }
+
 .order-detail-page .payout-due-clock {
   display: flex;
   align-items: baseline;
   gap: 6px;
   font-variant-numeric: tabular-nums;
 }
+
 .order-detail-page .payout-due-digits {
   font-family: var(--mb-font-head, Manrope, sans-serif);
   font-size: 22px;
@@ -750,13 +764,77 @@
   color: var(--d-ink);
   line-height: 1;
 }
+
 .order-detail-page .payout-due-done .payout-due-digits { color: var(--d-accent-2); }
 .order-detail-page .payout-due-digits-now { font-size: 15px; letter-spacing: -.2px; }
+
 .order-detail-page .payout-due-unit {
   font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--d-muted);
+}
+
+/* ── Dispute note (only when a payout is frozen) ──────── */
+
+.order-detail-page .payout-dispute-note {
+  margin: 12px 0 0;
+  padding: 8px 0 8px 12px;
+  border-left: 3px solid var(--d-danger-line);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--d-danger);
+}
+
+/* ── Footer notice (numbered) ──────────────────────────── */
+
+.order-detail-page .od-notice--footer {
+  padding: 14px 0 0;
+  margin: 16px 0 0;
+  border: none;
+  border-top: 1px solid var(--d-line-soft);
+  background: transparent;
+}
+
+.order-detail-page .od-notice-prefix {
+  display: block;
+  margin: 0 0 8px;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--d-accent-2);
+}
+
+.order-detail-page .od-notice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: notice;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.order-detail-page .od-notice-list li {
+  position: relative;
+  padding-left: 24px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--d-ink-soft);
+}
+
+.order-detail-page .od-notice-list li::before {
+  counter-increment: notice;
+  content: counter(notice) ")";
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--d-accent-2);
 }
 
 /* ── Forms ─────────────────────────────────────────────── */
@@ -1071,8 +1149,6 @@
   .order-detail-page .payout-amount { font-size: 14px; }
   .order-detail-page .payout-due { flex-direction: column; align-items: flex-start; gap: 10px; }
 
-  /* Stacked quote row: size to content so the amount and buttons
-     sit directly under the status, no leftover gap. */
   .order-detail-page .transporter { flex-direction: column; align-items: stretch; }
   .order-detail-page .transporter > div:first-child,
   .order-detail-page .transporter > div:last-child {
