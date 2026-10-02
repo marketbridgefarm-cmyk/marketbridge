@@ -256,7 +256,7 @@
 /* ---------- 4b. Body indent ----------
    Titles and section headers stay flush left; everything else is pushed in.
    !important is needed because some cards set margin via inline styles. */
-.order-detail-page .card > :not(.od-card-head):not(.od-card-section) {
+.order-detail-page .card:not(.payment-center) > :not(.od-card-head):not(.od-card-section) {
   margin-left: var(--od-indent) !important;
 }
 .order-detail-page .od-card-section > :not(.od-card-section-head) {
