@@ -1030,3 +1030,54 @@
   .order-detail-page .card.od-next { padding: 30px 36px 12px; }
   .order-detail-page .od-next-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* ==========================================================================
+   20. Header-right fix + first-card cleanup
+   Append at the very END of OrderDetail.css (after section 19).
+   Only touches: the right-hand block in card headers, and the status pills
+   on the first (overview) card.
+   ========================================================================== */
+
+/* A) Right block (Status / Delivery / Seller / Due date …) hugs the right edge */
+.order-detail-page .od-card-head .od-card-head-side {
+  justify-self: end !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+  padding-right: 0 !important;
+  width: max-content !important;
+  align-items: flex-end !important;
+  text-align: right;
+}
+
+/* every child (label, pill, value, avatar row) pins to the right edge */
+.order-detail-page .od-card-head-side > * {
+  align-self: flex-end;
+  margin-left: auto;
+  margin-right: 0;
+}
+
+/* the status row inside the block must not add its own spacing or left-align */
+.order-detail-page .od-card-head-side .od-status-row {
+  justify-content: flex-end;
+  margin-bottom: 0;
+}
+
+/* letter-spacing leaves a gap after the last letter; cancel it so the text
+   lines up with the pill / avatar below it */
+.order-detail-page .od-card-head-side .od-card-side-label {
+  margin-right: -0.2em;
+}
+
+/* the long description under the title must not widen the right column and
+   push the block away from the edge */
+.order-detail-page .od-card-head .od-card-subtitle {
+  width: 0;
+  min-width: 100%;
+}
+
+/* B) First card: drop the status pills (COMPLETED / PAYMENT / TRANSPORT).
+      The progress line already shows the same information. */
+.order-detail-page .card.od-card-overview .od-status-row {
+  display: none !important;
+}
+
