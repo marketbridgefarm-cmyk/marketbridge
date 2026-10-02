@@ -823,3 +823,15 @@
   .detail-page .back-link,
   .detail-page .detail-media-thumb { transition: none; }
 }
+
+/* ── Availability note (end of content card) ──────────── */
+
+.detail-page .listing-availability-note {
+  margin: 18px 0 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--ld-line-soft);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ld-muted);
+}
+
