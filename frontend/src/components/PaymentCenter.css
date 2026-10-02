@@ -82,14 +82,15 @@
   color: var(--pc-ink);
   overflow-wrap: anywhere;
 }
-/* tiny line under the title */
-.payment-center .pc-title::after {
+/* accent bar on the header rule (above the descriptions) */
+.payment-center .pc-head { position: relative; }
+.payment-center .pc-head::after {
   content: '';
-  display: block;
+  position: absolute;
+  left: 0;
+  bottom: -1px;
   width: 28px;
   height: 3px;
-  margin-top: 8px;
-  border-radius: 3px;
   background: var(--od-accent, var(--pc-brand));
 }
 
