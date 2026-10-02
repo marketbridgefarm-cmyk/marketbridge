@@ -187,11 +187,13 @@
   color: var(--od-muted);
 }
 
+/* Updated to ensure right-side elements stay pinned to the right */
 .order-detail-page .od-card-head-side {
   display: flex;
   flex: none;
   flex-direction: column;
   align-items: flex-end;
+  justify-content: flex-end; /* Added to push content to the right */
   gap: 4px;
   max-width: 48%;
   min-width: 0;
@@ -212,10 +214,12 @@
   overflow-wrap: anywhere;
 }
 
+/* Updated to ensure right-side avatars stay pinned to the right */
 .order-detail-page .od-card-side-party {
   display: flex;
   flex-direction: row; /* text, then avatar at the far right */
   align-items: center;
+  justify-content: flex-end; /* Added to ensure avatar stays right */
   gap: 10px;
 }
 .order-detail-page .od-card-side-party > div { display: flex; flex: 0 1 auto; flex-direction: column; align-items: flex-end; min-width: 0; }
@@ -239,9 +243,10 @@
 .order-detail-page .od-card-head + .od-card-section:first-of-type { border-top: 0; padding-top: 0; }
 .order-detail-page .od-card-section:last-child { padding-bottom: 0; }
 
+/* Updated align-items to center to properly align avatars with titles */
 .order-detail-page .od-card-section-head {
   display: flex;
-  align-items: baseline;
+  align-items: center; /* Changed from baseline to center to align avatar with text */
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 6px 12px;
@@ -254,7 +259,10 @@
   color: var(--od-accent, var(--od-brand));
 }
 
+/* Updated to allow the avatar to sit cleanly inside the meta slot */
 .order-detail-page .od-card-section-meta {
+  display: flex;
+  align-items: center;
   font: 600 12px var(--od-font-body);
   color: var(--od-muted);
   font-variant-numeric: tabular-nums;
