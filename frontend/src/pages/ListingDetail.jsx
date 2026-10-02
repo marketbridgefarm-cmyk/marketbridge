@@ -9,14 +9,8 @@ import './listing-detail/ListingDetail.css';
 
 const money = (n) => Number(n || 0).toLocaleString();
 
-/* First defined, non-empty value wins. Use for fields that may be
-   named slightly differently across listing kinds. */
 const pick = (...values) => values.find((v) => v != null && v !== '');
 
-/* ─────────────────────────────────────────────────────────
-   Card head primitive — the same shape used across Orders,
-   OrderDetail and the Digital Marketplace.
-   ───────────────────────────────────────────────────────── */
 function CardHead({ eyebrow, title, subtitle, side, id }) {
   return (
     <header className="ld-card-head">
@@ -30,7 +24,6 @@ function CardHead({ eyebrow, title, subtitle, side, id }) {
   );
 }
 
-/* Section heading inside a card: green title, hairline under. */
 function SectionHead({ title, meta, strong }) {
   return (
     <div className="ld-section-head">
@@ -49,15 +42,12 @@ export default function ListingDetail() {
 
   const [listing, setListing] = useState(null);
 
-  // Offer form
   const [offerAmount, setOfferAmount] = useState('');
   const [message, setMessage] = useState('');
 
-  // Inspection payment
   const [inspectionPayMethod, setInspectionPayMethod] = useState('TELEBIRR');
   const [payingInspectionId, setPayingInspectionId] = useState('');
 
-  // Inspection quotes
   const [quotesByRequest, setQuotesByRequest] = useState({});
   const [loadingQuotesId, setLoadingQuotesId] = useState('');
   const [acceptingQuoteId, setAcceptingQuoteId] = useState('');
@@ -65,10 +55,8 @@ export default function ListingDetail() {
   const [rejectingQuoteId, setRejectingQuoteId] = useState('');
   const [quoteCounterInputs, setQuoteCounterInputs] = useState({});
 
-  // Buyer-side negotiation
   const [buyerCounter, setBuyerCounter] = useState('');
 
-  // Media
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
 
   const relatedOrders = (listing?.orders || [])
@@ -458,12 +446,6 @@ export default function ListingDetail() {
               <CardHead
                 eyebrow={isAgricultural ? 'AGRICULTURE' : 'PRODUCT'}
                 title={listing.title || listing.cropType}
-                subtitle={
-                  <>
-                    {Number(listing.quantity || 0).toLocaleString()} {listing.unit || 'units'}
-                    {listing.location ? ` · ${listing.location}` : ''}
-                  </>
-                }
                 side={
                   <>
                     <span className="ld-card-side-label">Status</span>
@@ -474,14 +456,11 @@ export default function ListingDetail() {
                 }
               />
 
-              <p className="muted">
-                {isAvailable
-                  ? 'Available for competing buyers. Selecting a buyer opens negotiation; only acceptance creates the reservation.'
-                  : 'This listing is currently reserved / unavailable to new buyers.'}
-              </p>
-
               {listing.description && (
-                <div className="listing-description">{listing.description}</div>
+                <>
+                  <SectionHead title="Description" />
+                  <div className="listing-description">{listing.description}</div>
+                </>
               )}
 
               <SectionHead title="Listing details" />
@@ -569,6 +548,12 @@ export default function ListingDetail() {
                   </Link>
                 </p>
               )}
+
+              <p className="listing-availability-note">
+                {isAvailable
+                  ? 'Available for competing buyers. Selecting a buyer opens negotiation; only acceptance creates the reservation.'
+                  : 'This listing is currently reserved / unavailable to new buyers.'}
+              </p>
             </div>
 
             {/* ── Inspection evidence ───────────────────────── */}
@@ -792,7 +777,6 @@ export default function ListingDetail() {
                           </div>
                         )}
 
-                      {/* ── Inspection payment block ────────── */}
                       {(() => {
                         if (request.requestedById !== user?.id || request.fee == null) {
                           return null;
@@ -913,7 +897,6 @@ export default function ListingDetail() {
           </section>
 
           <aside>
-            {/* ── Buyer negotiation ─────────────────────────── */}
             {isBuyer && myLatestOffer && (isAgricultural || isProduct) && (
               <div className="card" id="negotiation">
                 <CardHead
@@ -1037,7 +1020,6 @@ export default function ListingDetail() {
               </div>
             )}
 
-            {/* ── Make offer / buyer control ────────────────── */}
             {isBuyer && (
               <div className="card sticky-card" id="make-offer">
                 <CardHead
@@ -1161,7 +1143,6 @@ export default function ListingDetail() {
               </div>
             )}
 
-            {/* ── About the seller ──────────────────────────── */}
             {listing.seller && (
               <div className="card">
                 <CardHead
@@ -1223,7 +1204,6 @@ export default function ListingDetail() {
               </div>
             )}
 
-            {/* ── Seller controls ───────────────────────────── */}
             {isOwner && (
               <div className="card sticky-card">
                 <CardHead
@@ -1261,7 +1241,6 @@ export default function ListingDetail() {
               </div>
             )}
 
-            {/* ── Guest CTA ────────────────────────────────── */}
             {!user && (
               <div className="card">
                 <CardHead
@@ -1281,9 +1260,6 @@ export default function ListingDetail() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   Seller negotiations list
-   ───────────────────────────────────────────────────────── */
 function SellerNegotiations({ offers, onAction }) {
   const list = Array.isArray(offers) ? offers : [];
 
@@ -1316,9 +1292,6 @@ function SellerNegotiations({ offers, onAction }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   Offer row (seller view)
-   ───────────────────────────────────────────────────────── */
 function OfferRow({ offer, onAction }) {
   const [counter, setCounter] = useState('');
   const [busy, setBusy] = useState('');
