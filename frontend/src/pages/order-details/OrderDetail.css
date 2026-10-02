@@ -7,7 +7,8 @@
      · od-detail-facts                 — flat key/value rows
      · od-status-pill                  — pills with od-tone-*
      · od-eyebrow, od-card-side-*      — head furniture
-     · od-card-grid                    — responsive multi-card layout
+     · od-card-grid                    — responsive transport grid
+     · od-page-grid / od-span-all      — page-level responsive grid
 
    No boxes inside cards. Only the outer .card has a border.
    Buttons are white with a green outline — no green fills.
@@ -17,15 +18,15 @@
        flush left.
      · Section bodies, the card subtitle (description), and any
        direct card content are nudged right by one uniform
-       gutter (--d-indent) so the data reads as a block
-       distinct from its heading.
+       gutter (--d-indent).
      · Every card carries a slightly wider right padding so
        right-aligned values (amounts, statuses, dates) have
-       more breathing room from the card edge.
-     · .od-card-grid lays out sibling cards responsively:
-         1 per row on phone, 2 on tablet, 3 on desktop.
-     · Responsive: phone (≤719px) and small phone (≤420px)
-       tighten the gutter proportionally.
+       more room from the card edge.
+     · The page flows into a responsive grid:
+         phone   → 1 column
+         tablet  → 2 columns
+         desktop → 3 columns
+       Wide cards use .od-span-all to cover every column.
    ============================================================ */
 
 .order-detail-page {
@@ -267,8 +268,6 @@
   overflow-wrap: anywhere;
 }
 
-/* The subtitle (description) sits indented, matching the
-   section bodies. Eyebrow and title above stay flush. */
 .order-detail-page .od-card-subtitle {
   margin: 2px 0 0 var(--d-indent);
   font-size: 12.5px;
@@ -1182,21 +1181,62 @@
 }
 
 /* ============================================================
-   RESPONSIVE CARD GRID
+   PAGE GRID
    ============================================================
-   Used to lay out a set of sibling cards (the three transport
-   cards) responsively:
-     · phone (default)      → 1 card per row
-     · tablet (≥640px)      → 2 cards per row
-     · desktop (≥1000px)    → 3 cards per row
-   Cards fill their cell height so a short card and a tall card
-   in the same row line up at top and bottom. */
+   Top-level cards flow into a responsive grid:
+     · phone (default)      → 1 column
+     · tablet (≥640px)      → 2 columns
+     · desktop (≥1000px)    → 3 columns
+   Wide cards use .od-span-all to cover every column. */
+
+.order-detail-page .od-page-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.order-detail-page .od-page-grid > * {
+  min-width: 0;
+  margin: 0;
+}
+
+.order-detail-page .od-page-grid > .card,
+.order-detail-page .od-page-grid > * > .card {
+  margin: 0;
+  height: 100%;
+}
+
+.order-detail-page .od-span-all {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .order-detail-page .od-page-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+}
+
+@media (min-width: 1000px) {
+  .order-detail-page .od-page-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE TRANSPORT GRID
+   ============================================================
+   The three transport cards sit inside .od-card-grid, which
+   also flows 1 → 2 → 3 columns by breakpoint. */
 
 .order-detail-page .od-card-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
-  margin: 0 0 20px;
+  margin: 0;
   align-items: stretch;
 }
 
@@ -1218,17 +1258,11 @@
   }
 }
 
-/* ── Wide screens: allow the container to grow so 3 cards fit ── */
+/* ── Widen the page container on desktop so 3 columns fit ── */
 
 @media (min-width: 1000px) {
   .order-detail-page .container-narrow {
-    max-width: 1180px;
-  }
-}
-
-@media (max-width: 639px) {
-  .order-detail-page .od-card-grid {
-    gap: 14px;
+    max-width: 1240px;
   }
 }
 
@@ -1257,6 +1291,11 @@
     border-radius: 16px;
   }
   .order-detail-page .card.loading { padding: 32px 20px; }
+
+  .order-detail-page .od-page-grid { gap: 14px; }
+  .order-detail-page .od-card-grid { gap: 14px; }
+  .order-detail-page .od-page-grid > .card,
+  .order-detail-page .od-card-grid > .card { margin: 0; }
 
   .order-detail-page .page-bar { margin-bottom: 12px; }
   .order-detail-page .back-link { padding: 6px 4px; font-size: 13px; }
@@ -1397,6 +1436,8 @@
     border-radius: 14px;
     margin-bottom: 12px;
   }
+  .order-detail-page .od-page-grid > .card,
+  .order-detail-page .od-card-grid > .card { margin: 0; }
 
   .order-detail-page .od-card-head { padding-bottom: 10px; margin-bottom: 12px; }
   .order-detail-page .od-card-head-side { max-width: 110px; }
