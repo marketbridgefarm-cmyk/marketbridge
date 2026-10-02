@@ -9,6 +9,35 @@ import './listing-detail/ListingDetail.css';
 
 const money = (n) => Number(n || 0).toLocaleString();
 
+/* ─────────────────────────────────────────────────────────
+   Card head primitive — the same shape used across Orders,
+   OrderDetail and the Digital Marketplace.
+   ───────────────────────────────────────────────────────── */
+function CardHead({ eyebrow, title, subtitle, side, id }) {
+  return (
+    <header className="ld-card-head">
+      <div className="ld-card-head-main">
+        {eyebrow && <span className="ld-eyebrow">{eyebrow}</span>}
+        <h2 className="ld-card-title" id={id}>{title}</h2>
+        {subtitle && <p className="ld-card-subtitle">{subtitle}</p>}
+      </div>
+      {side && <div className="ld-card-head-side">{side}</div>}
+    </header>
+  );
+}
+
+/* Section heading inside a card: green title, hairline under. */
+function SectionHead({ title, meta, strong }) {
+  return (
+    <div className="ld-section-head">
+      <h3 className="ld-section-title">{title}</h3>
+      {meta != null && (
+        <span className={`ld-section-meta${strong ? ' is-strong' : ''}`}>{meta}</span>
+      )}
+    </div>
+  );
+}
+
 export default function ListingDetail() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -45,9 +74,6 @@ export default function ListingDetail() {
     );
   const relatedOrder = relatedOrders[0] || null;
 
-  // Inspections (agricultural and product) are order-owned. ListingDetail may
-  // still show the listing, but it must never create a free-floating inspection
-  // that cannot participate in the exact purchase workflow.
   const activeInspectionRequest =
     (listing?.inspectionRequests || [])
       .filter((request) => request.status !== 'CANCELLED')
@@ -172,11 +198,6 @@ export default function ListingDetail() {
     }
   }
 
-  // A payment that already reached Chapa (PROCESSING) must never be resumed
-  // or re-created — only checked. See OrderDetail.jsx's checkPaymentStatus
-  // for the same pattern; a stuck PROCESSING payment here used to be
-  // invisible to this page (it only looked for PENDING/PAID), which left
-  // the buyer re-submitting into a "payment already exists" dead end.
   async function checkInspectionPaymentStatus(paymentId, requestId) {
     setPayingInspectionId(requestId);
     try {
@@ -309,8 +330,6 @@ export default function ListingDetail() {
     }
   }
 
-  // A quote's negotiation thread is only "live" at its leaf: the row that
-  // no later counter-quote points back to as a parent.
   function leafQuotes(list) {
     const parentIds = new Set(
       (list || []).map((q) => q.parentQuoteId).filter(Boolean)
@@ -331,8 +350,6 @@ export default function ListingDetail() {
   const isAgricultural = listing.category === 'AGRICULTURAL';
   const isProduct = listing.category === 'PRODUCT';
 
-  // Both agricultural and products marketplaces use competition + negotiation.
-  // A selected buyer is only a provisional winner; payment comes later.
   const isAvailable =
     listing.status === 'ACTIVE' ||
     ((isAgricultural || isProduct) && listing.status === 'UNDER_NEGOTIATION');
@@ -422,21 +439,30 @@ export default function ListingDetail() {
 
             {/* ── Content card ──────────────────────────────── */}
             <div className="card detail-content">
-              <div className="listing-meta">
-                <span className="tag">
-                  {isAgricultural ? 'AGRICULTURE' : 'PRODUCT'}
-                </span>
-                <span className="badge">{listing.status}</span>
-              </div>
+              <CardHead
+                eyebrow={isAgricultural ? 'AGRICULTURE' : 'PRODUCT'}
+                title={listing.title || listing.cropType}
+                subtitle={
+                  <>
+                    {Number(listing.quantity).toLocaleString()} {listing.unit}
+                    {' · '}
+                    {listing.location}
+                  </>
+                }
+                side={
+                  <>
+                    <span className="ld-card-side-label">Status</span>
+                    <span className={`ld-badge tone-${listing.status === 'ACTIVE' ? 'good' : 'neutral'}`}>
+                      {String(listing.status || '').replace(/_/g, ' ')}
+                    </span>
+                  </>
+                }
+              />
 
-              <h1>{listing.title || listing.cropType}</h1>
-
-              <p className="lead">
-                {Number(listing.quantity).toLocaleString()} {listing.unit}{' '}
+              <p className="muted">
                 {isAvailable
-                  ? 'available for competing buyers'
-                  : 'currently reserved / unavailable'}{' '}
-                · {listing.location}
+                  ? 'Available for competing buyers. Selecting a buyer opens negotiation; only acceptance creates the reservation.'
+                  : 'This listing is currently reserved / unavailable to new buyers.'}
               </p>
 
               <div className="detail-facts">
@@ -454,22 +480,13 @@ export default function ListingDetail() {
                 </div>
                 <div>
                   <span>Seller</span>
-                  <strong>{listing.seller?.name}</strong>
+                  <strong>{listing.seller?.name || '—'}</strong>
                 </div>
               </div>
 
-              <p className="muted">
-                Multiple buyers can compete while this listing is active or under
-                negotiation. Selecting a buyer opens negotiation; only acceptance
-                creates the reservation.
-              </p>
-
               {myOrder && (
-                <p style={{ marginTop: 8 }}>
-                  <Link
-                    className="btn btn-primary btn-sm"
-                    to={`/orders/${myOrder.id}`}
-                  >
+                <p className="detail-order-link">
+                  <Link className="btn btn-primary" to={`/orders/${myOrder.id}`}>
                     View your order ({myOrder.status.replaceAll('_', ' ')}) →
                   </Link>
                 </p>
@@ -479,25 +496,29 @@ export default function ListingDetail() {
             {/* ── Inspection evidence ───────────────────────── */}
             {(isAgricultural || isProduct) && (
               <div className="card">
-                <h2>Inspection evidence</h2>
+                <CardHead
+                  eyebrow="QUALITY"
+                  title="Inspection evidence"
+                  subtitle="Independent reports attached to this listing and its order."
+                />
 
                 {listing.inspectionRequests?.length ? (
                   listing.inspectionRequests.map((request) => (
                     <div className="evidence" key={request.id}>
-                      <div>
+                      <div className="evidence-head">
                         <strong>{request.mode.replaceAll('_', ' ')}</strong>
-                        <span className="badge" style={{ marginLeft: 8 }}>
-                          {request.status}
-                        </span>
+                        <span className="ld-badge">{request.status.replace(/_/g, ' ')}</span>
                       </div>
 
                       {request.inspector && (
-                        <p>Inspector: {request.inspector.name}</p>
+                        <p className="evidence-line">
+                          Inspector: <strong>{request.inspector.name}</strong>
+                        </p>
                       )}
 
                       {request.requestedById === user?.id &&
                         ['REQUESTED', 'ACCEPTED'].includes(request.status) && (
-                          <div style={{ marginTop: 8 }}>
+                          <div className="evidence-actions">
                             {!quotesByRequest[request.id] ? (
                               <button
                                 type="button"
@@ -510,8 +531,8 @@ export default function ListingDetail() {
                                   : 'View inspector quotes'}
                               </button>
                             ) : (
-                              <div>
-                                <p className="muted" style={{ marginBottom: 6 }}>
+                              <div className="quotes-block">
+                                <p className="muted">
                                   {
                                     quotesByRequest[request.id].filter((q) =>
                                       ['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status)
@@ -543,23 +564,18 @@ export default function ListingDetail() {
                                     quote.counteredBy === 'REQUESTER';
 
                                   return (
-                                    <div
-                                      key={quote.id}
-                                      className="evidence"
-                                      style={{ marginBottom: 6 }}
-                                    >
-                                      <div>
+                                    <div className="quote-row" key={quote.id}>
+                                      <div className="quote-row-head">
                                         <strong>
                                           {quote.inspector?.name || 'Inspector'}
                                         </strong>
-                                        {' — '}
-                                        {Number(displayAmount).toLocaleString()} ETB
-                                        <span className="badge" style={{ marginLeft: 8 }}>
-                                          {quote.status}
+                                        <span className="quote-amount">
+                                          {Number(displayAmount).toLocaleString()} ETB
                                         </span>
+                                        <span className="ld-badge">{quote.status.replace(/_/g, ' ')}</span>
                                       </div>
 
-                                      <p className="muted">
+                                      <p className="quote-meta">
                                         {quote.inspector?.location || 'Location not set'}
                                         {quote.inspector?.rating != null &&
                                           ` · Rating ${Number(quote.inspector.rating).toFixed(1)}`}
@@ -568,11 +584,11 @@ export default function ListingDetail() {
                                       </p>
 
                                       {quote.message && (
-                                        <p className="muted">"{quote.message}"</p>
+                                        <p className="quote-message">"{quote.message}"</p>
                                       )}
 
                                       {isWaitingOnInspector && (
-                                        <p className="muted">
+                                        <p className="quote-meta">
                                           You countered{' '}
                                           {Number(displayAmount).toLocaleString()} ETB —
                                           waiting for the inspector to respond.
@@ -598,7 +614,7 @@ export default function ListingDetail() {
 
                                       {quote.status === 'ACCEPTED' &&
                                         request.requestedById === user?.id && (
-                                          <div style={{ marginTop: 6 }}>
+                                          <div className="quote-actions">
                                             <span className="muted small">
                                               Provisional inspector agreement. Release it
                                               if the inspector drops out before payment.
@@ -623,15 +639,7 @@ export default function ListingDetail() {
 
                                       {isRequesterTurn &&
                                         request.status === 'REQUESTED' && (
-                                          <div
-                                            style={{
-                                              display: 'flex',
-                                              gap: 6,
-                                              flexWrap: 'wrap',
-                                              marginTop: 6,
-                                              alignItems: 'center',
-                                            }}
-                                          >
+                                          <div className="quote-actions">
                                             <button
                                               type="button"
                                               className="btn btn-primary btn-sm"
@@ -649,7 +657,7 @@ export default function ListingDetail() {
                                               type="number"
                                               min="1"
                                               placeholder="Counter (ETB)"
-                                              style={{ width: 130 }}
+                                              className="inline-input"
                                               value={quoteCounterInputs[quote.id] || ''}
                                               onChange={(e) =>
                                                 setQuoteCounterInputs((q) => ({
@@ -718,16 +726,14 @@ export default function ListingDetail() {
 
                         if (existing?.status === 'PAID') {
                           return (
-                            <p className="muted" style={{ marginTop: 8 }}>
-                              Inspection fee paid.
-                            </p>
+                            <p className="evidence-line muted">Inspection fee paid.</p>
                           );
                         }
 
                         if (existing?.status === 'PROCESSING') {
                           return (
-                            <div style={{ marginTop: 8 }}>
-                              <p className="muted">
+                            <div className="evidence-actions">
+                              <p className="evidence-line muted">
                                 Your fee payment is being processed by Chapa.
                               </p>
                               <button
@@ -748,8 +754,8 @@ export default function ListingDetail() {
 
                         if (existing?.status === 'PENDING') {
                           return (
-                            <div style={{ marginTop: 8 }}>
-                              <p className="muted">
+                            <div className="evidence-actions">
+                              <p className="evidence-line muted">
                                 Your fee payment hasn't completed yet.
                               </p>
                               <button
@@ -769,20 +775,14 @@ export default function ListingDetail() {
                         }
 
                         return (
-                          <div style={{ marginTop: 8 }}>
-                            <p>
+                          <div className="evidence-actions">
+                            <p className="evidence-line">
                               Fee due:{' '}
                               <strong>
                                 {Number(request.fee).toLocaleString()} ETB
                               </strong>
                             </p>
-                            <div
-                              style={{
-                                display: 'flex',
-                                gap: 8,
-                                flexWrap: 'wrap',
-                              }}
-                            >
+                            <div className="inline-row">
                               <select
                                 value={inspectionPayMethod}
                                 onChange={(e) => setInspectionPayMethod(e.target.value)}
@@ -806,7 +806,7 @@ export default function ListingDetail() {
                       })()}
 
                       {request.report ? (
-                        <p>
+                        <p className="evidence-line">
                           ✓ {request.report.quantity} verified ·{' '}
                           {request.report.grade || 'Grade not stated'}
                           {request.report.moisture != null
@@ -814,7 +814,7 @@ export default function ListingDetail() {
                             : ''}
                         </p>
                       ) : (
-                        <p className="muted">Report pending.</p>
+                        <p className="evidence-line muted">Report pending.</p>
                       )}
 
                       {request.report && (
@@ -838,23 +838,29 @@ export default function ListingDetail() {
             {/* ── Buyer negotiation ─────────────────────────── */}
             {isBuyer && myLatestOffer && (isAgricultural || isProduct) && (
               <div className="card" id="negotiation">
-                <h2>Your negotiation</h2>
-                <p>
-                  Current amount:{' '}
-                  <strong>
-                    {money(myLatestOffer.counterAmount ?? myLatestOffer.amount)} ETB
-                  </strong>
-                </p>
-                <span className="badge">{myLatestOffer.status}</span>
+                <CardHead
+                  eyebrow="NEGOTIATION"
+                  title="Your negotiation"
+                  side={
+                    <>
+                      <span className="ld-card-side-label">Current</span>
+                      <span className="ld-card-side-value">
+                        {money(myLatestOffer.counterAmount ?? myLatestOffer.amount)} ETB
+                      </span>
+                    </>
+                  }
+                />
+
+                <span className="ld-badge">{myLatestOffer.status.replace(/_/g, ' ')}</span>
 
                 {myLatestOffer.status === 'SELECTED' && (
                   <>
-                    <p className="muted" style={{ marginTop: 10 }}>
+                    <p className="muted negotiation-note">
                       <strong>The seller selected your bid.</strong> Competition is
                       complete for this deal. Accept the selected price or make your
                       counter.
                     </p>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <div className="negotiation-actions">
                       <button
                         className="btn btn-primary"
                         onClick={() =>
@@ -870,7 +876,7 @@ export default function ListingDetail() {
                         placeholder="Counter ETB"
                         value={buyerCounter}
                         onChange={(e) => setBuyerCounter(e.target.value)}
-                        style={{ minWidth: 140 }}
+                        className="inline-input"
                       />
                       <button
                         className="btn btn-light"
@@ -887,10 +893,10 @@ export default function ListingDetail() {
 
                 {sellerCounterWaitingForBuyer && (
                   <>
-                    <p className="muted" style={{ marginTop: 10 }}>
+                    <p className="muted negotiation-note">
                       The seller has countered. <strong>Your turn.</strong>
                     </p>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <div className="negotiation-actions">
                       <button
                         className="btn btn-primary"
                         onClick={() =>
@@ -906,7 +912,7 @@ export default function ListingDetail() {
                         placeholder="Counter ETB"
                         value={buyerCounter}
                         onChange={(e) => setBuyerCounter(e.target.value)}
-                        style={{ minWidth: 140 }}
+                        className="inline-input"
                       />
                       <button
                         className="btn btn-light"
@@ -922,20 +928,20 @@ export default function ListingDetail() {
                 )}
 
                 {buyerCounterWaitingForSeller && (
-                  <p className="muted" style={{ marginTop: 10 }}>
+                  <p className="muted negotiation-note">
                     You made the latest counter. Waiting for the seller.
                   </p>
                 )}
 
                 {myLatestOffer.status === 'PENDING' && (
-                  <p className="muted" style={{ marginTop: 10 }}>
+                  <p className="muted negotiation-note">
                     Your offer remains active while other buyers may compete. The
                     seller will select one buyer to open negotiation.
                   </p>
                 )}
 
                 {myLatestOffer.status === 'REJECTED' && (
-                  <p className="muted" style={{ marginTop: 10 }}>
+                  <p className="muted negotiation-note">
                     The seller rejected this offer. If the listing is available, you
                     can make a new offer.
                   </p>
@@ -956,11 +962,19 @@ export default function ListingDetail() {
             {/* ── Make offer / buyer control ────────────────── */}
             {isBuyer && (
               <div className="card sticky-card" id="make-offer">
-                <h2>
-                  {!isAvailable || buyerHasActiveOfferDeal
-                    ? 'Offer unavailable'
-                    : 'Make an Offer'}
-                </h2>
+                <CardHead
+                  eyebrow="BUYER"
+                  title={
+                    !isAvailable || buyerHasActiveOfferDeal
+                      ? 'Offer unavailable'
+                      : 'Make an Offer'
+                  }
+                  subtitle={
+                    !isAvailable || buyerHasActiveOfferDeal
+                      ? null
+                      : 'Competitive bidding — your bid enters the competition without charging or reserving the product.'
+                  }
+                />
 
                 {buyerHasActiveOfferDeal ? (
                   <div>
@@ -996,14 +1010,6 @@ export default function ListingDetail() {
                   </>
                 ) : (
                   <>
-                    <p className="muted">
-                      This listing uses competitive bidding. Your first bid enters
-                      the competition; it does <strong>not</strong> charge you or
-                      reserve the product. If the seller selects your bid, you can
-                      negotiate repeatedly with the seller before accepting the
-                      provisional deal.
-                    </p>
-
                     <form onSubmit={submitOffer}>
                       <label>
                         {isProduct
@@ -1045,9 +1051,11 @@ export default function ListingDetail() {
                     </form>
 
                     <hr />
-                    <h3>Quality check</h3>
+
+                    <SectionHead title="Quality check" />
+
                     {activeInspectionRequest ? (
-                      <p className="small muted">
+                      <p className="muted">
                         Inspection already requested:{' '}
                         <strong>
                           {activeInspectionRequest.status.replaceAll('_', ' ')}
@@ -1057,7 +1065,7 @@ export default function ListingDetail() {
                       </p>
                     ) : (
                       <>
-                        <p className="small muted">
+                        <p className="muted">
                           {relatedOrder
                             ? 'Request an independent inspection for this agreed order.'
                             : 'Inspection becomes available after an offer is accepted and an order is created.'}
@@ -1078,15 +1086,16 @@ export default function ListingDetail() {
             {/* ── Seller controls ───────────────────────────── */}
             {isOwner && (
               <div className="card sticky-card">
-                <h2>Seller controls</h2>
-                <p className="small muted">
-                  Only the seller can change price or listing status.
-                </p>
+                <CardHead
+                  eyebrow="SELLER"
+                  title="Seller controls"
+                  subtitle="Only the seller can change price or listing status."
+                />
 
                 {(isAgricultural || isProduct) && (
                   <>
                     {activeInspectionRequest ? (
-                      <p className="small muted">
+                      <p className="muted">
                         Inspection already requested:{' '}
                         <strong>
                           {activeInspectionRequest.status.replaceAll('_', ' ')}
@@ -1104,7 +1113,7 @@ export default function ListingDetail() {
                   </>
                 )}
 
-                <h3 className="mt">Negotiations</h3>
+                <SectionHead title="Negotiations" />
                 <SellerNegotiations
                   offers={listing.offers}
                   onAction={respondToOffer}
@@ -1115,8 +1124,11 @@ export default function ListingDetail() {
             {/* ── Guest CTA ────────────────────────────────── */}
             {!user && (
               <div className="card">
-                <h2>Ready to participate?</h2>
-                <p>Register to buy and sell across MarketBridge.</p>
+                <CardHead
+                  eyebrow="GET STARTED"
+                  title="Ready to participate?"
+                  subtitle="Register to buy and sell across MarketBridge."
+                />
                 <Link className="btn btn-primary full" to="/register">
                   Create account
                 </Link>
@@ -1131,10 +1143,6 @@ export default function ListingDetail() {
 
 /* ─────────────────────────────────────────────────────────
    Seller negotiations list
-   Each parentOfferId points to the previous step in the same
-   negotiation chain. The leaf is the only actionable offer.
-   Group by buyer so separate negotiations do not visually
-   stack together as if they were one conversation.
    ───────────────────────────────────────────────────────── */
 function SellerNegotiations({ offers, onAction }) {
   const list = Array.isArray(offers) ? offers : [];
@@ -1160,7 +1168,7 @@ function SellerNegotiations({ offers, onAction }) {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
+    <div className="negotiations-list">
       {negotiations.map((offer) => (
         <OfferRow key={offer.id} offer={offer} onAction={onAction} />
       ))}
@@ -1175,8 +1183,6 @@ function OfferRow({ offer, onAction }) {
   const [counter, setCounter] = useState('');
   const [busy, setBusy] = useState('');
 
-  // The seller may respond to an original PENDING offer, or to the buyer's
-  // latest COUNTERED offer. A seller counter means the buyer must respond.
   const buyerCountered =
     offer.status === 'COUNTERED' &&
     String(offer.counteredBy || '').toUpperCase() === 'BUYER';
@@ -1209,24 +1215,16 @@ function OfferRow({ offer, onAction }) {
 
   return (
     <div className="offer-row">
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: 8,
-          flexWrap: 'wrap',
-          alignItems: 'center',
-        }}
-      >
+      <div className="offer-row-head">
         <strong>
           {Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB
         </strong>
-        <span className="badge">{offer.status}</span>
+        <span className="ld-badge">{offer.status.replace(/_/g, ' ')}</span>
       </div>
-      <small>{offer.buyer?.name || 'Buyer'}</small>
+      <small className="offer-buyer">{offer.buyer?.name || 'Buyer'}</small>
 
       {buyerCountered && (
-        <p className="muted" style={{ marginTop: 8 }}>
+        <p className="offer-note">
           <strong>Buyer countered.</strong> This is the buyer's latest price. You
           can accept it, reject the negotiation, or send another counter.
         </p>
@@ -1234,13 +1232,13 @@ function OfferRow({ offer, onAction }) {
 
       {offer.status === 'COUNTERED' &&
         String(offer.counteredBy || '').toUpperCase() === 'SELLER' && (
-          <p className="muted" style={{ marginTop: 8 }}>
+          <p className="offer-note">
             You made the latest counter. Waiting for the buyer.
           </p>
         )}
 
       {offer.status === 'PENDING' && (
-        <div className="row-actions" style={{ marginTop: 8 }}>
+        <div className="offer-actions">
           <button
             type="button"
             className="btn btn-sm btn-primary"
@@ -1261,10 +1259,10 @@ function OfferRow({ offer, onAction }) {
       )}
 
       {sellerCanAct && (
-        <div className="row-actions" style={{ marginTop: 8 }}>
+        <div className="offer-actions">
           <button
             type="button"
-            className="btn btn-sm"
+            className="btn btn-sm btn-primary"
             disabled={Boolean(busy)}
             onClick={() => submit('ACCEPT')}
           >
@@ -1282,6 +1280,7 @@ function OfferRow({ offer, onAction }) {
             type="number"
             min="0.01"
             step="0.01"
+            className="inline-input"
             placeholder={
               Number.isFinite(minimum) ? `Counter ≥ ${minimum}` : 'Counter ETB'
             }
@@ -1303,13 +1302,13 @@ function OfferRow({ offer, onAction }) {
       {!sellerCanAct &&
         offer.status === 'COUNTERED' &&
         String(offer.counteredBy || '').toUpperCase() !== 'BUYER' && (
-          <p className="small muted" style={{ marginTop: 8 }}>
+          <p className="offer-note small">
             Waiting for the buyer to respond.
           </p>
         )}
 
       {offer.status === 'ACCEPTED' && (
-        <p className="small muted" style={{ marginTop: 8 }}>
+        <p className="offer-note small">
           Agreed price: <strong>{Number(amount).toLocaleString()} ETB</strong>. The
           order can now continue to inspection and payment.
         </p>
