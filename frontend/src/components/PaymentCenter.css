@@ -64,7 +64,7 @@
   font: 800 11px / 1.2 var(--pc-font-head);
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--pc-brand);
+  color: var(--od-accent, var(--pc-brand));
 }
 .payment-center .pc-eyebrow::before {
   content: '';
@@ -82,6 +82,16 @@
   color: var(--pc-ink);
   overflow-wrap: anywhere;
 }
+/* tiny line under the title */
+.payment-center .pc-title::after {
+  content: '';
+  display: block;
+  width: 28px;
+  height: 3px;
+  margin-top: 8px;
+  border-radius: 3px;
+  background: var(--od-accent, var(--pc-brand));
+}
 
 .payment-center .pc-head-side {
   flex: none;
@@ -96,7 +106,7 @@
   font: 800 11px var(--pc-font-head);
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--pc-brand);
+  color: var(--od-accent, var(--pc-brand));
 }
 
 /* ---------- Chips ---------- */
