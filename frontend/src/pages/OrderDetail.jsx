@@ -10,7 +10,7 @@ import MessageThread from '../components/MessageThread.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import ActionCenter from '../components/ActionCenter.jsx';
-import NextStepCard from '../components/NextStepCard.jsx';
+
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
