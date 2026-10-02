@@ -11,15 +11,13 @@
    No boxes inside cards. Only the outer .card has a border.
    Buttons are white with a green outline — no green fills.
 
-   Layout rules:
-     · Card head and section headings sit flush left.
-     · Everything else inside a card — fact rows, pills, tables,
-       galleries, action rows — is nudged right by one small
-       uniform gutter (--d-indent) so the data reads as a block
-       distinct from its heading.
-     · Responsive: phone (≤719px) tightens spacing; small phone
-       (≤420px) tightens again. The indent scales with the
-       breakpoint for consistency.
+   Layout: every piece of card content — head, titles, sections,
+   body, footer — sits inside one uniform inset from the card's
+   four edges. Headers are no longer flush; the whole card reads
+   as a centred column inside its frame.
+
+   Responsive: phone (≤719px) and small phone (≤420px) tighten
+   the frame and the inset proportionally.
    ============================================================ */
 
 .order-detail-page {
@@ -57,9 +55,6 @@
   --d-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
   --d-ring:        0 0 0 3px rgba(30, 158, 90, .18);
   --d-ease:        cubic-bezier(.2, .7, .3, 1);
-
-  /* One gutter value used everywhere below. */
-  --d-indent:      16px;
 
   min-height: calc(100vh - 72px);
   color: var(--d-ink);
@@ -186,10 +181,12 @@
   color: var(--d-accent-2);
 }
 
-/* ── Card ──────────────────────────────────────────────── */
+/* ── Card ──────────────────────────────────────────────
+   The uniform inset that keeps every card content —
+   head, sections, body, footer — inside the same frame. */
 
 .order-detail-page .card {
-  padding: 22px 24px 24px;
+  padding: 32px 32px 32px;
   margin: 0 0 20px;
   border: 1px solid var(--d-line);
   border-radius: var(--d-radius);
@@ -1145,40 +1142,6 @@
 }
 
 /* ============================================================
-   CONTENT INDENT
-   ============================================================
-   Card head and section headings stay flush left. Everything
-   inside them — fact rows, pills, tables, evidence items,
-   action rows, notices, forms — shifts right by one uniform
-   gutter so the data reads as a distinct block. */
-
-/* Section bodies: pad the whole section, pull the heading back
-   so it stays flush with the card head. */
-.order-detail-page .od-card-section {
-  padding-left: var(--d-indent);
-}
-
-.order-detail-page .od-card-section > .od-card-section-head {
-  margin-left: calc(-1 * var(--d-indent));
-}
-
-/* Direct content children of a card (anything that isn't the
-   head, a section wrapper, or a full-width button) also get
-   the indent so blocks outside sections line up with those
-   inside them. */
-.order-detail-page .card:not(.loading) > *:not(.od-card-head):not(.od-card-section):not(.btn) {
-  margin-left: var(--d-indent);
-  margin-right: var(--d-indent);
-}
-
-/* The countdown strip and its inline-set margins need a heavier
-   hand so the indent lands. */
-.order-detail-page .card > .payout-due {
-  margin-left: var(--d-indent) !important;
-  margin-right: var(--d-indent) !important;
-}
-
-/* ============================================================
    RESPONSIVE — Tablet
    ============================================================ */
 
@@ -1191,14 +1154,12 @@
    ============================================================ */
 
 @media (max-width: 719px) {
-  .order-detail-page { --d-indent: 13px; }
-
   .order-detail-page .container-narrow {
     padding: 20px 14px 64px;
   }
 
   .order-detail-page .card {
-    padding: 16px 16px 18px;
+    padding: 26px 26px 26px;
     margin: 0 0 14px;
     border-radius: 16px;
   }
@@ -1334,11 +1295,13 @@
    ============================================================ */
 
 @media (max-width: 420px) {
-  .order-detail-page { --d-indent: 11px; }
-
   .order-detail-page .container-narrow { padding: 16px 12px 56px; }
 
-  .order-detail-page .card { padding: 14px 14px 16px; border-radius: 14px; margin-bottom: 12px; }
+  .order-detail-page .card {
+    padding: 22px 22px 22px;
+    border-radius: 14px;
+    margin-bottom: 12px;
+  }
 
   .order-detail-page .od-card-head { padding-bottom: 10px; margin-bottom: 12px; }
   .order-detail-page .od-card-head-side { max-width: 110px; }
