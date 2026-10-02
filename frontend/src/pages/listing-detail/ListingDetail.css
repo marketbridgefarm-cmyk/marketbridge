@@ -2,9 +2,10 @@
    MarketBridge — Listing detail
    pages/listing-detail/ListingDetail.css
 
-   Two-column layout: media + content on the left, buyer /
-   seller controls on the right. Same design language as
-   Orders, Order Detail, Digital Marketplace.
+   Same card language as Orders / Order Detail / Digital Market:
+   eyebrow with dash → title → subtitle → right-side stack.
+   Section headings in green with a hairline under. Facts are
+   flat key-value rows — no boxes inside cards.
    ============================================================ */
 
 .detail-page {
@@ -101,14 +102,14 @@
   align-items: start;
 }
 
-.detail-page .detail-grid > section { min-width: 0; }
+.detail-page .detail-grid > section,
 .detail-page .detail-grid > aside { min-width: 0; }
 
 @media (max-width: 960px) {
   .detail-page .detail-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* ── Media carousel ────────────────────────────────────── */
+/* ── Media ─────────────────────────────────────────────── */
 
 .detail-page .detail-media {
   position: relative;
@@ -160,7 +161,7 @@
   overflow: hidden;
   background: #fff;
   cursor: pointer;
-  transition: border-color .15s var(--ld-ease), transform .15s var(--ld-ease);
+  transition: border-color .15s var(--ld-ease);
 }
 
 .detail-page .detail-media-thumb:hover { border-color: rgba(30, 158, 90, .35); }
@@ -199,57 +200,134 @@
   box-shadow: var(--ld-shadow);
 }
 
-.detail-page .card > h2 {
-  margin: 0 0 14px;
-  padding: 0 0 12px;
-  border-bottom: 1px solid var(--ld-line-soft);
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: -.25px;
-  line-height: 1.3;
-  color: var(--ld-ink);
+/* ── Card head (the reference shape) ──────────────────── */
+
+.detail-page .ld-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 16px;
+  padding: 0 0 16px;
+  margin: 0 0 18px;
+  border-bottom: 1px solid var(--ld-line);
 }
 
-.detail-page .card > h3 {
-  margin: 18px 0 10px;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: -.1px;
-  color: var(--ld-ink);
-}
-
-.detail-page .card > h3.mt { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--ld-line-soft); }
-
-/* ── Listing content card ──────────────────────────────── */
-
-.detail-page .detail-content { padding: 26px 26px 28px; }
-
-.detail-page .listing-meta {
+.detail-page .ld-card-head-main {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 0 0 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
 }
 
-.detail-page .tag {
+.detail-page .ld-card-head-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+  max-width: 200px;
+  text-align: right;
+}
+
+.detail-page .ld-eyebrow {
   display: inline-flex;
   align-items: center;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: var(--ld-accent-soft);
-  border: 1px solid var(--ld-accent-line);
+  gap: 8px;
   color: var(--ld-accent-ink);
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .12em;
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .16em;
   text-transform: uppercase;
-  white-space: nowrap;
 }
 
-.detail-page .badge {
+.detail-page .ld-eyebrow::before {
+  content: '';
+  flex: 0 0 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.detail-page .ld-card-title {
+  margin: 0;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -.4px;
+  line-height: 1.22;
+  color: var(--ld-ink);
+  overflow-wrap: anywhere;
+}
+
+.detail-page .detail-content .ld-card-title {
+  font-size: clamp(22px, 2.6vw, 28px);
+  letter-spacing: -.6px;
+  line-height: 1.18;
+}
+
+.detail-page .ld-card-subtitle {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ld-muted);
+  max-width: 60ch;
+}
+
+.detail-page .ld-card-side-label {
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ld-accent-2);
+}
+
+.detail-page .ld-card-side-value {
+  font: 700 14px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
+  color: var(--ld-ink);
+  letter-spacing: -.1px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* ── Section head (green title + hairline under) ──────── */
+
+.detail-page .ld-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 0 0 10px;
+  margin: 18px 0 14px;
+  border-bottom: 1px solid var(--ld-line-soft);
+}
+
+.detail-page .ld-section-title {
+  margin: 0;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 14.5px;
+  font-weight: 800;
+  letter-spacing: -.1px;
+  line-height: 1.3;
+  color: var(--ld-accent-2);
+}
+
+.detail-page .ld-section-meta {
+  font: 700 11.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ld-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-page .ld-section-meta.is-strong { color: var(--ld-ink); font-weight: 800; }
+
+/* ── Badges ────────────────────────────────────────────── */
+
+.detail-page .ld-badge {
   display: inline-flex;
   align-items: center;
   height: 24px;
@@ -264,32 +342,22 @@
   white-space: nowrap;
 }
 
-.detail-page .detail-content h1 {
-  margin: 0 0 10px;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: clamp(24px, 3vw, 32px);
-  font-weight: 800;
-  letter-spacing: -.7px;
-  line-height: 1.15;
-  color: var(--ld-ink);
-  overflow-wrap: anywhere;
+.detail-page .ld-badge.tone-good {
+  background: var(--ld-accent-soft);
+  border-color: var(--ld-accent-line);
+  color: var(--ld-accent-ink);
 }
 
-.detail-page .detail-content .lead {
-  margin: 0 0 18px;
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--ld-ink-soft);
-  font-variant-numeric: tabular-nums;
-}
-
-/* ── Facts (flat key-value rows) ───────────────────────── */
+/* ── Facts — flat key-value rows ──────────────────────── */
 
 .detail-page .detail-facts {
   display: flex;
   flex-direction: column;
-  margin: 4px 0 18px;
+  margin: 0 0 16px;
   padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .detail-page .detail-facts > div {
@@ -302,7 +370,11 @@
   border-bottom: 1px solid var(--ld-line-soft);
 }
 
-.detail-page .detail-facts > div:first-child { border-top: 1px solid var(--ld-line-soft); }
+.detail-page .detail-facts > div:first-child {
+  border-top: 1px solid var(--ld-line-soft);
+}
+
+.detail-page .detail-facts > div:last-child { border-bottom: 1px solid var(--ld-line-soft); }
 
 .detail-page .detail-facts > div > span {
   flex: 0 0 auto;
@@ -322,7 +394,7 @@
   overflow-wrap: anywhere;
 }
 
-/* ── Muted / small text ────────────────────────────────── */
+/* ── Text helpers ──────────────────────────────────────── */
 
 .detail-page .muted {
   margin: 4px 0;
@@ -338,56 +410,7 @@
   margin: 4px 0;
 }
 
-/* ── Evidence blocks (flat, inside cards) ──────────────── */
-
-.detail-page .evidence {
-  padding: 16px 0 16px 14px;
-  margin: 0;
-  border: none;
-  border-left: 3px solid var(--ld-accent-line);
-  border-radius: 0;
-  background: transparent;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--ld-ink-soft);
-}
-
-.detail-page .evidence + .evidence { margin-top: 14px; }
-
-.detail-page .evidence > div:first-child {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 4px;
-}
-
-.detail-page .evidence strong {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--ld-ink);
-  letter-spacing: -.1px;
-}
-
-.detail-page .evidence p {
-  margin: 4px 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--ld-ink-soft);
-}
-
-.detail-page .evidence p.muted {
-  color: var(--ld-muted);
-  font-size: 12.5px;
-}
-
-/* Nested evidence (quote rows) get a lighter accent bar */
-.detail-page .evidence .evidence {
-  padding: 12px 0 12px 12px;
-  border-left-color: var(--ld-line);
-  margin: 10px 0 0;
-}
+.detail-page .detail-order-link { margin: 12px 0 0; }
 
 /* ── Buttons — white bg, green outline ─────────────────── */
 
@@ -427,7 +450,6 @@
 .detail-page .btn.full,
 .detail-page .btn.full-width { width: 100%; }
 
-/* Primary CTA — same white/green-outline treatment */
 .detail-page .btn-primary {
   background: #fff;
   color: var(--ld-accent-2);
@@ -441,7 +463,6 @@
   box-shadow: 0 1px 2px rgba(30, 158, 90, .12);
 }
 
-/* Light/neutral button */
 .detail-page .btn-light {
   background: var(--ld-line-soft);
   border-color: var(--ld-line);
@@ -469,13 +490,11 @@
 
 .detail-page form label:first-child { margin-top: 0; }
 
-.detail-page form input[type="number"],
-.detail-page form input[type="text"],
-.detail-page form input[type="search"],
-.detail-page form select,
-.detail-page form textarea,
+.detail-page input[type="number"],
+.detail-page input[type="text"],
+.detail-page input[type="search"],
 .detail-page select,
-.detail-page input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]) {
+.detail-page textarea {
   display: block;
   width: 100%;
   padding: 10px 12px;
@@ -492,12 +511,12 @@
   appearance: none;
 }
 
-.detail-page form input::placeholder,
-.detail-page form textarea::placeholder { color: var(--ld-muted-2); }
+.detail-page input::placeholder,
+.detail-page textarea::placeholder { color: var(--ld-muted-2); }
 
-.detail-page form input:focus,
-.detail-page form select:focus,
-.detail-page form textarea:focus {
+.detail-page input:focus,
+.detail-page select:focus,
+.detail-page textarea:focus {
   outline: none;
   border-color: var(--ld-accent);
   box-shadow: var(--ld-ring);
@@ -513,14 +532,18 @@
 
 .detail-page form button[type="submit"] { margin-top: 8px; }
 
-/* Standalone select (e.g. inspection pay method) */
-.detail-page select:not(.field) {
-  width: auto;
-  min-width: 130px;
-  max-width: 220px;
+/* Inline inputs (counter fields) stay compact */
+.detail-page .inline-input {
+  width: 130px;
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  font-size: 13px;
 }
 
-/* ── hr inside cards ───────────────────────────────────── */
+/* Standalone select (inspection pay method) */
+.detail-page select { width: auto; min-width: 130px; max-width: 220px; }
+
+/* ── hr ─────────────────────────────────────────────────── */
 
 .detail-page hr {
   height: 1px;
@@ -529,44 +552,132 @@
   background: var(--ld-line-soft);
 }
 
-/* ── Offer row (seller negotiations) ───────────────────── */
+/* ── Evidence block ────────────────────────────────────── */
 
-.detail-page .offer-row {
-  padding: 16px 0;
-  border-top: 1px solid var(--ld-line-soft);
+.detail-page .evidence {
+  padding: 14px 0 14px 14px;
+  margin: 14px 0 0;
+  border: none;
+  border-left: 3px solid var(--ld-accent-line);
+  border-radius: 0;
+  background: transparent;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ld-ink-soft);
 }
 
-.detail-page .offer-row:first-child { border-top: none; padding-top: 4px; }
+.detail-page .evidence:first-of-type { margin-top: 6px; }
 
-.detail-page .offer-row strong {
+.detail-page .evidence-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 6px;
+}
+
+.detail-page .evidence-head strong {
   font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 800;
-  letter-spacing: -.2px;
+  color: var(--ld-ink);
+  letter-spacing: -.1px;
+}
+
+.detail-page .evidence-line {
+  margin: 4px 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ld-ink-soft);
+}
+
+.detail-page .evidence-line.muted { color: var(--ld-muted); font-size: 12.5px; }
+
+.detail-page .evidence-actions { margin: 10px 0 0; }
+
+/* ── Quote rows (nested inside evidence) ──────────────── */
+
+.detail-page .quotes-block { margin-top: 8px; }
+
+.detail-page .quote-row {
+  padding: 12px 0 12px 12px;
+  margin: 10px 0 0;
+  border: none;
+  border-left: 2px solid var(--ld-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.detail-page .quote-row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 4px;
+}
+
+.detail-page .quote-row-head strong {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ld-ink);
+}
+
+.detail-page .quote-amount {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 14px;
+  font-weight: 800;
   color: var(--ld-ink);
   font-variant-numeric: tabular-nums;
 }
 
-.detail-page .offer-row > small {
-  display: block;
-  margin: 4px 0 0;
-  font-size: 12px;
+.detail-page .quote-meta {
+  margin: 4px 0;
+  font-size: 12.5px;
+  line-height: 1.5;
   color: var(--ld-muted);
 }
 
-.detail-page .offer-row .row-actions {
+.detail-page .quote-message {
+  margin: 6px 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ld-ink-soft);
+}
+
+.detail-page .quote-actions {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  margin-top: 8px;
 }
 
-.detail-page .offer-row .row-actions input {
-  width: 130px;
-  flex: 0 0 auto;
+.detail-page .inline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-/* ── Sticky card ───────────────────────────────────────── */
+/* ── Negotiation card ──────────────────────────────────── */
+
+.detail-page .negotiation-note {
+  margin: 10px 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ld-ink-soft);
+}
+
+.detail-page .negotiation-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+/* ── Sticky sidebar ────────────────────────────────────── */
 
 .detail-page .sticky-card {
   position: sticky;
@@ -577,17 +688,62 @@
   .detail-page .sticky-card { position: static; }
 }
 
-/* ── Negotiation card specifics ────────────────────────── */
+/* ── Offer row (seller negotiations) ──────────────────── */
 
-.detail-page #negotiation p { margin: 4px 0 10px; font-size: 14px; line-height: 1.55; color: var(--ld-ink-soft); }
-.detail-page #negotiation .badge { margin: 4px 0 6px; }
-.detail-page #negotiation > div[style*="display: flex"] { margin-top: 10px; }
+.detail-page .negotiations-list { display: grid; gap: 4px; }
 
-/* ── Inspection evidence card ──────────────────────────── */
+.detail-page .offer-row {
+  padding: 14px 0;
+  border-top: 1px solid var(--ld-line-soft);
+}
 
-.detail-page .card > .evidence:first-of-type { margin-top: 4px; }
+.detail-page .offer-row:first-child { border-top: none; padding-top: 4px; }
 
-/* ── Toast-style alerts (rare, but jsx uses .muted widely) ── */
+.detail-page .offer-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.detail-page .offer-row-head strong {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -.2px;
+  color: var(--ld-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-page .offer-buyer {
+  display: block;
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--ld-muted);
+}
+
+.detail-page .offer-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ld-ink-soft);
+}
+
+.detail-page .offer-note.small {
+  font-size: 12.5px;
+  color: var(--ld-muted);
+}
+
+.detail-page .offer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+/* ── Alerts ────────────────────────────────────────────── */
 
 .detail-page .alert {
   padding: 12px 16px;
@@ -614,8 +770,10 @@
   .detail-page .card { padding: 18px 18px 20px; }
   .detail-page .detail-content { padding: 20px 18px 22px; }
 
-  .detail-page .detail-content h1 { font-size: 22px; }
-  .detail-page .detail-content .lead { font-size: 14px; }
+  .detail-page .ld-card-head { column-gap: 12px; }
+  .detail-page .ld-card-head-side { max-width: 140px; }
+  .detail-page .ld-card-title { font-size: 17px; }
+  .detail-page .detail-content .ld-card-title { font-size: 22px; }
 
   .detail-page .detail-media { aspect-ratio: 4 / 3; }
 
@@ -625,34 +783,33 @@
   }
 
   .detail-page .evidence { padding-left: 12px; }
-  .detail-page .evidence .evidence { padding-left: 10px; }
+  .detail-page .quote-row { padding-left: 10px; }
 
-  .detail-page .offer-row .row-actions input { width: 100%; }
-  .detail-page .offer-row .row-actions .btn { flex: 1 1 auto; }
-
-  .detail-page form button[type="submit"],
-  .detail-page form .btn.full { width: 100%; }
-
-  .detail-page #negotiation > div[style*="display: flex"] {
+  .detail-page .offer-actions,
+  .detail-page .quote-actions,
+  .detail-page .negotiation-actions {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .detail-page #negotiation input[type="number"] { width: 100%; min-width: 0; }
+  .detail-page .offer-actions .btn,
+  .detail-page .quote-actions .btn,
+  .detail-page .negotiation-actions .btn { width: 100%; justify-content: center; }
+
+  .detail-page .inline-input { width: 100%; }
+
+  .detail-page form button[type="submit"],
+  .detail-page form .btn.full { width: 100%; }
 }
 
 @media (max-width: 420px) {
-  .detail-page .detail-content h1 { font-size: 20px; }
+  .detail-page .detail-content .ld-card-title { font-size: 20px; }
   .detail-page .detail-facts > div > strong { font-size: 14px; }
   .detail-page .detail-media-thumbs { grid-template-columns: repeat(4, 1fr); }
 }
 
-/* ── Reduced motion ────────────────────────────────────── */
-
 @media (prefers-reduced-motion: reduce) {
   .detail-page .btn,
   .detail-page .back-link,
-  .detail-page .detail-media-thumb {
-    transition: none;
-  }
+  .detail-page .detail-media-thumb { transition: none; }
 }
