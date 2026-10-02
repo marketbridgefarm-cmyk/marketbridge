@@ -353,7 +353,7 @@
 .detail-page .detail-facts {
   display: flex;
   flex-direction: column;
-  margin: 0 0 16px;
+  margin: 0 0 4px;
   padding: 0;
   border: none;
   border-radius: 0;
@@ -374,8 +374,6 @@
   border-top: 1px solid var(--ld-line-soft);
 }
 
-.detail-page .detail-facts > div:last-child { border-bottom: 1px solid var(--ld-line-soft); }
-
 .detail-page .detail-facts > div > span {
   flex: 0 0 auto;
   font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
@@ -394,6 +392,18 @@
   overflow-wrap: anywhere;
 }
 
+/* ── Listing description ──────────────────────────────── */
+
+.detail-page .listing-description {
+  margin: 4px 0 4px;
+  padding: 0;
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--ld-ink-soft);
+  max-width: 68ch;
+  white-space: pre-wrap;
+}
+
 /* ── Text helpers ──────────────────────────────────────── */
 
 .detail-page .muted {
@@ -410,7 +420,7 @@
   margin: 4px 0;
 }
 
-.detail-page .detail-order-link { margin: 12px 0 0; }
+.detail-page .detail-order-link { margin: 16px 0 0; }
 
 /* ── Buttons — white bg, green outline ─────────────────── */
 
