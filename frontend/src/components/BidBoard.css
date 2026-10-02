@@ -516,36 +516,46 @@
 /* ── Responsive ────────────────────────────────────────── */
 
 @media (max-width: 719px) {
-  .bb-board-head {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+  .neg-page .container-narrow { padding: 24px 16px 56px; }
 
-  .bb-row-main {
-    grid-template-columns: auto minmax(0, 1fr);
-    row-gap: 8px;
-  }
-
-  .bb-row-side {
-    grid-column: 1 / -1;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
+  /* Tab strips become single-line horizontal scrollers. No wrap, no
+     growing pill on wrap. Swipe to reveal any tabs that don't fit. */
+  .neg-page .sd-tabs {
+    display: flex;
+    flex-wrap: nowrap;
     width: 100%;
-    padding-top: 6px;
-    border-top: 1px dashed var(--bb-line-soft);
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: 4px;
   }
 
-  .bb-actions {
-    padding-left: 0;
-    flex-direction: column;
-    align-items: stretch;
+  .neg-page .sd-tabs::-webkit-scrollbar { display: none; }
+
+  .neg-page .sd-tab {
+    flex: 0 0 auto;
+    padding: 8px 14px;
+    font-size: 12.5px;
   }
 
-  .bb-actions .bb-btn,
-  .bb-actions .bb-counter-input { width: 100%; }
+  .neg-page .neg-group { padding: 18px 18px 20px; }
+  .neg-page .neg-card { padding: 18px 18px 20px; }
 
-  .bb-btn-spacer { margin-left: 0; }
+  .neg-page .neg-group-head,
+  .neg-page .neg-card-head { column-gap: 12px; }
+  .neg-page .neg-group-head-side,
+  .neg-page .neg-card-head-side { max-width: 130px; }
+
+  .neg-page .neg-actions,
+  .neg-page .neg-quote-actions { flex-direction: column; align-items: stretch; }
+
+  .neg-page .neg-actions .sd-btn,
+  .neg-page .neg-actions .neg-counter-input,
+  .neg-page .neg-quote-actions .sd-btn,
+  .neg-page .neg-quote-actions .neg-counter-input { width: 100%; }
 }
 
 @media (max-width: 420px) {
