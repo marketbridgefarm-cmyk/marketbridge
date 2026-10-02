@@ -550,10 +550,11 @@ export default function ListingDetail() {
               )}
 
               <p className="listing-availability-note">
-                {isAvailable
-                  ? 'Available for competing buyers. Selecting a buyer opens negotiation; only acceptance creates the reservation.'
-                  : 'This listing is currently reserved / unavailable to new buyers.'}
-              </p>
+  <strong className="notice-prefix">Notice:</strong>{' '}
+  {isAvailable
+    ? 'Available for competing buyers. Selecting a buyer opens negotiation; only acceptance creates the reservation.'
+    : 'This listing is currently reserved / unavailable to new buyers.'}
+</p>
             </div>
 
             {/* ── Inspection evidence ───────────────────────── */}
