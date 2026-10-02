@@ -124,19 +124,26 @@ function CompetitionGroup({ group, busyKey, onRespond }) {
         )}
       </section>
 
-      {/* ── Previous bids ──────────────────────────────────── */}
-      {previousQuotes.length > 0 && (
-        <details className="neg-previous">
-          <summary className="neg-previous-summary">
-            Previous bids ({previousQuotes.length}) — hired or not selected
-          </summary>
-          <ul className="neg-quote-list neg-quote-list--muted">
-            {previousQuotes.map((quote) => (
-              <PreviousQuoteRow key={quote.id} quote={quote} />
-            ))}
-          </ul>
-        </details>
-      )}
+{/* ── Previous bids ──────────────────────────────────── */}
+{previousQuotes.length > 0 && (
+  <section className="neg-subsection neg-subsection--previous">
+    <div className="neg-subsection-head">
+      <h3 className="neg-subsection-title">Previous bids</h3>
+      <span className="neg-subsection-meta">{previousQuotes.length}</span>
+    </div>
+
+    <details className="neg-previous">
+      <summary className="neg-previous-summary">
+        Check here — hired or not selected
+      </summary>
+      <ul className="neg-quote-list neg-quote-list--muted">
+        {previousQuotes.map((quote) => (
+          <PreviousQuoteRow key={quote.id} quote={quote} />
+        ))}
+      </ul>
+    </details>
+  </section>
+)}
 
       {/* ── Notice + footer action ─────────────────────────── */}
       <footer className="neg-group-footer">
