@@ -2,13 +2,9 @@
    MarketBridge — Negotiations
    pages/negotiations/Negotiations.css
 
-   Unified hub for listing offers, transport quotes and
-   inspection quotes. Two visual modes on the same page:
-     · Competition groups — a BidBoard per request.
-     · Bilateral deals — a list of neg-card rows.
-
-   Same design language as Orders / Order Detail / Listings /
-   Digital Marketplace. No boxes inside cards, ever.
+   One card per competition group; bilateral deals render as
+   their own cards. No boxes inside cards — every section is a
+   flat block with a green heading and a hairline under.
    ============================================================ */
 
 .neg-page {
@@ -33,10 +29,6 @@
   --ng-danger:      #b42318;
   --ng-danger-soft: #fef2f2;
   --ng-danger-line: #fecaca;
-
-  --ng-info:        #1e5fa8;
-  --ng-info-soft:   #eff5fd;
-  --ng-info-line:   #cddff5;
 
   --ng-radius:      20px;
   --ng-radius-sm:   12px;
@@ -169,7 +161,7 @@
   max-width: 70ch;
 }
 
-/* ── Competition group wrapper ─────────────────────────── */
+/* ── Competition group (one card per request / job) ────── */
 
 .neg-page .neg-group {
   margin: 0 0 20px;
@@ -182,96 +174,97 @@
 
 .neg-page .neg-group:last-child { margin-bottom: 0; }
 
-/* The header block. Force-kill any inherited background / colour
-   that might come from a global rule, then restore the intended
-   flat layout with a rule underneath. */
-.neg-page .neg-group-header {
-  display: flex !important;
-  align-items: flex-start !important;
-  justify-content: space-between !important;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 0 0 14px !important;
-  margin: 0 0 14px !important;
-  background: transparent !important;
-  background-image: none !important;
-  color: var(--ng-ink) !important;
-  border: none !important;
-  border-bottom: 1px solid var(--ng-line) !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
+.neg-page .neg-group-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 16px;
+  padding: 0 0 14px;
+  margin: 0 0 16px;
+  border-bottom: 1px solid var(--ng-line);
+  background: transparent;
 }
 
-.neg-page .neg-group-header > * { color: inherit !important; }
-
-.neg-page .neg-group-heading {
+.neg-page .neg-group-head-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   min-width: 0;
-  flex: 1 1 auto;
-  background: transparent !important;
-  color: var(--ng-ink) !important;
+}
+
+.neg-page .neg-group-head-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+  max-width: 180px;
+  text-align: right;
+}
+
+.neg-page .neg-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ng-accent-ink);
+  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.neg-page .neg-eyebrow::before {
+  content: '';
+  flex: 0 0 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
 }
 
 .neg-page .neg-group-title {
+  margin: 0;
   font-family: var(--mb-font-head, Manrope, sans-serif);
   font-size: 17px;
   font-weight: 800;
   letter-spacing: -.3px;
   line-height: 1.25;
-  color: var(--ng-ink) !important;
-  background: transparent !important;
+  color: var(--ng-ink);
   overflow-wrap: anywhere;
 }
 
-.neg-page .neg-group-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 6px 0 0;
+.neg-page .neg-group-subtitle {
+  margin: 2px 0 0;
   font-size: 12.5px;
-  line-height: 1.4;
-  color: var(--ng-muted) !important;
+  line-height: 1.5;
+  color: var(--ng-muted);
   font-variant-numeric: tabular-nums;
-  background: transparent !important;
 }
 
-.neg-page .neg-group-meta > span { color: inherit !important; background: transparent !important; }
-.neg-page .neg-group-meta > span:last-child { color: var(--ng-muted-2) !important; }
-
-.neg-page .neg-group-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
-  padding: 6px 10px;
-  border-radius: 8px;
-  color: var(--ng-accent-2) !important;
-  background: transparent !important;
-  font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .01em;
-  text-decoration: none;
-  transition: background .15s var(--ng-ease), color .15s var(--ng-ease);
+.neg-page .neg-side-label {
+  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ng-accent-2);
 }
 
-.neg-page .neg-group-link:hover {
-  background: var(--ng-accent-soft) !important;
-  color: var(--ng-accent) !important;
+.neg-page .neg-side-value {
+  font: 700 14px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
+  color: var(--ng-ink);
+  letter-spacing: -.1px;
+  white-space: nowrap;
 }
 
-/* ── Commit notice — flat, no box ──────────────────────── */
+/* ── Notice line ───────────────────────────────────────── */
 
-.neg-page .neg-commit-note {
-  display: block;
+.neg-page .neg-notice {
   margin: 0 0 18px;
   padding: 0;
-  border: none;
-  background: transparent;
   font-size: 13px;
   line-height: 1.6;
   color: var(--ng-ink-soft);
 }
 
-.neg-page .neg-commit-note strong {
+.neg-page .neg-notice strong {
   font-family: var(--mb-font-head, Manrope, sans-serif);
   font-size: 11px;
   font-weight: 800;
@@ -281,11 +274,188 @@
   margin-right: 4px;
 }
 
+/* ── Subsection head ───────────────────────────────────── */
+
+.neg-page .neg-subsection { margin: 0 0 4px; }
+
+.neg-page .neg-subsection-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 0 0 10px;
+  margin: 0 0 6px;
+  border-bottom: 1px solid var(--ng-line-soft);
+}
+
+.neg-page .neg-subsection-title {
+  margin: 0;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -.1px;
+  color: var(--ng-accent-2);
+}
+
+.neg-page .neg-subsection-meta {
+  font: 700 11.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ng-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.neg-page .neg-empty {
+  margin: 12px 0 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ng-muted);
+}
+
+/* ── Quote list (flat rows) ────────────────────────────── */
+
+.neg-page .neg-quote-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.neg-page .neg-quote-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--ng-line-soft);
+}
+
+.neg-page .neg-quote-row:last-child { border-bottom: none; }
+
+.neg-page .neg-quote-row--muted { padding: 12px 0; }
+
+.neg-page .neg-quote-main { min-width: 0; }
+
+.neg-page .neg-quote-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.neg-page .neg-quote-name {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 14.5px;
+  font-weight: 800;
+  letter-spacing: -.15px;
+  color: var(--ng-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.neg-page .neg-quote-amount {
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -.2px;
+  color: var(--ng-ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.neg-page .neg-quote-amount small {
+  margin-left: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--ng-muted);
+  text-transform: uppercase;
+}
+
+.neg-page .neg-quote-meta {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ng-muted);
+}
+
+.neg-page .neg-quote-message {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ng-ink-soft);
+  font-style: italic;
+}
+
+.neg-page .neg-quote-waiting {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ng-gold);
+}
+
+.neg-page .neg-quote-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 0 0;
+}
+
+/* ── Previous bids (details / summary) ─────────────────── */
+
+.neg-page .neg-previous {
+  margin: 14px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--ng-line-soft);
+}
+
+.neg-page .neg-previous-summary {
+  display: block;
+  padding: 12px 0 4px;
+  font: 700 12.5px/1.4 var(--mb-font-body, 'DM Sans', sans-serif);
+  color: var(--ng-muted);
+  cursor: pointer;
+  list-style: none;
+  transition: color .15s var(--ng-ease);
+}
+
+.neg-page .neg-previous-summary::-webkit-details-marker { display: none; }
+.neg-page .neg-previous-summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 14px;
+  margin-right: 4px;
+  color: var(--ng-muted-2);
+  transition: transform .15s var(--ng-ease);
+}
+
+.neg-page .neg-previous[open] .neg-previous-summary::before {
+  transform: rotate(90deg);
+}
+
+.neg-page .neg-previous-summary:hover { color: var(--ng-ink); }
+
+.neg-page .neg-quote-list--muted .neg-quote-name,
+.neg-page .neg-quote-list--muted .neg-quote-amount { color: var(--ng-muted); }
+.neg-page .neg-quote-list--muted .role-chip { opacity: .8; }
+
+/* ── Group footer ──────────────────────────────────────── */
+
+.neg-page .neg-group-footer {
+  padding: 14px 0 0;
+  margin: 12px 0 0;
+  border-top: 1px solid var(--ng-line-soft);
+}
+
 /* ── Bilateral deal list ───────────────────────────────── */
 
 .neg-page .neg-deal-list { display: grid; gap: 14px; }
-
-/* ── Negotiation row card ──────────────────────────────── */
 
 .neg-page .neg-card {
   position: relative;
@@ -313,7 +483,6 @@
   left: 20px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
   height: 22px;
   padding: 0 10px;
   border-radius: 999px;
@@ -325,24 +494,58 @@
   text-transform: uppercase;
 }
 
-.neg-page .neg-card-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin: 0 0 12px;
+.neg-page .neg-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 16px;
+  padding: 0 0 14px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid var(--ng-line);
 }
 
-.neg-page .neg-card-top > div { min-width: 0; flex: 1 1 auto; }
-.neg-page .neg-card-top .btn { flex: 0 0 auto; }
+.neg-page .neg-card-head-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.neg-page .neg-card-head-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+  max-width: 180px;
+  text-align: right;
+}
+
+.neg-page .neg-title {
+  margin: 0;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -.25px;
+  line-height: 1.3;
+  color: var(--ng-ink);
+  overflow-wrap: anywhere;
+}
+
+.neg-page .neg-card-subtitle {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ng-muted);
+}
 
 .neg-page .neg-deal-status {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  margin: 0 0 8px;
+  margin: 0 0 10px;
 }
 
 .neg-page .role-chip {
@@ -366,39 +569,8 @@
   color: var(--ng-accent-ink);
 }
 
-.neg-page .neg-title {
-  margin: 0 0 8px;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: -.25px;
-  line-height: 1.3;
-  color: var(--ng-ink);
-  overflow-wrap: anywhere;
-}
-
-.neg-page .neg-amount {
-  margin: 0;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -.5px;
-  line-height: 1;
-  color: var(--ng-ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.neg-page .neg-amount-unit {
-  margin-left: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .12em;
-  color: var(--ng-muted);
-  text-transform: uppercase;
-}
-
 .neg-page .neg-deal-context {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   font-size: 13px;
   line-height: 1.6;
   color: var(--ng-ink-soft);
@@ -415,19 +587,23 @@
   color: var(--ng-muted);
 }
 
-/* ── Action row ────────────────────────────────────────── */
+/* ── Action rows ───────────────────────────────────────── */
 
-.neg-page .neg-actions {
+.neg-page .neg-actions,
+.neg-page .neg-quote-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin: 16px 0 0;
+}
+
+.neg-page .neg-actions {
+  margin: 14px 0 0;
   padding: 14px 0 0;
   border-top: 1px solid var(--ng-line-soft);
 }
 
-.neg-page .neg-actions input[type="number"] {
+.neg-page .neg-counter-input {
   width: 120px;
   flex: 0 0 auto;
   padding: 8px 10px;
@@ -438,16 +614,24 @@
   font: inherit;
   font-size: 13px;
   line-height: 1.4;
-  transition: border-color .18s var(--ng-ease), box-shadow .18s var(--ng-ease);
   -webkit-appearance: none;
   appearance: none;
+  transition: border-color .18s var(--ng-ease), box-shadow .18s var(--ng-ease);
 }
 
-.neg-page .neg-actions input[type="number"]::placeholder { color: var(--ng-muted-2); }
-.neg-page .neg-actions input[type="number"]:focus {
+.neg-page .neg-counter-input::placeholder { color: var(--ng-muted-2); }
+.neg-page .neg-counter-input:focus {
   outline: none;
   border-color: var(--ng-accent);
   box-shadow: var(--ng-ring);
+}
+
+/* ── Card footer ───────────────────────────────────────── */
+
+.neg-page .neg-card-footer {
+  padding: 14px 0 0;
+  margin: 12px 0 0;
+  border-top: 1px solid var(--ng-line-soft);
 }
 
 /* ── Buttons — white bg, green outline ─────────────────── */
@@ -458,13 +642,13 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 38px;
-  padding: 0 16px;
+  height: 36px;
+  padding: 0 14px;
   border-radius: 10px;
   border: 1px solid var(--ng-line);
   background: #fff;
   color: var(--ng-ink);
-  font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
+  font: 700 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .01em;
   text-decoration: none;
   cursor: pointer;
@@ -516,7 +700,7 @@
   border-color: var(--ng-line);
 }
 
-/* ── Empty state / notices ─────────────────────────────── */
+/* ── Empty state / alerts / toast ──────────────────────── */
 
 .neg-page .card.notice {
   padding: 40px 24px;
@@ -529,8 +713,6 @@
   font-size: 14.5px;
   box-shadow: none;
 }
-
-/* ── Alerts ────────────────────────────────────────────── */
 
 .neg-page .alert {
   padding: 12px 16px;
@@ -548,8 +730,6 @@
   background: var(--ng-danger-soft);
   color: var(--ng-danger);
 }
-
-/* ── Toast ─────────────────────────────────────────────── */
 
 .neg-page .sd-toast {
   position: fixed;
@@ -574,8 +754,6 @@
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* ── Loading text ──────────────────────────────────────── */
-
 .neg-page .loading,
 .neg-page > .container-narrow > p {
   font-size: 14px;
@@ -591,15 +769,20 @@
   .neg-page .sd-tab { flex: 1 1 auto; text-align: center; padding: 8px 10px; }
 
   .neg-page .neg-group { padding: 18px 18px 20px; }
-
-  .neg-page .neg-group-header { gap: 10px; }
-  .neg-page .neg-group-link { padding: 6px 8px; }
-
   .neg-page .neg-card { padding: 18px 18px 20px; }
 
-  .neg-page .neg-actions { flex-direction: column; align-items: stretch; }
+  .neg-page .neg-group-head,
+  .neg-page .neg-card-head { column-gap: 12px; }
+  .neg-page .neg-group-head-side,
+  .neg-page .neg-card-head-side { max-width: 130px; }
+
+  .neg-page .neg-actions,
+  .neg-page .neg-quote-actions { flex-direction: column; align-items: stretch; }
+
   .neg-page .neg-actions .sd-btn,
-  .neg-page .neg-actions input[type="number"] { width: 100%; }
+  .neg-page .neg-actions .neg-counter-input,
+  .neg-page .neg-quote-actions .sd-btn,
+  .neg-page .neg-quote-actions .neg-counter-input { width: 100%; }
 }
 
 @media (max-width: 420px) {
@@ -607,8 +790,7 @@
   .neg-page .neg-section-title { font-size: 16px; }
   .neg-page .neg-group-title { font-size: 15px; }
   .neg-page .neg-title { font-size: 15px; }
-  .neg-page .neg-amount { font-size: 20px; }
-
+  .neg-page .neg-quote-amount { font-size: 14px; }
   .neg-page .sd-toast { bottom: 12px; padding: 10px 14px; font-size: 13px; }
 }
 
@@ -617,7 +799,7 @@
   .neg-page .btn,
   .neg-page .sd-tab,
   .neg-page .neg-card,
-  .neg-page .neg-group-link { transition: none; }
+  .neg-page .neg-previous-summary { transition: none; }
 
   .neg-page .sd-toast { animation: none; }
 }
