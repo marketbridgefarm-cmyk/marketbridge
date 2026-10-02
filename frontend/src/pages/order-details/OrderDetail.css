@@ -7,6 +7,7 @@
      · od-detail-facts                 — flat key/value rows
      · od-status-pill                  — pills with od-tone-*
      · od-eyebrow, od-card-side-*      — head furniture
+     · od-card-grid                    — responsive multi-card layout
 
    No boxes inside cards. Only the outer .card has a border.
    Buttons are white with a green outline — no green fills.
@@ -21,6 +22,8 @@
      · Every card carries a slightly wider right padding so
        right-aligned values (amounts, statuses, dates) have
        more breathing room from the card edge.
+     · .od-card-grid lays out sibling cards responsively:
+         1 per row on phone, 2 on tablet, 3 on desktop.
      · Responsive: phone (≤719px) and small phone (≤420px)
        tighten the gutter proportionally.
    ============================================================ */
@@ -1179,6 +1182,57 @@
 }
 
 /* ============================================================
+   RESPONSIVE CARD GRID
+   ============================================================
+   Used to lay out a set of sibling cards (the three transport
+   cards) responsively:
+     · phone (default)      → 1 card per row
+     · tablet (≥640px)      → 2 cards per row
+     · desktop (≥1000px)    → 3 cards per row
+   Cards fill their cell height so a short card and a tall card
+   in the same row line up at top and bottom. */
+
+.order-detail-page .od-card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  margin: 0 0 20px;
+  align-items: stretch;
+}
+
+.order-detail-page .od-card-grid > .card {
+  margin: 0;
+  height: 100%;
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .order-detail-page .od-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1000px) {
+  .order-detail-page .od-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ── Wide screens: allow the container to grow so 3 cards fit ── */
+
+@media (min-width: 1000px) {
+  .order-detail-page .container-narrow {
+    max-width: 1180px;
+  }
+}
+
+@media (max-width: 639px) {
+  .order-detail-page .od-card-grid {
+    gap: 14px;
+  }
+}
+
+/* ============================================================
    RESPONSIVE — Tablet
    ============================================================ */
 
@@ -1197,8 +1251,6 @@
     padding: 20px 14px 64px;
   }
 
-  /* Right padding stays wider than the left so right-aligned
-     values keep room from the card edge on phones too. */
   .order-detail-page .card {
     padding: 20px 28px 22px 20px;
     margin: 0 0 14px;
