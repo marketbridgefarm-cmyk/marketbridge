@@ -4,19 +4,14 @@ import api from '../api/client';
 // ============================================================================
 // TRANSPORT SETUP
 // ============================================================================
-// The initial "create the transport job" form — who arranges it, own truck
-// vs. hire, pickup/destination/load details, and (for hired transport) the
-// matcher UI. This used to live on its own route (/orders/:id/transport,
-// pages/ArrangeTransport.jsx) while the rest of the transport lifecycle
-// (quotes, evidence, payment, pickup/in-transit/delivered) was already
-// inline on OrderDetail.jsx. Moved here so transport now follows the same
-// "everything happens on the order page" pattern inspection already used —
-// no more navigating away mid-task.
+// Initial "create the transport job" form — who arranges it, own truck vs.
+// hire, pickup/destination/load details, and (for hired transport) the
+// matcher UI.
 //
-// This is intentionally its own file rather than inline JSX in
-// OrderDetail.jsx: it's the single biggest chunk of new markup this change
-// adds, and OrderDetail.jsx is already the largest file flagged for the
-// separate large-file refactor.
+// Visual note: this renders INSIDE the Transport card on OrderDetail. It no
+// longer draws its own outer .card — the enclosing card already provides
+// the frame. Sections are flat blocks separated by hairlines; buttons and
+// inputs reuse the classes the surrounding page already styles.
 // ============================================================================
 
 const emptyForm = {
@@ -25,6 +20,169 @@ const emptyForm = {
   load: '',
   requiredCapacity: '',
   specialRequirements: '',
+};
+
+/* ── Small inline style tokens ────────────────────────────── */
+
+const eyebrow = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  color: '#12734a',
+  fontFamily: "'DM Sans', system-ui, sans-serif",
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: '.16em',
+  textTransform: 'uppercase',
+  margin: '0 0 6px',
+};
+
+const eyebrowLine = {
+  display: 'inline-block',
+  width: 18,
+  height: 2,
+  borderRadius: 2,
+  background: 'currentColor',
+};
+
+const lead = {
+  margin: '0 0 14px',
+  fontFamily: "'DM Sans', system-ui, sans-serif",
+  fontSize: 13.5,
+  lineHeight: 1.6,
+  color: '#64748b',
+};
+
+const sectionHead = {
+  display: 'flex',
+  alignItems: 'baseline',
+  justifyContent: 'space-between',
+  gap: 12,
+  flexWrap: 'wrap',
+  paddingBottom: 10,
+  marginBottom: 14,
+  borderBottom: '1px solid #eef1f5',
+};
+
+const sectionTitle = {
+  margin: 0,
+  fontFamily: "'Manrope', system-ui, sans-serif",
+  fontSize: 14,
+  fontWeight: 800,
+  letterSpacing: '-.1px',
+  color: '#0f7a44',
+};
+
+const choiceGrid = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+  gap: 10,
+  margin: '0 0 16px',
+};
+
+const choiceBase = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  gap: 4,
+  textAlign: 'left',
+  width: '100%',
+  padding: '14px 16px',
+  borderRadius: 12,
+  border: '1px solid #e5e9ef',
+  background: '#fff',
+  color: '#0d1b2a',
+  fontFamily: "'DM Sans', system-ui, sans-serif",
+  cursor: 'pointer',
+  transition: 'border-color .15s, background .15s',
+};
+
+const choiceSelected = {
+  ...choiceBase,
+  borderColor: '#1e9e5a',
+  background: '#ecfdf3',
+};
+
+const choiceDisabled = {
+  ...choiceBase,
+  opacity: .5,
+  cursor: 'not-allowed',
+};
+
+const choiceLabel = {
+  fontFamily: "'Manrope', system-ui, sans-serif",
+  fontSize: 14,
+  fontWeight: 800,
+  letterSpacing: '-.15px',
+  color: '#0d1b2a',
+};
+
+const choiceLabelSelected = {
+  ...choiceLabel,
+  color: '#12734a',
+};
+
+const choiceHint = {
+  fontSize: 12.5,
+  lineHeight: 1.5,
+  color: '#64748b',
+};
+
+const truckRow = (isChosen) => ({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  flexWrap: 'wrap',
+  padding: '14px 0',
+  borderBottom: '1px solid #eef1f5',
+  background: 'transparent',
+  border: 'none',
+  borderTop: '1px solid #eef1f5',
+  borderBottomWidth: 1,
+});
+
+const truckInfo = {
+  minWidth: 0,
+  flex: '1 1 auto',
+};
+
+const truckName = {
+  display: 'block',
+  fontFamily: "'Manrope', system-ui, sans-serif",
+  fontSize: 14,
+  fontWeight: 800,
+  letterSpacing: '-.15px',
+  color: '#0d1b2a',
+  marginBottom: 2,
+};
+
+const truckMeta = {
+  margin: 0,
+  fontSize: 12.5,
+  lineHeight: 1.5,
+  color: '#64748b',
+};
+
+const noticeBox = {
+  margin: '0 0 16px',
+  padding: '4px 0 4px 14px',
+  borderLeft: '3px solid #c6eccf',
+  fontFamily: "'DM Sans', system-ui, sans-serif",
+  fontSize: 12.5,
+  lineHeight: 1.55,
+  color: '#2c3a4a',
+};
+
+const noticeStrong = {
+  color: '#0d1b2a',
+  fontWeight: 700,
+};
+
+const submitRow = {
+  marginTop: 18,
+  paddingTop: 16,
+  borderTop: '1px solid #eef1f5',
 };
 
 export default function TransportSetup({
@@ -51,7 +209,7 @@ export default function TransportSetup({
 
   useEffect(() => {
     // A non-truck-owner will get a 403 here; that's expected and just means
-    // no own-truck option is offered — same as the page this replaces.
+    // no own-truck option is offered.
     api
       .get('/transport/trucks/mine')
       .then((r) => setOwnTrucks(r.data.trucks || []))
@@ -112,176 +270,263 @@ export default function TransportSetup({
   const availableOwnTrucks = ownTrucks.filter((t) => t.availability === 'AVAILABLE');
 
   return (
-    <form className="card form-card mb-transport-setup" onSubmit={submit} style={{ marginTop: 12 }}>
-      <p className="lead" style={{ marginTop: 0 }}>
+    <form className="mb-transport-setup" onSubmit={submit}>
+      <p style={lead}>
         {buyerOnlyCompetition
           ? 'The buyer controls the transporter competition. Registered truck owners submit sealed quotes, then the buyer selects and negotiates one.'
           : 'Choose who controls the transport arrangement. The buyer remains responsible for paying a hired transporter.'}
       </p>
 
-      <div className="choice-grid" style={{ marginBottom: 16 }}>
-        {canBuyer && (
+      {/* ── Who arranges ─────────────────────────────────── */}
+      <div className="od-card-section" style={{ marginBottom: 18 }}>
+        <div style={sectionHead}>
+          <h3 style={sectionTitle}>Who arranges transport</h3>
+        </div>
+
+        <div style={choiceGrid}>
+          {canBuyer && (
+            <button
+              type="button"
+              style={party === 'BUYER' ? choiceSelected : choiceBase}
+              onClick={() => setArrangingParty('BUYER')}
+            >
+              <span style={party === 'BUYER' ? choiceLabelSelected : choiceLabel}>Buyer arranges</span>
+              <span style={choiceHint}>Buyer controls the request and quote selection.</span>
+            </button>
+          )}
+          {canSeller && !buyerOnlyCompetition && (
+            <button
+              type="button"
+              style={party === 'SELLER' ? choiceSelected : choiceBase}
+              onClick={() => setArrangingParty('SELLER')}
+            >
+              <span style={party === 'SELLER' ? choiceLabelSelected : choiceLabel}>Seller arranges</span>
+              <span style={choiceHint}>Seller controls the request and quote selection.</span>
+            </button>
+          )}
+          {canBuyer && canSeller && !buyerOnlyCompetition && (
+            <button
+              type="button"
+              style={party === 'JOINT' ? choiceSelected : choiceBase}
+              onClick={() => {
+                setArrangingParty('JOINT');
+                if (method === 'OWN_TRUCK') setMethod('HIRE_TRANSPORTER');
+              }}
+            >
+              <span style={party === 'JOINT' ? choiceLabelSelected : choiceLabel}>Joint arrangement</span>
+              <span style={choiceHint}>Buyer and seller agree together; hired transporter only.</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Method ───────────────────────────────────────── */}
+      <div className="od-card-section" style={{ marginBottom: 18 }}>
+        <div style={sectionHead}>
+          <h3 style={sectionTitle}>Method</h3>
+        </div>
+
+        <div style={choiceGrid}>
+          {!buyerOnlyCompetition && (
+            <button
+              type="button"
+              disabled={party === 'JOINT'}
+              style={party === 'JOINT' ? choiceDisabled : (method === 'OWN_TRUCK' ? choiceSelected : choiceBase)}
+              onClick={() => setMethod('OWN_TRUCK')}
+            >
+              <span style={method === 'OWN_TRUCK' && party !== 'JOINT' ? choiceLabelSelected : choiceLabel}>
+                🚚 Use my own truck
+              </span>
+              <span style={choiceHint}>
+                Record your own legally permitted vehicle. No transport-hiring commission.
+              </span>
+            </button>
+          )}
+
           <button
             type="button"
-            className={`choice ${party === 'BUYER' ? 'selected' : ''}`}
-            onClick={() => setArrangingParty('BUYER')}
+            style={method === 'HIRE_TRANSPORTER' ? choiceSelected : choiceBase}
+            onClick={() => setMethod('HIRE_TRANSPORTER')}
           >
-            <b>Buyer arranges</b>
-            <span>Buyer controls the transport request and quote selection.</span>
+            <span style={method === 'HIRE_TRANSPORTER' ? choiceLabelSelected : choiceLabel}>
+              Hire a registered transporter
+            </span>
+            <span style={choiceHint}>
+              MarketBridge matches by capacity, area, route, availability, rating and verification.
+            </span>
           </button>
-        )}
-        {canSeller && !buyerOnlyCompetition && (
-          <button
-            type="button"
-            className={`choice ${party === 'SELLER' ? 'selected' : ''}`}
-            onClick={() => setArrangingParty('SELLER')}
-          >
-            <b>Seller arranges</b>
-            <span>Seller controls the transport request and quote selection.</span>
-          </button>
-        )}
-        {canBuyer && canSeller && !buyerOnlyCompetition && (
-          <button
-            type="button"
-            className={`choice ${party === 'JOINT' ? 'selected' : ''}`}
-            onClick={() => {
-              setArrangingParty('JOINT');
-              if (method === 'OWN_TRUCK') setMethod('HIRE_TRANSPORTER');
-            }}
-          >
-            <b>Joint arrangement</b>
-            <span>Buyer and seller jointly agree; hired transporter only.</span>
-          </button>
-        )}
-      </div>
-
-      {error && <div className="alert error">{error}</div>}
-
-      <div className="choice-grid">
-        {!buyerOnlyCompetition && <button
-          type="button"
-          disabled={party === 'JOINT'}
-          className={`choice ${method === 'OWN_TRUCK' ? 'selected' : ''}`}
-          onClick={() => setMethod('OWN_TRUCK')}
-        >
-          <b>🚚 Use my own truck</b>
-          <span>Record your own legally permitted vehicle and pickup details. No
-            transport-hiring commission.</span>
-        </button>}
-        <button
-          type="button"
-          className={`choice ${method === 'HIRE_TRANSPORTER' ? 'selected' : ''}`}
-          onClick={() => setMethod('HIRE_TRANSPORTER')}
-        >
-          <b>Hire a registered transporter</b>
-          <span>MarketBridge matches by capacity, area, route, availability, rating and
-            verification.</span>
-        </button>
-      </div>
-
-      <div className="notice">
-        <strong>Role separation:</strong> Inspectors verify produce and evidence; they do not
-        arrange trucks.
-      </div>
-
-      <div className="form-grid">
-        <div>
-          <label>Pickup farm / location</label>
-          <input
-            required
-            value={form.pickupLocation}
-            onChange={(e) => setForm({ ...form, pickupLocation: e.target.value })}
-          />
         </div>
-        <div>
-          <label>Destination</label>
-          <input
-            required
-            value={form.destination}
-            onChange={(e) => setForm({ ...form, destination: e.target.value })}
-          />
-        </div>
-        <div>
-          <label>Load</label>
-          <input
-            required
-            value={form.load}
-            onChange={(e) => setForm({ ...form, load: e.target.value })}
-          />
-        </div>
-        <div>
-          <label>Required capacity (tons)</label>
-          <input
-            type="number"
-            value={form.requiredCapacity}
-            onChange={(e) => setForm({ ...form, requiredCapacity: e.target.value })}
-          />
-        </div>
-        <div>
-          <label>Special requirements</label>
-          <input
-            value={form.specialRequirements}
-            onChange={(e) => setForm({ ...form, specialRequirements: e.target.value })}
-            placeholder="Access, loading, route..."
-          />
+
+        <div style={noticeBox}>
+          <strong style={noticeStrong}>Role separation:</strong> Inspectors verify produce and
+          evidence; they do not arrange trucks.
         </div>
       </div>
 
-      {method === 'OWN_TRUCK' && (
-        <div className="match-box">
-          <div className="row-between">
-            <h3>My available trucks</h3>
+      {error && <div className="alert error" style={{ marginTop: 0 }}>{error}</div>}
+
+      {/* ── Trip details ─────────────────────────────────── */}
+      <div className="od-card-section">
+        <div style={sectionHead}>
+          <h3 style={sectionTitle}>Trip details</h3>
+        </div>
+
+        <div className="form-grid">
+          <div className="field">
+            <label htmlFor="ts-pickup">Pickup farm / location</label>
+            <input
+              id="ts-pickup"
+              required
+              value={form.pickupLocation}
+              onChange={(e) => setForm({ ...form, pickupLocation: e.target.value })}
+            />
           </div>
-          {availableOwnTrucks.map((t) => (
-            <div className={`transporter ${truck === t.id ? 'chosen' : ''}`} key={t.id}>
-              <div>
-                <strong>{t.registration}</strong>
-                <p>
+          <div className="field">
+            <label htmlFor="ts-destination">Destination</label>
+            <input
+              id="ts-destination"
+              required
+              value={form.destination}
+              onChange={(e) => setForm({ ...form, destination: e.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="ts-load">Load</label>
+            <input
+              id="ts-load"
+              required
+              value={form.load}
+              onChange={(e) => setForm({ ...form, load: e.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="ts-capacity">Required capacity (tons)</label>
+            <input
+              id="ts-capacity"
+              type="number"
+              value={form.requiredCapacity}
+              onChange={(e) => setForm({ ...form, requiredCapacity: e.target.value })}
+            />
+          </div>
+          <div className="field field-span">
+            <label htmlFor="ts-requirements">Special requirements</label>
+            <input
+              id="ts-requirements"
+              value={form.specialRequirements}
+              onChange={(e) => setForm({ ...form, specialRequirements: e.target.value })}
+              placeholder="Access, loading, route…"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Own trucks ───────────────────────────────────── */}
+      {method === 'OWN_TRUCK' && (
+        <div className="od-card-section">
+          <div style={sectionHead}>
+            <h3 style={sectionTitle}>My available trucks</h3>
+            <span
+              style={{
+                fontFamily: "'DM Sans', system-ui, sans-serif",
+                fontSize: 11.5,
+                fontWeight: 700,
+                letterSpacing: '.1em',
+                textTransform: 'uppercase',
+                color: '#64748b',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {availableOwnTrucks.length}
+            </span>
+          </div>
+
+          {availableOwnTrucks.map((t, i) => (
+            <div
+              key={t.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                flexWrap: 'wrap',
+                padding: '14px 0',
+                borderTop: i === 0 ? 'none' : '1px solid #eef1f5',
+                borderBottom: i === availableOwnTrucks.length - 1 ? 'none' : '1px solid #eef1f5',
+              }}
+            >
+              <div style={truckInfo}>
+                <strong style={truckName}>{t.registration}</strong>
+                <p style={truckMeta}>
                   {t.truckType} · {t.capacity}t · {t.operatingArea}
                 </p>
               </div>
-              <button type="button" className="btn btn-sm" onClick={() => setTruck(t.id)}>
+              <button
+                type="button"
+                className={truck === t.id ? 'btn btn-primary btn-sm' : 'btn btn-sm'}
+                onClick={() => setTruck(t.id)}
+              >
                 {truck === t.id ? 'Selected' : 'Select'}
               </button>
             </div>
           ))}
+
           {!availableOwnTrucks.length && (
-            <p className="muted">No available truck is registered to your account.</p>
+            <p style={lead}>No available truck is registered to your account.</p>
           )}
         </div>
       )}
 
+      {/* ── Registered transporters ──────────────────────── */}
       {method === 'HIRE_TRANSPORTER' && (
-        <div className="match-box">
-          <div className="row-between">
-            <h3>Registered transporters</h3>
-            <button type="button" className="btn btn-light" onClick={findMatches}>
+        <div className="od-card-section">
+          <div style={sectionHead}>
+            <h3 style={sectionTitle}>Registered transporters</h3>
+            <button type="button" className="btn btn-light btn-sm" onClick={findMatches}>
               Find matches
             </button>
           </div>
-          {matches.map((t) => (
-            <div className={`transporter ${truck === t.owner.id ? 'chosen' : ''}`} key={t.id}>
-              <div>
-                <strong>{t.owner.name}</strong>
-                <p>
+
+          {matches.map((t, i) => (
+            <div
+              key={t.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                flexWrap: 'wrap',
+                padding: '14px 0',
+                borderTop: i === 0 ? 'none' : '1px solid #eef1f5',
+                borderBottom: i === matches.length - 1 ? 'none' : '1px solid #eef1f5',
+              }}
+            >
+              <div style={truckInfo}>
+                <strong style={truckName}>{t.owner.name}</strong>
+                <p style={truckMeta}>
                   {t.truckType} · {t.capacity}t · {t.operatingArea} · ★{' '}
                   {t.owner.rating?.toFixed?.(1) || '—'}
                 </p>
               </div>
-              <span className="sd-badge sd-blue">Quote later</span>
+              <span className="od-status-pill od-tone-info">Quote later</span>
             </div>
           ))}
-          {!matches.length && <p className="muted">Enter your details and select "Find matches".</p>}
+
+          {!matches.length && (
+            <p style={lead}>Enter your details and select "Find matches".</p>
+          )}
         </div>
       )}
 
-      <button className="btn btn-primary btn-lg full" type="submit" disabled={submitting}>
-        {submitting
-          ? 'Submitting…'
-          : method === 'HIRE_TRANSPORTER'
-            ? 'Create transport request'
-            : 'Confirm own-truck arrangement'}
-      </button>
+      {/* ── Submit ──────────────────────────────────────── */}
+      <div style={submitRow}>
+        <button className="btn btn-primary btn-block" type="submit" disabled={submitting}>
+          {submitting
+            ? 'Submitting…'
+            : method === 'HIRE_TRANSPORTER'
+              ? 'Create transport request'
+              : 'Confirm own-truck arrangement'}
+        </button>
+      </div>
     </form>
   );
 }
