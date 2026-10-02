@@ -96,10 +96,11 @@
   color: var(--ng-muted);
 }
 
-/* ── Filter tabs ───────────────────────────────────────── */
+/* ── Filter tabs — single-line, no wrap, swipe on overflow ── */
 
 .neg-page .sd-tabs {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
   padding: 4px;
@@ -107,13 +108,22 @@
   border-radius: 999px;
   background: #fff;
   box-shadow: var(--ng-shadow-sm);
-  flex-wrap: wrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  max-width: 100%;
 }
 
+.neg-page .sd-tabs::-webkit-scrollbar { display: none; }
+
 .neg-page .sd-tab {
+  flex: 0 0 auto;
   appearance: none;
-  border: none;
-  background: transparent;
+  border: 1px solid transparent;
+  background: transparent !important;
+  background-image: none !important;
   padding: 8px 16px;
   border-radius: 999px;
   color: var(--ng-muted);
@@ -123,14 +133,21 @@
   transition: color .15s var(--ng-ease), background .15s var(--ng-ease);
 }
 
-.neg-page .sd-tab:hover { color: var(--ng-ink); background: var(--ng-line-soft); }
+.neg-page .sd-tab:hover {
+  color: var(--ng-ink);
+  background: var(--ng-line-soft) !important;
+  background-image: none !important;
+}
+
 .neg-page .sd-tab:focus-visible { outline: none; box-shadow: var(--ng-ring); }
 
 .neg-page .sd-tab.sd-active {
-  background: var(--ng-accent-soft);
-  color: var(--ng-accent-ink);
+  background: var(--ng-accent-soft) !important;
+  background-image: none !important;
+  color: var(--ng-accent-ink) !important;
   font-weight: 700;
-  border: 1px solid var(--ng-accent-line);
+  border: 1px solid var(--ng-accent-line) !important;
+  box-shadow: none !important;
 }
 
 /* ── Sections ──────────────────────────────────────────── */
@@ -232,14 +249,6 @@
   overflow-wrap: anywhere;
 }
 
-.neg-page .neg-group-subtitle {
-  margin: 2px 0 0;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--ng-muted);
-  font-variant-numeric: tabular-nums;
-}
-
 .neg-page .neg-side-label {
   font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .14em;
@@ -252,26 +261,6 @@
   color: var(--ng-ink);
   letter-spacing: -.1px;
   white-space: nowrap;
-}
-
-/* ── Notice line ───────────────────────────────────────── */
-
-.neg-page .neg-notice {
-  margin: 0 0 18px;
-  padding: 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ng-ink-soft);
-}
-
-.neg-page .neg-notice strong {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--ng-accent-2);
-  margin-right: 4px;
 }
 
 /* ── Subsection head ───────────────────────────────────── */
@@ -332,7 +321,6 @@
 }
 
 .neg-page .neg-quote-row:last-child { border-bottom: none; }
-
 .neg-page .neg-quote-row--muted { padding: 12px 0; }
 
 .neg-page .neg-quote-main { min-width: 0; }
@@ -426,6 +414,7 @@
 }
 
 .neg-page .neg-previous-summary::-webkit-details-marker { display: none; }
+
 .neg-page .neg-previous-summary::before {
   content: '▸';
   display: inline-block;
@@ -435,22 +424,73 @@
   transition: transform .15s var(--ng-ease);
 }
 
-.neg-page .neg-previous[open] .neg-previous-summary::before {
-  transform: rotate(90deg);
-}
-
+.neg-page .neg-previous[open] .neg-previous-summary::before { transform: rotate(90deg); }
 .neg-page .neg-previous-summary:hover { color: var(--ng-ink); }
 
 .neg-page .neg-quote-list--muted .neg-quote-name,
 .neg-page .neg-quote-list--muted .neg-quote-amount { color: var(--ng-muted); }
 .neg-page .neg-quote-list--muted .role-chip { opacity: .8; }
 
-/* ── Group footer ──────────────────────────────────────── */
+/* ── Group footer (notice + action) ────────────────────── */
 
 .neg-page .neg-group-footer {
-  padding: 14px 0 0;
-  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 0 0;
+  margin: 14px 0 0;
   border-top: 1px solid var(--ng-line-soft);
+}
+
+/* ── Notice line (numbered) ────────────────────────────── */
+
+.neg-page .neg-notice {
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ng-ink-soft);
+}
+
+.neg-page .neg-notice-prefix {
+  display: inline-block;
+  margin: 0 0 8px;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ng-accent-2);
+}
+
+.neg-page .neg-notice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: notice;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.neg-page .neg-notice-list li {
+  position: relative;
+  padding-left: 24px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ng-ink-soft);
+}
+
+.neg-page .neg-notice-list li::before {
+  counter-increment: notice;
+  content: counter(notice) ")";
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ng-accent-2);
 }
 
 /* ── Bilateral deal list ───────────────────────────────── */
@@ -589,15 +629,11 @@
 
 /* ── Action rows ───────────────────────────────────────── */
 
-.neg-page .neg-actions,
-.neg-page .neg-quote-actions {
+.neg-page .neg-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-.neg-page .neg-actions {
   margin: 14px 0 0;
   padding: 14px 0 0;
   border-top: 1px solid var(--ng-line-soft);
@@ -765,8 +801,26 @@
 @media (max-width: 719px) {
   .neg-page .container-narrow { padding: 24px 16px 56px; }
 
-  .neg-page .sd-tabs { display: flex; width: 100%; justify-content: space-between; }
-  .neg-page .sd-tab { flex: 1 1 auto; text-align: center; padding: 8px 10px; }
+  /* Keep tab strips single-line: scroll horizontally instead of wrapping */
+  .neg-page .sd-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: 4px;
+  }
+  .neg-page .sd-tabs::-webkit-scrollbar { display: none; }
+
+  .neg-page .sd-tab {
+    flex: 0 0 auto;
+    padding: 8px 14px;
+    font-size: 12.5px;
+  }
 
   .neg-page .neg-group { padding: 18px 18px 20px; }
   .neg-page .neg-card { padding: 18px 18px 20px; }
