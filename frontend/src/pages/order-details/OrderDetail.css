@@ -42,7 +42,8 @@
   --od-radius-lg: 16px;
   --od-radius: 12px;
   --od-radius-sm: 8px;
-  --od-shadow: 0 1px 2px rgba(13, 27, 42, 0.05), 0 4px 14px rgba(13, 27, 42, 0.04);
+  --od-shadow: none;
+  --od-indent: 14px; /* body content is pushed in by this much; titles/headers stay flush */
 
   --od-gap: 14px;
   --od-pad: 18px;
@@ -117,7 +118,6 @@
   background: var(--od-surface);
   border: 1px solid var(--od-line);
   border-radius: var(--od-radius-lg);
-  box-shadow: var(--od-shadow);
   padding: var(--od-pad);
   scroll-margin-top: 16px;
 }
@@ -126,11 +126,10 @@
 
 .order-detail-page .od-card-warning { border-color: #f1d9a0; background: #fffdf6; }
 .order-detail-page .od-card-accent { border-color: #bfe3cd; background: var(--od-brand-soft); }
-.order-detail-page .od-card-overview { border-top: 3px solid var(--od-brand); }
 
 .order-detail-page .od-card-head {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
@@ -139,7 +138,7 @@
   border-bottom: 1px solid var(--od-line);
 }
 
-.order-detail-page .od-card-head-main { flex: 1 1 200px; min-width: 0; }
+.order-detail-page .od-card-head-main { flex: 1 1 0; min-width: 0; }
 
 .order-detail-page .od-eyebrow {
   display: inline-block;
@@ -170,10 +169,13 @@
 
 .order-detail-page .od-card-head-side {
   display: flex;
+  flex: none;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: flex-end;
   gap: 4px;
+  max-width: 48%;
   min-width: 0;
+  text-align: right;
 }
 
 .order-detail-page .od-card-side-label {
@@ -192,10 +194,11 @@
 
 .order-detail-page .od-card-side-party {
   display: flex;
+  flex-direction: row-reverse; /* avatar sits at the far right */
   align-items: center;
   gap: 10px;
 }
-.order-detail-page .od-card-side-party > div { display: flex; flex-direction: column; min-width: 0; }
+.order-detail-page .od-card-side-party > div { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
 
 .order-detail-page .od-party-avatar {
   flex: none;
@@ -241,6 +244,21 @@
 }
 
 .order-detail-page .od-card-created { margin-top: 12px; font-size: 12.5px; color: var(--od-muted); }
+
+/* ---------- 4b. Body indent ----------
+   Titles and section headers stay flush left; everything else is pushed in.
+   !important is needed because some cards set margin via inline styles. */
+.order-detail-page .card > :not(.od-card-head):not(.od-card-section) {
+  margin-left: var(--od-indent) !important;
+}
+.order-detail-page .od-card-section > :not(.od-card-section-head) {
+  margin-left: var(--od-indent);
+}
+.order-detail-page .od-card-section > .payout-table,
+.order-detail-page .od-card-section > .field,
+.order-detail-page .od-card-section > .alert {
+  width: calc(100% - var(--od-indent));
+}
 
 /* ---------- 5. Facts (label / value pairs) ---------- */
 .order-detail-page .od-detail-facts {
@@ -409,7 +427,7 @@
 .order-detail-page .btn-outline:hover:not(:disabled) { background: var(--od-bad-bg); border-color: var(--od-bad); }
 
 .order-detail-page .btn-sm { min-height: 38px; padding: 0 14px; font-size: 13px; border-radius: var(--od-radius-sm); }
-.order-detail-page .btn-block { display: flex; width: 100%; margin-top: 14px; }
+.order-detail-page .btn-block { display: flex; width: calc(100% - var(--od-indent)); margin-top: 14px; }
 
 .order-detail-page .od-actions {
   display: flex;
@@ -650,19 +668,15 @@
 /* Phones (< 640px): stack the payout cell so status doesn't squeeze the name */
 @media (max-width: 639px) {
   .order-detail-page .od-detail-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .order-detail-page .od-card-head-side { width: 100%; }
 }
 
 /* Tablets (≥ 640px): 2 columns */
 @media (min-width: 640px) {
-  .order-detail-page { --od-pad: 22px; --od-gap: 18px; padding-top: 22px; }
+  .order-detail-page { --od-pad: 22px; --od-gap: 18px; --od-indent: 18px; padding-top: 22px; }
   .order-detail-page .container-narrow { padding-inline: 22px; }
 
   .order-detail-page .od-page-grid,
   .order-detail-page .od-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
-  .order-detail-page .od-card-head-side { align-items: flex-end; text-align: right; }
-  .order-detail-page .od-card-side-party { flex-direction: row-reverse; text-align: right; }
 
   .order-detail-page .od-actions { flex-direction: row; flex-wrap: wrap; }
   .order-detail-page .od-actions .btn { width: auto; }
@@ -705,7 +719,7 @@
 
 /* Desktops (≥ 1000px): 3 columns */
 @media (min-width: 1000px) {
-  .order-detail-page { --od-pad: 24px; --od-gap: 20px; padding-top: 28px; }
+  .order-detail-page { --od-pad: 24px; --od-gap: 20px; --od-indent: 22px; padding-top: 28px; }
   .order-detail-page .container-narrow { padding-inline: 32px; }
 
   .order-detail-page .od-page-grid,
