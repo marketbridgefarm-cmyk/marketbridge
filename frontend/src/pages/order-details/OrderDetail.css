@@ -148,7 +148,7 @@
   font: 800 11px / 1.2 var(--od-font-head);
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--od-brand);
+  color: var(--od-accent, var(--od-brand));
 }
 .order-detail-page .od-eyebrow::before {
   content: '';
@@ -190,7 +190,7 @@
   font: 800 11px var(--od-font-head);
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--od-brand);
+  color: var(--od-accent, var(--od-brand));
 }
 
 .order-detail-page .od-card-side-value {
@@ -221,7 +221,7 @@
 }
 
 /* ---------- 4. Sections inside cards ---------- */
-.order-detail-page .od-card-section { padding: 14px 0; border-top: 1px solid var(--od-line); }
+.order-detail-page .od-card-section { padding: 18px 0; border-top: 1px solid var(--od-line); }
 .order-detail-page .od-card-head + .od-card-section,
 .order-detail-page .od-card-head + .od-card-section:first-of-type { border-top: 0; padding-top: 0; }
 .order-detail-page .od-card-section:last-child { padding-bottom: 0; }
@@ -232,13 +232,13 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 6px 12px;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
 }
 
 .order-detail-page .od-card-section-title {
   margin: 0;
-  font: 700 14px var(--od-font-head);
-  color: var(--od-ink);
+  font: 800 14px var(--od-font-head);
+  color: var(--od-accent, var(--od-brand));
 }
 
 .order-detail-page .od-card-section-meta {
@@ -256,7 +256,7 @@
 /* ---------- 4b. Body indent ----------
    Titles and section headers stay flush left; everything else is pushed in.
    !important is needed because some cards set margin via inline styles. */
-.order-detail-page .card:not(.payment-center) > :not(.od-card-head):not(.od-card-section) {
+.order-detail-page .card:not(.payment-center) > :not(.od-card-head):not(.od-card-section):not(header) {
   margin-left: var(--od-indent) !important;
 }
 .order-detail-page .od-card-section > :not(.od-card-section-head) {
@@ -775,4 +775,41 @@
 }
 .order-detail-page .card > .od-card-head {
   flex-wrap: nowrap !important;
+}
+
+
+/* ==========================================================================
+   17. Title underline + per-card accent colour
+   --------------------------------------------------------------------------
+   Each card gets an accent (eyebrow, small underline, side label, section
+   headers). Change a colour here and every part of that card follows.
+   ========================================================================== */
+.order-detail-page .card { --od-accent: var(--od-brand); }
+.order-detail-page #make-offer { --od-accent: #4f46e5; }
+.order-detail-page #inspection-section { --od-accent: #b45309; }
+.order-detail-page #transport-section { --od-accent: #1d5fb4; }
+.order-detail-page #transport-evidence-section { --od-accent: #6d3fc0; }
+.order-detail-page #transport-payment-section,
+.order-detail-page #payment-center { --od-accent: #0f7a44; }
+.order-detail-page #order-payout-status { --od-accent: #0e7490; }
+.order-detail-page #order-refund-status { --od-accent: #b42318; }
+.order-detail-page #raise-dispute { --od-accent: #c2410c; }
+
+/* tiny line under every card title */
+.order-detail-page .od-card-title::after,
+.order-detail-page #order-refund-status > header h2::after {
+  content: '';
+  display: block;
+  width: 28px;
+  height: 3px;
+  margin-top: 8px;
+  border-radius: 3px;
+  background: var(--od-accent, var(--od-brand));
+}
+
+/* Refund card is inline-styled: recolour its eyebrow and fit its table */
+.order-detail-page #order-refund-status > header span { color: var(--od-accent) !important; }
+.order-detail-page #order-refund-status > header { margin-bottom: 14px !important; }
+.order-detail-page #order-refund-status > .refund-table {
+  width: calc(100% - var(--od-indent));
 }
