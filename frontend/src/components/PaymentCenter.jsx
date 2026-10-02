@@ -24,8 +24,8 @@ const money = (value) =>
 
 function StatusBadge({ paid, pending, processing }) {
   const label = paid ? 'PAID' : processing ? 'PROCESSING' : pending ? 'PENDING' : 'NOT PAID';
-  const tone = paid ? 'badge-success' : pending || processing ? 'badge-pending' : '';
-  return <span className={`badge ${tone}`}>{label}</span>;
+  const tone = paid ? 'good' : (pending || processing) ? 'wait' : 'neutral';
+  return <span className={`pc-chip pc-chip--${tone}`}>{label}</span>;
 }
 
 function ObligationRow({
@@ -39,22 +39,18 @@ function ObligationRow({
   children,
 }) {
   return (
-    <div className="notice payment-center-row">
-      <div className="row-between" style={{ gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <strong>{title}</strong>
-          <p className="muted" style={{ marginBottom: 0 }}>
+    <div className="pc-row">
+      <div className="pc-row-head">
+        <div className="pc-row-head-main">
+          <strong className="pc-row-title">{title}</strong>
+          <p className="pc-row-sub">
             {subtitle || (paid ? 'Payment confirmed.' : `Amount due: ${money(amount)} ETB`)}
           </p>
         </div>
         <StatusBadge paid={paid} pending={pending} processing={processing} />
       </div>
 
-      {note && (
-        <p className="muted" style={{ marginTop: 8, marginBottom: 0 }}>
-          {note}
-        </p>
-      )}
+      {note && <p className="pc-row-note">{note}</p>}
 
       {children}
     </div>
@@ -63,7 +59,12 @@ function ObligationRow({
 
 function PaymentMethodPicker({ methods, value, onChange, disabled }) {
   return (
-    <select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled}>
+    <select
+      className="pc-field"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      disabled={disabled}
+    >
       {methods.map((method) => (
         <option key={method.value} value={method.value}>
           {method.label}
@@ -98,12 +99,10 @@ export default function PaymentCenter({
 }) {
   const [showHistory, setShowHistory] = useState(false);
 
-  // Largest single online payment the provider accepts (from the backend).
   const maxOnlineAmount = Number(workflowPayments?.marketplace?.maxOnlineAmount) || 0;
   const marketplaceOverLimit =
     maxOnlineAmount > 0 && Number(marketplace?.amount) > maxOnlineAmount;
 
-  // Installment plan for a goods payment above the limit (parent + children).
   const plan = marketplace?.installmentPlan || null;
   const installmentRows = marketplace?.installments || [];
   const paidInstallments = installmentRows.filter((row) => row.status === 'PAID').length;
@@ -116,39 +115,40 @@ export default function PaymentCenter({
     (transport?.required && !transport.paid ? 1 : 0);
 
   return (
-    <div className="card payment-action-center mb-payment-center" id="payment-center">
-      <div className="row-between" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <div>
-          <span className="eyebrow">PAYMENT CENTER</span>
-          <h2>Complete required payments</h2>
-          <p className="muted">
-            Payments are separate. The buyer pays the seller, any required inspector, and a
-            hired transporter, each from its own row below.
-          </p>
+    <section
+      className="card payment-center payment-action-center mb-payment-center"
+      id="payment-center"
+    >
+      <header className="pc-head">
+        <div className="pc-head-main">
+          <span className="pc-eyebrow">PAYMENT CENTER</span>
+          <h2 className="pc-title">Required payments</h2>
         </div>
 
-        {workflowPayments &&
-          (outstanding === 0 ? (
-            <span className="badge badge-success">All settled</span>
-          ) : (
-            <span className="badge badge-pending">{outstanding} outstanding</span>
-          ))}
-      </div>
+        {workflowPayments && (
+          <div className="pc-head-side">
+            <span className="pc-side-label">Status</span>
+            {outstanding === 0 ? (
+              <span className="pc-chip pc-chip--good">All settled</span>
+            ) : (
+              <span className="pc-chip pc-chip--wait">{outstanding} outstanding</span>
+            )}
+          </div>
+        )}
+      </header>
 
       {marketplaceBlockedReason && (
-        <div className="alert" style={{ marginTop: 10 }}>
-          {marketplaceBlockedReason}
-        </div>
+        <div className="pc-alert">{marketplaceBlockedReason}</div>
       )}
 
       {buyerIdentityMismatch && (
-        <div className="alert error" style={{ marginTop: 10 }}>
-          This order belongs to a different buyer account. Sign in with the buyer account to make
-          payments.
+        <div className="pc-alert pc-alert--error">
+          This order belongs to a different buyer account. Sign in with the buyer account
+          to make payments.
         </div>
       )}
 
-      <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
+      <div className="pc-rows">
         {marketplace && (
           <ObligationRow
             title="Seller / order payment"
@@ -163,27 +163,26 @@ export default function PaymentCenter({
             }
           >
             {isBuyer && !marketplace.paid && plan && (
-              <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+              <div className="pc-installments">
                 {installmentRows.map((row) => {
                   const rowBusy = busy === `installment-${row.id}`;
                   return (
-                    <div
-                      key={row.id}
-                      className="row-between"
-                      style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}
-                    >
-                      <span>
+                    <div className="pc-installment" key={row.id}>
+                      <div className="pc-installment-info">
                         <strong>
                           Installment {row.installmentSequence} of {plan.installmentCount}
                         </strong>
-                        <span className="muted"> — {money(row.amount)} ETB</span>
-                      </span>
+                        <span className="pc-installment-amount">
+                          {money(row.amount)} ETB
+                        </span>
+                      </div>
+
                       {row.status === 'PAID' ? (
-                        <span className="badge badge-success">PAID</span>
+                        <span className="pc-chip pc-chip--good">PAID</span>
                       ) : row.status === 'PROCESSING' ? (
                         <button
                           type="button"
-                          className="btn btn-primary btn-sm"
+                          className="pc-btn pc-btn--primary"
                           disabled={rowBusy}
                           onClick={() => marketplace.onCheckInstallment(row)}
                         >
@@ -192,7 +191,7 @@ export default function PaymentCenter({
                       ) : row.status === 'PENDING' ? (
                         <button
                           type="button"
-                          className="btn btn-primary btn-sm"
+                          className="pc-btn pc-btn--primary"
                           disabled={rowBusy}
                           onClick={() => marketplace.onPayInstallment(row)}
                         >
@@ -201,14 +200,14 @@ export default function PaymentCenter({
                       ) : row.status === 'FAILED' ? (
                         <button
                           type="button"
-                          className="btn btn-outline btn-sm"
+                          className="pc-btn pc-btn--outline"
                           disabled={rowBusy}
                           onClick={() => marketplace.onRetryInstallment(row)}
                         >
                           {rowBusy ? 'Preparing…' : 'Payment failed — try again'}
                         </button>
                       ) : (
-                        <span className="badge">{row.status}</span>
+                        <span className="pc-chip pc-chip--neutral">{row.status}</span>
                       )}
                     </div>
                   );
@@ -217,11 +216,11 @@ export default function PaymentCenter({
             )}
 
             {isBuyer && !marketplace.paid && !plan && marketplaceOverLimit && (
-              <div className="alert" style={{ marginTop: 10 }}>
+              <div className="pc-alert pc-alert--info">
                 <strong>Too large for one online payment.</strong>
-                <p style={{ margin: '6px 0 0' }}>
-                  Online payments are limited to {money(maxOnlineAmount)} ETB per transaction, and
-                  this order is {money(marketplace.amount)} ETB.
+                <p>
+                  Online payments are limited to {money(maxOnlineAmount)} ETB per transaction,
+                  and this order is {money(marketplace.amount)} ETB.
                   {marketplace.canStartInstallments
                     ? ` You can pay it in ${installmentCountNeeded} installments of about ${money(
                         Math.ceil((Number(marketplace.amount) * 100) / installmentCountNeeded) / 100
@@ -229,7 +228,7 @@ export default function PaymentCenter({
                     : ' Please contact MarketBridge support to arrange this payment.'}
                 </p>
                 {marketplace.canStartInstallments && (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+                  <div className="pc-row-actions">
                     <PaymentMethodPicker
                       methods={paymentMethods}
                       value={payMethod}
@@ -238,7 +237,7 @@ export default function PaymentCenter({
                     />
                     <button
                       type="button"
-                      className="btn btn-primary"
+                      className="pc-btn pc-btn--primary"
                       disabled={busy === 'start-installments'}
                       onClick={marketplace.onStartInstallments}
                     >
@@ -252,11 +251,11 @@ export default function PaymentCenter({
             )}
 
             {isBuyer && !marketplace.paid && !plan && !marketplaceOverLimit && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+              <div className="pc-row-actions">
                 {marketplace.canCheck ? (
                   <button
                     type="button"
-                    className="btn btn-primary"
+                    className="pc-btn pc-btn--primary"
                     disabled={busy === 'check-marketplace'}
                     onClick={marketplace.onCheck}
                   >
@@ -265,7 +264,7 @@ export default function PaymentCenter({
                 ) : marketplace.canResume ? (
                   <button
                     type="button"
-                    className="btn btn-primary"
+                    className="pc-btn pc-btn--primary"
                     disabled={busy === 'resume-marketplace'}
                     onClick={marketplace.onResume}
                   >
@@ -281,7 +280,7 @@ export default function PaymentCenter({
                     />
                     <button
                       type="button"
-                      className="btn btn-primary"
+                      className="pc-btn pc-btn--primary"
                       disabled={busy === 'pay-marketplace'}
                       onClick={marketplace.onPay}
                     >
@@ -289,9 +288,9 @@ export default function PaymentCenter({
                     </button>
                   </>
                 ) : marketplace.pending ? (
-                  <span className="muted">
-                    A seller payment is being processed. Check the payment status before starting
-                    another checkout.
+                  <span className="pc-row-sub">
+                    A seller payment is being processed. Check the payment status before
+                    starting another checkout.
                   </span>
                 ) : null}
               </div>
@@ -310,11 +309,11 @@ export default function PaymentCenter({
             note={row.note}
           >
             {isBuyer && !row.paid && (
-              <div style={{ marginTop: 8 }}>
+              <div className="pc-row-actions">
                 {row.canCheck ? (
                   <button
                     type="button"
-                    className="btn btn-primary btn-sm"
+                    className="pc-btn pc-btn--primary"
                     disabled={busy === row.busyKey}
                     onClick={row.onCheck}
                   >
@@ -323,7 +322,7 @@ export default function PaymentCenter({
                 ) : row.canResume ? (
                   <button
                     type="button"
-                    className="btn btn-primary btn-sm"
+                    className="pc-btn pc-btn--primary"
                     disabled={busy === row.busyKey}
                     onClick={row.onResume}
                   >
@@ -332,7 +331,7 @@ export default function PaymentCenter({
                 ) : (
                   <button
                     type="button"
-                    className="btn btn-primary btn-sm"
+                    className="pc-btn pc-btn--primary"
                     disabled={busy === row.busyKey}
                     onClick={row.onPay}
                   >
@@ -358,11 +357,11 @@ export default function PaymentCenter({
             note={transport.note}
           >
             {isBuyer && !transport.paid && transport.readyToPay && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+              <div className="pc-row-actions">
                 {transport.canCheck ? (
                   <button
                     type="button"
-                    className="btn btn-primary"
+                    className="pc-btn pc-btn--primary"
                     disabled={busy === 'check-transport'}
                     onClick={transport.onCheck}
                   >
@@ -371,7 +370,7 @@ export default function PaymentCenter({
                 ) : transport.canResume ? (
                   <button
                     type="button"
-                    className="btn btn-primary"
+                    className="pc-btn pc-btn--primary"
                     disabled={busy === 'resume-transport'}
                     onClick={transport.onResume}
                   >
@@ -387,7 +386,7 @@ export default function PaymentCenter({
                     />
                     <button
                       type="button"
-                      className="btn btn-primary"
+                      className="pc-btn pc-btn--primary"
                       disabled={busy === 'pay-transport'}
                       onClick={transport.onStart}
                     >
@@ -395,7 +394,9 @@ export default function PaymentCenter({
                     </button>
                   </>
                 ) : transport.pending ? (
-                  <span className="muted">A transport payment is pending. Refresh this page after checkout.</span>
+                  <span className="pc-row-sub">
+                    A transport payment is pending. Refresh this page after checkout.
+                  </span>
                 ) : null}
               </div>
             )}
@@ -403,52 +404,68 @@ export default function PaymentCenter({
         )}
 
         {transport && !transport.required && (
-          <div className="muted" style={{ fontSize: 12 }}>
+          <p className="pc-row-sub pc-own-truck">
             Own-truck transport — no separate transport payment required.
-          </div>
+          </p>
         )}
 
         {!isBuyer && (
-          <p className="muted" style={{ marginBottom: 0 }}>
+          <p className="pc-row-sub pc-not-buyer">
             Only the buyer can make these payments. The statuses above stay up to date for
             everyone on the order.
           </p>
         )}
       </div>
 
+      {/* ── Payment history ────────────────────────────────── */}
       {rawPayments.length > 0 && (
-        <div style={{ marginTop: 14 }}>
+        <div className="pc-history">
           <button
             type="button"
-            className="btn btn-sm btn-outline"
+            className="pc-btn pc-btn--outline"
             onClick={() => setShowHistory((value) => !value)}
           >
-            {showHistory ? 'Hide payment history' : `Show payment history (${rawPayments.length})`}
+            {showHistory
+              ? 'Hide payment history'
+              : `Show payment history (${rawPayments.length})`}
           </button>
 
           {showHistory && (
-            <div style={{ marginTop: 10 }}>
+            <ul className="pc-history-list">
               {rawPayments.map((payment) => (
-                <div className="payment-row" key={payment.id}>
-                  <span>
-                    <strong>
+                <li className="pc-history-row" key={payment.id}>
+                  <div className="pc-history-main">
+                    <strong className="pc-history-type">
                       {payment.type === 'MARKETPLACE_INSTALLMENT'
                         ? `INSTALLMENT ${payment.installmentSequence || ''}`.trim()
-                        : payment.type}
+                        : String(payment.type || '').replace(/_/g, ' ')}
                     </strong>
-                  </span>
-                  <strong>{money(payment.amount)} ETB</strong>
-                  <span>{payment.method || '—'}</span>
-                  <span className="badge">{payment.status}</span>
-                  {payment.reference && (
-                    <span className="muted">Ref: {payment.reference.slice(0, 8)}</span>
-                  )}
-                </div>
+                    <span className="pc-history-meta">
+                      {payment.method || '—'}
+                      {payment.reference ? ` · Ref ${payment.reference.slice(0, 8)}` : ''}
+                    </span>
+                  </div>
+                  <div className="pc-history-side">
+                    <strong className="pc-history-amount">
+                      {money(payment.amount)} ETB
+                    </strong>
+                    <span className="pc-chip pc-chip--neutral">
+                      {String(payment.status || '').replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
       )}
-    </div>
+
+      {/* ── Notice ─────────────────────────────────────────── */}
+      <div className="pc-notice">
+        <strong className="pc-notice-prefix">Notice:</strong>{' '}
+        Payments are separate. The buyer pays the seller, any required inspector, and a
+        hired transporter, each from its own row above.
+      </div>
+    </section>
   );
 }
