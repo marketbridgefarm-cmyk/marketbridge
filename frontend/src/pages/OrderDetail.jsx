@@ -898,21 +898,21 @@ function TransportCard({ order, t }) {
         {job.truckOwner && (
           <Section
             title="Transporter"
-            // Changed meta to include both the name and avatar side-by-side
+            // Put name and avatar directly in the meta prop, side-by-side
             meta={
-              <div className="od-person" style={{ margin: 0 }}>
+              <>
                 <strong>{job.truckOwner.name || '—'}</strong>
                 <Avatar name={job.truckOwner.name} />
-              </div>
+              </>
             }
             strong
           >
-            {/* Removed the separate name div here, pushing phone and truck up */}
+            {/* Removed the name wrapper div from the body, pushing these lines up */}
             {job.truckOwner.phone && (
-              <p className="muted" style={{ marginTop: 0 }}>Phone: {job.truckOwner.phone}</p>
+              <p className="muted">Phone: {job.truckOwner.phone}</p>
             )}
             {job.truck && (
-              <p style={{ marginTop: 0 }}>
+              <p>
                 Truck: <strong>{job.truck.registration || '—'}</strong> ·{' '}
                 {job.truck.truckType || 'Truck'}
                 {job.truck.capacity != null && ` · ${job.truck.capacity}t`}
