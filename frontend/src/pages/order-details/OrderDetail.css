@@ -195,7 +195,7 @@
   flex-direction: column;
   align-items: flex-end;
   justify-self: end;
-  align-self: start;
+  align-self: start; /* Pin to the very top of the card header */
   width: max-content;
   max-width: none;
   min-width: 0;
