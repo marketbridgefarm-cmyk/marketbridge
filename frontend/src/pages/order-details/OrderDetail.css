@@ -128,17 +128,29 @@
 .order-detail-page .od-card-accent { border-color: #bfe3cd; background: var(--od-brand-soft); }
 
 .order-detail-page .od-card-head {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 12px;
   margin-bottom: 14px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--od-line);
 }
+.order-detail-page .od-card-head-main { display: contents; }
+.order-detail-page .od-card-head .od-eyebrow { grid-column: 1; grid-row: 1; }
+.order-detail-page .od-card-head .od-card-title { grid-column: 1; grid-row: 2; min-width: 0; }
+.order-detail-page .od-card-head .od-card-head-side { grid-column: 2; grid-row: 1 / span 2; }
 
-.order-detail-page .od-card-head-main { flex: 1 1 0; min-width: 0; }
+/* divider under the title row: hairline + short accent bar, sits ABOVE the description */
+.order-detail-page .od-card-head::before {
+  content: '';
+  grid-column: 1 / -1;
+  grid-row: 3;
+  height: 3px;
+  margin-top: 12px;
+  background:
+    linear-gradient(var(--od-accent, var(--od-brand)), var(--od-accent, var(--od-brand))) left center / 28px 3px no-repeat,
+    linear-gradient(var(--od-line), var(--od-line)) left center / 100% 1px no-repeat;
+}
+.order-detail-page .od-card-head .od-card-subtitle { grid-column: 1 / -1; grid-row: 4; margin-top: 12px; }
 
 .order-detail-page .od-eyebrow {
   display: flex;
@@ -169,7 +181,7 @@
 }
 
 .order-detail-page .od-card-subtitle {
-  margin: 6px 0 0 var(--od-indent);
+  margin: 12px 0 0 var(--od-indent);
   font-size: 13.5px;
   line-height: 1.55;
   color: var(--od-muted);
@@ -202,11 +214,12 @@
 
 .order-detail-page .od-card-side-party {
   display: flex;
-  flex-direction: row-reverse; /* avatar sits at the far right */
+  flex-direction: row; /* text, then avatar at the far right */
   align-items: center;
   gap: 10px;
 }
-.order-detail-page .od-card-side-party > div { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
+.order-detail-page .od-card-side-party > div { display: flex; flex: 0 1 auto; flex-direction: column; align-items: flex-end; min-width: 0; }
+.order-detail-page .od-card-side-label { white-space: nowrap; }
 
 .order-detail-page .od-party-avatar {
   flex: none;
@@ -795,16 +808,16 @@
 .order-detail-page #order-refund-status { --od-accent: #b42318; }
 .order-detail-page #raise-dispute { --od-accent: #c2410c; }
 
-/* tiny line under every card title */
-.order-detail-page .od-card-title::after,
-.order-detail-page #order-refund-status > header h2::after {
+/* Refund card header is inline-styled: same accent bar, anchored to its bottom rule */
+.order-detail-page #order-refund-status > header { position: relative; }
+.order-detail-page #order-refund-status > header::after {
   content: '';
-  display: block;
+  position: absolute;
+  left: 0;
+  bottom: -1px;
   width: 28px;
   height: 3px;
-  margin-top: 8px;
-  border-radius: 3px;
-  background: var(--od-accent, var(--od-brand));
+  background: var(--od-accent);
 }
 
 /* Refund card is inline-styled: recolour its eyebrow and fit its table */
@@ -813,3 +826,17 @@
 .order-detail-page #order-refund-status > .refund-table {
   width: calc(100% - var(--od-indent));
 }
+
+
+/* ==========================================================================
+   18. Avatars (initials) — reuse .od-party-avatar anywhere a person appears
+   ========================================================================== */
+.order-detail-page .od-person { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; min-width: 0; }
+.order-detail-page .od-person strong { overflow-wrap: anywhere; }
+.order-detail-page .od-party-avatar--sm {
+  width: 26px;
+  height: 26px;
+  font-size: 10.5px;
+  background: var(--od-accent, var(--od-ink));
+}
+.order-detail-page .payout-party-line .od-party-avatar--sm { order: -1; }
