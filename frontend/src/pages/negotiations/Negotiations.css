@@ -4,13 +4,11 @@
 
    Unified hub for listing offers, transport quotes and
    inspection quotes. Two visual modes on the same page:
-     · Competition groups — a BidBoard per request (rendered by
-       the BidBoard component; styles live in its own file).
-     · Bilateral deals — a list of neg-card rows, one per offer
-       or quote that's been selected for one-to-one negotiation.
+     · Competition groups — a BidBoard per request.
+     · Bilateral deals — a list of neg-card rows.
 
    Same design language as Orders / Order Detail / Listings /
-   Digital Marketplace.
+   Digital Marketplace. No boxes inside cards, ever.
    ============================================================ */
 
 .neg-page {
@@ -145,9 +143,7 @@
 
 /* ── Sections ──────────────────────────────────────────── */
 
-.neg-page .neg-section {
-  margin: 28px 0 0;
-}
+.neg-page .neg-section { margin: 28px 0 0; }
 
 .neg-page .neg-section-title {
   margin: 0 0 18px;
@@ -173,7 +169,7 @@
   max-width: 70ch;
 }
 
-/* ── Competition group wrapper (one per request / job) ─── */
+/* ── Competition group wrapper ─────────────────────────── */
 
 .neg-page .neg-group {
   margin: 0 0 20px;
@@ -186,18 +182,34 @@
 
 .neg-page .neg-group:last-child { margin-bottom: 0; }
 
+/* The header block. Force-kill any inherited background / colour
+   that might come from a global rule, then restore the intended
+   flat layout with a rule underneath. */
 .neg-page .neg-group-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
   gap: 16px;
   flex-wrap: wrap;
-  padding: 0 0 14px;
-  margin: 0 0 14px;
-  border-bottom: 1px solid var(--ng-line);
+  padding: 0 0 14px !important;
+  margin: 0 0 14px !important;
+  background: transparent !important;
+  background-image: none !important;
+  color: var(--ng-ink) !important;
+  border: none !important;
+  border-bottom: 1px solid var(--ng-line) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 
-.neg-page .neg-group-heading { min-width: 0; flex: 1 1 auto; }
+.neg-page .neg-group-header > * { color: inherit !important; }
+
+.neg-page .neg-group-heading {
+  min-width: 0;
+  flex: 1 1 auto;
+  background: transparent !important;
+  color: var(--ng-ink) !important;
+}
 
 .neg-page .neg-group-title {
   font-family: var(--mb-font-head, Manrope, sans-serif);
@@ -205,7 +217,8 @@
   font-weight: 800;
   letter-spacing: -.3px;
   line-height: 1.25;
-  color: var(--ng-ink);
+  color: var(--ng-ink) !important;
+  background: transparent !important;
   overflow-wrap: anywhere;
 }
 
@@ -217,11 +230,13 @@
   margin: 6px 0 0;
   font-size: 12.5px;
   line-height: 1.4;
-  color: var(--ng-muted);
+  color: var(--ng-muted) !important;
   font-variant-numeric: tabular-nums;
+  background: transparent !important;
 }
 
-.neg-page .neg-group-meta > span:last-child { color: var(--ng-muted-2); }
+.neg-page .neg-group-meta > span { color: inherit !important; background: transparent !important; }
+.neg-page .neg-group-meta > span:last-child { color: var(--ng-muted-2) !important; }
 
 .neg-page .neg-group-link {
   display: inline-flex;
@@ -230,7 +245,8 @@
   flex: 0 0 auto;
   padding: 6px 10px;
   border-radius: 8px;
-  color: var(--ng-accent-2);
+  color: var(--ng-accent-2) !important;
+  background: transparent !important;
   font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .01em;
   text-decoration: none;
@@ -238,31 +254,36 @@
 }
 
 .neg-page .neg-group-link:hover {
-  background: var(--ng-accent-soft);
-  color: var(--ng-accent);
+  background: var(--ng-accent-soft) !important;
+  color: var(--ng-accent) !important;
 }
 
+/* ── Commit notice — flat, no box ──────────────────────── */
+
 .neg-page .neg-commit-note {
-  margin: 0 0 16px;
-  padding: 10px 14px;
-  border-left: 3px solid var(--ng-accent-line);
+  display: block;
+  margin: 0 0 18px;
+  padding: 0;
+  border: none;
   background: transparent;
-  font-size: 12.5px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.6;
   color: var(--ng-ink-soft);
 }
 
 .neg-page .neg-commit-note strong {
-  color: var(--ng-ink);
+  font-family: var(--mb-font-head, Manrope, sans-serif);
+  font-size: 11px;
   font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ng-accent-2);
+  margin-right: 4px;
 }
 
 /* ── Bilateral deal list ───────────────────────────────── */
 
-.neg-page .neg-deal-list {
-  display: grid;
-  gap: 14px;
-}
+.neg-page .neg-deal-list { display: grid; gap: 14px; }
 
 /* ── Negotiation row card ──────────────────────────────── */
 
@@ -296,12 +317,12 @@
   height: 22px;
   padding: 0 10px;
   border-radius: 999px;
-  background: linear-gradient(150deg, var(--ng-accent) 0%, var(--ng-accent-2) 100%);
-  color: #fff;
+  background: var(--ng-accent-soft);
+  border: 1px solid var(--ng-accent-line);
+  color: var(--ng-accent-ink);
   font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .12em;
   text-transform: uppercase;
-  box-shadow: 0 4px 10px rgba(30, 158, 90, .28);
 }
 
 .neg-page .neg-card-top {
@@ -314,10 +335,8 @@
 }
 
 .neg-page .neg-card-top > div { min-width: 0; flex: 1 1 auto; }
-
 .neg-page .neg-card-top .btn { flex: 0 0 auto; }
 
-/* Chip row inside a card */
 .neg-page .neg-deal-status {
   display: flex;
   align-items: center;
@@ -425,71 +444,15 @@
 }
 
 .neg-page .neg-actions input[type="number"]::placeholder { color: var(--ng-muted-2); }
-
 .neg-page .neg-actions input[type="number"]:focus {
   outline: none;
   border-color: var(--ng-accent);
   box-shadow: var(--ng-ring);
 }
 
-/* ── Buttons (outline treatment used by this page) ─────── */
+/* ── Buttons — white bg, green outline ─────────────────── */
 
-.neg-page .sd-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 38px;
-  padding: 0 16px;
-  border-radius: 10px;
-  border: 1px solid var(--ng-line);
-  background: #fff;
-  color: var(--ng-ink);
-  font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .01em;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: border-color .15s var(--ng-ease),
-              background .15s var(--ng-ease),
-              color .15s var(--ng-ease),
-              box-shadow .15s var(--ng-ease);
-}
-
-.neg-page .sd-btn:hover:not(:disabled) {
-  border-color: var(--ng-accent);
-  background: var(--ng-accent-soft);
-  color: var(--ng-accent-2);
-}
-
-.neg-page .sd-btn:focus-visible { outline: none; box-shadow: var(--ng-ring); }
-.neg-page .sd-btn:disabled { opacity: .55; cursor: not-allowed; }
-
-.neg-page .sd-btn-primary {
-  background: #fff;
-  color: var(--ng-accent-2);
-  border-color: var(--ng-accent-line);
-}
-
-.neg-page .sd-btn-primary:hover:not(:disabled) {
-  background: var(--ng-accent-soft);
-  color: var(--ng-accent-ink);
-  border-color: var(--ng-accent);
-  box-shadow: 0 1px 2px rgba(30, 158, 90, .12);
-}
-
-.neg-page .sd-btn-outline {
-  background: #fff;
-  color: var(--ng-ink-soft);
-  border-color: var(--ng-line);
-}
-
-.neg-page .sd-btn-outline:hover:not(:disabled) {
-  background: var(--ng-line-soft);
-  color: var(--ng-ink);
-  border-color: var(--ng-line);
-}
-
-/* Generic `.btn` / `.btn-outline` — used on the "Open" link */
+.neg-page .sd-btn,
 .neg-page .btn {
   display: inline-flex;
   align-items: center;
@@ -508,25 +471,49 @@
   white-space: nowrap;
   transition: border-color .15s var(--ng-ease),
               background .15s var(--ng-ease),
-              color .15s var(--ng-ease);
+              color .15s var(--ng-ease),
+              box-shadow .15s var(--ng-ease);
 }
 
+.neg-page .sd-btn:hover:not(:disabled),
 .neg-page .btn:hover:not(:disabled) {
   border-color: var(--ng-accent);
   background: var(--ng-accent-soft);
   color: var(--ng-accent-2);
 }
 
+.neg-page .sd-btn:focus-visible,
+.neg-page .btn:focus-visible { outline: none; box-shadow: var(--ng-ring); }
+.neg-page .sd-btn:disabled,
+.neg-page .btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.neg-page .sd-btn-primary,
+.neg-page .btn-primary,
 .neg-page .btn-outline {
   background: #fff;
   color: var(--ng-accent-2);
   border-color: var(--ng-accent-line);
 }
 
+.neg-page .sd-btn-primary:hover:not(:disabled),
+.neg-page .btn-primary:hover:not(:disabled),
 .neg-page .btn-outline:hover:not(:disabled) {
   background: var(--ng-accent-soft);
   color: var(--ng-accent-ink);
   border-color: var(--ng-accent);
+  box-shadow: 0 1px 2px rgba(30, 158, 90, .12);
+}
+
+.neg-page .sd-btn-outline {
+  background: #fff;
+  color: var(--ng-ink-soft);
+  border-color: var(--ng-line);
+}
+
+.neg-page .sd-btn-outline:hover:not(:disabled) {
+  background: var(--ng-line-soft);
+  color: var(--ng-ink);
+  border-color: var(--ng-line);
 }
 
 /* ── Empty state / notices ─────────────────────────────── */
@@ -543,7 +530,7 @@
   box-shadow: none;
 }
 
-/* ── Alerts (loading errors) ───────────────────────────── */
+/* ── Alerts ────────────────────────────────────────────── */
 
 .neg-page .alert {
   padding: 12px 16px;
@@ -587,7 +574,7 @@
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* ── Loading ───────────────────────────────────────────── */
+/* ── Loading text ──────────────────────────────────────── */
 
 .neg-page .loading,
 .neg-page > .container-narrow > p {
@@ -600,11 +587,7 @@
 @media (max-width: 719px) {
   .neg-page .container-narrow { padding: 24px 16px 56px; }
 
-  .neg-page .sd-tabs {
-    display: flex;
-    width: 100%;
-    justify-content: space-between;
-  }
+  .neg-page .sd-tabs { display: flex; width: 100%; justify-content: space-between; }
   .neg-page .sd-tab { flex: 1 1 auto; text-align: center; padding: 8px 10px; }
 
   .neg-page .neg-group { padding: 18px 18px 20px; }
@@ -614,15 +597,9 @@
 
   .neg-page .neg-card { padding: 18px 18px 20px; }
 
-  .neg-page .neg-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
+  .neg-page .neg-actions { flex-direction: column; align-items: stretch; }
   .neg-page .neg-actions .sd-btn,
-  .neg-page .neg-actions input[type="number"] {
-    width: 100%;
-  }
+  .neg-page .neg-actions input[type="number"] { width: 100%; }
 }
 
 @media (max-width: 420px) {
@@ -632,11 +609,7 @@
   .neg-page .neg-title { font-size: 15px; }
   .neg-page .neg-amount { font-size: 20px; }
 
-  .neg-page .sd-toast {
-    bottom: 12px;
-    padding: 10px 14px;
-    font-size: 13px;
-  }
+  .neg-page .sd-toast { bottom: 12px; padding: 10px 14px; font-size: 13px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -644,9 +617,7 @@
   .neg-page .btn,
   .neg-page .sd-tab,
   .neg-page .neg-card,
-  .neg-page .neg-group-link {
-    transition: none;
-  }
+  .neg-page .neg-group-link { transition: none; }
 
   .neg-page .sd-toast { animation: none; }
 }
