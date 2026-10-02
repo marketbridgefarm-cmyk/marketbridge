@@ -127,11 +127,9 @@
 .order-detail-page .od-card-warning { border-color: #f1d9a0; background: #fffdf6; }
 .order-detail-page .od-card-accent { border-color: #bfe3cd; background: var(--od-brand-soft); }
 
-/* Right column is sized to its content (max-content) so Seller / Status /
-   Due Date / Fee blocks never clip or wrap and always sit flush right. */
 .order-detail-page .od-card-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   column-gap: 12px;
   margin-bottom: 14px;
@@ -189,17 +187,14 @@
   color: var(--od-muted);
 }
 
-/* Right-side header block: always flush right, never wraps */
 .order-detail-page .od-card-head-side {
   display: flex;
+  flex: none;
   flex-direction: column;
   align-items: flex-end;
-  justify-self: end;
-  align-self: start; /* Pin to the very top of the card header */
-  width: max-content;
-  max-width: none;
-  min-width: 0;
   gap: 4px;
+  max-width: 48%;
+  min-width: 0;
   text-align: right;
 }
 
@@ -217,27 +212,14 @@
   overflow-wrap: anywhere;
 }
 
-.order-detail-page .od-card-side-label,
-.order-detail-page .od-card-side-value {
-  white-space: nowrap;
-}
-
-/* Party badge: text, then avatar at the far right */
 .order-detail-page .od-card-side-party {
   display: flex;
-  flex-direction: row;
+  flex-direction: row; /* text, then avatar at the far right */
   align-items: center;
-  justify-content: flex-end;
   gap: 10px;
 }
 .order-detail-page .od-card-side-party > div { display: flex; flex: 0 1 auto; flex-direction: column; align-items: flex-end; min-width: 0; }
-
-/* long names truncate instead of pushing the layout */
-.order-detail-page .od-card-side-party .od-card-side-value {
-  max-width: 42vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.order-detail-page .od-card-side-label { white-space: nowrap; }
 
 .order-detail-page .od-party-avatar {
   flex: none;
@@ -257,12 +239,11 @@
 .order-detail-page .od-card-head + .od-card-section:first-of-type { border-top: 0; padding-top: 0; }
 .order-detail-page .od-card-section:last-child { padding-bottom: 0; }
 
-/* Title left, meta (text and/or avatar) pinned right on one row */
 .order-detail-page .od-card-section-head {
   display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 6px 12px;
   margin-bottom: 14px;
 }
@@ -274,10 +255,6 @@
 }
 
 .order-detail-page .od-card-section-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  white-space: nowrap;
   font: 600 12px var(--od-font-body);
   color: var(--od-muted);
   font-variant-numeric: tabular-nums;
@@ -350,7 +327,7 @@
   vertical-align: middle;
 }
 
-/* ---------- 6. Status pills ---------- */
+/* ---------- 6. Status pills & progress ---------- */
 .order-detail-page .od-status-row {
   display: flex;
   flex-wrap: wrap;
@@ -393,6 +370,57 @@
   font-size: 11.5px;
   font-weight: 700;
 }
+
+.order-detail-page .order-progress {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.order-detail-page .order-progress-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.order-detail-page .order-progress-step::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--od-line-strong);
+}
+.order-detail-page .order-progress-step:first-child::before { display: none; }
+.order-detail-page .order-progress-step.is-done::before,
+.order-detail-page .order-progress-step.is-current::before { background: var(--od-brand); }
+
+.order-detail-page .order-progress-dot {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--od-surface);
+  border: 2px solid var(--od-line-strong);
+}
+.order-detail-page .is-done .order-progress-dot { background: var(--od-brand); border-color: var(--od-brand); }
+.order-detail-page .is-current .order-progress-dot {
+  border-color: var(--od-brand);
+  box-shadow: 0 0 0 4px var(--od-brand-soft);
+}
+
+.order-detail-page .order-progress-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--od-muted);
+}
+.order-detail-page .is-done .order-progress-label,
+.order-detail-page .is-current .order-progress-label { color: var(--od-ink); }
 
 /* ---------- 7. Buttons & actions ---------- */
 .order-detail-page .btn {
@@ -654,13 +682,14 @@
 /* Very small phones (≤ 380px) */
 @media (max-width: 380px) {
   .order-detail-page { --od-pad: 14px; --od-gap: 12px; }
+  .order-detail-page .order-progress-label { font-size: 10.5px; }
   .order-detail-page .payout-table th,
   .order-detail-page .payout-table td { padding: 10px 4px; }
   .order-detail-page .payout-table { font-size: 12.5px; }
   .order-detail-page .od-status-pill { white-space: normal; }
 }
 
-/* Phones (< 640px) */
+/* Phones (< 640px): stack the payout cell so status doesn't squeeze the name */
 @media (max-width: 639px) {
   .order-detail-page .od-detail-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -721,6 +750,7 @@
   .order-detail-page .od-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
   .order-detail-page .od-card-title { font-size: 22px; }
+  .order-detail-page .order-progress-label { font-size: 12.5px; }
 }
 
 /* Large desktops (≥ 1400px) */
@@ -813,7 +843,7 @@
 
 
 /* ==========================================================================
-   19. Lead card (ActionCenter) + landing highlight
+   19. Next-step card (buyer lead) + landing highlight
    ========================================================================== */
 .order-detail-page .card.od-next {
   --od-accent: #6ee7a8;
@@ -856,15 +886,6 @@
   color: #cbd5e1;
 }
 
-.order-detail-page .od-next-error {
-  margin: 0 0 14px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(252, 165, 165, 0.12);
-  color: #fca5a5;
-  font-size: 13px;
-}
-
 .order-detail-page .od-next-cta {
   display: flex;
   align-items: center;
@@ -883,7 +904,6 @@
 }
 .order-detail-page .od-next-cta:hover { background: #86efac; }
 .order-detail-page .od-next-cta:active { transform: translateY(1px); }
-.order-detail-page .od-next-cta:disabled { opacity: 0.6; cursor: not-allowed; }
 .order-detail-page .od-next-cta:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 .order-detail-page .od-next-cta-arrow { font-size: 18px; }
 
@@ -949,8 +969,6 @@
   text-align: center;
   color: #94a3b8;
 }
-/* the 4-stage order track always shows its labels, even on phones */
-.order-detail-page .od-next-track--stages .od-next-step-label { display: block; }
 .order-detail-page .is-current .od-next-step-label,
 .order-detail-page .is-done .od-next-step-label { color: #e2e8f0; }
 
@@ -1005,10 +1023,6 @@
   cursor: pointer;
 }
 .order-detail-page .od-next-item-go:hover { background: #162a40; }
-.order-detail-page .od-next-item-go:disabled { opacity: 0.6; cursor: not-allowed; }
-
-/* other ready workflow actions */
-.order-detail-page .od-next-others { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 12px; }
 
 /* landing highlight when a button scrolls to a card */
 .order-detail-page .od-flash {
@@ -1030,55 +1044,4 @@
 @media (min-width: 1000px) {
   .order-detail-page .card.od-next { padding: 30px 36px 12px; }
   .order-detail-page .od-next-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-
-/* ==========================================================================
-   20. Header-right fix + first-card cleanup
-   Append at the very END of OrderDetail.css (after section 19).
-   Only touches: the right-hand block in card headers, and the status pills
-   on the first (overview) card.
-   ========================================================================== */
-
-/* A) Right block (Status / Delivery / Seller / Due date …) hugs the right edge */
-.order-detail-page .od-card-head .od-card-head-side {
-  justify-self: end !important;
-  align-self: start !important;
-  margin-left: auto !important;
-  margin-right: 0 !important;
-  padding-right: 0 !important;
-  width: max-content !important;
-  align-items: flex-end !important;
-  text-align: right;
-}
-
-/* every child (label, pill, value, avatar row) pins to the right edge */
-.order-detail-page .od-card-head-side > * {
-  align-self: flex-end;
-  margin-left: auto;
-  margin-right: 0;
-}
-
-/* the status row inside the block must not add its own spacing or left-align */
-.order-detail-page .od-card-head-side .od-status-row {
-  justify-content: flex-end;
-  margin-bottom: 0;
-}
-
-/* letter-spacing leaves a gap after the last letter; cancel it so the text
-   lines up with the pill / avatar below it */
-.order-detail-page .od-card-head-side .od-card-side-label {
-  margin-right: -0.2em;
-}
-
-/* the long description under the title must not widen the right column and
-   push the block away from the edge */
-.order-detail-page .od-card-head .od-card-subtitle {
-  width: 0;
-  min-width: 100%;
-}
-
-/* B) First card: drop the status pills (COMPLETED / PAYMENT / TRANSPORT).
-      The progress line already shows the same information. */
-.order-detail-page .card.od-card-overview .od-status-row {
-  display: none !important;
 }
