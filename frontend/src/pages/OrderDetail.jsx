@@ -192,11 +192,7 @@ const Button = ({ variant = 'default', size, busy, busyText, children, ...rest }
    ========================================================================
    Party labels are abbreviated (SR / IR / TR). The countdown strip shows
    "Due Date" and the timer on one horizontal row; the date itself is not
-   repeated here because it already appears in the card head.
-
-   The countdown strip and numbered notice use inline styles so they render
-   flat regardless of what the stylesheet contains or what global CSS is
-   loaded. */
+   repeated here because it already appears in the card head. */
 
 function PayoutStatusCard({ payouts, names, you }) {
   const parties = [
@@ -250,8 +246,6 @@ function PayoutStatusCard({ payouts, names, you }) {
       ? new Date(dueMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
       : null;
   const duePassed = dueMs !== null && remainingMs === 0;
-
-  /* ── Inline styles ─────────────────────────────────────── */
 
   const dueStripStyle = {
     display: 'flex',
@@ -354,8 +348,6 @@ function PayoutStatusCard({ payouts, names, you }) {
     fontWeight: 800,
     color: '#0f7a44',
   };
-
-  /* ── Render ─────────────────────────────────────────────── */
 
   return (
     <Card
@@ -702,8 +694,13 @@ function InspectionCard({ order, title, i }) {
 }
 
 /* ========================================================================
-   6. Transport
-   ======================================================================== */
+   6. Transport — two cards
+   ========================================================================
+   Card A (Logistics)    — the physical trip: route, transporter, evidence,
+                           delivery confirmation, incident notes.
+   Card B (Payment)      — quotes, fee due, pay/resume, confirmed, recovery.
+   Both use the standard Card / Section / Facts / Pill primitives so they
+   match every other card on the page. */
 
 function EvidenceForm({ kind, t }) {
   const isPickup = kind === 'PICKUP';
@@ -821,15 +818,16 @@ function TransportCard({ order, t }) {
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
 
-  return (
-    <Card
-      id="transport-section"
-      eyebrow="Logistics"
-      title="Transport"
-      side={job?.status && <SideLabel name="Status"><Pill tone={statusTone(job.status)}>{label(job.status)}</Pill></SideLabel>}
-    >
-      {!job ? (
-        t.canArrange ? (
+  /* ── No job yet: single setup card ─────────────────────── */
+  if (!job) {
+    return (
+      <Card
+        id="transport-section"
+        eyebrow="Logistics"
+        title="Transport"
+        subtitle="The buyer or seller arranges transport. MarketBridge does not assign a transporter automatically."
+      >
+        {t.canArrange ? (
           <TransportSetup
             orderId={order.id}
             pickupDefault={order.listing?.location}
@@ -840,94 +838,213 @@ function TransportCard({ order, t }) {
           />
         ) : (
           <p className="muted">No transport arrangement recorded yet.</p>
-        )
-      ) : (
-        <>
-          <Section title="Trip details" meta={job.method || '—'}>
-            <Facts>
-              <Fact name="Arranged by">{job.arrangingParty || '—'}</Fact>
-              <Fact name="Pickup">{job.pickupLocation || '—'}</Fact>
-              <Fact name="Destination">{job.destination || '—'}</Fact>
-              {job.load && <Fact name="Load">{job.load}</Fact>}
-              {job.requiredCapacity != null && <Fact name="Required capacity">{job.requiredCapacity}</Fact>}
-            </Facts>
-          </Section>
+        )}
+      </Card>
+    );
+  }
 
-          {job.truckOwner && (
-            <Section title="Transporter" meta={job.agreedAmount != null ? `${money(job.agreedAmount)} ETB` : null} strong>
-              <p><strong>{job.truckOwner.name || '—'}</strong></p>
-              {job.truckOwner.phone && <p className="muted">Phone: {job.truckOwner.phone}</p>}
-              {job.truck && (
-                <p>
-                  Truck: <strong>{job.truck.registration || '—'}</strong> · {job.truck.truckType || 'Truck'}
-                  {job.truck.capacity != null && ` · ${job.truck.capacity}t`}
-                </p>
-              )}
-            </Section>
-          )}
+  return (
+    <>
+      {/* ── Card A — Logistics: the physical trip ──────────── */}
+      <Card
+        id="transport-section"
+        eyebrow="Logistics"
+        title="Transport"
+        subtitle="The physical trip — who drives, where from, where to, and handover evidence."
+        side={
+          job?.status && (
+            <SideLabel name="Status">
+              <Pill tone={statusTone(job.status)}>{label(job.status)}</Pill>
+            </SideLabel>
+          )
+        }
+      >
+        <Section title="Trip details" meta={job.method || '—'}>
+          <Facts>
+            <Fact name="Arranged by">{job.arrangingParty || '—'}</Fact>
+            <Fact name="Pickup">{job.pickupLocation || '—'}</Fact>
+            <Fact name="Destination">{job.destination || '—'}</Fact>
+            {job.load && <Fact name="Load">{job.load}</Fact>}
+            {job.requiredCapacity != null && (
+              <Fact name="Required capacity">{job.requiredCapacity}</Fact>
+            )}
+          </Facts>
+        </Section>
 
-          {hired && !t.paid && (
-            <Section title="Transport quotes" meta="Bids">
-              {quotes.length ? (
-                quotes.map((q) => <QuoteRow key={q.id} quote={q} t={t} />)
-              ) : (
-                <p className="muted">Waiting for registered truck owners to submit quotes.</p>
-              )}
-            </Section>
-          )}
-
-          {job.method === 'OWN_TRUCK' && (
-            <Section title="Transport payment">
-              <p><strong>No separate transporter payment is required.</strong></p>
-              <p className="muted">This order uses the owner's own truck, so no transport payment is created.</p>
-            </Section>
-          )}
-
-          {hired && !t.paid && (
-            <Section title="Transport payment" meta={job.agreedAmount != null ? `${money(job.agreedAmount)} ETB` : null} strong>
-              <p className="muted">
-                Transport payment is separate from the seller payment. You can pay as soon as the quote is accepted. The
-                transporter cannot start the trip until every required payment is confirmed.
+        {job.truckOwner && (
+          <Section
+            title="Transporter"
+            meta={job.agreedAmount != null ? `${money(job.agreedAmount)} ETB` : null}
+            strong
+          >
+            <p><strong>{job.truckOwner.name || '—'}</strong></p>
+            {job.truckOwner.phone && (
+              <p className="muted">Phone: {job.truckOwner.phone}</p>
+            )}
+            {job.truck && (
+              <p>
+                Truck: <strong>{job.truck.registration || '—'}</strong> ·{' '}
+                {job.truck.truckType || 'Truck'}
+                {job.truck.capacity != null && ` · ${job.truck.capacity}t`}
               </p>
-              {t.canStartPayment && (
-                <div className="od-field-row">
-                  <select className="field field-inline" value={t.payMethod} onChange={(e) => t.setPayMethod(e.target.value)} disabled={t.busy === 'pay-transport'}>
-                    {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                  </select>
-                  <Button variant="primary" size="sm" disabled={t.busy === 'pay-transport'} busy={t.busy === 'pay-transport'} busyText="Submitting…" onClick={t.pay}>
-                    Pay for transport
-                  </Button>
-                </div>
-              )}
-              {t.canResumePayment && (
-                <>
-                  <p>Pending payment: <strong>{t.payment.method || '—'}</strong>, {money(t.payment.amount)} ETB. It was started but not completed.</p>
-                  <Button variant="primary" size="sm" disabled={t.busy === 'resume-transport'} busy={t.busy === 'resume-transport'} busyText="Redirecting…" onClick={() => t.resume(t.payment.id, 'resume-transport')}>
-                    Resume payment
-                  </Button>
-                </>
-              )}
-            </Section>
-          )}
+            )}
+          </Section>
+        )}
 
-          {t.paid && (
-            <Section title="Transport payment confirmed" meta={`${money(t.paidAmount)} ETB`} strong />
-          )}
+        <Section title="Pickup and delivery evidence">
+          <p className="muted">
+            The transporter must upload pickup evidence before moving the trip from Pickup to In transit, and delivery
+            evidence before marking it Delivered.
+          </p>
+          {t.isTransporter && job.status === 'PICKUP' && <EvidenceForm kind="PICKUP" t={t} />}
+          {t.isTransporter && job.status === 'IN_TRANSIT' && <EvidenceForm kind="DELIVERY" t={t} />}
+          <EvidenceGallery
+            listUrl={`/transport/${job.id}/evidence`}
+            mediaUrl={(evidenceId) => `/transport/${job.id}/evidence/${evidenceId}/media`}
+          />
+        </Section>
 
-          {t.isArranger && ['REQUESTED', 'QUOTED', 'ACCEPTED', 'CANCELLED'].includes(job.status) && (
+        {job.status === 'DELIVERED' && (
+          <Section title="Delivery">
+            <p><strong>✓ Transport marked as delivered.</strong></p>
+            {job.deliveredConfirmedAt && (
+              <p className="muted">Delivery confirmed.</p>
+            )}
+          </Section>
+        )}
+
+        {job.incidentNotes && (
+          <div className="alert">
+            <strong>Transport notes:</strong> {job.incidentNotes}
+          </div>
+        )}
+      </Card>
+
+      {/* ── Card B — Transport payment ─────────────────────── */}
+      <Card
+        id="transport-payment-section"
+        eyebrow="Payment"
+        title="Transport payment"
+        subtitle="Select and pay the transporter. Separate from the seller payment and any inspection fee."
+        side={
+          hired && job.agreedAmount != null ? (
+            <SideLabel name="Fee">
+              <span className="od-card-side-value">{money(job.agreedAmount)} ETB</span>
+            </SideLabel>
+          ) : null
+        }
+      >
+        {hired && !t.paid && (
+          <Section title="Transport quotes" meta="Bids">
+            {quotes.length ? (
+              quotes.map((q) => <QuoteRow key={q.id} quote={q} t={t} />)
+            ) : (
+              <p className="muted">
+                Waiting for registered truck owners to submit quotes.
+              </p>
+            )}
+          </Section>
+        )}
+
+        {job.method === 'OWN_TRUCK' && (
+          <Section title="Transport payment">
+            <p><strong>No separate transporter payment is required.</strong></p>
+            <p className="muted">
+              This order uses the owner's own truck, so no transport payment is created.
+            </p>
+          </Section>
+        )}
+
+        {hired && !t.paid && (
+          <Section
+            title="Fee due"
+            meta={job.agreedAmount != null ? `${money(job.agreedAmount)} ETB` : null}
+            strong
+          >
+            <p className="muted">
+              Transport payment is separate from the seller payment. You can pay as soon as the quote is accepted. The
+              transporter cannot start the trip until every required payment is confirmed.
+            </p>
+
+            {t.canStartPayment && (
+              <div className="od-field-row">
+                <select
+                  className="field field-inline"
+                  value={t.payMethod}
+                  onChange={(e) => t.setPayMethod(e.target.value)}
+                  disabled={t.busy === 'pay-transport'}
+                >
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={t.busy === 'pay-transport'}
+                  busy={t.busy === 'pay-transport'}
+                  busyText="Submitting…"
+                  onClick={t.pay}
+                >
+                  Pay for transport
+                </Button>
+              </div>
+            )}
+
+            {t.canResumePayment && (
+              <>
+                <p>
+                  Pending payment: <strong>{t.payment.method || '—'}</strong>,{' '}
+                  {money(t.payment.amount)} ETB. It was started but not completed.
+                </p>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={t.busy === 'resume-transport'}
+                  busy={t.busy === 'resume-transport'}
+                  busyText="Redirecting…"
+                  onClick={() => t.resume(t.payment.id, 'resume-transport')}
+                >
+                  Resume payment
+                </Button>
+              </>
+            )}
+          </Section>
+        )}
+
+        {t.paid && (
+          <Section
+            title="Transport payment confirmed"
+            meta={`${money(t.paidAmount)} ETB`}
+            strong
+          />
+        )}
+
+        {t.isArranger &&
+          ['REQUESTED', 'QUOTED', 'ACCEPTED', 'CANCELLED'].includes(job.status) && (
             <Section title="Transport recovery">
               <p className="muted">
                 If the competition has stalled or the previous arrangement was cancelled, request admin approval to
                 release a fresh transport form.
               </p>
-              {t.recoveryRequests.filter((r) => r.type === 'TRANSPORT').map((r) => (
-                <p className="muted small" key={r.id}>
-                  Recovery: <strong>{r.status}</strong>{r.formReleasedAt ? ' — fresh form released' : ' — awaiting admin approval'}
-                </p>
-              ))}
+              {t.recoveryRequests
+                .filter((r) => r.type === 'TRANSPORT')
+                .map((r) => (
+                  <p className="muted small" key={r.id}>
+                    Recovery: <strong>{r.status}</strong>
+                    {r.formReleasedAt
+                      ? ' — fresh form released'
+                      : ' — awaiting admin approval'}
+                  </p>
+                ))}
               <Button
                 variant="primary"
-                disabled={Boolean(t.busy) || t.recoveryRequests.some((r) => r.type === 'TRANSPORT' && r.status === 'PENDING')}
+                disabled={
+                  Boolean(t.busy) ||
+                  t.recoveryRequests.some(
+                    (r) => r.type === 'TRANSPORT' && r.status === 'PENDING'
+                  )
+                }
                 busy={t.busy === 'recovery-TRANSPORT'}
                 busyText="Requesting…"
                 onClick={t.requestRecovery}
@@ -936,33 +1053,8 @@ function TransportCard({ order, t }) {
               </Button>
             </Section>
           )}
-
-          <Section title="Pickup and delivery evidence">
-            <p className="muted">
-              The transporter must upload pickup evidence before moving the trip from Pickup to In transit, and delivery
-              evidence before marking it Delivered.
-            </p>
-            {t.isTransporter && job.status === 'PICKUP' && <EvidenceForm kind="PICKUP" t={t} />}
-            {t.isTransporter && job.status === 'IN_TRANSIT' && <EvidenceForm kind="DELIVERY" t={t} />}
-            <EvidenceGallery
-              listUrl={`/transport/${job.id}/evidence`}
-              mediaUrl={(evidenceId) => `/transport/${job.id}/evidence/${evidenceId}/media`}
-            />
-          </Section>
-
-          {job.status === 'DELIVERED' && (
-            <Section title="Delivery">
-              <p><strong>✓ Transport marked as delivered.</strong></p>
-              {job.deliveredConfirmedAt && <p className="muted">Delivery confirmed.</p>}
-            </Section>
-          )}
-
-          {job.incidentNotes && (
-            <div className="alert"><strong>Transport notes:</strong> {job.incidentNotes}</div>
-          )}
-        </>
-      )}
-    </Card>
+      </Card>
+    </>
   );
 }
 
@@ -1663,9 +1755,9 @@ export default function OrderDetail() {
 
   /* ====================================================================
      Layout — top to bottom, the order a person works through an order:
-     summary → what to do next → offer → inspection → transport →
-     payments → receipt → payouts/refunds → history → dispute → rating →
-     messages
+     summary → what to do next → offer → inspection → transport (trip) →
+     transport (payment) → payments → receipt → payouts/refunds →
+     history → dispute → rating → messages
      ==================================================================== */
   return (
     <main className="section order-detail-page">
@@ -1716,7 +1808,7 @@ export default function OrderDetail() {
           <InspectionCard order={order} title={title} i={inspectionProps} />
         )}
 
-        {/* Transport */}
+        {/* Transport — Logistics card + Transport payment card */}
         <TransportCard order={order} t={transportProps} />
 
         {/* Payments */}
