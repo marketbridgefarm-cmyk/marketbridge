@@ -1,49 +1,19 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import './BidBoard.css';
 
 // ============================================================================
 // BID BOARD — competitive service-provider quote selection
 // ============================================================================
-//
-// Shows ALL competing quotes on one inspection request or transport job so
-// the requester can compare and hire. There are two sequential phases:
-//
-//  COMPETITION phase  (quote.status === 'PENDING')
-//    Any number of providers have submitted bids. The requester reviews them
-//    all and picks one with the "Select for negotiation" button.
-//    → PATCH /inspections/:id/quotes/:qid/select   (inspection)
-//    → PATCH /transport/quotes/:qid/select          (transport)
-//    The backend marks that quote SELECTED and keeps the others PENDING so
-//    the requester can still switch to a different provider later.
-//
-//  NEGOTIATION phase  (quote.status === 'SELECTED' or 'COUNTERED')
-//    Exactly one quote is in negotiation at a time. The requester can:
-//      Accept  → PATCH …/accept  (inspection) | PATCH …/quotes/:id {ACCEPT}
-//      Counter → POST  …/counter {counterAmount}  | PATCH …/quotes/:id {COUNTER}
-//      Reject  → PATCH …/reject  | PATCH …/quotes/:id {REJECT}
-//    While this negotiation runs the other PENDING bids remain visible.
-//    The requester can SELECT a different one at any time (the backend
-//    atomically moves the current SELECTED back to PENDING).
-//
-// Props
-//   quotes     {array}    Raw quote objects (all statuses).
-//                         Fields used: id, status, amount, counterAmount,
-//                         counteredBy, message, parentQuoteId,
-//                         inspector | truckOwner | provider.
-//   type       {string}   'INSPECTION_QUOTE' | 'TRANSPORT_QUOTE'
-//   requestId  {string}   Inspection request ID (INSPECTION_QUOTE only)
-//   orderLink  {string?}  Link shown in the board header
-//   onRespond  {fn}       (quote, action, amount?) => Promise<void>
-//                         action: 'SELECT' | 'ACCEPT' | 'COUNTER' | 'REJECT'
-//   disabled   {boolean}  Lock all CTAs (not the requester, or order closed)
+// Same props and API contract as the previous version. The visual change is
+// that bids render as flat rows inside the host card, not as bordered cards.
 // ============================================================================
 
 const money = (v) => Number(v || 0).toLocaleString();
 
-// Back-end turn rule — mirrors routes/inspections.js and routes/transport.js
 function quoteTurn(quote) {
-  if (quote.status === 'PENDING')   return 'REQUESTER'; // requester picks from competition
-  if (quote.status === 'SELECTED')  return 'REQUESTER'; // requester acts first after selecting
+  if (quote.status === 'PENDING')   return 'REQUESTER';
+  if (quote.status === 'SELECTED')  return 'REQUESTER';
   if (quote.status === 'COUNTERED') {
     return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
   }
@@ -54,21 +24,39 @@ function isQuoteExpired(quote) {
   return Boolean(quote.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
 }
 
-// A row is "superseded" when a later counter points back to it (or the API
-// says it has children). Only the newest row of a chain is a live offer.
 function supersededIds(quotes) {
   const ids = new Set(quotes.map((q) => q.parentQuoteId).filter(Boolean));
   quotes.forEach((q) => { if ((q._count?.childQuotes || 0) > 0) ids.add(q.id); });
   return ids;
 }
 
-// ---- Individual bid card ------------------------------------------------
-function BidCard({ quote, type, onRespond, disabled }) {
+function providerOf(quote) {
+  return quote.inspector || quote.truckOwner || quote.provider || {};
+}
+
+function initialsOf(name) {
+  const parts = String(name || '?').trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]).join('').toUpperCase() || '?';
+}
+
+function statusChip(status) {
+  if (status === 'ACCEPTED')  return { label: 'Hired', tone: 'good' };
+  if (status === 'COUNTERED') return { label: 'Counter', tone: 'wait' };
+  if (status === 'SELECTED')  return { label: 'Selected', tone: 'info' };
+  if (status === 'PENDING')   return { label: 'Pending', tone: 'neutral' };
+  if (status === 'EXPIRED')   return { label: 'Expired', tone: 'muted' };
+  if (status === 'WITHDRAWN') return { label: 'Released', tone: 'muted' };
+  if (status === 'REJECTED')  return { label: 'Not selected', tone: 'muted' };
+  return { label: String(status || '').replace(/_/g, ' '), tone: 'neutral' };
+}
+
+// ---- Individual bid row -------------------------------------------------
+function BidRow({ quote, type, onRespond, disabled }) {
   const [showCounter, setShowCounter] = useState(false);
   const [counterAmount, setCounterAmount] = useState('');
   const [busy, setBusy] = useState('');
 
-  const provider   = quote.inspector || quote.truckOwner || quote.provider || {};
+  const provider   = providerOf(quote);
   const isPending  = quote.status === 'PENDING';
   const isSelected = quote.status === 'SELECTED';
   const isNeg      = quote.status === 'COUNTERED';
@@ -77,14 +65,14 @@ function BidCard({ quote, type, onRespond, disabled }) {
   const isDone     = ['REJECTED', 'EXPIRED', 'WITHDRAWN'].includes(quote.status);
   const expired    = isActive && isQuoteExpired(quote);
   const turn       = quoteTurn(quote);
-  // In BidBoard the viewer is always the REQUESTER
   const myTurn     = !expired && (isSelected || (isNeg && turn === 'REQUESTER'));
   const waiting    = !expired && isNeg && turn === 'PROVIDER';
 
-  // Current effective price — use counterAmount when in negotiation
   const displayAmount = (isNeg || isHired) && quote.counterAmount != null
     ? quote.counterAmount
     : quote.amount;
+
+  const chip = statusChip(quote.status);
 
   async function handle(action) {
     if (busy) return;
@@ -97,92 +85,84 @@ function BidCard({ quote, type, onRespond, disabled }) {
     }
   }
 
+  const isProviderPlaceholder = !provider.name;
+
   return (
-    <div className={[
-      'bid-card',
-      isPending  ? 'bid-card--pending'   : '',
-      isSelected ? 'bid-card--selected'  : '',
-      isNeg      ? 'bid-card--countered' : '',
-      myTurn     ? 'bid-card--my-turn'   : '',
-      isHired    ? 'bid-card--hired'     : '',
-      isDone     ? 'bid-card--rejected'  : '',
+    <li className={[
+      'bb-row',
+      myTurn    ? 'bb-row--turn'   : '',
+      isHired   ? 'bb-row--hired'  : '',
+      isDone    ? 'bb-row--closed' : '',
     ].filter(Boolean).join(' ')}>
 
-      {/* ---- Provider row ---- */}
-      <div className="bid-card-header">
-        <div className="bid-card-provider">
-          <span className="bid-card-avatar" aria-hidden="true">
-            {(provider.name || '?').slice(0, 2).toUpperCase()}
-          </span>
-          <div>
-            <strong className="bid-card-name">{provider.name || 'Provider'}</strong>
-            <div className="bid-card-meta">
-              {provider.verificationStatus === 'VERIFIED' && (
-                <span className="bid-card-verified">✓ Verified</span>
-              )}
-              {provider.rating != null && (
-                <span className="bid-card-rating">★ {Number(provider.rating).toFixed(1)}</span>
-              )}
-              {type === 'TRANSPORT_QUOTE' && provider.truckCapacity && (
-                <span className="bid-card-spec">{provider.truckCapacity} t</span>
-              )}
-            </div>
+      {/* ── Provider + price ────────────────────────────── */}
+      <div className="bb-row-main">
+        <span className="bb-avatar" aria-hidden="true">{initialsOf(provider.name)}</span>
+
+        <div className="bb-row-body">
+          <div className="bb-row-line">
+            <strong className="bb-name">{provider.name || 'Provider'}</strong>
+            {provider.verificationStatus === 'VERIFIED' && (
+              <span className="bb-verified">✓ Verified</span>
+            )}
+            {provider.rating != null && (
+              <span className="bb-rating">★ {Number(provider.rating).toFixed(1)}</span>
+            )}
+            {type === 'TRANSPORT_QUOTE' && provider.truckCapacity && (
+              <span className="bb-spec">{provider.truckCapacity} t</span>
+            )}
           </div>
+
+          {!isProviderPlaceholder && (
+            <p className="bb-meta">
+              {provider.location || 'Location not set'}
+            </p>
+          )}
+
+          {quote.message && (
+            <p className="bb-message">"{quote.message}"</p>
+          )}
+
+          {(isSelected || isNeg) && (
+            <p className={`bb-turn-note${myTurn ? ' is-mine' : ''}`}>
+              {isSelected && myTurn && 'You selected this bid — accept, counter, or reject below.'}
+              {isNeg && myTurn && `Provider countered · last offer ${money(quote.counterAmount)} ETB — your turn.`}
+              {isNeg && waiting && `You offered ${money(quote.counterAmount)} ETB — waiting for provider.`}
+            </p>
+          )}
+
+          {expired && (
+            <p className="bb-turn-note is-warn">
+              Quote expired
+              {turn === 'REQUESTER'
+                ? ' — reject it to clear it, or select another bid.'
+                : ' — waiting on the provider, or select another bid.'}
+            </p>
+          )}
+
+          {isHired && (
+            <p className="bb-turn-note is-hired">
+              ✓ Provisional agreement — {type === 'INSPECTION_QUOTE' ? 'inspector' : 'transporter'} selected;
+              payment is still required to commit.
+            </p>
+          )}
         </div>
 
-        <div className="bid-card-price-block">
-          <span className="bid-card-price">{money(displayAmount)}</span>
-          <span className="bid-card-currency"> ETB</span>
-          {isSelected && (
-            <div style={{ textAlign: 'right', marginTop: 3 }}>
-              <span className="bid-card-verified" style={{ fontSize: 10 }}>Selected</span>
-            </div>
-          )}
+        <div className="bb-row-side">
+          <span className="bb-price">
+            {money(displayAmount)} <small>ETB</small>
+          </span>
+          <span className={`bb-chip bb-chip--${chip.tone}`}>{chip.label}</span>
         </div>
       </div>
 
-      {/* Optional pitch message */}
-      {quote.message && <p className="bid-card-message">{quote.message}</p>}
-
-      {/* Expired notice — nothing can be accepted or countered on a timed-out quote */}
-      {expired && (
-        <div className="bid-card-status-bar bid-card-status-bar--rejected">
-          Quote expired{turn === 'REQUESTER' ? ' — reject it to clear it, or select another bid' : ' — waiting on the provider, or select another bid'}
-        </div>
-      )}
-
-      {/* Negotiation state bar */}
-      {(isSelected || isNeg) && (
-        <div className={`bid-card-neg-bar${myTurn ? ' bid-card-neg-bar--mine' : ''}`}>
-          {isSelected && myTurn && '⚡ You selected this bid — accept, counter, or reject below'}
-          {isNeg && myTurn && `⚡ Provider countered · last offer: ${money(quote.counterAmount)} ETB — your turn`}
-          {isNeg && waiting && `⏳ You offered ${money(quote.counterAmount)} ETB — waiting for provider`}
-        </div>
-      )}
-
-      {/* Hired */}
-      {isHired && (
-        <div className="bid-card-status-bar bid-card-status-bar--hired">
-          ✓ Provisional agreement — {type === 'INSPECTION_QUOTE' ? 'inspector' : 'transporter'} selected; payment is still required to commit
-        </div>
-      )}
-
-      {/* Rejected / expired */}
-      {isDone && (
-        <div className="bid-card-status-bar bid-card-status-bar--rejected">
-          {quote.status === 'EXPIRED' ? 'Quote expired' : quote.status === 'WITHDRAWN' ? 'Released' : 'Not selected'}
-        </div>
-      )}
-
-      {/* ---- CTAs ---- */}
+      {/* ── CTAs ─────────────────────────────────────────── */}
       {isActive && !disabled && (
-        <div className="bid-card-actions">
-
-          {/* COMPETITION PHASE — PENDING: only action is SELECT */}
+        <div className="bb-actions">
           {isPending && !expired && (
             <button
               type="button"
-              className="btn btn-outline btn-sm"
+              className="bb-btn bb-btn-primary"
               disabled={!!busy}
               onClick={() => handle('SELECT')}
             >
@@ -190,25 +170,22 @@ function BidCard({ quote, type, onRespond, disabled }) {
             </button>
           )}
 
-          {/* Expired quote on the requester's side: the only thing left is to clear it */}
           {expired && turn === 'REQUESTER' && (
             <button
               type="button"
-              className="btn btn-light btn-sm"
+              className="bb-btn bb-btn-light"
               disabled={!!busy}
               onClick={() => handle('REJECT')}
-              style={{ marginLeft: 'auto' }}
             >
               {busy === 'REJECT' ? 'Rejecting…' : 'Reject'}
             </button>
           )}
 
-          {/* NEGOTIATION PHASE — SELECTED or COUNTERED (my turn): ACCEPT + Counter + Reject */}
           {myTurn && (
             <>
               <button
                 type="button"
-                className="btn btn-primary btn-sm"
+                className="bb-btn bb-btn-primary"
                 disabled={!!busy}
                 onClick={() => handle('ACCEPT')}
               >
@@ -222,19 +199,21 @@ function BidCard({ quote, type, onRespond, disabled }) {
               {!showCounter ? (
                 <button
                   type="button"
-                  className="btn btn-outline btn-sm"
+                  className="bb-btn bb-btn-outline"
                   disabled={!!busy}
                   onClick={() => setShowCounter(true)}
                 >
-                  {isNeg ? 'Counter again' : (type === 'INSPECTION_QUOTE' ? 'Counter inspector' : 'Negotiate price')}
+                  {isNeg
+                    ? 'Counter again'
+                    : (type === 'INSPECTION_QUOTE' ? 'Counter inspector' : 'Negotiate price')}
                 </button>
               ) : (
-                <div className="bid-card-counter-row">
+                <>
                   <input
                     type="number"
                     min="1"
                     step="0.01"
-                    className="bid-card-counter-input"
+                    className="bb-counter-input"
                     placeholder="Your offer (ETB)"
                     value={counterAmount}
                     onChange={(e) => setCounterAmount(e.target.value)}
@@ -243,7 +222,7 @@ function BidCard({ quote, type, onRespond, disabled }) {
                   />
                   <button
                     type="button"
-                    className="btn btn-primary btn-sm"
+                    className="bb-btn bb-btn-primary"
                     disabled={!counterAmount || !!busy}
                     onClick={() => handle('COUNTER')}
                   >
@@ -251,20 +230,19 @@ function BidCard({ quote, type, onRespond, disabled }) {
                   </button>
                   <button
                     type="button"
-                    className="btn btn-light btn-sm"
+                    className="bb-btn bb-btn-light"
                     onClick={() => { setShowCounter(false); setCounterAmount(''); }}
                   >
                     Cancel
                   </button>
-                </div>
+                </>
               )}
 
               <button
                 type="button"
-                className="btn btn-light btn-sm"
+                className="bb-btn bb-btn-light bb-btn-spacer"
                 disabled={!!busy}
                 onClick={() => handle('REJECT')}
-                style={{ marginLeft: 'auto' }}
               >
                 {busy === 'REJECT' ? 'Rejecting…' : 'Reject'}
               </button>
@@ -272,7 +250,7 @@ function BidCard({ quote, type, onRespond, disabled }) {
           )}
         </div>
       )}
-    </div>
+    </li>
   );
 }
 
@@ -282,12 +260,10 @@ export default function BidBoard({ quotes, type, requestId, orderLink, onRespond
 
   if (!Array.isArray(quotes) || quotes.length === 0) return null;
 
-  const active   = quotes.filter((q) => ['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status));
+  const active = quotes.filter((q) =>
+    ['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status)
+  );
 
-  // Within each provider's counter-chain keep only the leaf (most recent).
-  // The parent lookup MUST cover every status: if a rejected/accepted leaf is
-  // left out, its COUNTERED parent looks like a live offer again and the
-  // requester can "act" on a negotiation that already ended.
   const superseded = supersededIds(quotes);
   const leafActive = active.filter((q) => !superseded.has(q.id));
   const resolved   = quotes.filter(
@@ -296,8 +272,8 @@ export default function BidBoard({ quotes, type, requestId, orderLink, onRespond
 
   const sorted = [...leafActive].sort((a, b) => {
     if (sortBy === 'price') return (a.amount || 0) - (b.amount || 0);
-    const na = (a.inspector || a.truckOwner || {}).name || '';
-    const nb = (b.inspector || b.truckOwner || {}).name || '';
+    const na = providerOf(a).name || '';
+    const nb = providerOf(b).name || '';
     return na.localeCompare(nb);
   });
 
@@ -305,43 +281,57 @@ export default function BidBoard({ quotes, type, requestId, orderLink, onRespond
     (q) => q.status === 'SELECTED' || (q.status === 'COUNTERED' && quoteTurn(q) === 'REQUESTER'),
   ).length;
 
+  const providerLabel = type === 'INSPECTION_QUOTE' ? 'inspectors' : 'truck owners';
+
   return (
-    <div className="bid-board">
-      {/* Header */}
-      <div className="bid-board-header">
-        <div className="bid-board-summary">
-          <strong>
+    <div className="bb-board">
+
+      {/* ── Section header ─────────────────────────────── */}
+      <div className="bb-board-head">
+        <div className="bb-board-head-main">
+          <h3 className="bb-board-title">Active bids</h3>
+          <p className="bb-board-sub">
             {leafActive.length} active bid{leafActive.length === 1 ? '' : 's'}
-          </strong>
-          {myTurnCount > 0 && (
-            <span className="bid-board-turn-badge">{myTurnCount} awaiting your response</span>
+            {myTurnCount > 0 && ` · ${myTurnCount} awaiting your response`}
+          </p>
+        </div>
+
+        <div className="bb-board-head-side">
+          {leafActive.length > 1 && (
+            <div className="bb-sort">
+              <span className="bb-sort-label">Sort</span>
+              <button
+                type="button"
+                className={`bb-sort-btn${sortBy === 'price' ? ' is-active' : ''}`}
+                onClick={() => setSortBy('price')}
+              >
+                Price ↑
+              </button>
+              <button
+                type="button"
+                className={`bb-sort-btn${sortBy === 'name' ? ' is-active' : ''}`}
+                onClick={() => setSortBy('name')}
+              >
+                Name
+              </button>
+            </div>
           )}
           {orderLink && (
-            <Link className="bid-board-order-link" to={orderLink}>View order →</Link>
+            <Link className="bb-board-link" to={orderLink}>View order →</Link>
           )}
         </div>
-        {leafActive.length > 1 && (
-          <div className="bid-board-sort">
-            <span>Sort:</span>
-            <button type="button" className={`bid-sort-btn${sortBy === 'price' ? ' active' : ''}`}
-              onClick={() => setSortBy('price')}>Price ↑</button>
-            <button type="button" className={`bid-sort-btn${sortBy === 'name' ? ' active' : ''}`}
-              onClick={() => setSortBy('name')}>Name</button>
-          </div>
-        )}
       </div>
 
-      {/* Active bids */}
+      {/* ── Active rows ────────────────────────────────── */}
       {sorted.length === 0 ? (
-        <div className="bid-board-empty">
-          No bids yet. Registered{' '}
-          {type === 'INSPECTION_QUOTE' ? 'inspectors' : 'truck owners'}{' '}
-          on the platform can view this request and submit a quote.
-        </div>
+        <p className="bb-empty">
+          No bids yet. Registered {providerLabel} on the platform can view this
+          request and submit a quote.
+        </p>
       ) : (
-        <div className="bid-board-list">
+        <ul className="bb-list">
           {sorted.map((q) => (
-            <BidCard
+            <BidRow
               key={q.id}
               quote={q}
               type={type}
@@ -350,18 +340,26 @@ export default function BidBoard({ quotes, type, requestId, orderLink, onRespond
               disabled={disabled}
             />
           ))}
-        </div>
+        </ul>
       )}
 
-      {/* Resolved bids */}
+      {/* ── Previous bids ──────────────────────────────── */}
       {resolved.length > 0 && (
-        <details className="bid-board-resolved">
-          <summary>Previous bids ({resolved.length}) — hired or not selected</summary>
-          <div className="bid-board-list bid-board-list--resolved">
+        <details className="bb-previous">
+          <summary className="bb-previous-summary">
+            Previous bids ({resolved.length}) — hired or not selected
+          </summary>
+          <ul className="bb-list bb-list--muted">
             {resolved.map((q) => (
-              <BidCard key={q.id} quote={q} type={type} onRespond={onRespond} disabled={true} />
+              <BidRow
+                key={q.id}
+                quote={q}
+                type={type}
+                onRespond={onRespond}
+                disabled={true}
+              />
             ))}
-          </div>
+          </ul>
         </details>
       )}
     </div>
