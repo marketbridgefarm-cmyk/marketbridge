@@ -1,244 +1,174 @@
-/* ============================================================
-   MarketBridge — Order detail
-   pages/order-details/OrderDetail.css
+/* ==========================================================================
+   OrderDetail.css  →  src/pages/order-details/OrderDetail.css
+   --------------------------------------------------------------------------
+   Responsive layout (mobile-first):
+     · phones   (default)  → 1 card per row
+     · tablets  (≥ 640px)  → 2 cards per row
+     · desktops (≥ 1000px) → 3 cards per row
+   .od-span-all always spans every column (Overview, Transport, Payments,
+   Payout, Timeline, Messages).
+   Everything is scoped under .order-detail-page so it can't leak.
+   ========================================================================== */
 
-   Class names match OrderDetail.jsx:
-     · od-card-head / od-card-section  — the card skeleton
-     · od-detail-facts                 — flat key/value rows
-     · od-status-pill                  — pills with od-tone-*
-     · od-eyebrow, od-card-side-*      — head furniture
-     · od-card-grid                    — responsive transport grid
-     · od-page-grid / od-span-all      — page-level responsive grid
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Manrope:wght@600;700;800&display=swap');
 
-   No boxes inside cards. Only the outer .card has a border.
-   Buttons are white with a green outline — no green fills.
-
-   Layout rules:
-     · Card head, eyebrow, title, and section headings sit
-       flush left.
-     · Section bodies, the card subtitle (description), and any
-       direct card content are nudged right by one uniform
-       gutter (--d-indent).
-     · Every card carries a slightly wider right padding so
-       right-aligned values (amounts, statuses, dates) have
-       more room from the card edge.
-     · The page flows into a responsive grid:
-         phone   → 1 column
-         tablet  → 2 columns
-         desktop → 3 columns
-       Wide cards use .od-span-all to cover every column.
-   ============================================================ */
-
+/* ---------- 1. Tokens ---------- */
 .order-detail-page {
-  --d-accent:      #1e9e5a;
-  --d-accent-2:    #0f7a44;
-  --d-accent-ink:  #12734a;
-  --d-accent-soft: #ecfdf3;
-  --d-accent-line: #c6eccf;
+  --od-ink: #0d1b2a;
+  --od-text: #2c3a4a;
+  --od-muted: #64748b;
+  --od-line: #e5e9ef;
+  --od-line-strong: #d3dae3;
+  --od-surface: #ffffff;
+  --od-page: #f4f6f9;
+  --od-soft: #f8fafc;
 
-  --d-ink:         #0d1b2a;
-  --d-ink-soft:    #2c3a4a;
-  --d-muted:       #64748b;
-  --d-muted-2:     #94a3b8;
+  --od-brand: #0f7a44;
+  --od-brand-dark: #0b5f35;
+  --od-brand-soft: #e7f5ed;
 
-  --d-line:        #e5e9ef;
-  --d-line-soft:   #eef1f5;
+  --od-good: #0f7a44;
+  --od-good-bg: #e7f5ed;
+  --od-bad: #b42318;
+  --od-bad-bg: #fef0ee;
+  --od-bad-line: #fecaca;
+  --od-wait: #9a6700;
+  --od-wait-bg: #fff6df;
+  --od-info: #1d5fb4;
+  --od-info-bg: #e8f0fb;
+  --od-neutral: #475569;
+  --od-neutral-bg: #eef1f5;
 
-  --d-gold:        #a86f10;
-  --d-gold-soft:   #fdf6e7;
-  --d-gold-line:   #f4e0b6;
+  --od-radius-lg: 16px;
+  --od-radius: 12px;
+  --od-radius-sm: 8px;
+  --od-shadow: 0 1px 2px rgba(13, 27, 42, 0.05), 0 4px 14px rgba(13, 27, 42, 0.04);
 
-  --d-danger:      #b42318;
-  --d-danger-soft: #fef2f2;
-  --d-danger-line: #fecaca;
+  --od-gap: 14px;
+  --od-pad: 18px;
 
-  --d-info:        #1e5fa8;
-  --d-info-soft:   #eff5fd;
-  --d-info-line:   #cddff5;
+  --od-font-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --od-font-head: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  --d-radius:      20px;
-  --d-radius-sm:   12px;
+  font-family: var(--od-font-body);
+  color: var(--od-text);
+  background: var(--od-page);
+  min-height: 100vh;
+  padding: 14px 0 88px;
+  -webkit-text-size-adjust: 100%;
+}
 
-  --d-shadow:      0 1px 2px rgba(15, 30, 45, .04),
-                   0 8px 24px rgba(15, 30, 45, .05);
-  --d-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
-  --d-ring:        0 0 0 3px rgba(30, 158, 90, .18);
-  --d-ease:        cubic-bezier(.2, .7, .3, 1);
-
-  /* One gutter value used everywhere below. */
-  --d-indent:      24px;
-
-  min-height: calc(100vh - 72px);
-  color: var(--d-ink);
-  font-family: var(--mb-font-body, 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif);
-  -webkit-font-smoothing: antialiased;
-
-  background:
-    radial-gradient(circle at 88% 0%,  rgba(230, 245, 236, .85), transparent 40%),
-    radial-gradient(circle at 5% 100%, rgba(231, 235, 245, .8),  transparent 40%),
-    linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
-  background-attachment: fixed;
+.order-detail-page *,
+.order-detail-page *::before,
+.order-detail-page *::after {
+  box-sizing: border-box;
 }
 
 .order-detail-page .container-narrow {
-  max-width: 960px;
+  width: 100%;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 40px 24px 80px;
+  padding-inline: max(14px, env(safe-area-inset-left)) max(14px, env(safe-area-inset-right));
 }
 
-/* ── Page bar (Back / Refresh) ─────────────────────────── */
+.order-detail-page p { margin: 0 0 8px; line-height: 1.6; }
+.order-detail-page p:last-child { margin-bottom: 0; }
+.order-detail-page strong { color: var(--od-ink); font-weight: 700; }
+.order-detail-page .muted { color: var(--od-muted); }
+.order-detail-page .small { font-size: 12.5px; }
+.order-detail-page .optional { color: var(--od-muted); font-weight: 400; }
 
+/* ---------- 2. Page bar & grid ---------- */
 .order-detail-page .row-between {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
 }
 
-.order-detail-page .page-bar { margin-bottom: 16px; }
+.order-detail-page .page-bar { margin-bottom: 14px; }
 
 .order-detail-page .back-link {
-  appearance: none;
-  border: none;
-  background: transparent;
-  padding: 8px 6px;
-  color: var(--d-accent-2);
-  font: 700 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .01em;
-  cursor: pointer;
-  border-radius: 8px;
-  transition: color .15s var(--d-ease), background .15s var(--d-ease);
-}
-
-.order-detail-page .back-link:hover {
-  color: var(--d-accent);
-  background: var(--d-accent-soft);
-}
-
-.order-detail-page .back-link:focus-visible {
-  outline: none;
-  box-shadow: var(--d-ring);
-}
-
-/* ── Buttons — white bg, green outline ─────────────────── */
-
-.order-detail-page .btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: 10px;
-  border: 1px solid var(--d-line);
-  background: #fff;
-  color: var(--d-ink);
-  font: 700 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .01em;
-  text-decoration: none;
+  min-height: 40px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font: 600 14px var(--od-font-body);
+  color: var(--od-muted);
   cursor: pointer;
-  transition: border-color .15s var(--d-ease),
-              background .15s var(--d-ease),
-              color .15s var(--d-ease),
-              box-shadow .15s var(--d-ease);
+}
+.order-detail-page .back-link:hover { color: var(--od-ink); }
+
+.order-detail-page .od-page-grid,
+.order-detail-page .od-card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--od-gap);
+  align-items: start;
 }
 
-.order-detail-page .btn:hover:not(:disabled) {
-  border-color: var(--d-accent);
-  background: var(--d-accent-soft);
-  color: var(--d-accent-2);
-}
+.order-detail-page .od-span-all { grid-column: 1 / -1; min-width: 0; }
 
-.order-detail-page .btn:focus-visible { outline: none; box-shadow: var(--d-ring); }
-.order-detail-page .btn:disabled { opacity: .55; cursor: not-allowed; }
-
-.order-detail-page .btn-sm { height: 34px; padding: 0 12px; font-size: 12.5px; }
-.order-detail-page .btn-block { width: 100%; }
-
-.order-detail-page .btn-primary {
-  background: #fff;
-  color: var(--d-accent-2);
-  border-color: var(--d-accent-line);
-}
-
-.order-detail-page .btn-primary:hover:not(:disabled) {
-  background: var(--d-accent-soft);
-  color: var(--d-accent-ink);
-  border-color: var(--d-accent);
-  box-shadow: 0 1px 2px rgba(30, 158, 90, .12);
-}
-
-.order-detail-page .btn-outline {
-  background: #fff;
-  color: var(--d-accent-2);
-  border-color: var(--d-line);
-}
-
-.order-detail-page .btn-outline:hover:not(:disabled) {
-  border-color: var(--d-accent);
-  background: var(--d-accent-soft);
-  color: var(--d-accent-2);
-}
-
-.order-detail-page .btn-light {
-  background: var(--d-line-soft);
-  border-color: var(--d-line);
-  color: var(--d-ink-soft);
-}
-
-.order-detail-page .btn-light:hover:not(:disabled) {
-  background: #fff;
-  border-color: var(--d-accent);
-  color: var(--d-accent-2);
-}
-
-/* ── Card ──────────────────────────────────────────────
-   Right padding is wider than the left so right-aligned
-   values (amounts, statuses, dates) have more room from the
-   card edge. */
-
+/* ---------- 3. Card ---------- */
 .order-detail-page .card {
-  padding: 24px 36px 28px 26px;
-  margin: 0 0 20px;
-  border: 1px solid var(--d-line);
-  border-radius: var(--d-radius);
-  background: #fff;
-  box-shadow: var(--d-shadow);
+  min-width: 0;
+  background: var(--od-surface);
+  border: 1px solid var(--od-line);
+  border-radius: var(--od-radius-lg);
+  box-shadow: var(--od-shadow);
+  padding: var(--od-pad);
+  scroll-margin-top: 16px;
 }
 
-.order-detail-page .card.loading {
-  padding: 40px 24px;
-  text-align: center;
-  color: var(--d-muted);
-  font-size: 14.5px;
-}
+.order-detail-page .card.loading { text-align: center; padding: 40px 18px; color: var(--od-muted); }
 
-.order-detail-page .card.loading > p { margin: 0; }
-
-.order-detail-page .od-card-warning {
-  background: linear-gradient(180deg, var(--d-gold-soft) 0%, #fff 100%);
-  border-color: var(--d-gold-line);
-}
-.order-detail-page .od-card-warning .od-card-head { border-bottom-color: var(--d-gold-line); }
-.order-detail-page .od-card-warning .od-card-title { color: #7c4f0b; }
-
-.order-detail-page .od-card-accent { border-color: var(--d-accent-line); }
-.order-detail-page .od-card-accent .od-card-head { border-bottom-color: var(--d-accent-line); }
-
-/* ── Card head ─────────────────────────────────────────── */
+.order-detail-page .od-card-warning { border-color: #f1d9a0; background: #fffdf6; }
+.order-detail-page .od-card-accent { border-color: #bfe3cd; background: var(--od-brand-soft); }
+.order-detail-page .od-card-overview { border-top: 3px solid var(--od-brand); }
 
 .order-detail-page .od-card-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  column-gap: 16px;
-  padding: 0 0 16px;
-  margin: 0 0 20px;
-  border-bottom: 1px solid var(--d-line);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--od-line);
 }
 
-.order-detail-page .od-card-head-main {
+.order-detail-page .od-card-head-main { flex: 1 1 200px; min-width: 0; }
+
+.order-detail-page .od-eyebrow {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--od-neutral-bg);
+  font: 700 11px var(--od-font-head);
+  letter-spacing: 0.04em;
+  color: var(--od-neutral);
+}
+.order-detail-page .od-eyebrow.is-selling { background: var(--od-info-bg); color: var(--od-info); }
+
+.order-detail-page .od-card-title {
+  margin: 0;
+  font: 800 clamp(18px, 4.6vw, 22px) / 1.25 var(--od-font-head);
+  letter-spacing: -0.3px;
+  color: var(--od-ink);
+  overflow-wrap: anywhere;
+}
+
+.order-detail-page .od-card-subtitle {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--od-muted);
+}
+
+.order-detail-page .od-card-head-side {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -246,1282 +176,562 @@
   min-width: 0;
 }
 
-.order-detail-page .od-card-head-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: flex-start;
-  gap: 6px;
-  min-width: 0;
-  max-width: 200px;
-  text-align: right;
+.order-detail-page .od-card-side-label {
+  font: 700 10.5px var(--od-font-head);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--od-muted);
 }
 
-.order-detail-page .od-card-title {
-  margin: 0;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 19px;
-  font-weight: 800;
-  letter-spacing: -.4px;
-  line-height: 1.22;
-  color: var(--d-ink);
+.order-detail-page .od-card-side-value {
+  display: block;
+  font: 700 14px var(--od-font-head);
+  color: var(--od-ink);
   overflow-wrap: anywhere;
 }
-
-.order-detail-page .od-card-subtitle {
-  margin: 2px 0 0 var(--d-indent);
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--d-muted);
-  max-width: 60ch;
-}
-
-.order-detail-page .od-card-created {
-  margin: 14px 0 0;
-  padding: 14px 0 0;
-  border-top: 1px solid var(--d-line-soft);
-  font-size: 12px;
-  color: var(--d-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-/* ── Eyebrow ───────────────────────────────────────────── */
-
-.order-detail-page .od-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  color: var(--d-accent-ink);
-  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .16em;
-  text-transform: uppercase;
-}
-
-.order-detail-page .od-eyebrow::before {
-  content: '';
-  flex: 0 0 18px;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
-}
-
-.order-detail-page .od-eyebrow.is-selling { color: var(--d-info); }
-
-/* ── Section ───────────────────────────────────────────── */
-
-.order-detail-page .od-card-section { margin: 0 0 22px; }
-.order-detail-page .od-card-section:last-child { margin-bottom: 0; }
-
-.order-detail-page .od-card-section-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 0 0 10px;
-  margin: 0 0 16px;
-  border-bottom: 1px solid var(--d-line-soft);
-}
-
-.order-detail-page .od-card-section-title {
-  margin: 0;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -.15px;
-  line-height: 1.3;
-  color: var(--d-accent-2);
-}
-
-.order-detail-page .od-card-section-meta {
-  font: 700 11.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--d-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.order-detail-page .od-card-section-meta.is-strong { color: var(--d-ink); font-weight: 800; }
-
-/* ── Card-side party ───────────────────────────────────── */
 
 .order-detail-page .od-card-side-party {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 0;
 }
-
-.order-detail-page .od-card-side-party > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  align-items: flex-end;
-  min-width: 0;
-  text-align: right;
-}
-
-.order-detail-page .od-card-side-label {
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--d-accent-2);
-}
-
-.order-detail-page .od-card-side-value {
-  font: 700 14px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--d-ink);
-  letter-spacing: -.1px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-/* ── Party avatar ──────────────────────────────────────── */
+.order-detail-page .od-card-side-party > div { display: flex; flex-direction: column; min-width: 0; }
 
 .order-detail-page .od-party-avatar {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  border-radius: 12px;
-  background: var(--d-accent-soft);
-  color: var(--d-accent-2);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-weight: 800;
-  font-size: 14px;
-  letter-spacing: -.2px;
-  border: none;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--od-ink);
+  color: #fff;
+  font: 800 13px var(--od-font-head);
 }
 
-/* ── Status pills ──────────────────────────────────────── */
+/* ---------- 4. Sections inside cards ---------- */
+.order-detail-page .od-card-section { padding: 14px 0; border-top: 1px solid var(--od-line); }
+.order-detail-page .od-card-head + .od-card-section,
+.order-detail-page .od-card-head + .od-card-section:first-of-type { border-top: 0; padding-top: 0; }
+.order-detail-page .od-card-section:last-child { padding-bottom: 0; }
 
+.order-detail-page .od-card-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 10px;
+}
+
+.order-detail-page .od-card-section-title {
+  margin: 0;
+  font: 700 14px var(--od-font-head);
+  color: var(--od-ink);
+}
+
+.order-detail-page .od-card-section-meta {
+  font: 600 12px var(--od-font-body);
+  color: var(--od-muted);
+  font-variant-numeric: tabular-nums;
+}
+.order-detail-page .od-card-section-meta.is-strong {
+  font: 800 15px var(--od-font-head);
+  color: var(--od-ink);
+}
+
+.order-detail-page .od-card-created { margin-top: 12px; font-size: 12.5px; color: var(--od-muted); }
+
+/* ---------- 5. Facts (label / value pairs) ---------- */
+.order-detail-page .od-detail-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 16px;
+}
+.order-detail-page .od-detail-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.order-detail-page .od-detail-facts span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--od-muted);
+}
+.order-detail-page .od-detail-facts strong {
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.order-detail-page .od-finding-flag {
+  display: inline-block;
+  padding: 4px 9px;
+  border-radius: var(--od-radius-sm);
+  background: var(--od-bad-bg);
+  color: var(--od-bad);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.order-detail-page .od-party-you {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--od-brand-soft);
+  color: var(--od-brand-dark);
+  font: 700 10.5px var(--od-font-head);
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+/* ---------- 6. Status pills & progress ---------- */
 .order-detail-page .od-status-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 0 0 16px;
+  margin-bottom: 14px;
 }
 
 .order-detail-page .od-status-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 24px;
-  padding: 0 10px;
+  padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid transparent;
-  background: var(--d-line-soft);
-  color: var(--d-ink-soft);
-  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .04em;
-  text-transform: uppercase;
+  font: 700 12px / 1.3 var(--od-font-body);
   white-space: nowrap;
+  background: var(--od-neutral-bg);
+  color: var(--od-neutral);
 }
-
 .order-detail-page .od-status-pill-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: currentColor;
-  flex: 0 0 auto;
-  opacity: .85;
 }
-
-.order-detail-page .od-status-pill.od-tone-good {
-  background: var(--d-accent-soft);
-  border-color: var(--d-accent-line);
-  color: var(--d-accent-ink);
-}
-.order-detail-page .od-status-pill.od-tone-wait {
-  background: var(--d-gold-soft);
-  border-color: var(--d-gold-line);
-  color: var(--d-gold);
-}
-.order-detail-page .od-status-pill.od-tone-bad {
-  background: var(--d-danger-soft);
-  border-color: var(--d-danger-line);
-  color: var(--d-danger);
-}
-.order-detail-page .od-status-pill.od-tone-info {
-  background: var(--d-info-soft);
-  border-color: var(--d-info-line);
-  color: var(--d-info);
-}
-.order-detail-page .od-status-pill.od-tone-neutral {
-  background: var(--d-line-soft);
-  border-color: var(--d-line);
-  color: var(--d-muted);
-}
+.order-detail-page .od-tone-good { background: var(--od-good-bg); color: var(--od-good); }
+.order-detail-page .od-tone-bad { background: var(--od-bad-bg); color: var(--od-bad); }
+.order-detail-page .od-tone-wait { background: var(--od-wait-bg); color: var(--od-wait); }
+.order-detail-page .od-tone-info { background: var(--od-info-bg); color: var(--od-info); }
+.order-detail-page .od-tone-neutral { background: var(--od-neutral-bg); color: var(--od-neutral); }
 
 .order-detail-page .badge {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 9px;
+  display: inline-block;
+  padding: 2px 8px;
   border-radius: 999px;
-  background: var(--d-line-soft);
-  border: 1px solid var(--d-line);
-  color: var(--d-ink-soft);
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  white-space: nowrap;
+  background: var(--od-neutral-bg);
+  color: var(--od-neutral);
+  font-size: 11.5px;
+  font-weight: 700;
 }
-
-/* ── Text helpers ──────────────────────────────────────── */
-
-.order-detail-page .muted {
-  color: var(--d-muted);
-  font-size: 13.5px;
-  line-height: 1.6;
-  margin: 0 0 10px;
-}
-.order-detail-page .muted:last-child { margin-bottom: 0; }
-.order-detail-page .muted.small,
-.order-detail-page .small { font-size: 12.5px; line-height: 1.5; margin: 4px 0; }
-
-/* ── Facts (flat key/value rows) ───────────────────────── */
-
-.order-detail-page .od-detail-facts {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 0;
-  margin: 0;
-}
-
-.order-detail-page .od-detail-facts > div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  min-width: 0;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--d-line-soft);
-}
-
-.order-detail-page .od-detail-facts > div:last-child { border-bottom: none; }
-
-.order-detail-page .od-detail-facts > div > span {
-  flex: 0 0 auto;
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--d-muted);
-}
-
-.order-detail-page .od-detail-facts > div > strong {
-  flex: 1 1 auto;
-  min-width: 0;
-  text-align: right;
-  font: 700 14px/1.35 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--d-ink);
-  letter-spacing: -.1px;
-  overflow-wrap: anywhere;
-}
-
-.order-detail-page .od-finding-flag {
-  font: 700 14px/1.35 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--d-ink);
-  letter-spacing: -.1px;
-  overflow-wrap: anywhere;
-}
-
-/* ── You tag ───────────────────────────────────────────── */
-
-.order-detail-page .od-party-you {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 8px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: var(--d-accent-soft);
-  border: 1px solid var(--d-accent-line);
-  color: var(--d-accent-ink);
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-
-.order-detail-page .od-party-you-inline {
-  margin-left: 8px;
-  height: 18px;
-  padding: 0 6px;
-  font-size: 9.5px;
-}
-
-/* ── Overview card ─────────────────────────────────────── */
-
-.order-detail-page .od-card-overview .od-card-title { font-size: 22px; }
-
-/* ── Order progress ────────────────────────────────────── */
 
 .order-detail-page .order-progress {
-  list-style: none;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  width: 100%;
-  margin: 4px 0 0;
-  padding: 0 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-
 .order-detail-page .order-progress-step {
   position: relative;
-  width: 100%;
-  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   text-align: center;
 }
-
 .order-detail-page .order-progress-step::before {
   content: '';
   position: absolute;
-  top: 7px;
+  top: 6px;
   right: 50%;
-  left: -50%;
+  width: 100%;
   height: 2px;
-  background: var(--d-line);
-  z-index: 0;
+  background: var(--od-line-strong);
 }
-
 .order-detail-page .order-progress-step:first-child::before { display: none; }
 .order-detail-page .order-progress-step.is-done::before,
-.order-detail-page .order-progress-step.is-current::before { background: var(--d-accent); }
+.order-detail-page .order-progress-step.is-current::before { background: var(--od-brand); }
 
 .order-detail-page .order-progress-dot {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #fff;
-  border: 2px solid var(--d-line);
   position: relative;
   z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background .2s var(--d-ease), border-color .2s var(--d-ease), box-shadow .2s var(--d-ease);
-}
-
-.order-detail-page .order-progress-step.is-done .order-progress-dot {
-  background: var(--d-accent);
-  border-color: var(--d-accent);
-}
-
-.order-detail-page .order-progress-step.is-done .order-progress-dot::after {
-  content: '';
-  width: 9px;
-  height: 9px;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M3 8.5l3 3 7-7' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>");
-  background-size: contain;
-  background-repeat: no-repeat;
-  background-position: center;
-}
-
-.order-detail-page .order-progress-step.is-current .order-progress-dot {
-  background: #fff;
-  border-color: var(--d-accent);
-  box-shadow: 0 0 0 4px rgba(30, 158, 90, .16);
-}
-
-.order-detail-page .order-progress-step.is-current .order-progress-dot::after {
-  content: '';
-  width: 6px;
-  height: 6px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: var(--d-accent);
+  background: var(--od-surface);
+  border: 2px solid var(--od-line-strong);
+}
+.order-detail-page .is-done .order-progress-dot { background: var(--od-brand); border-color: var(--od-brand); }
+.order-detail-page .is-current .order-progress-dot {
+  border-color: var(--od-brand);
+  box-shadow: 0 0 0 4px var(--od-brand-soft);
 }
 
 .order-detail-page .order-progress-label {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--d-muted-2);
-  letter-spacing: .01em;
-  line-height: 1.3;
-  max-width: 90px;
-}
-
-.order-detail-page .order-progress-step.is-done .order-progress-label { color: var(--d-ink-soft); }
-.order-detail-page .order-progress-step.is-current .order-progress-label { color: var(--d-accent-2); font-weight: 700; }
-
-/* ── Payout table ──────────────────────────────────────── */
-
-.order-detail-page .payout-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0;
-}
-
-.order-detail-page .payout-table thead th {
-  padding: 0 0 12px;
-  text-align: left;
-  border-bottom: 1px solid var(--d-line);
-  color: var(--d-muted);
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .14em;
-  text-transform: uppercase;
-}
-
-.order-detail-page .payout-table thead th.payout-amount-col,
-.order-detail-page .payout-table thead th.payout-status-col { text-align: right; }
-
-.order-detail-page .payout-table tbody th,
-.order-detail-page .payout-table tbody td {
-  padding: 14px 0;
-  text-align: left;
-  vertical-align: middle;
-  border-bottom: 1px solid var(--d-line-soft);
-}
-
-.order-detail-page .payout-table tbody tr:last-child th,
-.order-detail-page .payout-table tbody tr:last-child td { border-bottom: none; }
-
-.order-detail-page .payout-amount,
-.order-detail-page .payout-status { text-align: right; }
-
-.order-detail-page .payout-party-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.order-detail-page .payout-party-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-
-.order-detail-page .payout-party-role {
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--d-accent-2);
-}
-
-.order-detail-page .payout-party-name {
-  font: 700 13.5px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--d-ink);
-  letter-spacing: -.1px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 220px;
-}
-
-.order-detail-page .payout-party-note {
   font-size: 11.5px;
-  line-height: 1.4;
-  color: var(--d-muted);
+  font-weight: 600;
+  color: var(--od-muted);
 }
+.order-detail-page .is-done .order-progress-label,
+.order-detail-page .is-current .order-progress-label { color: var(--od-ink); }
 
-.order-detail-page .payout-amount {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -.2px;
-  color: var(--d-ink);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.order-detail-page .payout-currency {
-  margin-left: 6px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .1em;
-  color: var(--d-muted);
-}
-
-/* ── Payout countdown (flat — no box) ──────────────────── */
-
-.order-detail-page .payout-due {
-  display: flex;
+/* ---------- 7. Buttons & actions ---------- */
+.order-detail-page .btn {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-  padding: 14px 0 0 !important;
-  margin: 14px 0 0 !important;
-  border: none !important;
-  border-top: 1px solid var(--d-line) !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  background-image: none !important;
-  box-shadow: none !important;
-  color: var(--d-ink-soft);
-}
-
-.order-detail-page .payout-due.payout-due-done { color: var(--d-accent-2); }
-.order-detail-page .payout-due.payout-due-idle { color: var(--d-muted); }
-
-.order-detail-page .payout-due-when { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-
-.order-detail-page .payout-due-label {
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--d-muted);
-}
-
-.order-detail-page .payout-due-date {
-  font: 700 14px/1.2 var(--mb-font-head, Manrope, sans-serif);
-  color: inherit;
-  letter-spacing: -.2px;
-}
-
-.order-detail-page .payout-due-clock {
-  display: flex;
-  align-items: baseline;
+  justify-content: center;
   gap: 6px;
-  font-variant-numeric: tabular-nums;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--od-line-strong);
+  border-radius: var(--od-radius);
+  background: var(--od-surface);
+  color: var(--od-ink);
+  font: 700 14px / 1.2 var(--od-font-body);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
 }
+.order-detail-page .btn:hover:not(:disabled) { background: var(--od-soft); border-color: var(--od-muted); }
+.order-detail-page .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-.order-detail-page .payout-due-digits {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -.6px;
-  color: var(--d-ink);
-  line-height: 1;
-}
+.order-detail-page .btn-primary { background: var(--od-brand); border-color: var(--od-brand); color: #fff; }
+.order-detail-page .btn-primary:hover:not(:disabled) { background: var(--od-brand-dark); border-color: var(--od-brand-dark); }
 
-.order-detail-page .payout-due-done .payout-due-digits { color: var(--d-accent-2); }
-.order-detail-page .payout-due-digits-now { font-size: 15px; letter-spacing: -.2px; }
+.order-detail-page .btn-light { background: var(--od-neutral-bg); border-color: transparent; }
+.order-detail-page .btn-outline { background: transparent; border-color: var(--od-bad-line); color: var(--od-bad); }
+.order-detail-page .btn-outline:hover:not(:disabled) { background: var(--od-bad-bg); border-color: var(--od-bad); }
 
-.order-detail-page .payout-due-unit {
-  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--d-muted);
-}
-
-/* ── Dispute note ──────────────────────────────────────── */
-
-.order-detail-page .payout-dispute-note {
-  margin: 12px 0 0;
-  padding: 8px 0 8px 12px;
-  border-left: 3px solid var(--d-danger-line);
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--d-danger);
-}
-
-/* ── Footer notice (numbered) ──────────────────────────── */
-
-.order-detail-page .od-notice--footer {
-  padding: 14px 0 0;
-  margin: 16px 0 0;
-  border: none;
-  border-top: 1px solid var(--d-line-soft);
-  background: transparent;
-}
-
-.order-detail-page .od-notice-prefix {
-  display: block;
-  margin: 0 0 8px;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--d-accent-2);
-}
-
-.order-detail-page .od-notice-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  counter-reset: notice;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.order-detail-page .od-notice-list li {
-  position: relative;
-  padding-left: 24px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--d-ink-soft);
-}
-
-.order-detail-page .od-notice-list li::before {
-  counter-increment: notice;
-  content: counter(notice) ")";
-  position: absolute;
-  left: 0;
-  top: 0;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--d-accent-2);
-}
-
-/* ── Forms ─────────────────────────────────────────────── */
-
-.order-detail-page .form {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-}
-
-.order-detail-page .form label {
-  display: block;
-  margin: 12px 0 0;
-  font: 700 12.5px/1.35 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--d-ink-soft);
-}
-
-.order-detail-page .form label:first-child { margin-top: 0; }
-
-.order-detail-page .form .optional {
-  color: var(--d-muted);
-  font-weight: 500;
-}
-
-.order-detail-page .field {
-  display: block;
-  width: 100%;
-  padding: 10px 12px;
-  box-sizing: border-box;
-  border: 1px solid var(--d-line);
-  border-radius: 10px;
-  background: #fff;
-  color: var(--d-ink);
-  font: inherit;
-  font-size: 13.5px;
-  line-height: 1.5;
-  -webkit-appearance: none;
-  appearance: none;
-  transition: border-color .18s var(--d-ease), box-shadow .18s var(--d-ease);
-}
-
-.order-detail-page .field::placeholder { color: var(--d-muted-2); }
-
-.order-detail-page .field:focus {
-  outline: none;
-  border-color: var(--d-accent);
-  box-shadow: var(--d-ring);
-}
-
-.order-detail-page textarea.field { resize: vertical; min-height: 80px; }
-
-.order-detail-page .field-inline {
-  width: auto;
-  min-width: 110px;
-  padding: 8px 10px;
-  font-size: 12.5px;
-  border-radius: 8px;
-}
-
-.order-detail-page .form .btn { margin-top: 14px; align-self: flex-start; }
-
-.order-detail-page .od-field-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-  margin-top: 8px;
-}
-
-.order-detail-page .od-quote-actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  align-items: center;
-  margin-top: 8px;
-}
-
-/* ── Actions row ──────────────────────────────────────── */
+.order-detail-page .btn-sm { min-height: 38px; padding: 0 14px; font-size: 13px; border-radius: var(--od-radius-sm); }
+.order-detail-page .btn-block { display: flex; width: 100%; margin-top: 14px; }
 
 .order-detail-page .od-actions {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 10px;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
 }
+.order-detail-page .od-actions .btn { width: 100%; }
 
-/* ── Notice ───────────────────────────────────────────── */
+/* ---------- 8. Forms ---------- */
+.order-detail-page .form { display: flex; flex-direction: column; gap: 8px; }
+.order-detail-page .form label { font-size: 13px; font-weight: 700; color: var(--od-ink); margin-top: 4px; }
+.order-detail-page .form .btn { margin-top: 8px; }
 
+.order-detail-page .field {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--od-line-strong);
+  border-radius: var(--od-radius-sm);
+  background: var(--od-surface);
+  color: var(--od-ink);
+  font: 500 16px / 1.4 var(--od-font-body); /* 16px stops iOS zoom-on-focus */
+}
+.order-detail-page textarea.field { resize: vertical; min-height: 88px; }
+.order-detail-page .field::placeholder { color: #94a3b8; }
+.order-detail-page .field:disabled { background: var(--od-soft); }
+
+.order-detail-page .od-field-row { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+
+/* ---------- 9. Notices & alerts ---------- */
 .order-detail-page .od-notice {
-  padding: 4px 0 4px 16px;
-  margin: 16px 0;
-  border: none;
-  border-left: 3px solid var(--d-accent-line);
-  background: transparent;
-}
-
-.order-detail-page .od-notice:first-child { margin-top: 0; }
-.order-detail-page .od-notice:last-child { margin-bottom: 0; }
-
-.order-detail-page .od-notice > strong {
-  display: block;
-  font: 700 13.5px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--d-ink);
-  margin-bottom: 4px;
-}
-
-.order-detail-page .od-notice > p {
-  margin: 4px 0;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--d-ink-soft);
-}
-
-.order-detail-page .od-notice .btn { margin-top: 10px; }
-
-/* ── Alerts ───────────────────────────────────────────── */
-
-.order-detail-page .alert {
-  padding: 12px 16px;
-  margin: 14px 0;
-  border-radius: var(--d-radius-sm);
-  border: 1px solid var(--d-gold-line);
-  background: var(--d-gold-soft);
-  color: #7c4f0b;
-  font-size: 13.5px;
-  line-height: 1.55;
-}
-.order-detail-page .alert:first-child { margin-top: 0; }
-.order-detail-page .alert.error { border-color: var(--d-danger-line); background: var(--d-danger-soft); color: var(--d-danger); }
-.order-detail-page .alert.success { border-color: var(--d-accent-line); background: var(--d-accent-soft); color: var(--d-accent-ink); }
-
-/* ── Transporter (quote) row ──────────────────────────── */
-
-.order-detail-page .transporter {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 16px 0;
-  border-top: 1px solid var(--d-line-soft);
-}
-
-.order-detail-page .transporter:first-of-type { border-top: none; padding-top: 0; }
-
-.order-detail-page .transporter > div:first-child {
-  flex: 1 1 260px;
-  min-width: 0;
-}
-
-.order-detail-page .transporter > div:last-child {
-  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-  min-width: 0;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--od-line);
+  border-left: 3px solid var(--od-brand);
+  border-radius: var(--od-radius);
+  background: var(--od-soft);
 }
+.order-detail-page .od-notice > strong { font: 700 14px var(--od-font-head); }
+.order-detail-page .od-notice p { margin: 0; font-size: 13.5px; }
 
-.order-detail-page .transporter strong {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 14.5px;
-  font-weight: 800;
-  letter-spacing: -.2px;
-  color: var(--d-ink);
-}
-
-.order-detail-page .transporter p {
-  margin: 4px 0;
-  font-size: 13px;
+.order-detail-page .alert {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--od-line);
+  border-radius: var(--od-radius);
+  background: var(--od-soft);
+  font-size: 13.5px;
   line-height: 1.55;
-  color: var(--d-ink-soft);
 }
+.order-detail-page .alert.error { background: var(--od-bad-bg); border-color: var(--od-bad-line); color: var(--od-bad); }
+.order-detail-page .alert.success { background: var(--od-good-bg); border-color: #bfe3cd; color: var(--od-good); }
 
-.order-detail-page .transporter p.muted {
-  color: var(--d-muted);
-  font-size: 12.5px;
-}
-
-/* ── Inspection decision state ────────────────────────── */
-
+/* ---------- 10. Inspection decision ---------- */
 .order-detail-page .inspection-decision-state {
   display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 0 0;
-  margin: 16px 0 0;
-  border-top: 1px solid var(--d-line-soft);
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--od-radius);
 }
-
-.order-detail-page .inspection-decision-state:first-child {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-}
-
+.order-detail-page .inspection-decision-state.is-buy { background: var(--od-good-bg); }
+.order-detail-page .inspection-decision-state.is-cancel { background: var(--od-bad-bg); }
 .order-detail-page .inspection-decision-icon {
-  width: 38px;
-  height: 38px;
-  flex: 0 0 auto;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--d-line-soft);
-  border: 1px solid var(--d-line);
-  color: var(--d-ink-soft);
-  font: 800 18px/1 var(--mb-font-head, Manrope, sans-serif);
+  color: #fff;
+  font-weight: 800;
 }
+.order-detail-page .is-buy .inspection-decision-icon { background: var(--od-good); }
+.order-detail-page .is-cancel .inspection-decision-icon { background: var(--od-bad); }
+.order-detail-page .inspection-decision-state p { margin-top: 2px; font-size: 13px; color: var(--od-text); }
 
-.order-detail-page .inspection-decision-state.is-buy .inspection-decision-icon {
-  background: var(--d-accent-soft);
-  border-color: var(--d-accent-line);
-  color: var(--d-accent-2);
+/* ---------- 11. Transport quotes ---------- */
+.order-detail-page .transporter {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+  border: 1px solid var(--od-line);
+  border-radius: var(--od-radius);
+  background: var(--od-soft);
 }
-
-.order-detail-page .inspection-decision-state.is-cancel .inspection-decision-icon {
-  background: var(--d-danger-soft);
-  border-color: var(--d-danger-line);
-  color: var(--d-danger);
+.order-detail-page .transporter:last-child { margin-bottom: 0; }
+.order-detail-page .transporter > div { min-width: 0; }
+.order-detail-page .transporter > div:last-child {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--od-line-strong);
 }
+.order-detail-page .transporter > div:last-child > strong { font: 800 18px var(--od-font-head); }
+.order-detail-page .transporter .btn,
+.order-detail-page .transporter .field-inline { width: 100%; }
 
-.order-detail-page .inspection-decision-state strong {
-  display: block;
-  margin-bottom: 4px;
-  font: 700 14px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--d-ink);
+.order-detail-page .od-quote-actions { display: flex; flex-direction: column; gap: 8px; }
+
+/* ---------- 12. Payout table ---------- */
+.order-detail-page .payout-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
 }
-
-.order-detail-page .inspection-decision-state p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--d-muted);
+.order-detail-page .payout-table th,
+.order-detail-page .payout-table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--od-line);
+  text-align: left;
+  vertical-align: middle;
 }
+.order-detail-page .payout-table thead th {
+  padding-top: 0;
+  font: 700 11px var(--od-font-head);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--od-muted);
+}
+.order-detail-page .payout-table tbody tr:last-child th,
+.order-detail-page .payout-table tbody tr:last-child td { border-bottom: 0; }
 
-/* ── Toast ─────────────────────────────────────────────── */
+.order-detail-page .payout-amount-col,
+.order-detail-page .payout-amount { text-align: right; white-space: nowrap; }
+.order-detail-page .payout-status-col,
+.order-detail-page .payout-status { text-align: right; }
+.order-detail-page .payout-amount { font: 800 14px var(--od-font-head); color: var(--od-ink); font-variant-numeric: tabular-nums; }
+.order-detail-page .payout-currency { margin-left: 4px; font-size: 11px; font-weight: 600; color: var(--od-muted); }
 
-.order-detail-page .order-detail-toast {
+.order-detail-page .payout-party { font-weight: 500; }
+.order-detail-page .payout-party-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.order-detail-page .payout-party-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.order-detail-page .payout-party-role {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--od-ink);
+  color: #fff;
+  font: 800 11px var(--od-font-head);
+  letter-spacing: 0.04em;
+}
+.order-detail-page .payout-party-name { font-weight: 700; color: var(--od-ink); overflow-wrap: anywhere; }
+.order-detail-page .payout-party-note { font-size: 12px; color: var(--od-muted); overflow-wrap: anywhere; }
+
+/* ---------- 13. Toast ---------- */
+.order-detail-toast {
   position: fixed;
   left: 50%;
-  bottom: 24px;
+  bottom: max(16px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
-  z-index: 9999;
+  z-index: 1000;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  max-width: min(560px, calc(100vw - 32px));
-  padding: 12px 14px;
-  border-radius: 12px;
+  align-items: flex-start;
+  gap: 10px;
+  width: calc(100% - 28px);
+  max-width: 480px;
+  padding: 12px 12px 12px 14px;
+  border-radius: var(--od-radius);
   background: #0d1b2a;
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, .08);
-  box-shadow: 0 12px 30px rgba(15, 30, 45, .35);
-  font-size: 13.5px;
-  line-height: 1.45;
-  animation: order-detail-toast-in .22s var(--d-ease);
+  font: 500 13.5px / 1.5 'DM Sans', system-ui, sans-serif;
+  box-shadow: 0 12px 32px rgba(13, 27, 42, 0.3);
+  animation: od-toast-in 0.2s ease-out;
 }
-
-.order-detail-page .order-detail-toast-icon {
+.order-detail-toast-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
   width: 22px;
   height: 22px;
-  flex: 0 0 auto;
   border-radius: 50%;
-  background: rgba(255, 255, 255, .12);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font: 800 12px/1 var(--mb-font-head, Manrope, sans-serif);
+  background: #f59e0b;
+  color: #0d1b2a;
+  font-weight: 800;
+  font-size: 13px;
 }
-
-.order-detail-page .order-detail-toast-message { min-width: 0; }
-
-.order-detail-page .order-detail-toast-close {
-  appearance: none;
-  border: none;
+.order-detail-toast-message { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.order-detail-toast-close {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: -6px -2px -6px 0;
+  border: 0;
+  border-radius: 8px;
   background: transparent;
-  color: rgba(255, 255, 255, .7);
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  border-radius: 6px;
-  font-size: 18px;
+  color: #cbd5e1;
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
-  transition: background .15s var(--d-ease), color .15s var(--d-ease);
 }
+.order-detail-toast-close:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
 
-.order-detail-page .order-detail-toast-close:hover {
-  background: rgba(255, 255, 255, .1);
-  color: #fff;
-}
-
-@keyframes order-detail-toast-in {
+@keyframes od-toast-in {
   from { opacity: 0; transform: translate(-50%, 8px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* ============================================================
-   CONTENT INDENT
-   ============================================================
-   Card head, eyebrow, title, and section headings stay flush
-   left. Everything inside a section body, the card subtitle
-   (description), and any direct card content all shift right
-   by one uniform gutter (--d-indent). */
-
-.order-detail-page .od-card-section {
-  padding-left: var(--d-indent);
+/* ---------- 14. Accessibility ---------- */
+.order-detail-page a:focus-visible,
+.order-detail-page button:focus-visible,
+.order-detail-page .field:focus-visible,
+.order-detail-toast button:focus-visible {
+  outline: 3px solid rgba(15, 122, 68, 0.45);
+  outline-offset: 2px;
 }
-
-.order-detail-page .od-card-section > .od-card-section-head {
-  margin-left: calc(-1 * var(--d-indent));
-}
-
-.order-detail-page .card:not(.loading) > *:not(.od-card-head):not(.od-card-section):not(.btn) {
-  margin-left: var(--d-indent);
-  margin-right: var(--d-indent);
-}
-
-.order-detail-page .card > .payout-due {
-  margin-left: var(--d-indent) !important;
-  margin-right: var(--d-indent) !important;
-}
-
-/* ============================================================
-   PAGE GRID
-   ============================================================
-   Top-level cards flow into a responsive grid:
-     · phone (default)      → 1 column
-     · tablet (≥640px)      → 2 columns
-     · desktop (≥1000px)    → 3 columns
-   Wide cards use .od-span-all to cover every column. */
-
-.order-detail-page .od-page-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  align-items: stretch;
-}
-
-.order-detail-page .od-page-grid > * {
-  min-width: 0;
-  margin: 0;
-}
-
-.order-detail-page .od-page-grid > .card,
-.order-detail-page .od-page-grid > * > .card {
-  margin: 0;
-  height: 100%;
-}
-
-.order-detail-page .od-span-all {
-  grid-column: 1 / -1;
-  min-width: 0;
-}
-
-@media (min-width: 640px) {
-  .order-detail-page .od-page-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
-  }
-}
-
-@media (min-width: 1000px) {
-  .order-detail-page .od-page-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 20px;
-  }
-}
-
-/* ============================================================
-   RESPONSIVE TRANSPORT GRID
-   ============================================================
-   The three transport cards sit inside .od-card-grid, which
-   also flows 1 → 2 → 3 columns by breakpoint. */
-
-.order-detail-page .od-card-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  margin: 0;
-  align-items: stretch;
-}
-
-.order-detail-page .od-card-grid > .card {
-  margin: 0;
-  height: 100%;
-  min-width: 0;
-}
-
-@media (min-width: 640px) {
-  .order-detail-page .od-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 1000px) {
-  .order-detail-page .od-card-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-/* ── Widen the page container on desktop so 3 columns fit ── */
-
-@media (min-width: 1000px) {
-  .order-detail-page .container-narrow {
-    max-width: 1240px;
-  }
-}
-
-/* ============================================================
-   RESPONSIVE — Tablet
-   ============================================================ */
-
-@media (max-width: 960px) {
-  .order-detail-page .payout-party-name { max-width: 180px; }
-}
-
-/* ============================================================
-   RESPONSIVE — Phone (≤719px)
-   ============================================================ */
-
-@media (max-width: 719px) {
-  .order-detail-page { --d-indent: 19px; }
-
-  .order-detail-page .container-narrow {
-    padding: 20px 14px 64px;
-  }
-
-  .order-detail-page .card {
-    padding: 20px 28px 22px 20px;
-    margin: 0 0 14px;
-    border-radius: 16px;
-  }
-  .order-detail-page .card.loading { padding: 32px 20px; }
-
-  .order-detail-page .od-page-grid { gap: 14px; }
-  .order-detail-page .od-card-grid { gap: 14px; }
-  .order-detail-page .od-page-grid > .card,
-  .order-detail-page .od-card-grid > .card { margin: 0; }
-
-  .order-detail-page .page-bar { margin-bottom: 12px; }
-  .order-detail-page .back-link { padding: 6px 4px; font-size: 13px; }
-
-  .order-detail-page .od-card-head {
-    column-gap: 10px;
-    padding: 0 0 12px;
-    margin: 0 0 14px;
-  }
-  .order-detail-page .od-card-head-side { max-width: 130px; gap: 4px; }
-
-  .order-detail-page .od-card-title { font-size: 16px; letter-spacing: -.3px; line-height: 1.2; }
-  .order-detail-page .od-card-overview .od-card-title { font-size: 19px; letter-spacing: -.5px; }
-
-  .order-detail-page .od-card-subtitle { font-size: 12px; line-height: 1.4; margin-top: 1px; }
-  .order-detail-page .od-card-created { margin-top: 12px; padding-top: 12px; font-size: 11.5px; }
-
-  .order-detail-page .od-eyebrow { font-size: 10px; letter-spacing: .14em; gap: 6px; }
-  .order-detail-page .od-eyebrow::before { flex-basis: 14px; height: 1.5px; }
-
-  .order-detail-page .od-card-section { margin: 0 0 16px; }
-  .order-detail-page .od-card-section-head {
-    padding: 0 0 8px;
-    margin: 0 0 10px;
-  }
-  .order-detail-page .od-card-section-title { font-size: 13.5px; letter-spacing: -.1px; }
-  .order-detail-page .od-card-section-meta { font-size: 10.5px; letter-spacing: .08em; }
-
-  .order-detail-page .od-detail-facts > div {
-    padding: 8px 0;
-    gap: 12px;
-  }
-  .order-detail-page .od-detail-facts > div > span {
-    font-size: 10px;
-    letter-spacing: .1em;
-  }
-  .order-detail-page .od-detail-facts > div > strong { font-size: 13.5px; }
-
-  .order-detail-page .od-card-side-party { gap: 8px; }
-  .order-detail-page .od-card-side-label { font-size: 10px; letter-spacing: .12em; }
-  .order-detail-page .od-card-side-value { font-size: 13px; }
-
-  .order-detail-page .od-party-avatar {
-    width: 36px;
-    height: 36px;
-    flex-basis: 36px;
-    font-size: 12px;
-    border-radius: 10px;
-  }
-
-  .order-detail-page .od-status-row { gap: 6px; margin: 0 0 12px; }
-  .order-detail-page .od-status-pill {
-    min-height: 22px;
-    padding: 0 8px;
-    font-size: 10px;
-    letter-spacing: .03em;
-  }
-  .order-detail-page .od-status-pill-dot { width: 5px; height: 5px; }
-  .order-detail-page .badge { height: 20px; padding: 0 8px; font-size: 10px; }
-
-  .order-detail-page .muted { font-size: 13px; line-height: 1.55; }
-  .order-detail-page .muted.small,
-  .order-detail-page .small { font-size: 12px; }
-
-  .order-detail-page .order-progress { margin-top: 2px; padding: 0 2px; }
-  .order-detail-page .order-progress-step { gap: 6px; }
-  .order-detail-page .order-progress-dot { width: 14px; height: 14px; }
-  .order-detail-page .order-progress-step::before { top: 6px; }
-  .order-detail-page .order-progress-label { font-size: 9.5px; }
-  .order-detail-page .order-progress-step.is-done .order-progress-dot::after { width: 8px; height: 8px; }
-
-  .order-detail-page .payout-table thead th {
-    padding: 0 0 10px;
-    font-size: 10px;
-    letter-spacing: .1em;
-  }
-  .order-detail-page .payout-table tbody th,
-  .order-detail-page .payout-table tbody td { padding: 10px 0; }
-
-  .order-detail-page .payout-party-role { font-size: 10px; letter-spacing: .1em; }
-  .order-detail-page .payout-party-name { font-size: 12.5px; max-width: 110px; }
-  .order-detail-page .payout-party-note { font-size: 11px; }
-  .order-detail-page .payout-amount { font-size: 13.5px; }
-  .order-detail-page .payout-currency { font-size: 10px; }
-
-  .order-detail-page .payout-due { padding: 12px 0 0 !important; margin: 12px 0 0 !important; gap: 8px; }
-  .order-detail-page .payout-due-digits { font-size: 18px; letter-spacing: -.4px; }
-  .order-detail-page .payout-due-digits-now { font-size: 13px; }
-  .order-detail-page .payout-due-label { font-size: 10px; }
-  .order-detail-page .payout-due-date { font-size: 13px; }
-  .order-detail-page .payout-due-unit { font-size: 10px; }
-
-  .order-detail-page .od-notice--footer { padding-top: 12px; margin-top: 14px; }
-  .order-detail-page .od-notice-prefix { font-size: 10.5px; margin-bottom: 6px; }
-  .order-detail-page .od-notice-list { gap: 5px; }
-  .order-detail-page .od-notice-list li { font-size: 12.5px; line-height: 1.55; padding-left: 22px; }
-  .order-detail-page .od-notice-list li::before { font-size: 11.5px; }
-
-  .order-detail-page .transporter {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-    padding: 14px 0;
-  }
-  .order-detail-page .transporter > div:first-child,
-  .order-detail-page .transporter > div:last-child {
-    flex: 0 0 auto;
-    width: 100%;
-    align-items: flex-start;
-  }
-  .order-detail-page .transporter strong { font-size: 13.5px; }
-  .order-detail-page .transporter p { font-size: 12.5px; }
-
-  .order-detail-page .od-field-row,
-  .order-detail-page .od-quote-actions { width: 100%; }
-  .order-detail-page .od-notice .btn,
-  .order-detail-page .form .btn,
-  .order-detail-page .od-actions .btn { width: 100%; justify-content: center; }
-
-  .order-detail-page .order-detail-toast {
-    bottom: 16px;
-    padding: 11px 13px;
-    font-size: 13px;
-  }
-}
-
-/* ============================================================
-   RESPONSIVE — Small phone (≤420px)
-   ============================================================ */
-
-@media (max-width: 420px) {
-  .order-detail-page { --d-indent: 16px; }
-
-  .order-detail-page .container-narrow { padding: 16px 12px 56px; }
-
-  .order-detail-page .card {
-    padding: 16px 22px 18px 16px;
-    border-radius: 14px;
-    margin-bottom: 12px;
-  }
-  .order-detail-page .od-page-grid > .card,
-  .order-detail-page .od-card-grid > .card { margin: 0; }
-
-  .order-detail-page .od-card-head { padding-bottom: 10px; margin-bottom: 12px; }
-  .order-detail-page .od-card-head-side { max-width: 110px; }
-  .order-detail-page .od-card-title { font-size: 15px; }
-  .order-detail-page .od-card-overview .od-card-title { font-size: 17px; }
-  .order-detail-page .od-card-subtitle { font-size: 11.5px; }
-  .order-detail-page .od-card-side-value { font-size: 12.5px; }
-
-  .order-detail-page .od-detail-facts > div { padding: 7px 0; }
-  .order-detail-page .od-detail-facts > div > strong { font-size: 13px; }
-  .order-detail-page .od-detail-facts > div > span { font-size: 9.5px; }
-
-  .order-detail-page .od-card-section { margin-bottom: 14px; }
-  .order-detail-page .od-card-section-title { font-size: 13px; }
-
-  .order-detail-page .od-party-avatar {
-    width: 32px;
-    height: 32px;
-    flex-basis: 32px;
-    font-size: 11px;
-    border-radius: 9px;
-  }
-
-  .order-detail-page .od-status-pill { font-size: 9.5px; padding: 0 7px; min-height: 20px; }
-
-  .order-detail-page .order-progress-label {
-    position: absolute;
-    width: 1px; height: 1px;
-    padding: 0; margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
-  }
-  .order-detail-page .order-progress-step { gap: 0; }
-  .order-detail-page .order-progress { margin: 10px 0 0; }
-
-  .order-detail-page .payout-party-name { max-width: 90px; font-size: 12px; }
-  .order-detail-page .payout-amount { font-size: 13px; }
-
-  .order-detail-page .payout-due-digits { font-size: 16px; }
-  .order-detail-page .payout-due-digits-now { font-size: 12px; }
-
-  .order-detail-page .order-detail-toast {
-    bottom: 12px;
-    padding: 10px 12px;
-    font-size: 12.5px;
-  }
-}
-
-/* ============================================================
-   Reduced motion
-   ============================================================ */
+.order-detail-page .field:focus { border-color: var(--od-brand); }
 
 @media (prefers-reduced-motion: reduce) {
+  .order-detail-page *,
+  .order-detail-toast { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* ==========================================================================
+   15. Responsive breakpoints
+   ========================================================================== */
+
+/* Very small phones (≤ 380px) */
+@media (max-width: 380px) {
+  .order-detail-page { --od-pad: 14px; --od-gap: 12px; }
+  .order-detail-page .order-progress-label { font-size: 10.5px; }
+  .order-detail-page .payout-table th,
+  .order-detail-page .payout-table td { padding: 10px 4px; }
+  .order-detail-page .payout-table { font-size: 12.5px; }
+  .order-detail-page .od-status-pill { white-space: normal; }
+}
+
+/* Phones (< 640px): stack the payout cell so status doesn't squeeze the name */
+@media (max-width: 639px) {
+  .order-detail-page .od-detail-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .order-detail-page .od-card-head-side { width: 100%; }
+}
+
+/* Tablets (≥ 640px): 2 columns */
+@media (min-width: 640px) {
+  .order-detail-page { --od-pad: 22px; --od-gap: 18px; padding-top: 22px; }
+  .order-detail-page .container-narrow { padding-inline: 22px; }
+
+  .order-detail-page .od-page-grid,
+  .order-detail-page .od-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .order-detail-page .od-card-head-side { align-items: flex-end; text-align: right; }
+  .order-detail-page .od-card-side-party { flex-direction: row-reverse; text-align: right; }
+
+  .order-detail-page .od-actions { flex-direction: row; flex-wrap: wrap; }
+  .order-detail-page .od-actions .btn { width: auto; }
+  .order-detail-page .btn-block { width: auto; display: inline-flex; }
+
+  .order-detail-page .od-field-row { flex-direction: row; align-items: center; }
+  .order-detail-page .od-field-row .field { flex: 1 1 200px; width: auto; }
+  .order-detail-page .od-field-row .btn { flex: none; width: auto; }
+
+  .order-detail-page .field { font-size: 14.5px; }
+
+  .order-detail-page .transporter {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+  }
+  .order-detail-page .transporter > div:first-child { flex: 1 1 55%; }
+  .order-detail-page .transporter > div:last-child {
+    flex: 1 1 40%;
+    padding: 0 0 0 20px;
+    border-top: 0;
+    border-left: 1px dashed var(--od-line-strong);
+  }
+
+  .order-detail-page .od-quote-actions { flex-direction: row; flex-wrap: wrap; }
+  .order-detail-page .od-quote-actions .btn { width: auto; }
+  .order-detail-page .od-quote-actions .field-inline { flex: 1 1 120px; width: auto; }
+
+  .order-detail-page .payout-table th,
+  .order-detail-page .payout-table td { padding: 14px 12px; }
+  .order-detail-page .payout-table { font-size: 14px; }
+
+  .order-detail-toast { left: auto; right: 22px; transform: none; width: auto; min-width: 320px; animation-name: od-toast-in-side; }
+  @keyframes od-toast-in-side {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* Desktops (≥ 1000px): 3 columns */
+@media (min-width: 1000px) {
+  .order-detail-page { --od-pad: 24px; --od-gap: 20px; padding-top: 28px; }
+  .order-detail-page .container-narrow { padding-inline: 32px; }
+
+  .order-detail-page .od-page-grid,
+  .order-detail-page .od-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  .order-detail-page .od-card-title { font-size: 22px; }
+  .order-detail-page .order-progress-label { font-size: 12.5px; }
+}
+
+/* Large desktops (≥ 1400px) */
+@media (min-width: 1400px) {
+  .order-detail-page .container-narrow { max-width: 1320px; }
+}
+
+/* Landscape phones: keep the toast out of the way */
+@media (max-height: 480px) and (orientation: landscape) {
+  .order-detail-toast { bottom: 8px; }
+}
+
+/* Print: clean, single column, no chrome */
+@media print {
+  .order-detail-page { background: #fff; padding: 0; }
+  .order-detail-page .page-bar,
   .order-detail-page .btn,
-  .order-detail-page .back-link,
-  .order-detail-page .order-progress-dot,
-  .order-detail-page .order-detail-toast-close { transition: none; }
-
-  .order-detail-page .btn-primary:hover:not(:disabled) { transform: none; }
-  .order-detail-page .order-detail-toast { animation: none; }
-}
-
-/* ============================================================
-   Band-aid: flatten Payment Center rows
-   ============================================================ */
-
-.order-detail-page .payment-center .payment-row,
-.order-detail-page .payment-center .payment-item,
-.order-detail-page .payment-center [class*="payment-obligation"],
-.order-detail-page .payment-center [class*="obligation"] {
-  border: none;
-  border-bottom: 1px solid var(--d-line-soft);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  padding: 14px 0;
-}
-
-.order-detail-page .payment-center .payment-row:last-child,
-.order-detail-page .payment-center .payment-item:last-child,
-.order-detail-page .payment-center [class*="payment-obligation"]:last-child,
-.order-detail-page .payment-center [class*="obligation"]:last-child {
-  border-bottom: none;
+  .order-detail-toast { display: none !important; }
+  .order-detail-page .od-page-grid,
+  .order-detail-page .od-card-grid { display: block; }
+  .order-detail-page .card { box-shadow: none; break-inside: avoid; margin-bottom: 12px; }
 }
