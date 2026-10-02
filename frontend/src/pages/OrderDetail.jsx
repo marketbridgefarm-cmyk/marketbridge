@@ -10,7 +10,7 @@ import MessageThread from '../components/MessageThread.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import ActionCenter from '../components/ActionCenter.jsx';
-import NextStepCard from '../components/NextStepCard.jsx';
+
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
@@ -128,7 +128,11 @@ function Section({ title, meta, strong, children }) {
       {(title || meta) && (
         <div className="od-card-section-head">
           <h3 className="od-card-section-title">{title}</h3>
-          {meta != null && <span className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>{meta}</span>}
+          {meta != null && (
+            <div className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>
+              {meta}
+            </div>
+          )}
         </div>
       )}
       {children}
@@ -533,15 +537,11 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
       eyebrow={role}
       eyebrowClass={isSeller ? 'is-selling' : ''}
       title={title}
-      side={<PartyBadge role={otherLabel} name={other?.name} />}
+      // 1. Changed side to only render the Avatar, moving it cleanly to the top right.
+      side={<Avatar name={other?.name} />}
     >
       <Section title="Order status" meta={`ORD ${shortId(order.id).toUpperCase()}`}>
-        <div className="od-status-row">
-          <Pill tone={statusTone(order.status)}>{label(order.status)}</Pill>
-          {marketplacePaid && <Pill tone="good" dot={false}>Payment: Paid</Pill>}
-          {marketplacePending && !marketplacePaid && <Pill tone="wait" dot={false}>Payment: Pending</Pill>}
-          {transportJob?.status && <Pill tone="neutral" dot={false}>Transport: {label(transportJob.status)}</Pill>}
-        </div>
+        {/* 2. Removed the od-status-row div with the text pills (COMPLETED, PAYMENT, TRANSPORT) */}
         <OrderProgress steps={steps} />
       </Section>
 
@@ -902,13 +902,14 @@ function TransportCard({ order, t }) {
         {job.truckOwner && (
           <Section
             title="Transporter"
-            meta={job.agreedAmount != null ? `${money(job.agreedAmount)} ETB` : null}
+            meta={
+              <>
+                <strong>{job.truckOwner.name || '—'}</strong>
+                <Avatar name={job.truckOwner.name} />
+              </>
+            }
             strong
           >
-            <div className="od-person">
-              <Avatar name={job.truckOwner.name} />
-              <strong>{job.truckOwner.name || '—'}</strong>
-            </div>
             {job.truckOwner.phone && (
               <p className="muted">Phone: {job.truckOwner.phone}</p>
             )}
@@ -1236,7 +1237,7 @@ export default function OrderDetail() {
         if (orderRes.status !== 'fulfilled') throw orderRes.reason;
         setOrder(orderRes.value.data?.order || null);
         setWorkflow(workflowRes.status === 'fulfilled' ? workflowRes.value.data?.workflow || null : null);
-        setRecoveryRequests(recoveryRes.status === 'fulfilled' ? recoveryRes.value.data?.recoveryRequests || [] : []);
+        setRecoveryRequests(recoveryRes.status === 'fulfilled' ? asArray(recoveryRes.value.data?.recoveryRequests) : []);
       } catch (err) {
         setError(getError(err, 'Could not load order'));
       } finally {
@@ -1289,7 +1290,7 @@ export default function OrderDetail() {
   /* ---------- inspection ---------- */
   const allInspections = useMemo(
     () =>
-      (order?.inspectionRequests || order?.listing?.inspectionRequests || [])
+      asArray(order?.inspectionRequests?.length != null ? order.inspectionRequests : order?.listing?.inspectionRequests)
         .slice()
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [order?.inspectionRequests, order?.listing?.inspectionRequests]
@@ -1299,7 +1300,7 @@ export default function OrderDetail() {
   const assignedInspection = inspections.find((r) => r.inspectorId === currentUserId) || null;
   const isInspector = Boolean(assignedInspection);
   const inspectionFormReleased = recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'APPROVED' && r.formReleasedAt);
-  const inspectorName = (order?.inspectionRequests || inspections).find((r) => r?.inspector?.name)?.inspector?.name || null;
+  const inspectorName = asArray(order?.inspectionRequests?.length != null ? order.inspectionRequests : inspections).find((r) => r?.inspector?.name)?.inspector?.name || null;
 
   const inspectionGateMet =
     !inspectionApplies || Boolean(currentInspection && currentInspection.status === 'COMPLETED' && currentInspection.report);
@@ -1404,9 +1405,9 @@ export default function OrderDetail() {
     isBuyer;
 
   /* ---------- payouts & refunds ---------- */
-  const payouts = order?.payouts || [];
+  const payouts = asArray(order?.payouts);
   const payoutBy = (role) => payouts.find((p) => p.payeeRole === role) || null;
-  const refunds = order?.refunds || [];
+  const refunds = asArray(order?.refunds);
 
   /* ---------- payment actions ---------- */
   const checkPayment = (paymentId, key) =>
@@ -1505,7 +1506,7 @@ export default function OrderDetail() {
 
   const inspectionPaymentGroups = inspectionApplies && currentInspection && Number(currentInspection.fee) > 0
     ? [currentInspection].map((request) => {
-        const list = request.payments || [];
+        const list = asArray(request?.payments);
         const open = list.find((p) => p.type === 'INSPECTOR' && active(p)) || null;
         const key = `${open?.status === 'PROCESSING' ? 'check' : open ? 'resume' : 'pay'}-inspection-${request.id}`;
         return {
@@ -1970,7 +1971,7 @@ export default function OrderDetail() {
             <div className="od-span-all">
               <MessageThread
                 orderId={order.id}
-                messages={order.messages || []}
+                messages={asArray(order.messages)}
                 counterpartId={counterpartId}
                 counterpartName={counterpartName}
                 currentUserId={currentUserId}
