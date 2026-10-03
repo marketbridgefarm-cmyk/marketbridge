@@ -76,7 +76,6 @@ const scrollToId = (id, delay = 0) => {
     const el = document.getElementById(id);
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    /* brief outline so the buyer sees where they landed */
     el.classList.remove('od-flash');
     void el.offsetWidth;
     el.classList.add('od-flash');
@@ -108,7 +107,7 @@ function useNowUntil(targetMs) {
 }
 
 /* ========================================================================
-   2. UI primitives — every card on the page is built from these
+   2. UI primitives
    ======================================================================== */
 
 function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, className, children }) {
@@ -145,7 +144,6 @@ function Section({ title, meta, strong, children }) {
   );
 }
 
-/* Round initials avatar. `small` = compact version for tables and lists. */
 const Avatar = ({ name, small }) => (
   <span className={`od-party-avatar${small ? ' od-party-avatar--sm' : ''}`} aria-hidden="true">
     {initials(name)}
@@ -568,7 +566,7 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
 }
 
 /* ========================================================================
-   5. Inspection
+   5. Inspection (with full quote negotiation)
    ======================================================================== */
 
 function InspectionCard({ order, title, i }) {
@@ -618,6 +616,20 @@ function InspectionCard({ order, title, i }) {
     </SideLabel>
   );
 
+  // ── Quotes / negotiation state ─────────────────────────────
+  const isRequester = request.requestedById === i.currentUserId;
+  const quotes = leafQuotes(request.quotes);
+  const counterKeyFor = (quoteId) => `inspection-counter-${quoteId}`;
+  const busyKey = (quoteId, action) => `inspection-quote-${quoteId}-${action}`;
+  const isBusy = (quoteId, action) => i.busy === busyKey(quoteId, action);
+
+  const feePaid = (request.payments || []).some(
+    (p) => p.type === 'INSPECTOR' && p.status === 'PAID'
+  );
+  const feePending = (request.payments || []).some(
+    (p) => p.type === 'INSPECTOR' && ['PENDING', 'PROCESSING'].includes(p.status)
+  );
+
   return (
     <Card
       id="inspection-section"
@@ -639,6 +651,205 @@ function InspectionCard({ order, title, i }) {
           {!inspectorName && <Fact name="Status">{label(request.status)}</Fact>}
         </Facts>
       </Section>
+
+      {/* ── Inspector bids and negotiation (REQUESTED state) ── */}
+      {request.status === 'REQUESTED' && (
+        <Section
+          title="Inspector bids"
+          meta={`${quotes.length} bid${quotes.length === 1 ? '' : 's'}`}
+        >
+          {!isRequester ? (
+            <p className="muted">
+              {quotes.length === 0
+                ? 'Waiting for registered inspectors to submit sealed bids.'
+                : `The requester is reviewing ${quotes.length} inspector bid(s). You will see the assigned inspector once a quote is accepted.`}
+            </p>
+          ) : quotes.length === 0 ? (
+            <p className="muted">
+              Waiting for registered inspectors to submit sealed bids. You can compare
+              all bids, then select one for price negotiation.
+            </p>
+          ) : (
+            <div className="od-card-grid">
+              {quotes.map((quote) => {
+                const displayAmount =
+                  quote.status === 'COUNTERED'
+                    ? quote.counterAmount ?? quote.amount
+                    : quote.amount;
+                const isPending = quote.status === 'PENDING';
+                const isSelected = quote.status === 'SELECTED';
+                const isCounteredByProvider =
+                  quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER';
+                const isCounteredByRequester =
+                  quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
+                const requesterCanAct =
+                  isRequester && (isSelected || isCounteredByProvider);
+                const canSelect = isRequester && isPending;
+
+                return (
+                  <div className="transporter" key={quote.id}>
+                    <div>
+                      <div className="od-person">
+                        <Avatar small name={quote.inspector?.name || 'Inspector'} />
+                        <strong>{quote.inspector?.name || 'Inspector'}</strong>
+                      </div>
+                      <p>
+                        {quote.inspector?.location || 'Location not set'}
+                        {typeof quote.inspector?.rating === 'number' &&
+                          ` · ★ ${quote.inspector.rating.toFixed(1)}`}
+                        {quote.inspector?.verificationStatus &&
+                          ` · ${quote.inspector.verificationStatus}`}
+                      </p>
+                      {quote.message && <p className="muted">{quote.message}</p>}
+                      <p>
+                        Status:{' '}
+                        <span className="badge">{label(quote.status || 'PENDING')}</span>
+                      </p>
+                      {isCounteredByRequester && (
+                        <p className="muted small">
+                          You countered {money(displayAmount)} ETB — waiting for the
+                          inspector.
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <strong>{money(displayAmount)} ETB</strong>
+
+                      {canSelect && (
+                        <>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={isBusy(quote.id, 'select')}
+                            busy={isBusy(quote.id, 'select')}
+                            busyText="Selecting…"
+                            onClick={() => i.selectInspectionQuote(quote.id)}
+                          >
+                            Select bid for deal
+                          </Button>
+                          <span className="muted small">
+                            Selecting opens price negotiation.
+                          </span>
+                        </>
+                      )}
+
+                      {requesterCanAct && (
+                        <div className="od-quote-actions">
+                          <Button
+                            size="sm"
+                            disabled={isBusy(quote.id, 'accept')}
+                            busy={isBusy(quote.id, 'accept')}
+                            busyText="Accepting…"
+                            onClick={() => i.acceptInspectionQuote(quote.id)}
+                          >
+                            Accept quote
+                          </Button>
+                          <input
+                            className="field field-inline"
+                            type="number"
+                            min="1"
+                            placeholder="Counter (ETB)"
+                            value={
+                              i.counterInputs[counterKeyFor(quote.id)] || ''
+                            }
+                            onChange={(e) =>
+                              i.setCounterInputs((prev) => ({
+                                ...prev,
+                                [counterKeyFor(quote.id)]: e.target.value,
+                              }))
+                            }
+                          />
+                          <Button
+                            variant="light"
+                            size="sm"
+                            disabled={isBusy(quote.id, 'counter')}
+                            busy={isBusy(quote.id, 'counter')}
+                            busyText="Sending…"
+                            onClick={() =>
+                              i.counterInspectionQuote(
+                                quote.id,
+                                counterKeyFor(quote.id)
+                              )
+                            }
+                          >
+                            Counter
+                          </Button>
+                          <Button
+                            variant="light"
+                            size="sm"
+                            disabled={isBusy(quote.id, 'reject')}
+                            busy={isBusy(quote.id, 'reject')}
+                            busyText="Rejecting…"
+                            onClick={() => i.rejectInspectionQuote(quote.id)}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* ── Provisional inspector agreement (ACCEPTED state) ── */}
+      {request.status === 'ACCEPTED' && request.fee != null && (
+        <Section title="Inspector assigned — fee due">
+          <p className="muted">
+            The inspector is provisionally assigned. Pay the inspection fee below to
+            let the inspector start.
+          </p>
+          <p>
+            Fee: <strong>{money(request.fee)} ETB</strong>
+          </p>
+
+          {feePaid ? (
+            <p className="muted small">Inspection fee paid.</p>
+          ) : feePending ? (
+            <p className="muted small">
+              A payment for this inspection is pending or processing.
+            </p>
+          ) : i.canPayInspection ? (
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={isBusy(request.id, 'pay')}
+              busy={isBusy(request.id, 'pay')}
+              busyText="Starting…"
+              onClick={() => i.payInspection(request)}
+            >
+              Pay inspection fee
+            </Button>
+          ) : (
+            <p className="muted small">
+              Only the buyer can pay the inspector fee.
+            </p>
+          )}
+
+          {isRequester && (
+            <div style={{ marginTop: 12 }}>
+              <Button
+                variant="light"
+                size="sm"
+                disabled={Boolean(i.busy)}
+                busy={i.busy === `withdraw-inspection-${request.id}`}
+                busyText="Releasing…"
+                onClick={() => i.withdrawInspectionAgreement(request.id)}
+              >
+                Inspector unavailable — choose another
+              </Button>
+              <p className="muted small" style={{ marginTop: 6 }}>
+                Provisional agreement — release it if the inspector drops out
+                before payment.
+              </p>
+            </div>
+          )}
+        </Section>
+      )}
 
       {reportReady ? (
         <>
@@ -689,16 +900,19 @@ function InspectionCard({ order, title, i }) {
           )}
         </>
       ) : (
-        ['REQUESTED', 'ACCEPTED'].includes(request.status) && (
+        ['REQUESTED', 'ACCEPTED'].includes(request.status) && (i.isAdmin || i.isParticipant) && (
           <Section title="Inspection recovery">
             <p className="muted">
-              If every inspector bid is closed, reopen bidding. If you no longer want this request, cancel it without
-              cancelling the order.
+              {i.isAdmin
+                ? 'If every inspector bid is closed, reopen bidding. If the request is no longer wanted, cancel it without cancelling the order.'
+                : 'If you no longer want this request, cancel it without cancelling the order. Only MarketBridge admin can reopen inspection bidding.'}
             </p>
             <Actions>
-              <Button variant="primary" disabled={Boolean(i.busy)} busy={i.busy === `reopen-inspection-${request.id}`} busyText="Reopening…" onClick={i.reopenBidding}>
-                Reopen inspection bidding
-              </Button>
+              {i.isAdmin && (
+                <Button variant="primary" disabled={Boolean(i.busy)} busy={i.busy === `reopen-inspection-${request.id}`} busyText="Reopening…" onClick={i.reopenBidding}>
+                  Reopen inspection bidding
+                </Button>
+              )}
               <Button variant="light" disabled={Boolean(i.busy)} busy={i.busy === `cancel-inspection-${request.id}`} busyText="Cancelling…" onClick={i.cancel}>
                 Cancel inspection request
               </Button>
@@ -711,7 +925,7 @@ function InspectionCard({ order, title, i }) {
 }
 
 /* ========================================================================
-   6. Transport — three cards, laid out responsively
+   6. Transport
    ======================================================================== */
 
 function EvidenceForm({ kind, t }) {
@@ -759,10 +973,18 @@ function QuoteRow({ quote, t }) {
   const key = `quote-${quote.id}`;
   const working = t.busy === key;
   const amount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
-  const arrangerTurn = quote.status === 'SELECTED' || (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+
+  const isArrangerTurn =
+    quote.status === 'SELECTED' ||
+    (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+  const isTransporterTurn =
+    quote.status === 'SELECTED' ||
+    (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
+
   const isOwner = quote.truckOwnerId === t.currentUserId;
-  const transporterTurn = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
-  const canRespond = (t.canChooseQuote && arrangerTurn) || (isOwner && transporterTurn);
+  const canRespond =
+    (t.canChooseQuote && isArrangerTurn) ||
+    (isOwner && isTransporterTurn);
   const rating = typeof quote.truckOwner?.rating === 'number' ? quote.truckOwner.rating.toFixed(1) : '—';
   const ownerName = quote.truckOwner?.name || 'Truck owner';
 
@@ -779,7 +1001,9 @@ function QuoteRow({ quote, t }) {
         </p>
         {quote.message && <p className="muted">{quote.message}</p>}
         <p>Status: <span className="badge">{quote.status || 'PENDING'}</span></p>
-        {transporterTurn && <p className="muted">You countered {money(amount)} ETB — waiting for the transporter.</p>}
+        {quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER' && (
+          <p className="muted">You countered {money(amount)} ETB — waiting for the transporter.</p>
+        )}
       </div>
 
       <div>
@@ -797,7 +1021,7 @@ function QuoteRow({ quote, t }) {
         {canRespond && (
           <div className="od-quote-actions">
             <Button size="sm" disabled={working} busy={working} busyText="Accepting…" onClick={() => t.acceptQuote(quote.id)}>
-              {transporterTurn ? 'Accept buyer counter' : 'Accept quote'}
+              {isTransporterTurn && quote.status === 'COUNTERED' ? 'Accept buyer counter' : 'Accept quote'}
             </Button>
             <input
               className="field field-inline"
@@ -834,7 +1058,6 @@ function TransportCard({ order, t }) {
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
 
-  /* ── No job yet: single setup card, full width ─────────── */
   if (!job) {
     return (
       <Card
@@ -866,7 +1089,6 @@ function TransportCard({ order, t }) {
 
   return (
     <div className="od-card-grid">
-      {/* ── Card A — Logistics: the physical trip ──────────── */}
       <Card
         id="transport-section"
         eyebrow="Logistics"
@@ -917,7 +1139,6 @@ function TransportCard({ order, t }) {
         )}
       </Card>
 
-      {/* ── Card B — Pickup and delivery evidence ──────────── */}
       {hasEvidenceContent && (
         <Card
           id="transport-evidence-section"
@@ -965,7 +1186,6 @@ function TransportCard({ order, t }) {
         </Card>
       )}
 
-      {/* ── Card C — Transport payment ─────────────────────── */}
       <Card
         id="transport-payment-section"
         eyebrow="Payment"
@@ -1180,7 +1400,6 @@ export default function OrderDetail() {
   const location = useLocation();
   const { user } = useAuth();
 
-  /* ---------- state ---------- */
   const [order, setOrder] = useState(null);
   const [workflow, setWorkflow] = useState(null);
   const [recoveryRequests, setRecoveryRequests] = useState([]);
@@ -1207,14 +1426,12 @@ export default function OrderDetail() {
   const [submittingDispute, setSubmittingDispute] = useState(false);
   const [disputeSubmitted, setDisputeSubmitted] = useState(false);
 
-  /* ---------- toast auto-dismiss ---------- */
   useEffect(() => {
     if (!error) return undefined;
     const timer = window.setTimeout(() => setError(''), 3000);
     return () => window.clearTimeout(timer);
   }, [error]);
 
-  /* ---------- data loading ---------- */
   const load = useCallback(
     async ({ silent = false } = {}) => {
       if (!orderId) return;
@@ -1261,7 +1478,6 @@ export default function OrderDetail() {
     if (id) scrollToId(id);
   }, [loading, location.hash]);
 
-  /* One wrapper for the "busy → call → reload → report error" pattern. */
   const run = async (key, fn, fallback) => {
     setBusy(key);
     setError('');
@@ -1277,7 +1493,6 @@ export default function OrderDetail() {
     }
   };
 
-  /* ---------- identity & roles ---------- */
   const currentUserId = user?.id || user?.userId || user?._id || null;
   const isAdmin = (Array.isArray(user?.roles) ? user.roles : []).includes('ADMIN');
   const isBuyer = Boolean(order && currentUserId && currentUserId === order.buyerId);
@@ -1285,13 +1500,11 @@ export default function OrderDetail() {
   const isParticipant = isBuyer || isSeller;
   const buyerIdentityMismatch = Boolean(order && currentUserId && !isParticipant && !isAdmin);
 
-  /* ---------- listing kind ---------- */
   const isAgricultural = order?.listing?.category === 'AGRICULTURAL';
   const isProduct = order?.listing?.category === 'PRODUCT';
   const inspectionApplies = isAgricultural || isProduct;
   const title = order?.listing?.title || order?.listing?.cropType || 'Order';
 
-  /* ---------- inspection ---------- */
   const allInspections = useMemo(
     () =>
       (order?.inspectionRequests || order?.listing?.inspectionRequests || [])
@@ -1312,7 +1525,6 @@ export default function OrderDetail() {
   const decisionGateMet = !decisionRequired || order?.buyerDecision === 'BUY';
   const negotiatedGateMet = !isProduct || Boolean(order?.agreedOfferId);
 
-  /* ---------- transport ---------- */
   const rawJob = order?.transportJob || null;
   const transportJob = rawJob?.status === 'CANCELLED' ? null : rawJob;
   const isTransporter = Boolean(transportJob?.truckOwnerId && transportJob.truckOwnerId === currentUserId);
@@ -1325,7 +1537,6 @@ export default function OrderDetail() {
   const transportInMotion = Boolean(transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status));
   const acceptedQuote = Array.isArray(transportJob?.quotes) ? transportJob.quotes.find((q) => q.status === 'ACCEPTED') : null;
 
-  /* ---------- payments ---------- */
   const payments = Array.isArray(order?.payments) ? order.payments : [];
   const active = (p) => ['PENDING', 'PROCESSING'].includes(p.status);
   const pick = (list) => list.find(active) || list.find((p) => p.status === 'PAID') || null;
@@ -1407,12 +1618,10 @@ export default function OrderDetail() {
     !transportPayments.some((p) => ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)) &&
     isBuyer;
 
-  /* ---------- payouts & refunds ---------- */
   const payouts = order?.payouts || [];
   const payoutBy = (role) => payouts.find((p) => p.payeeRole === role) || null;
   const refunds = order?.refunds || [];
 
-  /* ---------- payment actions ---------- */
   const checkPayment = (paymentId, key) =>
     paymentId &&
     (async () => {
@@ -1530,7 +1739,6 @@ export default function OrderDetail() {
       })
     : [];
 
-  /* ---------- transport actions ---------- */
   const transportActions = {
     selectQuote: (id) => id && run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}/select`), 'Could not select transport bid'),
     releaseQuote: (id) => id && run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'WITHDRAW' }), 'Could not release the transporter agreement'),
@@ -1584,7 +1792,6 @@ export default function OrderDetail() {
     },
   };
 
-  /* ---------- inspection actions ---------- */
   const inspectionActions = {
     request: async (mode) => {
       if (!order?.listing) return;
@@ -1616,9 +1823,82 @@ export default function OrderDetail() {
       const ok = await run(`buyer-decision-${decision.toLowerCase()}`, () => api.patch(`/orders/${order.id}/buyer-decision`, { decision }), `Could not record ${decision === 'BUY' ? 'BUY' : 'cancellation'} decision`);
       if (ok) scrollToId(decision === 'BUY' ? 'payment-center' : 'inspection-section', 120);
     },
+    selectInspectionQuote: (quoteId) => {
+      if (!currentInspection) return;
+      return run(
+        `inspection-quote-${quoteId}-select`,
+        () => api.patch(`/inspections/${currentInspection.id}/quotes/${quoteId}/select`),
+        'Could not select inspection bid'
+      );
+    },
+    acceptInspectionQuote: (quoteId) => {
+      if (!currentInspection) return;
+      return run(
+        `inspection-quote-${quoteId}-accept`,
+        () => api.patch(`/inspections/${currentInspection.id}/quotes/${quoteId}/accept`),
+        'Could not accept inspection quote'
+      );
+    },
+    counterInspectionQuote: async (quoteId, counterKey) => {
+      if (!currentInspection) return;
+      const amount = Number(counterInputs[counterKey] || 0);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setError('Enter a valid counter amount before sending.');
+        return;
+      }
+      const ok = await run(
+        `inspection-quote-${quoteId}-counter`,
+        () =>
+          api.post(`/inspections/${currentInspection.id}/quotes/${quoteId}/counter`, {
+            counterAmount: amount,
+          }),
+        'Could not send counter-offer'
+      );
+      if (ok) setCounterInputs((prev) => ({ ...prev, [counterKey]: '' }));
+    },
+    rejectInspectionQuote: (quoteId) => {
+      if (!currentInspection) return;
+      return run(
+        `inspection-quote-${quoteId}-reject`,
+        () => api.patch(`/inspections/${currentInspection.id}/quotes/${quoteId}/reject`),
+        'Could not reject inspection quote'
+      );
+    },
+    withdrawInspectionAgreement: (requestId) => {
+      if (!currentInspection) return;
+      const accepted = leafQuotes(currentInspection.quotes).find(
+        (q) => q.status === 'ACCEPTED'
+      );
+      if (!accepted) return;
+      const reason = window.prompt(
+        'Why are you releasing this provisional inspection agreement?',
+        'Inspector unavailable before payment'
+      );
+      if (reason === null) return;
+      return run(
+        `withdraw-inspection-${requestId}`,
+        () =>
+          api.patch(`/inspections/${requestId}/quotes/${accepted.id}/withdraw`, {
+            reason: (reason || '').trim() || undefined,
+          }),
+        'Could not release inspection agreement'
+      );
+    },
+    payInspection: (request) => payInspection(request),
+    currentUserId,
+    counterInputs,
+    setCounterInputs,
+    canPayInspection: Boolean(
+      currentInspection &&
+      isBuyer &&
+      currentInspection.status === 'ACCEPTED' &&
+      currentInspection.fee != null &&
+      !(currentInspection.payments || []).some((p) =>
+        ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
+      )
+    ),
   };
 
-  /* ---------- order actions ---------- */
   const canCancelOrder = Boolean(
     order &&
       !['COMPLETED', 'CANCELLED'].includes(order.status) &&
@@ -1673,7 +1953,6 @@ export default function OrderDetail() {
     return run(`refund-${refund.id}`, () => api.patch(`/admin/financial/refunds/${refund.id}/fail`, { failureReason: reason.trim() }), 'Could not mark the refund as failed');
   };
 
-  /* ---------- disputes ---------- */
   const disputeCounterparties = useMemo(() => {
     if (!order) return [];
     return [
@@ -1723,7 +2002,6 @@ export default function OrderDetail() {
     }
   };
 
-  /* ---------- early returns ---------- */
   if (loading) {
     return (
       <main className="section order-detail-page">
@@ -1745,7 +2023,6 @@ export default function OrderDetail() {
     );
   }
 
-  /* ---------- grouped props for section components ---------- */
   const counterpartId = isBuyer ? order.sellerId : isSeller ? order.buyerId : null;
   const counterpartName = isBuyer ? order.seller?.name : isSeller ? order.buyer?.name : null;
   const orderOpen = !['COMPLETED', 'CANCELLED'].includes(order.status);
@@ -1756,6 +2033,8 @@ export default function OrderDetail() {
     formReleased: inspectionFormReleased,
     requesting: requestingInspection,
     isBuyer,
+    isAdmin,
+    isParticipant,
     isAgricultural,
     decisionRequired,
     busy,
@@ -1817,7 +2096,6 @@ export default function OrderDetail() {
         </div>
 
         <div className="od-page-grid">
-          {/* Summary — full width */}
           <div className="od-span-all">
             <OverviewCard
               order={order}
@@ -1829,7 +2107,6 @@ export default function OrderDetail() {
             />
           </div>
 
-          {/* Next step — ActionCenter handles the workflow for all roles */}
           {workflow ? (
             <ActionCenter workflow={workflow} onScroll={scrollToId} onActionComplete={reload} />
           ) : (
@@ -1843,7 +2120,6 @@ export default function OrderDetail() {
             )
           )}
 
-          {/* Offer (product marketplace, before a deal exists) */}
           {isProduct && isBuyer && !order.agreedOfferId && (
             <OfferCard
               amount={offerAmount}
@@ -1855,17 +2131,14 @@ export default function OrderDetail() {
             />
           )}
 
-          {/* Inspection */}
           {inspectionApplies && isParticipant && orderOpen && (
             <InspectionCard order={order} title={title} i={inspectionProps} />
           )}
 
-          {/* Transport — full width; it renders its own inner grid */}
           <div className="od-span-all">
             <TransportCard order={order} t={transportProps} />
           </div>
 
-          {/* Payments — full width */}
           {(!isProduct || order.agreedOfferId) && (
             <div className="od-span-all">
               <PaymentCenter
@@ -1885,7 +2158,6 @@ export default function OrderDetail() {
             </div>
           )}
 
-          {/* Receipt */}
           {order.status === 'DELIVERED' && isBuyer && (
             <ReceiptCard
               marketplacePaid={marketplacePaid}
@@ -1895,7 +2167,6 @@ export default function OrderDetail() {
             />
           )}
 
-          {/* Payout — full width (has a table) */}
           <div className="od-span-all">
             <PayoutStatusCard
               payouts={{ seller: payoutBy('SELLER'), inspector: payoutBy('INSPECTOR'), transporter: payoutBy('TRANSPORTER') }}
@@ -1904,7 +2175,6 @@ export default function OrderDetail() {
             />
           </div>
 
-          {/* Refund */}
           <RefundStatusCard
             refunds={refunds}
             payouts={payouts}
@@ -1919,7 +2189,6 @@ export default function OrderDetail() {
             onFail={failRefund}
           />
 
-          {/* Timeline — full width */}
           {workflow && (
             <div className="od-span-all">
               <Card eyebrow="History" title="Order timeline" subtitle="Everything that has happened on this order">
@@ -1928,10 +2197,8 @@ export default function OrderDetail() {
             </div>
           )}
 
-          {/* Problems */}
           <DisputeCard order={order} d={disputeProps} />
 
-          {/* Closing */}
           {order.status === 'COMPLETED' && (
             <Card eyebrow="Closed" title="Order completed">
               <Notice title="✓ This order has been completed.">
@@ -1940,10 +2207,8 @@ export default function OrderDetail() {
             </Card>
           )}
 
-          {/* Rating */}
           <RatingBox order={order} userId={currentUserId} onRated={reload} />
 
-          {/* Messages — full width */}
           {counterpartId && (
             <div className="od-span-all">
               <MessageThread
@@ -1957,7 +2222,6 @@ export default function OrderDetail() {
             </div>
           )}
 
-          {/* Admin indicator */}
           {isAdmin && (
             <Card eyebrow="Admin" title="Administrator view" subtitle="You are viewing this order with administrator access." />
           )}
