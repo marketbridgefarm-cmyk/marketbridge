@@ -59,8 +59,9 @@ class TruckConflictError extends Error {
 
 // ============================================================================
 // TRANSPORT QUOTE NEGOTIATION HELPERS
-// Mirrors the buyer <-> seller Offer negotiation chain and the inspection
-// quote negotiation: a counter creates a new child quote row.
+// Counter mutates the existing quote row in place (same pattern as the
+// inspection quote negotiation) to satisfy the unique
+// (transportJobId, truckOwnerId) constraint on TransportQuote.
 // ============================================================================
 
 function quoteError(message, statusCode = 400) {
@@ -2432,7 +2433,15 @@ router.patch(
       const effectiveRole = actorRole;
 
       // ----------------------------------------------------------------------
-      // COUNTER
+      // COUNTER  (FIXED)
+      // ----------------------------------------------------------------------
+      // Previously inserted a NEW child quote row for the same
+      // (transportJobId, truckOwnerId), which violates the schema's unique
+      // constraint on that pair → P2002 → 500 "Could not process quote action".
+      //
+      // Now updates the EXISTING row in place, storing the live negotiation
+      // state in (amount, counterAmount, counteredBy, status). This mirrors
+      // the inspection counter fix and satisfies the unique constraint.
       // ----------------------------------------------------------------------
 
       if (req.body.action === 'COUNTER') {
@@ -2481,23 +2490,15 @@ router.patch(
             throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
           }
 
-          await tx.transportQuote.update({
+          // ✅ Update the SAME row — no new insert, so no unique-constraint violation.
+          const updated = await tx.transportQuote.update({
             where: { id: freshQuote.id },
-            data: { status: 'COUNTERED' },
-          });
-
-          const created = await tx.transportQuote.create({
             data: {
-              transportJobId: freshQuote.transportJobId,
-              truckOwnerId: freshQuote.truckOwnerId,
-              truckId: freshQuote.truckId,
-              amount: counterAmount,
+              status: 'COUNTERED',
               counterAmount,
               counteredBy: effectiveRole,
-              status: 'COUNTERED',
-              parentQuoteId: freshQuote.id,
-              expiresAt: quoteExpiry(12),
               message: req.body.message || freshQuote.message,
+              expiresAt: quoteExpiry(12),
             },
             include: {
               truckOwner: { select: { id: true, name: true, rating: true } },
@@ -2509,17 +2510,16 @@ router.patch(
             actorId: req.user.id,
             action: 'TRANSPORT_QUOTE_COUNTERED',
             resourceType: 'TransportQuote',
-            resourceId: created.id,
+            resourceId: updated.id,
             metadata: {
               transportJobId: freshQuote.transportJobId,
-              parentQuoteId: freshQuote.id,
               counteredBy: effectiveRole,
               previousAmount: String(freshQuote.counterAmount ?? freshQuote.amount),
               counterAmount: String(counterAmount),
             },
           });
 
-          return created;
+          return updated;
         }, { maxWait: 10000, timeout: 15000 });
 
         return res.status(201).json({
@@ -2833,6 +2833,3 @@ router.claimAvailableTruck =
   claimAvailableTruck;
 
 module.exports = router;
-
-
-
