@@ -1,8 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import api from '../api/client';
-import { startChapaPayment, chapaInitializeAndRedirect } from '../utils/chapaCheckout';
+import {
+  startChapaPayment,
+  chapaInitializeAndRedirect,
+} from '../utils/chapaCheckout';
 import { useAuth } from '../context/AuthContext.jsx';
 
 import RatingBox from '../components/RatingBox.jsx';
@@ -15,12 +24,6 @@ import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
-
-import './order-details/OrderDetail.css';
-
-/* ========================================================================
-   1. Constants & pure helpers
-   ======================================================================== */
 
 const PAYMENT_METHODS = [
   { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
@@ -37,7 +40,9 @@ const DISPUTE_TYPES = [
 ];
 
 const pad2 = (n) => String(n).padStart(2, '0');
+
 const shortId = (id) => id?.slice(0, 8) || '—';
+
 const label = (value) => String(value || '').replace(/_/g, ' ');
 
 const money = (value, fraction = 2) =>
