@@ -314,26 +314,25 @@
 }
 
 /* ==========================================================================
-   21. Glassmorphism Theme for Home Page
-   Append at the very END of Home.css to make the page glassy.
+   21. Green Glassmorphism Theme for Home Page
    ========================================================================== */
 
-/* 1. Give the page a soft, colorful gradient background */
+/* 1. Rich green gradient background */
 .mb-home {
-  background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 50%, #ecfdf5 100%);
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 50%, #a5d6a7 100%);
   background-attachment: fixed;
 }
 
-/* 2. Make the hero section blend seamlessly into the glassy background */
+/* 2. Hero section blends seamlessly into the green background */
 .home-hero {
   background: transparent;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
 }
 .home-hero::before {
-  background: radial-gradient(circle, rgba(47, 145, 89, 0.15), transparent 70%);
+  background: radial-gradient(circle, rgba(23, 107, 58, 0.15), transparent 70%);
 }
 
-/* 3. Apply the frosted glass effect to all major cards and containers */
+/* 3. Apply the frosted green glass effect to all major cards */
 .mb-home .hero-join,
 .mb-home .hero-stat-card,
 .mb-home .platform-card,
@@ -341,56 +340,56 @@
 .mb-home .showcase,
 .mb-home .pillar,
 .mb-home .process-item {
-  background: rgba(255, 255, 255, 0.55) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px); /* Safari support */
-  border: 1px solid rgba(255, 255, 255, 0.8) !important;
-  box-shadow: 0 8px 32px 0 rgba(20, 45, 28, 0.06) !important;
-}
-
-/* 4. Make the trust carousel glassy too */
-.mb-home .trust-carousel {
-  background: rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.6);
-}
-
-/* 5. Adjust the final CTA to be a darker, glassy green block */
-.mb-home .final-cta {
-  background: linear-gradient(135deg, rgba(14, 75, 41, 0.9), rgba(23, 107, 58, 0.85)) !important;
+  background: rgba(255, 255, 255, 0.6) !important;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 8px 32px 0 rgba(23, 107, 58, 0.08) !important;
 }
 
-/* 6. Add a subtle hover lift to the glassy cards for a premium feel */
+/* 4. Glassy trust carousel */
+.mb-home .trust-carousel {
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+/* 5. Darker glassy green block for the final CTA */
+.mb-home .final-cta {
+  background: linear-gradient(135deg, rgba(14, 75, 41, 0.92), rgba(23, 107, 58, 0.88)) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+/* 6. Hover lift for the glassy cards */
 .mb-home .market-card:hover,
 .mb-home .platform-card:hover,
 .mb-home .hero-stat-card:hover,
 .mb-home .pillar:hover,
 .mb-home .process-item:hover {
   transform: translateY(-3px);
-  box-shadow: 0 12px 40px 0 rgba(20, 45, 28, 0.12) !important;
+  box-shadow: 0 12px 40px 0 rgba(23, 107, 58, 0.15) !important;
 }
 
-/* 7. Fix the hero stat background so numbers stay readable */
+/* 7. Readable hero stat background */
 .mb-home .hero-stat {
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.55);
 }
 
-/* 8. Adjust the light buttons so they don't disappear against the glass */
+/* 8. Adjust light buttons so they stand out on the green glass */
 .mb-home .home-btn-light {
-  background: rgba(255, 255, 255, 0.8);
-  border-color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(8px);
 }
 .mb-home .home-btn-light:hover {
   background: #fff;
 }
 
-/* 9. Ensure text has a subtle shadow to remain readable on the gradient */
+/* 9. Subtle text shadow for headings */
 .mb-home .hero-title,
 .mb-home .section-heading h2 {
-  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.95);
 }
