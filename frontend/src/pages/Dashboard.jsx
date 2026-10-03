@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import AmountPicker from '../components/AmountPicker.jsx';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -813,12 +814,13 @@ export default function Dashboard() {
                       )}
                       {canCounter && (
                         <>
-                          <input
-                            className="sd-counter-input"
-                            type="number"
-                            placeholder="Counter ETB"
+                          <AmountPicker
+                            className="sd-counter-picker"
+                            reference={Number(o.counterAmount ?? o.amount)}
+                            placeholder="Counter (ETB)"
                             value={counterDrafts[o.id] || ''}
-                            onChange={(e) => setCounterDrafts((d) => ({ ...d, [o.id]: e.target.value }))}
+                            onChange={(v) => setCounterDrafts((d) => ({ ...d, [o.id]: v }))}
+                            ariaLabel="Counter amount in ETB"
                           />
                           <button
                             type="button"

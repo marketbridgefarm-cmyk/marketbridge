@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import AmountPicker from '../components/AmountPicker.jsx';
 import { Link, useParams } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -439,14 +440,13 @@ export default function ListingDetail() {
                       >
                         Accept selected price
                       </button>
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        placeholder="Counter ETB"
+                      <AmountPicker
+                        className="inline-picker"
+                        reference={Number(myLatestOffer.counterAmount ?? myLatestOffer.amount)}
+                        placeholder="Counter (ETB)"
                         value={buyerCounter}
-                        onChange={(e) => setBuyerCounter(e.target.value)}
-                        className="inline-input"
+                        onChange={setBuyerCounter}
+                        ariaLabel="Counter amount in ETB"
                       />
                       <button
                         className="btn btn-light"
@@ -475,14 +475,13 @@ export default function ListingDetail() {
                       >
                         Accept seller counter
                       </button>
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        placeholder="Counter ETB"
+                      <AmountPicker
+                        className="inline-picker"
+                        reference={Number(myLatestOffer.counterAmount ?? myLatestOffer.amount)}
+                        placeholder="Counter (ETB)"
                         value={buyerCounter}
-                        onChange={(e) => setBuyerCounter(e.target.value)}
-                        className="inline-input"
+                        onChange={setBuyerCounter}
+                        ariaLabel="Counter amount in ETB"
                       />
                       <button
                         className="btn btn-light"
@@ -584,20 +583,17 @@ export default function ListingDetail() {
                         ? 'Offer amount (ETB)'
                         : 'Your bid / offer (ETB)'}
                     </label>
-                    <input
+                    <AmountPicker
                       required
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      inputMode="decimal"
+                      reference={Number(listing.askingPrice)}
                       placeholder={
                         isProduct
-                          ? 'Enter the amount you want to offer (ETB)'
-                          : 'Enter your bid amount (ETB)'
+                          ? 'Select the amount you want to offer'
+                          : 'Select your bid amount'
                       }
                       value={offerAmount}
-                      onChange={(e) => setOfferAmount(e.target.value)}
-                      aria-label="Your bid amount in ETB"
+                      onChange={setOfferAmount}
+                      ariaLabel="Your bid amount in ETB"
                     />
                     <label>Message</label>
                     <textarea
@@ -846,17 +842,17 @@ function OfferRow({ offer, onAction }) {
           >
             {busy === 'REJECT' ? 'Rejecting…' : 'Reject'}
           </button>
-          <input
-            type="number"
-            min="0.01"
-            step="0.01"
-            className="inline-input"
+          <AmountPicker
+            className="inline-picker"
+            reference={amount}
+            min={Number.isFinite(minimum) ? minimum : undefined}
             placeholder={
-              Number.isFinite(minimum) ? `Counter ≥ ${minimum}` : 'Counter ETB'
+              Number.isFinite(minimum) ? `Counter ≥ ${minimum}` : 'Counter (ETB)'
             }
             value={counter}
             disabled={Boolean(busy)}
-            onChange={(e) => setCounter(e.target.value)}
+            onChange={setCounter}
+            ariaLabel="Counter amount in ETB"
           />
           <button
             type="button"

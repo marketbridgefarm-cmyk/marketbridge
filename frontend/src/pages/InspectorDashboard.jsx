@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import AmountPicker from '../components/AmountPicker.jsx';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
@@ -720,19 +721,19 @@ export default function InspectorDashboard() {
                                 <div className="sd-form-grid sd-form-grid--tight">
                                   <div>
                                     <label htmlFor={`counter-${myLeaf.id}`}>Your counter (ETB)</label>
-                                    <input
+                                    <AmountPicker
                                       id={`counter-${myLeaf.id}`}
-                                      type="number"
-                                      min="1"
-                                      step="0.01"
-                                      placeholder="e.g. 450"
+                                      reference={Number(myLeaf.counterAmount ?? myLeaf.amount)}
+                                      min={1}
+                                      placeholder="Select your counter"
                                       value={quoteCounterInputs[myLeaf.id] || ''}
-                                      onChange={(e) =>
+                                      onChange={(v) =>
                                         setQuoteCounterInputs((q) => ({
                                           ...q,
-                                          [myLeaf.id]: e.target.value,
+                                          [myLeaf.id]: v,
                                         }))
                                       }
+                                      ariaLabel="Your counter in ETB"
                                     />
                                   </div>
                                 </div>
@@ -755,19 +756,19 @@ export default function InspectorDashboard() {
                                 <div className="sd-form-grid sd-form-grid--tight">
                                   <div>
                                     <label htmlFor={`quote-${r.id}`}>Your quote (ETB)</label>
-                                    <input
+                                    <AmountPicker
                                       id={`quote-${r.id}`}
-                                      type="number"
-                                      min="1"
-                                      step="0.01"
-                                      placeholder="e.g. 450"
+                                      min={50}
+                                      max={100000}
+                                      placeholder="Select your quote"
                                       value={quoteAmountInputs[r.id] || ''}
-                                      onChange={(e) =>
+                                      onChange={(v) =>
                                         setQuoteAmountInputs((q) => ({
                                           ...q,
-                                          [r.id]: e.target.value,
+                                          [r.id]: v,
                                         }))
                                       }
+                                      ariaLabel="Your quote in ETB"
                                     />
                                   </div>
 

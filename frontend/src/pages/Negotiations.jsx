@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import AmountPicker from '../components/AmountPicker.jsx';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -253,15 +254,14 @@ function QuoteRow({ quote, group, busyKey, onRespond }) {
                 {busy('REJECT') ? 'Rejecting…' : 'Reject'}
               </button>
 
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                className="neg-counter-input"
-                placeholder="Counter ETB"
+              <AmountPicker
+                className="neg-counter-picker"
+                reference={amountOf(quote)}
+                placeholder="Counter (ETB)"
                 value={counterDraft}
                 disabled={anyBusy}
-                onChange={(e) => setCounterDraft(e.target.value)}
+                onChange={setCounterDraft}
+                ariaLabel="Counter amount in ETB"
               />
 
               <button
@@ -424,15 +424,14 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
             </button>
           )}
 
-          <input
-            type="number"
-            min="0.01"
-            step="0.01"
-            className="neg-counter-input"
-            placeholder="Counter ETB"
+          <AmountPicker
+            className="neg-counter-picker"
+            reference={amountOf(item)}
+            placeholder="Counter (ETB)"
             value={counterDraft}
             disabled={anyBusy}
-            onChange={(e) => onCounterDraftChange(e.target.value)}
+            onChange={onCounterDraftChange}
+            ariaLabel="Counter amount in ETB"
           />
 
           <button

@@ -4,6 +4,7 @@ import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import RecentActivity from '../components/RecentActivity.jsx';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
+import AmountPicker from '../components/AmountPicker.jsx';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/TruckOwnerDashboard.css';
@@ -204,6 +205,10 @@ export default function TruckOwnerDashboard() {
 
   const [truckForm, setTruckForm] = useState(EMPTY_TRUCK_FORM);
   const [showTruckModal, setShowTruckModal] = useState(false);
+  // Select-only price entry for quotes / counters (no free typing, so no
+  // phone numbers can be slipped into a price box).
+  const [amountModal, setAmountModal] = useState(null); // { kind, job?, quoteId?, reference }
+  const [amountDraft, setAmountDraft] = useState('');
 
   // Evidence capture, required by the backend before PICKUP -> IN_TRANSIT
   // (needs PICKUP evidence) and IN_TRANSIT -> DELIVERED (needs DELIVERY evidence).
@@ -379,11 +384,19 @@ export default function TruckOwnerDashboard() {
       return;
     }
 
-    const amount = window.prompt(`Transport quote in ETB for ${job.load}:`);
-    if (amount === null) return;
+    setAmountDraft('');
+    setAmountModal({ kind: 'quote', job, reference: null });
+    return;
+  }
 
-    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
-      toast('Enter a valid positive quote.');
+  async function submitJobQuote(job, amount) {
+    const available = trucks.filter(
+      (t) =>
+        t.availability === 'AVAILABLE' &&
+        (!job.requiredCapacity || t.capacity >= Number(job.requiredCapacity))
+    );
+    if (!available.length) {
+      toast('No available truck meets this request.');
       return;
     }
 
@@ -453,15 +466,12 @@ export default function TruckOwnerDashboard() {
     }
   }
 
-  async function counterTransportQuote(quoteId) {
-    const amount = window.prompt('Your counter-offer in ETB:');
-    if (amount === null) return;
+  function counterTransportQuote(quoteId, reference) {
+    setAmountDraft('');
+    setAmountModal({ kind: 'counter', quoteId, reference: Number(reference) || null });
+  }
 
-    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
-      toast('Enter a valid positive amount.');
-      return;
-    }
-
+  async function submitTransportCounter(quoteId, amount) {
     setActionLoading(`quote-${quoteId}`);
 
     try {
@@ -1172,7 +1182,7 @@ export default function TruckOwnerDashboard() {
                                 type="button"
                                 className="sd-btn sd-btn-outline"
                                 disabled={respondBusy}
-                                onClick={() => counterTransportQuote(myLeaf.id)}
+                                onClick={() => counterTransportQuote(myLeaf.id, myLeaf.counterAmount ?? myLeaf.amount)}
                               >
                                 {respondBusy ? 'Sending…' : 'Counter'}
                               </button>
@@ -1562,6 +1572,80 @@ export default function TruckOwnerDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          SELECT-ONLY PRICE MODAL (quote / counter)
+      ========================================================= */}
+
+      {amountModal && (
+        <div
+          className="sd-report-backdrop"
+          role="presentation"
+          onClick={() => setAmountModal(null)}
+        >
+          <div
+            className="sd-report-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="amount-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sd-report-header">
+              <h2 id="amount-modal-title">
+                {amountModal.kind === 'quote'
+                  ? `Transport quote${amountModal.job?.load ? ` · ${amountModal.job.load}` : ''}`
+                  : 'Your counter-offer'}
+              </h2>
+              <button
+                type="button"
+                className="btn btn-light btn-sm"
+                aria-label="Close price picker"
+                onClick={() => setAmountModal(null)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="sd-report-body">
+              <p className="sd-amount-note">
+                Pick your price from the list. Prices are selected, not typed,
+                so every deal stays on MarketBridge.
+              </p>
+              <AmountPicker
+                value={amountDraft}
+                onChange={setAmountDraft}
+                reference={amountModal.reference}
+                min={amountModal.kind === 'quote' ? 100 : 1}
+                max={1000000}
+                ariaLabel="Price in ETB"
+                autoFocus
+              />
+            </div>
+            <div className="sd-modal-actions sd-report-actions">
+              <button
+                type="button"
+                className="sd-btn sd-btn-outline"
+                onClick={() => setAmountModal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sd-btn sd-btn-primary"
+                disabled={!amountDraft || Number(amountDraft) <= 0}
+                onClick={() => {
+                  const m = amountModal;
+                  const amount = Number(amountDraft);
+                  setAmountModal(null);
+                  if (m.kind === 'quote') submitJobQuote(m.job, amount);
+                  else submitTransportCounter(m.quoteId, amount);
+                }}
+              >
+                {amountModal.kind === 'quote' ? 'Submit quote' : 'Send counter'}
+              </button>
+            </div>
           </div>
         </div>
       )}

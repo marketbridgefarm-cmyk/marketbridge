@@ -1,4 +1,5 @@
 import React, {
+import AmountPicker from '../components/AmountPicker.jsx';
   useCallback,
   useEffect,
   useMemo,
@@ -745,20 +746,21 @@ function InspectionCard({ order, title, i }) {
                           >
                             Accept quote
                           </Button>
-                          <input
-                            className="field field-inline"
-                            type="number"
-                            min="1"
+                          <AmountPicker
+                            className="field-inline"
+                            reference={Number(quote.counterAmount ?? quote.amount)}
+                            min={1}
                             placeholder="Counter (ETB)"
                             value={
                               i.counterInputs[counterKeyFor(quote.id)] || ''
                             }
-                            onChange={(e) =>
+                            onChange={(v) =>
                               i.setCounterInputs((prev) => ({
                                 ...prev,
-                                [counterKeyFor(quote.id)]: e.target.value,
+                                [counterKeyFor(quote.id)]: v,
                               }))
                             }
+                            ariaLabel="Counter amount in ETB"
                           />
                           <Button
                             variant="light"
@@ -1023,13 +1025,14 @@ function QuoteRow({ quote, t }) {
             <Button size="sm" disabled={working} busy={working} busyText="Accepting…" onClick={() => t.acceptQuote(quote.id)}>
               {isTransporterTurn && quote.status === 'COUNTERED' ? 'Accept buyer counter' : 'Accept quote'}
             </Button>
-            <input
-              className="field field-inline"
-              type="number"
-              min="1"
+            <AmountPicker
+              className="field-inline"
+              reference={Number(quote.counterAmount ?? quote.amount)}
+              min={1}
               placeholder="Counter (ETB)"
               value={t.counterInputs[quote.id] || ''}
-              onChange={(e) => t.setCounterInputs((q) => ({ ...q, [quote.id]: e.target.value }))}
+              onChange={(v) => t.setCounterInputs((q) => ({ ...q, [quote.id]: v }))}
+              ariaLabel="Counter amount in ETB"
             />
             <Button variant="light" size="sm" disabled={working} busy={working} busyText="Sending…" onClick={() => t.counterQuote(quote.id)}>
               Counter
@@ -1327,12 +1330,12 @@ function TransportCard({ order, t }) {
    7. Offer, receipt, dispute, completed, admin
    ======================================================================== */
 
-function OfferCard({ amount, setAmount, message, setMessage, submitting, onSubmit }) {
+function OfferCard({ amount, setAmount, reference, message, setMessage, submitting, onSubmit }) {
   return (
     <Card id="make-offer" eyebrow="Product marketplace" title="Make an offer" subtitle="Your offer enters the seller's competition. It does not charge you or reserve the product.">
       <form onSubmit={onSubmit} className="form">
         <label htmlFor="offer-amount">Offer amount (ETB)</label>
-        <input id="offer-amount" className="field" type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter your offer" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={submitting} required />
+        <AmountPicker id="offer-amount" reference={reference} min={1} placeholder="Select your offer" value={amount} onChange={setAmount} disabled={submitting} required ariaLabel="Offer amount in ETB" />
         <label htmlFor="offer-message">Message to seller <span className="optional">(optional)</span></label>
         <textarea id="offer-message" className="field" rows="3" placeholder="Add a message to the seller" value={message} onChange={(e) => setMessage(e.target.value)} disabled={submitting} />
         <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Submitting…' : 'Make offer'}</button>
@@ -2124,6 +2127,7 @@ export default function OrderDetail() {
             <OfferCard
               amount={offerAmount}
               setAmount={setOfferAmount}
+              reference={Number(order.listing?.askingPrice ?? order.listing?.price)}
               message={offerMessage}
               setMessage={setOfferMessage}
               submitting={submittingOffer}
