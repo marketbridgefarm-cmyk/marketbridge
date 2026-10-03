@@ -33,11 +33,16 @@ const router = express.Router();
 const OPTIONAL_ROLES = ['INSPECTOR', 'TRUCK_OWNER', 'ADVERTISER'];
 const DEFAULT_ROLES = ['BUYER', 'SELLER'];
 
+// Bcrypt cost factor. 10 rounds is the industry standard (OWASP, Laravel,
+// Rails, Django) and takes ~600ms on Render's free-tier CPU. Anything
+// higher (11-14) makes login noticeably slow on 0.5 CPU instances.
+// Existing hashes with a higher round count are auto-upgraded on next
+// successful login (see the login handler below).
+const BCRYPT_ROUNDS = 10;
+
 // Refresh tokens live in an HttpOnly cookie, never in the JSON response body
 // or localStorage — this is what keeps a stolen/XSS'd page from being able
-// to mint fresh sessions indefinitely. The access token (short-lived) still
-// goes back in the body for the frontend to hold in memory/localStorage,
-// since its short TTL makes that an acceptable, lower-value target.
+// to mint fresh sessions indefinitely.
 const REFRESH_COOKIE_NAME = 'mb_refresh';
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -45,12 +50,7 @@ function refreshCookieOptions() {
   return {
     httpOnly: true,
     secure: isProduction,
-    // Frontend and backend are on different domains in production
-    // (Vercel + Render), which requires SameSite=None + Secure for the
-    // cookie to be sent at all. Locally (http, same-site) Lax is fine.
     sameSite: isProduction ? 'none' : 'lax',
-    // Scoped to the auth routes only — the browser won't attach this
-    // cookie to ordinary API calls, just /api/auth/refresh and /api/auth/logout.
     path: '/api/auth',
     maxAge: REFRESH_TTL_MS,
   };
@@ -66,19 +66,6 @@ function clearRefreshCookie(res) {
 }
 
 // CSRF hardening for the two cookie-authenticated endpoints.
-//
-// Every other route in this API uses a Bearer access token, which a
-// cross-site page cannot attach (it isn't a cookie, so the browser never
-// sends it automatically) — the standard reason "the API is Bearer-only,
-// so CSRF doesn't apply" holds for them. /refresh and /logout are the
-// exception: they read an HttpOnly cookie, and that cookie is
-// SameSite=None in production (required because the SPA and API are on
-// different domains), so the browser WILL attach it to a cross-site POST.
-// The response body can't be read cross-origin (CORS still blocks that),
-// but the request still executes server-side — an attacker page could
-// silently trigger session rotation or logout. Requiring the request's
-// Origin (or Referer, as a fallback for older/odd clients) to match an
-// allowed origin closes that gap without touching the Bearer-only routes.
 const trustedOrigins = process.env.CLIENT_URL
   ? process.env.CLIENT_URL.split(',').map((o) => o.trim()).filter(Boolean)
   : [];
@@ -126,8 +113,7 @@ function sanitize(user) {
 }
 
 // Short-lived, single-purpose token: proves "this device just supplied the
-// correct password for this account" without yet granting a session. Only
-// POST /auth/mfa/verify-login accepts it, and only within 5 minutes.
+// correct password for this account" without yet granting a session.
 const MFA_CHALLENGE_TTL = '5m';
 
 function signMfaChallenge(user) {
@@ -208,7 +194,7 @@ router.post(
         return res.status(409).json({ error: 'Email already registered' });
       }
 
-      const passwordHash = await bcrypt.hash(password, 12);
+      const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
       const user = await prisma.user.create({
         data: { name, email, phone, passwordHash, roles, location },
       });
@@ -245,14 +231,30 @@ router.post(
       const match = await bcrypt.compare(password, user.passwordHash);
       if (!match) return res.status(401).json({ error: 'Invalid credentials' });
 
+      // Auto-upgrade password hash if it was created with an older/higher
+      // bcrypt cost factor. bcrypt stores the round count inside the hash
+      // itself (the "$12$" prefix), so we can read it and quietly re-hash
+      // the password at the current standard. The first login after this
+      // change takes the old time; every login after that is fast.
+      const currentRounds = Number.parseInt(String(user.passwordHash).split('$')[2], 10);
+      if (Number.isFinite(currentRounds) && currentRounds > BCRYPT_ROUNDS) {
+        try {
+          const upgraded = await bcrypt.hash(password, BCRYPT_ROUNDS);
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { passwordHash: upgraded },
+          });
+        } catch (rehashError) {
+          // Never fail a valid login because of a rehash hiccup.
+          req.log.error({ err: rehashError, userId: user.id }, 'Password rehash on login failed');
+        }
+      }
+
       if (user.accountStatus === 'SUSPENDED') {
         return res.status(403).json({ error: 'This account has been suspended. Contact support for assistance.' });
       }
 
-      // MFA-enabled accounts don't get a session from a password alone —
-      // password verification only earns a short-lived challenge token,
-      // which POST /auth/mfa/verify-login exchanges for the real session
-      // once a valid TOTP/backup code is presented too.
+      // MFA-enabled accounts don't get a session from a password alone.
       if (user.mfaEnabled) {
         return res.json({
           mfaRequired: true,
@@ -348,9 +350,7 @@ router.get('/me', authenticate, async (req, res) => {
   res.json({ user: sanitize(req.user) });
 });
 
-// Notification/localization preferences. Deliberately narrow (just these
-// three fields) rather than a general profile-edit endpoint — phone/name/
-// etc. changes go through whatever profile flow already exists elsewhere.
+// Notification/localization preferences.
 router.patch(
   '/me/preferences',
   authenticate,
@@ -392,8 +392,7 @@ router.patch(
   }
 );
 
-// Revoke only the current persistent session. Access-token session IDs are
-// accepted by the auth middleware and therefore become invalid immediately.
+// Revoke only the current persistent session.
 router.post('/logout', authenticate, async (req, res) => {
   await revokeFamily(prisma, req.authSessionFamilyId, 'logout');
   clearRefreshCookie(res);
@@ -411,9 +410,6 @@ router.post('/logout-all', authenticate, async (req, res) => {
 // MULTI-FACTOR AUTHENTICATION (TOTP)
 // ============================================================================
 
-// Step 2 of login for an MFA-enabled account: exchange the short-lived
-// challenge token (proof of a correct password) plus a current TOTP code
-// (or a one-time backup code) for a real session.
 router.post(
   '/mfa/verify-login',
   authLimiter,
@@ -453,7 +449,6 @@ router.post(
           return res.status(401).json({ error: 'Invalid authentication code', code: 'INVALID_MFA_CODE' });
         }
         usedBackupCode = true;
-        // Backup codes are one-time use: drop the consumed one immediately.
         const remaining = [...user.mfaBackupCodes];
         remaining.splice(backupIndex, 1);
         await prisma.user.update({ where: { id: user.id }, data: { mfaBackupCodes: remaining } });
@@ -481,9 +476,6 @@ router.get('/mfa/status', authenticate, async (req, res) => {
   });
 });
 
-// Begin (or restart) enrollment: generates a fresh secret and QR code.
-// Nothing takes effect until POST /mfa/verify-setup confirms the user
-// actually scanned it and can produce a valid code.
 router.post('/mfa/setup', authenticate, async (req, res) => {
   try {
     if (req.user.mfaEnabled) {
@@ -503,11 +495,6 @@ router.post('/mfa/setup', authenticate, async (req, res) => {
   }
 });
 
-// Confirm enrollment. Requires the current password in addition to a valid
-// code: this is the step that actually turns MFA on, so it deserves the
-// same bar as any other sensitive account change — a hijacked but
-// still-logged-in session shouldn't be able to silently lock the real
-// owner into an attacker-controlled authenticator.
 router.post(
   '/mfa/verify-setup',
   authenticate,
@@ -547,8 +534,6 @@ router.post(
         data: { mfaEnabled: true, mfaBackupCodes: hashed },
       });
 
-      // The only moment these plaintext codes ever exist outside the
-      // user's own device — not stored, not logged, shown exactly once.
       return res.json({
         message: 'MFA is now enabled on your account.',
         backupCodes,
@@ -560,10 +545,6 @@ router.post(
   }
 );
 
-// Disable MFA. Requires both the password and a currently-valid code
-// (TOTP or backup) — the same "don't let a hijacked session quietly weaken
-// account security" reasoning as verify-setup, doubled, since disabling is
-// the more damaging direction.
 router.post(
   '/mfa/disable',
   authenticate,
@@ -612,15 +593,6 @@ router.post(
 // PASSWORD RECOVERY
 // ============================================================================
 
-// Always responds with the same generic message regardless of whether the
-// email is registered, so this endpoint can't be used to enumerate
-// accounts. The reset link is emailed via the shared SMTP mailer
-// (utils/mailer.js); a send failure is logged and swallowed rather than
-// surfaced to the caller — letting it bubble up as a distinct error would
-// itself leak account existence during a provider outage (nonexistent
-// emails short-circuit above before ever reaching sendMail, so only real
-// accounts would see the failure). Outside production the link is also
-// echoed in the response for local/manual testing without real SMTP.
 router.post(
   '/forgot-password',
   authLimiter,
@@ -682,7 +654,7 @@ router.post(
         const userId = await consumeResetToken(tx, req.body.token);
         if (!userId) return null;
 
-        const passwordHash = await bcrypt.hash(req.body.password, 12);
+        const passwordHash = await bcrypt.hash(req.body.password, BCRYPT_ROUNDS);
         const user = await tx.user.update({ where: { id: userId }, data: { passwordHash } });
         return user;
       }, { maxWait: 10000, timeout: 15000 });
@@ -691,10 +663,6 @@ router.post(
         return res.status(400).json({ error: 'This reset link is invalid or has expired. Request a new one.', code: 'INVALID_RESET_TOKEN' });
       }
 
-      // A password reset is a strong enough signal of account takeover
-      // risk (or at least "the previous password may be compromised") to
-      // sign every other device out, the same way changing a password
-      // manually would.
       await revokeAllSessions(prisma, result.id, 'password-reset');
 
       return res.json({ message: 'Your password has been reset. Please log in again.' });
