@@ -1,0 +1,48 @@
+.amount-picker {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.amount-picker-select {
+  flex: 1 1 auto;
+  min-width: 150px;
+  min-height: 40px;
+  padding: 0 10px;
+  font: inherit;
+  color: inherit;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #d6dbe1);
+  border-radius: 10px;
+}
+
+.amount-picker-select:focus-visible,
+.amount-picker-step:focus-visible {
+  outline: 2px solid var(--primary, #1f7a4d);
+  outline-offset: 1px;
+}
+
+.amount-picker-step {
+  flex: 0 0 40px;
+  min-height: 40px;
+  font-size: 20px;
+  line-height: 1;
+  color: inherit;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #d6dbe1);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.amount-picker-step:disabled,
+.amount-picker-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .amount-picker { display: flex; width: 100%; }
+  .amount-picker-select { min-width: 0; }
+}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import AmountPicker from './AmountPicker.jsx';
 import { Link } from 'react-router-dom';
 import './BidBoard.css';
 
@@ -209,16 +210,14 @@ function BidRow({ quote, type, onRespond, disabled }) {
                 </button>
               ) : (
                 <>
-                  <input
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    className="bb-counter-input"
-                    placeholder="Your offer (ETB)"
+                  <AmountPicker
+                    className="bb-counter-picker"
+                    reference={Number(displayAmount)}
+                    min={1}
+                    placeholder="Select your offer (ETB)"
                     value={counterAmount}
-                    onChange={(e) => setCounterAmount(e.target.value)}
-                    aria-label="Counter-offer amount"
-                    autoFocus
+                    onChange={setCounterAmount}
+                    ariaLabel="Counter-offer amount"
                   />
                   <button
                     type="button"
