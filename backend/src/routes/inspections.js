@@ -589,7 +589,7 @@ router.patch(
         return res.status(409).json({ error: 'This quote has expired' });
       }
 
-      // FIXED: turn check now allows null (either party may act on SELECTED)
+      // Turn check now allows null (either party may act on SELECTED)
       const turn = quoteTurn(quote);
       if (turn !== null && turn !== actorRole) {
         return res.status(409).json({
@@ -683,7 +683,18 @@ router.patch(
 );
 
 // ============================================================================
-// COUNTER INSPECTION QUOTE
+// COUNTER INSPECTION QUOTE  (FIXED)
+// ----------------------------------------------------------------------------
+// Root cause of the "Could not counter inspection quote" 500 was:
+//   Unique constraint failed on (inspectionRequestId, inspectorId)
+//
+// The schema enforces ONE quote row per inspector per inspection. The old
+// code tried to INSERT a brand-new counter row for the same inspector, which
+// Prisma rejected with P2002 and rolled back the transaction.
+//
+// Fix: update the SAME row in place, storing the negotiation state in
+// (amount, counterAmount, counteredBy, status). No new row, no constraint
+// violation, and the negotiation loop works in both directions.
 // ============================================================================
 
 router.post(
@@ -716,7 +727,7 @@ router.post(
         return res.status(409).json({ error: 'This quote has expired' });
       }
 
-      // FIXED: turn check now allows null (either party may act on SELECTED)
+      // Turn check: SELECTED → both may act; COUNTERED → only the other side.
       const outerTurn = quoteTurn(quote);
       if (outerTurn !== null && outerTurn !== actorRole) {
         return res.status(409).json({
@@ -735,28 +746,20 @@ router.post(
           throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
         }
 
-        // FIXED: inner turn check now allows null
         const freshTurn = quoteTurn(freshQuote);
         if (freshTurn !== null && freshTurn !== actorRole) {
           throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
         }
 
-        await tx.inspectionQuote.update({
+        // ✅ UPDATE the same row — no new insert, so no unique-constraint violation.
+        const updated = await tx.inspectionQuote.update({
           where: { id: freshQuote.id },
-          data: { status: 'COUNTERED' },
-        });
-
-        const created = await tx.inspectionQuote.create({
           data: {
-            inspectionRequestId: request.id,
-            inspectorId: freshQuote.inspectorId,
-            amount: counterAmount,
+            status: 'COUNTERED',
             counterAmount,
             counteredBy: actorRole,
-            status: 'COUNTERED',
-            parentQuoteId: freshQuote.id,
-            expiresAt: quoteExpiry(12),
             message: req.body.message || freshQuote.message,
+            expiresAt: quoteExpiry(12),
           },
           include: {
             inspector: { select: { id: true, name: true, rating: true, location: true } },
@@ -767,17 +770,16 @@ router.post(
           actorId: req.user.id,
           action: 'INSPECTION_QUOTE_COUNTERED',
           resourceType: 'InspectionQuote',
-          resourceId: created.id,
+          resourceId: updated.id,
           metadata: {
             inspectionRequestId: request.id,
-            parentQuoteId: freshQuote.id,
             counteredBy: actorRole,
             previousAmount: String(freshQuote.counterAmount ?? freshQuote.amount),
             counterAmount: String(counterAmount),
           },
         });
 
-        return created;
+        return updated;
       }, { maxWait: 10000, timeout: 15000 });
 
       return res.status(201).json({
@@ -881,7 +883,6 @@ router.patch(
         return res.status(400).json({ error: `Quote cannot be rejected because it is ${quote.status}` });
       }
 
-      // FIXED: turn check now allows null (either party may act on SELECTED)
       const turn = quoteTurn(quote);
       if (turn !== null && turn !== actorRole) {
         return res.status(409).json({
