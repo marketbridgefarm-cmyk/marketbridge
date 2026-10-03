@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api from '../api/client';
-import { startChapaPayment, chapaInitializeAndRedirect } from '../utils/chapaCheckout';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
-import EvidenceGallery from '../components/EvidenceGallery.jsx';
 import './listing-detail/ListingDetail.css';
 
 const money = (n) => Number(n || 0).toLocaleString();
@@ -45,16 +43,6 @@ export default function ListingDetail() {
   const [offerAmount, setOfferAmount] = useState('');
   const [message, setMessage] = useState('');
 
-  const [inspectionPayMethod, setInspectionPayMethod] = useState('TELEBIRR');
-  const [payingInspectionId, setPayingInspectionId] = useState('');
-
-  const [quotesByRequest, setQuotesByRequest] = useState({});
-  const [loadingQuotesId, setLoadingQuotesId] = useState('');
-  const [acceptingQuoteId, setAcceptingQuoteId] = useState('');
-  const [counteringQuoteId, setCounteringQuoteId] = useState('');
-  const [rejectingQuoteId, setRejectingQuoteId] = useState('');
-  const [quoteCounterInputs, setQuoteCounterInputs] = useState({});
-
   const [buyerCounter, setBuyerCounter] = useState('');
 
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
@@ -66,6 +54,8 @@ export default function ListingDetail() {
     );
   const relatedOrder = relatedOrders[0] || null;
 
+  // Read-only view of the current inspection (if any) so the listing page can
+  // point the buyer at the order page where the actual negotiation happens.
   const activeInspectionRequest =
     (listing?.inspectionRequests || [])
       .filter((request) => request.status !== 'CANCELLED')
@@ -127,28 +117,6 @@ export default function ListingDetail() {
     }
   }
 
-  async function requestInspection(mode) {
-    try {
-      if (!relatedOrder?.id) {
-        showToast(
-          'Complete the offer/negotiation first. Inspection is attached to the resulting order.',
-          'error'
-        );
-        return;
-      }
-      const body = { orderId: relatedOrder.id, listingId: id, mode };
-      await api.post('/inspections', body, {
-        headers: {
-          'Idempotency-Key': `inspection:${relatedOrder.id}:${mode}`,
-        },
-      });
-      showToast('Inspection request created.', 'success');
-      load();
-    } catch (e) {
-      showToast(e.response?.data?.error || 'Could not request inspection', 'error');
-    }
-  }
-
   async function respondToOffer(offerId, action, counterAmount) {
     try {
       const payload = { action };
@@ -160,173 +128,6 @@ export default function ListingDetail() {
     } catch (e) {
       showToast(e.response?.data?.error || 'Action failed', 'error');
     }
-  }
-
-  async function payInspection(request) {
-    setPayingInspectionId(request.id);
-    try {
-      await startChapaPayment({
-        type: 'INSPECTOR',
-        inspectionRequestId: request.id,
-        amount: request.fee,
-        method: inspectionPayMethod,
-      });
-    } catch (e) {
-      showToast(
-        e.response?.data?.error || e.message || 'Could not start inspection payment',
-        'error'
-      );
-      setPayingInspectionId('');
-    }
-  }
-
-  async function resumeInspectionPayment(paymentId, requestId) {
-    setPayingInspectionId(requestId);
-    try {
-      await chapaInitializeAndRedirect(paymentId);
-    } catch (e) {
-      showToast(e.response?.data?.error || e.message || 'Could not resume payment', 'error');
-      setPayingInspectionId('');
-    }
-  }
-
-  async function checkInspectionPaymentStatus(paymentId, requestId) {
-    setPayingInspectionId(requestId);
-    try {
-      const response = await api.get(`/payments/${paymentId}/chapa/verify`);
-      await load();
-      if (response.data?.status === 'PENDING') {
-        showToast(
-          'Chapa has not confirmed this payment yet. Try again shortly, or retry once it shows FAILED.',
-          'info'
-        );
-      }
-    } catch (e) {
-      showToast(
-        e.response?.data?.error || e.message || 'Could not check payment status',
-        'error'
-      );
-    } finally {
-      setPayingInspectionId('');
-    }
-  }
-
-  async function loadQuotes(requestId) {
-    setLoadingQuotesId(requestId);
-    try {
-      const response = await api.get(`/inspections/${requestId}/quotes`);
-      setQuotesByRequest((q) => ({
-        ...q,
-        [requestId]: response.data?.quotes || [],
-      }));
-    } catch (e) {
-      showToast(e.response?.data?.error || 'Could not load quotes', 'error');
-    } finally {
-      setLoadingQuotesId('');
-    }
-  }
-
-  async function selectInspectionQuote(requestId, quoteId) {
-    setAcceptingQuoteId(quoteId);
-    try {
-      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/select`);
-      showToast(
-        'Inspector bid selected. Price-deal negotiation is now open.',
-        'success'
-      );
-      await loadQuotes(requestId);
-    } catch (e) {
-      showToast(
-        e.response?.data?.error || 'Could not select this inspection bid.',
-        'error'
-      );
-    } finally {
-      setAcceptingQuoteId('');
-    }
-  }
-
-  async function acceptQuote(requestId, quoteId) {
-    setAcceptingQuoteId(quoteId);
-    try {
-      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/accept`);
-      showToast(
-        'Quote accepted provisionally. The inspector is assigned after the inspection payment gate.',
-        'success'
-      );
-      await loadQuotes(requestId);
-      await load();
-    } catch (e) {
-      showToast(
-        e.response?.data?.error ||
-          'Could not accept this quote — it may no longer be available.',
-        'error'
-      );
-    } finally {
-      setAcceptingQuoteId('');
-    }
-  }
-
-  async function releaseInspectionAgreement(requestId, quoteId) {
-    setRejectingQuoteId(quoteId);
-    try {
-      const reason = window.prompt('Why are you releasing this provisional inspection agreement?');
-      if (!reason || !reason.trim()) return;
-      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/withdraw`, { reason: reason.trim() });
-      showToast(
-        'Provisional inspector deal released. Other inspector bids are available again.',
-        'success'
-      );
-      await loadQuotes(requestId);
-      await load();
-    } catch (e) {
-      showToast(
-        e.response?.data?.error || 'Could not release the inspector agreement.',
-        'error'
-      );
-    } finally {
-      setRejectingQuoteId('');
-    }
-  }
-
-  async function counterQuote(requestId, quoteId) {
-    const amount = Number(quoteCounterInputs[quoteId]);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      showToast('Enter a valid counter amount before sending.', 'error');
-      return;
-    }
-    setCounteringQuoteId(quoteId);
-    try {
-      await api.post(`/inspections/${requestId}/quotes/${quoteId}/counter`, {
-        counterAmount: amount,
-      });
-      showToast('Counter-offer sent to the inspector.', 'success');
-      setQuoteCounterInputs((q) => ({ ...q, [quoteId]: '' }));
-      await loadQuotes(requestId);
-    } catch (e) {
-      showToast(e.response?.data?.error || 'Could not send counter-offer.', 'error');
-    } finally {
-      setCounteringQuoteId('');
-    }
-  }
-
-  async function rejectQuote(requestId, quoteId) {
-    setRejectingQuoteId(quoteId);
-    try {
-      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/reject`);
-      showToast('Quote rejected.', 'success');
-      await loadQuotes(requestId);
-    } catch (e) {
-      showToast(e.response?.data?.error || 'Could not reject this quote.', 'error');
-    } finally {
-      setRejectingQuoteId('');
-    }
-  }
-
-  function leafQuotes(list) {
-    const parentIds = new Set(
-      (list || []).map((q) => q.parentQuoteId).filter(Boolean)
-    );
-    return (list || []).filter((q) => !parentIds.has(q.id));
   }
 
   if (!listing) {
@@ -550,348 +351,55 @@ export default function ListingDetail() {
               )}
 
               <p className="listing-availability-note">
-  <strong className="notice-prefix">Notice:</strong>{' '}
-  {isAvailable
-    ? 'Available for competing buyers. Selecting a buyer opens negotiation; only acceptance creates the reservation.'
-    : 'This listing is currently reserved / unavailable to new buyers.'}
-</p>
+                <strong className="notice-prefix">Notice:</strong>{' '}
+                {isAvailable
+                  ? 'Available for competing buyers. Selecting a buyer opens negotiation; only acceptance creates the reservation.'
+                  : 'This listing is currently reserved / unavailable to new buyers.'}
+              </p>
             </div>
 
-            {/* ── Inspection evidence ───────────────────────── */}
+            {/* ── Inspection summary (read-only) ────────────── */}
             {(isAgricultural || isProduct) && (
               <div className="card">
                 <CardHead
                   eyebrow="QUALITY"
-                  title="Inspection evidence"
-                  subtitle="Independent reports attached to this listing and its order."
+                  title="Inspection"
+                  subtitle="Inspection is arranged and negotiated from the order page."
                 />
 
-                {listing.inspectionRequests?.length ? (
-                  listing.inspectionRequests.map((request) => (
-                    <div className="evidence" key={request.id}>
-                      <div className="evidence-head">
-                        <strong>{request.mode.replaceAll('_', ' ')}</strong>
-                        <span className="ld-badge">{request.status.replace(/_/g, ' ')}</span>
-                      </div>
-
-                      {request.inspector && (
-                        <p className="evidence-line">
-                          Inspector: <strong>{request.inspector.name}</strong>
-                        </p>
-                      )}
-
-                      {request.requestedById === user?.id &&
-                        ['REQUESTED', 'ACCEPTED'].includes(request.status) && (
-                          <div className="evidence-actions">
-                            {!quotesByRequest[request.id] ? (
-                              <button
-                                type="button"
-                                className="btn btn-light btn-sm"
-                                disabled={loadingQuotesId === request.id}
-                                onClick={() => loadQuotes(request.id)}
-                              >
-                                {loadingQuotesId === request.id
-                                  ? 'Loading…'
-                                  : 'View inspector quotes'}
-                              </button>
-                            ) : (
-                              <div className="quotes-block">
-                                <p className="muted">
-                                  {
-                                    quotesByRequest[request.id].filter((q) =>
-                                      ['PENDING', 'SELECTED', 'COUNTERED'].includes(q.status)
-                                    ).length
-                                  }{' '}
-                                  available quote(s). This is a competitive inspection
-                                  request. Inspectors submit sealed quotes; you select
-                                  one for bilateral negotiation.
-                                  {request.status === 'ACCEPTED' &&
-                                    ' The current inspector agreement is provisional until the inspection payment settles.'}
-                                </p>
-
-                                {quotesByRequest[request.id].length === 0 && (
-                                  <p className="muted">No quotes submitted yet.</p>
-                                )}
-
-                                {leafQuotes(quotesByRequest[request.id]).map((quote) => {
-                                  const displayAmount =
-                                    quote.status === 'COUNTERED'
-                                      ? quote.counterAmount ?? quote.amount
-                                      : quote.amount;
-                                  const isRequesterTurn =
-                                    quote.status === 'SELECTED' ||
-                                    (quote.status === 'COUNTERED' &&
-                                      quote.counteredBy === 'PROVIDER');
-                                  const isCompetitionBid = quote.status === 'PENDING';
-                                  const isWaitingOnInspector =
-                                    quote.status === 'COUNTERED' &&
-                                    quote.counteredBy === 'REQUESTER';
-
-                                  return (
-                                    <div className="quote-row" key={quote.id}>
-                                      <div className="quote-row-head">
-                                        <strong>
-                                          {quote.inspector?.name || 'Inspector'}
-                                        </strong>
-                                        <span className="quote-amount">
-                                          {Number(displayAmount).toLocaleString()} ETB
-                                        </span>
-                                        <span className="ld-badge">{quote.status.replace(/_/g, ' ')}</span>
-                                      </div>
-
-                                      <p className="quote-meta">
-                                        {quote.inspector?.location || 'Location not set'}
-                                        {quote.inspector?.rating != null &&
-                                          ` · Rating ${Number(quote.inspector.rating).toFixed(1)}`}
-                                        {quote.inspector?.verificationStatus &&
-                                          ` · ${quote.inspector.verificationStatus}`}
-                                      </p>
-
-                                      {quote.message && (
-                                        <p className="quote-message">"{quote.message}"</p>
-                                      )}
-
-                                      {isWaitingOnInspector && (
-                                        <p className="quote-meta">
-                                          You countered{' '}
-                                          {Number(displayAmount).toLocaleString()} ETB —
-                                          waiting for the inspector to respond.
-                                        </p>
-                                      )}
-
-                                      {isCompetitionBid &&
-                                        request.requestedById === user?.id &&
-                                        request.status === 'REQUESTED' && (
-                                          <button
-                                            type="button"
-                                            className="btn btn-primary btn-sm"
-                                            disabled={acceptingQuoteId === quote.id}
-                                            onClick={() =>
-                                              selectInspectionQuote(request.id, quote.id)
-                                            }
-                                          >
-                                            {acceptingQuoteId === quote.id
-                                              ? 'Selecting…'
-                                              : 'Select bid for deal'}
-                                          </button>
-                                        )}
-
-                                      {quote.status === 'ACCEPTED' &&
-                                        request.requestedById === user?.id && (
-                                          <div className="quote-actions">
-                                            <span className="muted small">
-                                              Provisional inspector agreement. Release it
-                                              if the inspector drops out before payment.
-                                            </span>
-                                            <button
-                                              type="button"
-                                              className="btn btn-light btn-sm"
-                                              disabled={rejectingQuoteId === quote.id}
-                                              onClick={() =>
-                                                releaseInspectionAgreement(
-                                                  request.id,
-                                                  quote.id
-                                                )
-                                              }
-                                            >
-                                              {rejectingQuoteId === quote.id
-                                                ? 'Releasing…'
-                                                : 'Release inspector agreement'}
-                                            </button>
-                                          </div>
-                                        )}
-
-                                      {isRequesterTurn &&
-                                        request.status === 'REQUESTED' && (
-                                          <div className="quote-actions">
-                                            <button
-                                              type="button"
-                                              className="btn btn-primary btn-sm"
-                                              disabled={acceptingQuoteId === quote.id}
-                                              onClick={() =>
-                                                acceptQuote(request.id, quote.id)
-                                              }
-                                            >
-                                              {acceptingQuoteId === quote.id
-                                                ? 'Accepting…'
-                                                : 'Accept'}
-                                            </button>
-
-                                            <input
-                                              type="number"
-                                              min="1"
-                                              placeholder="Counter (ETB)"
-                                              className="inline-input"
-                                              value={quoteCounterInputs[quote.id] || ''}
-                                              onChange={(e) =>
-                                                setQuoteCounterInputs((q) => ({
-                                                  ...q,
-                                                  [quote.id]: e.target.value,
-                                                }))
-                                              }
-                                            />
-
-                                            <button
-                                              type="button"
-                                              className="btn btn-light btn-sm"
-                                              disabled={counteringQuoteId === quote.id}
-                                              onClick={() =>
-                                                counterQuote(request.id, quote.id)
-                                              }
-                                            >
-                                              {counteringQuoteId === quote.id
-                                                ? 'Sending…'
-                                                : 'Counter'}
-                                            </button>
-
-                                            <button
-                                              type="button"
-                                              className="btn btn-light btn-sm"
-                                              disabled={rejectingQuoteId === quote.id}
-                                              onClick={() =>
-                                                rejectQuote(request.id, quote.id)
-                                              }
-                                            >
-                                              {rejectingQuoteId === quote.id
-                                                ? 'Rejecting…'
-                                                : 'Reject'}
-                                            </button>
-                                          </div>
-                                        )}
-                                    </div>
-                                  );
-                                })}
-
-                                <button
-                                  type="button"
-                                  className="btn btn-light btn-sm"
-                                  style={{ marginTop: 6 }}
-                                  disabled={loadingQuotesId === request.id}
-                                  onClick={() => loadQuotes(request.id)}
-                                >
-                                  {loadingQuotesId === request.id
-                                    ? 'Refreshing…'
-                                    : 'Refresh quotes'}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                      {(() => {
-                        if (request.requestedById !== user?.id || request.fee == null) {
-                          return null;
-                        }
-
-                        const existing = (request.payments || []).find((p) =>
-                          ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
-                        );
-
-                        if (existing?.status === 'PAID') {
-                          return (
-                            <p className="evidence-line muted">Inspection fee paid.</p>
-                          );
-                        }
-
-                        if (existing?.status === 'PROCESSING') {
-                          return (
-                            <div className="evidence-actions">
-                              <p className="evidence-line muted">
-                                Your fee payment is being processed by Chapa.
-                              </p>
-                              <button
-                                type="button"
-                                className="btn btn-primary btn-sm"
-                                disabled={payingInspectionId === request.id}
-                                onClick={() =>
-                                  checkInspectionPaymentStatus(existing.id, request.id)
-                                }
-                              >
-                                {payingInspectionId === request.id
-                                  ? 'Checking…'
-                                  : 'Check payment status'}
-                              </button>
-                            </div>
-                          );
-                        }
-
-                        if (existing?.status === 'PENDING') {
-                          return (
-                            <div className="evidence-actions">
-                              <p className="evidence-line muted">
-                                Your fee payment hasn't completed yet.
-                              </p>
-                              <button
-                                type="button"
-                                className="btn btn-primary btn-sm"
-                                disabled={payingInspectionId === request.id}
-                                onClick={() =>
-                                  resumeInspectionPayment(existing.id, request.id)
-                                }
-                              >
-                                {payingInspectionId === request.id
-                                  ? 'Redirecting…'
-                                  : 'Resume payment'}
-                              </button>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div className="evidence-actions">
-                            <p className="evidence-line">
-                              Fee due:{' '}
-                              <strong>
-                                {Number(request.fee).toLocaleString()} ETB
-                              </strong>
-                            </p>
-                            <div className="inline-row">
-                              <select
-                                value={inspectionPayMethod}
-                                onChange={(e) => setInspectionPayMethod(e.target.value)}
-                              >
-                                <option value="TELEBIRR">Telebirr</option>
-                                <option value="QR">QR</option>
-                              </select>
-                              <button
-                                type="button"
-                                className="btn btn-primary btn-sm"
-                                disabled={payingInspectionId === request.id}
-                                onClick={() => payInspection(request)}
-                              >
-                                {payingInspectionId === request.id
-                                  ? 'Submitting…'
-                                  : 'Pay inspection fee'}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {request.report ? (
-                        <p className="evidence-line">
-                          ✓ {request.report.quantity} verified ·{' '}
-                          {request.report.grade || 'Grade not stated'}
-                          {request.report.moisture != null
-                            ? ` · ${request.report.moisture}% moisture`
-                            : ''}
-                        </p>
-                      ) : (
-                        <p className="evidence-line muted">Report pending.</p>
-                      )}
-
-                      {request.report && (
-                        <EvidenceGallery
-                          listUrl={`/inspections/${request.id}/evidence`}
-                          mediaUrl={(evidenceId) =>
-                            `/inspections/${request.id}/evidence/${evidenceId}/media`
-                          }
-                        />
-                      )}
+                {activeInspectionRequest ? (
+                  <div className="evidence">
+                    <div className="evidence-head">
+                      <strong>{activeInspectionRequest.mode.replaceAll('_', ' ')}</strong>
+                      <span className="ld-badge">
+                        {activeInspectionRequest.status.replace(/_/g, ' ')}
+                      </span>
                     </div>
-                  ))
+
+                    {activeInspectionRequest.inspector && (
+                      <p className="evidence-line">
+                        Inspector: <strong>{activeInspectionRequest.inspector.name}</strong>
+                      </p>
+                    )}
+
+                    {myOrder ? (
+                      <p className="detail-order-link">
+                        <Link className="btn btn-primary" to={`/orders/${myOrder.id}#inspection-section`}>
+                          Open inspection in your order →
+                        </Link>
+                      </p>
+                    ) : (
+                      <p className="muted">
+                        Inspection proceeds once your order exists.
+                      </p>
+                    )}
+                  </div>
                 ) : (
-                  <p className="muted">No inspection yet.</p>
+                  <p className="muted">
+                    {myOrder
+                      ? 'No inspection yet. Request one from the order page.'
+                      : 'Inspection becomes available after your offer is accepted and an order is created.'}
+                  </p>
                 )}
               </div>
             )}
@@ -1070,76 +578,45 @@ export default function ListingDetail() {
                     </Link>
                   </>
                 ) : (
-                  <>
-                    <form onSubmit={submitOffer}>
-                      <label>
-                        {isProduct
-                          ? 'Offer amount (ETB)'
-                          : 'Your bid / offer (ETB)'}
-                      </label>
-                      <input
-                        required
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        inputMode="decimal"
-                        placeholder={
-                          isProduct
-                            ? 'Enter the amount you want to offer (ETB)'
-                            : 'Enter your bid amount (ETB)'
-                        }
-                        value={offerAmount}
-                        onChange={(e) => setOfferAmount(e.target.value)}
-                        aria-label="Your bid amount in ETB"
-                      />
-                      <label>Message</label>
-                      <textarea
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                        placeholder={
-                          isProduct
-                            ? 'Optional message to the seller'
-                            : 'Optional message to the farmer'
-                        }
-                      />
-                      <button
-                        type="submit"
-                        className="btn btn-primary full"
-                        disabled={!offerAmount || Number(offerAmount) <= 0}
-                      >
-                        {isProduct ? 'Make Offer' : 'Submit bid'}
-                      </button>
-                    </form>
-
-                    <hr />
-
-                    <SectionHead title="Quality check" />
-
-                    {activeInspectionRequest ? (
-                      <p className="muted">
-                        Inspection already requested:{' '}
-                        <strong>
-                          {activeInspectionRequest.status.replaceAll('_', ' ')}
-                        </strong>
-                        . Continue with the existing inspection rather than creating
-                        another request.
-                      </p>
-                    ) : (
-                      <>
-                        <p className="muted">
-                          {relatedOrder
-                            ? 'Request an independent inspection for this agreed order.'
-                            : 'Inspection becomes available after an offer is accepted and an order is created.'}
-                        </p>
-                        <button
-                          className="btn btn-light full"
-                          onClick={() => requestInspection('BUYER_REQUESTED')}
-                        >
-                          Request inspection
-                        </button>
-                      </>
-                    )}
-                  </>
+                  <form onSubmit={submitOffer}>
+                    <label>
+                      {isProduct
+                        ? 'Offer amount (ETB)'
+                        : 'Your bid / offer (ETB)'}
+                    </label>
+                    <input
+                      required
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      inputMode="decimal"
+                      placeholder={
+                        isProduct
+                          ? 'Enter the amount you want to offer (ETB)'
+                          : 'Enter your bid amount (ETB)'
+                      }
+                      value={offerAmount}
+                      onChange={(e) => setOfferAmount(e.target.value)}
+                      aria-label="Your bid amount in ETB"
+                    />
+                    <label>Message</label>
+                    <textarea
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      placeholder={
+                        isProduct
+                          ? 'Optional message to the seller'
+                          : 'Optional message to the farmer'
+                      }
+                    />
+                    <button
+                      type="submit"
+                      className="btn btn-primary full"
+                      disabled={!offerAmount || Number(offerAmount) <= 0}
+                    >
+                      {isProduct ? 'Make Offer' : 'Submit bid'}
+                    </button>
+                  </form>
                 )}
               </div>
             )}
@@ -1212,27 +689,6 @@ export default function ListingDetail() {
                   title="Seller controls"
                   subtitle="Only the seller can change price or listing status."
                 />
-
-                {(isAgricultural || isProduct) && (
-                  <>
-                    {activeInspectionRequest ? (
-                      <p className="muted">
-                        Inspection already requested:{' '}
-                        <strong>
-                          {activeInspectionRequest.status.replaceAll('_', ' ')}
-                        </strong>
-                        . Continue with the existing inspection.
-                      </p>
-                    ) : (
-                      <button
-                        className="btn btn-light full"
-                        onClick={() => requestInspection('SELLER_REQUESTED')}
-                      >
-                        Request inspection
-                      </button>
-                    )}
-                  </>
-                )}
 
                 <SectionHead title="Negotiations" />
                 <SellerNegotiations
