@@ -64,7 +64,6 @@ const showcaseTabs = [
   ['digital', 'Digital', '/digital', 'blue'],
 ];
 
-// Normalises each marketplace response into one card shape.
 const showcaseSources = {
   agricultural: ['/listings', { category: 'AGRICULTURAL' }, (d) => (d?.listings || []).map((l) => ({
     id: l.id, title: l.title || l.cropType || 'Listing', meta: l.location, price: l.askingPrice, image: l.photos?.[0], to: `/listings/${l.id}`,
@@ -82,35 +81,53 @@ function formatStat(value) {
   return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 }
 
-function HeroMarketplaceStats({ stats, loading }) {
-  const items = [
+function HeroPanel({ stats, loading }) {
+  const statItems = [
     ['activeListings', 'Active listings'],
     ['activeUsers', 'Marketplace users'],
     ['completedOrders', 'Completed orders'],
     ['agriculturalLots', 'Agricultural lots'],
   ];
 
+  const marketLinks = [
+    { title: 'Agricultural', desc: 'Farm produce, offers, inspection & transport', link: '/agricultural' },
+    { title: 'Products', desc: 'Independent physical product sellers', link: '/products' },
+    { title: 'Digital', desc: 'eBooks, courses, software & creative products', link: '/digital' },
+  ];
+
   return (
-    <aside className={`hero-stat-card${loading ? ' hero-stat-loading' : ''}`} aria-label="Live MarketBridge marketplace statistics">
-      <div className="hero-stat-header">
-        <span className="hero-stat-label">Marketplace today</span>
-        <span className="hero-stat-live">Live statistics</span>
+    <div className="hero-panel">
+      <div className="hero-panel-header">
+        <span className="hero-panel-label">Marketplace today</span>
+        <span className="hero-panel-live">Live statistics</span>
       </div>
 
-      <div className="hero-stat-grid">
-        {items.map(([key, label]) => (
-          <div className="hero-stat" key={key}>
+      <div className="hero-panel-stats">
+        {statItems.map(([key, label]) => (
+          <div className="hero-panel-stat" key={key}>
             <strong>{formatStat(stats?.[key])}</strong>
             <span>{label}</span>
           </div>
         ))}
       </div>
 
-      <div className="hero-stat-footer">
-        <span>{stats?.updatedAt ? `Updated ${new Date(stats.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Connecting to marketplace data'}</span>
-        <span className="hero-stat-refresh">Refreshes every 60s</span>
+      <div className="hero-panel-divider" />
+
+      <div className="hero-panel-markets">
+        <span className="hero-panel-label">Explore marketplaces</span>
+        <div className="hero-market-list">
+          {marketLinks.map((m) => (
+            <Link className="hero-market-link" key={m.title} to={m.link}>
+              <div className="hero-market-link-copy">
+                <strong>{m.title}</strong>
+                <span>{m.desc}</span>
+              </div>
+              <span className="hero-market-link-arrow" aria-hidden="true">→</span>
+            </Link>
+          ))}
+        </div>
       </div>
-    </aside>
+    </div>
   );
 }
 
@@ -182,19 +199,6 @@ function AdSlot({ children, cta }) {
   );
 }
 
-function PlatformStep({ number, title, description, link }) {
-  return (
-    <Link className="platform-step" to={link}>
-      <div className="step-number">{number}</div>
-      <div className="step-copy">
-        <strong>{title}</strong>
-        <span>{description}</span>
-      </div>
-      <span className="step-arrow" aria-hidden="true">→</span>
-    </Link>
-  );
-}
-
 export default function Home() {
   const [marketStats, setMarketStats] = useState(null);
   const [marketStatsLoading, setMarketStatsLoading] = useState(true);
@@ -241,56 +245,26 @@ export default function Home() {
               commerce.
             </p>
 
-            <div className="hero-join">
-              <strong>New to MarketBridge?</strong>
-              <span>
-                Create an account to buy, sell, negotiate and participate
-                across the marketplace.
-              </span>
-
-              <div className="account-actions">
-                <Link className="home-btn home-btn-primary" to="/register">
-                  Join MarketBridge
-                </Link>
-                <Link className="home-btn home-btn-light" to="/login">
-                  Sign in
-                </Link>
-              </div>
+            <div className="account-actions">
+              <Link className="home-btn home-btn-primary" to="/register">
+                Join MarketBridge
+              </Link>
+              <Link className="home-btn home-btn-light" to="/login">
+                Sign in
+              </Link>
             </div>
           </div>
 
-          <div className="hero-visual">
-            <HeroMarketplaceStats stats={marketStats} loading={marketStatsLoading} />
-
-            <div className="platform-card">
-              <div className="platform-header">
-                <span className="platform-label">Choose a marketplace</span>
-                <span className="platform-status">Connected</span>
-              </div>
-
-              <div className="platform-main">
-                <strong>A marketplace built around people.</strong>
-                <p>
-                  Independent producers and sellers keep ownership of their
-                  goods while MarketBridge provides marketplace infrastructure.
-                </p>
-              </div>
-
-              <div className="platform-flow">
-                <PlatformStep number="01" title="Agricultural" description="Farm produce, offers, inspection & transport" link="/agricultural" />
-                <PlatformStep number="02" title="Products" description="Independent physical product sellers" link="/products" />
-                <PlatformStep number="03" title="Digital" description="eBooks, courses, software & creative products" link="/digital" />
-              </div>
-            </div>
-          </div>
+          <HeroPanel stats={marketStats} loading={marketStatsLoading} />
         </div>
       </section>
 
-      <div className="trust-carousel" aria-label="MarketBridge marketplace features">
-        <div className="trust-carousel-track">
-          {[0, 1].map((copy) =>
-            trustItems.map(([title, subtitle, icon]) => (
-              <span className="trust-item" key={`${copy}-${title}`} aria-hidden={copy === 1 ? 'true' : undefined}>
+      {/* New static trust bar instead of carousel */}
+      <div className="trust-bar" aria-label="MarketBridge marketplace features">
+        <div className="home-container">
+          <div className="trust-bar-grid">
+            {trustItems.map(([title, subtitle, icon], index) => (
+              <span className="trust-item" key={title}>
                 <span className="trust-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24">{icon}</svg>
                 </span>
@@ -299,8 +273,8 @@ export default function Home() {
                   <span className="trust-subtitle">{subtitle}</span>
                 </span>
               </span>
-            ))
-          )}
+            ))}
+          </div>
         </div>
       </div>
 
