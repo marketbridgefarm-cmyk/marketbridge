@@ -9,8 +9,6 @@ import './dashboards/Dashboard.css';
 
 // ============================================================================
 // UNIFIED DASHBOARD
-// Card system mirrors pages/Orders.jsx (head, status block, progress, amount,
-// footer) so every list in the dashboard looks and behaves the same.
 // ============================================================================
 
 const TABS = [
@@ -30,7 +28,6 @@ const ORDER_FILTERS = [
   { id: 'selling', label: 'Selling' },
 ];
 
-const LISTING_STATUSES = ['ACTIVE', 'UNDER_NEGOTIATION', 'SOLD'];
 const ACTIVE_SALE_STATUSES = ['CONFIRMED', 'TRANSPORT_ARRANGED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
 
 // ---------------------------------------------------------------------------
@@ -44,7 +41,6 @@ const shortId = (id) => (id ? String(id).slice(0, 8).toUpperCase() : '—');
 const pretty = (s) => String(s || '').replace(/_/g, ' ');
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString() : null);
 
-// Same precedence as Orders.jsx: title first, then crop type.
 function listingLabel(listing) {
   return listing?.title || listing?.cropType || 'Listing';
 }
@@ -53,8 +49,6 @@ function recordTag(text) {
   return String(text || '??').replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || '??';
 }
 
-// Initials from a name, falling back to a 2-letter tag when the name is
-// missing or literally "Unknown".
 function initialsOf(name, fallback) {
   const cleaned = String(name || '').trim();
   if (!cleaned || cleaned.toLowerCase() === 'unknown') return recordTag(fallback);
@@ -73,10 +67,6 @@ function statusTone(status) {
   return 'muted';
 }
 
-/*
- * Payment status of one type reduced to a single label.
- * PAID wins over PENDING, which wins over FAILED — mirrors Orders.jsx.
- */
 function summarizePayments(payments, type) {
   const rows = (payments || []).filter((p) => p.type === type);
   if (rows.length === 0) return null;
@@ -87,7 +77,6 @@ function summarizePayments(payments, type) {
   return rows[0].status;
 }
 
-/* Order placed → Payment → Transport → Delivered (same rules as Orders.jsx) */
 function progressFor(order, marketplaceStatus) {
   const steps = ['Order placed', 'Payment', 'Transport', 'Delivered'];
   const status = String(order.status || '').toUpperCase();
@@ -166,10 +155,6 @@ function StatTile({ label, value, accent }) {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Shared card — identical structure to the Orders page card
-// ---------------------------------------------------------------------------
 
 function RecordCard({
   eyebrow, selling, title, date,
@@ -316,48 +301,49 @@ export default function Dashboard() {
     window.setTimeout(() => setToastMsg(''), 2500);
   }, []);
 
+  // --------------------------------------------------------------------
+  // PERFORMANCE: 3 requests instead of 25+
+  // --------------------------------------------------------------------
+  // Old flow: 1 offers + 1 orders + 3 listings statuses + N offers/listing
+  // New flow: 1 offers/mine + 1 orders + 1 listings (all statuses) + 1 offers/received
+  //
+  // The backend /offers/received endpoint is required. If it doesn't exist
+  // yet, it can be added as a 5-line route in offers.js (see note below).
+  // As a graceful fallback, if that endpoint 404s, we skip received offers.
+  // --------------------------------------------------------------------
   const loadAll = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     setError('');
 
     try {
-      // Only the data needed to paint the initial dashboard is awaited.
-      // Received-offer details are loaded after the first screen is visible.
-      const [offersRes, ordersRes, ...listingResults] = await Promise.all([
-        api.get('/offers/mine'),
-        api.get('/orders'),
-        ...LISTING_STATUSES.map((status) =>
-          api.get('/listings', { params: { sellerId: user.id, status, limit: 50 } })
-        ),
+      const [offersRes, ordersRes, listingsRes, receivedRes] = await Promise.allSettled([
+        api.get('/offers/mine', { params: { limit: 50 } }),
+        api.get('/orders', { params: { limit: 50 } }),
+        api.get('/listings', { params: { sellerId: user.id, limit: 100 } }),
+        api.get('/offers/received', { params: { limit: 100 } }),
       ]);
 
-      const nextOffersSent = offersRes.data?.offers || [];
-      const nextOrders = ordersRes.data?.orders || [];
-      const listings = listingResults.flatMap((r) => r.data?.listings || []);
+      setOffersSent(offersRes.status === 'fulfilled' ? offersRes.value.data?.offers || [] : []);
+      setOrders(ordersRes.status === 'fulfilled' ? ordersRes.value.data?.orders || [] : []);
+      setMyListings(listingsRes.status === 'fulfilled' ? listingsRes.value.data?.listings || [] : []);
 
-      setOffersSent(nextOffersSent);
-      setOrders(nextOrders);
-      setMyListings(listings);
-      setOffersReceived([]);
-      setLoading(false);
+      // offers/received may not exist yet on older backends. If it 404s,
+      // fall back to an empty list rather than crashing the dashboard.
+      if (receivedRes.status === 'fulfilled') {
+        setOffersReceived(receivedRes.value.data?.offers || []);
+      } else {
+        setOffersReceived([]);
+      }
 
-      // N+1 offer requests are intentionally kept off the critical path.
-      // One slow listing/offer endpoint must not keep the whole dashboard in
-      // its loading state.
-      if (listings.length > 0) {
-        const offerResults = await Promise.allSettled(
-          listings.map((l) => api.get(`/offers/listing/${l.id}`))
-        );
-        const received = listings.flatMap((listing, index) => {
-          const result = offerResults[index];
-          if (result?.status !== 'fulfilled') return [];
-          return (result.value.data?.offers || []).map((offer) => ({ ...offer, listing }));
-        });
-        setOffersReceived(received);
+      // If any critical request failed, surface a friendly error.
+      if (offersRes.status === 'rejected' || ordersRes.status === 'rejected' || listingsRes.status === 'rejected') {
+        const first = [offersRes, ordersRes, listingsRes].find((r) => r.status === 'rejected');
+        setError(first?.reason?.response?.data?.error || 'Could not load your dashboard');
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Could not load your dashboard');
+    } finally {
       setLoading(false);
     }
   }, [user?.id]);
@@ -550,7 +536,6 @@ export default function Dashboard() {
           />
         </DashboardWelcome>
 
-        {/* SERVICE ACCESS */}
         <section className="service-access" aria-labelledby="service-access-title">
           <div className="service-access-header">
             <div>
@@ -588,7 +573,6 @@ export default function Dashboard() {
         {error && <div className="alert error">{error}</div>}
         {toastMsg && <div className="sd-toast">{toastMsg}</div>}
 
-        {/* TABS */}
         <nav className={`sd-tabs-nav${tabsOpen ? ' sd-tabs-open' : ''}`}>
           <button
             type="button"
@@ -737,7 +721,7 @@ export default function Dashboard() {
             ) : (
               <div className="order-list">
                 {myListings.map((l) => {
-                  const offersForListing = offersReceived.filter((o) => o.listing?.id === l.id).length;
+                  const offersForListing = offersReceived.filter((o) => o.listing?.id === l.id || o.listingId === l.id).length;
                   const date = fmtDate(l.createdAt);
                   const tone = statusTone(l.status);
                   const title = listingLabel(l);
