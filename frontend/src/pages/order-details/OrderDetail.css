@@ -9,7 +9,7 @@
    Payout, Timeline, Messages).
    Everything is scoped under .order-detail-page so it can't leak.
    ========================================================================== */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Manrope:wght@600;700;800&display=swap');
+
 
 /* ---------- 1. Tokens ---------- */
 .order-detail-page {
