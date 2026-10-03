@@ -215,10 +215,7 @@ const Button = ({ variant = 'default', size, busy, busyText, children, ...rest }
 
 /* ========================================================================
    3. Payout card
-   ========================================================================
-   Party labels are abbreviated (SR / IR / TR). The countdown strip shows
-   "Due Date" and the timer on one horizontal row; the date itself is not
-   repeated here because it already appears in the card head. */
+   ======================================================================== */
 
 function PayoutStatusCard({ payouts, names, you }) {
   const parties = [
@@ -526,7 +523,6 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
   const role = isBuyer ? 'Buying' : isSeller ? 'Selling' : 'Order';
   const showBuyer = isSeller;
   const other = showBuyer ? order.buyer : order.seller;
-  const otherLabel = showBuyer ? 'Buyer' : 'Seller';
   const delivered = ['DELIVERED', 'COMPLETED'].includes(order.status) || transportJob?.status === 'DELIVERED';
 
   const steps = [
@@ -542,11 +538,9 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
       eyebrow={role}
       eyebrowClass={isSeller ? 'is-selling' : ''}
       title={title}
-      // 1. Changed side to only render the Avatar, moving it cleanly to the top right.
       side={<Avatar name={other?.name} />}
     >
       <Section title="Order status" meta={`ORD ${shortId(order.id).toUpperCase()}`}>
-        {/* 2. Removed the od-status-row div with the text pills (COMPLETED, PAYMENT, TRANSPORT) */}
         <OrderProgress steps={steps} />
       </Section>
 
@@ -616,7 +610,6 @@ function InspectionCard({ order, title, i }) {
   const inspectionDate =
     report?.inspectedAt || report?.completedAt || request.completedAt || request.updatedAt || request.createdAt || null;
 
-  /* Show the inspector avatar as soon as one is assigned, not only after the report. */
   const side = inspectorName ? (
     <PartyBadge role="Inspector" name={inspectorName} />
   ) : (
@@ -719,12 +712,7 @@ function InspectionCard({ order, title, i }) {
 
 /* ========================================================================
    6. Transport — three cards, laid out responsively
-   ========================================================================
-   · Phone (default)      → one card per row
-   · Tablet (≥640px)      → two cards per row
-   · Desktop (≥1000px)    → three cards per row
-   The grid class (.od-card-grid) does the layout; the cards themselves
-   keep the same shape as every other card on the page. */
+   ======================================================================== */
 
 function EvidenceForm({ kind, t }) {
   const isPickup = kind === 'PICKUP';
@@ -1347,8 +1335,8 @@ export default function OrderDetail() {
 
   const marketplacePayments = useMemo(() => payments.filter((p) => p.type === 'MARKETPLACE'), [payments]);
   const transportPayments = useMemo(() => payments.filter((p) => p.type === 'TRANSPORT'), [payments]);
-  const marketplacePayment = useMemo(() => pick(marketplacePayments), [marketplacePayments]); // eslint-disable-line react-hooks/exhaustive-deps
-  const transportPayment = useMemo(() => pick(transportPayments), [transportPayments]); // eslint-disable-line react-hooks/exhaustive-deps
+  const marketplacePayment = useMemo(() => pick(marketplacePayments), [marketplacePayments]);
+  const transportPayment = useMemo(() => pick(transportPayments), [transportPayments]);
 
   const installmentPlan = useMemo(
     () =>
@@ -1853,26 +1841,8 @@ export default function OrderDetail() {
             />
           </div>
 
-          {/* Next step — the buyer's guided lead card; everyone else keeps the workflow card */}
-          {isBuyer ? (
-            <div className="od-span-all">
-              <NextStepCard
-                order={order}
-                onGo={scrollToId}
-                flags={{
-                  isProduct,
-                  inspectionApplies,
-                  inspectionGateMet,
-                  decisionGateMet,
-                  marketplacePaid,
-                  transportJob,
-                  hiredTransport,
-                  acceptedQuote,
-                  transportPaid,
-                }}
-              />
-            </div>
-          ) : workflow ? (
+          {/* Next step — ActionCenter handles the workflow for all roles */}
+          {workflow ? (
             <ActionCenter workflow={workflow} onScroll={scrollToId} onActionComplete={reload} />
           ) : (
             isInspector && (
