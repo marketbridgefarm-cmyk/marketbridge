@@ -40,10 +40,14 @@ export default function NotificationCenter() {
   }
 
   useEffect(() => {
-    loadNotifications();
+    // Notifications are secondary UI. Do not put their API request on the
+    // critical path for every authenticated page. They load when the panel
+    // is opened, then refresh while the panel remains mounted.
+    if (!open) return undefined;
+    loadNotifications(true);
     const interval = window.setInterval(() => loadNotifications(), 30000);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -103,7 +107,6 @@ export default function NotificationCenter() {
         aria-expanded={open}
         onClick={() => {
           setOpen((value) => !value);
-          if (!open) loadNotifications(true);
         }}
       >
         <span className="notification-bell" aria-hidden="true">
