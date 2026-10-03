@@ -10,6 +10,7 @@ import MessageThread from '../components/MessageThread.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import ActionCenter from '../components/ActionCenter.jsx';
+
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
@@ -209,7 +210,10 @@ const Button = ({ variant = 'default', size, busy, busyText, children, ...rest }
 
 /* ========================================================================
    3. Payout card
-   ======================================================================== */
+   ========================================================================
+   Party labels are abbreviated (SR / IR / TR). The countdown strip shows
+   "Due Date" and the timer on one horizontal row; the date itself is not
+   repeated here because it already appears in the card head. */
 
 function PayoutStatusCard({ payouts, names, you }) {
   const parties = [
@@ -513,10 +517,11 @@ function OrderProgress({ steps }) {
 }
 
 function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
-  const { isBuyer, isSeller, marketplacePaid, transportJob } = flags;
+  const { isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob } = flags;
   const role = isBuyer ? 'Buying' : isSeller ? 'Selling' : 'Order';
   const showBuyer = isSeller;
   const other = showBuyer ? order.buyer : order.seller;
+  const otherLabel = showBuyer ? 'Buyer' : 'Seller';
   const delivered = ['DELIVERED', 'COMPLETED'].includes(order.status) || transportJob?.status === 'DELIVERED';
 
   const steps = [
@@ -532,9 +537,11 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
       eyebrow={role}
       eyebrowClass={isSeller ? 'is-selling' : ''}
       title={title}
+      // 1. Changed side to only render the Avatar, moving it cleanly to the top right.
       side={<Avatar name={other?.name} />}
     >
       <Section title="Order status" meta={`ORD ${shortId(order.id).toUpperCase()}`}>
+        {/* 2. Removed the od-status-row div with the text pills (COMPLETED, PAYMENT, TRANSPORT) */}
         <OrderProgress steps={steps} />
       </Section>
 
@@ -604,6 +611,7 @@ function InspectionCard({ order, title, i }) {
   const inspectionDate =
     report?.inspectedAt || report?.completedAt || request.completedAt || request.updatedAt || request.createdAt || null;
 
+  /* Show the inspector avatar as soon as one is assigned, not only after the report. */
   const side = inspectorName ? (
     <PartyBadge role="Inspector" name={inspectorName} />
   ) : (
@@ -706,7 +714,12 @@ function InspectionCard({ order, title, i }) {
 
 /* ========================================================================
    6. Transport — three cards, laid out responsively
-   ======================================================================== */
+   ========================================================================
+   · Phone (default)      → one card per row
+   · Tablet (≥640px)      → two cards per row
+   · Desktop (≥1000px)    → three cards per row
+   The grid class (.od-card-grid) does the layout; the cards themselves
+   keep the same shape as every other card on the page. */
 
 function EvidenceForm({ kind, t }) {
   const isPickup = kind === 'PICKUP';
@@ -828,6 +841,7 @@ function TransportCard({ order, t }) {
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
 
+  /* ── No job yet: single setup card, full width ─────────── */
   if (!job) {
     return (
       <Card
@@ -859,6 +873,7 @@ function TransportCard({ order, t }) {
 
   return (
     <div className="od-card-grid">
+      {/* ── Card A — Logistics: the physical trip ──────────── */}
       <Card
         id="transport-section"
         eyebrow="Logistics"
@@ -909,6 +924,7 @@ function TransportCard({ order, t }) {
         )}
       </Card>
 
+      {/* ── Card B — Pickup and delivery evidence ──────────── */}
       {hasEvidenceContent && (
         <Card
           id="transport-evidence-section"
@@ -956,6 +972,7 @@ function TransportCard({ order, t }) {
         </Card>
       )}
 
+      {/* ── Card C — Transport payment ─────────────────────── */}
       <Card
         id="transport-payment-section"
         eyebrow="Payment"
@@ -1212,15 +1229,29 @@ export default function OrderDetail() {
       else setLoading(true);
       setError('');
       try {
-        const [orderRes, workflowRes, recoveryRes] = await Promise.allSettled([
-          api.get(`/orders/${orderId}`),
+        // The order itself is the critical path. Render it as soon as it is
+        // available instead of making the page wait for secondary workflow
+        // and recovery endpoints. Those sections populate progressively.
+        const orderRes = await api.get(`/orders/${orderId}`);
+        const nextOrder = orderRes.data?.order || null;
+        setOrder(nextOrder);
+        if (!silent) setLoading(false);
+
+        const [workflowRes, recoveryRes] = await Promise.allSettled([
           api.get(`/orders/${orderId}/workflow`),
           api.get(`/recovery-requests/order/${orderId}`),
         ]);
-        if (orderRes.status !== 'fulfilled') throw orderRes.reason;
-        setOrder(orderRes.value.data?.order || null);
-        setWorkflow(workflowRes.status === 'fulfilled' ? workflowRes.value.data?.workflow || null : null);
-        setRecoveryRequests(recoveryRes.status === 'fulfilled' ? recoveryRes.value.data?.recoveryRequests || [] : []);
+
+        setWorkflow(
+          workflowRes.status === 'fulfilled'
+            ? workflowRes.value.data?.workflow || null
+            : null
+        );
+        setRecoveryRequests(
+          recoveryRes.status === 'fulfilled'
+            ? recoveryRes.value.data?.recoveryRequests || []
+            : []
+        );
       } catch (err) {
         setError(getError(err, 'Could not load order'));
       } finally {
@@ -1240,6 +1271,7 @@ export default function OrderDetail() {
     if (id) scrollToId(id);
   }, [loading, location.hash]);
 
+  /* One wrapper for the "busy → call → reload → report error" pattern. */
   const run = async (key, fn, fallback) => {
     setBusy(key);
     setError('');
@@ -1310,8 +1342,8 @@ export default function OrderDetail() {
 
   const marketplacePayments = useMemo(() => payments.filter((p) => p.type === 'MARKETPLACE'), [payments]);
   const transportPayments = useMemo(() => payments.filter((p) => p.type === 'TRANSPORT'), [payments]);
-  const marketplacePayment = useMemo(() => pick(marketplacePayments), [marketplacePayments]);
-  const transportPayment = useMemo(() => pick(transportPayments), [transportPayments]);
+  const marketplacePayment = useMemo(() => pick(marketplacePayments), [marketplacePayments]); // eslint-disable-line react-hooks/exhaustive-deps
+  const transportPayment = useMemo(() => pick(transportPayments), [transportPayments]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const installmentPlan = useMemo(
     () =>
@@ -1333,6 +1365,7 @@ export default function OrderDetail() {
     [payments, installmentPlan]
   );
 
+  /* Heal a plan whose installments are all paid but whose parent is still pending. */
   const planHealRef = useRef(null);
   useEffect(() => {
     if (
@@ -1786,6 +1819,14 @@ export default function OrderDetail() {
     submit: submitDispute,
   };
 
+  /* ====================================================================
+     Layout — cards flow into a responsive grid:
+       · phone (default)     → 1 card per row
+       · tablet (≥640px)     → 2 cards per row
+       · desktop (≥1000px)   → 3 cards per row
+     Wide cards (Overview, Transport, Payment, Payout, Timeline,
+     Messages) span all columns; everything else flows naturally.
+     ==================================================================== */
   return (
     <main className="section order-detail-page">
       <div className="container-narrow">
@@ -1807,8 +1848,26 @@ export default function OrderDetail() {
             />
           </div>
 
-          {/* Next step — ActionCenter handles both buyers and sellers */}
-          {workflow ? (
+          {/* Next step — the buyer's guided lead card; everyone else keeps the workflow card */}
+          {isBuyer ? (
+            <div className="od-span-all">
+              <NextStepCard
+                order={order}
+                onGo={scrollToId}
+                flags={{
+                  isProduct,
+                  inspectionApplies,
+                  inspectionGateMet,
+                  decisionGateMet,
+                  marketplacePaid,
+                  transportJob,
+                  hiredTransport,
+                  acceptedQuote,
+                  transportPaid,
+                }}
+              />
+            </div>
+          ) : workflow ? (
             <ActionCenter workflow={workflow} onScroll={scrollToId} onActionComplete={reload} />
           ) : (
             isInspector && (

@@ -322,6 +322,8 @@ export default function Dashboard() {
     setError('');
 
     try {
+      // Only the data needed to paint the initial dashboard is awaited.
+      // Received-offer details are loaded after the first screen is visible.
       const [offersRes, ordersRes, ...listingResults] = await Promise.all([
         api.get('/offers/mine'),
         api.get('/orders'),
@@ -330,26 +332,32 @@ export default function Dashboard() {
         ),
       ]);
 
-      setOffersSent(offersRes.data?.offers || []);
-      setOrders(ordersRes.data?.orders || []);
-
+      const nextOffersSent = offersRes.data?.offers || [];
+      const nextOrders = ordersRes.data?.orders || [];
       const listings = listingResults.flatMap((r) => r.data?.listings || []);
-      setMyListings(listings);
 
+      setOffersSent(nextOffersSent);
+      setOrders(nextOrders);
+      setMyListings(listings);
+      setOffersReceived([]);
+      setLoading(false);
+
+      // N+1 offer requests are intentionally kept off the critical path.
+      // One slow listing/offer endpoint must not keep the whole dashboard in
+      // its loading state.
       if (listings.length > 0) {
-        const offerResults = await Promise.all(
+        const offerResults = await Promise.allSettled(
           listings.map((l) => api.get(`/offers/listing/${l.id}`))
         );
-        const received = listings.flatMap((l, i) =>
-          (offerResults[i].data?.offers || []).map((o) => ({ ...o, listing: l }))
-        );
+        const received = listings.flatMap((listing, index) => {
+          const result = offerResults[index];
+          if (result?.status !== 'fulfilled') return [];
+          return (result.value.data?.offers || []).map((offer) => ({ ...offer, listing }));
+        });
         setOffersReceived(received);
-      } else {
-        setOffersReceived([]);
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Could not load your dashboard');
-    } finally {
       setLoading(false);
     }
   }, [user?.id]);
