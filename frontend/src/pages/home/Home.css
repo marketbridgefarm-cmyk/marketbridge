@@ -312,3 +312,44 @@
   .platform-step,
   .showcase-tile { transition: none; }
 }
+
+/* ==========================================================================
+   21. Glassmorphism Theme
+   Append at the very END of OrderDetail.css to make the page glassy.
+   ========================================================================== */
+
+/* 1. Give the page a soft, colorful gradient so the glass effect is visible */
+.order-detail-page {
+  background: linear-gradient(135deg, #eef2ff 0%, #e0f2fe 50%, #ecfdf5 100%);
+  background-attachment: fixed;
+}
+
+/* 2. Make the cards translucent, add the blur, and soften the borders */
+.order-detail-page .card,
+.order-detail-page .card.od-card-overview {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px); /* Safari support */
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Optional: Add a subtle hover lift effect to the cards */
+.order-detail-page .card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.12) !important;
+}
+
+/* 3. Fix the divider under the card titles to work with the glassy background */
+.order-detail-page .od-card-head::before {
+  background:
+    linear-gradient(var(--od-accent, var(--od-brand)), var(--od-accent, var(--od-brand))) left center / 28px 3px no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.06)) left center / 100% 1px no-repeat;
+}
+
+/* 4. Ensure text labels remain readable against the new background */
+.order-detail-page .od-card-side-label,
+.order-detail-page .od-card-title {
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
