@@ -1,11 +1,11 @@
 import React, {
-import AmountPicker from '../components/AmountPicker.jsx';
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
+import AmountPicker from '../components/AmountPicker.jsx';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import api from '../api/client';
