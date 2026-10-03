@@ -286,6 +286,10 @@ router.post(
 // ============================================================================
 // BUYER — MY OFFERS
 // GET /api/offers/mine
+// ----------------------------------------------------------------------------
+// Lightweight list for the Dashboard "My buying activity" panel. Only the
+// fields a buyer needs to render an offer card are selected; the full
+// listing graph (photos, videos, coordinates, etc.) is NOT fetched here.
 // ============================================================================
 
 router.get(
@@ -293,24 +297,56 @@ router.get(
   authenticate,
   async (req, res) => {
     try {
-      const offers =
-        await prisma.offer.findMany({
-          where: {
-            buyerId: req.user.id,
-          },
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+      const skip = (page - 1) * limit;
 
-          include: {
-            listing: true,
+      const [offers, total] = await Promise.all([
+        prisma.offer.findMany({
+          where: { buyerId: req.user.id },
+          select: {
+            id: true,
+            listingId: true,
+            buyerId: true,
+            sellerId: true,
+            amount: true,
+            quantity: true,
+            status: true,
+            counterAmount: true,
+            counteredBy: true,
+            message: true,
+            expiresAt: true,
+            parentOfferId: true,
+            createdAt: true,
+            updatedAt: true,
+            agreedOrder: { select: { id: true, status: true } },
+            listing: {
+              select: {
+                id: true,
+                title: true,
+                cropType: true,
+                category: true,
+                photos: true, // String[] — cannot be paginated via take.
+                askingPrice: true,
+                location: true,
+                status: true,
+              },
+            },
+            _count: { select: { childOffers: true } },
           },
-
-          orderBy: {
-            createdAt: 'desc',
-          },
-        });
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip,
+        }),
+        prisma.offer.count({ where: { buyerId: req.user.id } }),
+      ]);
 
       return res.json({
         offers,
         count: offers.length,
+        total,
+        page,
+        limit,
       });
     } catch (error) {
       req.log.error({ err: error }, 'MY OFFERS ERROR:');
@@ -449,11 +485,7 @@ async function acceptOfferAndCreateOrder(
     throw offerError('Offer has no valid quantity', 400);
   }
 
-  // Claim the offer itself before allocating inventory. A seller-selected
-  // bid is intentionally accepted through the same atomic path as a pending
-  // or countered bid: SELECTED means the parties chose this negotiation
-  // thread, not that inventory has already been committed. If the inventory
-  // reservation fails, the whole transaction rolls back this claim.
+  // Claim the offer itself before allocating inventory.
   const offerClaim = await tx.offer.updateMany({
     where: {
       id: offer.id,
@@ -471,10 +503,7 @@ async function acceptOfferAndCreateOrder(
   });
 
   // There can be only one live provisional buyer/order for a listing at a
-  // time. Competition remains visible while that provisional deal is active,
-  // but the seller must release/cancel it before another waiting buyer can be
-  // promoted. Without this guard, two buyers could both reach PENDING_PAYMENT
-  // and race for the same inventory at payment time.
+  // time.
   const existingProvisionalOrder = await tx.order.findFirst({
     where: {
       listingId: offer.listingId,
@@ -490,13 +519,6 @@ async function acceptOfferAndCreateOrder(
     );
   }
 
-  // IMPORTANT: acceptance creates a provisional winner/order only. It must
-  // not consume inventory or reject the other competing buyers yet. The
-  // goods are committed atomically only when the MARKETPLACE payment settles
-  // successfully. This lets the buyer inspect the goods and cancel after a
-  // bad report without making the seller lose the public listing or the
-  // waiting buyer queue.
-
   const order =
     await tx.order.create({
       data: {
@@ -508,9 +530,6 @@ async function acceptOfferAndCreateOrder(
         status: 'PENDING_PAYMENT',
         agreedOfferId: updatedOffer.id,
         agreedAt: new Date(),
-        // Agricultural orders unlock payment only after inspection + BUY.
-        // General physical-product orders can pay immediately after the
-        // negotiated agreement, so their normal payment deadline starts now.
         paymentDueAt: offer.listing.category === 'AGRICULTURAL' ? null : computePaymentDueAt(),
       },
     });
@@ -565,32 +584,6 @@ async function acceptOfferAndCreateOrder(
 // ============================================================================
 // OFFER RESPONSE
 // PATCH /api/offers/:id
-//
-// SELLER:
-//   ACCEPT
-//   REJECT
-//   COUNTER
-//
-// BUYER:
-//   ACCEPT_COUNTER
-//   RE_COUNTER
-//
-// NEGOTIATION RULE:
-//
-// PENDING
-//   seller COUNTER
-//      ↓
-// COUNTERED + counteredBy=SELLER
-//      ↓
-// buyer ACCEPT_COUNTER OR RE_COUNTER
-//      ↓
-// COUNTERED + counteredBy=BUYER
-//      ↓
-// seller ACCEPT OR COUNTER
-//      ↓
-// repeat
-//
-// This prevents the same party from countering twice consecutively.
 // ============================================================================
 
 router.patch(
@@ -669,9 +662,6 @@ router.patch(
 
       // ======================================================================
       // SELLER SELECTS A BUYER BID FOR DEAL NEGOTIATION
-      // Competition and price-deal negotiation are deliberately separate.
-      // Selecting a bid does not create an order; it simply opens that buyer
-      // as the seller's chosen negotiation counterpart.
       // ======================================================================
 
       if (action === 'SELECT') {
@@ -689,8 +679,6 @@ router.patch(
             throw offerError('Offer has expired and can no longer be selected', 409);
           }
           if (fresh.status !== 'PENDING') throw offerError(`Only a pending bid can be selected (current: ${fresh.status})`, 409);
-          // One seller-selected buyer at a time. Other independent bids remain
-          // in the competition pool and can still be reviewed/rejected.
           await tx.offer.updateMany({
             where: {
               listingId: fresh.listingId,
@@ -990,9 +978,6 @@ router.patch(
           return res.status(400).json({ error: `Offer cannot be accepted because it is ${offer.status}` });
         }
 
-        // If the offer is COUNTERED, it must have been
-        // countered by the buyer. The seller cannot accept
-        // their own latest counter.
         if (
           offer.status === 'COUNTERED' &&
           offer.counteredBy !== 'BUYER'
@@ -1069,10 +1054,6 @@ router.patch(
                 );
               }
 
-              // The seller may accept a buyer counter-offer when it reaches
-              // the seller's configured minimum acceptable price. This is a
-              // seller-side floor, not a requirement that the buyer accept
-              // the seller's previous counter.
               if (
                 freshOffer.status === 'COUNTERED' &&
                 freshOffer.counteredBy === 'BUYER' &&
@@ -1162,10 +1143,6 @@ router.patch(
                   },
                 });
 
-              // A negotiation is active only when its latest (leaf) offer
-              // is PENDING or COUNTERED. Older parent offers remain
-              // COUNTERED for the audit trail and must not keep the listing
-              // locked after the latest offer is rejected.
               const activeOffers = await tx.offer.findMany({
                 where: {
                   listingId: freshOffer.listingId,
@@ -1244,8 +1221,6 @@ router.patch(
           });
         }
 
-        // If already COUNTERED, the previous counter
-        // must have been made by the BUYER.
         if (
           offer.status === 'COUNTERED' &&
           offer.counteredBy !== 'BUYER'
