@@ -16,13 +16,13 @@ const logger = require('../utils/logger');
 const router = express.Router();
 
 /**
- * Listing photos/videos are stored as private object-storage keys (see
- * POST /listings/media). Resolve each key to a short-lived signed URL right
- * before sending a response, rather than persisting a URL that would expire.
+ * Listing photos/videos are stored as private object-storage keys. Resolve
+ * each key to a short-lived signed URL right before sending a response.
  *
- * Older listings created back when this form took raw https:// URLs are
- * still supported: a value that's already an http(s) URL is passed through
- * unchanged instead of being (incorrectly) treated as a storage key.
+ * Performance note: for list endpoints where the caller only renders a card
+ * thumbnail, pass `firstPhotoOnly: true`. Signing every photo AND every
+ * video for every listing on a 50-item page results in hundreds of signed
+ * URL requests per page load (each an object-storage round trip).
  */
 async function resolveMediaUrl(value) {
   if (!value) return null;
@@ -36,15 +36,20 @@ async function resolveMediaUrl(value) {
   }
 }
 
-async function attachMediaUrls(listing, { includePrivateKeys = false } = {}) {
+async function attachMediaUrls(listing, { includePrivateKeys = false, firstPhotoOnly = false } = {}) {
   if (!listing) return listing;
 
   const photoKeys = listing.photos || [];
   const videoKeys = listing.videos || [];
 
+  // For list views (cards) we only need the first photo as a thumbnail.
+  // Videos are not shown on cards, so skip signing them entirely.
+  const keysToSign = firstPhotoOnly ? photoKeys.slice(0, 1) : photoKeys;
+  const videoKeysToSign = firstPhotoOnly ? [] : videoKeys;
+
   const [photos, videos] = await Promise.all([
-    Promise.all(photoKeys.map(resolveMediaUrl)),
-    Promise.all(videoKeys.map(resolveMediaUrl)),
+    Promise.all(keysToSign.map(resolveMediaUrl)),
+    Promise.all(videoKeysToSign.map(resolveMediaUrl)),
   ]);
 
   return {
@@ -60,9 +65,6 @@ async function attachMediaUrls(listing, { includePrivateKeys = false } = {}) {
  *
  * IMPORTANT:
  * minAcceptablePrice is intentionally absent.
- *
- * Never return a raw Prisma Listing from a public endpoint because the
- * database model contains seller-private fields.
  */
 const PUBLIC_LISTING_FIELDS = {
   id: true,
@@ -125,9 +127,6 @@ function toPublicListing(listing) {
 
 /**
  * Convert an incoming date into a valid Date.
- *
- * Returns null for empty values.
- * Returns null for invalid dates.
  */
 function parseDate(value) {
   if (value === undefined || value === null || value === '') {
@@ -145,9 +144,6 @@ function parseDate(value) {
 
 /**
  * Validate price relationships.
- *
- * The seller's private minimum acceptable price must never be negative,
- * zero, or greater than the public asking price.
  */
 function validatePrices(askingPrice, minAcceptablePrice) {
   if (
@@ -238,10 +234,7 @@ function validateAgriculturalDates(
 }
 
 /**
- * Validate an agricultural pickup window. Both boundaries are optional, but
- * if either is supplied the complete window must be supplied and end must be
- * later than start. Active listings cannot advertise a window that has
- * already completely expired.
+ * Validate an agricultural pickup window.
  */
 function validatePickupWindow(
   category,
@@ -293,14 +286,15 @@ function validatePickupWindow(
 // ============================================================================
 // PUBLIC LISTINGS — browse/search
 // ============================================================================
-// ============================================================================
-// SEARCH — PostgreSQL full-text search with bounded pagination
-// ============================================================================
 
 router.get('/search', optionalAuthenticate, async (req, res) => {
   try {
     const result = await searchListings(req.query);
-    result.listings = await Promise.all(result.listings.map((listing) => attachMediaUrls(toPublicListing(listing))));
+    result.listings = await Promise.all(
+      result.listings.map((listing) =>
+        attachMediaUrls(toPublicListing(listing), { firstPhotoOnly: true })
+      )
+    );
     return res.json(result);
   } catch (error) {
     req.log.error({ err: error }, 'LISTING SEARCH ERROR:');
@@ -311,14 +305,17 @@ router.get('/search', optionalAuthenticate, async (req, res) => {
 router.get('/recommendations', authenticate, async (req, res) => {
   try {
     const result = await getRecommendations(req.user.id, { limit: req.query.limit });
-    result.listings = await Promise.all(result.listings.map((listing) => attachMediaUrls(toPublicListing(listing))));
+    result.listings = await Promise.all(
+      result.listings.map((listing) =>
+        attachMediaUrls(toPublicListing(listing), { firstPhotoOnly: true })
+      )
+    );
     return res.json(result);
   } catch (error) {
     req.log.error({ err: error }, 'LISTING RECOMMENDATIONS ERROR:');
     return res.status(500).json({ error: 'Could not load recommendations' });
   }
 });
-
 
 router.get('/', optionalAuthenticate, async (req, res) => {
   try {
@@ -447,9 +444,6 @@ router.get('/', optionalAuthenticate, async (req, res) => {
         },
       });
 
-    // Deterministic paid-placement score. Advertising never bypasses the
-    // normal listing eligibility filter above (ACTIVE listings only by
-    // default), and sponsored search is only boosted in an actual search.
     const BOOST_SCORE = {
       FEATURED_LISTING: 500,
       TOP_OF_CATEGORY: 1000,
@@ -628,12 +622,17 @@ router.get('/', optionalAuthenticate, async (req, res) => {
         where,
       });
 
+    // PERFORMANCE: only sign the first photo per listing as a card thumbnail.
+    // Signing every photo and video of 50 listings was resulting in 300+
+    // object-storage round trips per page load and was the dominant
+    // contributor to multi-second GET /listings response times.
     listings = await Promise.all(
       listings.map((listing) =>
         attachMediaUrls(listing, {
           includePrivateKeys: Boolean(
             req.user && listing.sellerId === req.user.id
           ),
+          firstPhotoOnly: true,
         })
       )
     );
@@ -660,8 +659,6 @@ router.get('/', optionalAuthenticate, async (req, res) => {
 // STRUCTURED ETHIOPIAN GEOGRAPHY
 // ============================================================================
 
-// Region dropdown data for the frontend. Public and static — same list as
-// constants/ethiopianRegions.js and the Region enum in schema.prisma.
 router.get('/meta/regions', (req, res) => {
   res.json({ regions: REGIONS });
 });
@@ -669,16 +666,7 @@ router.get('/meta/regions', (req, res) => {
 // ============================================================================
 // MARKET PRICE TRENDS
 // ============================================================================
-//
-// Aggregates recent completed-sale prices by crop type (and optionally
-// region), so a seller weighing an offer — or setting an asking price in
-// the first place — can see what similar produce has actually sold for
-// recently instead of guessing. Computed on the fly from Order+Listing;
-// no new tables. Deliberately keeps the raw sample size small enough to
-// fetch and reduce in JS rather than adding a groupBy-on-Decimal query,
-// which is fine at MarketBridge's current order volume but is the first
-// thing to revisit (e.g. a materialized nightly rollup) if this endpoint
-// ever shows up in a slow-query report.
+
 router.get('/market-trends', optionalAuthenticate, async (req, res) => {
   try {
     const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 365);
@@ -744,12 +732,10 @@ router.get('/market-trends', optionalAuthenticate, async (req, res) => {
   }
 });
 
-// "Nearby produce discovery": listings within radiusKm of (lat, lng),
-// sorted nearest-first. Kept as its own endpoint rather than folded into
-// the main search above so it doesn't have to interact with that route's
-// sponsored/boosted-ad ranking — distance ordering and paid placement are
-// two different sort orders, and mixing them would need real product
-// decisions about precedence that are out of scope here.
+// ============================================================================
+// NEARBY LISTINGS
+// ============================================================================
+
 router.get('/nearby', optionalAuthenticate, async (req, res) => {
   try {
     const lat = Number(req.query.lat);
@@ -797,7 +783,7 @@ router.get('/nearby', optionalAuthenticate, async (req, res) => {
       listings
         .sort((a, b) => distanceById.get(a.id) - distanceById.get(b.id))
         .map(async (listing) => ({
-          ...(await attachMediaUrls(listing)),
+          ...(await attachMediaUrls(listing, { firstPhotoOnly: true })),
           distanceKm: Math.round(distanceById.get(listing.id) * 10) / 10,
         }))
     );
@@ -812,6 +798,8 @@ router.get('/nearby', optionalAuthenticate, async (req, res) => {
 // ============================================================================
 // GET SINGLE PUBLIC LISTING
 // ============================================================================
+// Detail view — sign every photo and video since the detail page renders a
+// gallery.
 
 router.get('/:id', optionalAuthenticate, async (req, res) => {
   try {
@@ -838,10 +826,6 @@ router.get('/:id', optionalAuthenticate, async (req, res) => {
 
     const publicListing = toPublicListing(listing);
 
-    // Negotiations, orders, and inspection details are private operational
-    // data. They are attached only when the authenticated user is actually
-    // entitled to see them. This keeps the public listing contract safe
-    // without breaking the authenticated ListingDetail experience.
     if (req.user) {
       const isAdmin = Array.isArray(req.user.roles) && req.user.roles.includes('ADMIN');
       const isSeller = listing.sellerId === req.user.id;
@@ -928,15 +912,6 @@ router.get('/:id', optionalAuthenticate, async (req, res) => {
 // UPLOAD LISTING MEDIA
 // ============================================================================
 
-/**
- * Upload photos/short videos for a listing before it exists.
- *
- * Mirrors the transport/inspection evidence upload pattern: files go to
- * private object storage first, the caller gets back opaque keys, and those
- * keys are then submitted as `photos`/`videos` on POST /listings. Signed,
- * viewable URLs are generated on read (see attachMediaUrls above) rather
- * than stored, since a stored signed URL would eventually expire.
- */
 router.post(
   '/media',
   authenticate,
@@ -974,11 +949,6 @@ router.post(
   '/',
   authenticate,
   [
-    /**
-     * DIGITAL intentionally remains excluded here.
-     *
-     * MarketBridge already has a separate DigitalProduct flow.
-     */
     body('category')
       .optional()
       .isIn([
@@ -1106,15 +1076,6 @@ router.post(
         description,
       } = req.body;
 
-      // ----------------------------------------------------------------------
-      // Permission checks
-      // ----------------------------------------------------------------------
-
-      // Product/Digital marketplace architecture: every authenticated user
-      // may sell. For generic PRODUCT listings the seller is ALWAYS the
-      // authenticated user; never trust a client-supplied sellerId.
-      //
-      // Agricultural listings keep the specialized seller/inspector flow.
       const sellerId =
         category === 'PRODUCT'
           ? req.user.id
@@ -1149,10 +1110,6 @@ router.post(
         }
       }
 
-      // ----------------------------------------------------------------------
-      // Category-specific validation
-      // ----------------------------------------------------------------------
-
       if (
         category === 'AGRICULTURAL' &&
         !cropType
@@ -1173,10 +1130,6 @@ router.post(
         });
       }
 
-      /**
-       * A generic PRODUCT listing should not carry an agricultural cropType
-       * merely because the title exists.
-       */
       if (
         category === 'PRODUCT' &&
         cropType
@@ -1186,10 +1139,6 @@ router.post(
             'cropType is only allowed for agricultural listings',
         });
       }
-
-      // ----------------------------------------------------------------------
-      // Price validation
-      // ----------------------------------------------------------------------
 
       const priceError =
         validatePrices(
@@ -1202,10 +1151,6 @@ router.post(
           error: priceError,
         });
       }
-
-      // ----------------------------------------------------------------------
-      // Date validation
-      // ----------------------------------------------------------------------
 
       const dateError =
         validateAgriculturalDates(
@@ -1230,9 +1175,6 @@ router.post(
         return res.status(400).json({ error: pickupWindowError });
       }
 
-      /**
-       * Agricultural dates do not make sense for a generic product.
-       */
       if (
         category === 'PRODUCT' &&
         (harvestedDate ||
@@ -1243,10 +1185,6 @@ router.post(
             'harvestedDate and readinessDate are only allowed for agricultural listings',
         });
       }
-
-      // ----------------------------------------------------------------------
-      // Seller validation
-      // ----------------------------------------------------------------------
 
       const seller =
         await prisma.user.findUnique({
@@ -1261,9 +1199,6 @@ router.post(
         });
       }
 
-      // Generic PRODUCT sellers do not need the legacy SELLER role.
-      // Agricultural listings retain the specialized SELLER requirement,
-      // except when an INSPECTOR creates the listing for a farmer.
       if (
         category === 'AGRICULTURAL' &&
         !seller.roles.includes('SELLER') &&
@@ -1278,10 +1213,6 @@ router.post(
       const safePhotos = Array.isArray(photos) ? validateListingReferences(photos, req.user.id, 'photos') : [];
       const safeVideos = Array.isArray(videos) ? validateListingReferences(videos, req.user.id, 'videos') : [];
 
-      // ----------------------------------------------------------------------
-      // Create listing
-      // ----------------------------------------------------------------------
-
       const listing =
         await prisma.listing.create({
           data: {
@@ -1291,10 +1222,6 @@ router.post(
             title:
               title || null,
 
-            /**
-             * IMPORTANT:
-             * Do not copy a generic product title into cropType.
-             */
             cropType:
               category === 'AGRICULTURAL'
                 ? cropType
@@ -1447,10 +1374,6 @@ router.patch(
         longitude,
       } = req.body;
 
-      // ----------------------------------------------------------------------
-      // Validate update values before touching the database
-      // ----------------------------------------------------------------------
-
       if (region !== undefined && region !== null && !REGION_VALUES.includes(region)) {
         return res.status(400).json({ error: `Invalid region. Must be one of: ${REGION_VALUES.join(', ')}` });
       }
@@ -1555,10 +1478,6 @@ router.patch(
         nextAvailableQuantity = requestedQuantity - allocatedQuantity;
       }
 
-      // ----------------------------------------------------------------------
-      // Validate harvestedDate and readinessDate
-      // ----------------------------------------------------------------------
-
       let parsedHarvestedDate;
       let parsedReadinessDate;
 
@@ -1621,10 +1540,6 @@ router.patch(
         }
       }
 
-      // ----------------------------------------------------------------------
-      // Validate pickup window
-      // ----------------------------------------------------------------------
-
       const pickupWindowError = validatePickupWindow(
         listing.category,
         pickupWindowStart,
@@ -1636,10 +1551,6 @@ router.patch(
       if (pickupWindowError) {
         return res.status(400).json({ error: pickupWindowError });
       }
-
-      // ----------------------------------------------------------------------
-      // Validate status
-      // ----------------------------------------------------------------------
 
       const allowedStatuses = [
         'DRAFT',
@@ -1659,16 +1570,6 @@ router.patch(
           error: 'Invalid listing status',
         });
       }
-
-      // ----------------------------------------------------------------------
-      // Validate photos/videos
-      //
-      // The client sends the *full* desired array each time (the keys it
-      // wants to keep, plus any newly-uploaded keys from POST
-      // /listings/media) — this endpoint replaces, it doesn't merge, since
-      // it has no way to tell "leave existing alone" apart from "clear
-      // them" otherwise. Capped at 10 each as a sanity limit.
-      // ----------------------------------------------------------------------
 
       if (
         photos !== undefined &&
@@ -1709,10 +1610,6 @@ router.patch(
               )
               .slice(0, 10)
           : undefined;
-
-      // ----------------------------------------------------------------------
-      // Update listing
-      // ----------------------------------------------------------------------
 
       const updated =
         await prisma.listing.update({
