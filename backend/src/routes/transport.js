@@ -14,6 +14,11 @@ const { isOrderParticipant, isAdmin } = require('../utils/authorization');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { idempotency } = require('../middleware/idempotency');
 const { matchTrucks } = require('../services/transportMatchingService');
+const {
+  AMOUNT_LIMITS,
+  validAmount,
+  noContactInfo,
+} = require('../utils/contactGuard');
 
 const router = express.Router();
 
@@ -36,7 +41,7 @@ const validate = (req, res, next) => {
 
   if (!errors.isEmpty()) {
     return res.status(400).json({
-      error: 'Validation failed',
+      error: errors.array()[0]?.msg || 'Validation failed',
       errors: errors.array(),
     });
   }
@@ -598,7 +603,8 @@ router.post(
     body('specialRequirements')
       .optional()
       .isString()
-      .trim(),
+      .trim()
+      .custom(noContactInfo),
 
     body('truckId')
       .optional()
@@ -1884,16 +1890,13 @@ router.post(
   [
     param('id').isUUID(),
 
-    body('amount')
-      .isFloat({ gt: 0 })
-      .withMessage(
-        'Amount must be greater than zero'
-      ),
+    body('amount').custom(validAmount(AMOUNT_LIMITS.transport)),
 
     body('message')
       .optional()
       .isString()
-      .trim(),
+      .trim()
+      .custom(noContactInfo),
 
     body('truckId')
       .optional()
@@ -2412,14 +2415,14 @@ router.patch(
 
     body('counterAmount')
       .if(body('action').equals('COUNTER'))
-      .isFloat({ gt: 0 })
-      .withMessage('counterAmount must be greater than zero'),
+      .custom(validAmount(AMOUNT_LIMITS.transport)),
 
     body('message')
       .optional({ nullable: true })
       .isString()
       .trim()
-      .isLength({ max: 1000 }),
+      .isLength({ max: 1000 })
+      .custom(noContactInfo),
   ],
   validate,
   async (req, res) => {

@@ -9,6 +9,11 @@ const { syncOrderPaymentObligations } = require('../services/paymentObligationSe
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
+const {
+  AMOUNT_LIMITS,
+  validAmount,
+  noContactInfo,
+} = require('../utils/contactGuard');
 
 const router = express.Router();
 
@@ -346,15 +351,14 @@ router.post(
   requireRole('INSPECTOR'),
   [
     param('id').notEmpty(),
-    body('amount')
-      .isFloat({ gt: 0 })
-      .withMessage('Quote amount must be greater than zero'),
+    body('amount').custom(validAmount(AMOUNT_LIMITS.inspection)),
     body('message')
       .optional({ nullable: true })
       .isString()
       .trim()
       .isLength({ max: 1000 })
-      .withMessage('Quote message is too long'),
+      .withMessage('Quote message is too long')
+      .custom(noContactInfo),
   ],
   async (req, res) => {
     try {
@@ -703,8 +707,8 @@ router.post(
   [
     param('id').notEmpty(),
     param('quoteId').notEmpty(),
-    body('counterAmount').isFloat({ gt: 0 }).withMessage('counterAmount must be greater than zero'),
-    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }),
+    body('counterAmount').custom(validAmount(AMOUNT_LIMITS.inspection)),
+    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }).custom(noContactInfo),
   ],
   async (req, res) => {
     try {

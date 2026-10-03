@@ -11,6 +11,12 @@ const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { idempotency } = require('../middleware/idempotency');
 const { computePaymentDueAt } = require('../utils/orderTiming');
+const {
+  AMOUNT_LIMITS,
+  amountProblem,
+  validAmount,
+  noContactInfo,
+} = require('../utils/contactGuard');
 
 const router = express.Router();
 
@@ -114,14 +120,13 @@ router.post(
       .notEmpty()
       .withMessage('listingId is required'),
 
-    body('amount')
-      .isFloat({ gt: 0 })
-      .withMessage('amount must be greater than zero'),
+    body('amount').custom(validAmount(AMOUNT_LIMITS.offer)),
 
     body('message')
       .optional()
       .isString()
-      .trim(),
+      .trim()
+      .custom(noContactInfo),
   ],
   async (req, res) => {
     try {
@@ -129,7 +134,7 @@ router.post(
 
       if (!errors.isEmpty()) {
         return res.status(400).json({
-          error: 'Validation failed',
+          error: errors.array()[0]?.msg || 'Validation failed',
           errors: errors.array(),
         });
       }
@@ -847,15 +852,12 @@ router.patch(
           });
         }
 
-        if (
-          !isPositiveNumber(
-            counterAmount
-          )
-        ) {
-          return res.status(400).json({
-            error:
-              'counterAmount must be greater than zero',
-          });
+        const counterProblem = amountProblem(
+          counterAmount,
+          AMOUNT_LIMITS.offer
+        );
+        if (counterProblem) {
+          return res.status(400).json({ error: counterProblem });
         }
 
         const numericCounter =
@@ -1199,15 +1201,12 @@ router.patch(
           });
         }
 
-        if (
-          !isPositiveNumber(
-            counterAmount
-          )
-        ) {
-          return res.status(400).json({
-            error:
-              'counterAmount must be greater than zero',
-          });
+        const counterProblem = amountProblem(
+          counterAmount,
+          AMOUNT_LIMITS.offer
+        );
+        if (counterProblem) {
+          return res.status(400).json({ error: counterProblem });
         }
 
         if (

@@ -3,12 +3,13 @@ const { body, param, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { isAdmin, isConversationParticipant } = require('../utils/authorization');
+const { noContactInfo } = require('../utils/contactGuard');
 
 const router = express.Router();
 
 const validate = (req, res, next) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
+  if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
   next();
 };
 
@@ -17,7 +18,7 @@ router.post(
   authenticate,
   [
     body('receiverId').isUUID().withMessage('receiverId must be a valid user id'),
-    body('content').isString().trim().isLength({ min: 1, max: 5000 }),
+    body('content').isString().trim().isLength({ min: 1, max: 5000 }).custom(noContactInfo),
     body('orderId').optional({ values: 'falsy' }).isUUID(),
   ],
   validate,
