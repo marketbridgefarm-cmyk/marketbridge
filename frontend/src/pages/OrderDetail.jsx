@@ -1222,9 +1222,6 @@ export default function OrderDetail() {
       else setLoading(true);
       setError('');
       try {
-        // The order itself is the critical path. Render it as soon as it is
-        // available instead of making the page wait for secondary workflow
-        // and recovery endpoints. Those sections populate progressively.
         const orderRes = await api.get(`/orders/${orderId}`);
         const nextOrder = orderRes.data?.order || null;
         setOrder(nextOrder);
@@ -1358,7 +1355,6 @@ export default function OrderDetail() {
     [payments, installmentPlan]
   );
 
-  /* Heal a plan whose installments are all paid but whose parent is still pending. */
   const planHealRef = useRef(null);
   useEffect(() => {
     if (
@@ -1812,14 +1808,6 @@ export default function OrderDetail() {
     submit: submitDispute,
   };
 
-  /* ====================================================================
-     Layout — cards flow into a responsive grid:
-       · phone (default)     → 1 card per row
-       · tablet (≥640px)     → 2 cards per row
-       · desktop (≥1000px)   → 3 cards per row
-     Wide cards (Overview, Transport, Payment, Payout, Timeline,
-     Messages) span all columns; everything else flows naturally.
-     ==================================================================== */
   return (
     <main className="section order-detail-page">
       <div className="container-narrow">
