@@ -586,7 +586,14 @@ function InspectionCard({ order, title, i }) {
         </Section>
         {needsApproval ? (
           <Notice title="Admin approval required">
-            <p>Ask MarketBridge admin to release a fresh inspection form before opening another competition.</p>
+            <p>A fresh inspection competition is released after a recorded cancellation, provider withdrawal, or resolved dispute, once any inspection payment/refund is settled. Your order remains visible while this service issue is reviewed.</p>
+            {i.recoveryEligibility?.INSPECTION ? (
+              <Button variant="primary" disabled={Boolean(i.busy) || i.recoveryPending} busy={i.busy === 'recovery-INSPECTION'} busyText="Requesting…" onClick={i.requestRecovery}>
+                Request fresh inspection form
+              </Button>
+            ) : (
+              <p className="muted small">No qualifying recovery event is recorded yet. The request option will appear when the workflow becomes eligible.</p>
+            )}
           </Notice>
         ) : (
           <Button
@@ -652,6 +659,15 @@ function InspectionCard({ order, title, i }) {
           {!inspectorName && <Fact name="Status">{label(request.status)}</Fact>}
         </Facts>
       </Section>
+
+      {isRequester && i.recoveryEligibility?.INSPECTION && (
+        <Section title="Restart inspection competition">
+          <p className="muted">The previous inspector arrangement is no longer usable. MarketBridge admin must approve the fresh form before new bids can be submitted.</p>
+          <Button variant="primary" disabled={Boolean(i.busy) || i.recoveryPending} busy={i.busy === 'recovery-INSPECTION'} busyText="Requesting…" onClick={i.requestRecovery}>
+            Request fresh inspection form
+          </Button>
+        </Section>
+      )}
 
       {/* ── Inspector bids and negotiation (REQUESTED state) ── */}
       {request.status === 'REQUESTED' && (
@@ -1304,10 +1320,14 @@ function TransportCard({ order, t }) {
                       : ' — awaiting admin approval'}
                   </p>
                 ))}
+              {t.recoveryEligibility?.TRANSPORT === false && (
+                <p className="muted small">A fresh transport form becomes available after a recorded transporter withdrawal, cancellation, or resolved dispute, once any transport payment/refund is settled.</p>
+              )}
               <Button
                 variant="primary"
                 disabled={
                   Boolean(t.busy) ||
+                  t.recoveryEligibility?.TRANSPORT === false ||
                   t.recoveryRequests.some(
                     (r) => r.type === 'TRANSPORT' && r.status === 'PENDING'
                   )
@@ -1452,6 +1472,7 @@ export default function OrderDetail() {
   const [order, setOrder] = useState(null);
   const [workflow, setWorkflow] = useState(null);
   const [recoveryRequests, setRecoveryRequests] = useState([]);
+  const [recoveryEligibility, setRecoveryEligibility] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -1507,6 +1528,11 @@ export default function OrderDetail() {
           recoveryRes.status === 'fulfilled'
             ? recoveryRes.value.data?.recoveryRequests || []
             : []
+        );
+        setRecoveryEligibility(
+          recoveryRes.status === 'fulfilled'
+            ? recoveryRes.value.data?.eligibility || null
+            : null
         );
       } catch (err) {
         setError(getError(err, 'Could not load order'));
@@ -1565,7 +1591,10 @@ export default function OrderDetail() {
   const currentInspection = inspections[0] || null;
   const assignedInspection = inspections.find((r) => r.inspectorId === currentUserId) || null;
   const isInspector = Boolean(assignedInspection);
-  const inspectionFormReleased = recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'APPROVED' && r.formReleasedAt);
+  const inspectionFormReleased = Boolean(
+    recoveryEligibility?.INSPECTION === false &&
+    recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'APPROVED' && r.formReleasedAt)
+  );
   const inspectorName = (order?.inspectionRequests || inspections).find((r) => r?.inspector?.name)?.inspector?.name || null;
 
   const inspectionGateMet =
@@ -1575,7 +1604,8 @@ export default function OrderDetail() {
   const negotiatedGateMet = !isProduct || Boolean(order?.agreedOfferId);
 
   const rawJob = order?.transportJob || null;
-  const transportJob = rawJob?.status === 'CANCELLED' ? null : rawJob;
+  // Keep cancelled jobs visible so the arranger can request admin-approved recovery.
+  const transportJob = rawJob;
   const isTransporter = Boolean(transportJob?.truckOwnerId && transportJob.truckOwnerId === currentUserId);
   const isTransportArranger = Boolean(
     transportJob &&
@@ -1804,16 +1834,17 @@ export default function OrderDetail() {
       const ok = await run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'COUNTER', counterAmount: amount }), 'Could not send counter-offer');
       if (ok) setCounterInputs((q) => ({ ...q, [id]: '' }));
     },
-    requestRecovery: () =>
-      run('recovery-TRANSPORT', async () => {
+    requestRecovery: async () => {
+      const ok = await run('recovery-TRANSPORT', async () => {
         await api.post('/recovery-requests', {
           orderId: order.id,
           type: 'TRANSPORT',
           targetParties: isBuyer ? ['BUYER'] : ['SELLER'],
           reason: 'Transport competition has no usable live bid or the previous transporter arrangement is no longer available.',
         });
-        setError('Recovery request sent to MarketBridge admin for approval.');
-      }, 'Could not request workflow recovery'),
+      }, 'Could not request workflow recovery');
+      if (ok) setError('Recovery request sent to MarketBridge admin for approval.');
+    },
     submitEvidence: async (type, nextStatus) => {
       if (!transportJob || !isTransporter) return;
       const { photoKeys, videoKeys } = evidence;
@@ -2080,6 +2111,20 @@ export default function OrderDetail() {
     all: allInspections,
     current: currentInspection,
     formReleased: inspectionFormReleased,
+    recoveryEligibility,
+    currentUserId,
+    recoveryPending: recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'PENDING'),
+    requestRecovery: async () => {
+      const ok = await run('recovery-INSPECTION', async () => {
+        await api.post('/recovery-requests', {
+          orderId: order.id,
+          type: 'INSPECTION',
+          targetParties: isBuyer ? ['BUYER'] : ['SELLER'],
+          reason: 'Inspection competition has no usable live bid or the previous inspector arrangement is no longer available.',
+        });
+      }, 'Could not request workflow recovery');
+      if (ok) setError('Fresh inspection form request sent to MarketBridge admin for review.');
+    },
     requesting: requestingInspection,
     isBuyer,
     isAdmin,
@@ -2097,7 +2142,7 @@ export default function OrderDetail() {
     isSeller,
     isTransporter,
     isArranger: isTransportArranger,
-    canArrange: Boolean(!transportJob && order.status !== 'CANCELLED' && isParticipant),
+    canArrange: Boolean(!rawJob && order.status !== 'CANCELLED' && isParticipant),
     canChooseQuote: Boolean(transportJob && isTransportArranger && ['REQUESTED', 'QUOTED'].includes(transportJob.status)),
     canStartPayment: canStartTransportPayment,
     canResumePayment: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
@@ -2112,6 +2157,7 @@ export default function OrderDetail() {
     busy,
     reload,
     recoveryRequests,
+    recoveryEligibility,
     counterInputs,
     setCounterInputs,
     evidence,
