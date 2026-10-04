@@ -127,6 +127,10 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
 
   const previousOrderStatus = order.status;
 
+  if (cancelledByRole !== 'ADMIN' && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(order.transportJob?.status)) {
+    throw Object.assign(new Error('Goods are already in transit or delivered for this order. Raise a dispute instead of cancelling.'), { status: 400, code: 'TRANSPORT_MOVEMENT_STARTED' });
+  }
+
   await transitionOrderStatus(
     tx,
     order.id,

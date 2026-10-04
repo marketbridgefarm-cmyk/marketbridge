@@ -23,18 +23,19 @@ async function withJobLock(fn) {
 
 async function expireOffers(now = new Date()) {
   const offers = await prisma.offer.findMany({
-    where: { status: { in: ['PENDING', 'COUNTERED'] }, expiresAt: { lte: now } },
+    where: { status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] }, expiresAt: { lte: now } },
     select: { id: true, listingId: true, status: true, expiresAt: true }, take: 500,
   });
   let expired = 0;
   for (const offer of offers) {
     const changed = await prisma.$transaction(async (tx) => {
       const updated = await tx.offer.updateMany({
-        where: { id: offer.id, status: { in: ['PENDING', 'COUNTERED'] }, expiresAt: { lte: now } },
+        where: { id: offer.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] }, expiresAt: { lte: now } },
         data: { status: 'EXPIRED' },
       });
       if (updated.count !== 1) return false;
-      await recordAuditEvent(tx, { actorId: null, action: 'OFFER_EXPIRED_AUTOMATICALLY', resourceType: 'Offer', resourceId: offer.id, metadata: { listingId: offer.listingId, expiresAt: offer.expiresAt } });
+      await recordAuditEvent(tx, { actorId: null, action: 'OFFER_EXPIRED_AUTOMATICALLY', resourceType: 'Offer', resourceId: offer.id, metadata: { listingId: offer.listingId, previousStatus: offer.status, expiresAt: offer.expiresAt } });
+      if (offer.status === 'SELECTED') await promoteNextWaitingBuyer(tx, offer.listingId, null);
       return true;
     }, { maxWait: 10000, timeout: 15000 });
     if (changed) expired += 1;

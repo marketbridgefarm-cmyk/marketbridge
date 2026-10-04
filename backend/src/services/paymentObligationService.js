@@ -33,7 +33,7 @@ async function syncOrderPaymentObligations(tx, orderId) {
     desired.push({
       obligationKey: `ORDER:${order.id}:INSPECTOR:${r.id}`,
       type: 'INSPECTOR',
-      payerId: order.buyerId,
+      payerId: r.mode === 'SELLER_REQUESTED' ? order.sellerId : order.buyerId,
       beneficiaryId: r.inspectorId || null,
       amount: r.fee,
       inspectionRequestId: r.id,

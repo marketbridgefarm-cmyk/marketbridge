@@ -85,12 +85,13 @@ function buildPaymentSnapshot(order) {
         label: 'Inspection fee',
         inspectionRequestId: r.id,
         requestedById: r.requestedById,
+        mode: r.mode,
         required: true,
         amount: o?.amount ?? r.fee,
         paid: o?.status === 'PAID' ||
           isPaid(r.payments, 'INSPECTOR'),
-        payerRole: 'BUYER',
-        payerId: o?.payerId || order.buyerId,
+        payerRole: r.mode === 'SELLER_REQUESTED' ? 'SELLER' : 'BUYER',
+        payerId: o?.payerId || (r.mode === 'SELLER_REQUESTED' ? order.sellerId : order.buyerId),
         beneficiaryRole: 'INSPECTOR',
         beneficiaryId: o?.beneficiaryId || r.inspectorId || null,
         inspectionStatus: r.status,
@@ -595,12 +596,14 @@ function buildActions(order, payments, viewer) {
   for (const obligation of payments.inspections) {
     if (obligation.paid) continue;
     const viewerIsRequester = obligation.requestedById === viewer.userId;
+    const inspectionRequest = (order.inspectionRequests || []).find((r) => r.id === obligation.inspectionRequestId);
+    const inspectionPayerId = inspectionRequest?.mode === 'SELLER_REQUESTED' ? order.sellerId : order.buyerId;
     push({
       code: 'PAY_INSPECTION',
       label: 'Pay inspection fee',
-      actorRole: 'BUYER',
+      actorRole: inspectionRequest?.mode === 'SELLER_REQUESTED' ? 'SELLER' : 'BUYER',
       inspectionRequestId: obligation.inspectionRequestId,
-      viewerCanPerform: isBuyer || viewerIsRequester,
+      viewerCanPerform: viewer.userId === inspectionPayerId || (viewerIsRequester && !order.id),
       ready: !terminal,
       reason: terminal ? 'Order is no longer active' : null,
       route: {
