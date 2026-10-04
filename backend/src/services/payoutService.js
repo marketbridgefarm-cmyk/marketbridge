@@ -100,19 +100,25 @@ async function createPayoutHold(tx, { orderId, payeeRole, payeeId, payment }) {
 }
 
 /**
- * Called when a dispute is raised on an order. A dispute targets the order
- * as a whole (not one specific payment), so it freezes every payout tied to
- * that order regardless of payee role or where each was in the
- * HELD -> RELEASED timeline. Payouts that are already PAID_OUT are left
- * alone — money is gone, and a dispute at that point is an operational
- * matter, not something this record can still gate. No-op if the order has
- * no payouts yet.
+ * Freeze only payouts economically related to the disputed service. Legacy or
+ * unclassified dispute types retain the previous order-wide behavior so older
+ * clients do not accidentally leave a dispute without a financial hold.
  */
-async function holdForDispute(tx, { orderId, actorId }) {
+function payoutRolesForDispute(disputeType) {
+  const type = String(disputeType || '').toUpperCase();
+  if (type.includes('TRANSPORT') || type.includes('TRUCK') || type.includes('DELIVERY')) return ['TRANSPORTER'];
+  if (type.includes('INSPECT')) return ['INSPECTOR'];
+  if (type.includes('SELLER') || type.includes('PRODUCT') || type.includes('GOODS') || type.includes('MARKETPLACE')) return ['SELLER'];
+  return null;
+}
+
+async function holdForDispute(tx, { orderId, actorId, disputeType }) {
+  const roles = payoutRolesForDispute(disputeType);
   const payouts = await tx.payout.findMany({
     where: {
       orderId,
       status: { in: ['HELD', 'RELEASED'] },
+      ...(roles ? { payeeRole: { in: roles } } : {}),
     },
   });
 
@@ -123,16 +129,14 @@ async function holdForDispute(tx, { orderId, actorId }) {
       data: { status: 'ON_HOLD_DISPUTE' },
     });
     updated.push(result);
-
     await recordAuditEvent(tx, {
       actorId: actorId || null,
       action: 'PAYOUT_HELD_FOR_DISPUTE',
       resourceType: 'Payout',
       resourceId: payout.id,
-      metadata: { orderId, payeeRole: payout.payeeRole, previousStatus: payout.status },
+      metadata: { orderId, disputeType: disputeType || null, payeeRole: payout.payeeRole, previousStatus: payout.status },
     });
   }
-
   return updated;
 }
 
@@ -144,9 +148,10 @@ async function holdForDispute(tx, { orderId, actorId }) {
  * fresh cool-off period, not to treat "resolved" as "immediately safe to
  * pay out".
  */
-async function resumeAfterDispute(tx, { orderId, actorId }) {
+async function resumeAfterDispute(tx, { orderId, actorId, disputeType }) {
+  const roles = payoutRolesForDispute(disputeType);
   const payouts = await tx.payout.findMany({
-    where: { orderId, status: 'ON_HOLD_DISPUTE' },
+    where: { orderId, status: 'ON_HOLD_DISPUTE', ...(roles ? { payeeRole: { in: roles } } : {}) },
   });
 
   const updated = [];
