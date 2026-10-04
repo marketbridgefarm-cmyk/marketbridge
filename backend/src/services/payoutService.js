@@ -264,11 +264,86 @@ async function cancelPayoutsForOrder(tx, { orderId, actorId, reason }) {
  * inspector payout all release on the same rule.
  */
 async function releaseDuePayouts(prisma, now = new Date()) {
-  const result = await prisma.payout.updateMany({
-    where: { status: 'HELD', releaseAt: { lte: now } },
-    data: { status: 'RELEASED', releasedAt: now },
+  // releaseAt is only a cool-off deadline. It is never sufficient by itself:
+  // seller/transporter money must wait for confirmed receipt/completion, and
+  // inspector money must wait for the inspection report to be completed.
+  const payouts = await prisma.payout.findMany({
+    where: { status: 'HELD' },
+    include: {
+      order: {
+        include: {
+          events: {
+            where: { type: 'RECEIPT_CONFIRMED' },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
+        },
+      },
+      payment: {
+        include: {
+          inspectionRequest: true,
+        },
+      },
+    },
+    take: 500,
   });
-  return { released: result.count };
+
+  let released = 0;
+  let deferred = 0;
+
+  for (const payout of payouts) {
+    let completionAt = null;
+
+    if (payout.payeeRole === 'SELLER' || payout.payeeRole === 'TRANSPORTER') {
+      const receiptEvent = payout.order?.events?.[0];
+      if (receiptEvent) completionAt = receiptEvent.createdAt;
+      else if (payout.order?.status === 'COMPLETED') completionAt = payout.order.updatedAt;
+    } else if (payout.payeeRole === 'INSPECTOR') {
+      const request = payout.payment?.inspectionRequest;
+      if (request?.status === 'COMPLETED') completionAt = request.updatedAt;
+    }
+
+    if (!completionAt) {
+      deferred += 1;
+      continue;
+    }
+
+    const eligibleReleaseAt = new Date(
+      new Date(completionAt).getTime() + holdDays() * 24 * 60 * 60 * 1000
+    );
+
+    // Move an old payment-time releaseAt forward to completion + hold. This
+    // prevents a payout from becoming RELEASED immediately when a late order
+    // finally completes.
+    const effectiveReleaseAt = new Date(
+      Math.max(new Date(payout.releaseAt).getTime(), eligibleReleaseAt.getTime())
+    );
+
+    if (effectiveReleaseAt > now) {
+      if (effectiveReleaseAt.getTime() !== new Date(payout.releaseAt).getTime()) {
+        await prisma.payout.updateMany({
+          where: { id: payout.id, status: 'HELD' },
+          data: { releaseAt: effectiveReleaseAt },
+        });
+      }
+      deferred += 1;
+      continue;
+    }
+
+    // The conditional status claim prevents a simultaneous dispute from being
+    // released after the dispute transaction has changed HELD -> ON_HOLD_DISPUTE.
+    const claim = await prisma.payout.updateMany({
+      where: {
+        id: payout.id,
+        status: 'HELD',
+        releaseAt: { lte: now },
+      },
+      data: { status: 'RELEASED', releasedAt: now },
+    });
+    released += claim.count;
+  }
+
+  return { released, deferred };
 }
 
 /**

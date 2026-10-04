@@ -133,9 +133,16 @@ async function commitListingQuantity(tx, listingId, requestedQuantity) {
  * into CANCELLED.
  */
 async function releaseListingQuantity(tx, order) {
-  // Provisional PENDING_PAYMENT orders never consumed inventory. Their
-  // cancellation must therefore not add quantity back to the listing.
-  if (order.status !== 'CONFIRMED') return null;
+  // PENDING_PAYMENT orders normally never consumed inventory. Every later
+  // commercial state represents a committed goods payment, including an order
+  // cancelled from DISPUTED/TRANSPORT_ARRANGED. The cancellation service also
+  // passes a paid-payment marker for the narrow dispute/cancellation path.
+  const paidGoodsPayment = Array.isArray(order.payments) &&
+    order.payments.some((payment) =>
+      payment?.type === 'MARKETPLACE' &&
+      ['PAID', 'REFUND_PENDING', 'REFUNDED'].includes(payment.status)
+    );
+  if (order.status === 'PENDING_PAYMENT' && !paidGoodsPayment) return null;
 
   const quantity = normalizeQuantity(order.quantity, 'order quantity');
 

@@ -6,7 +6,7 @@ const { recordOrderEvent } = require('./orderEventService');
 const { cancelOrderInTransaction } = require('./orderCancellationService');
 const { sendSms } = require('./smsService');
 const { releaseDuePayouts } = require('./payoutService');
-const { verifyAndFinalizeRefund } = require('./paymentRefundService');
+const { processRefund, verifyAndFinalizeRefund } = require('./paymentRefundService');
 const logger = require('../utils/logger');
 
 const LOCK_KEY = 82461327;
@@ -313,6 +313,41 @@ async function sendPendingSms(now = new Date()) {
  * must not block the rest of the batch or fail the whole maintenance
  * cycle.
  */
+async function submitRequestedRefunds() {
+  const pending = await prisma.paymentRefund.findMany({
+    where: { status: 'REQUESTED' },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+    take: 50,
+  });
+
+  let submitted = 0;
+  let completed = 0;
+  let failed = 0;
+  let blocked = 0;
+
+  for (const item of pending) {
+    try {
+      const refund = await processRefund({
+        refundId: item.id,
+        actorId: null,
+        note: 'Automatically submitted by maintenance sweep',
+      });
+      submitted += 1;
+      if (refund?.status === 'COMPLETED') completed += 1;
+      else if (refund?.status === 'FAILED') failed += 1;
+    } catch (error) {
+      // Operational/provider configuration errors must not stop the batch.
+      // A REFUND_BLOCKED_ORDER_ACTIVE or missing Chapa reference remains
+      // visible as REQUESTED/PROCESSING for an operator to resolve.
+      if (error?.code === 'REFUND_BLOCKED_ORDER_ACTIVE') blocked += 1;
+      logger.error({ err: error, refundId: item.id }, 'Failed to submit requested refund');
+    }
+  }
+
+  return { checked: pending.length, submitted, completed, failed, blocked };
+}
+
 async function syncProcessingRefunds() {
   const pending = await prisma.paymentRefund.findMany({
     where: { status: 'PROCESSING', providerRefundId: { not: null } },
@@ -342,10 +377,10 @@ async function runMaintenanceCycle() {
   return withJobLock(async () => {
     const startedAt = Date.now();
     const now = new Date();
-    const [offers, listings, ads, adsActivated, reminders, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, refundSync] = await Promise.all([
-      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), expireInspectionWorkflows(now), expireTransportWorkflows(now), sendPendingSms(now), releaseDuePayouts(prisma, now), syncProcessingRefunds(),
+    const [offers, listings, ads, adsActivated, reminders, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync] = await Promise.all([
+      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), expireInspectionWorkflows(now), expireTransportWorkflows(now), sendPendingSms(now), releaseDuePayouts(prisma, now), submitRequestedRefunds(), syncProcessingRefunds(),
     ]);
-    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, refundSync };
+    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync };
   });
 }
 
@@ -364,4 +399,4 @@ function startMaintenanceScheduler() {
   return setInterval(tick, intervalMs);
 }
 
-module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, expireInspectionWorkflows, expireTransportWorkflows, expireUnpaidOrders, sendPendingSms, releaseDuePayouts, syncProcessingRefunds };
+module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, expireInspectionWorkflows, expireTransportWorkflows, expireUnpaidOrders, sendPendingSms, releaseDuePayouts, submitRequestedRefunds, syncProcessingRefunds };

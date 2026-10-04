@@ -150,7 +150,10 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
 
   // Only a paid/CONFIRMED order ever consumed agricultural inventory. A
   // PENDING_PAYMENT provisional winner must leave availableQuantity untouched.
-  const restoredListing = await releaseListingQuantity(tx, order);
+  const restoredListing = await releaseListingQuantity(tx, {
+    ...order,
+    payments: order.payments || [],
+  });
   if (!restoredListing && previousOrderStatus !== 'PENDING_PAYMENT') {
     await tx.listing.update({
       where: { id: order.listingId },
@@ -166,8 +169,24 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
   if (order.transportJob && !['DELIVERED', 'CANCELLED'].includes(order.transportJob.status)) {
     await tx.transportJob.update({
       where: { id: order.transportJob.id },
-      data: { status: 'CANCELLED' },
+      data: { status: 'CANCELLED', workflowDueAt: null },
     });
+    await tx.transportQuote.updateMany({
+      where: {
+        transportJobId: order.transportJob.id,
+        status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
+      },
+      data: { status: 'REJECTED' },
+    });
+    if (order.transportJob.truckId) {
+      await tx.truck.updateMany({
+        where: {
+          id: order.transportJob.truckId,
+          availability: 'BUSY',
+        },
+        data: { availability: 'AVAILABLE' },
+      });
+    }
   }
 
   await tx.inspectionRequest.updateMany({
@@ -180,7 +199,7 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
   await tx.inspectionQuote.updateMany({
     where: {
       inspectionRequest: { orderId: order.id },
-      status: { in: ['PENDING', 'COUNTERED'] },
+      status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
     },
     data: { status: 'REJECTED' },
   });

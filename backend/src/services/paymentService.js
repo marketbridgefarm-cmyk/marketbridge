@@ -13,6 +13,7 @@ const {
   createReconciliationIssue,
 } = require('./paymentReconciliationService');
 const { transitionOrderStatus } = require('./orderStateMachine');
+const { assertTransition: assertPaymentTransition } = require('./paymentStateMachine');
 const { commitListingQuantity } = require('./inventoryService');
 const payoutService = require('./payoutService');
 
@@ -823,8 +824,41 @@ async function settlePaymentCore({
       // ----------------------------------------------------------------------
       // PROVIDER AMOUNT VALIDATION
       // ----------------------------------------------------------------------
+      // A successful provider verification without an amount is not evidence
+      // that the correct amount was paid. Never substitute our local amount:
+      // that turns a missing provider field into a false match.
+      if (status === 'PAID' && payload.amount == null) {
+        await createReconciliationIssue(tx, {
+          paymentId: payment.id,
+          provider: provider || payment.provider || 'UNKNOWN',
+          observedStatus: status,
+          expectedAmount: payment.amount,
+          observedAmount: null,
+          expectedCurrency: payment.currency,
+          observedCurrency: payload.currency || null,
+          reason: 'PROVIDER_AMOUNT_MISSING',
+          payload,
+        });
+
+        try {
+          assertPaymentTransition(payment.status, 'RECONCILIATION_REQUIRED');
+        } catch (_) {
+          return payment;
+        }
+
+        return tx.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: 'RECONCILIATION_REQUIRED',
+            provider: provider || payment.provider || null,
+            providerTransactionId: providerTransactionId || payment.providerTransactionId || null,
+            reference: reference || payment.reference || null,
+          },
+        });
+      }
 
       if (
+        status === 'PAID' &&
         payload.amount != null &&
         !moneyEqual(
           payment.amount,
@@ -861,6 +895,12 @@ async function settlePaymentCore({
 
           payload,
         });
+
+        try {
+          assertPaymentTransition(payment.status, 'RECONCILIATION_REQUIRED');
+        } catch (_) {
+          return payment;
+        }
 
         const flagged =
           await tx.payment.update({
@@ -961,6 +1001,12 @@ async function settlePaymentCore({
 
           payload,
         });
+
+        try {
+          assertPaymentTransition(payment.status, 'RECONCILIATION_REQUIRED');
+        } catch (_) {
+          return payment;
+        }
 
         const flagged =
           await tx.payment.update({
@@ -1214,21 +1260,33 @@ async function settlePaymentCore({
       // ----------------------------------------------------------------------
 
       if (updated.obligationId) {
-        await tx.paymentObligation.update({
-          where: {
-            id:
-              updated.obligationId,
-          },
-
-          data: {
-            status:
-              status === 'PAID'
-                ? 'PAID'
-                : status === 'REFUNDED'
-                  ? 'CANCELLED'
-                  : undefined,
-          },
-        });
+        const currentObligationId = updated.obligationId;
+        if (status === 'FAILED') {
+          // FAILED is a retryable payment attempt, not a consumed business
+          // obligation. Release the one-to-one FK so a fresh attempt can
+          // satisfy the same OPEN obligation.
+          await tx.paymentObligation.update({
+            where: { id: currentObligationId },
+            data: { status: 'OPEN' },
+          });
+          await tx.payment.update({
+            where: { id: updated.id },
+            data: { obligationId: null },
+          });
+          updated.obligationId = null;
+        } else {
+          await tx.paymentObligation.update({
+            where: { id: currentObligationId },
+            data: {
+              status:
+                status === 'PAID'
+                  ? 'PAID'
+                  : status === 'REFUNDED'
+                    ? 'CANCELLED'
+                    : undefined,
+            },
+          });
+        }
       }
 
       // ----------------------------------------------------------------------
@@ -1330,6 +1388,26 @@ async function settlePaymentCore({
       // ----------------------------------------------------------------------
       // PAID BUSINESS EFFECTS
       // ----------------------------------------------------------------------
+
+      if (status === 'PAID' && payment.orderId && payment.order?.status === 'DISPUTED') {
+        // The provider has actually received the money, but an open dispute
+        // freezes the order. Keep the payment PAID for financial truth and
+        // write the ledger now, while deliberately withholding inventory
+        // commitment/payout creation until dispute resolution.
+        await writeLedger(tx, payment, 'PAID');
+        await createReconciliationIssue(tx, {
+          paymentId: payment.id,
+          provider: provider || payment.provider || 'UNKNOWN',
+          observedStatus: status,
+          expectedAmount: payment.amount,
+          observedAmount: payload.amount,
+          expectedCurrency: payment.currency,
+          observedCurrency: payload.currency || null,
+          reason: 'PAYMENT_RECEIVED_WHILE_ORDER_DISPUTED',
+          payload,
+        });
+        return updated;
+      }
 
       if (status === 'PAID') {
         // --------------------------------------------------------------------
@@ -1796,8 +1874,181 @@ async function settlePaymentCore({
 // payment - settles the parent goods payment once every installment is PAID.
 // See installmentService.js.
 
+
+/**
+ * Replays business effects for a payment that was verified PAID while its
+ * order was DISPUTED. The financial payment remains authoritative; this only
+ * performs the effects that were intentionally withheld by settlePaymentCore.
+ * Must be called inside the caller's Prisma transaction after the order is
+ * restored from DISPUTED.
+ */
+async function replayDisputedPaidPayment(tx, paymentId) {
+  const payment = await tx.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      order: true,
+      transportJob: true,
+      transportQuote: true,
+      inspectionRequest: true,
+    },
+  });
+  if (!payment || payment.status !== 'PAID') return payment;
+  if (!payment.orderId || !payment.order) return payment;
+
+  if (payment.type === 'MARKETPLACE') {
+    if (payment.order.status === 'PENDING_PAYMENT') {
+      if (payment.order.listingId) {
+        const listing = await tx.listing.findUnique({
+          where: { id: payment.order.listingId },
+          select: { id: true, category: true },
+        });
+        if (['AGRICULTURAL', 'PRODUCT'].includes(listing?.category)) {
+          await commitListingQuantity(tx, listing.id, payment.order.quantity);
+        }
+      }
+
+      await transitionOrderStatus(tx, payment.orderId, 'PENDING_PAYMENT', 'CONFIRMED');
+    }
+
+    await payoutService.createPayoutHold(tx, {
+      orderId: payment.order.id,
+      payeeRole: 'SELLER',
+      payeeId: payment.order.sellerId,
+      payment,
+    });
+  }
+
+  if (
+    payment.type === 'TRANSPORT' &&
+    payment.transportJob?.method === 'HIRE_TRANSPORTER' &&
+    payment.transportJob.truckOwnerId
+  ) {
+    const job = await tx.transportJob.findUnique({
+      where: { id: payment.transportJob.id },
+      select: { id: true, status: true, truckId: true, truckOwnerId: true, agreedAmount: true, orderId: true },
+    });
+    if (job && ['REQUESTED', 'QUOTED', 'ACCEPTED'].includes(job.status)) {
+      const quote = payment.transportQuote;
+      if (quote?.status === 'ACCEPTED' && quote.truckId === job.truckId && quote.truckOwnerId === job.truckOwnerId) {
+        if (job.truckId) {
+          await tx.truck.updateMany({
+            where: { id: job.truckId, availability: 'AVAILABLE' },
+            data: { availability: 'BUSY' },
+          });
+        }
+        await tx.transportJob.update({
+          where: { id: job.id },
+          data: { status: 'ACCEPTED' },
+        });
+        await tx.transportQuote.updateMany({
+          where: { transportJobId: job.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
+          data: { status: 'REJECTED' },
+        });
+        const order = await tx.order.findUnique({ where: { id: job.orderId }, select: { id: true, status: true } });
+        if (order?.status === 'CONFIRMED') {
+          await transitionOrderStatus(tx, order.id, 'CONFIRMED', 'TRANSPORT_ARRANGED');
+        }
+      }
+    }
+
+    await payoutService.createPayoutHold(tx, {
+      orderId: payment.transportJob.orderId,
+      payeeRole: 'TRANSPORTER',
+      payeeId: payment.transportQuote?.truckOwnerId || payment.transportJob.truckOwnerId,
+      payment,
+    });
+  }
+
+  if (
+    payment.type === 'INSPECTOR' &&
+    payment.inspectionRequest?.inspectorId
+  ) {
+    const request = await tx.inspectionRequest.findUnique({
+      where: { id: payment.inspectionRequest.id },
+      select: { id: true, status: true, inspectorId: true },
+    });
+    if (request && ['REQUESTED', 'ACCEPTED'].includes(request.status)) {
+      await tx.inspectionRequest.update({
+        where: { id: request.id },
+        data: { status: 'ACCEPTED' },
+      });
+      await tx.inspectionQuote.updateMany({
+        where: { inspectionRequestId: request.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
+        data: { status: 'REJECTED' },
+      });
+    }
+    await payoutService.createPayoutHold(tx, {
+      orderId: payment.inspectionRequest.orderId,
+      payeeRole: 'INSPECTOR',
+      payeeId: payment.inspectionRequest.inspectorId,
+      payment,
+    });
+  }
+
+  return payment;
+}
+
 async function settlePayment(args) {
-  const result = await settlePaymentCore(args);
+  let result;
+  try {
+    result = await settlePaymentCore(args);
+  } catch (error) {
+    // Chapa may already have captured money while our final business commit
+    // discovers an inventory shortage. Never roll the provider payment back
+    // into a locally PENDING/PROCESSING state and pretend nothing happened.
+    // Persist a durable reconciliation record in a NEW transaction.
+    if (error?.code === 'INSUFFICIENT_INVENTORY' && args?.status === 'PAID' && args?.paymentId) {
+      try {
+        result = await prisma.$transaction(async (tx) => {
+          const payment = await tx.payment.findUnique({ where: { id: args.paymentId } });
+          if (!payment) throw error;
+
+          if (payment.status !== 'RECONCILIATION_REQUIRED') {
+            assertPaymentTransition(payment.status, 'RECONCILIATION_REQUIRED');
+            await tx.payment.update({
+              where: { id: payment.id },
+              data: {
+                status: 'RECONCILIATION_REQUIRED',
+                provider: args.provider || payment.provider || null,
+                providerTransactionId: args.providerTransactionId || payment.providerTransactionId || null,
+                reference: args.reference || payment.reference || null,
+              },
+            });
+          }
+
+          await createReconciliationIssue(tx, {
+            paymentId: payment.id,
+            provider: args.provider || payment.provider || 'UNKNOWN',
+            observedStatus: 'PAID',
+            expectedAmount: payment.amount,
+            observedAmount: args.payload?.amount ?? null,
+            expectedCurrency: payment.currency,
+            observedCurrency: args.payload?.currency || null,
+            reason: 'INSUFFICIENT_INVENTORY_AFTER_PROVIDER_PAYMENT',
+            payload: args.payload || {},
+          });
+
+          await recordAuditEvent(tx, {
+            actorId: null,
+            action: 'PAYMENT_RECONCILIATION_REQUIRED',
+            resourceType: 'Payment',
+            resourceId: payment.id,
+            metadata: {
+              reason: 'INSUFFICIENT_INVENTORY_AFTER_PROVIDER_PAYMENT',
+              error: error.message,
+            },
+          });
+
+          return tx.payment.findUnique({ where: { id: payment.id } });
+        }, { maxWait: 10000, timeout: 20000 });
+      } catch (reconciliationError) {
+        logger.error({ err: reconciliationError, paymentId: args.paymentId }, 'Failed to persist inventory/payment reconciliation');
+        throw error;
+      }
+    } else {
+      throw error;
+    }
+  }
 
   if (
     result &&
@@ -1834,4 +2085,5 @@ module.exports = {
   createPayment,
   settlePayment,
   settlePaymentCore,
+  replayDisputedPaidPayment,
 };
