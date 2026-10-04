@@ -1542,7 +1542,7 @@ export default function AdminDashboard() {
     try {
       await api.patch(`/recovery-requests/admin/${id}/${action}`, action === 'approve' ? {} : {});
       setRecoveryRequests((items) => items.filter((item) => item.id !== id));
-      setSuccess(action === 'approve' ? 'Recovery approved and the fresh requesting form was released.' : 'Recovery request rejected.');
+      setSuccess(action === 'approve' ? 'Recovery approved. The fresh service form was released; the goods order and payment records were not automatically cancelled.' : 'Recovery request rejected.');
     } catch (err) {
       setError(err.response?.data?.error || `Could not ${action} recovery request`);
     } finally {
@@ -3392,7 +3392,7 @@ export default function AdminDashboard() {
                 <div>
                   <span className="ac-section-label">ADMIN APPROVAL QUEUE</span>
                   <h2>Workflow recovery requests</h2>
-                  <p className="sd-muted">Buyers and sellers can request recovery, but bidding is not reopened until an admin approves it. Approval releases a fresh requesting form to the requested party or parties.</p>
+                  <p className="sd-muted">Review the reason, service status and payment/refund state before deciding. Approving recovery releases a fresh form for the affected service only; it does not cancel the goods order or mark the replacement provider as paid. Resolve disputes and approve service cancellations through their separate decision workflow.</p>
                 </div>
               </div>
               {recoveryRequests.length === 0 ? (
@@ -3411,7 +3411,7 @@ export default function AdminDashboard() {
                           <td>{item.reason || 'No reason supplied'}</td>
                           <td>
                             <div className="ac-actions">
-                              <button type="button" className="sd-btn sd-btn-primary" disabled={Boolean(actionLoading)} onClick={() => decideRecovery(item.id, 'approve')}>{actionLoading === `recovery-approve-${item.id}` ? 'Approving…' : 'Approve & release form'}</button>
+                              <button type="button" className="sd-btn sd-btn-primary" disabled={Boolean(actionLoading)} onClick={() => decideRecovery(item.id, 'approve')}>{actionLoading === `recovery-approve-${item.id}` ? 'Approving…' : 'Approve fresh service form'}</button>
                               <button type="button" className="sd-btn" disabled={Boolean(actionLoading)} onClick={() => decideRecovery(item.id, 'reject')}>{actionLoading === `recovery-reject-${item.id}` ? 'Rejecting…' : 'Reject'}</button>
                             </div>
                           </td>

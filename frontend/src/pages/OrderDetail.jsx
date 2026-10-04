@@ -1292,8 +1292,7 @@ function TransportCard({ order, t }) {
           ['REQUESTED', 'QUOTED', 'ACCEPTED', 'CANCELLED'].includes(job.status) && (
             <Section title="Transport recovery">
               <p className="muted">
-                If the competition has stalled or the previous arrangement was cancelled, request admin approval to
-                release a fresh transport form.
+                If the transporter withdrew or the arrangement was cancelled, request admin review. The order stays separate from this service issue; a fresh competition opens only after approval and any required refund is resolved.
               </p>
               {t.recoveryRequests
                 .filter((r) => r.type === 'TRANSPORT')
@@ -1317,7 +1316,7 @@ function TransportCard({ order, t }) {
                 busyText="Requesting…"
                 onClick={t.requestRecovery}
               >
-                Request fresh transport form
+                Request admin review for new transport bids
               </Button>
             </Section>
           )}
@@ -1390,6 +1389,53 @@ function DisputeCard({ order, d }) {
         </form>
       )}
     </Card>
+  );
+}
+
+function BuyerConfidenceCard({ order, recoveryRequests }) {
+  const latest = [...(recoveryRequests || [])].sort((a, b) =>
+    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  )[0];
+  const hasOpenDispute = order?.status === 'DISPUTED';
+  const recoveryPending = latest?.status === 'PENDING';
+  const formReleased = Boolean(latest?.formReleasedAt) || latest?.status === 'APPROVED';
+  const recoveryRejected = latest?.status === 'REJECTED';
+
+  let status = 'Order remains active';
+  let detail = 'If an inspection or transport arrangement changes, the affected service can be reviewed separately. Your goods order is not automatically cancelled.';
+  let tone = 'is-safe';
+  if (hasOpenDispute) {
+    status = 'Admin review in progress';
+    detail = 'The case is under review. Payments affected by the dispute remain protected while the decision is pending. You will see the next permitted action here after review.';
+    tone = 'is-review';
+  } else if (recoveryPending) {
+    status = 'Waiting for admin approval';
+    detail = `Your ${String(latest.type || 'service').toLowerCase()} recovery request has been submitted. A fresh competition is not opened until an administrator approves it.`;
+    tone = 'is-review';
+  } else if (formReleased) {
+    status = 'Fresh competition available';
+    detail = 'Admin approved recovery. Follow the released form to invite new bids. The replacement provider must have its own agreement and payment.';
+    tone = 'is-safe';
+  } else if (recoveryRejected) {
+    status = 'Recovery request reviewed';
+    detail = 'The latest recovery request was not approved. Review the decision and reason, then contact MarketBridge support if you need help.';
+    tone = 'is-review';
+  }
+
+  return (
+    <section className={`card od-buyer-confidence ${tone}`} aria-live="polite">
+      <div className="od-confidence-icon" aria-hidden="true">{hasOpenDispute || recoveryPending ? 'i' : '✓'}</div>
+      <div className="od-confidence-main">
+        <span className="od-eyebrow">MARKETBRIDGE ORDER PROTECTION</span>
+        <h2>{status}</h2>
+        <p>{detail}</p>
+        <div className="od-confidence-promises">
+          <span><b aria-hidden="true">✓</b> Service issues reviewed separately</span>
+          <span><b aria-hidden="true">✓</b> No automatic replacement charge</span>
+          <span><b aria-hidden="true">✓</b> Payment and refund status stays visible</span>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -2109,6 +2155,12 @@ export default function OrderDetail() {
               onCancel={cancelOrder}
             />
           </div>
+
+          {isBuyer && (
+            <div className="od-span-all">
+              <BuyerConfidenceCard order={order} recoveryRequests={recoveryRequests} />
+            </div>
+          )}
 
           {workflow ? (
             <ActionCenter workflow={workflow} onScroll={scrollToId} onActionComplete={reload} />
