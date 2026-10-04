@@ -131,6 +131,7 @@ const orderDetailInclude = {
     },
   },
   agreedOffer: true,
+  priceReviews: { include: { proposedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' } },
   buyer: { select: userSelect },
   seller: { select: userSelect },
   transportJob: { include: transportInclude },
@@ -350,6 +351,95 @@ router.get('/:id/workflow', authenticate, async (req, res) => {
 });
 
 // ============================================================================
+// Inspection-driven price review. Every proposal is immutable; a counter creates
+// a child proposal. Only mutual acceptance changes Order.finalPrice.
+// ============================================================================
+const PRICE_REVIEW_REASONS = new Set([
+  'MARKET_PRICE_RISE', 'MARKET_PRICE_FALL', 'QUALITY_OR_QUANTITY_CHANGE',
+  'FRESHNESS_OR_DAMAGE', 'OTHER_INSPECTION_FINDING',
+]);
+
+router.post('/:id/price-reviews', authenticate, idempotency('orders.price-review-create'), [
+  param('id').isUUID(),
+  body('proposedPrice').isFloat({ gt: 0 }),
+  body('reasonCode').isIn([...PRICE_REVIEW_REASONS]),
+], validate, async (req, res) => {
+  try {
+    const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: {
+      listing: { select: { category: true } },
+      inspectionRequests: { where: { status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' }, take: 1, select: { status: true, report: { select: { id: true } } } },
+      payments: { where: { type: 'MARKETPLACE', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true, status: true } },
+      priceReviews: { where: { status: 'PENDING' }, select: { id: true } },
+    }});
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (![order.buyerId, order.sellerId].includes(req.user.id)) return res.status(403).json({ error: 'Only the buyer or seller can request a price review' });
+    if (!['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category)) return res.status(400).json({ error: 'Price review is only available for goods orders' });
+    if (['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(order.status) || order.payments.length || order.buyerDecision === 'BUY') return res.status(409).json({ error: 'Price review is unavailable after cancellation, dispute, completion, price confirmation, or once goods payment has started' });
+    const inspection = order.inspectionRequests[0];
+    if (!inspection || inspection.status !== 'COMPLETED' || !inspection.report) return res.status(409).json({ error: 'A completed inspection report is required before price review' });
+    if (order.priceReviews.length) return res.status(409).json({ error: 'A price review is already awaiting a response' });
+    if (order.buyerDecision === 'CANCEL') return res.status(409).json({ error: 'This order has already been cancelled after inspection' });
+    const amount = Number(req.body.proposedPrice);
+    const review = await prisma.$transaction(async tx => {
+      const current = await tx.order.findUnique({ where: { id: order.id }, select: { finalPrice: true, buyerDecision: true, status: true } });
+      if (!current || ['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(current.status)) throw Object.assign(new Error('Order is no longer available for price review'), { status: 409 });
+      const open = await tx.priceReview.findFirst({ where: { orderId: order.id, status: 'PENDING' }, select: { id: true } });
+      if (open) throw Object.assign(new Error('A price review is already awaiting a response'), { status: 409 });
+      if (Number(current.finalPrice) === amount) throw Object.assign(new Error('The proposed price must differ from the current agreed price'), { status: 400 });
+      return tx.priceReview.create({ data: { orderId: order.id, proposedById: req.user.id, proposedPrice: amount, reasonCode: req.body.reasonCode }, include: { proposedBy: { select: { id: true, name: true } } } });
+    });
+    await recordOrderEvent(prisma, { orderId: order.id, actorId: req.user.id, type: 'PRICE_REVIEW_PROPOSED', metadata: { priceReviewId: review.id, proposedPrice: amount, reasonCode: review.reasonCode } }).catch(err => req.log.error({err}, 'PRICE REVIEW EVENT FAILED'));
+    return res.status(201).json({ message: 'Price review proposal submitted; the other party must respond.', priceReview: review });
+  } catch (error) {
+    req.log.error({ err: error }, 'CREATE PRICE REVIEW ERROR');
+    return res.status(error.status || (error.code === 'P2002' ? 409 : 500)).json({ error: error.message || (error.code === 'P2002' ? 'A price review is already awaiting a response' : 'Could not submit price review') });
+  }
+});
+
+router.patch('/:id/price-reviews/:reviewId/respond', authenticate, idempotency('orders.price-review-respond'), [
+  param('id').isUUID(), param('reviewId').isUUID(),
+  body('action').isIn(['ACCEPT', 'COUNTER', 'REJECT']),
+  body('proposedPrice').optional().isFloat({ gt: 0 }),
+  body('reasonCode').optional().isIn([...PRICE_REVIEW_REASONS]),
+], validate, async (req, res) => {
+  try {
+    const result = await prisma.$transaction(async tx => {
+      const order = await tx.order.findUnique({ where: { id: req.params.id }, select: { id: true, buyerId: true, sellerId: true, finalPrice: true, buyerDecision: true, status: true, paymentDueAt: true, payments: { where: { type: 'MARKETPLACE', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true, status: true } } } });
+      if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
+      if (![order.buyerId, order.sellerId].includes(req.user.id)) throw Object.assign(new Error('Only the buyer or seller can respond'), { status: 403 });
+      if (['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(order.status) || order.payments.length || order.buyerDecision === 'BUY') throw Object.assign(new Error('Price review is closed for this order once goods payment has started or the order is no longer active'), { status: 409 });
+      const review = await tx.priceReview.findUnique({ where: { id: req.params.reviewId }, include: { proposedBy: { select: { id: true, name: true } } } });
+      if (!review || review.orderId !== order.id) throw Object.assign(new Error('Price review not found'), { status: 404 });
+      if (review.status !== 'PENDING') throw Object.assign(new Error('This proposal is no longer awaiting a response'), { status: 409 });
+      if (review.proposedById === req.user.id) throw Object.assign(new Error('The proposer cannot respond to their own proposal'), { status: 403 });
+      if (req.body.action === 'COUNTER') {
+        const claimed = await tx.priceReview.updateMany({ where: { id: review.id, status: 'PENDING' }, data: { status: 'COUNTERED' } });
+        if (claimed.count !== 1) throw Object.assign(new Error('This proposal was already answered. Refresh and try again.'), { status: 409 });
+        if (!req.body.proposedPrice || !req.body.reasonCode) throw Object.assign(new Error('Counter price and reason are required'), { status: 400 });
+        if (Number(req.body.proposedPrice) === Number(review.proposedPrice)) throw Object.assign(new Error('Counter price must differ from the current proposal'), { status: 400 });
+        const child = await tx.priceReview.create({ data: { orderId: order.id, proposedById: req.user.id, proposedPrice: Number(req.body.proposedPrice), reasonCode: req.body.reasonCode, parentId: review.id }, include: { proposedBy: { select: { id: true, name: true } } } });
+        return { action: 'COUNTER', priceReview: child };
+      }
+      if (req.body.action === 'REJECT') {
+        const claimed = await tx.priceReview.updateMany({ where: { id: review.id, status: 'PENDING' }, data: { status: 'REJECTED' } });
+        if (claimed.count !== 1) throw Object.assign(new Error('This proposal was already answered. Refresh and try again.'), { status: 409 });
+        return { action: 'REJECT', priceReview: { ...review, status: 'REJECTED' } };
+      }
+      const now = new Date();
+      const claimed = await tx.priceReview.updateMany({ where: { id: review.id, status: 'PENDING' }, data: { status: 'ACCEPTED' } });
+      if (claimed.count !== 1) throw Object.assign(new Error('This proposal was already answered. Refresh and try again.'), { status: 409 });
+      await tx.order.update({ where: { id: order.id }, data: { finalPrice: review.proposedPrice, buyerDecision: 'BUY', buyerDecisionAt: now, paymentDueAt: computePaymentDueAt() } });
+      return { action: 'ACCEPT', priceReview: { ...review, status: 'ACCEPTED' }, agreedPrice: review.proposedPrice };
+    }, { maxWait: 10000, timeout: 15000 });
+    await recordOrderEvent(prisma, { orderId: req.params.id, actorId: req.user.id, type: `PRICE_REVIEW_${result.action}`, metadata: { priceReviewId: result.priceReview.id, proposedPrice: result.agreedPrice ?? result.priceReview.proposedPrice } }).catch(err => req.log.error({err}, 'PRICE REVIEW RESPONSE EVENT FAILED'));
+    return res.json({ message: result.action === 'ACCEPT' ? 'Revised price accepted by both parties. Goods payment is now available.' : result.action === 'COUNTER' ? 'Counter-proposal submitted; awaiting the other party.' : 'Price review proposal rejected.', ...result });
+  } catch (error) {
+    req.log.error({ err: error }, 'RESPOND PRICE REVIEW ERROR');
+    return res.status(error.status || 500).json({ error: error.message || 'Could not respond to price review' });
+  }
+});
+
+// ============================================================================
 // PATCH /api/orders/:id/buyer-decision
 // ============================================================================
 // After the inspection report is available, the buyer must explicitly decide
@@ -421,6 +511,11 @@ router.patch(
         if (['CANCELLED', 'COMPLETED'].includes(current.status)) {
           throw Object.assign(new Error(`Order is already ${current.status.toLowerCase()}`), { status: 409 });
         }
+        if (decision === 'BUY') {
+          const pendingReview = await tx.priceReview.findFirst({ where: { orderId: current.id, status: 'PENDING' }, select: { id: true } });
+          if (pendingReview) throw Object.assign(new Error('Respond to the pending price review before proceeding to payment.'), { status: 409, code: 'PRICE_REVIEW_PENDING' });
+        }
+
         if (current.buyerDecision) {
           throw Object.assign(
             new Error(`Buyer decision has already been recorded as ${current.buyerDecision}`),
