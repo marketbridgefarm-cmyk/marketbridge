@@ -1425,10 +1425,8 @@ router.get(
 // ============================================================================
 // PAYMENT GATE FOR TRUCK PICKUP
 // ============================================================================
-// PICKUP is the point at which the truck takes physical possession of the
-// produce/goods. It is server-side locked until every payment required by
-// this order is settled — the buyer must have paid the seller, transport,
-// and inspections before the truck is allowed to collect the goods.
+// PICKUP records physical handover. Transport payment is required before
+// IN_TRANSIT, so the truck cannot leave with the goods before settlement.
 //
 // Required payments:
 //   1. MARKETPLACE payment for the agricultural/physical order (to the seller).
@@ -1458,34 +1456,19 @@ async function getTransportPaymentGate(client, jobId) {
 
   if (!job) return { ready: false, missing: ['TRANSPORT_JOB'] };
 
-  const marketplacePaid = job.order.payments.some(
-    (p) => p.type === 'MARKETPLACE' && p.status === 'PAID'
-  );
-
-  const inspectionRequests = job.order.inspectionRequests || [];
-  const inspectionMissing = inspectionRequests
-    .filter((r) => r.fee != null && Number(r.fee) > 0)
-    .filter((r) => !r.payments.some((p) => p.type === 'INSPECTOR' && p.status === 'PAID'))
-    .map((r) => r.id);
-
+  // The transport payment is a service-specific obligation. Marketplace and
+  // inspection payments have their own lifecycle and must not be used as a
+  // hidden gate for the transporter's departure.
   const transportRequired = job.method === 'HIRE_TRANSPORTER';
   const transportPaid = !transportRequired || job.payments.some(
     (p) => p.type === 'TRANSPORT' && p.status === 'PAID'
   );
-
-  const missing = [];
-  if (!marketplacePaid) missing.push('MARKETPLACE');
-  if (inspectionMissing.length) missing.push('INSPECTOR');
-  if (!transportPaid) missing.push('TRANSPORT');
-
+  const missing = transportPaid ? [] : ['TRANSPORT'];
   return {
     ready: missing.length === 0,
     missing,
-    marketplacePaid,
-    inspectionPaid: inspectionMissing.length === 0,
     transportRequired,
     transportPaid,
-    inspectionRequestIds: inspectionRequests.map((r) => r.id),
   };
 }
 
@@ -1736,16 +1719,14 @@ router.patch(
         });
       }
 
-      // HARD PAYMENT GATE: no transporter may pick up the goods until all
-      // required buyer payments (seller/marketplace, inspection, and
-      // transport) are PAID. This runs before PICKUP, not before
-      // IN_TRANSIT, so the truck cannot collect the produce unpaid-for.
-      if (next === 'PICKUP') {
+      // Payment is triggered by verified pickup. The transporter may record
+      // physical handover, but cannot depart until the required payments settle.
+      if (next === 'IN_TRANSIT') {
         const gate = await getTransportPaymentGate(prisma, job.id);
         if (!gate.ready) {
           return res.status(409).json({
-            code: 'PAYMENTS_REQUIRED_BEFORE_PICKUP',
-            error: 'All required payments must be completed before the truck can pick up the goods.',
+            code: 'PAYMENTS_REQUIRED_BEFORE_TRANSIT',
+            error: 'Required payments must be completed before the truck can enter IN_TRANSIT.',
             missingPayments: gate.missing,
           });
         }

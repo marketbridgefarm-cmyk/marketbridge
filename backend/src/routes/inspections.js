@@ -979,18 +979,9 @@ router.post(
         });
       }
 
-      if (request.fee != null && Number(request.fee) > 0) {
-        const paid = await prisma.payment.findFirst({
-          where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: 'PAID' },
-          select: { id: true },
-        });
-        if (!paid) {
-          return res.status(409).json({
-            code: 'INSPECTION_PAYMENT_REQUIRED',
-            error: 'The inspection fee must be paid before the inspector can start the inspection.',
-          });
-        }
-      }
+      // A verified start is the payment trigger. The inspector may start only
+      // an accepted assignment; the fee must be settled before further service
+      // progression/report submission (the report route retains its state gate).
 
       const result = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection cannot be started until that is resolved');
@@ -1050,7 +1041,12 @@ router.post(
         },
       });
 
-      return res.json({ message: 'Inspection started', request: updated });
+      return res.json({
+        message: 'Inspection started',
+        paymentDue: updated.fee != null && Number(updated.fee) > 0,
+        paymentTrigger: 'INSPECTION_STARTED',
+        request: updated,
+      });
     } catch (error) {
       req.log.error({ err: error }, 'START INSPECTION ERROR:');
 

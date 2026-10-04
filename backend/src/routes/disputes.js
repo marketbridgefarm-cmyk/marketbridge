@@ -85,7 +85,7 @@ router.post(
         // between the pre-check above and this transaction.
         await transitionOrderStatus(tx, orderId, order.status, 'DISPUTED');
 
-        await holdForDispute(tx, { orderId, actorId: req.user.id });
+        await holdForDispute(tx, { orderId, actorId: req.user.id, disputeType });
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
@@ -237,7 +237,7 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
         // pre-dispute order state. The order was frozen while the dispute was
         // open, so no payment/transport/inspection action can sneak through.
         if (decision === 'RELEASE') {
-          await resumeAfterDispute(tx, { orderId: dispute.orderId, actorId: req.user.id });
+          await resumeAfterDispute(tx, { orderId: dispute.orderId, actorId: req.user.id, disputeType: dispute.disputeType });
         }
         restoredOrderStatus = dispute.previousOrderStatus || 'CONFIRMED';
         await transitionOrderStatus(tx, dispute.orderId, 'DISPUTED', restoredOrderStatus);
