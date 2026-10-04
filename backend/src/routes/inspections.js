@@ -9,6 +9,7 @@ const { syncOrderPaymentObligations } = require('../services/paymentObligationSe
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
+const { computeInspectionWorkflowDueAt, computePaymentDueAt } = require('../utils/orderTiming');
 const {
   AMOUNT_LIMITS,
   validAmount,
@@ -100,6 +101,10 @@ router.post(
         return res.status(403).json({ error: 'Only the buyer or seller of the order can request inspection' });
       }
 
+      if (req.user.roles.includes('INSPECTOR') && (order.buyerId === req.user.id || order.sellerId === req.user.id || order.listing?.createdByInspectorId === req.user.id)) {
+        return res.status(403).json({ error: 'An inspector cannot request or perform an inspection on their own transaction or listing' });
+      }
+
       if (['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(order.status)) {
         return res.status(409).json({ error: `Inspection cannot be requested for an order that is ${order.status.toLowerCase()}` });
       }
@@ -142,6 +147,7 @@ router.post(
             location: order.listing.location || null,
             inspectorId: null,
             status: 'REQUESTED',
+            workflowDueAt: computeInspectionWorkflowDueAt(),
             fee: null,
           },
           include: {
@@ -382,6 +388,11 @@ router.post(
         return res.status(400).json({ error: 'This inspection is no longer accepting quotes' });
       }
 
+      const quoteOrder = request.orderId ? await prisma.order.findUnique({ where: { id: request.orderId }, select: { buyerId: true, sellerId: true, listing: { select: { createdByInspectorId: true } } } }) : null;
+      if (req.user.id === quoteOrder?.buyerId || req.user.id === quoteOrder?.sellerId || req.user.id === quoteOrder?.listing?.createdByInspectorId) {
+        return res.status(403).json({ error: 'You cannot inspect or quote on your own transaction or listing' });
+      }
+
       if (request.requestedById === req.user.id) {
         return res.status(403).json({ error: 'You cannot quote on your own inspection request' });
       }
@@ -554,6 +565,7 @@ router.patch(
       const selected = await prisma.$transaction(async (tx) => {
         const fresh = await tx.inspectionQuote.findUnique({ where: { id: quote.id } });
         if (!fresh || fresh.status !== 'PENDING') throw quoteError('This bid is no longer available', 409);
+        if (isQuoteExpired(fresh)) throw quoteError('This bid has expired', 409);
         await tx.inspectionQuote.updateMany({
           where: { inspectionRequestId: request.id, id: { not: fresh.id }, status: 'SELECTED' },
           data: { status: 'PENDING' },
@@ -1329,6 +1341,13 @@ router.post(
 
         if (completed.count !== 1) {
           throw new Error('INSPECTION_STATUS_CHANGED');
+        }
+
+        if (request.orderId) {
+          await tx.order.updateMany({
+            where: { id: request.orderId, status: 'PENDING_PAYMENT', buyerDecision: null },
+            data: { paymentDueAt: computePaymentDueAt() },
+          });
         }
 
         const relatedOrders = await tx.order.findMany({

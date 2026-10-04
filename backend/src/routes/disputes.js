@@ -7,6 +7,7 @@ const { recordAuditEvent } = require('../utils/audit');
 const { transitionOrderStatus, DISPUTABLE_STATUSES } = require('../services/orderStateMachine');
 const { holdForDispute, resumeAfterDispute } = require('../services/payoutService');
 const { cancelOrderInTransaction } = require('../services/orderCancellationService');
+const { noContactInfo, findContactInfo } = require('../utils/contactGuard');
 const paymentService = require('../services/paymentService');
 
 const router = express.Router();
@@ -14,7 +15,14 @@ const router = express.Router();
 router.post(
   '/',
   authenticate,
-  [body('orderId').notEmpty(), body('againstId').notEmpty(), body('disputeType').notEmpty(), body('description').notEmpty()],
+  [
+    body('orderId').isUUID().withMessage('orderId must be a valid UUID'),
+    body('againstId').isUUID().withMessage('againstId must be a valid UUID'),
+    body('disputeType').isString().trim().isLength({ min: 2, max: 50 }).withMessage('disputeType must be 2-50 characters').custom(noContactInfo),
+    body('description').isString().trim().isLength({ min: 10, max: 5000 }).withMessage('description must be 10-5000 characters').custom(noContactInfo),
+    body('evidence').optional({ nullable: true }).isArray({ max: 10 }).withMessage('evidence must contain at most 10 references'),
+    body('evidence.*').optional().isString().trim().isLength({ min: 1, max: 2048 }).withMessage('Each evidence reference must be 1-2048 characters'),
+  ],
   async (req, res) => {
     try {
       const errors = validationResult(req);
@@ -154,7 +162,17 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
       return res.status(409).json({ error: `Dispute is already ${dispute.status}` });
     }
 
-    const finalStatus = status || 'RESOLVED';
+    const allowedStatuses = ['RESOLVED', 'REJECTED'];
+    const finalStatus = String(status || 'RESOLVED').toUpperCase();
+    if (!allowedStatuses.includes(finalStatus)) {
+      return res.status(400).json({ error: 'status must be RESOLVED or REJECTED' });
+    }
+    if (!resolution || typeof resolution !== 'string' || resolution.trim().length < 5 || resolution.trim().length > 5000) {
+      return res.status(400).json({ error: 'resolution must be 5-5000 characters' });
+    }
+    if (findContactInfo(resolution)) {
+      return res.status(400).json({ error: 'Resolution cannot contain contact information' });
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       const dispute = await tx.dispute.findUnique({

@@ -784,31 +784,31 @@ router.post(
           });
         }
 
-        // Once an agricultural order exists, the buyer is responsible for
-        // the inspection service payment even when the seller originally
-        // requested the inspection. Keep the original requester authorized
-        // as well for pre-order inspection payments.
-        let inspectionPaymentAllowed = request.requestedById === req.user.id || isAdmin(req.user);
+        // The party who requests the inspection is responsible for its fee.
+        // This keeps SELLER_REQUESTED inspections from silently billing the
+        // buyer, while BUYER_REQUESTED inspections remain buyer-paid.
+        let inspectionPaymentAllowed = isAdmin(req);
         if (!inspectionPaymentAllowed && req.body.orderId) {
           const inspectionOrder = await prisma.order.findUnique({
             where: { id: req.body.orderId },
-            select: { id: true, buyerId: true, listingId: true, status: true },
+            select: { id: true, buyerId: true, sellerId: true, listingId: true, status: true },
           });
           if (inspectionOrder?.status === 'DISPUTED') {
-            return res.status(409).json({
-              code: 'ORDER_DISPUTED',
-              error: 'This order is under dispute. Inspection payment is paused until the dispute is resolved.',
-            });
+            return res.status(409).json({ code: 'ORDER_DISPUTED', error: 'This order is under dispute. Inspection payment is paused until the dispute is resolved.' });
           }
-          inspectionPaymentAllowed = Boolean(
-            inspectionOrder &&
-            inspectionOrder.buyerId === req.user.id &&
-            inspectionOrder.listingId === request.listingId
-          );
+          if (inspectionOrder && inspectionOrder.listingId === request.listingId) {
+            const expectedPayer = request.mode === 'SELLER_REQUESTED'
+              ? inspectionOrder.sellerId
+              : inspectionOrder.buyerId;
+            inspectionPaymentAllowed = expectedPayer === req.user.id;
+          }
+        }
+        if (!inspectionPaymentAllowed && request.requestedById === req.user.id && !req.body.orderId) {
+          inspectionPaymentAllowed = true;
         }
         if (!inspectionPaymentAllowed) {
           return res.status(403).json({
-            error: 'Only the buyer of the related order or the inspection requester may pay',
+            error: 'Only the designated inspection payer may pay this fee',
           });
         }
 

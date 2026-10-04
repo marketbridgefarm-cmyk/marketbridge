@@ -7,6 +7,7 @@ const { recordAuditEvent } = require('../utils/audit');
 const { signedMediaUrl } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { validateListingReferences } = require('../utils/evidenceValidator');
+const { noContactInfo, findContactInfo } = require('../utils/contactGuard');
 const { searchListings } = require('../services/searchService');
 const { getRecommendations } = require('../services/recommendationService');
 const { REGIONS, REGION_VALUES } = require('../utils/ethiopianRegions');
@@ -1036,8 +1037,12 @@ router.post(
       .isArray(),
 
     body('description')
-      .optional()
-      .isString(),
+      .optional({ nullable: true })
+      .isString()
+      .trim()
+      .isLength({ max: 5000 })
+      .withMessage('description must be 5000 characters or fewer')
+      .custom(noContactInfo),
   ],
 
   async (req, res) => {
@@ -1373,6 +1378,15 @@ router.patch(
         latitude,
         longitude,
       } = req.body;
+
+      if (description !== undefined && description !== null) {
+        if (typeof description !== 'string' || description.trim().length > 5000) {
+          return res.status(400).json({ error: 'description must be 5000 characters or fewer' });
+        }
+        if (findContactInfo(description)) {
+          return res.status(400).json({ error: 'Listing description cannot contain contact information' });
+        }
+      }
 
       if (region !== undefined && region !== null && !REGION_VALUES.includes(region)) {
         return res.status(400).json({ error: `Invalid region. Must be one of: ${REGION_VALUES.join(', ')}` });

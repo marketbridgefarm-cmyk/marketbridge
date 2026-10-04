@@ -1809,6 +1809,13 @@ router.patch(
                 await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'DELIVERED');
               } else if (freshOrder?.status === 'IN_TRANSIT') {
                 await transitionOrderStatus(tx, job.orderId, 'IN_TRANSIT', 'DELIVERED');
+              } else if (freshOrder?.status === 'CONFIRMED') {
+                // Recovery for a stale but financially valid order: delivery
+                // must never leave the order in CONFIRMED because receipt
+                // confirmation only accepts DELIVERED. Record the missing
+                // arrangement transition before applying delivery.
+                await transitionOrderStatus(tx, job.orderId, 'CONFIRMED', 'TRANSPORT_ARRANGED');
+                await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'DELIVERED');
               }
 
               await releaseTruck(

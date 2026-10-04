@@ -10,7 +10,8 @@ const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { idempotency } = require('../middleware/idempotency');
-const { computePaymentDueAt } = require('../utils/orderTiming');
+const { computePaymentDueAt, computeInspectionWorkflowDueAt } = require('../utils/orderTiming');
+const { promoteNextWaitingBuyer } = require('../services/orderCancellationService');
 const {
   AMOUNT_LIMITS,
   amountProblem,
@@ -83,7 +84,7 @@ function isOfferExpired(offer) {
 
 async function expireOfferIfNeeded(tx, offer, actorId = null) {
   if (!offer || !isOfferExpired(offer)) return false;
-  if (!['PENDING', 'COUNTERED'].includes(offer.status)) return false;
+  if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(offer.status)) return false;
 
   const updated = await tx.offer.update({
     where: { id: offer.id },
@@ -101,6 +102,10 @@ async function expireOfferIfNeeded(tx, offer, actorId = null) {
       expiresAt: offer.expiresAt,
     },
   });
+
+  if (offer.status === 'SELECTED') {
+    await promoteNextWaitingBuyer(tx, updated.listingId, actorId);
+  }
 
   return true;
 }
@@ -276,6 +281,10 @@ router.post(
       });
     } catch (error) {
       req.log.error({ err: error }, 'CREATE OFFER ERROR:');
+
+      if (error?.code === 'P2002' && Array.isArray(error?.meta?.target) && error.meta.target.includes('Offer_active_buyer_listing_unique')) {
+        return res.status(409).json({ error: 'You already have an active negotiation on this listing' });
+      }
 
       return res.status(500).json({
         error: 'Could not create offer',
@@ -579,7 +588,7 @@ async function acceptOfferAndCreateOrder(
         status: 'PENDING_PAYMENT',
         agreedOfferId: updatedOffer.id,
         agreedAt: new Date(),
-        paymentDueAt: offer.listing.category === 'AGRICULTURAL' ? null : computePaymentDueAt(),
+        paymentDueAt: offer.listing.category === 'AGRICULTURAL' ? computeInspectionWorkflowDueAt() : computePaymentDueAt(),
       },
     });
 
