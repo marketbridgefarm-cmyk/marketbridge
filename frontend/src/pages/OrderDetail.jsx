@@ -570,6 +570,75 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
    5. Inspection (with full quote negotiation)
    ======================================================================== */
 
+const PRICE_REVIEW_REASON_OPTIONS = [
+  ['MARKET_PRICE_RISE', 'Market price increased'],
+  ['MARKET_PRICE_FALL', 'Market price decreased'],
+  ['QUALITY_OR_QUANTITY_CHANGE', 'Inspected quantity differs'],
+  ['FRESHNESS_OR_DAMAGE', 'Freshness or damage finding'],
+  ['OTHER_INSPECTION_FINDING', 'Other inspection finding'],
+];
+
+function PriceReviewPanel({ order, i }) {
+  const [amount, setAmount] = useState(String(order.finalPrice ?? ''));
+  const [reasonCode, setReasonCode] = useState('QUALITY_OR_QUANTITY_CHANGE');
+  const [counterAmount, setCounterAmount] = useState('');
+  const [counterReason, setCounterReason] = useState('QUALITY_OR_QUANTITY_CHANGE');
+  const reviews = Array.isArray(order.priceReviews) ? order.priceReviews : [];
+  const pending = [...reviews].reverse().find((review) => review.status === 'PENDING');
+  const paymentStarted = (order.payments || []).some((payment) => payment.type === 'MARKETPLACE' && ['PENDING', 'PROCESSING', 'PAID'].includes(payment.status));
+  const available = !paymentStarted && !['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(order.status);
+  const ownProposal = pending?.proposedById === i.currentUserId;
+  const money = (value) => `${Number(value || 0).toLocaleString()} ETB`;
+  return (
+    <Section title="Provisional price review">
+      <p className="muted">The current agreed price is protected from automatic market changes. A price changes only when the other party accepts a proposal. Inspection fees remain separate.</p>
+      <div className="detail-facts">
+        <div><span>Current agreed price</span><strong>{money(order.finalPrice)}</strong></div>
+        <div><span>Price state</span><strong>{order.buyerDecision === 'BUY' ? 'Confirmed for payment' : pending ? 'Awaiting response' : 'Provisional'}</strong></div>
+      </div>
+      {reviews.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <strong>Price-review history</strong>
+          {reviews.map((review) => (
+            <div key={review.id} style={{ borderTop: '1px solid var(--border-color, #ddd)', padding: '10px 0' }}>
+              <div><strong>{money(review.proposedPrice)}</strong> · {PRICE_REVIEW_REASON_OPTIONS.find(([key]) => key === review.reasonCode)?.[1] || review.reasonCode}</div>
+              <div className="muted small">{review.proposedBy?.name || (review.proposedById === i.currentUserId ? 'You' : 'Other party')} · {review.status}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {pending && available && (
+        <div style={{ marginTop: 12 }}>
+          <p><strong>Proposal awaiting response:</strong> {money(pending.proposedPrice)} — {PRICE_REVIEW_REASON_OPTIONS.find(([key]) => key === pending.reasonCode)?.[1] || pending.reasonCode}</p>
+          {ownProposal ? <p className="muted">Your proposal is waiting for the other party.</p> : (
+            <>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '8px 0' }}>
+                <Button variant="primary" disabled={Boolean(i.busy)} onClick={() => i.respondPriceReview(pending.id, 'ACCEPT')}>Accept revised price</Button>
+                <Button variant="light" disabled={Boolean(i.busy)} onClick={() => i.respondPriceReview(pending.id, 'REJECT')}>Reject proposal</Button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+                <label>Counter price (ETB)<input type="number" min="0.01" step="0.01" value={counterAmount} onChange={(e) => setCounterAmount(e.target.value)} /></label>
+                <label>Reason<select value={counterReason} onChange={(e) => setCounterReason(e.target.value)}>{PRICE_REVIEW_REASON_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+              </div>
+              <Button variant="light" disabled={Boolean(i.busy) || !(Number(counterAmount) > 0)} onClick={() => i.respondPriceReview(pending.id, 'COUNTER', Number(counterAmount), counterReason)}>Send counter-proposal</Button>
+            </>
+          )}
+        </div>
+      )}
+      {!pending && available && order.buyerDecision !== 'BUY' && i.isParticipant && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+            <label>Proposed total price (ETB)<input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+            <label>Reason<select value={reasonCode} onChange={(e) => setReasonCode(e.target.value)}>{PRICE_REVIEW_REASON_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+          </div>
+          <Button variant="light" disabled={Boolean(i.busy) || !(Number(amount) > 0) || Number(amount) === Number(order.finalPrice)} onClick={() => i.createPriceReview(Number(amount), reasonCode)}>Request price review</Button>
+        </div>
+      )}
+      {order.buyerDecision === 'BUY' && <p className="muted">The price has been confirmed for payment. Further price changes must use the applicable dispute/refund process.</p>}
+    </Section>
+  );
+}
+
 function InspectionCard({ order, title, i }) {
   const request = i.current;
 
@@ -586,14 +655,7 @@ function InspectionCard({ order, title, i }) {
         </Section>
         {needsApproval ? (
           <Notice title="Admin approval required">
-            <p>A fresh inspection competition is released after a recorded cancellation, provider withdrawal, or resolved dispute, once any inspection payment/refund is settled. Your order remains visible while this service issue is reviewed.</p>
-            {i.recoveryEligibility?.INSPECTION ? (
-              <Button variant="primary" disabled={Boolean(i.busy) || i.recoveryPending} busy={i.busy === 'recovery-INSPECTION'} busyText="Requesting…" onClick={i.requestRecovery}>
-                Request fresh inspection form
-              </Button>
-            ) : (
-              <p className="muted small">No qualifying recovery event is recorded yet. The request option will appear when the workflow becomes eligible.</p>
-            )}
+            <p>Ask MarketBridge admin to release a fresh inspection form before opening another competition.</p>
           </Notice>
         ) : (
           <Button
@@ -659,15 +721,6 @@ function InspectionCard({ order, title, i }) {
           {!inspectorName && <Fact name="Status">{label(request.status)}</Fact>}
         </Facts>
       </Section>
-
-      {isRequester && i.recoveryEligibility?.INSPECTION && (
-        <Section title="Restart inspection competition">
-          <p className="muted">The previous inspector arrangement is no longer usable. MarketBridge admin must approve the fresh form before new bids can be submitted.</p>
-          <Button variant="primary" disabled={Boolean(i.busy) || i.recoveryPending} busy={i.busy === 'recovery-INSPECTION'} busyText="Requesting…" onClick={i.requestRecovery}>
-            Request fresh inspection form
-          </Button>
-        </Section>
-      )}
 
       {/* ── Inspector bids and negotiation (REQUESTED state) ── */}
       {request.status === 'REQUESTED' && (
@@ -916,6 +969,7 @@ function InspectionCard({ order, title, i }) {
               )}
             </Section>
           )}
+          {i.isParticipant && <PriceReviewPanel order={order} i={i} />}
         </>
       ) : (
         ['REQUESTED', 'ACCEPTED'].includes(request.status) && (i.isAdmin || i.isParticipant) && (
@@ -1320,14 +1374,10 @@ function TransportCard({ order, t }) {
                       : ' — awaiting admin approval'}
                   </p>
                 ))}
-              {t.recoveryEligibility?.TRANSPORT === false && (
-                <p className="muted small">A fresh transport form becomes available after a recorded transporter withdrawal, cancellation, or resolved dispute, once any transport payment/refund is settled.</p>
-              )}
               <Button
                 variant="primary"
                 disabled={
                   Boolean(t.busy) ||
-                  t.recoveryEligibility?.TRANSPORT === false ||
                   t.recoveryRequests.some(
                     (r) => r.type === 'TRANSPORT' && r.status === 'PENDING'
                   )
@@ -1472,7 +1522,6 @@ export default function OrderDetail() {
   const [order, setOrder] = useState(null);
   const [workflow, setWorkflow] = useState(null);
   const [recoveryRequests, setRecoveryRequests] = useState([]);
-  const [recoveryEligibility, setRecoveryEligibility] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -1528,11 +1577,6 @@ export default function OrderDetail() {
           recoveryRes.status === 'fulfilled'
             ? recoveryRes.value.data?.recoveryRequests || []
             : []
-        );
-        setRecoveryEligibility(
-          recoveryRes.status === 'fulfilled'
-            ? recoveryRes.value.data?.eligibility || null
-            : null
         );
       } catch (err) {
         setError(getError(err, 'Could not load order'));
@@ -1591,10 +1635,7 @@ export default function OrderDetail() {
   const currentInspection = inspections[0] || null;
   const assignedInspection = inspections.find((r) => r.inspectorId === currentUserId) || null;
   const isInspector = Boolean(assignedInspection);
-  const inspectionFormReleased = Boolean(
-    recoveryEligibility?.INSPECTION === false &&
-    recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'APPROVED' && r.formReleasedAt)
-  );
+  const inspectionFormReleased = recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'APPROVED' && r.formReleasedAt);
   const inspectorName = (order?.inspectionRequests || inspections).find((r) => r?.inspector?.name)?.inspector?.name || null;
 
   const inspectionGateMet =
@@ -1604,8 +1645,7 @@ export default function OrderDetail() {
   const negotiatedGateMet = !isProduct || Boolean(order?.agreedOfferId);
 
   const rawJob = order?.transportJob || null;
-  // Keep cancelled jobs visible so the arranger can request admin-approved recovery.
-  const transportJob = rawJob;
+  const transportJob = rawJob?.status === 'CANCELLED' ? null : rawJob;
   const isTransporter = Boolean(transportJob?.truckOwnerId && transportJob.truckOwnerId === currentUserId);
   const isTransportArranger = Boolean(
     transportJob &&
@@ -1834,17 +1874,16 @@ export default function OrderDetail() {
       const ok = await run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'COUNTER', counterAmount: amount }), 'Could not send counter-offer');
       if (ok) setCounterInputs((q) => ({ ...q, [id]: '' }));
     },
-    requestRecovery: async () => {
-      const ok = await run('recovery-TRANSPORT', async () => {
+    requestRecovery: () =>
+      run('recovery-TRANSPORT', async () => {
         await api.post('/recovery-requests', {
           orderId: order.id,
           type: 'TRANSPORT',
           targetParties: isBuyer ? ['BUYER'] : ['SELLER'],
           reason: 'Transport competition has no usable live bid or the previous transporter arrangement is no longer available.',
         });
-      }, 'Could not request workflow recovery');
-      if (ok) setError('Recovery request sent to MarketBridge admin for approval.');
-    },
+        setError('Recovery request sent to MarketBridge admin for approval.');
+      }, 'Could not request workflow recovery'),
     submitEvidence: async (type, nextStatus) => {
       if (!transportJob || !isTransporter) return;
       const { photoKeys, videoKeys } = evidence;
@@ -1903,6 +1942,19 @@ export default function OrderDetail() {
       const ok = await run(`buyer-decision-${decision.toLowerCase()}`, () => api.patch(`/orders/${order.id}/buyer-decision`, { decision }), `Could not record ${decision === 'BUY' ? 'BUY' : 'cancellation'} decision`);
       if (ok) scrollToId(decision === 'BUY' ? 'payment-center' : 'inspection-section', 120);
     },
+    isBuyer,
+    isSeller,
+    isParticipant,
+    createPriceReview: (proposedPrice, reasonCode) => run(
+      'price-review-create',
+      () => api.post(`/orders/${order.id}/price-reviews`, { proposedPrice, reasonCode }),
+      'Could not submit price review'
+    ),
+    respondPriceReview: (reviewId, action, proposedPrice, reasonCode) => run(
+      `price-review-${reviewId}-${action.toLowerCase()}`,
+      () => api.patch(`/orders/${order.id}/price-reviews/${reviewId}/respond`, { action, ...(proposedPrice ? { proposedPrice, reasonCode } : {}) }),
+      'Could not respond to price review'
+    ),
     selectInspectionQuote: (quoteId) => {
       if (!currentInspection) return;
       return run(
@@ -2111,20 +2163,6 @@ export default function OrderDetail() {
     all: allInspections,
     current: currentInspection,
     formReleased: inspectionFormReleased,
-    recoveryEligibility,
-    currentUserId,
-    recoveryPending: recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'PENDING'),
-    requestRecovery: async () => {
-      const ok = await run('recovery-INSPECTION', async () => {
-        await api.post('/recovery-requests', {
-          orderId: order.id,
-          type: 'INSPECTION',
-          targetParties: isBuyer ? ['BUYER'] : ['SELLER'],
-          reason: 'Inspection competition has no usable live bid or the previous inspector arrangement is no longer available.',
-        });
-      }, 'Could not request workflow recovery');
-      if (ok) setError('Fresh inspection form request sent to MarketBridge admin for review.');
-    },
     requesting: requestingInspection,
     isBuyer,
     isAdmin,
@@ -2142,7 +2180,7 @@ export default function OrderDetail() {
     isSeller,
     isTransporter,
     isArranger: isTransportArranger,
-    canArrange: Boolean(!rawJob && order.status !== 'CANCELLED' && isParticipant),
+    canArrange: Boolean(!transportJob && order.status !== 'CANCELLED' && isParticipant),
     canChooseQuote: Boolean(transportJob && isTransportArranger && ['REQUESTED', 'QUOTED'].includes(transportJob.status)),
     canStartPayment: canStartTransportPayment,
     canResumePayment: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
@@ -2157,7 +2195,6 @@ export default function OrderDetail() {
     busy,
     reload,
     recoveryRequests,
-    recoveryEligibility,
     counterInputs,
     setCounterInputs,
     evidence,
