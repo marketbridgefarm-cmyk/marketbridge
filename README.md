@@ -1,51 +1,61 @@
-# MarketBridge Advertising Production Recheck
+# MarketBridge — Offers & Negotiation Enabled Package
 
-This package is based on the newly uploaded production repository and contains only advertising-related production files that were rechecked/corrected.
+This package enables the existing negotiation workflows without replacing the
+underlying business architecture.
 
-## Critical Render migration repair
+## Enabled workflows
 
-The Render database reported Prisma error P3009 because migration `202609030001_advertising_default` failed.
+### Marketplace Offers
+- Buyer creates an offer.
+- Seller selects a buyer offer.
+- Seller accepts or rejects.
+- Seller counters.
+- Buyer re-counters.
+- Buyer accepts seller counter.
+- Every counter creates a new historical Offer row.
+- `parentOfferId` preserves the complete negotiation chain.
 
-The corrected migration sequence is deliberately split:
+### Inspection Quotes
+- Buyer/requester can review/select quotes.
+- Inspector/provider can accept/reject/counter.
+- Requester/provider quote counters remain historical child rows.
+- Multiple inspectors can compete on the same inspection request.
 
-1. `202609030001_advertising_default` adds the new `AdStatus` enum values only.
-2. Prisma commits that migration.
-3. `202609030001_advertising_system` creates/updates the advertising columns, event type/table, indexes, and only then sets the `Advertisement.status` default to `PENDING_PAYMENT`.
+### Transport Quotes
+- Requester can review/select competing transport quotes.
+- Provider can accept/reject/counter.
+- Requester/provider quote counters remain historical child rows.
+- Multiple transport providers can compete on the same transport job.
 
-This avoids PostgreSQL's restriction on using a newly-added enum value before its transaction commits.
+## Critical database correction
 
-### One-time production repair
+The migration `202610040002_restore_offer_negotiation_history` removes the
+incorrect `Offer_active_buyer_listing_unique` partial unique index introduced
+by `202610040001`.
 
-Run against the SAME production Railway PostgreSQL database used by Render, from `backend/`:
+The application-level active-leaf check remains responsible for preventing a
+buyer from opening two independent negotiations for the same listing.
 
-```bash
-npx prisma migrate resolve --rolled-back 202609030001_advertising_default
-npx prisma migrate deploy
-```
+Do NOT convert counter creation from `create()` to `update()` and do NOT remove
+`parentOfferId`.
 
-Then restart/redeploy Render.
+## Included files
 
-Do not delete or edit `_prisma_migrations` manually.
+Backend:
+- `backend/prisma/schema.prisma`
+- `backend/src/routes/offers.js`
+- `backend/src/routes/inspections.js`
+- `backend/src/routes/transport.js`
+- `backend/prisma/migrations/202610040002_restore_offer_negotiation_history/migration.sql`
 
-## Render startup
+Frontend:
+- `frontend/src/pages/Negotiations.jsx`
+- `frontend/src/pages/ListingDetail.jsx`
+- `frontend/src/pages/Dashboard.jsx`
+- `frontend/src/pages/InspectorDashboard.jsx`
+- `frontend/src/pages/TruckOwnerDashboard.jsx`
+- `frontend/src/pages/OrderDetail.jsx`
+- `frontend/src/pages/negotiations/Negotiations.css`
 
-Keep:
-
-```bash
-prisma migrate deploy && node src/index.js
-```
-
-## Required storage configuration
-
-Banner upload requires the existing S3-compatible private object storage configuration:
-
-- `S3_REGION`
-- `S3_BUCKET`
-- `S3_ACCESS_KEY_ID`
-- `S3_SECRET_ACCESS_KEY`
-- optional `S3_ENDPOINT`
-- optional `S3_FORCE_PATH_STYLE`
-
-## Validation
-
-Node syntax checks were run successfully for the advertising/payment/listing backend files. Prisma CLI execution was not available in the source-only inspection environment because dependencies were not installed locally; Render's `npm install`/Prisma generation should perform the final Prisma validation during deployment.
+These are complete replacement files from the uploaded MarketBridge package,
+with only the Offer P2002 handling and the new safe migration changed.
