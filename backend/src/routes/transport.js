@@ -609,8 +609,6 @@ router.post(
     body('truckId')
       .optional()
       .isUUID(),
-    body('workDetails').optional().isObject().withMessage('Transport work details must be an object'),
-    body('workDetails').optional().isObject().withMessage('Transport work details must be an object'),
   ],
   validate,
   async (req, res) => {
@@ -626,18 +624,6 @@ router.post(
         specialRequirements,
         truckId,
       } = req.body;
-      const rawDetails = req.body.workDetails || {};
-      const workDetails = {
-        weight: String(rawDetails.weight || '').trim().slice(0, 50),
-        packageCount: String(rawDetails.packageCount || '').trim().slice(0, 30),
-        vehicleType: String(rawDetails.vehicleType || '').trim().slice(0, 100),
-        loadingHelp: String(rawDetails.loadingHelp || '').trim().slice(0, 300),
-        unloadingHelp: String(rawDetails.unloadingHelp || '').trim().slice(0, 300),
-        handling: Array.isArray(rawDetails.handling) ? rawDetails.handling.filter((v) => ['COVERED','REFRIGERATED','FRAGILE','KEEP_DRY','FOOD_SAFE'].includes(v)).slice(0, 5) : [],
-        deliveryDeadline: String(rawDetails.deliveryDeadline || '').trim().slice(0, 40),
-        proofOfDelivery: Boolean(rawDetails.proofOfDelivery),
-      };
-
 
       const order =
         await prisma.order.findUnique({
@@ -819,7 +805,7 @@ router.post(
                       where: { id: freshOrder.transportJob.id },
                       data: {
                         arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
-                        requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null, workDetails,
+                        requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
                         truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED',
                         pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
                       },
@@ -846,8 +832,6 @@ router.post(
                     specialRequirements:
                       specialRequirements ||
                       null,
-
-                    workDetails,
 
                     truckOwnerId: null,
                     truckId: null,
@@ -986,7 +970,7 @@ router.post(
                     where: { id: freshOrder.transportJob.id },
                     data: {
                       arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
-                      requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null, workDetails,
+                      requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
                       truckOwnerId: truck.ownerId, truckId: truck.id, agreedAmount: null, status: 'ACCEPTED',
                       pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
                     },
@@ -1013,10 +997,6 @@ router.post(
                   specialRequirements:
                     specialRequirements ||
                     null,
-
-                  workDetails,
-
-                  workDetails,
 
                   // Always bind the actual truck owner.
                   truckOwnerId:
@@ -1900,12 +1880,15 @@ router.post(
 
     body('amount').custom(validAmount(AMOUNT_LIMITS.transport)),
 
-    body('message').optional({ nullable: true }).custom((value) => value == null || value === '').withMessage('Free-text messages are not supported. Use the structured fields provided.'),
+    body('message')
+      .optional()
+      .isString()
+      .trim()
+      .custom(noContactInfo),
 
     body('truckId')
       .optional()
       .isUUID(),
-    body('workDetails').optional().isObject().withMessage('Transport work details must be an object'),
   ],
   validate,
   async (req, res) => {
@@ -2379,8 +2362,16 @@ router.patch(
           data: { status: 'WITHDRAWN' },
         });
         await tx.transportQuote.updateMany({
-          where: { transportJobId: job.id, id: { not: fresh.id }, status: 'SELECTED' },
-          data: { status: 'PENDING' },
+          where: {
+            transportJobId: job.id,
+            id: { not: fresh.id },
+            status: { in: ['SELECTED', 'COUNTERED'] },
+          },
+          data: {
+            status: 'PENDING',
+            counterAmount: null,
+            counteredBy: null,
+          },
         });
         const selected = await tx.transportQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
         await tx.transportJob.update({
@@ -2422,7 +2413,12 @@ router.patch(
       .if(body('action').equals('COUNTER'))
       .custom(validAmount(AMOUNT_LIMITS.transport)),
 
-    body('message').optional({ nullable: true }).custom((value) => value == null || value === '').withMessage('Free-text messages are not supported. Use the structured fields provided.'),
+    body('message')
+      .optional({ nullable: true })
+      .isString()
+      .trim()
+      .isLength({ max: 1000 })
+      .custom(noContactInfo),
   ],
   validate,
   async (req, res) => {
@@ -2488,6 +2484,17 @@ router.patch(
           if (!freshQuote) throw quoteError('Quote not found', 404);
           if (!['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
             throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
+          }
+          const competingThread = await tx.transportQuote.findFirst({
+            where: {
+              transportJobId: job.id,
+              id: { not: freshQuote.id },
+              status: { in: ['SELECTED', 'COUNTERED'] },
+            },
+            select: { id: true },
+          });
+          if (competingThread) {
+            throw quoteError('Another transporter bid is already in active negotiation. Refresh and select only after that negotiation is released.', 409);
           }
           if (quoteTurn(freshQuote) !== effectiveRole) {
             throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
@@ -2656,6 +2663,19 @@ router.patch(
           if (!freshQuote || !['PENDING', 'SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
             throw quoteError('This quote is no longer available for rejection', 409);
           }
+          if (['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
+            const competingThread = await tx.transportQuote.findFirst({
+              where: {
+                transportJobId: job.id,
+                id: { not: freshQuote.id },
+                status: { in: ['SELECTED', 'COUNTERED'] },
+              },
+              select: { id: true },
+            });
+            if (competingThread) {
+              throw quoteError('This quote is not the sole active negotiation thread', 409);
+            }
+          }
 
           return tx.transportQuote.update({
             where: { id: freshQuote.id },
@@ -2724,6 +2744,18 @@ router.patch(
           const error = new Error(`This quote is already ${freshQuote.status.toLowerCase()}`);
           error.statusCode = 409;
           throw error;
+        }
+
+        const competingThread = await tx.transportQuote.findFirst({
+          where: {
+            transportJobId: job.id,
+            id: { not: freshQuote.id },
+            status: { in: ['SELECTED', 'COUNTERED'] },
+          },
+          select: { id: true },
+        });
+        if (competingThread) {
+          throw quoteError('Another transporter bid is already in active negotiation. This quote cannot be accepted until the competing thread is released.', 409);
         }
 
         const freshJob = freshQuote.transportJob;
