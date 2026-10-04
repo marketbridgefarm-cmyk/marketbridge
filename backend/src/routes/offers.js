@@ -282,8 +282,20 @@ router.post(
     } catch (error) {
       req.log.error({ err: error }, 'CREATE OFFER ERROR:');
 
-      if (error?.code === 'P2002' && Array.isArray(error?.meta?.target) && error.meta.target.includes('Offer_active_buyer_listing_unique')) {
-        return res.status(409).json({ error: 'You already have an active negotiation on this listing' });
+      if (error?.code === 'P2002') {
+        req.log.error(
+          {
+            err: error,
+            target: error.meta?.target,
+          },
+          'OFFER UNIQUE CONSTRAINT ERROR'
+        );
+
+        return res.status(409).json({
+          error:
+            'This negotiation could not be completed because the record was changed by another request. Please refresh and try again.',
+          code: 'NEGOTIATION_CONFLICT',
+        });
       }
 
       return res.status(500).json({
