@@ -32,6 +32,18 @@ function isAdmin(req) {
   );
 }
 
+const PRICE_ADJUSTMENT_REASONS = Object.freeze({
+  MARKET_PRICE_RISE: 'Seller requests a price review because market prices have risen for perishable goods.',
+  MARKET_PRICE_FALL: 'Buyer requests a price review because market prices have fallen suddenly.',
+  QUALITY_OR_QUANTITY_CHANGE: 'Request to review the price because the confirmed quality or quantity differs from expectations.',
+  KEEP_CURRENT_PRICE: 'I prefer to keep the current negotiated price.',
+});
+
+function adjustmentReasonText(reasonCode) {
+  if (reasonCode == null || reasonCode === '') return null;
+  return PRICE_ADJUSTMENT_REASONS[reasonCode] || false;
+}
+
 function isPositiveNumber(value) {
   const number = Number(value);
 
@@ -385,46 +397,6 @@ router.get(
 );
 
 // ============================================================================
-// SELLER — OFFERS RECEIVED ACROSS THEIR LISTINGS
-// GET /api/offers/received
-// Only returns offers for listings owned by the authenticated seller. This is
-// intentionally a seller-facing view; it does not expose other sellers' bids.
-// ============================================================================
-router.get('/received', authenticate, async (req, res) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
-    const skip = (page - 1) * limit;
-    const where = { sellerId: req.user.id };
-
-    const [offers, total] = await Promise.all([
-      prisma.offer.findMany({
-        where,
-        select: {
-          id: true, listingId: true, buyerId: true, sellerId: true,
-          amount: true, quantity: true, status: true, counterAmount: true,
-          counteredBy: true, message: true, expiresAt: true, parentOfferId: true,
-          createdAt: true, updatedAt: true,
-          agreedOrder: { select: { id: true, status: true } },
-          buyer: { select: { id: true, name: true, rating: true, verificationStatus: true } },
-          listing: { select: { id: true, title: true, cropType: true, category: true, photos: true, askingPrice: true, location: true, status: true } },
-          _count: { select: { childOffers: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip,
-      }),
-      prisma.offer.count({ where }),
-    ]);
-
-    return res.json({ offers, count: offers.length, total, page, limit });
-  } catch (error) {
-    req.log.error({ err: error }, 'RECEIVED OFFERS ERROR:');
-    return res.status(500).json({ error: 'Could not load offers received' });
-  }
-});
-
-// ============================================================================
 // GET OFFERS FOR A LISTING
 // GET /api/offers/listing/:listingId
 // ============================================================================
@@ -709,6 +681,7 @@ router.patch(
       const {
         action,
         counterAmount,
+        reasonCode,
       } = req.body;
 
       const allowedActions = [
@@ -793,14 +766,17 @@ router.patch(
             throw offerError('Offer has expired and can no longer be selected', 409);
           }
           if (fresh.status !== 'PENDING') throw offerError(`Only a pending bid can be selected (current: ${fresh.status})`, 409);
-          await tx.offer.updateMany({
+          const activeNegotiation = await tx.offer.findFirst({
             where: {
               listingId: fresh.listingId,
               id: { not: fresh.id },
-              status: 'SELECTED',
+              status: { in: ['SELECTED', 'COUNTERED'] },
             },
-            data: { status: 'PENDING' },
+            select: { id: true, status: true },
           });
+          if (activeNegotiation) {
+            throw offerError('Another buyer is already in negotiation. Waiting bids cannot be changed until that negotiation is released, rejected, withdrawn, or expires.', 409);
+          }
           await tx.offer.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
           return tx.offer.findUnique({ where: { id: fresh.id } });
         }, { maxWait: 10000, timeout: 15000 });
@@ -943,6 +919,8 @@ router.patch(
       // ======================================================================
 
       if (action === 'RE_COUNTER') {
+        const controlledReason = adjustmentReasonText(reasonCode);
+        if (controlledReason === false) return res.status(400).json({ error: 'Choose a valid price-adjustment reason from the list.' });
         if (!isBuyer && !admin) {
           return res.status(403).json({
             error:
@@ -1041,6 +1019,7 @@ router.patch(
                   status: 'COUNTERED',
                   counterAmount: numericCounter,
                   counteredBy: 'BUYER',
+                ...(controlledReason ? { message: controlledReason } : {}),
                   parentOfferId: freshOffer.id,
                   expiresAt: counterExpiresAt,
                   message: freshOffer.message,
@@ -1054,6 +1033,7 @@ router.patch(
                 resourceId: counterOffer.id,
                 metadata: {
                   counteredBy: 'BUYER',
+                ...(controlledReason ? { message: controlledReason } : {}),
                   parentOfferId: freshOffer.id,
                   previousAmount: freshOffer.counterAmount ?? freshOffer.amount,
                   counterAmount: numericCounter,
@@ -1286,6 +1266,8 @@ router.patch(
       // ======================================================================
 
       if (action === 'COUNTER') {
+        const controlledReason = adjustmentReasonText(reasonCode);
+        if (controlledReason === false) return res.status(400).json({ error: 'Choose a valid price-adjustment reason from the list.' });
         if (!isSeller && !admin) {
           return res.status(403).json({
             error:
@@ -1395,6 +1377,7 @@ router.patch(
                   status: 'COUNTERED',
                   counterAmount: numericCounter,
                   counteredBy: 'SELLER',
+                ...(controlledReason ? { message: controlledReason } : {}),
                   parentOfferId: freshOffer.id,
                   expiresAt: counterExpiresAt,
                   message: freshOffer.message,
@@ -1408,6 +1391,7 @@ router.patch(
                 resourceId: counterOffer.id,
                 metadata: {
                   counteredBy: 'SELLER',
+                ...(controlledReason ? { message: controlledReason } : {}),
                   parentOfferId: freshOffer.id,
                   previousAmount: freshOffer.counterAmount ?? freshOffer.amount,
                   counterAmount: numericCounter,
