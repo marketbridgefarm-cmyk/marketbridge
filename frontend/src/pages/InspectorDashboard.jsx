@@ -159,7 +159,6 @@ export default function InspectorDashboard() {
 
   const [feeInputs] = useState({});
   const [quoteAmountInputs, setQuoteAmountInputs] = useState({});
-  const [quoteMessageInputs, setQuoteMessageInputs] = useState({});
   const [submittingQuoteId, setSubmittingQuoteId] = useState('');
   const [quotedRequestIds, setQuotedRequestIds] = useState(() => new Set());
   const [quoteCounterInputs, setQuoteCounterInputs] = useState({});
@@ -278,7 +277,6 @@ export default function InspectorDashboard() {
     try {
       await api.post(`/inspections/${id}/quote`, {
         amount,
-        message: quoteMessageInputs[id] || undefined,
       });
 
       setMsg(
@@ -653,8 +651,7 @@ export default function InspectorDashboard() {
                               {listingTitle(r)}
                             </h3>
                             {createdLabel && <p className="sd-card-sub">{createdLabel}</p>}
-                            {r.workDetails?.workDescription && <p className="sd-card-sub">Work: {r.workDetails.workDescription}</p>}
-                            {r.workDetails?.workDescription && <p className="sd-card-sub">Work: {r.workDetails.workDescription}</p>}
+                            {r.workDetails?.workDescription && <p className="sd-card-sub">Work scope: {r.workDetails.workDescription}</p>}
                           </div>
 
                           <div className="sd-card-head-party">
@@ -779,20 +776,7 @@ export default function InspectorDashboard() {
                                     />
                                   </div>
 
-                                  <div>
-                                    <label htmlFor={`quote-msg-${r.id}`}>Message (optional)</label>
-                                    <textarea
-                                      id={`quote-msg-${r.id}`}
-                                      placeholder="Optional message to the requester"
-                                      value={quoteMessageInputs[r.id] || ''}
-                                      onChange={(e) =>
-                                        setQuoteMessageInputs((q) => ({
-                                          ...q,
-                                          [r.id]: e.target.value,
-                                        }))
-                                      }
-                                    />
-                                  </div>
+
                                 </div>
                               </div>
                             </section>
@@ -919,8 +903,7 @@ export default function InspectorDashboard() {
                                   {listingTitle(r)}
                                 </h3>
                                 {createdLabel && <p className="sd-card-sub">{createdLabel}</p>}
-                            {r.workDetails?.workDescription && <p className="sd-card-sub">Work: {r.workDetails.workDescription}</p>}
-                            {r.workDetails?.workDescription && <p className="sd-card-sub">Work: {r.workDetails.workDescription}</p>}
+                            {r.workDetails?.workDescription && <p className="sd-card-sub">Work scope: {r.workDetails.workDescription}</p>}
                               </div>
 
                               <div className="sd-card-head-party">

@@ -16,7 +16,6 @@ import {
 import { useAuth } from '../context/AuthContext.jsx';
 
 import RatingBox from '../components/RatingBox.jsx';
-import MessageThread from '../components/MessageThread.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import ActionCenter from '../components/ActionCenter.jsx';
@@ -661,14 +660,14 @@ function InspectionCard({ order, title, i }) {
           <div className="od-inspection-work-form">
             <h3>Describe the inspection work</h3>
             <p className="muted">Inspectors will see these requirements before submitting a bid. Be specific so their fees cover the same work.</p>
-            <label>Work description / condition to assess<textarea rows={3} value={i.workDetails.workDescription} onChange={(e) => i.setWorkDetails({ ...i.workDetails, workDescription: e.target.value })} placeholder="For example: inspect the tomato lot for ripeness, bruising, rot and packaging condition." /></label>
+            <label>Inspection category<select value={i.workDetails.workCategory || 'GENERAL_QUALITY'} onChange={(e) => i.setWorkDetails({ ...i.workDetails, workCategory: e.target.value })}><option value="GENERAL_QUALITY">General quality and condition</option><option value="AGRICULTURAL_PRODUCE">Agricultural produce quality</option><option value="QUANTITY_VERIFICATION">Quantity and weight verification</option><option value="DAMAGE_ASSESSMENT">Damage and packaging assessment</option><option value="FUNCTIONAL_TESTING">Functionality / performance testing</option><option value="CONFORMITY_CHECK">Specification / conformity check</option><option value="SAFETY_COMPLIANCE">Safety-related checks</option></select></label>
             <div className="od-form-grid">
               <label>Quantity to inspect<input value={i.workDetails.quantityToInspect} onChange={(e) => i.setWorkDetails({ ...i.workDetails, quantityToInspect: e.target.value })} placeholder="e.g. 500 kg or 20 crates" /></label>
               <label>Number of lots / batches<input type="number" min="1" value={i.workDetails.lotCount} onChange={(e) => i.setWorkDetails({ ...i.workDetails, lotCount: e.target.value })} placeholder="e.g. 4" /></label>
               <label>Inspection deadline<input type="datetime-local" value={i.workDetails.requiredBy} onChange={(e) => i.setWorkDetails({ ...i.workDetails, requiredBy: e.target.value })} /></label>
             </div>
             <fieldset><legend>Checks required</legend><div className="od-check-grid">{[['QUALITY_GRADE','Quality / grading'],['SIZE_WEIGHT','Size / weight'],['MOISTURE','Moisture (if applicable)'],['VISIBLE_DEFECTS','Visible defects / damage'],['PACKAGING','Packaging condition'],['SAMPLING','Sampling / testing'],['PHOTOGRAPHS','Photos / evidence']].map(([value, label]) => <label key={value}><input type="checkbox" checked={i.workDetails.checks.includes(value)} onChange={(e) => i.setWorkDetails({ ...i.workDetails, checks: e.target.checked ? [...i.workDetails.checks, value] : i.workDetails.checks.filter((x) => x !== value) })} /> {label}</label>)}</div></fieldset>
-            <label>Report requirements<textarea rows={2} value={i.workDetails.reportRequirements} onChange={(e) => i.setWorkDetails({ ...i.workDetails, reportRequirements: e.target.value })} placeholder="e.g. grade, defect percentage, sample findings and photos" /></label>
+            <label>Report format<select value={i.workDetails.reportFormat || 'CHECKLIST_PHOTOS'} onChange={(e) => i.setWorkDetails({ ...i.workDetails, reportFormat: e.target.value })}><option value="CHECKLIST_PHOTOS">Checklist, findings and photos</option><option value="MEASUREMENTS">Measurements and test results</option><option value="PASS_FAIL">Pass / fail against agreed criteria</option><option value="FULL_REPORT">Full structured inspection report</option></select></label>
             <Button variant="primary" disabled={i.requesting} busy={i.requesting} busyText="Requesting…" onClick={() => i.request(i.isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}>Open inspection competition</Button>
           </div>
         )}
@@ -1405,14 +1404,12 @@ function TransportCard({ order, t }) {
    7. Offer, receipt, dispute, completed, admin
    ======================================================================== */
 
-function OfferCard({ amount, setAmount, reference, message, setMessage, submitting, onSubmit }) {
+function OfferCard({ amount, setAmount, reference, submitting, onSubmit }) {
   return (
     <Card id="make-offer" eyebrow="Product marketplace" title="Make an offer" subtitle="Your offer enters the seller's competition. It does not charge you or reserve the product.">
       <form onSubmit={onSubmit} className="form">
         <label htmlFor="offer-amount">Offer amount (ETB)</label>
         <AmountPicker id="offer-amount" reference={reference} min={1} placeholder="Select your offer" value={amount} onChange={setAmount} disabled={submitting} required ariaLabel="Offer amount in ETB" />
-        <label htmlFor="offer-message">Message to seller <span className="optional">(optional)</span></label>
-        <textarea id="offer-message" className="field" rows="3" placeholder="Add a message to the seller" value={message} onChange={(e) => setMessage(e.target.value)} disabled={submitting} />
         <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Submitting…' : 'Make offer'}</button>
       </form>
     </Card>
@@ -1460,7 +1457,7 @@ function DisputeCard({ order, d }) {
             {DISPUTE_TYPES.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
           </select>
           <label htmlFor="dispute-description">What happened?</label>
-          <textarea id="dispute-description" className="field" rows={4} placeholder="Describe the issue in detail" value={d.description} onChange={(e) => d.setDescription(e.target.value)} required />
+          <select id="dispute-description" className="field" value={d.description} onChange={(e) => d.setDescription(e.target.value)} required><option value="">Select a dispute reason</option><option value="ITEM_NOT_AS_DESCRIBED">Item differs from agreed description</option><option value="INSPECTION_CONCERN">Inspection or quality concern</option><option value="PAYMENT_ISSUE">Payment issue</option><option value="DELIVERY_ISSUE">Delivery or transport issue</option><option value="DAMAGE_OR_LOSS">Damage or loss</option><option value="OTHER_REVIEW_REQUIRED">Other issue requiring admin review</option></select>
           <button type="submit" className="btn btn-outline" disabled={d.submitting}>{d.submitting ? 'Submitting…' : 'Raise dispute'}</button>
         </form>
       )}
@@ -1541,10 +1538,9 @@ export default function OrderDetail() {
   const [evidenceBusy, setEvidenceBusy] = useState(false);
 
   const [offerAmount, setOfferAmount] = useState('');
-  const [offerMessage, setOfferMessage] = useState('');
   const [submittingOffer, setSubmittingOffer] = useState(false);
   const [requestingInspection, setRequestingInspection] = useState(false);
-  const [inspectionWorkDetails, setInspectionWorkDetails] = useState({ workDescription: '', quantityToInspect: '', lotCount: '', checks: ['QUALITY_GRADE', 'VISIBLE_DEFECTS', 'PHOTOGRAPHS'], reportRequirements: '', requiredBy: '' });
+  const [inspectionWorkDetails, setInspectionWorkDetails] = useState({ workCategory: 'GENERAL_QUALITY', quantityToInspect: '', lotCount: '', checks: ['QUALITY_GRADE', 'VISIBLE_DEFECTS', 'PHOTOGRAPHS'], reportFormat: 'CHECKLIST_PHOTOS', requiredBy: '' });
 
   const [disputeAgainstId, setDisputeAgainstId] = useState('');
   const [disputeType, setDisputeType] = useState('NOT_DELIVERED');
@@ -2068,11 +2064,10 @@ export default function OrderDetail() {
       return setError('Enter a valid offer amount before submitting.');
     }
     setSubmittingOffer(true);
-    const ok = await run('offer', () => api.post('/offers', { listingId: order.listingId, amount, message: offerMessage.trim() || undefined }), 'Could not submit your offer');
+    const ok = await run('offer', () => api.post('/offers', { listingId: order.listingId, amount }), 'Could not submit your offer');
     setSubmittingOffer(false);
     if (ok) {
       setOfferAmount('');
-      setOfferMessage('');
       setError('Offer submitted. The seller can select it and begin negotiation.');
     }
   };
@@ -2272,8 +2267,6 @@ export default function OrderDetail() {
               amount={offerAmount}
               setAmount={setOfferAmount}
               reference={Number(order.listing?.askingPrice ?? order.listing?.price)}
-              message={offerMessage}
-              setMessage={setOfferMessage}
               submitting={submittingOffer}
               onSubmit={submitOffer}
             />
@@ -2359,14 +2352,6 @@ export default function OrderDetail() {
 
           {counterpartId && (
             <div className="od-span-all">
-              <MessageThread
-                orderId={order.id}
-                messages={order.messages || []}
-                counterpartId={counterpartId}
-                counterpartName={counterpartName}
-                currentUserId={currentUserId}
-                onSent={reload}
-              />
             </div>
           )}
 
