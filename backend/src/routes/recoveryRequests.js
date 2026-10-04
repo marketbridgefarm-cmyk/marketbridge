@@ -33,16 +33,21 @@ async function getRecoveryEligibility(orderId) {
     where: { id: orderId },
     select: {
       status: true,
-      events: { where: { type: 'DISPUTE_RESOLVED' }, orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } },
+      disputes: { where: { status: 'RESOLVED' }, orderBy: { updatedAt: 'desc' }, take: 1, select: { updatedAt: true } },
       inspectionRequests: {
         orderBy: { updatedAt: 'desc' },
+        take: 1,
         select: {
-          id: true, status: true, updatedAt: true,
+          id: true, status: true, inspectorId: true, updatedAt: true,
+          quotes: { select: { inspectorId: true, status: true, updatedAt: true } },
+          payments: { where: { type: 'INSPECTOR', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true } },
         },
       },
       transportJob: {
         select: {
-          status: true, updatedAt: true,
+          id: true, status: true, truckOwnerId: true, updatedAt: true,
+          quotes: { select: { truckOwnerId: true, status: true, updatedAt: true } },
+          payments: { where: { type: 'TRANSPORT', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true } },
         },
       },
       recoveryRequests: {
@@ -57,25 +62,47 @@ async function getRecoveryEligibility(orderId) {
   if (!order) return { INSPECTION: false, TRANSPORT: false };
 
   const latestApproved = (type) => order.recoveryRequests.find((r) => r.type === type)?.formReleasedAt || null;
-  const disputeResolvedAt = order.events[0]?.createdAt || null;
+  // Dispute resolution updates the Dispute row; it does not currently create
+  // an OrderEvent, so eligibility must read the authoritative dispute record.
+  const disputeResolvedAt = order.disputes[0]?.updatedAt || null;
   const inspection = order.inspectionRequests[0] || null;
+  const transport = order.transportJob;
+
+  // A provider withdrawal is a recovery trigger only when it affects the
+  // assigned provider, or when every bid in the competition has become unusable.
+  // A random losing bidder withdrawing must not reset a live competition.
+  const latestInspectionWithdrawal = inspection?.quotes
+    .filter((q) => q.status === 'WITHDRAWN' && (!inspection.inspectorId || q.inspectorId === inspection.inspectorId))
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0] || null;
+  const inspectionHasLiveBid = Boolean(inspection?.quotes.some((q) => ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)));
+  const inspectionWithdrawalAt = latestInspectionWithdrawal && (!inspectionHasLiveBid || latestInspectionWithdrawal.inspectorId === inspection?.inspectorId)
+    ? latestInspectionWithdrawal.updatedAt : null;
+
+  const latestTransportWithdrawal = transport?.quotes
+    .filter((q) => q.status === 'WITHDRAWN' && (!transport.truckOwnerId || q.truckOwnerId === transport.truckOwnerId))
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0] || null;
+  const transportHasLiveBid = Boolean(transport?.quotes.some((q) => ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)));
+  const transportWithdrawalAt = latestTransportWithdrawal && (!transportHasLiveBid || latestTransportWithdrawal.truckOwnerId === transport?.truckOwnerId)
+    ? latestTransportWithdrawal.updatedAt : null;
+
   const inspectionTriggerAt = [
     inspection?.status === 'CANCELLED' ? inspection.updatedAt : null,
+    inspectionWithdrawalAt,
     disputeResolvedAt,
   ].filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
-  const transport = order.transportJob;
   const transportTriggerAt = [
     transport?.status === 'CANCELLED' ? transport.updatedAt : null,
+    transportWithdrawalAt,
     disputeResolvedAt,
   ].filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
 
-  const eligible = (triggerAt, releasedAt) => Boolean(
-    triggerAt && (!releasedAt || new Date(triggerAt) > new Date(releasedAt))
+  const eligible = (triggerAt, releasedAt, hasUnresolvedServicePayment) => Boolean(
+    triggerAt && !hasUnresolvedServicePayment && (!releasedAt || new Date(triggerAt) > new Date(releasedAt))
   );
 
   return {
-    INSPECTION: eligible(inspectionTriggerAt, latestApproved('INSPECTION')),
-    TRANSPORT: eligible(transportTriggerAt, latestApproved('TRANSPORT')),
+    INSPECTION: eligible(inspectionTriggerAt, latestApproved('INSPECTION'), Boolean(inspection?.payments?.length)),
+    TRANSPORT: eligible(transportTriggerAt, latestApproved('TRANSPORT'), Boolean(transport?.payments?.length)),
   };
 }
 
