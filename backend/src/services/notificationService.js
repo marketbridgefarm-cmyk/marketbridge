@@ -3,6 +3,24 @@
 const { localizedTitle } = require('./notificationCopy');
 
 const EVENT_COPY = {
+  WORKFLOW_RECOVERY_REQUESTED: {
+    type: 'ORDER',
+    title: 'Service recovery requested',
+    body: 'A request to recover the inspection or transport workflow was submitted for review. Your goods order remains separate from this service recovery.',
+    action: 'order',
+  },
+  WORKFLOW_RECOVERY_APPROVED: {
+    type: 'ORDER',
+    title: 'Fresh service bidding is available',
+    body: 'MarketBridge approved the affected service recovery and released a fresh form. Only that service competition was reset; other order workflows remain unchanged.',
+    action: 'order',
+  },
+  WORKFLOW_RECOVERY_REJECTED: {
+    type: 'ORDER',
+    title: 'Service recovery request reviewed',
+    body: 'MarketBridge reviewed the service recovery request. Open the order to see the decision and admin note.',
+    action: 'order',
+  },
   PICKUP_WINDOW_REMINDER: { type: 'ORDER', title: 'Pickup window approaching', body: 'The agricultural pickup window begins within 24 hours. Confirm transport and pickup readiness.', action: 'order' },
   ORDER_CREATED: {
     type: 'ORDER',
