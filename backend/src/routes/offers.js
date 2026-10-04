@@ -128,6 +128,7 @@ router.post(
     body('amount').custom(validAmount(AMOUNT_LIMITS.offer)),
 
     body('message').optional({ nullable: true }).custom((value) => value == null || value === '').withMessage('Free-text messages are not supported. Use the structured fields provided.'),
+,
   ],
   async (req, res) => {
     try {
