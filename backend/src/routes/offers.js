@@ -128,7 +128,6 @@ router.post(
     body('amount').custom(validAmount(AMOUNT_LIMITS.offer)),
 
     body('message').optional({ nullable: true }).custom((value) => value == null || value === '').withMessage('Free-text messages are not supported. Use the structured fields provided.'),
-,
   ],
   async (req, res) => {
     try {
@@ -737,32 +736,121 @@ router.patch(
 
       if (action === 'SELECT') {
         if (!isSeller && !admin) {
-          return res.status(403).json({ error: 'Only the seller can select a buyer bid' });
+          return res.status(403).json({
+            error: 'Only the seller can select a buyer bid',
+          });
         }
+
         if (offer.status !== 'PENDING') {
-          return res.status(400).json({ error: `Only a pending bid can be selected (current: ${offer.status})` });
+          return res.status(409).json({
+            error: `Only a pending bid can be selected (current: ${offer.status})`,
+          });
         }
 
         const selected = await prisma.$transaction(async (tx) => {
-          const fresh = await tx.offer.findUnique({ where: { id: offer.id }, include: { listing: true } });
+          // Serialize selection attempts for this listing. The listing row lock
+          // prevents two simultaneous requests from selecting different buyers.
+          const lockedListings = await tx.$queryRaw`
+            SELECT "id", "sellerId"
+            FROM "Listing"
+            WHERE "id" = ${offer.listingId}
+            FOR UPDATE
+          `;
+
+          if (!lockedListings?.length) {
+            throw offerError('Listing not found', 404);
+          }
+
+          if (String(lockedListings[0].sellerId) !== String(sellerId)) {
+            throw offerError('Listing seller changed; refresh and try again', 409);
+          }
+
+          const fresh = await tx.offer.findUnique({
+            where: { id: offer.id },
+            include: { listing: true },
+          });
+
           if (!fresh) throw offerError('Offer not found', 404);
+
           if (await expireOfferIfNeeded(tx, fresh, req.user.id)) {
             throw offerError('Offer has expired and can no longer be selected', 409);
           }
-          if (fresh.status !== 'PENDING') throw offerError(`Only a pending bid can be selected (current: ${fresh.status})`, 409);
-          await tx.offer.updateMany({
+
+          if (fresh.status !== 'PENDING') {
+            throw offerError(
+              `This bid is no longer pending (current: ${fresh.status})`,
+              409
+            );
+          }
+
+          const negotiationWindowError = validateNegotiationWindow(fresh.listing);
+          if (negotiationWindowError) {
+            throw offerError(negotiationWindowError, 409);
+          }
+
+          // A selected bid or any counter-offer chain means that buyer already
+          // owns the exclusive negotiation slot. Never silently switch buyers.
+          const activeNegotiation = await tx.offer.findFirst({
             where: {
               listingId: fresh.listingId,
-              id: { not: fresh.id },
-              status: 'SELECTED',
+              status: { in: ['SELECTED', 'COUNTERED'] },
             },
-            data: { status: 'PENDING' },
+            select: { id: true, buyerId: true, status: true },
           });
-          await tx.offer.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
+
+          if (activeNegotiation && String(activeNegotiation.buyerId) !== String(fresh.buyerId)) {
+            throw offerError(
+              'Another buyer is already in negotiation. Waiting bids cannot be selected until that negotiation is released, rejected, withdrawn, or expires.',
+              409
+            );
+          }
+
+          // A provisional order must also block selection of another buyer.
+          const provisionalOrder = await tx.order.findFirst({
+            where: {
+              listingId: fresh.listingId,
+              status: { notIn: ['CANCELLED', 'COMPLETED'] },
+            },
+            select: { id: true },
+          });
+
+          if (provisionalOrder) {
+            throw offerError(
+              'This listing already has an active provisional order. Release or cancel it before selecting another buyer.',
+              409
+            );
+          }
+
+          const claim = await tx.offer.updateMany({
+            where: { id: fresh.id, status: 'PENDING' },
+            data: { status: 'SELECTED' },
+          });
+
+          if (claim.count !== 1) {
+            throw offerError(
+              'This bid changed while you were selecting it. Refresh and try again.',
+              409
+            );
+          }
+
+          await recordAuditEvent(tx, {
+            actorId: req.user.id,
+            action: 'OFFER_SELECTED',
+            resourceType: 'Offer',
+            resourceId: fresh.id,
+            metadata: {
+              listingId: fresh.listingId,
+              buyerId: fresh.buyerId,
+            },
+          });
+
           return tx.offer.findUnique({ where: { id: fresh.id } });
         }, { maxWait: 10000, timeout: 15000 });
 
-        return res.json({ message: 'Buyer bid selected for price negotiation', offer: selected });
+        return res.json({
+          message: 'Buyer bid selected for exclusive price negotiation',
+          offer: selected,
+        });
       }
 
       // ======================================================================
