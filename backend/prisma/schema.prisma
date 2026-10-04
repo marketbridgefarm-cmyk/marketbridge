@@ -759,6 +759,9 @@ model InspectionRequest {
 
   location String?
 
+  // Structured job scope shown to every inspector before bidding.
+  workDetails Json?
+
   status InspectionStatus @default(REQUESTED)
 
   // Deadline for the open inspection-request/quote competition. Accepted or
@@ -1031,6 +1034,9 @@ model TransportJob {
   requiredCapacity Float?
 
   specialRequirements String?
+
+  // Structured load, handling, route and delivery requirements shown to every bidder.
+  workDetails Json?
 
   agreedAmount Decimal? @db.Decimal(18, 2)
 
