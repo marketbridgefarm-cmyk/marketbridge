@@ -81,6 +81,8 @@ router.post(
     body('mode')
       .isIn(['SELLER_REQUESTED', 'BUYER_REQUESTED', 'JOINT'])
       .withMessage('Invalid inspection mode'),
+    body('workDetails').optional().isObject().withMessage('Inspection work details must be an object'),
+    body('workDetails').optional().isObject().withMessage('Inspection work details must be an object'),
   ],
   async (req, res) => {
     try {
@@ -90,6 +92,16 @@ router.post(
       }
 
       const { orderId, listingId, mode } = req.body;
+      const rawDetails = req.body.workDetails || {};
+      const workDetails = {
+        workDescription: String(rawDetails.workDescription || '').trim().slice(0, 1200),
+        quantityToInspect: String(rawDetails.quantityToInspect || '').trim().slice(0, 100),
+        lotCount: String(rawDetails.lotCount || '').trim().slice(0, 30),
+        checks: Array.isArray(rawDetails.checks) ? rawDetails.checks.filter((v) => ['QUALITY_GRADE','SIZE_WEIGHT','MOISTURE','VISIBLE_DEFECTS','PACKAGING','SAMPLING','PHOTOGRAPHS'].includes(v)).slice(0, 7) : [],
+        reportRequirements: String(rawDetails.reportRequirements || '').trim().slice(0, 800),
+        requiredBy: String(rawDetails.requiredBy || '').trim().slice(0, 40),
+      };
+
 
       const order = await prisma.order.findUnique({
         where: { id: orderId },
@@ -145,6 +157,7 @@ router.post(
             requestedById: req.user.id,
             mode,
             location: order.listing.location || null,
+            workDetails,
             inspectorId: null,
             status: 'REQUESTED',
             workflowDueAt: computeInspectionWorkflowDueAt(),

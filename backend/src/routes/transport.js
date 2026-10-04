@@ -609,6 +609,8 @@ router.post(
     body('truckId')
       .optional()
       .isUUID(),
+    body('workDetails').optional().isObject().withMessage('Transport work details must be an object'),
+    body('workDetails').optional().isObject().withMessage('Transport work details must be an object'),
   ],
   validate,
   async (req, res) => {
@@ -624,6 +626,18 @@ router.post(
         specialRequirements,
         truckId,
       } = req.body;
+      const rawDetails = req.body.workDetails || {};
+      const workDetails = {
+        weight: String(rawDetails.weight || '').trim().slice(0, 50),
+        packageCount: String(rawDetails.packageCount || '').trim().slice(0, 30),
+        vehicleType: String(rawDetails.vehicleType || '').trim().slice(0, 100),
+        loadingHelp: String(rawDetails.loadingHelp || '').trim().slice(0, 300),
+        unloadingHelp: String(rawDetails.unloadingHelp || '').trim().slice(0, 300),
+        handling: Array.isArray(rawDetails.handling) ? rawDetails.handling.filter((v) => ['COVERED','REFRIGERATED','FRAGILE','KEEP_DRY','FOOD_SAFE'].includes(v)).slice(0, 5) : [],
+        deliveryDeadline: String(rawDetails.deliveryDeadline || '').trim().slice(0, 40),
+        proofOfDelivery: Boolean(rawDetails.proofOfDelivery),
+      };
+
 
       const order =
         await prisma.order.findUnique({
@@ -805,7 +819,7 @@ router.post(
                       where: { id: freshOrder.transportJob.id },
                       data: {
                         arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
-                        requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
+                        requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null, workDetails,
                         truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED',
                         pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
                       },
@@ -832,6 +846,8 @@ router.post(
                     specialRequirements:
                       specialRequirements ||
                       null,
+
+                    workDetails,
 
                     truckOwnerId: null,
                     truckId: null,
@@ -970,7 +986,7 @@ router.post(
                     where: { id: freshOrder.transportJob.id },
                     data: {
                       arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
-                      requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
+                      requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null, workDetails,
                       truckOwnerId: truck.ownerId, truckId: truck.id, agreedAmount: null, status: 'ACCEPTED',
                       pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
                     },
@@ -997,6 +1013,10 @@ router.post(
                   specialRequirements:
                     specialRequirements ||
                     null,
+
+                  workDetails,
+
+                  workDetails,
 
                   // Always bind the actual truck owner.
                   truckOwnerId:
@@ -1889,6 +1909,7 @@ router.post(
     body('truckId')
       .optional()
       .isUUID(),
+    body('workDetails').optional().isObject().withMessage('Transport work details must be an object'),
   ],
   validate,
   async (req, res) => {
