@@ -9,7 +9,7 @@ export default function ArrangeTransport() {
   const nav = useNavigate();
   const [order, setOrder] = useState(null);
   const [method, setMethod] = useState('OWN_TRUCK');
-  const [form, setForm] = useState({ pickupLocation: '', destination: '', load: '', requiredCapacity: '', specialRequirements: '', loadingAt: '' });
+  const [form, setForm] = useState({ pickupLocation: '', destination: '', load: '', requiredCapacity: '', specialRequirements: '', loadingAt: '', weight: '', packageCount: '', vehicleType: '', loadingHelp: '', unloadingHelp: '', handling: [], deliveryDeadline: '', proofOfDelivery: true });
   const [matches, setMatches] = useState([]);
   const [truck, setTruck] = useState('');
   const [ownTrucks, setOwnTrucks] = useState([]);
@@ -46,7 +46,8 @@ export default function ArrangeTransport() {
         truckId: method === 'OWN_TRUCK' ? truck : undefined,
         pickupLocation: form.pickupLocation, destination: form.destination, load: form.load,
         requiredCapacity: form.requiredCapacity ? Number(form.requiredCapacity) : undefined,
-        specialRequirements: form.specialRequirements
+        specialRequirements: form.specialRequirements,
+        workDetails: { weight: form.weight, packageCount: form.packageCount, vehicleType: form.vehicleType, loadingHelp: form.loadingHelp, unloadingHelp: form.unloadingHelp, handling: form.handling, deliveryDeadline: form.deliveryDeadline, proofOfDelivery: form.proofOfDelivery }
       });
       nav(`/orders/${orderId}`);
     } catch (e) { setError(e.response?.data?.error || 'Could not arrange transport'); }
@@ -82,8 +83,15 @@ export default function ArrangeTransport() {
             <div><label>Load</label><input required value={form.load} onChange={e => setForm({ ...form, load: e.target.value })} /></div>
             <div><label>Required capacity (tons)</label><input type="number" value={form.requiredCapacity} onChange={e => setForm({ ...form, requiredCapacity: e.target.value })} /></div>
             <div><label>Loading date/time</label><input type="datetime-local" value={form.loadingAt} onChange={e => setForm({ ...form, loadingAt: e.target.value })} /></div>
-            <div><label>Special requirements</label><input value={form.specialRequirements} onChange={e => setForm({ ...form, specialRequirements: e.target.value })} placeholder="Access, loading, route..." /></div>
+            <div><label>Special requirements / route constraints</label><input value={form.specialRequirements} onChange={e => setForm({ ...form, specialRequirements: e.target.value })} placeholder="Road access, stops, restrictions..." /></div>
+            <div><label>Estimated load weight</label><input value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} placeholder="e.g. 2.5 tonnes" /></div>
+            <div><label>Number of packages / crates</label><input type="number" min="1" value={form.packageCount} onChange={e => setForm({ ...form, packageCount: e.target.value })} /></div>
+            <div><label>Vehicle type requested</label><select value={form.vehicleType} onChange={e => setForm({ ...form, vehicleType: e.target.value })}><option value="">Provider recommends</option><option value="PICKUP">Pickup</option><option value="SMALL_TRUCK">Small truck</option><option value="MEDIUM_TRUCK">Medium truck</option><option value="LARGE_TRUCK">Large truck</option><option value="REFRIGERATED_TRUCK">Refrigerated truck</option></select></div>
+            <div><label>Loading help required</label><select value={form.loadingHelp} onChange={e => setForm({ ...form, loadingHelp: e.target.value })}><option value="">Not specified</option><option value="SENDER">Sender provides labor</option><option value="TRANSPORTER">Transporter provides labor</option><option value="SHARED">Shared responsibility</option></select></div>
+            <div><label>Unloading help required</label><select value={form.unloadingHelp} onChange={e => setForm({ ...form, unloadingHelp: e.target.value })}><option value="">Not specified</option><option value="RECEIVER">Receiver provides labor</option><option value="TRANSPORTER">Transporter provides labor</option><option value="SHARED">Shared responsibility</option></select></div>
+            <div><label>Required delivery deadline</label><input type="datetime-local" value={form.deliveryDeadline} onChange={e => setForm({ ...form, deliveryDeadline: e.target.value })} /></div>
           </div>
+          <fieldset className="form-card"><legend>Handling requirements</legend><div className="choice-grid">{[['COVERED','Covered truck'],['REFRIGERATED','Temperature controlled'],['FRAGILE','Careful / fragile handling'],['KEEP_DRY','Keep load dry'],['FOOD_SAFE','Food-safe vehicle']].map(([v, label]) => <label key={v}><input type="checkbox" checked={form.handling.includes(v)} onChange={e => setForm({ ...form, handling: e.target.checked ? [...form.handling, v] : form.handling.filter(x => x !== v) })} /> {label}</label>)}</div><label><input type="checkbox" checked={form.proofOfDelivery} onChange={e => setForm({ ...form, proofOfDelivery: e.target.checked })} /> Require delivery confirmation / proof</label></fieldset>
           {method === 'OWN_TRUCK' && (
             <div className="match-box">
               <div className="row-between"><h3>My available trucks</h3></div>

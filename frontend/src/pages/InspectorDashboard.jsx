@@ -653,6 +653,8 @@ export default function InspectorDashboard() {
                               {listingTitle(r)}
                             </h3>
                             {createdLabel && <p className="sd-card-sub">{createdLabel}</p>}
+                            {r.workDetails?.workDescription && <p className="sd-card-sub">Work: {r.workDetails.workDescription}</p>}
+                            {r.workDetails?.workDescription && <p className="sd-card-sub">Work: {r.workDetails.workDescription}</p>}
                           </div>
 
                           <div className="sd-card-head-party">
@@ -674,6 +676,9 @@ export default function InspectorDashboard() {
                             </div>
                             <div className="sd-card-block-body">
                               <div className="sd-job-meta">
+                                {r.workDetails?.quantityToInspect && <div className="sd-job-meta-item"><span>Quantity to inspect</span><strong>{r.workDetails.quantityToInspect}</strong></div>}
+                                {r.workDetails?.lotCount && <div className="sd-job-meta-item"><span>Lots / batches</span><strong>{r.workDetails.lotCount}</strong></div>}
+                                {r.workDetails?.requiredBy && <div className="sd-job-meta-item"><span>Deadline</span><strong>{fmtDate(r.workDetails.requiredBy)}</strong></div>}
                                 {r.mode && (
                                   <div className="sd-job-meta-item">
                                     <span>Mode</span>
@@ -692,6 +697,8 @@ export default function InspectorDashboard() {
                                 </div>
                               </div>
                             </div>
+                            {Array.isArray(r.workDetails?.checks) && r.workDetails.checks.length > 0 && <div className="sd-job-requirements"><span className="sd-job-requirements-label">Required checks</span><p>{r.workDetails.checks.map((x) => ({ QUALITY_GRADE: 'Quality / grading', SIZE_WEIGHT: 'Size / weight', MOISTURE: 'Moisture', VISIBLE_DEFECTS: 'Visible defects', PACKAGING: 'Packaging', SAMPLING: 'Sampling / testing', PHOTOGRAPHS: 'Photos / evidence' }[x] || x)).join(' · ')}</p></div>}
+                            {r.workDetails?.reportRequirements && <div className="sd-job-requirements"><span className="sd-job-requirements-label">Report requirements</span><p>{r.workDetails.reportRequirements}</p></div>}
                           </section>
 
                           {/* Block 2 — Your quote (whenever a quote exists) */}
@@ -912,6 +919,8 @@ export default function InspectorDashboard() {
                                   {listingTitle(r)}
                                 </h3>
                                 {createdLabel && <p className="sd-card-sub">{createdLabel}</p>}
+                            {r.workDetails?.workDescription && <p className="sd-card-sub">Work: {r.workDetails.workDescription}</p>}
+                            {r.workDetails?.workDescription && <p className="sd-card-sub">Work: {r.workDetails.workDescription}</p>}
                               </div>
 
                               <div className="sd-card-head-party">

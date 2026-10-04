@@ -658,15 +658,19 @@ function InspectionCard({ order, title, i }) {
             <p>Ask MarketBridge admin to release a fresh inspection form before opening another competition.</p>
           </Notice>
         ) : (
-          <Button
-            variant="primary"
-            disabled={i.requesting}
-            busy={i.requesting}
-            busyText="Requesting…"
-            onClick={() => i.request(i.isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}
-          >
-            Open inspection request
-          </Button>
+          <div className="od-inspection-work-form">
+            <h3>Describe the inspection work</h3>
+            <p className="muted">Inspectors will see these requirements before submitting a bid. Be specific so their fees cover the same work.</p>
+            <label>Work description / condition to assess<textarea rows={3} value={i.workDetails.workDescription} onChange={(e) => i.setWorkDetails({ ...i.workDetails, workDescription: e.target.value })} placeholder="For example: inspect the tomato lot for ripeness, bruising, rot and packaging condition." /></label>
+            <div className="od-form-grid">
+              <label>Quantity to inspect<input value={i.workDetails.quantityToInspect} onChange={(e) => i.setWorkDetails({ ...i.workDetails, quantityToInspect: e.target.value })} placeholder="e.g. 500 kg or 20 crates" /></label>
+              <label>Number of lots / batches<input type="number" min="1" value={i.workDetails.lotCount} onChange={(e) => i.setWorkDetails({ ...i.workDetails, lotCount: e.target.value })} placeholder="e.g. 4" /></label>
+              <label>Inspection deadline<input type="datetime-local" value={i.workDetails.requiredBy} onChange={(e) => i.setWorkDetails({ ...i.workDetails, requiredBy: e.target.value })} /></label>
+            </div>
+            <fieldset><legend>Checks required</legend><div className="od-check-grid">{[['QUALITY_GRADE','Quality / grading'],['SIZE_WEIGHT','Size / weight'],['MOISTURE','Moisture (if applicable)'],['VISIBLE_DEFECTS','Visible defects / damage'],['PACKAGING','Packaging condition'],['SAMPLING','Sampling / testing'],['PHOTOGRAPHS','Photos / evidence']].map(([value, label]) => <label key={value}><input type="checkbox" checked={i.workDetails.checks.includes(value)} onChange={(e) => i.setWorkDetails({ ...i.workDetails, checks: e.target.checked ? [...i.workDetails.checks, value] : i.workDetails.checks.filter((x) => x !== value) })} /> {label}</label>)}</div></fieldset>
+            <label>Report requirements<textarea rows={2} value={i.workDetails.reportRequirements} onChange={(e) => i.setWorkDetails({ ...i.workDetails, reportRequirements: e.target.value })} placeholder="e.g. grade, defect percentage, sample findings and photos" /></label>
+            <Button variant="primary" disabled={i.requesting} busy={i.requesting} busyText="Requesting…" onClick={() => i.request(i.isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}>Open inspection competition</Button>
+          </div>
         )}
       </Card>
     );
@@ -720,6 +724,7 @@ function InspectionCard({ order, title, i }) {
           {request.fee != null && <Fact name="Inspection fee">{money(request.fee)} ETB</Fact>}
           {!inspectorName && <Fact name="Status">{label(request.status)}</Fact>}
         </Facts>
+        {request.workDetails && <div className="od-work-details"><h4>Agreed inspection scope</h4>{request.workDetails.workDescription && <p>{request.workDetails.workDescription}</p>}<div className="od-work-detail-items">{request.workDetails.quantityToInspect && <span><b>Quantity:</b> {request.workDetails.quantityToInspect}</span>}{request.workDetails.lotCount && <span><b>Lots:</b> {request.workDetails.lotCount}</span>}{request.workDetails.requiredBy && <span><b>Deadline:</b> {formatDateTime(request.workDetails.requiredBy)}</span>}</div>{request.workDetails.checks?.length > 0 && <p><b>Checks:</b> {request.workDetails.checks.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>}{request.workDetails.reportRequirements && <p><b>Report:</b> {request.workDetails.reportRequirements}</p>}</div>}
       </Section>
 
       {/* ── Inspector bids and negotiation (REQUESTED state) ── */}
@@ -1185,6 +1190,7 @@ function TransportCard({ order, t }) {
               <Fact name="Required capacity">{job.requiredCapacity}</Fact>
             )}
           </Facts>
+          {job.workDetails && <div className="od-work-details"><h4>Transport work requirements</h4><div className="od-work-detail-items">{job.workDetails.weight && <span><b>Weight:</b> {job.workDetails.weight}</span>}{job.workDetails.packageCount && <span><b>Packages:</b> {job.workDetails.packageCount}</span>}{job.workDetails.vehicleType && <span><b>Vehicle:</b> {job.workDetails.vehicleType}</span>}{job.workDetails.deliveryDeadline && <span><b>Deadline:</b> {formatDateTime(job.workDetails.deliveryDeadline)}</span>}</div>{job.workDetails.handling?.length > 0 && <p><b>Handling:</b> {job.workDetails.handling.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>}</div>}
         </Section>
 
         {job.truckOwner && (
@@ -1538,6 +1544,7 @@ export default function OrderDetail() {
   const [offerMessage, setOfferMessage] = useState('');
   const [submittingOffer, setSubmittingOffer] = useState(false);
   const [requestingInspection, setRequestingInspection] = useState(false);
+  const [inspectionWorkDetails, setInspectionWorkDetails] = useState({ workDescription: '', quantityToInspect: '', lotCount: '', checks: ['QUALITY_GRADE', 'VISIBLE_DEFECTS', 'PHOTOGRAPHS'], reportRequirements: '', requiredBy: '' });
 
   const [disputeAgainstId, setDisputeAgainstId] = useState('');
   const [disputeType, setDisputeType] = useState('NOT_DELIVERED');
@@ -1917,7 +1924,7 @@ export default function OrderDetail() {
       setRequestingInspection(true);
       setError('');
       try {
-        await api.post('/inspections', { orderId: order.id, listingId: order.listing.id, mode });
+        await api.post('/inspections', { orderId: order.id, listingId: order.listing.id, mode, workDetails: inspectionWorkDetails });
         await reload();
       } catch (err) {
         setError(getError(err, 'Could not request inspection'));
@@ -2164,6 +2171,8 @@ export default function OrderDetail() {
     current: currentInspection,
     formReleased: inspectionFormReleased,
     requesting: requestingInspection,
+    workDetails: inspectionWorkDetails,
+    setWorkDetails: setInspectionWorkDetails,
     isBuyer,
     isAdmin,
     isParticipant,
