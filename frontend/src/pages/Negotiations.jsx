@@ -21,6 +21,12 @@ const SELLER_LISTING_STATUSES = ['ACTIVE', 'UNDER_NEGOTIATION', 'SOLD'];
 
 const ACTIVE_QUOTE_STATUSES   = ['PENDING', 'SELECTED', 'COUNTERED'];
 const PREVIOUS_QUOTE_STATUSES = ['ACCEPTED', 'REJECTED', 'WITHDRAWN', 'EXPIRED'];
+const PRICE_ADJUSTMENT_OPTIONS = [
+  { value: 'MARKET_PRICE_RISE', label: 'Seller: perishable-goods market price has risen' },
+  { value: 'MARKET_PRICE_FALL', label: 'Buyer: market price has fallen suddenly' },
+  { value: 'QUALITY_OR_QUANTITY_CHANGE', label: 'Review due to confirmed quality or quantity difference' },
+  { value: 'KEEP_CURRENT_PRICE', label: 'Keep the current negotiated price' },
+];
 
 function quoteTurn(quote) {
   if (quote.status === 'PENDING')   return 'REQUESTER';
@@ -317,6 +323,7 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
   const expired      = isExpired(item);
   const counterValue = Number(counterDraft);
   const counterValid = Number.isFinite(counterValue) && counterValue > 0;
+  const [reasonCode, setReasonCode] = React.useState('');
 
   let canAct        = false;
   let acceptAction  = 'ACCEPT';
@@ -424,6 +431,10 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
             </button>
           )}
 
+          <select className="neg-reason-picker" aria-label="Price adjustment reason" value={reasonCode} onChange={(event) => setReasonCode(event.target.value)} disabled={anyBusy}>
+            <option value="">Choose a reason (required)</option>
+            {PRICE_ADJUSTMENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
           <AmountPicker
             className="neg-counter-picker"
             reference={amountOf(item)}
@@ -437,8 +448,8 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
           <button
             type="button"
             className="sd-btn sd-btn-outline"
-            disabled={!counterValid || anyBusy}
-            onClick={() => onRespond(item, counterAction, counterValue)}
+            disabled={!counterValid || !reasonCode || anyBusy}
+            onClick={() => onRespond(item, counterAction, counterValue, reasonCode)}
           >
             {busy(counterAction) ? 'Sending…' : 'Counter'}
           </button>
@@ -639,14 +650,14 @@ export default function Negotiations() {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   // ---- Respond: bilateral NegotiationRow ---------------------------------
-  const respond = useCallback(async (item, action, counterAmount) => {
+  const respond = useCallback(async (item, action, counterAmount, reasonCode) => {
     const key = `${item.id}:${action}`;
     setBusyKey(key);
     try {
       let response;
       if (item.type === 'LISTING_OFFER') {
         const payload = { action };
-        if (action === 'COUNTER' || action === 'RE_COUNTER') payload.counterAmount = Number(counterAmount);
+        if (action === 'COUNTER' || action === 'RE_COUNTER') { payload.counterAmount = Number(counterAmount); payload.reasonCode = reasonCode; }
         response = await api.patch(`/offers/${item.raw.id}`, payload);
       } else if (item.type === 'TRANSPORT_QUOTE') {
         if (action === 'SELECT') {
