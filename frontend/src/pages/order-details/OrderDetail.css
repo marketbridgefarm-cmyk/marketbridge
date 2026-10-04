@@ -1143,3 +1143,21 @@
   .order-detail-page .od-confidence-icon { flex-basis: 32px; width: 32px; height: 32px; }
   .order-detail-page .od-confidence-promises { display: grid; gap: 7px; }
 }
+
+
+/* Structured service scope: visible to requesters and bidders, with compact mobile layout. */
+.order-detail-page .od-inspection-work-form { display: grid; gap: 12px; margin-top: 14px; }
+.order-detail-page .od-inspection-work-form h3 { margin: 0; font-size: 17px; }
+.order-detail-page .od-inspection-work-form label { display: grid; gap: 6px; font-weight: 650; font-size: 13px; }
+.order-detail-page .od-inspection-work-form input:not([type="checkbox"]),
+.order-detail-page .od-inspection-work-form textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.order-detail-page .od-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.order-detail-page .od-inspection-work-form fieldset { border: 1px solid var(--od-border, #dbe3e8); border-radius: 12px; padding: 12px; min-width: 0; }
+.order-detail-page .od-inspection-work-form legend { padding: 0 5px; font-weight: 750; font-size: 13px; }
+.order-detail-page .od-check-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.order-detail-page .od-check-grid label { display: flex; align-items: flex-start; gap: 7px; font-weight: 500; }
+.order-detail-page .od-work-details { margin-top: 12px; padding: 12px; border: 1px solid var(--od-border, #dbe3e8); border-radius: 12px; background: var(--od-soft, #f8fafc); overflow-wrap: anywhere; }
+.order-detail-page .od-work-details h4 { margin: 0 0 8px; font-size: 14px; }
+.order-detail-page .od-work-details p { margin: 7px 0 0; }
+.order-detail-page .od-work-detail-items { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; }
+@media (max-width: 560px) { .order-detail-page .od-form-grid, .order-detail-page .od-check-grid { grid-template-columns: minmax(0, 1fr); } }
