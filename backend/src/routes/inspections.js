@@ -373,7 +373,6 @@ router.post(
     param('id').notEmpty(),
     body('amount').custom(validAmount(AMOUNT_LIMITS.inspection)),
     body('message').optional({ nullable: true }).custom((value) => value == null || value === '').withMessage('Free-text messages are not supported. Use the structured fields provided.'),
-,
   ],
   async (req, res) => {
     try {
@@ -730,7 +729,6 @@ router.post(
     param('quoteId').notEmpty(),
     body('counterAmount').custom(validAmount(AMOUNT_LIMITS.inspection)),
     body('message').optional({ nullable: true }).custom((value) => value == null || value === '').withMessage('Free-text messages are not supported. Use the structured fields provided.'),
-,
   ],
   async (req, res) => {
     try {
