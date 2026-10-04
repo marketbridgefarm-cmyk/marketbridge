@@ -403,6 +403,7 @@ model User {
   // Orders
   ordersAsBuyer  Order[] @relation("BuyerOrders")
   ordersAsSeller Order[] @relation("SellerOrders")
+  priceReviewsProposed PriceReview[] @relation("PriceReviewProposer")
 
   // Transport
   transportJobsHauled TransportJob[] @relation("TruckOwnerJobs")
@@ -972,6 +973,7 @@ model Order {
   @@index([listingId])
   @@index([status])
   @@index([status, paymentDueAt])
+  priceReviews PriceReview[]
 }
 
 // ============================================================================
@@ -1985,4 +1987,23 @@ model Message {
   @@index([orderId])
   @@index([senderId])
   @@index([receiverId])
+}
+
+model PriceReview {
+  id String @id @default(uuid())
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+  proposedBy User @relation("PriceReviewProposer", fields: [proposedById], references: [id])
+  proposedById String
+  proposedPrice Decimal @db.Decimal(18, 2)
+  reasonCode String
+  status String @default("PENDING") // PENDING, COUNTERED, ACCEPTED, REJECTED
+  parent PriceReview? @relation("PriceReviewChain", fields: [parentId], references: [id])
+  parentId String?
+  children PriceReview[] @relation("PriceReviewChain")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([orderId, createdAt])
+  @@index([status])
+  @@index([parentId])
 }
