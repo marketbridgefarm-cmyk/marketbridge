@@ -81,7 +81,6 @@ router.post(
     body('mode')
       .isIn(['SELLER_REQUESTED', 'BUYER_REQUESTED', 'JOINT'])
       .withMessage('Invalid inspection mode'),
-    body('workDetails').optional().isObject().withMessage('Inspection work details must be an object'),
   ],
   async (req, res) => {
     try {
@@ -91,18 +90,6 @@ router.post(
       }
 
       const { orderId, listingId, mode } = req.body;
-      const rawDetails = req.body.workDetails || {};
-      const workDetails = {
-        workCategory: ['GENERAL_QUALITY','AGRICULTURAL_PRODUCE','QUANTITY_VERIFICATION','DAMAGE_ASSESSMENT','FUNCTIONAL_TESTING','CONFORMITY_CHECK','SAFETY_COMPLIANCE'].includes(rawDetails.workCategory) ? rawDetails.workCategory : 'GENERAL_QUALITY',
-        workDescription: '',
-        quantityToInspect: String(rawDetails.quantityToInspect || '').trim().slice(0, 100),
-        lotCount: String(rawDetails.lotCount || '').trim().slice(0, 30),
-        checks: Array.isArray(rawDetails.checks) ? rawDetails.checks.filter((v) => ['QUALITY_GRADE','SIZE_WEIGHT','MOISTURE','VISIBLE_DEFECTS','PACKAGING','SAMPLING','PHOTOGRAPHS'].includes(v)).slice(0, 7) : [],
-        reportFormat: ['CHECKLIST_PHOTOS','MEASUREMENTS','PASS_FAIL','FULL_REPORT'].includes(rawDetails.reportFormat) ? rawDetails.reportFormat : 'CHECKLIST_PHOTOS',
-        reportRequirements: '',
-        requiredBy: String(rawDetails.requiredBy || '').trim().slice(0, 40),
-      };
-
 
       const order = await prisma.order.findUnique({
         where: { id: orderId },
@@ -158,7 +145,6 @@ router.post(
             requestedById: req.user.id,
             mode,
             location: order.listing.location || null,
-            workDetails,
             inspectorId: null,
             status: 'REQUESTED',
             workflowDueAt: computeInspectionWorkflowDueAt(),
@@ -372,7 +358,13 @@ router.post(
   [
     param('id').notEmpty(),
     body('amount').custom(validAmount(AMOUNT_LIMITS.inspection)),
-    body('message').optional({ nullable: true }).custom((value) => value == null || value === '').withMessage('Free-text messages are not supported. Use the structured fields provided.'),
+    body('message')
+      .optional({ nullable: true })
+      .isString()
+      .trim()
+      .isLength({ max: 1000 })
+      .withMessage('Quote message is too long')
+      .custom(noContactInfo),
   ],
   async (req, res) => {
     try {
@@ -574,11 +566,20 @@ router.patch(
         const fresh = await tx.inspectionQuote.findUnique({ where: { id: quote.id } });
         if (!fresh || fresh.status !== 'PENDING') throw quoteError('This bid is no longer available', 409);
         if (isQuoteExpired(fresh)) throw quoteError('This bid has expired', 409);
+        // A request has exactly one live negotiation at a time. Clear stale
+        // selections/counters left by older clients before opening this bid.
         await tx.inspectionQuote.updateMany({
-          where: { inspectionRequestId: request.id, id: { not: fresh.id }, status: 'SELECTED' },
-          data: { status: 'PENDING' },
+          where: {
+            inspectionRequestId: request.id,
+            id: { not: fresh.id },
+            status: { in: ['SELECTED', 'COUNTERED'] },
+          },
+          data: { status: 'PENDING', counterAmount: null, counteredBy: null },
         });
-        return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
+        return tx.inspectionQuote.update({
+          where: { id: fresh.id },
+          data: { status: 'SELECTED', counterAmount: null, counteredBy: null },
+        });
       }, { maxWait: 10000, timeout: 15000 });
       return res.json({ message: 'Inspector bid selected for price negotiation', quote: selected });
     } catch (error) {
@@ -728,7 +729,7 @@ router.post(
     param('id').notEmpty(),
     param('quoteId').notEmpty(),
     body('counterAmount').custom(validAmount(AMOUNT_LIMITS.inspection)),
-    body('message').optional({ nullable: true }).custom((value) => value == null || value === '').withMessage('Free-text messages are not supported. Use the structured fields provided.'),
+    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }).custom(noContactInfo),
   ],
   async (req, res) => {
     try {
@@ -775,7 +776,19 @@ router.post(
           throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
         }
 
-        // ✅ UPDATE the same row — no new insert, so no unique-constraint violation.
+        // Keep negotiation exclusive: once one bid is countered, any stale
+        // competing SELECTED/COUNTERED bids return to waiting state. This also
+        // repairs older data where multiple inspectors were countered at once.
+        await tx.inspectionQuote.updateMany({
+          where: {
+            inspectionRequestId: request.id,
+            id: { not: freshQuote.id },
+            status: { in: ['SELECTED', 'COUNTERED'] },
+          },
+          data: { status: 'PENDING', counterAmount: null, counteredBy: null },
+        });
+
+        // Update the same row; never insert a second quote for this inspector.
         const updated = await tx.inspectionQuote.update({
           where: { id: freshQuote.id },
           data: {
