@@ -1900,11 +1900,8 @@ router.post(
 
     body('amount').custom(validAmount(AMOUNT_LIMITS.transport)),
 
-    body('message')
-      .optional()
-      .isString()
-      .trim()
-      .custom(noContactInfo),
+    body('message').optional({ nullable: true }).custom((value) => value == null || value === '').withMessage('Free-text messages are not supported. Use the structured fields provided.'),
+,
 
     body('truckId')
       .optional()
@@ -2426,12 +2423,8 @@ router.patch(
       .if(body('action').equals('COUNTER'))
       .custom(validAmount(AMOUNT_LIMITS.transport)),
 
-    body('message')
-      .optional({ nullable: true })
-      .isString()
-      .trim()
-      .isLength({ max: 1000 })
-      .custom(noContactInfo),
+    body('message').optional({ nullable: true }).custom((value) => value == null || value === '').withMessage('Free-text messages are not supported. Use the structured fields provided.'),
+,
   ],
   validate,
   async (req, res) => {

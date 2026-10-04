@@ -32,18 +32,6 @@ function isAdmin(req) {
   );
 }
 
-const PRICE_ADJUSTMENT_REASONS = Object.freeze({
-  MARKET_PRICE_RISE: 'Seller requests a price review because market prices have risen for perishable goods.',
-  MARKET_PRICE_FALL: 'Buyer requests a price review because market prices have fallen suddenly.',
-  QUALITY_OR_QUANTITY_CHANGE: 'Request to review the price because the confirmed quality or quantity differs from expectations.',
-  KEEP_CURRENT_PRICE: 'I prefer to keep the current negotiated price.',
-});
-
-function adjustmentReasonText(reasonCode) {
-  if (reasonCode == null || reasonCode === '') return null;
-  return PRICE_ADJUSTMENT_REASONS[reasonCode] || false;
-}
-
 function isPositiveNumber(value) {
   const number = Number(value);
 
@@ -139,11 +127,8 @@ router.post(
 
     body('amount').custom(validAmount(AMOUNT_LIMITS.offer)),
 
-    body('message')
-      .optional()
-      .isString()
-      .trim()
-      .custom(noContactInfo),
+    body('message').optional({ nullable: true }).custom((value) => value == null || value === '').withMessage('Free-text messages are not supported. Use the structured fields provided.'),
+,
   ],
   async (req, res) => {
     try {
@@ -681,7 +666,6 @@ router.patch(
       const {
         action,
         counterAmount,
-        reasonCode,
       } = req.body;
 
       const allowedActions = [
@@ -766,17 +750,14 @@ router.patch(
             throw offerError('Offer has expired and can no longer be selected', 409);
           }
           if (fresh.status !== 'PENDING') throw offerError(`Only a pending bid can be selected (current: ${fresh.status})`, 409);
-          const activeNegotiation = await tx.offer.findFirst({
+          await tx.offer.updateMany({
             where: {
               listingId: fresh.listingId,
               id: { not: fresh.id },
-              status: { in: ['SELECTED', 'COUNTERED'] },
+              status: 'SELECTED',
             },
-            select: { id: true, status: true },
+            data: { status: 'PENDING' },
           });
-          if (activeNegotiation) {
-            throw offerError('Another buyer is already in negotiation. Waiting bids cannot be changed until that negotiation is released, rejected, withdrawn, or expires.', 409);
-          }
           await tx.offer.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
           return tx.offer.findUnique({ where: { id: fresh.id } });
         }, { maxWait: 10000, timeout: 15000 });
@@ -919,8 +900,6 @@ router.patch(
       // ======================================================================
 
       if (action === 'RE_COUNTER') {
-        const controlledReason = adjustmentReasonText(reasonCode);
-        if (controlledReason === false) return res.status(400).json({ error: 'Choose a valid price-adjustment reason from the list.' });
         if (!isBuyer && !admin) {
           return res.status(403).json({
             error:
@@ -1019,7 +998,6 @@ router.patch(
                   status: 'COUNTERED',
                   counterAmount: numericCounter,
                   counteredBy: 'BUYER',
-                ...(controlledReason ? { message: controlledReason } : {}),
                   parentOfferId: freshOffer.id,
                   expiresAt: counterExpiresAt,
                   message: freshOffer.message,
@@ -1033,7 +1011,6 @@ router.patch(
                 resourceId: counterOffer.id,
                 metadata: {
                   counteredBy: 'BUYER',
-                ...(controlledReason ? { message: controlledReason } : {}),
                   parentOfferId: freshOffer.id,
                   previousAmount: freshOffer.counterAmount ?? freshOffer.amount,
                   counterAmount: numericCounter,
@@ -1266,8 +1243,6 @@ router.patch(
       // ======================================================================
 
       if (action === 'COUNTER') {
-        const controlledReason = adjustmentReasonText(reasonCode);
-        if (controlledReason === false) return res.status(400).json({ error: 'Choose a valid price-adjustment reason from the list.' });
         if (!isSeller && !admin) {
           return res.status(403).json({
             error:
@@ -1377,7 +1352,6 @@ router.patch(
                   status: 'COUNTERED',
                   counterAmount: numericCounter,
                   counteredBy: 'SELLER',
-                ...(controlledReason ? { message: controlledReason } : {}),
                   parentOfferId: freshOffer.id,
                   expiresAt: counterExpiresAt,
                   message: freshOffer.message,
@@ -1391,7 +1365,6 @@ router.patch(
                 resourceId: counterOffer.id,
                 metadata: {
                   counteredBy: 'SELLER',
-                ...(controlledReason ? { message: controlledReason } : {}),
                   parentOfferId: freshOffer.id,
                   previousAmount: freshOffer.counterAmount ?? freshOffer.amount,
                   counterAmount: numericCounter,

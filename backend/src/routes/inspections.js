@@ -82,7 +82,6 @@ router.post(
       .isIn(['SELLER_REQUESTED', 'BUYER_REQUESTED', 'JOINT'])
       .withMessage('Invalid inspection mode'),
     body('workDetails').optional().isObject().withMessage('Inspection work details must be an object'),
-    body('workDetails').optional().isObject().withMessage('Inspection work details must be an object'),
   ],
   async (req, res) => {
     try {
@@ -94,11 +93,13 @@ router.post(
       const { orderId, listingId, mode } = req.body;
       const rawDetails = req.body.workDetails || {};
       const workDetails = {
-        workDescription: String(rawDetails.workDescription || '').trim().slice(0, 1200),
+        workCategory: ['GENERAL_QUALITY','AGRICULTURAL_PRODUCE','QUANTITY_VERIFICATION','DAMAGE_ASSESSMENT','FUNCTIONAL_TESTING','CONFORMITY_CHECK','SAFETY_COMPLIANCE'].includes(rawDetails.workCategory) ? rawDetails.workCategory : 'GENERAL_QUALITY',
+        workDescription: '',
         quantityToInspect: String(rawDetails.quantityToInspect || '').trim().slice(0, 100),
         lotCount: String(rawDetails.lotCount || '').trim().slice(0, 30),
         checks: Array.isArray(rawDetails.checks) ? rawDetails.checks.filter((v) => ['QUALITY_GRADE','SIZE_WEIGHT','MOISTURE','VISIBLE_DEFECTS','PACKAGING','SAMPLING','PHOTOGRAPHS'].includes(v)).slice(0, 7) : [],
-        reportRequirements: String(rawDetails.reportRequirements || '').trim().slice(0, 800),
+        reportFormat: ['CHECKLIST_PHOTOS','MEASUREMENTS','PASS_FAIL','FULL_REPORT'].includes(rawDetails.reportFormat) ? rawDetails.reportFormat : 'CHECKLIST_PHOTOS',
+        reportRequirements: '',
         requiredBy: String(rawDetails.requiredBy || '').trim().slice(0, 40),
       };
 
@@ -371,13 +372,8 @@ router.post(
   [
     param('id').notEmpty(),
     body('amount').custom(validAmount(AMOUNT_LIMITS.inspection)),
-    body('message')
-      .optional({ nullable: true })
-      .isString()
-      .trim()
-      .isLength({ max: 1000 })
-      .withMessage('Quote message is too long')
-      .custom(noContactInfo),
+    body('message').optional({ nullable: true }).custom((value) => value == null || value === '').withMessage('Free-text messages are not supported. Use the structured fields provided.'),
+,
   ],
   async (req, res) => {
     try {
@@ -733,7 +729,8 @@ router.post(
     param('id').notEmpty(),
     param('quoteId').notEmpty(),
     body('counterAmount').custom(validAmount(AMOUNT_LIMITS.inspection)),
-    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }).custom(noContactInfo),
+    body('message').optional({ nullable: true }).custom((value) => value == null || value === '').withMessage('Free-text messages are not supported. Use the structured fields provided.'),
+,
   ],
   async (req, res) => {
     try {
