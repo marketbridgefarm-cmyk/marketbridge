@@ -1085,3 +1085,61 @@
 .order-detail-page .od-card-title {
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
+
+/* Buyer confidence and service recovery: scoped to the order detail page. */
+.order-detail-page .od-buyer-confidence {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: clamp(16px, 3vw, 24px);
+  border: 1px solid #cce8d7;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(247, 255, 250, .94), rgba(255, 255, 255, .82));
+  box-shadow: 0 8px 24px rgba(15, 85, 54, .06);
+}
+.order-detail-page .od-buyer-confidence.is-review {
+  border-color: #f0d9a6;
+  background: linear-gradient(135deg, rgba(255, 250, 235, .96), rgba(255, 255, 255, .86));
+}
+.order-detail-page .od-confidence-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: #fff;
+  background: #147447;
+  font-size: 20px;
+  font-weight: 800;
+}
+.order-detail-page .is-review .od-confidence-icon { background: #9a6700; }
+.order-detail-page .od-confidence-main { min-width: 0; flex: 1; }
+.order-detail-page .od-confidence-main h2 {
+  margin: 3px 0 7px;
+  color: var(--od-ink, #0d1b2a);
+  font: 800 clamp(17px, 2.2vw, 21px)/1.3 var(--od-font-head, system-ui);
+}
+.order-detail-page .od-confidence-main p { max-width: 850px; color: var(--od-text, #334155); }
+.order-detail-page .od-confidence-promises {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(15, 122, 68, .15);
+}
+.order-detail-page .od-confidence-promises span {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: #315344;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.order-detail-page .od-confidence-promises b { color: #147447; }
+@media (max-width: 520px) {
+  .order-detail-page .od-buyer-confidence { gap: 10px; padding: 15px; }
+  .order-detail-page .od-confidence-icon { flex-basis: 32px; width: 32px; height: 32px; }
+  .order-detail-page .od-confidence-promises { display: grid; gap: 7px; }
+}
