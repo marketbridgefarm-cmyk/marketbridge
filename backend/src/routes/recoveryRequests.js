@@ -5,6 +5,7 @@ const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
+const { recordOrderEvent } = require('../services/orderEventService');
 
 const router = express.Router();
 
@@ -37,13 +38,11 @@ async function getRecoveryEligibility(orderId) {
         orderBy: { updatedAt: 'desc' },
         select: {
           id: true, status: true, updatedAt: true,
-          quotes: { where: { status: 'WITHDRAWN' }, orderBy: { updatedAt: 'desc' }, take: 1, select: { updatedAt: true } },
         },
       },
       transportJob: {
         select: {
           status: true, updatedAt: true,
-          quotes: { where: { status: 'WITHDRAWN' }, orderBy: { updatedAt: 'desc' }, take: 1, select: { updatedAt: true } },
         },
       },
       recoveryRequests: {
@@ -62,13 +61,11 @@ async function getRecoveryEligibility(orderId) {
   const inspection = order.inspectionRequests[0] || null;
   const inspectionTriggerAt = [
     inspection?.status === 'CANCELLED' ? inspection.updatedAt : null,
-    inspection?.quotes?.[0]?.updatedAt || null,
     disputeResolvedAt,
   ].filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
   const transport = order.transportJob;
   const transportTriggerAt = [
     transport?.status === 'CANCELLED' ? transport.updatedAt : null,
-    transport?.quotes?.[0]?.updatedAt || null,
     disputeResolvedAt,
   ].filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
 
@@ -111,15 +108,24 @@ router.post('/', async (req, res) => {
     });
     if (existing) return res.json({ message: 'A recovery request is already awaiting admin review', recoveryRequest: existing });
 
-    const created = await prisma.recoveryRequest.create({
-      data: { orderId, requestedById: req.user.id, type, targetParties, reason },
-    });
-    await recordAuditEvent(prisma, {
-      actorId: req.user.id,
-      action: 'WORKFLOW_RECOVERY_REQUESTED',
-      resourceType: 'RecoveryRequest',
-      resourceId: created.id,
-      metadata: { orderId, type, targetParties },
+    const created = await prisma.$transaction(async (tx) => {
+      const recoveryRequest = await tx.recoveryRequest.create({
+        data: { orderId, requestedById: req.user.id, type, targetParties, reason },
+      });
+      await recordOrderEvent(tx, {
+        orderId,
+        actorId: req.user.id,
+        type: 'WORKFLOW_RECOVERY_REQUESTED',
+        metadata: { recoveryRequestId: recoveryRequest.id, recoveryType: type, targetParties, reason },
+      });
+      await recordAuditEvent(tx, {
+        actorId: req.user.id,
+        action: 'WORKFLOW_RECOVERY_REQUESTED',
+        resourceType: 'RecoveryRequest',
+        resourceId: recoveryRequest.id,
+        metadata: { orderId, type, targetParties },
+      });
+      return recoveryRequest;
     });
 
     return res.status(201).json({ message: 'Recovery request sent to MarketBridge admin for approval', recoveryRequest: created });
@@ -176,7 +182,7 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
           const activePayment = await tx.payment.findFirst({ where: { inspectionRequestId: current.id, type: 'INSPECTOR', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true } });
           if (activePayment) throw Object.assign(new Error('Inspection recovery is blocked because inspection payment has already started'), { statusCode: 409 });
           if (['REQUESTED', 'ACCEPTED'].includes(current.status)) {
-            await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: current.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
+            await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: current.id, inspectorId: current.inspectorId, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
             await tx.inspectionRequest.update({ where: { id: current.id }, data: { inspectorId: null, fee: null, status: 'REQUESTED' } });
           } else if (current.status === 'CANCELLED') {
             const requestedById = request.targetParties?.includes('BUYER') ? request.order.buyerId : request.targetParties?.includes('SELLER') ? request.order.sellerId : request.requestedById;
@@ -197,12 +203,18 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
         if (job) {
           const activePayment = await tx.payment.findFirst({ where: { transportJobId: job.id, type: 'TRANSPORT', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true } });
           if (activePayment) throw Object.assign(new Error('Transport recovery is blocked because transport payment has already started'), { statusCode: 409 });
-          await tx.transportQuote.updateMany({ where: { transportJobId: job.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
+          await tx.transportQuote.updateMany({ where: { transportJobId: job.id, truckOwnerId: job.truckOwnerId, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
           await tx.transportJob.update({ where: { id: job.id }, data: { truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED' } });
         }
       }
 
       const updated = await tx.recoveryRequest.update({ where: { id: request.id }, data: { status: 'APPROVED', approvedById: req.user.id, approvedAt: now, formReleasedAt: now, adminNote: typeof req.body?.adminNote === 'string' ? req.body.adminNote.trim().slice(0, 1000) : null } });
+      await recordOrderEvent(tx, {
+        orderId: request.orderId,
+        actorId: req.user.id,
+        type: 'WORKFLOW_RECOVERY_APPROVED',
+        metadata: { recoveryRequestId: request.id, recoveryType: request.type, targetParties: request.targetParties, formReleasedAt: now.toISOString() },
+      });
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'WORKFLOW_RECOVERY_APPROVED', resourceType: 'RecoveryRequest', resourceId: request.id, metadata: { orderId: request.orderId, type: request.type, targetParties: request.targetParties } });
       return updated;
     }, { maxWait: 10000, timeout: 15000 });
@@ -216,9 +228,15 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
 
 router.patch('/admin/:id/reject', requireRole('ADMIN'), requireMfa(), async (req, res) => {
   try {
-    const updated = await prisma.recoveryRequest.updateMany({ where: { id: req.params.id, status: 'PENDING' }, data: { status: 'REJECTED', rejectedAt: new Date(), adminNote: typeof req.body?.adminNote === 'string' ? req.body.adminNote.trim().slice(0, 1000) : null } });
-    if (!updated.count) return res.status(404).json({ error: 'Pending recovery request not found' });
-    await recordAuditEvent(prisma, { actorId: req.user.id, action: 'WORKFLOW_RECOVERY_REJECTED', resourceType: 'RecoveryRequest', resourceId: req.params.id, metadata: { adminNote: req.body?.adminNote || null } });
+    const updated = await prisma.$transaction(async (tx) => {
+      const request = await tx.recoveryRequest.findUnique({ where: { id: req.params.id } });
+      if (!request || request.status !== 'PENDING') return null;
+      const result = await tx.recoveryRequest.update({ where: { id: request.id }, data: { status: 'REJECTED', rejectedAt: new Date(), adminNote: typeof req.body?.adminNote === 'string' ? req.body.adminNote.trim().slice(0, 1000) : null } });
+      await recordOrderEvent(tx, { orderId: request.orderId, actorId: req.user.id, type: 'WORKFLOW_RECOVERY_REJECTED', metadata: { recoveryRequestId: request.id, recoveryType: request.type, adminNote: req.body?.adminNote || null } });
+      await recordAuditEvent(tx, { actorId: req.user.id, action: 'WORKFLOW_RECOVERY_REJECTED', resourceType: 'RecoveryRequest', resourceId: req.params.id, metadata: { orderId: request.orderId, adminNote: req.body?.adminNote || null } });
+      return result;
+    });
+    if (!updated) return res.status(404).json({ error: 'Pending recovery request not found' });
     return res.json({ message: 'Recovery request rejected' });
   } catch (error) {
     req.log.error({ err: error }, 'RECOVERY REQUEST REJECT ERROR');
