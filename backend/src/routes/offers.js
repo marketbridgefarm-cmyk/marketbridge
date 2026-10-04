@@ -470,7 +470,7 @@ router.get(
 async function acceptOfferAndCreateOrder(
   tx,
   offer,
-  finalPrice,
+  finalUnitPrice,
   sellerId,
   actorId = sellerId
 ) {
@@ -488,6 +488,50 @@ async function acceptOfferAndCreateOrder(
   const requestedQuantity = Number(offer.quantity);
   if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
     throw offerError('Offer has no valid quantity', 400);
+  }
+
+  const unitPrice = Number(finalUnitPrice);
+  if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+    throw offerError('Offer does not have a valid unit price', 400);
+  }
+
+  // Lock and re-read the listing at the mutation point. Offer creation checks
+  // availability too, but acceptance can happen after another workflow changed
+  // the listing. The lock makes the quantity check authoritative for this deal.
+  const lockedListingRows = await tx.$queryRaw`
+    SELECT "id", "availableQuantity", "quantity", "minAcceptablePrice", "category", "sellerId"
+    FROM "Listing"
+    WHERE "id" = ${offer.listingId}
+    FOR UPDATE
+  `;
+  const lockedListing = lockedListingRows?.[0];
+  if (!lockedListing) throw offerError('Listing not found', 404);
+  if (!['AGRICULTURAL', 'PRODUCT'].includes(String(lockedListing.category))) {
+    throw offerError('Offers can only create orders for physical goods listings', 400);
+  }
+  if (String(lockedListing.sellerId) !== String(sellerId)) {
+    throw offerError('Listing seller changed; refresh and try again', 409);
+  }
+
+  const availableQuantity = Number(lockedListing.availableQuantity);
+  if (!Number.isFinite(availableQuantity) || availableQuantity < requestedQuantity) {
+    throw offerError(
+      `Only ${Number.isFinite(availableQuantity) ? availableQuantity : 0} units remain available for this offer`,
+      409
+    );
+  }
+
+  // amount is the negotiated PER-UNIT price. The order/payment amount is the
+  // immutable server-calculated total.
+  const totalPrice = Math.round(unitPrice * requestedQuantity * 100) / 100;
+  const minimumUnitPrice = lockedListing.minAcceptablePrice == null
+    ? null
+    : Number(lockedListing.minAcceptablePrice);
+  if (minimumUnitPrice != null && Number.isFinite(minimumUnitPrice) && unitPrice < minimumUnitPrice) {
+    throw offerError(
+      `Offer price is below the seller's minimum acceptable unit price of ${minimumUnitPrice.toFixed(2)} ETB`,
+      409
+    );
   }
 
   // Claim the offer itself before allocating inventory.
@@ -530,7 +574,7 @@ async function acceptOfferAndCreateOrder(
         listingId: offer.listingId,
         buyerId: offer.buyerId,
         sellerId,
-        finalPrice,
+        finalPrice: totalPrice,
         quantity: requestedQuantity,
         status: 'PENDING_PAYMENT',
         agreedOfferId: updatedOffer.id,
@@ -560,7 +604,9 @@ async function acceptOfferAndCreateOrder(
       listingId: offer.listingId,
       buyerId: offer.buyerId,
       sellerId,
-      finalPrice,
+      finalUnitPrice: unitPrice,
+      totalPrice,
+      quantity: requestedQuantity,
       orderId: order.id,
     },
   });
@@ -575,7 +621,9 @@ async function acceptOfferAndCreateOrder(
       offerId: updatedOffer.id,
       buyerId: offer.buyerId,
       sellerId,
-      finalPrice,
+      finalUnitPrice: unitPrice,
+      totalPrice,
+      quantity: requestedQuantity,
       status: order.status,
     },
   });
@@ -1054,23 +1102,6 @@ router.patch(
                   'Offer does not have a valid final price',
                   400
                 );
-              }
-
-              if (
-                freshOffer.status === 'COUNTERED' &&
-                freshOffer.counteredBy === 'BUYER' &&
-                freshOffer.listing.minAcceptablePrice != null
-              ) {
-                const minimumPrice = Number(freshOffer.listing.minAcceptablePrice);
-                if (
-                  Number.isFinite(minimumPrice) &&
-                  finalPrice < minimumPrice
-                ) {
-                  throw offerError(
-                    `Buyer counter-offer is below the seller's minimum acceptable price of ${minimumPrice.toFixed(2)} ETB`,
-                    409
-                  );
-                }
               }
 
               return acceptOfferAndCreateOrder(

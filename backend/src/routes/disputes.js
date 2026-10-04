@@ -7,6 +7,7 @@ const { recordAuditEvent } = require('../utils/audit');
 const { transitionOrderStatus, DISPUTABLE_STATUSES } = require('../services/orderStateMachine');
 const { holdForDispute, resumeAfterDispute } = require('../services/payoutService');
 const { cancelOrderInTransaction } = require('../services/orderCancellationService');
+const paymentService = require('../services/paymentService');
 
 const router = express.Router();
 
@@ -222,6 +223,19 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
         }
         restoredOrderStatus = dispute.previousOrderStatus || 'CONFIRMED';
         await transitionOrderStatus(tx, dispute.orderId, 'DISPUTED', restoredOrderStatus);
+
+        // A provider payment can settle while the order is DISPUTED. Replay
+        // every paid order-level effect (goods, transport, inspection) after
+        // restoring the pre-dispute workflow state.
+        const paidOrderPayments = await tx.payment.findMany({
+          where: { orderId: dispute.orderId, status: 'PAID' },
+          select: { id: true },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        for (const paidPayment of paidOrderPayments) {
+          await paymentService.replayDisputedPaidPayment(tx, paidPayment.id);
+        }
       }
 
       await recordAuditEvent(tx, {

@@ -1419,7 +1419,7 @@ router.get(
           providerTransactionId,
           eventId: `chapa-callback-${payment.id}-${Date.now()}`,
           payload: {
-            amount: verifiedAmount ?? payment.amount,
+            amount: verifiedAmount,
             currency: verifiedCurrency ?? payment.currency ?? 'ETB',
             chapa: raw?.data || raw,
           },
@@ -1435,7 +1435,7 @@ router.get(
           providerTransactionId,
           eventId: `chapa-callback-failed-${payment.id}-${Date.now()}`,
           payload: {
-            amount: verifiedAmount ?? payment.amount,
+            amount: verifiedAmount,
             currency: verifiedCurrency ?? payment.currency ?? 'ETB',
             chapa: raw?.data || raw,
           },
@@ -1594,8 +1594,7 @@ router.get(
 
             payload: {
               amount:
-                verifiedAmount ??
-                payment.amount,
+                verifiedAmount,
 
               currency:
                 verifiedCurrency ??
@@ -1900,8 +1899,7 @@ router.post(
             ...req.body,
 
             amount:
-              verifiedAmount ??
-              payment.amount,
+              verifiedAmount,
 
             currency:
               verifiedCurrency ??
