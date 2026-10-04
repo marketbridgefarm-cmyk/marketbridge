@@ -1500,6 +1500,25 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
   }
 });
 
+// Seller confirmation gate: the selected transporter cannot record pickup until the seller confirms readiness.
+router.post('/:id/seller-confirm-pickup', authenticate, requireRole('SELLER'), [param('id').isUUID(), body('message').optional().isString().trim().isLength({ max: 500 })], validate, async (req, res) => {
+  try {
+    const job = await prisma.transportJob.findUnique({ where: { id: req.params.id }, include: { order: { select: { id: true, sellerId: true } } } });
+    if (!job) return res.status(404).json({ error: 'Transport job not found' });
+    if (job.order.sellerId !== req.user.id) return res.status(403).json({ error: 'Only the listing seller can confirm pickup readiness' });
+    if (job.status !== 'ACCEPTED') return res.status(409).json({ error: 'Seller pickup confirmation is available only after the transporter is selected and accepted' });
+    if (job.sellerPickupConfirmedAt) return res.status(409).json({ error: 'Pickup readiness was already confirmed' });
+    const updated = await prisma.transportJob.updateMany({ where: { id: job.id, status: 'ACCEPTED', sellerPickupConfirmedAt: null }, data: { sellerPickupConfirmedAt: new Date(), sellerPickupMessage: req.body?.message || null, sellerPickupMessageAt: req.body?.message ? new Date() : null } });
+    if (!updated.count) return res.status(409).json({ error: 'Transport status changed; refresh and try again' });
+    await recordAuditEvent(prisma, { actorId: req.user.id, action: 'TRANSPORT_SELLER_PICKUP_CONFIRMED', resourceType: 'TransportJob', resourceId: job.id, metadata: { orderId: job.orderId, message: req.body?.message || null } }).catch(() => {});
+    await recordOrderEvent(prisma, { orderId: job.orderId, actorId: req.user.id, type: 'TRANSPORT_SELLER_PICKUP_CONFIRMED', metadata: { transportJobId: job.id, message: req.body?.message || null } }).catch(() => {});
+    return res.json({ message: 'Pickup readiness confirmed. The transporter may now record pickup.', sellerPickupConfirmedAt: new Date().toISOString() });
+  } catch (error) {
+    req.log.error({ err: error }, 'SELLER TRANSPORT PICKUP CONFIRM ERROR');
+    return res.status(500).json({ error: 'Could not confirm transport pickup readiness' });
+  }
+});
+
 // ============================================================================
 // UPDATE TRANSPORT JOB STATUS
 // ============================================================================
@@ -1589,6 +1608,13 @@ router.patch(
 
       const current = job.status;
       const next = req.body.status;
+
+      if (next === 'PICKUP' && job.order.sellerId && !job.sellerPickupConfirmedAt && !isAdmin(req.user)) {
+        return res.status(409).json({
+          code: 'SELLER_PICKUP_CONFIRMATION_REQUIRED',
+          error: 'The seller must confirm that the goods are ready and authorize pickup before the transporter can mark the load as picked up.',
+        });
+      }
 
       // HIRE_TRANSPORTER uses the competitive quote/payment workflow.
       // ACCEPTED is deliberately NOT a client-settable transport status for
