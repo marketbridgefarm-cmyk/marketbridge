@@ -1086,3 +1086,14 @@
   .ac-card, .ac-metric-card, .ac-tab, .admin-control-center .sd-btn, .ac-radio-option { transition: none; }
   .ac-card:hover, .ac-metric-card:hover { transform: none; }
 }
+
+/* Workflow recovery review clarity and mobile-friendly actions. */
+.admin-control-center .ac-panel-header p { max-width: 900px; line-height: 1.65; }
+.admin-control-center .ac-table td { vertical-align: top; }
+.admin-control-center .ac-table td:last-child .ac-actions { min-width: 205px; flex-wrap: wrap; }
+.admin-control-center .ac-table td:last-child .sd-btn { white-space: normal; }
+@media (max-width: 760px) {
+  .admin-control-center .ac-table-shell { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .admin-control-center .ac-table { min-width: 850px; }
+  .admin-control-center .ac-table td:last-child .ac-actions { min-width: 180px; }
+}
