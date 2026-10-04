@@ -403,7 +403,6 @@ model User {
   // Orders
   ordersAsBuyer  Order[] @relation("BuyerOrders")
   ordersAsSeller Order[] @relation("SellerOrders")
-  priceReviewsProposed PriceReview[] @relation("PriceReviewProposer")
 
   // Transport
   transportJobsHauled TransportJob[] @relation("TruckOwnerJobs")
@@ -759,10 +758,12 @@ model InspectionRequest {
 
   location String?
 
-  // Structured job scope shown to every inspector before bidding.
-  workDetails Json?
-
   status InspectionStatus @default(REQUESTED)
+
+  // Seller must explicitly confirm the provisional inspector agreement before work starts.
+  sellerConfirmedAt DateTime?
+  sellerMessage String?
+  sellerMessageAt DateTime?
 
   // Deadline for the open inspection-request/quote competition. Accepted or
   // in-progress inspections are never auto-expired by maintenance.
@@ -918,7 +919,6 @@ model Order {
   // Immutable link to the exact accepted negotiation that created this order.
   agreedOffer   Offer? @relation("AgreedOffer", fields: [agreedOfferId], references: [id])
   agreedOfferId String? @unique
-  priceReviews PriceReview[]
   agreedAt DateTime?
 
   // Agricultural orders require an explicit buyer decision after the inspection
@@ -1035,9 +1035,6 @@ model TransportJob {
 
   specialRequirements String?
 
-  // Structured load, handling, route and delivery requirements shown to every bidder.
-  workDetails Json?
-
   agreedAmount Decimal? @db.Decimal(18, 2)
 
   status TransportStatus @default(REQUESTED)
@@ -1045,6 +1042,11 @@ model TransportJob {
   // Deadline for the open transport-request/quote competition. Accepted,
   // pickup, transit, and delivered jobs are never auto-expired.
   workflowDueAt DateTime?
+
+  // Seller must authorize physical pickup after confirming the selected transporter.
+  sellerPickupConfirmedAt DateTime?
+  sellerPickupMessage String?
+  sellerPickupMessageAt DateTime?
 
   pickupConfirmedAt   DateTime?
   deliveredConfirmedAt DateTime?
@@ -1983,25 +1985,4 @@ model Message {
   @@index([orderId])
   @@index([senderId])
   @@index([receiverId])
-}
-
-
-// Immutable, auditable price-review proposals after an inspection report.
-model PriceReview {
-  id String @id @default(uuid())
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderId String
-  proposedBy User @relation("PriceReviewProposer", fields: [proposedById], references: [id])
-  proposedById String
-  proposedPrice Decimal @db.Decimal(18, 2)
-  reasonCode String
-  status String @default("PENDING") // PENDING, COUNTERED, ACCEPTED, REJECTED
-  parent PriceReview? @relation("PriceReviewChain", fields: [parentId], references: [id])
-  parentId String?
-  children PriceReview[] @relation("PriceReviewChain")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  @@index([orderId, createdAt])
-  @@index([status])
-  @@index([parentId])
 }
