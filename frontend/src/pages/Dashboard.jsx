@@ -286,6 +286,11 @@ export default function Dashboard() {
   const [orders, setOrders] = useState([]);
   const [myListings, setMyListings] = useState([]);
   const [offersReceived, setOffersReceived] = useState([]);
+  const [sellerInspections, setSellerInspections] = useState([]);
+  const [inspectionMessages, setInspectionMessages] = useState({});
+  const [inspectionBusy, setInspectionBusy] = useState('');
+  const [transportMessages, setTransportMessages] = useState({});
+  const [transportBusy, setTransportBusy] = useState('');
 
   const [offerBusy, setOfferBusy] = useState('');
   const [counterDrafts, setCounterDrafts] = useState({});
@@ -318,11 +323,12 @@ export default function Dashboard() {
     setError('');
 
     try {
-      const [offersRes, ordersRes, listingsRes, receivedRes] = await Promise.allSettled([
+      const [offersRes, ordersRes, listingsRes, receivedRes, sellerInspectionRes] = await Promise.allSettled([
         api.get('/offers/mine', { params: { limit: 50 } }),
         api.get('/orders', { params: { limit: 50 } }),
         api.get('/listings', { params: { sellerId: user.id, limit: 100 } }),
         api.get('/offers/received', { params: { limit: 100 } }),
+        api.get('/inspections/seller-pending'),
       ]);
 
       setOffersSent(offersRes.status === 'fulfilled' ? offersRes.value.data?.offers || [] : []);
@@ -336,6 +342,7 @@ export default function Dashboard() {
       } else {
         setOffersReceived([]);
       }
+      setSellerInspections(sellerInspectionRes.status === 'fulfilled' ? sellerInspectionRes.value.data?.requests || [] : []);
 
       // If any critical request failed, surface a friendly error.
       if (offersRes.status === 'rejected' || ordersRes.status === 'rejected' || listingsRes.status === 'rejected') {
@@ -352,6 +359,41 @@ export default function Dashboard() {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  const confirmSellerInspection = async (requestId) => {
+    setInspectionBusy(requestId);
+    try {
+      await api.post(`/inspections/${requestId}/seller-confirm`, { message: inspectionMessages[requestId] || '' });
+      toast('Inspection confirmed. The inspector may now start work.');
+      await loadAll();
+    } catch (err) {
+      toast(err.response?.data?.error || 'Could not confirm inspection');
+    } finally { setInspectionBusy(''); }
+  };
+
+  const confirmSellerTransportPickup = async (jobId) => {
+    setTransportBusy(jobId);
+    try {
+      await api.post(`/transport/${jobId}/seller-confirm-pickup`, { message: transportMessages[jobId] || '' });
+      toast('Pickup readiness confirmed. The transporter may now record pickup.');
+      await loadAll();
+    } catch (err) {
+      toast(err.response?.data?.error || 'Could not confirm transport pickup');
+    } finally { setTransportBusy(''); }
+  };
+
+  const sendSellerInspectionMessage = async (requestId) => {
+    const message = inspectionMessages[requestId] || '';
+    if (!message.trim()) { toast('Choose or enter a message first.'); return; }
+    setInspectionBusy(requestId);
+    try {
+      await api.post(`/inspections/${requestId}/seller-message`, { message });
+      toast('Seller instructions saved. This does not confirm the inspection.');
+      await loadAll();
+    } catch (err) {
+      toast(err.response?.data?.error || 'Could not save seller instructions');
+    } finally { setInspectionBusy(''); }
+  };
 
   // --------------------------------------------------------------------
   // Derived views
@@ -683,6 +725,62 @@ export default function Dashboard() {
               <StatTile label="Offers received" value={offersReceived.length} />
               <StatTile label="Confirmed sales" value={money(grossSales)} accent />
             </div>
+
+            <section className="panel" aria-labelledby="seller-inspection-review-title">
+              <div className="panel-head"><h3 id="seller-inspection-review-title">Inspection confirmations</h3></div>
+              <p className="muted">An agreed inspector cannot begin until you confirm. Other inspector bids remain visible in the competition.</p>
+              {sellerInspections.filter((r) => r.status === 'ACCEPTED' || r.status === 'IN_PROGRESS').length === 0 ? (
+                <p>No inspections are awaiting seller review.</p>
+              ) : sellerInspections.filter((r) => r.status === 'ACCEPTED' || r.status === 'IN_PROGRESS').map((r) => (
+                <div key={r.id} className="panel" style={{ marginTop: 12 }}>
+                  <strong>{r.listing?.title || r.listing?.cropType || 'Produce inspection'}</strong>
+                  <p>Inspector: {r.inspector?.name || 'Selected inspector'} · Agreed fee: {money(r.fee)}</p>
+                  <p>Status: {r.sellerConfirmedAt ? 'Seller confirmed' : 'Waiting for your confirmation'}{r.status === 'IN_PROGRESS' ? ' · Inspection in progress' : ''}</p>
+                  {r.sellerMessage && <p>Latest seller message: {r.sellerMessage}</p>}
+                  <label style={{ display: 'block', margin: '8px 0' }}>Message to buyer / inspector
+                    <select value={inspectionMessages[r.id] || ''} onChange={(e) => setInspectionMessages((old) => ({ ...old, [r.id]: e.target.value }))} style={{ display: 'block', width: '100%', marginTop: 4 }}>
+                      <option value="">Choose a message or write a custom one below</option>
+                      <option value="I confirm the selected inspector and agreed fee.">I confirm the selected inspector and agreed fee.</option>
+                      <option value="The produce is ready for inspection.">The produce is ready for inspection.</option>
+                      <option value="Please coordinate the inspection time with the buyer.">Please coordinate the inspection time with the buyer.</option>
+                      <option value="Please contact me before visiting.">Please contact me before visiting.</option>
+                      <option value="The produce is not ready yet; please wait.">The produce is not ready yet; please wait.</option>
+                    </select>
+                  </label>
+                  <textarea aria-label="Custom inspection message" placeholder="Or enter a custom message" value={inspectionMessages[r.id] || ''} onChange={(e) => setInspectionMessages((old) => ({ ...old, [r.id]: e.target.value }))} rows={2} style={{ display: 'block', width: '100%', marginBottom: 8 }} />
+                  <div className="action-grid">
+                    <button type="button" className="btn btn-outline" disabled={inspectionBusy === r.id} onClick={() => sendSellerInspectionMessage(r.id)}>Send instructions only</button>
+                    {!r.sellerConfirmedAt && r.status === 'ACCEPTED' && <button type="button" className="btn btn-primary" disabled={inspectionBusy === r.id} onClick={() => confirmSellerInspection(r.id)}>Confirm inspection</button>}
+                  </div>
+                </div>
+              ))}
+            </section>
+
+            <section className="panel" aria-labelledby="seller-transport-confirm-title">
+              <div className="panel-head"><h3 id="seller-transport-confirm-title">Transport pickup confirmations</h3></div>
+              <p className="muted">Confirm that the goods are ready before the selected transporter can mark them as picked up.</p>
+              {orders.filter((o) => o.sellerId === user?.id && o.transportJob && o.transportJob.status === 'ACCEPTED' && !o.transportJob.sellerPickupConfirmedAt).length === 0 ? (
+                <p>No transport pickups are awaiting your confirmation.</p>
+              ) : orders.filter((o) => o.sellerId === user?.id && o.transportJob && o.transportJob.status === 'ACCEPTED' && !o.transportJob.sellerPickupConfirmedAt).map((o) => {
+                const job = o.transportJob;
+                return <div key={job.id} className="panel" style={{ marginTop: 12 }}>
+                  <strong>{o.listing?.title || o.listing?.cropType || 'Order transport'}</strong>
+                  <p>Transporter: {job.truckOwner?.name || job.truckOwner?.user?.name || 'Selected transporter'} · Status: awaiting seller pickup confirmation</p>
+                  <p>Pickup: {job.pickupLocation || 'Not specified'} · Destination: {job.destination || 'Not specified'}</p>
+                  <label style={{ display: 'block', margin: '8px 0' }}>Message to transporter / buyer
+                    <select value={transportMessages[job.id] || ''} onChange={(e) => setTransportMessages((old) => ({ ...old, [job.id]: e.target.value }))} style={{ display: 'block', width: '100%', marginTop: 4 }}>
+                      <option value="">Choose a message or write a custom one below</option>
+                      <option value="The goods are ready for pickup. You may proceed after coordinating with the buyer.">The goods are ready for pickup.</option>
+                      <option value="Please contact me before loading the goods.">Please contact me before loading the goods.</option>
+                      <option value="The goods are not ready yet; please wait.">The goods are not ready yet; please wait.</option>
+                      <option value="Please coordinate the pickup time with the buyer.">Please coordinate the pickup time with the buyer.</option>
+                    </select>
+                  </label>
+                  <textarea aria-label="Custom transport pickup message" placeholder="Optional custom message" value={transportMessages[job.id] || ''} onChange={(e) => setTransportMessages((old) => ({ ...old, [job.id]: e.target.value }))} rows={2} style={{ display: 'block', width: '100%', marginBottom: 8 }} />
+                  <button type="button" className="btn btn-primary" disabled={transportBusy === job.id} onClick={() => confirmSellerTransportPickup(job.id)}>Confirm goods ready for pickup</button>
+                </div>;
+              })}
+            </section>
 
             <section className="panel">
               <div className="panel-head"><h3>Quick actions</h3></div>

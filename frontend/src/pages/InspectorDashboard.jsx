@@ -159,6 +159,7 @@ export default function InspectorDashboard() {
 
   const [feeInputs] = useState({});
   const [quoteAmountInputs, setQuoteAmountInputs] = useState({});
+  const [quoteMessageInputs, setQuoteMessageInputs] = useState({});
   const [submittingQuoteId, setSubmittingQuoteId] = useState('');
   const [quotedRequestIds, setQuotedRequestIds] = useState(() => new Set());
   const [quoteCounterInputs, setQuoteCounterInputs] = useState({});
@@ -277,6 +278,7 @@ export default function InspectorDashboard() {
     try {
       await api.post(`/inspections/${id}/quote`, {
         amount,
+        message: quoteMessageInputs[id] || undefined,
       });
 
       setMsg(
@@ -651,7 +653,6 @@ export default function InspectorDashboard() {
                               {listingTitle(r)}
                             </h3>
                             {createdLabel && <p className="sd-card-sub">{createdLabel}</p>}
-                            {r.workDetails?.workDescription && <p className="sd-card-sub">Work scope: {r.workDetails.workDescription}</p>}
                           </div>
 
                           <div className="sd-card-head-party">
@@ -673,9 +674,6 @@ export default function InspectorDashboard() {
                             </div>
                             <div className="sd-card-block-body">
                               <div className="sd-job-meta">
-                                {r.workDetails?.quantityToInspect && <div className="sd-job-meta-item"><span>Quantity to inspect</span><strong>{r.workDetails.quantityToInspect}</strong></div>}
-                                {r.workDetails?.lotCount && <div className="sd-job-meta-item"><span>Lots / batches</span><strong>{r.workDetails.lotCount}</strong></div>}
-                                {r.workDetails?.requiredBy && <div className="sd-job-meta-item"><span>Deadline</span><strong>{fmtDate(r.workDetails.requiredBy)}</strong></div>}
                                 {r.mode && (
                                   <div className="sd-job-meta-item">
                                     <span>Mode</span>
@@ -694,8 +692,6 @@ export default function InspectorDashboard() {
                                 </div>
                               </div>
                             </div>
-                            {Array.isArray(r.workDetails?.checks) && r.workDetails.checks.length > 0 && <div className="sd-job-requirements"><span className="sd-job-requirements-label">Required checks</span><p>{r.workDetails.checks.map((x) => ({ QUALITY_GRADE: 'Quality / grading', SIZE_WEIGHT: 'Size / weight', MOISTURE: 'Moisture', VISIBLE_DEFECTS: 'Visible defects', PACKAGING: 'Packaging', SAMPLING: 'Sampling / testing', PHOTOGRAPHS: 'Photos / evidence' }[x] || x)).join(' · ')}</p></div>}
-                            {r.workDetails?.reportRequirements && <div className="sd-job-requirements"><span className="sd-job-requirements-label">Report requirements</span><p>{r.workDetails.reportRequirements}</p></div>}
                           </section>
 
                           {/* Block 2 — Your quote (whenever a quote exists) */}
@@ -776,7 +772,20 @@ export default function InspectorDashboard() {
                                     />
                                   </div>
 
-
+                                  <div>
+                                    <label htmlFor={`quote-msg-${r.id}`}>Message (optional)</label>
+                                    <textarea
+                                      id={`quote-msg-${r.id}`}
+                                      placeholder="Optional message to the requester"
+                                      value={quoteMessageInputs[r.id] || ''}
+                                      onChange={(e) =>
+                                        setQuoteMessageInputs((q) => ({
+                                          ...q,
+                                          [r.id]: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
                                 </div>
                               </div>
                             </section>
@@ -903,7 +912,6 @@ export default function InspectorDashboard() {
                                   {listingTitle(r)}
                                 </h3>
                                 {createdLabel && <p className="sd-card-sub">{createdLabel}</p>}
-                            {r.workDetails?.workDescription && <p className="sd-card-sub">Work scope: {r.workDetails.workDescription}</p>}
                               </div>
 
                               <div className="sd-card-head-party">
@@ -946,6 +954,8 @@ export default function InspectorDashboard() {
                                   </div>
                                 </div>
                               </section>
+
+                              {r.sellerMessage && <p className="sd-card-foot">Seller instructions: {r.sellerMessage}</p>}
 
                               {/* Block 2 — Inspection details */}
                               <section className="sd-card-block">
@@ -993,13 +1003,11 @@ export default function InspectorDashboard() {
                               <div className="sd-card-actions">
                                 {r.status === 'ACCEPTED' && (
                                   <>
-                                    <button
-                                      type="button"
-                                      className="sd-btn sd-btn-primary"
-                                      onClick={() => startInspection(r.id)}
-                                    >
-                                      Start inspection
-                                    </button>
+                                    {r.sellerConfirmedAt ? (
+                                      <button type="button" className="sd-btn sd-btn-primary" onClick={() => startInspection(r.id)}>Start inspection</button>
+                                    ) : (
+                                      <p role="status">Waiting for seller confirmation. You cannot start or report yet.</p>
+                                    )}
 
                                     {acceptedQuote && !paid && (
                                       <button
