@@ -4,7 +4,6 @@ const {
   validationResult,
 } = require('express-validator');
 
-const { Prisma } = require('@prisma/client');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
@@ -12,7 +11,7 @@ const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { idempotency } = require('../middleware/idempotency');
 const { computePaymentDueAt, computeInspectionWorkflowDueAt } = require('../utils/orderTiming');
-const { noticeWaitingLocked, noticeWaitingUnlocked } = require('../services/waitingListService');
+const { noticeWaitingLocked, noticeWaitingUnlocked, noticeBuyerReleased } = require('../services/waitingListService');
 const { getMarketPriceReference, marketSnapshotData } = require('../services/marketPriceService');
 const {
   AMOUNT_LIMITS,
@@ -73,24 +72,31 @@ function validateNegotiationWindow(listing) {
   return null;
 }
 
+// Safety valve for a silent buyer. The seller can never reject a buyer in
+// negotiation, but may RELEASE a buyer who has not responded for a while.
+// Only when it is the buyer's turn: SELECTED (buyer has not answered) or a
+// seller counter (buyer has not answered it). 0 hours = allowed immediately.
+function releaseAfterHours() {
+  const configured = Number(process.env.OFFER_RELEASE_AFTER_HOURS);
+  return Number.isFinite(configured) && configured >= 0 ? configured : 72;
+}
+
+function releaseAvailableAt(offer) {
+  const buyersTurn =
+    offer.status === 'SELECTED' ||
+    (offer.status === 'COUNTERED' && offer.counteredBy === 'SELLER');
+  if (!buyersTurn) return null;
+  const since = new Date(offer.updatedAt || offer.createdAt).getTime();
+  if (!Number.isFinite(since)) return null;
+  return new Date(since + releaseAfterHours() * 60 * 60 * 1000);
+}
+
 function isOfferExpired(offer) {
   return Boolean(
     offer.expiresAt &&
     new Date(offer.expiresAt).getTime() <= Date.now()
   );
 }
-
-// A counter creates a child row and leaves its parent as COUNTERED for history.
-// Only the leaf of a chain may be acted on; otherwise a stale parent could be
-// accepted/countered at an outdated price, or branch the chain.
-async function assertLiveLeaf(tx, offer) {
-  const children = await tx.offer.count({ where: { parentOfferId: offer.id } });
-  if (children > 0) {
-    throw offerError('This offer was superseded by a newer counter. Refresh and try again.', 409);
-  }
-}
-
-const OPEN_OFFER_STATUSES = ['PENDING', 'SELECTED', 'COUNTERED'];
 
 async function expireOfferIfNeeded(tx, offer, actorId = null) {
   if (!offer || !isOfferExpired(offer)) return false;
@@ -227,37 +233,28 @@ router.post(
       const marketReference = await getMarketPriceReference(prisma, listing, { quantity: offerQuantity });
       const marketSnapshot = marketSnapshotData(marketReference, offerQuantity);
 
+      const existingOffer =
+        await prisma.offer.findFirst({
+          where: {
+            listingId,
+            buyerId: req.user.id,
+            status: {
+              in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'],
+            },
+            childOffers: { none: {} },
+          },
+        });
+
+      if (existingOffer) {
+        return res.status(409).json({
+          error:
+            'You already have an active negotiation on this listing',
+          offer: existingOffer,
+        });
+      }
+
       const offer = await prisma.$transaction(
         async (tx) => {
-          // Serialize offer creation per listing so two concurrent requests from
-          // the same buyer cannot both pass the "no active negotiation" check
-          // (the unique index that used to guard this was intentionally dropped).
-          await tx.$queryRaw`SELECT "id" FROM "Listing" WHERE "id" = ${listingId} FOR UPDATE`;
-
-          // An ACCEPTED offer only blocks while its order is still live. Once the
-          // order is COMPLETED or CANCELLED the buyer may bid on remaining stock.
-          const existingOffer = await tx.offer.findFirst({
-            where: {
-              listingId,
-              buyerId: req.user.id,
-              childOffers: { none: {} },
-              OR: [
-                { status: { in: OPEN_OFFER_STATUSES } },
-                {
-                  status: 'ACCEPTED',
-                  agreedOrder: { is: { status: { notIn: ['CANCELLED', 'COMPLETED'] } } },
-                },
-              ],
-            },
-          });
-
-          if (existingOffer) {
-            throw Object.assign(
-              offerError('You already have an active negotiation on this listing', 409),
-              { offer: existingOffer }
-            );
-          }
-
           const createdOffer =
             await tx.offer.create({
               data: {
@@ -297,10 +294,6 @@ router.post(
         offer,
       });
     } catch (error) {
-      if (error?.statusCode === 409 && error.offer) {
-        return res.status(409).json({ error: error.message, offer: error.offer });
-      }
-
       req.log.error({ err: error }, 'CREATE OFFER ERROR:');
 
       if (error?.code === 'P2002') {
@@ -451,7 +444,6 @@ router.get(
             },
 
             include: {
-              agreedOrder: { select: { id: true, status: true } },
               buyer: {
                 select: {
                   id: true,
@@ -468,8 +460,12 @@ router.get(
             },
           });
 
+        const supersededIds = new Set(offers.map((o) => o.parentOfferId).filter(Boolean));
         return res.json({
-          offers,
+          offers: offers.map((o) => ({
+            ...o,
+            releaseAvailableAt: supersededIds.has(o.id) ? null : releaseAvailableAt(o),
+          })),
           count: offers.length,
         });
       }
@@ -575,21 +571,13 @@ async function acceptOfferAndCreateOrder(
 
   // amount is the negotiated PER-UNIT price. The order/payment amount is the
   // immutable server-calculated total.
-  // Decimal math avoids float drift (e.g. 0.285 * 100 = 28.499999999999996).
-  const totalPrice = new Prisma.Decimal(unitPrice)
-    .mul(new Prisma.Decimal(requestedQuantity))
-    .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)
-    .toNumber();
+  const totalPrice = Math.round(unitPrice * requestedQuantity * 100) / 100;
   const minimumUnitPrice = lockedListing.minAcceptablePrice == null
     ? null
     : Number(lockedListing.minAcceptablePrice);
   if (minimumUnitPrice != null && Number.isFinite(minimumUnitPrice) && unitPrice < minimumUnitPrice) {
-    // The minimum is private to the seller. Never echo it to the buyer.
-    const actorIsSeller = String(actorId) === String(sellerId);
     throw offerError(
-      actorIsSeller
-        ? `Offer price is below your minimum acceptable unit price of ${minimumUnitPrice.toFixed(2)} ETB`
-        : 'This price cannot be accepted by the seller. Try a different price.',
+      `Offer price is below the seller's minimum acceptable unit price of ${minimumUnitPrice.toFixed(2)} ETB`,
       409
     );
   }
@@ -756,6 +744,7 @@ router.patch(
         'RE_COUNTER',
         'SELECT',
         'WITHDRAW',
+        'RELEASE',
       ];
 
       if (
@@ -802,7 +791,7 @@ router.patch(
         });
       }
 
-      if (OPEN_OFFER_STATUSES.includes(offer.status) && isOfferExpired(offer)) {
+      if (isOfferExpired(offer)) {
         await prisma.$transaction(async (tx) => {
           await expireOfferIfNeeded(tx, offer, req.user.id);
         }, { maxWait: 10000, timeout: 15000 });
@@ -957,7 +946,6 @@ router.patch(
             throw offerError('This selected bid has expired and can no longer be accepted', 409);
           }
           if (fresh.status !== 'SELECTED') throw offerError('This selected bid is no longer available', 409);
-          await assertLiveLeaf(tx, fresh);
           return acceptOfferAndCreateOrder(tx, fresh, Number(fresh.amount), fresh.listing.sellerId, req.user.id);
         }, { maxWait: 10000, timeout: 15000 });
         return res.json({ message: 'Selected buyer bid accepted and order created successfully', offer: result.offer, order: result.order, transportAutomaticallyAssigned: false });
@@ -1030,7 +1018,6 @@ router.patch(
                   409
                 );
               }
-              await assertLiveLeaf(tx, freshOffer);
 
               if (freshOffer.status === 'COUNTERED' && freshOffer.counteredBy !== 'SELLER') {
                 throw offerError(
@@ -1142,7 +1129,6 @@ router.patch(
                   409
                 );
               }
-              await assertLiveLeaf(tx, freshOffer);
 
               if (
                 freshOffer.status === 'COUNTERED' &&
@@ -1270,7 +1256,6 @@ router.patch(
                   409
                 );
               }
-              await assertLiveLeaf(tx, freshOffer);
 
               if (
                 freshOffer.status ===
@@ -1330,6 +1315,95 @@ router.patch(
       }
 
       // ======================================================================
+      // SELLER RELEASES A SILENT BUYER (safety valve, not a rejection)
+      //  - Seller never rejects. A release is only possible when it is the
+      //    buyer's turn and the buyer has been inactive for the configured time.
+      //  - The released offer becomes WITHDRAWN ("Released"); the buyer may bid
+      //    again and the seller may select another waiting bid.
+      // ======================================================================
+
+      if (action === 'RELEASE') {
+        if (!isSeller && !admin) {
+          return res.status(403).json({ error: 'Only the seller can release a buyer' });
+        }
+
+        const availableAt = releaseAvailableAt(offer);
+        if (!availableAt) {
+          return res.status(409).json({
+            error: 'You can release a buyer only while you are waiting for the buyer to respond. Accept or counter the buyer\'s latest price instead.',
+          });
+        }
+        if (!admin && availableAt.getTime() > Date.now()) {
+          return res.status(409).json({
+            error: `The buyer has not been inactive long enough. You can release this buyer from ${availableAt.toISOString()}.`,
+            releaseAvailableAt: availableAt,
+          });
+        }
+
+        const released = await prisma.$transaction(
+          async (tx) => {
+            const freshOffer = await tx.offer.findUnique({ where: { id: offer.id } });
+            if (!freshOffer) throw offerError('Offer not found', 404);
+
+            const freshAvailableAt = releaseAvailableAt(freshOffer);
+            if (!freshAvailableAt || (!admin && freshAvailableAt.getTime() > Date.now())) {
+              throw offerError('This negotiation changed. Refresh and try again.', 409);
+            }
+
+            const superseded = await tx.offer.count({ where: { parentOfferId: freshOffer.id } });
+            if (superseded > 0) {
+              throw offerError('This offer was superseded by a newer counter. Refresh and try again.', 409);
+            }
+
+            const updatedOffer = await tx.offer.update({
+              where: { id: freshOffer.id },
+              data: { status: 'WITHDRAWN' },
+            });
+
+            const remainingActiveLeafOffers = await tx.offer.count({
+              where: {
+                listingId: freshOffer.listingId,
+                status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
+                childOffers: { none: {} },
+              },
+            });
+
+            if (remainingActiveLeafOffers === 0) {
+              await tx.listing.update({
+                where: { id: freshOffer.listingId },
+                data: { status: 'ACTIVE' },
+              });
+            }
+
+            await recordAuditEvent(tx, {
+              actorId: req.user.id,
+              action: 'OFFER_RELEASED',
+              resourceType: 'Offer',
+              resourceId: updatedOffer.id,
+              metadata: {
+                listingId: freshOffer.listingId,
+                buyerId: freshOffer.buyerId,
+                previousStatus: freshOffer.status,
+                inactiveSince: freshOffer.updatedAt,
+                remainingActiveLeafOffers,
+              },
+            });
+
+            return updatedOffer;
+          },
+          { maxWait: 10000, timeout: 15000 }
+        );
+
+        await noticeBuyerReleased(prisma, { listingId: released.listingId, offerId: released.id, buyerId: released.buyerId });
+        await noticeWaitingUnlocked(prisma, { listingId: released.listingId, reason: 'SELLER_RELEASED' });
+
+        return res.json({
+          message: 'Buyer released. You can now select another waiting bid.',
+          offer: released,
+        });
+      }
+
+      // ======================================================================
       // REJECT (buyer only) / WITHDRAW (buyer only, waiting bid)
       //  - The seller can NEVER reject or release a bid: they select, accept or
       //    counter. Waiting bids are locked for the seller.
@@ -1343,7 +1417,7 @@ router.patch(
 
         if (isSeller && !admin) {
           return res.status(403).json({
-            error: 'Sellers cannot reject or release bids. Select, accept or counter; waiting bids stay locked until the negotiation or order ends.',
+            error: 'Sellers cannot reject bids. Select, accept or counter. If a selected buyer stays silent you can release them after the inactivity period. Waiting bids stay locked until the negotiation or order ends.',
           });
         }
 
@@ -1403,22 +1477,10 @@ router.patch(
               });
 
               if (remainingActiveLeafOffers === 0) {
-                const liveOrder = await tx.order.findFirst({
-                  where: {
-                    listingId: freshOffer.listingId,
-                    status: { notIn: ['CANCELLED', 'COMPLETED'] },
-                  },
-                  select: { id: true },
+                await tx.listing.update({
+                  where: { id: freshOffer.listingId },
+                  data: { status: 'ACTIVE' },
                 });
-
-                // Only an UNDER_NEGOTIATION listing goes back to ACTIVE. Never
-                // overwrite SOLD / CANCELLED / EXPIRED / DRAFT.
-                if (!liveOrder) {
-                  await tx.listing.updateMany({
-                    where: { id: freshOffer.listingId, status: 'UNDER_NEGOTIATION' },
-                    data: { status: 'ACTIVE' },
-                  });
-                }
               }
 
               await recordAuditEvent(tx, {
@@ -1529,7 +1591,6 @@ router.patch(
                   409
                 );
               }
-              await assertLiveLeaf(tx, freshOffer);
 
               if (
                 freshOffer.status ===
