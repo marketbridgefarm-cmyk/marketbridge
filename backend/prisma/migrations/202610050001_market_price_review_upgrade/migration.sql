@@ -1,6 +1,5 @@
 -- Market-price evidence snapshots and immutable original order price.
 ALTER TABLE "Offer"
-  ADD COLUMN "negotiationDeadlineAt" TIMESTAMP(3),
   ADD COLUMN "marketReferenceUnitPrice" DECIMAL(18,2),
   ADD COLUMN "marketReferenceTotalPrice" DECIMAL(18,2),
   ADD COLUMN "marketReferenceSource" TEXT,
@@ -36,5 +35,4 @@ ALTER TABLE "PriceReview"
   ADD COLUMN "adjustmentPercent" DOUBLE PRECISION,
   ADD COLUMN "calculationVersion" TEXT;
 
-CREATE INDEX "Offer_negotiationDeadlineAt_idx" ON "Offer"("negotiationDeadlineAt");
 CREATE INDEX "PriceReview_marketReferenceDate_idx" ON "PriceReview"("marketReferenceDate");
