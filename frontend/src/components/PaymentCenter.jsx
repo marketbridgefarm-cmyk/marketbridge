@@ -318,7 +318,7 @@ export default function PaymentCenter({
             processing={row.processing}
             note={row.note}
           >
-            {isBuyer && !row.paid && (
+            {row.canPay && !row.paid && (
               <div className="pc-row-actions">
                 {row.canCheck ? (
                   <button
