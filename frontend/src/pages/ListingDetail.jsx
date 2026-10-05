@@ -157,10 +157,11 @@ export default function ListingDetail() {
   const isAgricultural = listing.category === 'AGRICULTURAL';
   const isProduct = listing.category === 'PRODUCT';
 
-  const marketUnitPrice = Number(marketInsight?.marketReference?.unitPrice);
-  const offerReferencePrice = Number.isFinite(marketUnitPrice) && marketUnitPrice > 0
-    ? marketUnitPrice
-    : Number(listing.askingPrice);
+  // The market reference is advisory only. It must never determine the
+  // selectable offer/bid amounts. Keep the picker anchored to the seller's
+  // current asking price so market data cannot unexpectedly constrain the
+  // buyer's negotiation range.
+  const offerReferencePrice = Number(listing.askingPrice);
 
   const isAvailable =
     listing.status === 'ACTIVE' ||
@@ -602,7 +603,7 @@ export default function ListingDetail() {
                         <p className="muted" style={{ margin: '4px 0 0' }}>
                           {money(marketInsight.marketReference.unitPrice)} ETB / {listing.unit || 'unit'} · {marketInsight.marketReference.sampleSize || 1} comparable {marketInsight.marketReference.source === 'RECENT_COMPLETED_ORDERS' ? 'completed sales' : 'listings'}
                         </p>
-                        <p className="muted small" style={{ margin: '4px 0 0' }}>This is an advisory reference for negotiation. It does not change your offer automatically.</p>
+                        <p className="muted small" style={{ margin: '4px 0 0' }}>Informational only. It does not determine the selectable bid/offer amounts or change your offer automatically.</p>
                       </div>
                     )}
                     <form onSubmit={submitOffer}>
