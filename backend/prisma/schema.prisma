@@ -712,6 +712,23 @@ model Offer {
 
   expiresAt DateTime?
 
+  // Absolute deadline for the whole buyer/seller negotiation chain. Each
+  // response timer may be shorter, but counters cannot extend this deadline.
+  negotiationDeadlineAt DateTime?
+
+  // Snapshot of the market reference used when this offer/counter was made.
+  // These are informational/audit values; they never silently change the
+  // negotiated price.
+  marketReferenceUnitPrice Decimal? @db.Decimal(18, 2)
+  marketReferenceTotalPrice Decimal? @db.Decimal(18, 2)
+  marketReferenceSource String?
+  marketReferenceDate DateTime?
+  marketReferenceLocation String?
+  marketReferenceUnit String?
+  marketSampleSize Int?
+  marketMinUnitPrice Decimal? @db.Decimal(18, 2)
+  marketMaxUnitPrice Decimal? @db.Decimal(18, 2)
+
   status OfferStatus @default(PENDING)
 
   counterAmount Decimal? @db.Decimal(18, 2)
@@ -913,6 +930,12 @@ model Order {
   sellerId String
 
   finalPrice Decimal @db.Decimal(18, 2)
+
+  // Immutable total price established by the accepted negotiation. If a later
+  // inspection price review changes finalPrice, this field remains unchanged
+  // so the original agreement is always auditable.
+  originalFinalPrice Decimal? @db.Decimal(18, 2)
+
   quantity   Float
 
   status OrderStatus @default(PENDING_PAYMENT)
@@ -1997,6 +2020,24 @@ model PriceReview {
   proposedById String
   proposedPrice Decimal @db.Decimal(18, 2)
   reasonCode String
+
+  // Evidence/snapshot used to calculate or justify the proposal.
+  marketReferenceUnitPrice Decimal? @db.Decimal(18, 2)
+  marketReferenceTotalPrice Decimal? @db.Decimal(18, 2)
+  marketReferenceSource String?
+  marketReferenceDate DateTime?
+  marketReferenceLocation String?
+  marketReferenceUnit String?
+  marketSampleSize Int?
+  marketMinUnitPrice Decimal? @db.Decimal(18, 2)
+  marketMaxUnitPrice Decimal? @db.Decimal(18, 2)
+  originalUnitPrice Decimal? @db.Decimal(18, 2)
+  inspectedQuantity Float?
+  quantityAdjustedPrice Decimal? @db.Decimal(18, 2)
+  suggestedPrice Decimal? @db.Decimal(18, 2)
+  adjustmentAmount Decimal? @db.Decimal(18, 2)
+  adjustmentPercent Float?
+  calculationVersion String?
   status String @default("PENDING") // PENDING, COUNTERED, ACCEPTED, REJECTED
   parent PriceReview? @relation("PriceReviewChain", fields: [parentId], references: [id])
   parentId String?
