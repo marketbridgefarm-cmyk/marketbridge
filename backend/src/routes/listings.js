@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
+const { getMarketPriceReference } = require('../services/marketPriceService');
 const { authenticate, optionalAuthenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
@@ -1763,121 +1764,51 @@ router.get(
   authenticate,
   async (req, res) => {
     try {
-      const listing =
-        await prisma.listing.findUnique({
-          where: {
-            id: req.params.id,
+      const listing = await prisma.listing.findUnique({
+        where: { id: req.params.id },
+        select: {
+          id: true, sellerId: true, category: true, title: true, cropType: true,
+          quantity: true, availableQuantity: true, unit: true, askingPrice: true,
+          location: true, region: true, status: true,
+          offers: {
+            where: { status: { in: ['PENDING', 'COUNTERED', 'SELECTED'] } },
+            select: { id: true, amount: true, quantity: true, status: true, counterAmount: true },
           },
+        },
+      });
 
-          include: {
-            offers: {
-              where: {
-                status: {
-                  in: [
-                    'PENDING',
-                    'COUNTERED',
-                  ],
-                },
-              },
-            },
-          },
-        });
+      if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
-      if (!listing) {
-        return res.status(404).json({
-          error: 'Listing not found',
-        });
-      }
+      const marketReference = await getMarketPriceReference(prisma, listing);
+      const bestOffer = listing.offers.reduce((max, offer) => {
+        const value = Number(offer.counterAmount ?? offer.amount);
+        return Number.isFinite(value) && value > Number(max?.amount ?? 0) ? offer : max;
+      }, null);
 
-      const recentSimilar =
-        await prisma.listing.findMany({
-          where: {
-            cropType:
-              listing.cropType,
-            status: 'SOLD',
-          },
-
-          orderBy: {
-            updatedAt: 'desc',
-          },
-
-          take: 10,
-
-          select: {
-            askingPrice: true,
-            updatedAt: true,
-          },
-        });
-
-      const bestOffer =
-        listing.offers.reduce(
-          (max, offer) =>
-            Number(offer.amount || 0) >
-            Number(max?.amount || 0)
-              ? offer
-              : max,
-          null
-        );
-
-      const estimatedTransportCost =
-        req.query.estTransportCost
-          ? Number(
-              req.query
-                .estTransportCost
-            )
-          : 0;
-
-      const estimatedInspectionCost =
-        req.query.estInspectionCost
-          ? Number(
-              req.query
-                .estInspectionCost
-            )
-          : 0;
-
+      const estimatedTransportCost = req.query.estTransportCost ? Number(req.query.estTransportCost) : 0;
+      const estimatedInspectionCost = req.query.estInspectionCost ? Number(req.query.estInspectionCost) : 0;
       const platformFeeRate = 0.03;
-
-      const grossOffer =
-        bestOffer?.amount ||
-        listing.askingPrice;
-
-      const platformFee =
-        grossOffer *
-        platformFeeRate;
-
-      const estimatedNetRevenue =
-        grossOffer -
-        estimatedTransportCost -
-        estimatedInspectionCost -
-        platformFee;
+      const grossOffer = bestOffer?.counterAmount ?? bestOffer?.amount ?? listing.askingPrice;
+      const gross = Number(grossOffer || 0);
+      const platformFee = gross * platformFeeRate;
+      const estimatedNetRevenue = gross - estimatedTransportCost - estimatedInspectionCost - platformFee;
 
       return res.json({
-        recentMarketPrices:
-          recentSimilar,
-
-        demand: {
-          competingOffers:
-            listing.offers.length,
-        },
-
+        marketReference,
+        recentMarketPrices: marketReference?.samples || [],
+        demand: { competingOffers: listing.offers.length },
         bestOffer,
-
         estimatedNetRevenue,
-
-        breakdown: {
-          grossOffer,
-          estimatedTransportCost,
-          estimatedInspectionCost,
-          platformFee,
+        breakdown: { grossOffer, estimatedTransportCost, estimatedInspectionCost, platformFee },
+        calculation: {
+          version: marketReference?.calculationVersion || null,
+          basis: marketReference?.source || null,
+          note: 'Market reference is advisory. It never changes a listing or negotiated order automatically.',
         },
       });
     } catch (error) {
       req.log.error({ err: error }, 'PRICE INSIGHTS ERROR:');
-
-      return res.status(500).json({
-        error:
-          'Could not load price insights',
-      });
+      return res.status(500).json({ error: 'Could not load price insights' });
     }
   }
 );

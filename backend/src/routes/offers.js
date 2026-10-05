@@ -12,6 +12,7 @@ const { recordOrderEvent } = require('../services/orderEventService');
 const { idempotency } = require('../middleware/idempotency');
 const { computePaymentDueAt, computeInspectionWorkflowDueAt } = require('../utils/orderTiming');
 const { promoteNextWaitingBuyer } = require('../services/orderCancellationService');
+const { getMarketPriceReference, marketSnapshotData } = require('../services/marketPriceService');
 const {
   AMOUNT_LIMITS,
   amountProblem,
@@ -49,19 +50,26 @@ function offerError(message, statusCode = 400) {
   return error;
 }
 
-function offerExpiry(hours = 24, listing = null) {
-  const standardExpiry = Date.now() + hours * 60 * 60 * 1000;
+function negotiationDeadline(listing, from = new Date()) {
+  const configuredHours = Number(process.env.OFFER_NEGOTIATION_DEADLINE_HOURS);
+  const hours = Number.isFinite(configuredHours) && configuredHours > 0 ? configuredHours : 48;
+  const absolute = from.getTime() + hours * 60 * 60 * 1000;
 
-  // Perishable agricultural listings should not keep a negotiation alive
-  // beyond the advertised pickup window.
   if (listing?.category === 'AGRICULTURAL' && listing.pickupWindowEnd) {
     const pickupDeadline = new Date(listing.pickupWindowEnd).getTime();
-    if (Number.isFinite(pickupDeadline)) {
-      return new Date(Math.min(standardExpiry, pickupDeadline));
-    }
+    if (Number.isFinite(pickupDeadline)) return new Date(Math.min(absolute, pickupDeadline));
   }
 
-  return new Date(standardExpiry);
+  return new Date(absolute);
+}
+
+function offerExpiry(hours = 24, listing = null, absoluteDeadline = null) {
+  const standardExpiry = Date.now() + hours * 60 * 60 * 1000;
+  const pickupOrStandard = listing?.category === 'AGRICULTURAL' && listing.pickupWindowEnd
+    ? Math.min(standardExpiry, new Date(listing.pickupWindowEnd).getTime())
+    : standardExpiry;
+  const deadlineMs = absoluteDeadline ? new Date(absoluteDeadline).getTime() : Infinity;
+  return new Date(Math.min(pickupOrStandard, deadlineMs));
 }
 
 function validateNegotiationWindow(listing) {
@@ -211,10 +219,16 @@ router.post(
         return res.status(409).json({ error: negotiationWindowError });
       }
 
-      const negotiationExpiresAt = offerExpiry(24, listing);
-      if (negotiationExpiresAt.getTime() <= Date.now()) {
-        return res.status(409).json({ error: 'The agricultural pickup window is too close or has expired.' });
+      const negotiationDeadlineAt = negotiationDeadline(listing);
+      const negotiationExpiresAt = offerExpiry(24, listing, negotiationDeadlineAt);
+      if (negotiationExpiresAt.getTime() <= Date.now() || negotiationDeadlineAt.getTime() <= Date.now()) {
+        return res.status(409).json({ error: 'The negotiation window is too close or has expired.' });
       }
+
+      // Market price is a reference snapshot for this negotiation only. It never
+      // changes the buyer's submitted amount or the seller's asking price.
+      const marketReference = await getMarketPriceReference(prisma, listing, { quantity: offerQuantity });
+      const marketSnapshot = marketSnapshotData(marketReference, offerQuantity);
 
       const existingOffer =
         await prisma.offer.findFirst({
@@ -247,6 +261,8 @@ router.post(
                 amount,
                 quantity: offerQuantity,
                 expiresAt: negotiationExpiresAt,
+                negotiationDeadlineAt,
+                ...marketSnapshot,
                 message,
                 status: 'PENDING',
                 counterAmount: null,
@@ -338,6 +354,16 @@ router.get(
             counteredBy: true,
             message: true,
             expiresAt: true,
+            negotiationDeadlineAt: true,
+            marketReferenceUnitPrice: true,
+            marketReferenceTotalPrice: true,
+            marketReferenceSource: true,
+            marketReferenceDate: true,
+            marketReferenceLocation: true,
+            marketReferenceUnit: true,
+            marketSampleSize: true,
+            marketMinUnitPrice: true,
+            marketMaxUnitPrice: true,
             parentOfferId: true,
             createdAt: true,
             updatedAt: true,
@@ -592,6 +618,7 @@ async function acceptOfferAndCreateOrder(
         buyerId: offer.buyerId,
         sellerId,
         finalPrice: totalPrice,
+        originalFinalPrice: totalPrice,
         quantity: requestedQuantity,
         status: 'PENDING_PAYMENT',
         agreedOfferId: updatedOffer.id,
@@ -1016,6 +1043,7 @@ router.patch(
 
         const numericCounter =
           Number(counterAmount);
+        const marketReference = await getMarketPriceReference(prisma, offer.listing, { quantity: offer.quantity });
 
         const updated =
           await prisma.$transaction(
@@ -1066,7 +1094,7 @@ router.patch(
                 throw offerError(negotiationWindowError, 409);
               }
 
-              const counterExpiresAt = offerExpiry(12, freshOffer.listing);
+              const counterExpiresAt = offerExpiry(12, freshOffer.listing, freshOffer.negotiationDeadlineAt);
               if (counterExpiresAt.getTime() <= Date.now()) {
                 throw offerError('The agricultural pickup window is too close or has expired.', 409);
               }
@@ -1088,6 +1116,8 @@ router.patch(
                   counteredBy: 'BUYER',
                   parentOfferId: freshOffer.id,
                   expiresAt: counterExpiresAt,
+                  negotiationDeadlineAt: freshOffer.negotiationDeadlineAt,
+                  ...marketSnapshotData(marketReference, freshOffer.quantity),
                   message: freshOffer.message,
                 },
               });
@@ -1369,6 +1399,7 @@ router.patch(
 
         const numericCounter =
           Number(counterAmount);
+        const marketReference = await getMarketPriceReference(prisma, offer.listing, { quantity: offer.quantity });
 
         const updated =
           await prisma.$transaction(
@@ -1420,7 +1451,7 @@ router.patch(
                 throw offerError(negotiationWindowError, 409);
               }
 
-              const counterExpiresAt = offerExpiry(12, freshOffer.listing);
+              const counterExpiresAt = offerExpiry(12, freshOffer.listing, freshOffer.negotiationDeadlineAt);
               if (counterExpiresAt.getTime() <= Date.now()) {
                 throw offerError('The agricultural pickup window is too close or has expired.', 409);
               }
@@ -1442,6 +1473,8 @@ router.patch(
                   counteredBy: 'SELLER',
                   parentOfferId: freshOffer.id,
                   expiresAt: counterExpiresAt,
+                  negotiationDeadlineAt: freshOffer.negotiationDeadlineAt,
+                  ...marketSnapshotData(marketReference, freshOffer.quantity),
                   message: freshOffer.message,
                 },
               });
