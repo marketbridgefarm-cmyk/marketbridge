@@ -137,6 +137,29 @@ function buildPaymentSnapshot(order) {
     (currentInspectionRequest.status === 'COMPLETED' && Boolean(currentInspectionRequest.report));
   const transportPaid = !transport || transport.paid;
 
+  // ---------------------------------------------------------------------------
+  // BUYER-SAFE COORDINATION SUMMARY
+  // ---------------------------------------------------------------------------
+  // Seller <-> inspector site coordination is NOT buyer-visible. This object
+  // only tells the buyer *whether* the operational handoff has started, so
+  // the UI can show "Coordination in progress" without exposing any contact
+  // data. It deliberately mirrors the shape added to GET /orders/:id so the
+  // two endpoints agree.
+  //
+  // Never add sellerPhone, inspectorPhone, emails, sites, meeting points,
+  // or availability slots here — the coordination row itself must never be
+  // forwarded on this route. The participant-gated
+  // GET /inspections/:id/coordination is the only place those fields are
+  // returned.
+  const coordination = currentInspectionRequest
+    ? {
+        opened: ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(currentInspectionRequest.status),
+        sellerSubmitted: Boolean(currentInspectionRequest.coordination?.sellerSubmittedAt),
+        inspectorSubmitted: Boolean(currentInspectionRequest.coordination?.inspectorSubmittedAt),
+        supersededAt: currentInspectionRequest.coordination?.supersededAt || null,
+      }
+    : null;
+
   return {
     marketplace,
     inspections,
@@ -149,6 +172,7 @@ function buildPaymentSnapshot(order) {
       requestedById: r.requestedById,
       fee: r.fee,
     })),
+    coordination,
     allInspectionsPaid,
     allInspectionsCompleted,
     allPaid: marketplace.paid && allInspectionsPaid && transportPaid,
