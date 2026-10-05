@@ -2111,3 +2111,36 @@
     padding-bottom: calc(var(--sd-nav-h) + env(safe-area-inset-bottom, 0px) + 32px);
   }
 }
+
+/* ==========================================================================
+   INSPECTION COORDINATION — inspector variant
+   ========================================================================== */
+.inspection-coordination--inspector {
+  margin-top: 16px;
+  padding: 0;
+  border: 1px solid #e5e9ef;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.inspection-coordination--inspector .ic-header {
+  padding: 14px 16px 0;
+}
+.inspection-coordination--inspector .ic-form,
+.inspection-coordination--inspector .ic-availability,
+.inspection-coordination--inspector .ic-inspector-side {
+  padding: 0 16px 16px;
+}
+.inspection-coordination--inspector .ic-inspector-side {
+  padding-top: 16px;
+}
+.inspection-coordination--inspector h4 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.inspection-coordination--inspector fieldset {
+  background: #fff;
+}
+.inspection-coordination--inspector .ic-footnote {
+  padding: 10px 16px 14px;
+  margin-top: 0;
+}
