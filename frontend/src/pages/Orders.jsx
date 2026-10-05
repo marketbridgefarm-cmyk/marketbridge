@@ -135,6 +135,49 @@ function progressFor(order) {
   });
 }
 
+// ============================================================================
+// BUYER-SAFE COORDINATION INDICATOR
+// ----------------------------------------------------------------------------
+// The seller <-> inspector site handoff is not buyer-visible in content.
+// This derives a *status string only* from the newest non-cancelled
+// inspection request. It never touches contact fields — the payload from
+// GET /orders does not even contain them (see orders.js PATCH B1).
+//
+// Rules:
+//   • No inspection request             → null (no chip rendered)
+//   • Status below ACCEPTED             → null (coordination not yet open)
+//   • ACCEPTED or later, neither shared → "Coordination in progress"
+//   • Exactly one side shared           → "Coordination in progress"
+//   • Both sides shared                 → "Site handoff complete"
+//   • Handoff was superseded            → "Handoff released"
+// ============================================================================
+function coordinationChipFor(order) {
+  const requests = Array.isArray(order?.inspectionRequests)
+    ? order.inspectionRequests.filter((r) => r && r.status !== 'CANCELLED')
+    : [];
+  if (requests.length === 0) return null;
+
+  // Newest request is the canonical one (matches orderWorkflowService.js).
+  const sorted = [...requests].sort(
+    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
+  const current = sorted[0];
+
+  const status = String(current.status || '').toUpperCase();
+  if (!['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(status)) return null;
+
+  const summary = current.coordinationStatus;
+  if (!summary) return null;
+
+  if (summary.supersededAt) {
+    return { tone: 'muted', text: 'Handoff released' };
+  }
+  if (summary.sellerSubmitted && summary.inspectorSubmitted) {
+    return { tone: 'success', text: 'Site handoff complete' };
+  }
+  return { tone: 'gold', text: 'Coordination in progress' };
+}
+
 const STAT_TONES = {
   accent:  { ring: '#1e9e5a', ink: '#0f7a44' },
   info:    { ring: '#1e5fa8', ink: '#1e5fa8' },
@@ -267,6 +310,10 @@ function OrderCard({ order, currentUserId }) {
     ? new Date(order.createdAt).toLocaleDateString()
     : null;
 
+  // Buyer-safe coordination chip. Renders only when coordination is actually
+  // open on this order. Never exposes names, phones, emails, or times.
+  const coordinationChip = coordinationChipFor(order);
+
   return (
     <article className="order-card">
       <div className="order-card-head">
@@ -276,10 +323,6 @@ function OrderCard({ order, currentUserId }) {
           </span>
           <h2 className="order-title" title={title}>{title}</h2>
 
-          {/* Location replaces the old created-date line. The
-              `order-date` class is reused purely for its muted small-text
-              styling — the class name is now slightly misnamed but the
-              visual is exactly what we want here. */}
           {locationLabel && (
             <p className="order-date" title={locationLabel}>
               <svg
@@ -349,6 +392,17 @@ function OrderCard({ order, currentUserId }) {
                 <span className={`status-pill tone-${statusTone(transportJob.status)}`}>
                   Transport: {transportJob.status}
                   {transportStatus ? ` · ${transportStatus}` : ''}
+                </span>
+              )}
+
+              {/* ★ Buyer-safe coordination status. Renders only when the
+                  inspection is ACCEPTED or later and coordination is actually
+                  open. Content (names, phones, sites, times) is never exposed
+                  on this list view. */}
+              {coordinationChip && (
+                <span className={`status-pill tone-${coordinationChip.tone}`}>
+                  <span className="status-pill-dot" aria-hidden="true" />
+                  {coordinationChip.text}
                 </span>
               )}
             </div>
