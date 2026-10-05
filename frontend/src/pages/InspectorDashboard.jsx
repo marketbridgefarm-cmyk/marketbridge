@@ -8,6 +8,7 @@ import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import RecentActivity from '../components/RecentActivity.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/InspectorDashboard.css';
+import InspectionCoordinationInspector from '../components/InspectionCoordinationInspector.jsx';
 
 const EMPTY_REPORT = {
   quantity: '',
@@ -811,6 +812,16 @@ export default function InspectorDashboard() {
 
                           {createdLabel && <p className="sd-card-foot">Created {createdLabel}</p>}
 
+                         {/* ★ Site handoff — seller <-> inspector coordination.
+    Visible only to the assigned inspector on this
+    request; the server gates it by inspection
+    status and viewer role. */}
+{['ACCEPTED', 'IN_PROGRESS'].includes(r.status) && (
+  <InspectionCoordinationInspector
+    inspectionRequestId={r.id}
+  />
+)}
+                          
                           {/* Footer */}
                           {(canQuote || isMyTurn) && (
                             <div className="sd-card-actions">
