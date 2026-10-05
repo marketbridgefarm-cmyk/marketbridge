@@ -31,6 +31,14 @@ function supersededIds(quotes) {
   return ids;
 }
 
+// Amount currently on the table (the latest counter, if any).
+function shownAmount(q) {
+  const v = (q.status === 'COUNTERED' || q.status === 'ACCEPTED') && q.counterAmount != null
+    ? q.counterAmount
+    : q.amount;
+  return Number(v) || 0;
+}
+
 function providerOf(quote) {
   return quote.inspector || quote.truckOwner || quote.provider || {};
 }
@@ -81,6 +89,8 @@ function BidRow({ quote, type, onRespond, disabled }) {
     try {
       await onRespond(quote, action, action === 'COUNTER' ? counterAmount : undefined);
       if (action === 'COUNTER') { setShowCounter(false); setCounterAmount(''); }
+    } catch (_) {
+      // The host reports the error; keep the counter form open so nothing typed is lost.
     } finally {
       setBusy('');
     }
@@ -270,7 +280,7 @@ export default function BidBoard({ quotes, type, requestId, orderLink, onRespond
   );
 
   const sorted = [...leafActive].sort((a, b) => {
-    if (sortBy === 'price') return (a.amount || 0) - (b.amount || 0);
+    if (sortBy === 'price') return shownAmount(a) - shownAmount(b);
     const na = providerOf(a).name || '';
     const nb = providerOf(b).name || '';
     return na.localeCompare(nb);
