@@ -823,6 +823,11 @@ model InspectionRequest {
 
   quotes InspectionQuote[]
 
+  // ── NEW: seller <-> inspector operational coordination ──
+  coordination InspectionCoordination?
+  availability InspectionAvailability[]
+  // ────────────────────────────────────────────────────────
+
   @@index([orderId])
   @@index([listingId])
   @@index([requestedById])
@@ -833,7 +838,6 @@ model InspectionRequest {
   @@index([startDueAt])
   @@index([completionDueAt])
 }
-
 // ============================================================================
 // INSPECTION QUOTE
 // ============================================================================
