@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
+const { getMarketPriceReference } = require('../services/marketPriceService');
 const { authenticate, optionalAuthenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
@@ -13,8 +14,6 @@ const { getRecommendations } = require('../services/recommendationService');
 const { REGIONS, REGION_VALUES } = require('../utils/ethiopianRegions');
 const { haversineSql } = require('../utils/geo');
 const logger = require('../utils/logger');
-
-const { getMarketReference } = require('../services/marketPriceService');
 
 const router = express.Router();
 
@@ -90,7 +89,6 @@ const PUBLIC_LISTING_FIELDS = {
   readinessDate: true,
   pickupWindowStart: true,
   pickupWindowEnd: true,
-  inspectionRequired: true,
   photos: true,
   videos: true,
   description: true,
@@ -960,10 +958,6 @@ router.post(
         'PRODUCT',
       ]),
 
-    body('inspectionRequired')
-      .optional()
-      .isBoolean(),
-
     body('title')
       .optional()
       .isString()
@@ -983,7 +977,8 @@ router.post(
       .trim(),
 
     body('askingPrice')
-      .isFloat({ gt: 0 }),
+      .isFloat({ gt: 0 })
+      .withMessage('askingPrice is the price PER UNIT (e.g. ETB per kg or per quintal), not the total, and must be greater than 0'),
 
     body('location')
       .notEmpty()
@@ -1066,7 +1061,6 @@ router.post(
       const {
         sellerId: requestedSellerId,
         category = 'AGRICULTURAL',
-        inspectionRequired,
         title,
         cropType,
         quantity,
@@ -1231,7 +1225,6 @@ router.post(
           data: {
             sellerId,
             category,
-            inspectionRequired: category === 'AGRICULTURAL' ? true : inspectionRequired === true,
 
             title:
               title || null,
@@ -1386,7 +1379,6 @@ router.patch(
         kebele,
         latitude,
         longitude,
-        inspectionRequired,
       } = req.body;
 
       if (description !== undefined && description !== null) {
@@ -1408,13 +1400,6 @@ router.patch(
 
       if (longitude !== undefined && longitude !== null && longitude !== '' && (!Number.isFinite(Number(longitude)) || Number(longitude) < -180 || Number(longitude) > 180)) {
         return res.status(400).json({ error: 'longitude must be between -180 and 180' });
-      }
-
-      if (inspectionRequired !== undefined && typeof inspectionRequired !== 'boolean') {
-        return res.status(400).json({ error: 'inspectionRequired must be boolean' });
-      }
-      if (listing.category === 'AGRICULTURAL' && inspectionRequired === false) {
-        return res.status(400).json({ error: 'Agricultural listings require inspection; this control cannot disable the agricultural inspection gate.' });
       }
 
       if (
@@ -1673,8 +1658,6 @@ router.patch(
               longitude: longitude === null || longitude === '' ? null : Number(longitude),
             }),
 
-            ...(inspectionRequired !== undefined && { inspectionRequired }),
-
             ...(askingPrice !==
               undefined && {
               askingPrice:
@@ -1782,78 +1765,51 @@ router.get(
   authenticate,
   async (req, res) => {
     try {
-      const listing =
-        await prisma.listing.findUnique({
-          where: {
-            id: req.params.id,
+      const listing = await prisma.listing.findUnique({
+        where: { id: req.params.id },
+        select: {
+          id: true, sellerId: true, category: true, title: true, cropType: true,
+          quantity: true, availableQuantity: true, unit: true, askingPrice: true,
+          location: true, region: true, status: true,
+          offers: {
+            where: { status: { in: ['PENDING', 'COUNTERED', 'SELECTED'] } },
+            select: { id: true, amount: true, quantity: true, status: true, counterAmount: true },
           },
-
-          include: {
-            offers: {
-              where: {
-                status: {
-                  in: [
-                    'PENDING',
-                    'COUNTERED',
-                  ],
-                },
-              },
-            },
-          },
-        });
-
-      if (!listing) {
-        return res.status(404).json({
-          error: 'Listing not found',
-        });
-      }
-
-      const recentSimilar = await prisma.listing.findMany({
-        where: {
-          category: listing.category,
-          unit: listing.unit,
-          ...(listing.category === 'AGRICULTURAL'
-            ? { cropType: listing.cropType || null }
-            : { title: listing.title || null }),
-          status: { in: ['ACTIVE', 'UNDER_NEGOTIATION'] },
         },
-        orderBy: { updatedAt: 'desc' },
-        take: 10,
-        select: { askingPrice: true, updatedAt: true },
       });
 
-      const marketReference = await getMarketReference(prisma, listing);
+      if (!listing) return res.status(404).json({ error: 'Listing not found' });
+
+      const marketReference = await getMarketPriceReference(prisma, listing);
+      const bestOffer = listing.offers.reduce((max, offer) => {
+        const value = Number(offer.counterAmount ?? offer.amount);
+        return Number.isFinite(value) && value > Number(max?.amount ?? 0) ? offer : max;
+      }, null);
+
+      const estimatedTransportCost = req.query.estTransportCost ? Number(req.query.estTransportCost) : 0;
+      const estimatedInspectionCost = req.query.estInspectionCost ? Number(req.query.estInspectionCost) : 0;
+      const platformFeeRate = 0.03;
+      const grossOffer = bestOffer?.counterAmount ?? bestOffer?.amount ?? listing.askingPrice;
+      const gross = Number(grossOffer || 0);
+      const platformFee = gross * platformFeeRate;
+      const estimatedNetRevenue = gross - estimatedTransportCost - estimatedInspectionCost - platformFee;
 
       return res.json({
         marketReference,
-
-        // Kept for compatibility with older clients; this is explicitly a
-        // discovery list, not a price-setting input.
-        recentMarketPrices: recentSimilar,
-
-        demand: {
-          competingOffers:
-            listing.offers.length,
-        },
-
+        recentMarketPrices: marketReference?.samples || [],
+        demand: { competingOffers: listing.offers.length },
         bestOffer,
-
         estimatedNetRevenue,
-
-        breakdown: {
-          grossOffer,
-          estimatedTransportCost,
-          estimatedInspectionCost,
-          platformFee,
+        breakdown: { grossOffer, estimatedTransportCost, estimatedInspectionCost, platformFee },
+        calculation: {
+          version: marketReference?.calculationVersion || null,
+          basis: marketReference?.source || null,
+          note: 'Market reference is advisory. It never changes a listing or negotiated order automatically.',
         },
       });
     } catch (error) {
       req.log.error({ err: error }, 'PRICE INSIGHTS ERROR:');
-
-      return res.status(500).json({
-        error:
-          'Could not load price insights',
-      });
+      return res.status(500).json({ error: 'Could not load price insights' });
     }
   }
 );

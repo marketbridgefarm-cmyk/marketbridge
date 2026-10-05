@@ -11,15 +11,14 @@ const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { idempotency } = require('../middleware/idempotency');
 const { computePaymentDueAt, computeInspectionWorkflowDueAt } = require('../utils/orderTiming');
-const { promoteNextWaitingBuyer } = require('../services/orderCancellationService');
+const { noticeWaitingLocked, noticeWaitingUnlocked } = require('../services/waitingListService');
+const { getMarketPriceReference, marketSnapshotData } = require('../services/marketPriceService');
 const {
   AMOUNT_LIMITS,
   amountProblem,
   validAmount,
   noContactInfo,
 } = require('../utils/contactGuard');
-
-const { getMarketReference } = require('../services/marketPriceService');
 
 const router = express.Router();
 
@@ -51,27 +50,15 @@ function offerError(message, statusCode = 400) {
   return error;
 }
 
-function negotiationDeadlineAt(listing = null, from = new Date()) {
-  const configured = Number(process.env.OFFER_NEGOTIATION_DEADLINE_HOURS);
-  const hours = Number.isFinite(configured) && configured > 0 ? configured : 48;
-  const standard = from.getTime() + hours * 60 * 60 * 1000;
+// No response timers: waiting bids stay until the goods are paid and
+// negotiation continues until a price is agreed. The only natural limit is the
+// end of an agricultural listing's pickup window (null = no expiry).
+function offerExpiry(listing = null) {
   if (listing?.category === 'AGRICULTURAL' && listing.pickupWindowEnd) {
-    const pickup = new Date(listing.pickupWindowEnd).getTime();
-    if (Number.isFinite(pickup)) return new Date(Math.min(standard, pickup));
+    const end = new Date(listing.pickupWindowEnd);
+    if (Number.isFinite(end.getTime())) return end;
   }
-  return new Date(standard);
-}
-
-function offerExpiry(hours = 24, listing = null, absoluteDeadline = null) {
-  const standardExpiry = Date.now() + hours * 60 * 60 * 1000;
-  const absolute = absoluteDeadline ? new Date(absoluteDeadline).getTime() : null;
-  let deadline = standardExpiry;
-  if (Number.isFinite(absolute)) deadline = Math.min(deadline, absolute);
-  if (listing?.category === 'AGRICULTURAL' && listing.pickupWindowEnd) {
-    const pickupDeadline = new Date(listing.pickupWindowEnd).getTime();
-    if (Number.isFinite(pickupDeadline)) deadline = Math.min(deadline, pickupDeadline);
-  }
-  return new Date(deadline);
+  return null;
 }
 
 function validateNegotiationWindow(listing) {
@@ -112,10 +99,6 @@ async function expireOfferIfNeeded(tx, offer, actorId = null) {
       expiresAt: offer.expiresAt,
     },
   });
-
-  if (offer.status === 'SELECTED') {
-    await promoteNextWaitingBuyer(tx, updated.listingId, actorId);
-  }
 
   return true;
 }
@@ -221,12 +204,15 @@ router.post(
         return res.status(409).json({ error: negotiationWindowError });
       }
 
-      const negotiationDeadline = negotiationDeadlineAt(listing);
-      const negotiationExpiresAt = offerExpiry(24, listing, negotiationDeadline);
-      const marketReference = await getMarketReference(prisma, listing);
-      if (negotiationExpiresAt.getTime() <= Date.now()) {
+      const negotiationExpiresAt = offerExpiry(listing);
+      if (negotiationExpiresAt && negotiationExpiresAt.getTime() <= Date.now()) {
         return res.status(409).json({ error: 'The agricultural pickup window is too close or has expired.' });
       }
+
+      // Market price is a reference snapshot for this negotiation only. It never
+      // changes the buyer's submitted amount or the seller's asking price.
+      const marketReference = await getMarketPriceReference(prisma, listing, { quantity: offerQuantity });
+      const marketSnapshot = marketSnapshotData(marketReference, offerQuantity);
 
       const existingOffer =
         await prisma.offer.findFirst({
@@ -259,16 +245,7 @@ router.post(
                 amount,
                 quantity: offerQuantity,
                 expiresAt: negotiationExpiresAt,
-                negotiationDeadlineAt: negotiationDeadline,
-                marketReferenceUnitPrice: marketReference?.unitPrice ?? null,
-                marketReferenceTotalPrice: marketReference ? Number(marketReference.unitPrice) * offerQuantity : null,
-                marketReferenceSource: marketReference?.source ?? null,
-                marketReferenceDate: marketReference?.referenceDate ?? null,
-                marketReferenceLocation: marketReference?.location ?? null,
-                marketReferenceUnit: marketReference?.unit ?? listing.unit ?? null,
-                marketSampleSize: marketReference?.sampleSize ?? null,
-                marketMinUnitPrice: marketReference?.minUnitPrice ?? null,
-                marketMaxUnitPrice: marketReference?.maxUnitPrice ?? null,
+                ...marketSnapshot,
                 message,
                 status: 'PENDING',
                 counterAmount: null,
@@ -360,6 +337,15 @@ router.get(
             counteredBy: true,
             message: true,
             expiresAt: true,
+            marketReferenceUnitPrice: true,
+            marketReferenceTotalPrice: true,
+            marketReferenceSource: true,
+            marketReferenceDate: true,
+            marketReferenceLocation: true,
+            marketReferenceUnit: true,
+            marketSampleSize: true,
+            marketMinUnitPrice: true,
+            marketMaxUnitPrice: true,
             parentOfferId: true,
             createdAt: true,
             updatedAt: true,
@@ -675,6 +661,42 @@ async function acceptOfferAndCreateOrder(
 }
 
 // ============================================================================
+// WAITING-LIST / NEGOTIATION NOTICES
+// GET   /api/offers/notices        -> my latest notices (unread first)
+// PATCH /api/offers/notices/read   -> mark all of my notices read
+// ============================================================================
+
+router.get('/notices', authenticate, async (req, res) => {
+  try {
+    const notices = await prisma.offerNotification.findMany({
+      where: { userId: req.user.id },
+      orderBy: [{ createdAt: 'desc' }],
+      take: 50,
+    });
+    return res.json({
+      notices,
+      unreadCount: notices.filter((notice) => !notice.readAt).length,
+    });
+  } catch (error) {
+    req.log.error({ err: error }, 'LIST OFFER NOTICES ERROR');
+    return res.status(500).json({ error: 'Failed to load notices' });
+  }
+});
+
+router.patch('/notices/read', authenticate, async (req, res) => {
+  try {
+    await prisma.offerNotification.updateMany({
+      where: { userId: req.user.id, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return res.json({ ok: true });
+  } catch (error) {
+    req.log.error({ err: error }, 'READ OFFER NOTICES ERROR');
+    return res.status(500).json({ error: 'Failed to update notices' });
+  }
+});
+
+// ============================================================================
 // OFFER RESPONSE
 // PATCH /api/offers/:id
 // ============================================================================
@@ -698,6 +720,7 @@ router.patch(
         'ACCEPT_SELECTED',
         'RE_COUNTER',
         'SELECT',
+        'WITHDRAW',
       ];
 
       if (
@@ -817,6 +840,9 @@ router.patch(
             where: {
               listingId: fresh.listingId,
               status: { in: ['SELECTED', 'COUNTERED'] },
+              // Superseded offers in a counter chain stay COUNTERED for history;
+              // only the live (leaf) offer holds the exclusive slot.
+              childOffers: { none: {} },
             },
             select: { id: true, buyerId: true, status: true },
           });
@@ -869,6 +895,12 @@ router.patch(
 
           return tx.offer.findUnique({ where: { id: fresh.id } });
         }, { maxWait: 10000, timeout: 15000 });
+
+        await noticeWaitingLocked(prisma, {
+          listingId: selected.listingId,
+          selectedOfferId: selected.id,
+          selectedBuyerId: selected.buyerId,
+        });
 
         return res.json({
           message: 'Buyer bid selected for exclusive price negotiation',
@@ -1039,6 +1071,7 @@ router.patch(
 
         const numericCounter =
           Number(counterAmount);
+        const marketReference = await getMarketPriceReference(prisma, offer.listing, { quantity: offer.quantity });
 
         const updated =
           await prisma.$transaction(
@@ -1089,8 +1122,8 @@ router.patch(
                 throw offerError(negotiationWindowError, 409);
               }
 
-              const counterExpiresAt = offerExpiry(12, freshOffer.listing, freshOffer.negotiationDeadlineAt);
-              if (counterExpiresAt.getTime() <= Date.now()) {
+              const counterExpiresAt = offerExpiry(freshOffer.listing);
+              if (counterExpiresAt && counterExpiresAt.getTime() <= Date.now()) {
                 throw offerError('The agricultural pickup window is too close or has expired.', 409);
               }
 
@@ -1098,8 +1131,6 @@ router.patch(
                 where: { id: freshOffer.id },
                 data: { status: 'COUNTERED' },
               });
-
-              const counterMarketReference = await getMarketReference(tx, freshOffer.listing);
 
               const counterOffer = await tx.offer.create({
                 data: {
@@ -1113,9 +1144,7 @@ router.patch(
                   counteredBy: 'BUYER',
                   parentOfferId: freshOffer.id,
                   expiresAt: counterExpiresAt,
-                  negotiationDeadlineAt: freshOffer.negotiationDeadlineAt || negotiationDeadlineAt(freshOffer.listing, freshOffer.createdAt),
-                  marketReferenceUnitPrice: counterMarketReference?.unitPrice ?? null,
-                  marketReferenceTotalPrice: counterMarketReference ? Number(counterMarketReference.unitPrice) * Number(freshOffer.quantity || 0) : null,
+                  ...marketSnapshotData(marketReference, freshOffer.quantity),
                   message: freshOffer.message,
                 },
               });
@@ -1262,67 +1291,77 @@ router.patch(
       }
 
       // ======================================================================
-      // SELLER REJECTS
+      // REJECT (buyer only) / WITHDRAW (buyer only, waiting bid)
+      //  - The seller can NEVER reject or release a bid: they select, accept or
+      //    counter. Waiting bids are locked for the seller.
+      //  - The buyer in negotiation (SELECTED / COUNTERED) may reject; the seller
+      //    then selects another waiting bid.
+      //  - A waiting (PENDING) bidder may withdraw from the waiting list.
       // ======================================================================
 
-      if (action === 'REJECT') {
-        if (!isSeller && !admin) {
+      if (action === 'REJECT' || action === 'WITHDRAW') {
+        const isWithdraw = action === 'WITHDRAW';
+
+        if (isSeller && !admin) {
           return res.status(403).json({
-            error:
-              'Only the seller can reject an offer',
+            error: 'Sellers cannot reject or release bids. Select, accept or counter; waiting bids stay locked until the negotiation or order ends.',
           });
         }
 
-        if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(offer.status)) {
-          return res.status(400).json({ error: `Offer cannot be rejected because it is ${offer.status}` });
+        if (!isBuyer && !admin) {
+          return res.status(403).json({ error: 'Only the buyer can do this' });
         }
+
+        const allowedStatuses = isWithdraw ? ['PENDING'] : ['SELECTED', 'COUNTERED'];
+        if (!allowedStatuses.includes(offer.status)) {
+          return res.status(400).json({
+            error: isWithdraw
+              ? `Only a waiting bid can be withdrawn (current: ${offer.status})`
+              : `Offer cannot be rejected because it is ${offer.status}`,
+          });
+        }
+
+        const terminalStatus = isWithdraw ? 'WITHDRAWN' : 'REJECTED';
 
         const result =
           await prisma.$transaction(
             async (tx) => {
               const freshOffer =
                 await tx.offer.findUnique({
-                  where: {
-                    id: offer.id,
-                  },
+                  where: { id: offer.id },
                   include: { listing: true },
                 });
 
               if (!freshOffer) {
+                throw offerError('Offer not found', 404);
+              }
+
+              if (!allowedStatuses.includes(freshOffer.status)) {
                 throw offerError(
-                  'Offer not found',
-                  404
+                  `Offer is no longer ${allowedStatuses.join('/')} (current: ${freshOffer.status})`,
+                  409
                 );
               }
 
-              if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(freshOffer.status)) {
-                throw offerError(`Offer cannot be rejected because it is ${freshOffer.status}`, 409);
+              const superseded = await tx.offer.count({ where: { parentOfferId: freshOffer.id } });
+              if (superseded > 0) {
+                throw offerError('This offer was superseded by a newer counter. Refresh and try again.', 409);
               }
 
               const updatedOffer =
                 await tx.offer.update({
-                  where: {
-                    id: freshOffer.id,
-                  },
-
-                  data: {
-                    status: 'REJECTED',
-                  },
+                  where: { id: freshOffer.id },
+                  data: { status: terminalStatus },
                 });
 
-              const activeOffers = await tx.offer.findMany({
+              // Live offers = leaves still waiting or in negotiation.
+              const remainingActiveLeafOffers = await tx.offer.count({
                 where: {
                   listingId: freshOffer.listingId,
-                  status: { in: ['PENDING', 'COUNTERED'] },
+                  status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
+                  childOffers: { none: {} },
                 },
-                select: { id: true, parentOfferId: true },
               });
-              const activeParentIds = new Set(
-                activeOffers.map((item) => item.parentOfferId).filter(Boolean)
-              );
-              const remainingActiveLeafOffers = activeOffers.filter(
-                (item) => !activeParentIds.has(item.id)
-              ).length;
 
               if (remainingActiveLeafOffers === 0) {
                 await tx.listing.update({
@@ -1333,12 +1372,13 @@ router.patch(
 
               await recordAuditEvent(tx, {
                 actorId: req.user.id,
-                action: 'OFFER_REJECTED',
+                action: isWithdraw ? 'OFFER_WITHDRAWN' : 'OFFER_REJECTED',
                 resourceType: 'Offer',
                 resourceId: updatedOffer.id,
                 metadata: {
                   listingId: freshOffer.listingId,
                   buyerId: freshOffer.buyerId,
+                  previousStatus: freshOffer.status,
                   remainingActiveLeafOffers,
                 },
               });
@@ -1348,8 +1388,15 @@ router.patch(
             { maxWait: 10000, timeout: 15000 }
           );
 
+        // A rejected negotiation unlocks the waiting list for the seller.
+        if (!isWithdraw) {
+          await noticeWaitingUnlocked(prisma, { listingId: result.listingId, reason: 'BUYER_REJECTED' });
+        }
+
         return res.json({
-          message: 'Offer rejected',
+          message: isWithdraw
+            ? 'You left the waiting list.'
+            : 'Offer rejected. The seller can now select another waiting bid.',
           offer: result,
         });
       }
@@ -1397,6 +1444,7 @@ router.patch(
 
         const numericCounter =
           Number(counterAmount);
+        const marketReference = await getMarketPriceReference(prisma, offer.listing, { quantity: offer.quantity });
 
         const updated =
           await prisma.$transaction(
@@ -1448,8 +1496,8 @@ router.patch(
                 throw offerError(negotiationWindowError, 409);
               }
 
-              const counterExpiresAt = offerExpiry(12, freshOffer.listing, freshOffer.negotiationDeadlineAt);
-              if (counterExpiresAt.getTime() <= Date.now()) {
+              const counterExpiresAt = offerExpiry(freshOffer.listing);
+              if (counterExpiresAt && counterExpiresAt.getTime() <= Date.now()) {
                 throw offerError('The agricultural pickup window is too close or has expired.', 409);
               }
 
@@ -1457,8 +1505,6 @@ router.patch(
                 where: { id: freshOffer.id },
                 data: { status: 'COUNTERED' },
               });
-
-              const counterMarketReference = await getMarketReference(tx, freshOffer.listing);
 
               const counterOffer = await tx.offer.create({
                 data: {
@@ -1472,9 +1518,7 @@ router.patch(
                   counteredBy: 'SELLER',
                   parentOfferId: freshOffer.id,
                   expiresAt: counterExpiresAt,
-                  negotiationDeadlineAt: freshOffer.negotiationDeadlineAt || negotiationDeadlineAt(freshOffer.listing, freshOffer.createdAt),
-                  marketReferenceUnitPrice: counterMarketReference?.unitPrice ?? null,
-                  marketReferenceTotalPrice: counterMarketReference ? Number(counterMarketReference.unitPrice) * Number(freshOffer.quantity || 0) : null,
+                  ...marketSnapshotData(marketReference, freshOffer.quantity),
                   message: freshOffer.message,
                 },
               });
