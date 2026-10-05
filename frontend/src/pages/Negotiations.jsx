@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AmountPicker from '../components/AmountPicker.jsx';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
@@ -21,12 +21,6 @@ const SELLER_LISTING_STATUSES = ['ACTIVE', 'UNDER_NEGOTIATION', 'SOLD'];
 
 const ACTIVE_QUOTE_STATUSES   = ['PENDING', 'SELECTED', 'COUNTERED'];
 const PREVIOUS_QUOTE_STATUSES = ['ACCEPTED', 'REJECTED', 'WITHDRAWN', 'EXPIRED'];
-const PRICE_ADJUSTMENT_OPTIONS = [
-  { value: 'MARKET_PRICE_RISE', label: 'Seller: perishable-goods market price has risen' },
-  { value: 'MARKET_PRICE_FALL', label: 'Buyer: market price has fallen suddenly' },
-  { value: 'QUALITY_OR_QUANTITY_CHANGE', label: 'Review due to confirmed quality or quantity difference' },
-  { value: 'KEEP_CURRENT_PRICE', label: 'Keep the current negotiated price' },
-];
 
 function quoteTurn(quote) {
   if (quote.status === 'PENDING')   return 'REQUESTER';
@@ -44,6 +38,36 @@ function isExpired(item) {
 function leavesOnly(items, parentKey) {
   const parentIds = new Set(items.map((i) => i[parentKey]).filter(Boolean));
   return items.filter((i) => !parentIds.has(i.id));
+}
+
+// Quotes that already have a newer counter are history, not live bids.
+function liveQuotes(quotes) {
+  const superseded = new Set(quotes.map((q) => q.parentQuoteId).filter(Boolean));
+  quotes.forEach((q) => { if ((q._count?.childQuotes || 0) > 0) superseded.add(q.id); });
+  return quotes.filter((q) => !superseded.has(q.id));
+}
+
+const OPEN_STATUSES = ['PENDING', 'SELECTED', 'COUNTERED'];
+
+// Open negotiations, plus a provisional agreement still waiting for payment.
+function isActiveItem(item) {
+  if (OPEN_STATUSES.includes(item.status)) return true;
+  return item.type === 'LISTING_OFFER'
+    && item.status === 'ACCEPTED'
+    && item.raw?.agreedOrder?.status === 'PENDING_PAYMENT';
+}
+
+// Walk every page so older negotiations are not silently dropped.
+async function fetchAllPages(path, params, pick, pageSize = 50, maxPages = 20) {
+  const out = [];
+  for (let page = 1; page <= maxPages; page += 1) {
+    const res = await api.get(path, { params: { ...params, page, limit: pageSize } });
+    const rows = pick(res.data) || [];
+    out.push(...rows);
+    const total = Number(res.data?.total);
+    if (rows.length === 0 || (Number.isFinite(total) ? out.length >= total : rows.length < pageSize)) break;
+  }
+  return out;
 }
 
 function humanStatus(status) {
@@ -185,7 +209,8 @@ function QuoteRow({ quote, group, busyKey, onRespond }) {
   const anyBusy = Boolean(busyKey) && busyKey.startsWith(`bid:${quote.id}:`);
 
   const turn = quoteTurn(quote);
-  const myTurn = turn === 'REQUESTER' && ACTIVE_QUOTE_STATUSES.includes(quote.status);
+  const expired = isExpired(quote);
+  const myTurn = !expired && turn === 'REQUESTER' && ACTIVE_QUOTE_STATUSES.includes(quote.status);
   const isPending = quote.status === 'PENDING';
   const waitingOnProvider = quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
 
@@ -219,7 +244,11 @@ function QuoteRow({ quote, group, busyKey, onRespond }) {
           <p className="neg-quote-message">"{quote.message}"</p>
         )}
 
-        {waitingOnProvider && (
+        {expired && ACTIVE_QUOTE_STATUSES.includes(quote.status) && (
+          <p className="neg-quote-waiting">This quote has expired.</p>
+        )}
+
+        {waitingOnProvider && !expired && (
           <p className="neg-quote-waiting">
             You countered {Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB
             {' — waiting for the provider to respond.'}
@@ -323,7 +352,6 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
   const expired      = isExpired(item);
   const counterValue = Number(counterDraft);
   const counterValid = Number.isFinite(counterValue) && counterValue > 0;
-  const [reasonCode, setReasonCode] = React.useState('');
 
   let canAct        = false;
   let acceptAction  = 'ACCEPT';
@@ -445,10 +473,7 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
             </button>
           )}
 
-          <select className="neg-reason-picker" aria-label="Price adjustment reason" value={reasonCode} onChange={(event) => setReasonCode(event.target.value)} disabled={anyBusy}>
-            <option value="">Choose a reason (required)</option>
-            {PRICE_ADJUSTMENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
+          {acceptAction !== 'SELECT' && (<>
           <AmountPicker
             className="neg-counter-picker"
             reference={amountOf(item)}
@@ -462,11 +487,12 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
           <button
             type="button"
             className="sd-btn sd-btn-outline"
-            disabled={!counterValid || !reasonCode || anyBusy}
-            onClick={() => onRespond(item, counterAction, counterValue, reasonCode)}
+            disabled={!counterValid || anyBusy}
+            onClick={() => onRespond(item, counterAction, counterValue)}
           >
             {busy(counterAction) ? 'Sending…' : 'Counter'}
           </button>
+          </>)}
         </div>
       )}
 
@@ -510,10 +536,16 @@ export default function Negotiations() {
   const [toastMsg,      setToastMsg]      = useState('');
   const [notices,       setNotices]       = useState([]);
 
+  const toastTimer = useRef(null);
   const toast = useCallback((msg) => {
     setToastMsg(msg);
-    window.setTimeout(() => setToastMsg(''), 2500);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToastMsg(''), 2500);
   }, []);
+  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
+
+  // Stable primitive: user.roles may be a new array on every auth refresh.
+  const rolesKey = (user?.roles || []).join(',');
 
   const markNoticesRead = useCallback(async () => {
     try {
@@ -526,7 +558,7 @@ export default function Negotiations() {
   const loadAll = useCallback(async () => {
     if (!user?.id) return;
     setError('');
-    const roles     = user.roles || [];
+    const roles     = rolesKey ? rolesKey.split(',') : [];
     const collected = [];
     const groups    = [];
 
@@ -537,19 +569,20 @@ export default function Negotiations() {
 
     try {
       // ---- 1. Listing offers ---------------------------------------------
-      const [mineRes, listingResults] = await Promise.all([
-        api.get('/offers/mine'),
+      const [mineOffers, listingGroups] = await Promise.all([
+        fetchAllPages('/offers/mine', {}, (d) => d?.offers),
         Promise.all(
-          SELLER_LISTING_STATUSES.map((s) =>
-            api.get('/listings', { params: { sellerId: user.id, status: s } })
+          SELLER_LISTING_STATUSES.map((status) =>
+            fetchAllPages('/listings', { sellerId: user.id, status }, (d) => d?.listings)
           )
         ),
       ]);
 
-      const buyerOffers = (mineRes.data?.offers || []).map((o) => ({ ...o, viewerRole: 'BUYER' }));
-      const myListings  = listingResults.flatMap((r) => r.data?.listings || []);
+      const buyerOffers = mineOffers.map((o) => ({ ...o, viewerRole: 'BUYER' }));
+      const myListings  = listingGroups.flat();
+      // One failing listing must not blank the whole page.
       const sellerOfferResults = await Promise.all(
-        myListings.map((l) => api.get(`/offers/listing/${l.id}`))
+        myListings.map((l) => api.get(`/offers/listing/${l.id}`).catch(() => ({ data: { offers: [] } })))
       );
       const sellerOffers = myListings.flatMap((l, i) =>
         (sellerOfferResults[i].data?.offers || []).map((o) => ({ ...o, listing: l, viewerRole: 'SELLER' }))
@@ -560,7 +593,10 @@ export default function Negotiations() {
       // negotiation or has an agreed (unpaid) order.
       const lockedListingIds = new Set(
         leafOffers
-          .filter((o) => o.viewerRole === 'SELLER' && ['SELECTED', 'COUNTERED', 'ACCEPTED'].includes(o.status))
+          .filter((o) => o.viewerRole === 'SELLER' && (
+            ['SELECTED', 'COUNTERED'].includes(o.status) ||
+            (o.status === 'ACCEPTED' && !['CANCELLED', 'COMPLETED'].includes(o.agreedOrder?.status))
+          ))
           .map((o) => o.listingId)
       );
 
@@ -573,7 +609,7 @@ export default function Negotiations() {
           amount:      amountOf(offer),
           message:     offer.message,
           viewerRole:  offer.viewerRole,
-          title:       offer.listing?.title || offer.listing?.cropType || 'Agricultural listing',
+          title:       offer.listing?.title || offer.listing?.cropType || 'Listing',
           subtitle:    offer.viewerRole === 'SELLER'
             ? 'Listing offer · you are the seller'
             : 'Listing offer · you are the buyer',
@@ -599,7 +635,7 @@ export default function Negotiations() {
               (order.buyerId === user.id || order.sellerId === user.id));
 
           if (isRequester) {
-            const visible = job.quotes.filter((q) =>
+            const visible = liveQuotes(job.quotes).filter((q) =>
               ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'].includes(q.status)
             );
             if (visible.length > 0) {
@@ -620,7 +656,7 @@ export default function Negotiations() {
           if (request.requestedById !== user.id) return;
           if (!Array.isArray(request.quotes))   return;
 
-          const visible = request.quotes.filter((q) =>
+          const visible = liveQuotes(request.quotes).filter((q) =>
             ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'].includes(q.status)
           );
           if (visible.length > 0) {
@@ -696,19 +732,19 @@ export default function Negotiations() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, user?.roles]);
+  }, [user?.id, rolesKey]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
   // ---- Respond: bilateral NegotiationRow ---------------------------------
-  const respond = useCallback(async (item, action, counterAmount, reasonCode) => {
+  const respond = useCallback(async (item, action, counterAmount) => {
     const key = `${item.id}:${action}`;
     setBusyKey(key);
     try {
       let response;
       if (item.type === 'LISTING_OFFER') {
         const payload = { action };
-        if (action === 'COUNTER' || action === 'RE_COUNTER') { payload.counterAmount = Number(counterAmount); payload.reasonCode = reasonCode; }
+        if (action === 'COUNTER' || action === 'RE_COUNTER') { payload.counterAmount = Number(counterAmount); }
         response = await api.patch(`/offers/${item.raw.id}`, payload);
       } else if (item.type === 'TRANSPORT_QUOTE') {
         if (action === 'SELECT') {
@@ -772,10 +808,9 @@ export default function Negotiations() {
 
   // ---- Filters -----------------------------------------------------------
   const visible = useMemo(() => {
-    let list = [...items].sort((a, b) =>
-      ['PENDING', 'SELECTED', 'COUNTERED'].includes(a.status) ? -1 : 1
-    );
-    if (filter === 'active') list = list.filter((i) => ['PENDING', 'SELECTED', 'COUNTERED'].includes(i.status));
+    const rank = (i) => (isActiveItem(i) ? 0 : 1);
+    let list = [...items].sort((a, b) => rank(a) - rank(b));
+    if (filter === 'active') list = list.filter(isActiveItem);
     if (typeFilter !== 'all') list = list.filter((i) => i.type === typeFilter);
     return list;
   }, [items, filter, typeFilter]);
