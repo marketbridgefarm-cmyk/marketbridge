@@ -6,6 +6,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
+const { closeCoordination } = require('../services/inspectionCoordinationService');
 
 const router = express.Router();
 
@@ -73,14 +74,14 @@ async function getRecoveryEligibility(orderId) {
   // A random losing bidder withdrawing must not reset a live competition.
   const latestInspectionWithdrawal = inspection?.quotes
     .filter((q) => q.status === 'WITHDRAWN' && (!inspection.inspectorId || q.inspectorId === inspection.inspectorId))
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0] || null;
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0] || null;
   const inspectionHasLiveBid = Boolean(inspection?.quotes.some((q) => ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)));
   const inspectionWithdrawalAt = latestInspectionWithdrawal && (!inspectionHasLiveBid || latestInspectionWithdrawal.inspectorId === inspection?.inspectorId)
     ? latestInspectionWithdrawal.updatedAt : null;
 
   const latestTransportWithdrawal = transport?.quotes
     .filter((q) => q.status === 'WITHDRAWN' && (!transport.truckOwnerId || q.truckOwnerId === transport.truckOwnerId))
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0] || null;
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0] || null;
   const transportHasLiveBid = Boolean(transport?.quotes.some((q) => ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)));
   const transportWithdrawalAt = latestTransportWithdrawal && (!transportHasLiveBid || latestTransportWithdrawal.truckOwnerId === transport?.truckOwnerId)
     ? latestTransportWithdrawal.updatedAt : null;
@@ -89,17 +90,23 @@ async function getRecoveryEligibility(orderId) {
     ['CANCELLED', 'STALLED'].includes(inspection?.status) ? inspection.updatedAt : null,
     inspectionWithdrawalAt,
     disputeResolvedAt,
-  ].filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
+  ].filter(Boolean).sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] || null;
   const transportTriggerAt = [
     transport?.status === 'CANCELLED' ? transport.updatedAt : null,
     transportWithdrawalAt,
     disputeResolvedAt,
-  ].filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
+  ].filter(Boolean).sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] || null;
 
   const eligible = (triggerAt, releasedAt, hasUnresolvedServicePayment) => Boolean(
     triggerAt && !hasUnresolvedServicePayment && (!releasedAt || new Date(triggerAt) > new Date(releasedAt))
   );
 
+  // NOTE: Eligibility deliberately does NOT consider InspectionCoordination.
+  // A legitimate recovery trigger is a dead competition, a withdrawn
+  // assigned provider, or a resolved dispute — never "coordination is
+  // incomplete". Coordination is closed as a side-effect of admin approval
+  // (see the inspection branch of PATCH /admin/:id/approve), not evaluated
+  // here.
   return {
     INSPECTION: eligible(inspectionTriggerAt, latestApproved('INSPECTION'), Boolean(inspection?.payments?.length)),
     TRANSPORT: eligible(transportTriggerAt, latestApproved('TRANSPORT'), Boolean(transport?.payments?.length)),
@@ -211,9 +218,12 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
           if (['REQUESTED', 'ACCEPTED', 'STALLED'].includes(current.status)) {
             await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: current.id, inspectorId: current.inspectorId, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
             await tx.inspectionRequest.update({ where: { id: current.id }, data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' } });
+            // Close coordination so the next inspector does not inherit the
+            // previous inspector's phone, availability, or site notes.
+            await closeCoordination(tx, current.id, 'ADMIN_RECOVERY_APPROVED');
           } else if (current.status === 'CANCELLED') {
             const requestedById = request.targetParties?.includes('BUYER') ? request.order.buyerId : request.targetParties?.includes('SELLER') ? request.order.sellerId : request.requestedById;
-            await tx.inspectionRequest.create({
+            const recreated = await tx.inspectionRequest.create({
               data: {
                 orderId: request.orderId,
                 listingId: current.listingId,
@@ -224,6 +234,12 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
                 status: 'REQUESTED',
               },
             });
+            // The recreated request carries a fresh id; close any coordination
+            // row left on the old cancelled request so the historical record
+            // is marked closed and cannot resurface. The new request opens a
+            // fresh coordination row only when its own quote is accepted.
+            await closeCoordination(tx, current.id, 'ADMIN_RECOVERY_RECREATED');
+            // `recreated` intentionally has no coordination row at this point.
           }
         }
       } else {
