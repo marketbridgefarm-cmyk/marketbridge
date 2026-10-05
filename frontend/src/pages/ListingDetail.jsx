@@ -157,11 +157,10 @@ export default function ListingDetail() {
   const isAgricultural = listing.category === 'AGRICULTURAL';
   const isProduct = listing.category === 'PRODUCT';
 
-  // The market reference is advisory only. It must never determine the
-  // selectable offer/bid amounts. Keep the picker anchored to the seller's
-  // current asking price so market data cannot unexpectedly constrain the
-  // buyer's negotiation range.
-  const offerReferencePrice = Number(listing.askingPrice);
+  const marketUnitPrice = Number(marketInsight?.marketReference?.unitPrice);
+  const offerReferencePrice = Number.isFinite(marketUnitPrice) && marketUnitPrice > 0
+    ? marketUnitPrice
+    : Number(listing.askingPrice);
 
   const isAvailable =
     listing.status === 'ACTIVE' ||
@@ -288,14 +287,14 @@ export default function ListingDetail() {
 
               <div className="detail-facts">
                 <div>
-                  <span>Asking price</span>
-                  <strong>{money(listing.askingPrice)} ETB</strong>
+                  <span>Asking price (per {listing.unit || 'unit'})</span>
+                  <strong>{money(listing.askingPrice)} ETB / {listing.unit || 'unit'}</strong>
                 </div>
 
                 {minimumPrice != null && (
                   <div>
-                    <span>Minimum price</span>
-                    <strong>{money(minimumPrice)} ETB</strong>
+                    <span>Minimum price (per {listing.unit || 'unit'})</span>
+                    <strong>{money(minimumPrice)} ETB / {listing.unit || 'unit'}</strong>
                   </div>
                 )}
 
@@ -523,14 +522,16 @@ export default function ListingDetail() {
 
                 {myLatestOffer.status === 'PENDING' && (
                   <p className="muted negotiation-note">
-                    Your offer remains active while other buyers may compete. The
-                    seller will select one buyer to open negotiation.
+                    You are on the seller's waiting list. Your offer stays until the
+                    goods are paid for. The seller can select you only when the
+                    current negotiation or order ends, and you will be notified.
+                    You can leave the list from your Negotiations page.
                   </p>
                 )}
 
                 {myLatestOffer.status === 'REJECTED' && (
                   <p className="muted negotiation-note">
-                    The seller rejected this offer. If the listing is available, you
+                    This negotiation was rejected. If the listing is available, you
                     can make a new offer.
                   </p>
                 )}
@@ -602,9 +603,15 @@ export default function ListingDetail() {
                         <strong>Current market reference</strong>
                         <p className="muted" style={{ margin: '4px 0 0' }}>
                           {money(marketInsight.marketReference.unitPrice)} ETB / {listing.unit || 'unit'} · {marketInsight.marketReference.sampleSize || 1} comparable {marketInsight.marketReference.source === 'RECENT_COMPLETED_ORDERS' ? 'completed sales' : 'listings'}
+                          {marketInsight.marketReference.minUnitPrice != null && marketInsight.marketReference.maxUnitPrice != null ? ` · range ${money(marketInsight.marketReference.minUnitPrice)}–${money(marketInsight.marketReference.maxUnitPrice)} ETB` : ''}
+                          {marketInsight.marketReference.source === 'RECENT_COMPLETED_ORDERS' && marketInsight.marketReference.windowDays ? ` · last ${marketInsight.marketReference.windowDays} days` : ''}
+                          {marketInsight.marketReference.scope === 'NATIONWIDE' ? ' · nationwide' : marketInsight.marketReference.scope === 'REGION' ? ' · same region' : ''}
                         </p>
-                        <p className="muted small" style={{ margin: '4px 0 0' }}>Informational only. It does not determine the selectable bid/offer amounts or change your offer automatically.</p>
+                        <p className="muted small" style={{ margin: '4px 0 0' }}>This is an advisory reference for negotiation. It does not change your offer automatically.</p>
                       </div>
+                    )}
+                    {marketInsight && !marketInsight.marketReference?.unitPrice && (
+                      <p className="muted small" style={{ margin: '0 0 12px' }}>Not enough recent market data to show a reference price.</p>
                     )}
                     <form onSubmit={submitOffer}>
                     <label>
@@ -822,7 +829,7 @@ function OfferRow({ offer, onAction }) {
       {buyerCountered && (
         <p className="offer-note">
           <strong>Buyer countered.</strong> This is the buyer's latest price. You
-          can accept it, reject the negotiation, or send another counter.
+          can accept it or send another counter.
         </p>
       )}
 
@@ -843,14 +850,6 @@ function OfferRow({ offer, onAction }) {
           >
             {busy === 'SELECT' ? 'Selecting…' : 'Select buyer for deal'}
           </button>
-          <button
-            type="button"
-            className="btn btn-sm btn-light"
-            disabled={Boolean(busy)}
-            onClick={() => submit('REJECT')}
-          >
-            {busy === 'REJECT' ? 'Rejecting…' : 'Reject bid'}
-          </button>
         </div>
       )}
 
@@ -863,14 +862,6 @@ function OfferRow({ offer, onAction }) {
             onClick={() => submit('ACCEPT')}
           >
             {busy === 'ACCEPT' ? 'Accepting…' : 'Accept'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm btn-light"
-            disabled={Boolean(busy)}
-            onClick={() => submit('REJECT')}
-          >
-            {busy === 'REJECT' ? 'Rejecting…' : 'Reject'}
           </button>
           <AmountPicker
             className="inline-picker"

@@ -333,8 +333,12 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
   if (item.type === 'LISTING_OFFER') {
     if (item.viewerRole === 'SELLER') {
       if (item.status === 'PENDING') {
-        canAct = true;
-        acceptAction = 'SELECT';
+        if (item.listingLocked) {
+          waitingMessage = 'Waiting list locked: you are negotiating with a selected buyer or an order is in progress. You can select another bid only if that buyer rejects or the order is cancelled.';
+        } else {
+          canAct = true;
+          acceptAction = 'SELECT';
+        }
       } else {
         canAct = item.status === 'SELECTED' || (item.status === 'COUNTERED' && item.counteredBy === 'BUYER');
         if (!canAct && item.status === 'COUNTERED' && item.counteredBy === 'SELLER')
@@ -344,7 +348,7 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
       acceptAction  = item.status === 'SELECTED' ? 'ACCEPT_SELECTED' : 'ACCEPT_COUNTER';
       counterAction = 'RE_COUNTER';
       canAct = item.status === 'SELECTED' || (item.status === 'COUNTERED' && item.counteredBy === 'SELLER');
-      if (!canAct && item.status === 'PENDING') waitingMessage = 'Your offer is competing with other buyer offers. Waiting for the seller to select a buyer.';
+      if (!canAct && item.status === 'PENDING') waitingMessage = 'You are on the seller\'s waiting list. The seller can select you only when the current negotiation or order ends. You will be notified, and you can leave the list at any time.';
       if (!canAct && item.status === 'COUNTERED' && item.counteredBy === 'BUYER')
         waitingMessage = 'You made the latest counter. Waiting for the seller.';
     }
@@ -365,6 +369,7 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
   }
 
   const myTurn = canAct && !waitingMessage;
+
 
   return (
     <article className={`neg-card${myTurn ? ' neg-card--my-turn' : ''}`}>
@@ -396,12 +401,10 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
       {item.type === 'LISTING_OFFER' && item.marketReference?.unitPrice > 0 && (
         <p className="neg-deal-context">
           Market reference: <strong>{item.marketReference.unitPrice.toLocaleString()} ETB/{item.raw?.listing?.unit || 'unit'}</strong>
-          {item.marketReference.sampleSize ? ` · ${item.marketReference.sampleSize} comparable ${item.marketReference.source === 'RECENT_COMPLETED_ORDERS' ? 'sales' : 'listings'}` : ''}.
+          {item.marketReference.sampleSize ? ` · ${item.marketReference.sampleSize} comparable ${item.marketReference.source === 'RECENT_COMPLETED_ORDERS' ? 'sales' : 'listings'}` : ''}
+          {item.marketReference.minUnitPrice > 0 && item.marketReference.maxUnitPrice > 0 ? ` · range ${item.marketReference.minUnitPrice.toLocaleString()}–${item.marketReference.maxUnitPrice.toLocaleString()} ETB` : ''}.
           <span className="muted"> Advisory only — it does not change the negotiated price.</span>
         </p>
-      )}
-      {item.type === 'LISTING_OFFER' && item.negotiationDeadlineAt && (
-        <p className="neg-deal-context small">Negotiation closes by {new Date(item.negotiationDeadlineAt).toLocaleString()}.</p>
       )}
 
       {item.message && <p className="neg-deal-context">{item.message}</p>}
@@ -431,7 +434,7 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
               : (acceptAction === 'SELECT' ? 'Select buyer for negotiation' : 'Accept provisional deal')}
           </button>
 
-          {!(item.type === 'LISTING_OFFER' && item.viewerRole === 'BUYER') && (
+          {!(item.type === 'LISTING_OFFER' && item.viewerRole === 'SELLER') && (
             <button
               type="button"
               className="sd-btn sd-btn-outline"
@@ -467,6 +470,19 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
         </div>
       )}
 
+      {item.type === 'LISTING_OFFER' && item.viewerRole === 'BUYER' && item.status === 'PENDING' && !expired && (
+        <div className="neg-actions">
+          <button
+            type="button"
+            className="sd-btn sd-btn-outline"
+            disabled={anyBusy}
+            onClick={() => onRespond(item, 'WITHDRAW')}
+          >
+            {busy('WITHDRAW') ? 'Leaving…' : 'Leave waiting list'}
+          </button>
+        </div>
+      )}
+
       {item.linkTo && (
         <footer className="neg-card-footer">
           <Link className="btn btn-outline" to={item.linkTo}>Open listing →</Link>
@@ -492,10 +508,18 @@ export default function Negotiations() {
   const [busyKey,       setBusyKey]       = useState('');
   const [counterDrafts, setCounterDrafts] = useState({});
   const [toastMsg,      setToastMsg]      = useState('');
+  const [notices,       setNotices]       = useState([]);
 
   const toast = useCallback((msg) => {
     setToastMsg(msg);
     window.setTimeout(() => setToastMsg(''), 2500);
+  }, []);
+
+  const markNoticesRead = useCallback(async () => {
+    try {
+      await api.patch('/offers/notices/read');
+      setNotices((prev) => prev.map((n) => ({ ...n, readAt: n.readAt || new Date().toISOString() })));
+    } catch (_) { /* ignore */ }
   }, []);
 
   // --------------------------------------------------------------------------
@@ -505,6 +529,11 @@ export default function Negotiations() {
     const roles     = user.roles || [];
     const collected = [];
     const groups    = [];
+
+    // Waiting-list notices are best-effort and never block the page.
+    api.get('/offers/notices')
+      .then((res) => setNotices(res.data?.notices || []))
+      .catch(() => {});
 
     try {
       // ---- 1. Listing offers ---------------------------------------------
@@ -526,7 +555,16 @@ export default function Negotiations() {
         (sellerOfferResults[i].data?.offers || []).map((o) => ({ ...o, listing: l, viewerRole: 'SELLER' }))
       );
 
-      leavesOnly([...buyerOffers, ...sellerOffers], 'parentOfferId').forEach((offer) => {
+      const leafOffers = leavesOnly([...buyerOffers, ...sellerOffers], 'parentOfferId');
+      // A listing's waiting list is locked while one buyer is in exclusive
+      // negotiation or has an agreed (unpaid) order.
+      const lockedListingIds = new Set(
+        leafOffers
+          .filter((o) => o.viewerRole === 'SELLER' && ['SELECTED', 'COUNTERED', 'ACCEPTED'].includes(o.status))
+          .map((o) => o.listingId)
+      );
+
+      leafOffers.forEach((offer) => {
         collected.push({
           type:        'LISTING_OFFER',
           id:          offer.id,
@@ -541,7 +579,7 @@ export default function Negotiations() {
             : 'Listing offer · you are the buyer',
           linkTo:    offer.listingId ? `/listings/${offer.listingId}` : null,
           expiresAt: offer.expiresAt,
-          negotiationDeadlineAt: offer.negotiationDeadlineAt,
+          listingLocked: offer.viewerRole === 'SELLER' && offer.status === 'PENDING' && lockedListingIds.has(offer.listingId),
           marketReference: offer.marketReferenceUnitPrice ? { unitPrice: Number(offer.marketReferenceUnitPrice), source: offer.marketReferenceSource, sampleSize: offer.marketSampleSize, minUnitPrice: Number(offer.marketMinUnitPrice || 0), maxUnitPrice: Number(offer.marketMaxUnitPrice || 0) } : null,
           raw:       offer,
         });
@@ -775,6 +813,20 @@ export default function Negotiations() {
               onClick={() => setTypeFilter(id)}>{label}</button>
           ))}
         </div>
+
+        {notices.some((n) => !n.readAt) && (
+          <section className="card" style={{ margin: '0 0 16px', padding: 12 }} aria-label="Waiting list updates">
+            <strong>Updates on your bids</strong>
+            {notices.filter((n) => !n.readAt).slice(0, 5).map((n) => (
+              <p key={n.id} className="muted small" style={{ margin: '6px 0 0' }}>
+                <strong>{n.title}.</strong> {n.body}
+              </p>
+            ))}
+            <button type="button" className="sd-btn sd-btn-outline" style={{ marginTop: 8 }} onClick={markNoticesRead}>
+              Mark all as read
+            </button>
+          </section>
+        )}
 
         {error   && <div className="alert error">{error}</div>}
         {loading && <p>Loading negotiations…</p>}
