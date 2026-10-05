@@ -110,8 +110,15 @@ enum InspectionStatus {
   REQUESTED
   ACCEPTED
   IN_PROGRESS
+  STALLED
   COMPLETED
   CANCELLED
+}
+
+enum InspectionFeePayer {
+  BUYER
+  SELLER
+  SPLIT
 }
 
 enum InspectionQuoteStatus {
@@ -396,6 +403,7 @@ model User {
   inspectionQuotes InspectionQuote[]
 
   inspectionEvidenceCreated InspectionEvidence[] @relation("InspectionEvidenceCreator")
+  inspectionReportAddendaCreated InspectionReportAddendum[] @relation("InspectionReportAddendumCreator")
 
   // Trucks
   trucks Truck[]
@@ -658,6 +666,10 @@ model Listing {
   pickupWindowStart DateTime?
   pickupWindowEnd   DateTime?
 
+  // Inspection is a listing-level capability. Agricultural listings are
+  // migrated to required=true; general Products may opt in when needed.
+  inspectionRequired Boolean @default(false)
+
   photos String[]
   videos String[]
 
@@ -788,6 +800,13 @@ model InspectionRequest {
   workflowDueAt DateTime?
 
   fee Decimal? @db.Decimal(18, 2)
+  feePayer InspectionFeePayer @default(BUYER)
+  buyerFeeAmount Decimal? @db.Decimal(18, 2)
+  sellerFeeAmount Decimal? @db.Decimal(18, 2)
+  startDueAt DateTime?
+  completionDueAt DateTime?
+  startedAt DateTime?
+  completedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -870,6 +889,10 @@ model InspectionReport {
   visibleDefects String?
   damageNotes    String?
   packagingNotes String?
+  assessmentSummary String?
+  qualityFlags String[] @default([])
+  quantityVariancePercent Float?
+  reportLockedAt DateTime @default(now())
 
   photos String[]
   videos String[]
@@ -879,11 +902,33 @@ model InspectionReport {
   inspectedAt DateTime @default(now())
 
   evidence InspectionEvidence[]
+  addenda InspectionReportAddendum[]
 }
 
 // ============================================================================
 // INSPECTION EVIDENCE
 // ============================================================================
+
+model InspectionReportAddendum {
+  id String @id @default(uuid())
+
+  report InspectionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  reportId String
+
+  createdById String
+  createdBy User @relation("InspectionReportAddendumCreator", fields: [createdById], references: [id])
+
+  reason String
+  notes String
+  photos String[] @default([])
+  videos String[] @default([])
+  gpsLocation String?
+
+  createdAt DateTime @default(now())
+
+  @@index([reportId, createdAt])
+  @@index([createdById, createdAt])
+}
 
 model InspectionEvidence {
   id String @id @default(uuid())
@@ -2020,8 +2065,6 @@ model PriceReview {
   proposedById String
   proposedPrice Decimal @db.Decimal(18, 2)
   reasonCode String
-
-  // Evidence/snapshot used to calculate or justify the proposal.
   marketReferenceUnitPrice Decimal? @db.Decimal(18, 2)
   marketReferenceTotalPrice Decimal? @db.Decimal(18, 2)
   marketReferenceSource String?
@@ -2038,6 +2081,7 @@ model PriceReview {
   adjustmentAmount Decimal? @db.Decimal(18, 2)
   adjustmentPercent Float?
   calculationVersion String?
+
   status String @default("PENDING") // PENDING, COUNTERED, ACCEPTED, REJECTED
   parent PriceReview? @relation("PriceReviewChain", fields: [parentId], references: [id])
   parentId String?
