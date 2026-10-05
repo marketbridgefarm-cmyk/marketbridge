@@ -81,6 +81,10 @@ router.post(
     body('mode')
       .isIn(['SELLER_REQUESTED', 'BUYER_REQUESTED', 'JOINT'])
       .withMessage('Invalid inspection mode'),
+    body('feePayer')
+      .optional()
+      .isIn(['BUYER', 'SELLER', 'SPLIT'])
+      .withMessage('feePayer must be BUYER, SELLER or SPLIT'),
   ],
   async (req, res) => {
     try {
@@ -90,6 +94,9 @@ router.post(
       }
 
       const { orderId, listingId, mode } = req.body;
+      const requestedFeePayer = req.body.feePayer || (mode === 'SELLER_REQUESTED' ? 'SELLER' : mode === 'JOINT' ? 'SPLIT' : 'BUYER');
+      if (mode === 'SELLER_REQUESTED' && requestedFeePayer !== 'SELLER') return res.status(400).json({ error: 'Seller-requested inspections are seller-paid' });
+      if (mode === 'BUYER_REQUESTED' && requestedFeePayer !== 'BUYER') return res.status(400).json({ error: 'Buyer-requested inspections are buyer-paid' });
 
       const order = await prisma.order.findUnique({
         where: { id: orderId },
@@ -110,9 +117,12 @@ router.post(
       }
 
       if (!['AGRICULTURAL', 'PRODUCT'].includes(order.listing.category)) {
-        return res.status(400).json({
-          error: 'Inspections are only available for agricultural and product listings',
-        });
+        return res.status(400).json({ error: 'Inspections are only available for agricultural and product listings' });
+      }
+      if (!order.listing.inspectionRequired && order.listing.category === 'PRODUCT') {
+        // Product inspections are opt-in. The buyer or seller may still request
+        // one explicitly from the order page; the listing flag controls whether
+        // the workflow is mandatory.
       }
 
       const resolvedListingId = order.listingId;
@@ -149,6 +159,9 @@ router.post(
             status: 'REQUESTED',
             workflowDueAt: computeInspectionWorkflowDueAt(),
             fee: null,
+            feePayer: requestedFeePayer,
+            buyerFeeAmount: null,
+            sellerFeeAmount: null,
           },
           include: {
             listing: {
@@ -162,6 +175,10 @@ router.post(
             },
           },
         });
+
+        if (order.id && order.status === 'PENDING_PAYMENT') {
+          await tx.order.update({ where: { id: order.id }, data: { paymentDueAt: computeInspectionWorkflowDueAt() } });
+        }
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
@@ -231,7 +248,7 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
   try {
     const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { order: true } });
     if (!request) return res.status(404).json({ error: 'Inspection request not found' });
-    if (!['REQUESTED', 'ACCEPTED'].includes(request.status)) return res.status(409).json({ error: `Inspection bidding cannot be reopened while the request is ${request.status.toLowerCase()}` });
+    if (!['REQUESTED', 'ACCEPTED', 'STALLED'].includes(request.status)) return res.status(409).json({ error: `Inspection bidding cannot be reopened while the request is ${request.status.toLowerCase()}` });
 
     const activePayment = await prisma.payment.findFirst({ where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true, status: true } });
     if (activePayment) return res.status(409).json({ error: 'Bidding cannot be reopened after inspection payment has started or completed' });
@@ -240,9 +257,9 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
       await lockOrderAndAssertNotClosed(tx, request.orderId, 'inspection bidding cannot be reopened until the order dispute is resolved');
       const fresh = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
       if (!fresh) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
-      if (!['REQUESTED', 'ACCEPTED'].includes(fresh.status)) throw Object.assign(new Error(`Inspection bidding cannot be reopened while the request is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
+      if (!['REQUESTED', 'ACCEPTED', 'STALLED'].includes(fresh.status)) throw Object.assign(new Error(`Inspection bidding cannot be reopened while the request is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
       await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
-      const updated = await tx.inspectionRequest.update({ where: { id: fresh.id }, data: { inspectorId: null, fee: null, status: 'REQUESTED' } });
+      const updated = await tx.inspectionRequest.update({ where: { id: fresh.id }, data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' } });
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_BIDDING_REOPENED', resourceType: 'InspectionRequest', resourceId: fresh.id, metadata: { orderId: fresh.orderId } });
       return updated;
     }, { maxWait: 10000, timeout: 15000 });
@@ -627,7 +644,14 @@ router.patch(
           data: {
             inspectorId: quote.inspectorId,
             fee: finalAmount,
+            feePayer: request.feePayer,
+            buyerFeeAmount: request.feePayer === 'SELLER' ? null : request.feePayer === 'SPLIT' ? Math.round(finalAmount * 50) / 100 : finalAmount,
+            sellerFeeAmount: request.feePayer === 'BUYER' ? null : request.feePayer === 'SPLIT' ? Math.round((finalAmount - Math.round(finalAmount * 50) / 100) * 100) / 100 : finalAmount,
             status: 'ACCEPTED',
+            startDueAt: null,
+            completionDueAt: null,
+            startedAt: null,
+            completedAt: null,
             sellerConfirmedAt: null,
             sellerMessage: null,
             sellerMessageAt: null,
@@ -853,7 +877,7 @@ router.patch(
 
         await tx.inspectionRequest.update({
           where: { id: request.id },
-          data: { inspectorId: null, fee: null, status: 'REQUESTED' },
+          data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' },
         });
 
         await recordAuditEvent(tx, {
@@ -942,7 +966,7 @@ router.patch('/:id/accept', authenticate, requireRole('INSPECTOR'), async (req, 
 router.get('/seller-pending', authenticate, requireRole('SELLER'), async (req, res) => {
   try {
     const requests = await prisma.inspectionRequest.findMany({
-      where: { listing: { sellerId: req.user.id }, status: { in: ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'] } },
+      where: { listing: { sellerId: req.user.id }, status: { in: ['ACCEPTED', 'IN_PROGRESS', 'STALLED', 'COMPLETED'] } },
       include: {
         listing: { select: { id: true, title: true, cropType: true, location: true } },
         requestedBy: { select: { id: true, name: true } },
@@ -968,7 +992,7 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
     if (request.status !== 'ACCEPTED' || !request.inspectorId) return res.status(409).json({ error: 'Only a provisionally agreed inspection can be confirmed' });
     const updated = await prisma.inspectionRequest.updateMany({
       where: { id: request.id, status: 'ACCEPTED', inspectorId: request.inspectorId, sellerConfirmedAt: null },
-      data: { sellerConfirmedAt: new Date(), sellerMessage: typeof req.body?.message === 'string' ? req.body.message.trim().slice(0, 500) : null, sellerMessageAt: req.body?.message ? new Date() : null },
+      data: { sellerConfirmedAt: new Date(), startDueAt: computeInspectionStartDueAt(), sellerMessage: typeof req.body?.message === 'string' ? req.body.message.trim().slice(0, 500) : null, sellerMessageAt: req.body?.message ? new Date() : null },
     });
     if (!updated.count) return res.status(409).json({ error: 'Inspection was already confirmed or its status changed' });
     await prisma.$transaction(async (tx) => {
@@ -1028,6 +1052,20 @@ router.post(
         return res.status(409).json({ error: 'The seller must confirm the selected inspector and agreed fee before work can start.' });
       }
 
+      const startPayments = await prisma.payment.findMany({
+        where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: 'PAID' },
+        select: { id: true, createdById: true, amount: true },
+      });
+      const startObligations = request.orderId
+        ? await prisma.paymentObligation.findMany({ where: { orderId: request.orderId, inspectionRequestId: request.id, type: 'INSPECTOR' }, select: { id: true, payerId: true, amount: true, status: true } })
+        : [];
+      const paymentComplete = startObligations.length
+        ? startObligations.every((o) => o.status === 'PAID')
+        : startPayments.some((p) => Number(p.amount) === Number(request.fee));
+      if (!paymentComplete) {
+        return res.status(402).json({ code: 'INSPECTION_PAYMENT_REQUIRED', error: 'The agreed inspection fee must be fully paid before the inspector can start.' });
+      }
+
       const orderForStart = await prisma.order.findUnique({
         where: { id: request.orderId },
         select: { status: true },
@@ -1052,7 +1090,7 @@ router.post(
             status: 'ACCEPTED',
             sellerConfirmedAt: { not: null },
           },
-          data: { status: 'IN_PROGRESS' },
+          data: { status: 'IN_PROGRESS', startedAt: new Date(), completionDueAt: computeInspectionCompletionDueAt(), },
         });
 
         if (updatedCount.count !== 1) {
@@ -1317,6 +1355,8 @@ router.post(
     body('visibleDefects').optional({ nullable: true }).isString(),
     body('damageNotes').optional({ nullable: true }).isString(),
     body('packagingNotes').optional({ nullable: true }).isString(),
+    body('assessmentSummary').optional({ nullable: true }).isString().trim().isLength({ max: 3000 }),
+    body('qualityFlags').optional().isArray().withMessage('qualityFlags must be an array'),
     body('gpsLocation').optional({ nullable: true }).isString(),
     body('photos').optional().isArray().withMessage('photos must be an array'),
     body('videos').optional().isArray().withMessage('videos must be an array'),
@@ -1333,7 +1373,7 @@ router.post(
 
       const request = await prisma.inspectionRequest.findUnique({
         where: { id: req.params.id },
-        include: { report: true },
+        include: { report: true, listing: { select: { quantity: true, unit: true, category: true } } },
       });
 
       if (!request) return res.status(404).json({ error: 'Request not found' });
@@ -1341,6 +1381,14 @@ router.post(
       if (request.status !== 'IN_PROGRESS') return res.status(400).json({ error: `Inspection must be IN_PROGRESS before submitting a report. Current status: ${request.status}` });
       if (!request.sellerConfirmedAt) return res.status(409).json({ error: 'Seller confirmation is required before submitting an inspection report.' });
       if (request.report) return res.status(409).json({ error: 'An inspection report has already been submitted' });
+
+      const reportObligations = request.orderId
+        ? await prisma.paymentObligation.findMany({ where: { orderId: request.orderId, inspectionRequestId: request.id, type: 'INSPECTOR' }, select: { status: true } })
+        : [];
+      const reportPaid = reportObligations.length
+        ? reportObligations.every((o) => o.status === 'PAID')
+        : (await prisma.payment.findFirst({ where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: 'PAID' }, select: { id: true } })) != null;
+      if (!reportPaid) return res.status(402).json({ code: 'INSPECTION_PAYMENT_REQUIRED', error: 'The inspection fee must be fully paid before the report can be submitted.' });
 
       const orderForReport = await prisma.order.findUnique({
         where: { id: request.orderId },
@@ -1353,7 +1401,7 @@ router.post(
       }
 
       const {
-        quantity, grade, moisture, visibleDefects, damageNotes, packagingNotes, photos, videos, gpsLocation,
+        quantity, grade, moisture, visibleDefects, damageNotes, packagingNotes, assessmentSummary, qualityFlags, photos, videos, gpsLocation,
       } = req.body;
 
       const report = await prisma.$transaction(async (tx) => {
@@ -1368,6 +1416,12 @@ router.post(
             visibleDefects: visibleDefects || null,
             damageNotes: damageNotes || null,
             packagingNotes: packagingNotes || null,
+            assessmentSummary: assessmentSummary || null,
+            qualityFlags: Array.isArray(qualityFlags) ? qualityFlags.map((v) => String(v).trim()).filter(Boolean).slice(0, 20) : [],
+            quantityVariancePercent: (() => {
+              const listingQuantity = Number(request.listing?.quantity || 0);
+              return listingQuantity > 0 ? ((Number(quantity) - listingQuantity) / listingQuantity) * 100 : null;
+            })(),
             photos: Array.isArray(photos) ? photos : [],
             videos: Array.isArray(videos) ? videos : [],
             gpsLocation: gpsLocation || null,
@@ -1393,7 +1447,7 @@ router.post(
             inspectorId: req.user.id,
             status: 'IN_PROGRESS',
           },
-          data: { status: 'COMPLETED' },
+          data: { status: 'COMPLETED', completedAt: new Date(), completionDueAt: null },
         });
 
         if (completed.count !== 1) {
@@ -1453,5 +1507,51 @@ router.post(
     }
   }
 );
+
+// ============================================================================
+// REPORT ADDENDUM — immutable correction trail
+// ============================================================================
+// The original report is never edited after COMPLETED. If a factual correction
+// is required, the assigned inspector appends an auditable addendum instead.
+router.post('/:id/report/addenda', authenticate, requireRole('INSPECTOR'), [
+  body('reason').isString().trim().isLength({ min: 3, max: 500 }),
+  body('notes').isString().trim().isLength({ min: 3, max: 3000 }),
+  body('photos').optional().isArray(),
+  body('videos').optional().isArray(),
+  body('gpsLocation').optional({ nullable: true }).isString(),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed' });
+    const request = await prisma.inspectionRequest.findUnique({
+      where: { id: req.params.id },
+      include: { report: true },
+    });
+    if (!request) return res.status(404).json({ error: 'Inspection request not found' });
+    if (request.inspectorId !== req.user.id) return res.status(403).json({ error: 'Only the assigned inspector can add a report addendum' });
+    if (request.status !== 'COMPLETED' || !request.report) return res.status(409).json({ error: 'A report addendum is available only after the original report is completed' });
+
+    const addendum = await prisma.$transaction(async (tx) => {
+      const created = await tx.inspectionReportAddendum.create({
+        data: {
+          reportId: request.report.id,
+          createdById: req.user.id,
+          reason: req.body.reason,
+          notes: req.body.notes,
+          photos: Array.isArray(req.body.photos) ? req.body.photos : [],
+          videos: Array.isArray(req.body.videos) ? req.body.videos : [],
+          gpsLocation: req.body.gpsLocation || null,
+        },
+      });
+      await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_REPORT_ADDENDUM_CREATED', resourceType: 'InspectionReportAddendum', resourceId: created.id, metadata: { inspectionRequestId: request.id, reportId: request.report.id } });
+      if (request.orderId) await recordOrderEvent(tx, { orderId: request.orderId, actorId: req.user.id, type: 'INSPECTION_REPORT_ADDENDUM_ADDED', metadata: { inspectionRequestId: request.id, reportId: request.report.id, addendumId: created.id } });
+      return created;
+    });
+    return res.status(201).json({ message: 'Report addendum recorded. The original report remains unchanged.', addendum });
+  } catch (error) {
+    req.log.error({ err: error }, 'CREATE INSPECTION REPORT ADDENDUM ERROR');
+    return res.status(500).json({ error: 'Could not create inspection report addendum' });
+  }
+});
 
 module.exports = router;

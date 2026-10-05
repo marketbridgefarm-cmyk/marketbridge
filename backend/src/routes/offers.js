@@ -12,13 +12,14 @@ const { recordOrderEvent } = require('../services/orderEventService');
 const { idempotency } = require('../middleware/idempotency');
 const { computePaymentDueAt, computeInspectionWorkflowDueAt } = require('../utils/orderTiming');
 const { promoteNextWaitingBuyer } = require('../services/orderCancellationService');
-const { getMarketPriceReference, marketSnapshotData } = require('../services/marketPriceService');
 const {
   AMOUNT_LIMITS,
   amountProblem,
   validAmount,
   noContactInfo,
 } = require('../utils/contactGuard');
+
+const { getMarketReference } = require('../services/marketPriceService');
 
 const router = express.Router();
 
@@ -50,26 +51,27 @@ function offerError(message, statusCode = 400) {
   return error;
 }
 
-function negotiationDeadline(listing, from = new Date()) {
-  const configuredHours = Number(process.env.OFFER_NEGOTIATION_DEADLINE_HOURS);
-  const hours = Number.isFinite(configuredHours) && configuredHours > 0 ? configuredHours : 48;
-  const absolute = from.getTime() + hours * 60 * 60 * 1000;
-
+function negotiationDeadlineAt(listing = null, from = new Date()) {
+  const configured = Number(process.env.OFFER_NEGOTIATION_DEADLINE_HOURS);
+  const hours = Number.isFinite(configured) && configured > 0 ? configured : 48;
+  const standard = from.getTime() + hours * 60 * 60 * 1000;
   if (listing?.category === 'AGRICULTURAL' && listing.pickupWindowEnd) {
-    const pickupDeadline = new Date(listing.pickupWindowEnd).getTime();
-    if (Number.isFinite(pickupDeadline)) return new Date(Math.min(absolute, pickupDeadline));
+    const pickup = new Date(listing.pickupWindowEnd).getTime();
+    if (Number.isFinite(pickup)) return new Date(Math.min(standard, pickup));
   }
-
-  return new Date(absolute);
+  return new Date(standard);
 }
 
 function offerExpiry(hours = 24, listing = null, absoluteDeadline = null) {
   const standardExpiry = Date.now() + hours * 60 * 60 * 1000;
-  const pickupOrStandard = listing?.category === 'AGRICULTURAL' && listing.pickupWindowEnd
-    ? Math.min(standardExpiry, new Date(listing.pickupWindowEnd).getTime())
-    : standardExpiry;
-  const deadlineMs = absoluteDeadline ? new Date(absoluteDeadline).getTime() : Infinity;
-  return new Date(Math.min(pickupOrStandard, deadlineMs));
+  const absolute = absoluteDeadline ? new Date(absoluteDeadline).getTime() : null;
+  let deadline = standardExpiry;
+  if (Number.isFinite(absolute)) deadline = Math.min(deadline, absolute);
+  if (listing?.category === 'AGRICULTURAL' && listing.pickupWindowEnd) {
+    const pickupDeadline = new Date(listing.pickupWindowEnd).getTime();
+    if (Number.isFinite(pickupDeadline)) deadline = Math.min(deadline, pickupDeadline);
+  }
+  return new Date(deadline);
 }
 
 function validateNegotiationWindow(listing) {
@@ -219,16 +221,12 @@ router.post(
         return res.status(409).json({ error: negotiationWindowError });
       }
 
-      const negotiationDeadlineAt = negotiationDeadline(listing);
-      const negotiationExpiresAt = offerExpiry(24, listing, negotiationDeadlineAt);
-      if (negotiationExpiresAt.getTime() <= Date.now() || negotiationDeadlineAt.getTime() <= Date.now()) {
-        return res.status(409).json({ error: 'The negotiation window is too close or has expired.' });
+      const negotiationDeadline = negotiationDeadlineAt(listing);
+      const negotiationExpiresAt = offerExpiry(24, listing, negotiationDeadline);
+      const marketReference = await getMarketReference(prisma, listing);
+      if (negotiationExpiresAt.getTime() <= Date.now()) {
+        return res.status(409).json({ error: 'The agricultural pickup window is too close or has expired.' });
       }
-
-      // Market price is a reference snapshot for this negotiation only. It never
-      // changes the buyer's submitted amount or the seller's asking price.
-      const marketReference = await getMarketPriceReference(prisma, listing, { quantity: offerQuantity });
-      const marketSnapshot = marketSnapshotData(marketReference, offerQuantity);
 
       const existingOffer =
         await prisma.offer.findFirst({
@@ -261,8 +259,16 @@ router.post(
                 amount,
                 quantity: offerQuantity,
                 expiresAt: negotiationExpiresAt,
-                negotiationDeadlineAt,
-                ...marketSnapshot,
+                negotiationDeadlineAt: negotiationDeadline,
+                marketReferenceUnitPrice: marketReference?.unitPrice ?? null,
+                marketReferenceTotalPrice: marketReference ? Number(marketReference.unitPrice) * offerQuantity : null,
+                marketReferenceSource: marketReference?.source ?? null,
+                marketReferenceDate: marketReference?.referenceDate ?? null,
+                marketReferenceLocation: marketReference?.location ?? null,
+                marketReferenceUnit: marketReference?.unit ?? listing.unit ?? null,
+                marketSampleSize: marketReference?.sampleSize ?? null,
+                marketMinUnitPrice: marketReference?.minUnitPrice ?? null,
+                marketMaxUnitPrice: marketReference?.maxUnitPrice ?? null,
                 message,
                 status: 'PENDING',
                 counterAmount: null,
@@ -354,16 +360,6 @@ router.get(
             counteredBy: true,
             message: true,
             expiresAt: true,
-            negotiationDeadlineAt: true,
-            marketReferenceUnitPrice: true,
-            marketReferenceTotalPrice: true,
-            marketReferenceSource: true,
-            marketReferenceDate: true,
-            marketReferenceLocation: true,
-            marketReferenceUnit: true,
-            marketSampleSize: true,
-            marketMinUnitPrice: true,
-            marketMaxUnitPrice: true,
             parentOfferId: true,
             createdAt: true,
             updatedAt: true,
@@ -1043,7 +1039,6 @@ router.patch(
 
         const numericCounter =
           Number(counterAmount);
-        const marketReference = await getMarketPriceReference(prisma, offer.listing, { quantity: offer.quantity });
 
         const updated =
           await prisma.$transaction(
@@ -1104,6 +1099,8 @@ router.patch(
                 data: { status: 'COUNTERED' },
               });
 
+              const counterMarketReference = await getMarketReference(tx, freshOffer.listing);
+
               const counterOffer = await tx.offer.create({
                 data: {
                   listingId: freshOffer.listingId,
@@ -1116,8 +1113,9 @@ router.patch(
                   counteredBy: 'BUYER',
                   parentOfferId: freshOffer.id,
                   expiresAt: counterExpiresAt,
-                  negotiationDeadlineAt: freshOffer.negotiationDeadlineAt,
-                  ...marketSnapshotData(marketReference, freshOffer.quantity),
+                  negotiationDeadlineAt: freshOffer.negotiationDeadlineAt || negotiationDeadlineAt(freshOffer.listing, freshOffer.createdAt),
+                  marketReferenceUnitPrice: counterMarketReference?.unitPrice ?? null,
+                  marketReferenceTotalPrice: counterMarketReference ? Number(counterMarketReference.unitPrice) * Number(freshOffer.quantity || 0) : null,
                   message: freshOffer.message,
                 },
               });
@@ -1399,7 +1397,6 @@ router.patch(
 
         const numericCounter =
           Number(counterAmount);
-        const marketReference = await getMarketPriceReference(prisma, offer.listing, { quantity: offer.quantity });
 
         const updated =
           await prisma.$transaction(
@@ -1461,6 +1458,8 @@ router.patch(
                 data: { status: 'COUNTERED' },
               });
 
+              const counterMarketReference = await getMarketReference(tx, freshOffer.listing);
+
               const counterOffer = await tx.offer.create({
                 data: {
                   listingId: freshOffer.listingId,
@@ -1473,8 +1472,9 @@ router.patch(
                   counteredBy: 'SELLER',
                   parentOfferId: freshOffer.id,
                   expiresAt: counterExpiresAt,
-                  negotiationDeadlineAt: freshOffer.negotiationDeadlineAt,
-                  ...marketSnapshotData(marketReference, freshOffer.quantity),
+                  negotiationDeadlineAt: freshOffer.negotiationDeadlineAt || negotiationDeadlineAt(freshOffer.listing, freshOffer.createdAt),
+                  marketReferenceUnitPrice: counterMarketReference?.unitPrice ?? null,
+                  marketReferenceTotalPrice: counterMarketReference ? Number(counterMarketReference.unitPrice) * Number(freshOffer.quantity || 0) : null,
                   message: freshOffer.message,
                 },
               });

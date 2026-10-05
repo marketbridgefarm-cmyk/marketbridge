@@ -86,7 +86,7 @@ async function getRecoveryEligibility(orderId) {
     ? latestTransportWithdrawal.updatedAt : null;
 
   const inspectionTriggerAt = [
-    inspection?.status === 'CANCELLED' ? inspection.updatedAt : null,
+    ['CANCELLED', 'STALLED'].includes(inspection?.status) ? inspection.updatedAt : null,
     inspectionWithdrawalAt,
     disputeResolvedAt,
   ].filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
@@ -208,9 +208,9 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
         if (current) {
           const activePayment = await tx.payment.findFirst({ where: { inspectionRequestId: current.id, type: 'INSPECTOR', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true } });
           if (activePayment) throw Object.assign(new Error('Inspection recovery is blocked because inspection payment has already started'), { statusCode: 409 });
-          if (['REQUESTED', 'ACCEPTED'].includes(current.status)) {
+          if (['REQUESTED', 'ACCEPTED', 'STALLED'].includes(current.status)) {
             await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: current.id, inspectorId: current.inspectorId, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
-            await tx.inspectionRequest.update({ where: { id: current.id }, data: { inspectorId: null, fee: null, status: 'REQUESTED' } });
+            await tx.inspectionRequest.update({ where: { id: current.id }, data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' } });
           } else if (current.status === 'CANCELLED') {
             const requestedById = request.targetParties?.includes('BUYER') ? request.order.buyerId : request.targetParties?.includes('SELLER') ? request.order.sellerId : request.requestedById;
             await tx.inspectionRequest.create({
@@ -219,6 +219,7 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
                 listingId: current.listingId,
                 requestedById,
                 mode: current.mode,
+                feePayer: current.feePayer,
                 location: current.location,
                 status: 'REQUESTED',
               },

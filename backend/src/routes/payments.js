@@ -488,15 +488,16 @@ router.post(
               .filter((request) => request.status !== 'CANCELLED')
               .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             const currentInspection = inspectionRequests[0] || null;
+            const inspectionGateRequired = Boolean(order.listing?.inspectionRequired || currentInspection);
 
-            if (!currentInspection) {
+            if (inspectionGateRequired && !currentInspection) {
               return res.status(409).json({
                 code: 'INSPECTION_REQUIRED_BEFORE_BUYER_DECISION',
-                error: 'An inspection must be requested and completed before the buyer can pay for the goods.',
+                error: 'An inspection must be requested and completed before the buyer can pay for these goods.',
               });
             }
 
-            if (currentInspection.status !== 'COMPLETED' || !currentInspection.report) {
+            if (inspectionGateRequired && (currentInspection.status !== 'COMPLETED' || !currentInspection.report)) {
               return res.status(409).json({
                 code: 'INSPECTION_REQUIRED_BEFORE_BUYER_DECISION',
                 error: 'Complete the current inspection and publish its report before the buyer can pay for the goods.',
@@ -506,10 +507,7 @@ router.post(
               });
             }
 
-            // Both Agricultural and Product orders have the same commercial decision
-            // gate: the buyer must explicitly choose BUY after reviewing the
-            // completed inspection report.
-            if (['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category) && order.buyerDecision !== 'BUY') {
+            if (inspectionGateRequired && order.buyerDecision !== 'BUY') {
               return res.status(409).json({
                 code: 'BUYER_DECISION_REQUIRED',
                 error: 'The buyer must explicitly choose BUY after reviewing the inspection report before paying for the goods.',
@@ -784,11 +782,10 @@ router.post(
           });
         }
 
-        // The party who requests the inspection is responsible for its fee.
-        // This keeps SELLER_REQUESTED inspections from silently billing the
-        // buyer, while BUYER_REQUESTED inspections remain buyer-paid.
         let inspectionPaymentAllowed = isAdmin(req);
-        if (!inspectionPaymentAllowed && req.body.orderId) {
+        let inspectionPayerId = null;
+        let inspectionExpectedAmount = null;
+        if (req.body.orderId) {
           const inspectionOrder = await prisma.order.findUnique({
             where: { id: req.body.orderId },
             select: { id: true, buyerId: true, sellerId: true, listingId: true, status: true },
@@ -797,43 +794,40 @@ router.post(
             return res.status(409).json({ code: 'ORDER_DISPUTED', error: 'This order is under dispute. Inspection payment is paused until the dispute is resolved.' });
           }
           if (inspectionOrder && inspectionOrder.listingId === request.listingId) {
-            const expectedPayer = request.mode === 'SELLER_REQUESTED'
-              ? inspectionOrder.sellerId
-              : inspectionOrder.buyerId;
-            inspectionPaymentAllowed = expectedPayer === req.user.id;
+            if (!request.sellerConfirmedAt) {
+              return res.status(409).json({ code: 'SELLER_CONFIRMATION_REQUIRED', error: 'The seller must confirm the selected inspector and agreed inspection fee before inspection payment can begin.' });
+            }
+            const obligations = await prisma.paymentObligation.findMany({
+              where: { orderId: inspectionOrder.id, inspectionRequestId: request.id, type: 'INSPECTOR' },
+              select: { id: true, payerId: true, amount: true, status: true },
+            });
+            const mine = obligations.find((o) => o.payerId === req.user.id);
+            if (mine) {
+              inspectionPayerId = mine.payerId;
+              inspectionExpectedAmount = Number(mine.amount);
+              inspectionPaymentAllowed = mine.status !== 'PAID';
+            } else {
+              const expectedPayer = request.feePayer === 'SELLER' || request.mode === 'SELLER_REQUESTED'
+                ? inspectionOrder.sellerId
+                : inspectionOrder.buyerId;
+              inspectionPayerId = expectedPayer;
+              inspectionExpectedAmount = request.feePayer === 'SPLIT'
+                ? Number(req.user.id === inspectionOrder.buyerId ? request.buyerFeeAmount : request.sellerFeeAmount)
+                : Number(request.fee);
+              inspectionPaymentAllowed = expectedPayer === req.user.id && request.feePayer !== 'SPLIT';
+            }
           }
         }
         if (!inspectionPaymentAllowed && request.requestedById === req.user.id && !req.body.orderId) {
           inspectionPaymentAllowed = true;
+          inspectionPayerId = req.user.id;
+          inspectionExpectedAmount = Number(request.fee);
         }
-        if (!inspectionPaymentAllowed) {
-          return res.status(403).json({
-            error: 'Only the designated inspection payer may pay this fee',
-          });
-        }
-
-        if (
-          request.fee == null
-        ) {
-          return res.status(400).json({
-            error:
-              'No agreed fee',
-          });
-        }
-
-        if (
-          !moneyEqual(
-            amount,
-            request.fee
-          )
-        ) {
-          return res.status(400).json({
-            error:
-              'Amount mismatch',
-
-            expectedAmount:
-              Number(request.fee),
-          });
+        if (!inspectionPaymentAllowed) return res.status(403).json({ error: 'Only the designated inspection payer may pay this fee' });
+        if (request.fee == null) return res.status(400).json({ error: 'No agreed fee' });
+        if (!Number.isFinite(inspectionExpectedAmount) || inspectionExpectedAmount <= 0) inspectionExpectedAmount = Number(request.fee);
+        if (!moneyEqual(amount, inspectionExpectedAmount)) {
+          return res.status(400).json({ error: 'Amount mismatch', expectedAmount: inspectionExpectedAmount });
         }
       }
 
