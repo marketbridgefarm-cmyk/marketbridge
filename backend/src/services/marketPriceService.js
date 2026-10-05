@@ -1,94 +1,299 @@
 'use strict';
 
-function median(values) {
-  const nums = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
-  if (!nums.length) return null;
-  const middle = Math.floor(nums.length / 2);
-  return nums.length % 2 ? nums[middle] : (nums[middle - 1] + nums[middle]) / 2;
+const COMPLETED_ORDER_STATUSES = ['DELIVERED', 'COMPLETED'];
+const CALCULATION_VERSION = 'market-price-v2';
+const DEFAULT_SAMPLE_SIZE = 30;
+
+function positiveIntEnv(name, fallback) {
+  const n = Number(process.env[name]);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
+
+// A market reference is only shown when enough RECENT comparables exist.
+// Fewer samples means "not enough market data", never a guess.
+const MIN_SAMPLE_SIZE = positiveIntEnv('MARKET_REFERENCE_MIN_SAMPLES', 3);
+const WINDOW_DAYS = positiveIntEnv('MARKET_REFERENCE_WINDOW_DAYS', 60);
+
+function finitePositive(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 function roundMoney(value) {
-  return Math.round(Number(value || 0) * 100) / 100;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 }
 
-/**
- * Advisory market reference only.
- * It is deliberately independent from the buyer's selectable offer amount.
- * Recent completed MarketBridge transactions are preferred; active comparable
- * listings are a fallback when there is insufficient transaction history.
- */
-async function getMarketReference(prisma, listing, { days = 180, sampleLimit = 50 } = {}) {
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  const comparableWhere = {
-    category: listing.category,
-    unit: listing.unit,
-    ...(listing.category === 'AGRICULTURAL'
-      ? { cropType: listing.cropType || null }
-      : { title: listing.title || null }),
-  };
+function median(values) {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
 
-  const completedOrders = await prisma.order.findMany({
+function identityWhere(listing) {
+  if (listing.category === 'AGRICULTURAL' && listing.cropType) {
+    return { cropType: { equals: listing.cropType, mode: 'insensitive' } };
+  }
+  if (listing.category === 'PRODUCT' && listing.title) {
+    return { title: { equals: listing.title, mode: 'insensitive' } };
+  }
+  return {};
+}
+
+async function findCompletedComparables(prisma, listing, { locationOnly = false } = {}) {
+  const identity = identityWhere(listing);
+  const location = locationOnly && listing.region
+    ? { region: listing.region }
+    : {};
+
+  return prisma.order.findMany({
     where: {
-      status: 'COMPLETED',
-      createdAt: { gte: since },
-      listing: comparableWhere,
+      status: { in: COMPLETED_ORDER_STATUSES },
+      quantity: { gt: 0 },
+      finalPrice: { gt: 0 },
+      createdAt: { gte: new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000) },
+      listing: {
+        category: listing.category,
+        unit: listing.unit,
+        ...identity,
+        ...location,
+      },
     },
-    orderBy: { createdAt: 'desc' },
-    take: sampleLimit,
     select: {
+      id: true,
       finalPrice: true,
       quantity: true,
       createdAt: true,
-      listing: { select: { location: true, unit: true } },
-    },
-  });
-
-  const transactionPrices = completedOrders
-    .map((o) => {
-      const total = Number(o.finalPrice);
-      const quantity = Number(o.quantity);
-      return quantity > 0 && total > 0 ? total / quantity : null;
-    })
-    .filter((v) => Number.isFinite(v) && v > 0);
-
-  let source = 'RECENT_COMPLETED_ORDERS';
-  let prices = transactionPrices;
-  let referenceDate = completedOrders[0]?.createdAt || null;
-
-  if (!prices.length) {
-    source = 'ACTIVE_COMPARABLE_LISTINGS';
-    const listings = await prisma.listing.findMany({
-      where: {
-        category: listing.category,
-        unit: listing.unit,
-        status: { in: ['ACTIVE', 'UNDER_NEGOTIATION'] },
-        ...(listing.category === 'AGRICULTURAL'
-          ? { cropType: listing.cropType || null }
-          : { title: listing.title || null }),
-        id: { not: listing.id },
+      listing: {
+        select: {
+          id: true,
+          title: true,
+          cropType: true,
+          unit: true,
+          location: true,
+          region: true,
+        },
       },
-      orderBy: { updatedAt: 'desc' },
-      take: sampleLimit,
-      select: { askingPrice: true, updatedAt: true },
-    });
-    prices = listings.map((l) => Number(l.askingPrice)).filter((v) => Number.isFinite(v) && v > 0);
-    referenceDate = listings[0]?.updatedAt || null;
-  }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: DEFAULT_SAMPLE_SIZE,
+  });
+}
 
-  const unitPrice = median(prices);
-  if (unitPrice == null) return null;
+async function findActiveComparables(prisma, listing) {
+  const identity = identityWhere(listing);
+  return prisma.listing.findMany({
+    where: {
+      id: { not: listing.id },
+      category: listing.category,
+      unit: listing.unit,
+      status: { in: ['ACTIVE', 'UNDER_NEGOTIATION'] },
+      askingPrice: { gt: 0 },
+      quantity: { gt: 0 },
+      ...identity,
+    },
+    select: {
+      id: true,
+      askingPrice: true,
+      quantity: true,
+      unit: true,
+      location: true,
+      region: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+    take: DEFAULT_SAMPLE_SIZE,
+  });
+}
 
+function comparableRows(orders) {
+  return orders.map((order) => {
+    const quantity = finitePositive(order.quantity);
+    const total = finitePositive(order.finalPrice);
+    if (!quantity || !total) return null;
+    return {
+      orderId: order.id,
+      listingId: order.listing?.id || null,
+      unitPrice: roundMoney(total / quantity),
+      totalPrice: roundMoney(total),
+      quantity,
+      createdAt: order.createdAt,
+      location: order.listing?.location || null,
+      region: order.listing?.region || null,
+    };
+  }).filter(Boolean).filter((row) => row.unitPrice != null);
+}
+
+// Listing.askingPrice is ALREADY a per-unit price (e.g. ETB per kg/quintal),
+// so it is used as the unit price directly and is never divided by quantity.
+function activeRows(listings) {
+  return listings.map((listing) => {
+    const quantity = finitePositive(listing.quantity);
+    const unitPrice = roundMoney(finitePositive(listing.askingPrice));
+    if (!quantity || !unitPrice) return null;
+    return {
+      listingId: listing.id,
+      unitPrice,
+      totalPrice: roundMoney(unitPrice * quantity),
+      quantity,
+      createdAt: listing.createdAt,
+      location: listing.location || null,
+      region: listing.region || null,
+    };
+  }).filter(Boolean);
+}
+
+function buildReference(rows, listing, source, targetQuantity = null, meta = {}) {
+  const prices = rows.map((row) => row.unitPrice).filter(Number.isFinite);
+  if (!prices.length) return null;
+  const unitPrice = roundMoney(median(prices));
+  const quantity = finitePositive(targetQuantity) || finitePositive(listing.quantity) || 1;
   return {
-    unitPrice: roundMoney(unitPrice),
-    totalPrice: roundMoney(unitPrice * Number(listing.quantity || 0)),
+    unitPrice,
+    totalPrice: roundMoney(unitPrice * quantity),
     source,
+    scope: meta.scope || null,
+    windowDays: source === 'RECENT_COMPLETED_ORDERS' ? WINDOW_DAYS : null,
+    observedAt: new Date(),
+    location: meta.location || null,
+    unit: listing.unit || null,
     sampleSize: prices.length,
     minUnitPrice: roundMoney(Math.min(...prices)),
     maxUnitPrice: roundMoney(Math.max(...prices)),
-    referenceDate,
-    location: listing.location || null,
-    unit: listing.unit || null,
+    samples: rows,
+    calculationVersion: CALCULATION_VERSION,
   };
 }
 
-module.exports = { getMarketReference, roundMoney };
+/**
+ * Calculates a market reference without ever mutating the listing/order price.
+ * Order of preference (each needs at least MIN_SAMPLE_SIZE comparables):
+ *   1. completed sales in the same region, last WINDOW_DAYS days
+ *   2. completed sales nationwide, last WINDOW_DAYS days
+ *   3. other active comparable listings
+ * If none qualifies the result is null ("not enough market data"). The listing's
+ * own asking price is never used as its own market reference.
+ */
+async function getMarketPriceReference(prisma, listing, options = {}) {
+  if (!listing || !['AGRICULTURAL', 'PRODUCT'].includes(listing.category)) return null;
+
+  if (listing.region) {
+    const regional = comparableRows(await findCompletedComparables(prisma, listing, { locationOnly: true }));
+    if (regional.length >= MIN_SAMPLE_SIZE) {
+      return buildReference(regional, listing, 'RECENT_COMPLETED_ORDERS', options.quantity, { scope: 'REGION', location: listing.region });
+    }
+  }
+
+  const national = comparableRows(await findCompletedComparables(prisma, listing));
+  if (national.length >= MIN_SAMPLE_SIZE) {
+    return buildReference(national, listing, 'RECENT_COMPLETED_ORDERS', options.quantity, { scope: 'NATIONWIDE', location: 'All regions' });
+  }
+
+  const active = activeRows(await findActiveComparables(prisma, listing));
+  if (active.length >= MIN_SAMPLE_SIZE) {
+    return buildReference(active, listing, 'ACTIVE_COMPARABLE_LISTINGS', options.quantity, { scope: 'NATIONWIDE', location: 'All regions' });
+  }
+
+  return null;
+}
+
+function reasonForAdjustment(currentPrice, suggestedPrice, inspectedQuantity, orderedQuantity) {
+  if (orderedQuantity && inspectedQuantity && Math.abs(orderedQuantity - inspectedQuantity) > 1e-9) {
+    return 'QUALITY_OR_QUANTITY_CHANGE';
+  }
+  if (suggestedPrice > currentPrice) return 'MARKET_PRICE_RISE';
+  if (suggestedPrice < currentPrice) return 'MARKET_PRICE_FALL';
+  return null;
+}
+
+/**
+ * Builds a non-binding post-inspection price suggestion. Quantity is objective;
+ * market price is a reference. Grade/damage are deliberately not converted to
+ * an arbitrary percentage because MarketBridge has no universal grading tariff.
+ */
+async function getInspectionPriceSuggestion(prisma, order) {
+  if (!order?.listing || !order?.quantity) return null;
+  const inspection = (order.inspectionRequests || []).find((r) => r.status === 'COMPLETED' && r.report) || null;
+  if (!inspection?.report) return null;
+
+  const report = inspection.report;
+  const inspectedQuantity = finitePositive(report.quantity);
+  const orderedQuantity = finitePositive(order.quantity);
+  const originalTotal = finitePositive(order.originalFinalPrice ?? order.finalPrice);
+  if (!inspectedQuantity || !orderedQuantity || !originalTotal) return null;
+
+  const originalUnitPrice = originalTotal / orderedQuantity;
+  const quantityAdjustedPrice = roundMoney(originalUnitPrice * inspectedQuantity);
+  const market = await getMarketPriceReference(prisma, {
+    ...order.listing,
+    quantity: inspectedQuantity,
+  });
+
+  const marketBasedPrice = market?.unitPrice ? roundMoney(market.unitPrice * inspectedQuantity) : null;
+  const suggestedPrice = marketBasedPrice != null && (market.sampleSize || 0) >= 2
+    ? marketBasedPrice
+    : quantityAdjustedPrice;
+  const adjustmentAmount = roundMoney(suggestedPrice - Number(order.finalPrice));
+  const adjustmentPercent = Number(order.finalPrice) > 0
+    ? Math.round((adjustmentAmount / Number(order.finalPrice)) * 10000) / 100
+    : null;
+
+  return {
+    calculationVersion: CALCULATION_VERSION,
+    currentAgreedPrice: Number(order.finalPrice),
+    originalAgreedPrice: Number(originalTotal),
+    originalUnitPrice: roundMoney(originalUnitPrice),
+    orderedQuantity,
+    inspectedQuantity,
+    quantityAdjustedPrice,
+    marketReference: market,
+    marketBasedPrice,
+    suggestedPrice,
+    adjustmentAmount,
+    adjustmentPercent,
+    suggestedReasonCode: reasonForAdjustment(Number(order.finalPrice), suggestedPrice, inspectedQuantity, orderedQuantity),
+    qualityFinding: {
+      grade: report.grade || null,
+      moisture: report.moisture ?? null,
+      visibleDefects: report.visibleDefects || null,
+      damageNotes: report.damageNotes || null,
+      packagingNotes: report.packagingNotes || null,
+    },
+    requiresReview: Math.abs(adjustmentAmount || 0) >= 0.01,
+  };
+}
+
+function marketSnapshotData(reference, quantity) {
+  if (!reference) return {
+    marketReferenceUnitPrice: null,
+    marketReferenceTotalPrice: null,
+    marketReferenceSource: null,
+    marketReferenceDate: null,
+    marketReferenceLocation: null,
+    marketReferenceUnit: null,
+    marketSampleSize: null,
+    marketMinUnitPrice: null,
+    marketMaxUnitPrice: null,
+  };
+  return {
+    marketReferenceUnitPrice: reference.unitPrice,
+    marketReferenceTotalPrice: reference.unitPrice && quantity ? roundMoney(reference.unitPrice * Number(quantity)) : reference.totalPrice,
+    marketReferenceSource: reference.source,
+    marketReferenceDate: reference.observedAt,
+    marketReferenceLocation: reference.location,
+    marketReferenceUnit: reference.unit,
+    marketSampleSize: reference.sampleSize,
+    marketMinUnitPrice: reference.minUnitPrice,
+    marketMaxUnitPrice: reference.maxUnitPrice,
+  };
+}
+
+module.exports = {
+  CALCULATION_VERSION,
+  MIN_SAMPLE_SIZE,
+  WINDOW_DAYS,
+  getMarketPriceReference,
+  getInspectionPriceSuggestion,
+  marketSnapshotData,
+};
