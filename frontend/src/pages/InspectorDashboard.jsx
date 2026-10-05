@@ -16,6 +16,8 @@ const EMPTY_REPORT = {
   visibleDefects: '',
   damageNotes: '',
   packagingNotes: '',
+  assessmentSummary: '',
+  qualityFlags: [],
   gpsLocation: '',
 };
 
@@ -420,6 +422,22 @@ export default function InspectorDashboard() {
     setActiveRequestId('');
     setReport(EMPTY_REPORT);
     setReportEvidence({ photoKeys: [], videoKeys: [] });
+  }
+
+  async function addReportAddendum(requestId) {
+    const reason = window.prompt('Correction reason', 'Factual correction to completed inspection report');
+    if (reason === null) return;
+    const notes = window.prompt('Correction details');
+    if (!notes || !notes.trim()) return;
+    setError('');
+    setMsg('');
+    try {
+      await api.post(`/inspections/${requestId}/report/addenda`, { reason: reason.trim(), notes: notes.trim() });
+      setMsg('Report addendum recorded. The original report remains unchanged.');
+      await loadAll();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not add report correction.');
+    }
   }
 
   async function submitReport(e) {
@@ -1094,6 +1112,9 @@ export default function InspectorDashboard() {
                                   View listing
                                   <ArrowIcon />
                                 </Link>
+                                <button type="button" className="sd-table-action" style={{ marginLeft: 8, border: 0, background: 'none', cursor: 'pointer' }} onClick={() => addReportAddendum(r.id)}>
+                                  Add correction
+                                </button>
                               </td>
                             </tr>
                           ))}
@@ -1299,6 +1320,31 @@ export default function InspectorDashboard() {
                             setReport({ ...report, packagingNotes: e.target.value })
                           }
                         />
+                      </div>
+
+                      <div className="sd-full">
+                        <label htmlFor="rep-assessment">Inspector assessment</label>
+                        <textarea
+                          id="rep-assessment"
+                          value={report.assessmentSummary}
+                          placeholder="Summarize the verified condition and the most important findings. Do not set or dictate a sale price."
+                          onChange={(e) => setReport({ ...report, assessmentSummary: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="sd-full">
+                        <label>Quality flags</label>
+                        <div className="sd-check-grid">
+                          {['QUANTITY_VARIANCE','LOW_GRADE','MOISTURE_CONCERN','VISIBLE_DAMAGE','PACKAGING_DAMAGE','FRESHNESS_CONCERN','FUNCTIONAL_ISSUE','SPECIFICATION_MISMATCH'].map((flag) => (
+                            <label key={flag}>
+                              <input
+                                type="checkbox"
+                                checked={report.qualityFlags.includes(flag)}
+                                onChange={(e) => setReport({ ...report, qualityFlags: e.target.checked ? [...report.qualityFlags, flag] : report.qualityFlags.filter((v) => v !== flag) })}
+                              /> {flag.replaceAll('_', ' ').toLowerCase()}
+                            </label>
+                          ))}
+                        </div>
                       </div>
 
                       <div className="sd-full sd-photo-evidence">

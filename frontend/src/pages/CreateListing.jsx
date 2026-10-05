@@ -55,7 +55,8 @@ export default function CreateListing() {
     readinessDate: '',
     photos: [], // [{ key, name, previewUrl }]
     videos: [],  // [{ key, name, previewUrl }]
-    description: ''
+    description: '',
+    inspectionRequired: false
   });
   const [error, setError] = useState('');
   const [mediaError, setMediaError] = useState('');
@@ -156,7 +157,8 @@ export default function CreateListing() {
         readinessDate: category === 'AGRICULTURAL' && form.readinessDate ? form.readinessDate : undefined,
         description: form.description || undefined,
         photos: form.photos.map(p => p.key),
-        videos: form.videos.map(v => v.key)
+        videos: form.videos.map(v => v.key),
+        ...(category === 'PRODUCT' ? { inspectionRequired: Boolean(form.inspectionRequired) } : {})
       });
       nav(`/listings/${r.data.listing.id}`);
     } catch (e) {
@@ -224,6 +226,10 @@ export default function CreateListing() {
                 <div><label>Product title</label><input required value={form.title} onChange={set('title')} placeholder="Product name" /></div>
                 <div><label>Quantity</label><input required type="number" min="0.01" value={form.quantity} onChange={set('quantity')} /></div>
                 <div><label>Unit</label><input value={form.unit} onChange={set('unit')} placeholder="piece, box, kg..." /></div>
+                <label className="checkbox-row" style={{ alignItems: 'flex-start' }}>
+                  <input type="checkbox" checked={form.inspectionRequired} onChange={(e) => setForm((prev) => ({ ...prev, inspectionRequired: e.target.checked }))} />
+                  <span><strong>Require independent inspection</strong><small className="muted" style={{ display: 'block' }}>Buyers must review an inspection report before paying for this product.</small></span>
+                </label>
               </div>
             )}
           </div>

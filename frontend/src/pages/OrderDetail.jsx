@@ -578,19 +578,11 @@ const PRICE_REVIEW_REASON_OPTIONS = [
 ];
 
 function PriceReviewPanel({ order, i }) {
-  const suggested = order.priceReviewSuggestion?.suggestedPrice;
-  const [amount, setAmount] = useState(String(suggested ?? order.finalPrice ?? ''));
+  const [amount, setAmount] = useState(String(order.finalPrice ?? ''));
   const [reasonCode, setReasonCode] = useState('QUALITY_OR_QUANTITY_CHANGE');
   const [counterAmount, setCounterAmount] = useState('');
   const [counterReason, setCounterReason] = useState('QUALITY_OR_QUANTITY_CHANGE');
   const reviews = Array.isArray(order.priceReviews) ? order.priceReviews : [];
-  useEffect(() => {
-    const nextSuggested = order.priceReviewSuggestion?.suggestedPrice;
-    setAmount(String(nextSuggested ?? order.finalPrice ?? ''));
-    if (order.priceReviewSuggestion?.suggestedReasonCode) {
-      setReasonCode(order.priceReviewSuggestion.suggestedReasonCode);
-    }
-  }, [order.id, order.finalPrice, order.priceReviewSuggestion?.suggestedPrice, order.priceReviewSuggestion?.suggestedReasonCode]);
   const pending = [...reviews].reverse().find((review) => review.status === 'PENDING');
   const paymentStarted = (order.payments || []).some((payment) => payment.type === 'MARKETPLACE' && ['PENDING', 'PROCESSING', 'PAID'].includes(payment.status));
   const available = !paymentStarted && !['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(order.status);
@@ -601,23 +593,8 @@ function PriceReviewPanel({ order, i }) {
       <p className="muted">The current agreed price is protected from automatic market changes. A price changes only when the other party accepts a proposal. Inspection fees remain separate.</p>
       <div className="detail-facts">
         <div><span>Current agreed price</span><strong>{money(order.finalPrice)}</strong></div>
-        <div><span>Original negotiated total</span><strong>{money(order.originalFinalPrice ?? order.finalPrice)}</strong></div>
         <div><span>Price state</span><strong>{order.buyerDecision === 'BUY' ? 'Confirmed for payment' : pending ? 'Awaiting response' : 'Provisional'}</strong></div>
       </div>
-      {order.priceReviewSuggestion?.suggestedPrice && order.priceReviewSuggestion.requiresReview && (
-        <div className="card" style={{ marginTop: 12, padding: 12, background: 'var(--surface-2, #f7faf8)' }}>
-          <strong>Platform price-review suggestion</strong>
-          <p className="muted" style={{ margin: '5px 0' }}>
-            Suggested revised total: <strong>{money(order.priceReviewSuggestion.suggestedPrice)}</strong> ETB
-            {' '}({order.priceReviewSuggestion.adjustmentAmount > 0 ? '+' : ''}{money(order.priceReviewSuggestion.adjustmentAmount)} ETB / {Number(order.priceReviewSuggestion.adjustmentPercent || 0).toFixed(2)}%).
-          </p>
-          <p className="muted small" style={{ margin: 0 }}>
-            Inspection quantity: {Number(order.priceReviewSuggestion.inspectedQuantity).toLocaleString()} {order.listing?.unit || 'units'} · Original quantity: {Number(order.priceReviewSuggestion.orderedQuantity).toLocaleString()} {order.listing?.unit || 'units'}.
-            {order.priceReviewSuggestion.marketReference?.unitPrice ? ` Market reference: ${money(order.priceReviewSuggestion.marketReference.unitPrice)} ETB/${order.listing?.unit || 'unit'}.` : ''}
-          </p>
-          <p className="muted small" style={{ margin: '5px 0 0' }}>This is a non-binding calculation. Quality/damage findings are shown to both parties but are not converted into an arbitrary automatic discount.</p>
-        </div>
-      )}
       {reviews.length > 0 && (
         <div style={{ marginTop: 12 }}>
           <strong>Price-review history</strong>
@@ -651,7 +628,6 @@ function PriceReviewPanel({ order, i }) {
         <div style={{ marginTop: 12 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
             <label>Proposed total price (ETB)<input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
-            {order.priceReviewSuggestion?.suggestedPrice && <p className="muted small" style={{ margin: '2px 0 0' }}>Platform suggestion: {money(order.priceReviewSuggestion.suggestedPrice)} ETB. You may propose another amount.</p>}
             <label>Reason<select value={reasonCode} onChange={(e) => setReasonCode(e.target.value)}>{PRICE_REVIEW_REASON_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
           </div>
           <Button variant="light" disabled={Boolean(i.busy) || !(Number(amount) > 0) || Number(amount) === Number(order.finalPrice)} onClick={() => i.createPriceReview(Number(amount), reasonCode)}>Request price review</Button>
@@ -720,11 +696,18 @@ function InspectionCard({ order, title, i }) {
   const busyKey = (quoteId, action) => `inspection-quote-${quoteId}-${action}`;
   const isBusy = (quoteId, action) => i.busy === busyKey(quoteId, action);
 
-  const feePaid = (request.payments || []).some(
-    (p) => p.type === 'INSPECTOR' && p.status === 'PAID'
+  const inspectionObligations = (order.paymentObligations || []).filter(
+    (o) => o.type === 'INSPECTOR' && o.inspectionRequestId === request.id
   );
+  const myInspectionObligation = inspectionObligations.find((o) => o.payerId === i.currentUserId);
+  const feePaid = request.feePayer === 'SPLIT'
+    ? myInspectionObligation?.status === 'PAID'
+    : (request.payments || []).some((p) => p.type === 'INSPECTOR' && p.createdById === i.currentUserId && p.status === 'PAID');
+  const feeFullyPaid = inspectionObligations.length > 0
+    ? inspectionObligations.every((o) => o.status === 'PAID')
+    : (request.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID');
   const feePending = (request.payments || []).some(
-    (p) => p.type === 'INSPECTOR' && ['PENDING', 'PROCESSING'].includes(p.status)
+    (p) => p.type === 'INSPECTOR' && p.createdById === i.currentUserId && ['PENDING', 'PROCESSING'].includes(p.status)
   );
 
   return (
@@ -745,6 +728,7 @@ function InspectionCard({ order, title, i }) {
           {reportReady && <Fact name="Inspection date">{formatDateTime(inspectionDate)}</Fact>}
           {inspectorName && <Fact name="Inspected by">{inspectorName}</Fact>}
           {request.fee != null && <Fact name="Inspection fee">{money(request.fee)} ETB</Fact>}
+          {request.feePayer && <Fact name="Fee responsibility">{request.feePayer === 'SPLIT' ? `Buyer ${money(request.buyerFeeAmount)} + Seller ${money(request.sellerFeeAmount)}` : request.feePayer === 'SELLER' ? 'Seller' : 'Buyer'}</Fact>}
           {!inspectorName && <Fact name="Status">{label(request.status)}</Fact>}
         </Facts>
         {request.workDetails && <div className="od-work-details"><h4>Agreed inspection scope</h4>{request.workDetails.workDescription && <p>{request.workDetails.workDescription}</p>}<div className="od-work-detail-items">{request.workDetails.quantityToInspect && <span><b>Quantity:</b> {request.workDetails.quantityToInspect}</span>}{request.workDetails.lotCount && <span><b>Lots:</b> {request.workDetails.lotCount}</span>}{request.workDetails.requiredBy && <span><b>Deadline:</b> {formatDateTime(request.workDetails.requiredBy)}</span>}</div>{request.workDetails.checks?.length > 0 && <p><b>Checks:</b> {request.workDetails.checks.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>}{request.workDetails.reportRequirements && <p><b>Report:</b> {request.workDetails.reportRequirements}</p>}</div>}
@@ -897,20 +881,35 @@ function InspectionCard({ order, title, i }) {
 
       {/* ── Provisional inspector agreement (ACCEPTED state) ── */}
       {request.status === 'ACCEPTED' && request.fee != null && (
-        <Section title="Inspector assigned — fee due">
+        <Section title="Inspector assigned — seller confirmation & fee">
           <p className="muted">
-            The inspector is provisionally assigned. Pay the inspection fee below to
-            let the inspector start.
+            The inspector is provisionally assigned. The seller must confirm the selected inspector first; then the designated payer settles the inspection fee. The fee pays for independent verification and is not a commitment to buy the goods.
           </p>
           <p>
             Fee: <strong>{money(request.fee)} ETB</strong>
           </p>
+          {request.sellerConfirmedAt ? (
+            <p className="muted small">Seller confirmed the inspector. The inspection fee can now be paid.</p>
+          ) : i.isSeller ? (
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={Boolean(i.busy)}
+              busy={i.busy === `seller-confirm-${request.id}`}
+              busyText="Confirming…"
+              onClick={() => i.confirmSellerInspection(request.id)}
+            >
+              Confirm inspector & fee
+            </Button>
+          ) : (
+            <p className="muted small">Waiting for the seller to confirm the selected inspector and agreed fee.</p>
+          )}
 
-          {feePaid ? (
-            <p className="muted small">Inspection fee paid.</p>
+          {feeFullyPaid ? (
+            <p className="muted small">Inspection fee fully paid. The inspector can start once all required parties have paid.</p>
           ) : feePending ? (
             <p className="muted small">
-              A payment for this inspection is pending or processing.
+              Your inspection-fee payment is pending or processing.
             </p>
           ) : i.canPayInspection ? (
             <Button
@@ -925,7 +924,7 @@ function InspectionCard({ order, title, i }) {
             </Button>
           ) : (
             <p className="muted small">
-              Only the buyer can pay the inspector fee.
+              The designated inspection payer can pay this fee.
             </p>
           )}
 
@@ -954,10 +953,16 @@ function InspectionCard({ order, title, i }) {
         <>
           <Section title="Findings">
             <Facts>
+              <Fact name="Verified quantity">{report.quantity != null ? `${report.quantity} ${order.listing?.unit || 'units'}` : '—'}</Fact>
+              {report.quantityVariancePercent != null && <Fact name="Quantity variance">{Number(report.quantityVariancePercent).toFixed(2)}%</Fact>}
+              <Fact name="Grade / condition"><Finding text={report.grade} empty="Not specified" /></Fact>
               <Fact name="Visible defects"><Finding text={report.visibleDefects} empty="No defects" /></Fact>
               <Fact name="Damage notes"><Finding text={report.damageNotes} empty="No damage" /></Fact>
               <Fact name="Packaging"><Finding text={report.packagingNotes} empty="Fully packed" /></Fact>
             </Facts>
+            {report.assessmentSummary && <Notice title="Inspector assessment"><p className="muted">{report.assessmentSummary}</p></Notice>}
+            {Array.isArray(report.qualityFlags) && report.qualityFlags.length > 0 && <Notice title="Quality flags"><p className="muted">{report.qualityFlags.join(' · ')}</p></Notice>}
+            {Array.isArray(report.addenda) && report.addenda.length > 0 && <Notice title="Report corrections / addenda"><div>{report.addenda.map((a) => <div key={a.id} style={{ borderTop: '1px solid var(--border-color, #ddd)', padding: '8px 0' }}><strong>{a.reason}</strong><p className="muted small">{a.notes}</p></div>)}</div></Notice>}
           </Section>
 
           {i.decisionRequired && (
@@ -1000,11 +1005,11 @@ function InspectionCard({ order, title, i }) {
           {i.isParticipant && <PriceReviewPanel order={order} i={i} />}
         </>
       ) : (
-        ['REQUESTED', 'ACCEPTED'].includes(request.status) && (i.isAdmin || i.isParticipant) && (
+        ['REQUESTED', 'ACCEPTED', 'STALLED'].includes(request.status) && (i.isAdmin || i.isParticipant) && (
           <Section title="Inspection recovery">
             <p className="muted">
               {i.isAdmin
-                ? 'If every inspector bid is closed, reopen bidding. If the request is no longer wanted, cancel it without cancelling the order.'
+                ? 'If the inspection is stalled, every inspector bid is closed, or the provider is unavailable, reopen bidding. If the request is no longer wanted, cancel it without cancelling the order.'
                 : 'If you no longer want this request, cancel it without cancelling the order. Only MarketBridge admin can reopen inspection bidding.'}
             </p>
             <Actions>
@@ -1648,7 +1653,7 @@ export default function OrderDetail() {
 
   const isAgricultural = order?.listing?.category === 'AGRICULTURAL';
   const isProduct = order?.listing?.category === 'PRODUCT';
-  const inspectionApplies = isAgricultural || isProduct;
+  const inspectionAvailable = isAgricultural || isProduct;
   const title = order?.listing?.title || order?.listing?.cropType || 'Order';
 
   const allInspections = useMemo(
@@ -1665,9 +1670,11 @@ export default function OrderDetail() {
   const inspectionFormReleased = recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'APPROVED' && r.formReleasedAt);
   const inspectorName = (order?.inspectionRequests || inspections).find((r) => r?.inspector?.name)?.inspector?.name || null;
 
+  const inspectionGateRequired = isAgricultural || Boolean(order?.listing?.inspectionRequired || currentInspection);
+  const inspectionApplies = inspectionAvailable;
   const inspectionGateMet =
-    !inspectionApplies || Boolean(currentInspection && currentInspection.status === 'COMPLETED' && currentInspection.report);
-  const decisionRequired = inspectionApplies;
+    !inspectionGateRequired || Boolean(currentInspection && currentInspection.status === 'COMPLETED' && currentInspection.report);
+  const decisionRequired = inspectionGateRequired;
   const decisionGateMet = !decisionRequired || order?.buyerDecision === 'BUY';
   const negotiatedGateMet = !isProduct || Boolean(order?.agreedOfferId);
 
@@ -1745,7 +1752,7 @@ export default function OrderDetail() {
   const marketplaceBlockedReason =
     isProduct && !negotiatedGateMet
       ? 'This product must first be won through seller bidding and bilateral negotiation before payment.'
-      : inspectionApplies && !inspectionGateMet
+      : inspectionGateRequired && !inspectionGateMet
       ? !currentInspection
         ? 'Request and complete the inspection before paying for the goods.'
         : 'Complete the current inspection and make sure its report is published before paying for the goods.'
@@ -1805,11 +1812,19 @@ export default function OrderDetail() {
     return run('pay-transport', () => startChapaPayment({ type: 'TRANSPORT', orderId: order.id, amount, method: payMethod }), 'Could not start transport payment');
   };
 
-  const payInspection = (request) =>
-    request?.id && request.fee &&
-    run(`pay-inspection-${request.id}`, () =>
-      startChapaPayment({ type: 'INSPECTOR', inspectionRequestId: request.id, orderId: order.id, amount: Number(request.fee), method: payMethod }),
+  const payInspection = (request) => {
+    if (!request?.id || !request.fee) return;
+    const feePayer = request.feePayer || (request.mode === 'SELLER_REQUESTED' ? 'SELLER' : 'BUYER');
+    const amount = feePayer === 'SELLER'
+      ? Number(request.sellerFeeAmount ?? request.fee)
+      : feePayer === 'SPLIT'
+        ? (isBuyer ? Number(request.buyerFeeAmount ?? Number(request.fee) / 2) : isSeller ? Number(request.sellerFeeAmount ?? Number(request.fee) / 2) : 0)
+        : Number(request.buyerFeeAmount ?? request.fee);
+    if (!Number.isFinite(amount) || amount <= 0) return setError('No inspection fee is currently payable by this account.');
+    return run(`pay-inspection-${request.id}`, () =>
+      startChapaPayment({ type: 'INSPECTOR', inspectionRequestId: request.id, orderId: order.id, amount, method: payMethod }),
       'Could not start inspector payment');
+  };
 
   const startInstallments = () => {
     if (!isBuyer) return setError('Only the buyer can make the marketplace payment');
@@ -1865,18 +1880,28 @@ export default function OrderDetail() {
   const inspectionPaymentGroups = inspectionApplies && currentInspection && Number(currentInspection.fee) > 0
     ? [currentInspection].map((request) => {
         const list = request.payments || [];
-        const open = list.find((p) => p.type === 'INSPECTOR' && active(p)) || null;
+        const open = list.find((p) => p.type === 'INSPECTOR' && p.createdById === currentUserId && active(p)) || null;
         const key = `${open?.status === 'PROCESSING' ? 'check' : open ? 'resume' : 'pay'}-inspection-${request.id}`;
+        const feePayer = request.feePayer || (request.mode === 'SELLER_REQUESTED' ? 'SELLER' : 'BUYER');
+        const viewerShare = feePayer === 'SELLER'
+          ? (isSeller ? Number(request.sellerFeeAmount ?? request.fee) : 0)
+          : feePayer === 'SPLIT'
+            ? (isBuyer ? Number(request.buyerFeeAmount ?? Number(request.fee) / 2) : isSeller ? Number(request.sellerFeeAmount ?? Number(request.fee) / 2) : 0)
+            : (isBuyer ? Number(request.buyerFeeAmount ?? request.fee) : 0);
+        const viewerPaid = feePayer === 'SPLIT'
+          ? Boolean((order.paymentObligations || []).find((o) => o.type === 'INSPECTOR' && o.inspectionRequestId === request.id && o.payerId === currentUserId && o.status === 'PAID'))
+          : list.some((p) => p.type === 'INSPECTOR' && p.createdById === currentUserId && p.status === 'PAID');
         return {
           id: request.id,
-          label: `${request.inspector?.name || 'Inspector'} — inspection fee`,
-          amount: request.fee,
-          paid: list.some((p) => p.type === 'INSPECTOR' && p.status === 'PAID'),
+          label: `${request.inspector?.name || 'Inspector'} — ${feePayer === 'SPLIT' ? 'your inspection-fee share' : 'inspection fee'}`,
+          amount: viewerShare || Number(request.fee),
+          paid: viewerPaid,
           pending: Boolean(open),
           processing: open?.status === 'PROCESSING',
           note: request.status !== 'COMPLETED' ? `Inspection status: ${request.status}` : null,
           busyKey: key,
-          canCheck: open?.status === 'PROCESSING',
+          canPay: Boolean(request.status === 'ACCEPTED' && request.sellerConfirmedAt && viewerShare > 0 && ((feePayer === 'SELLER' && isSeller) || (feePayer === 'SPLIT' && (isBuyer || isSeller)) || (feePayer === 'BUYER' && isBuyer)) && !open),
+          canCheck: Boolean(open?.status === 'PROCESSING'),
           canResume: Boolean(open) && open.status !== 'PROCESSING',
           onCheck: () => checkPayment(open?.id, key),
           onResume: () => resumePayment(open?.id, key),
@@ -2044,16 +2069,22 @@ export default function OrderDetail() {
       );
     },
     payInspection: (request) => payInspection(request),
+    confirmSellerInspection: (requestId) => run(`seller-confirm-${requestId}`, () => api.post(`/inspections/${requestId}/seller-confirm`, { message: 'Seller confirmed the selected inspector and agreed inspection fee.' }), 'Could not confirm the inspector'),
     currentUserId,
     counterInputs,
     setCounterInputs,
     canPayInspection: Boolean(
       currentInspection &&
-      isBuyer &&
       currentInspection.status === 'ACCEPTED' &&
       currentInspection.fee != null &&
+      Boolean(currentInspection.sellerConfirmedAt) &&
+      (currentInspection.feePayer === 'SELLER'
+        ? isSeller
+        : currentInspection.feePayer === 'SPLIT'
+          ? (isBuyer || isSeller)
+          : isBuyer) &&
       !(currentInspection.payments || []).some((p) =>
-        ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
+        p.type === 'INSPECTOR' && p.createdById === currentUserId && ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
       )
     ),
   };
