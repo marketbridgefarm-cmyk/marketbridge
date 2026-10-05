@@ -7,8 +7,8 @@
  *  - While one buyer is in exclusive negotiation, or an order exists that is not
  *    yet paid, the waiting list is LOCKED: the seller can neither select nor
  *    reject waiting bids. Waiting bidders may withdraw themselves.
- *  - The list unlocks when the buyer rejects, or the order is cancelled; the
- *    seller then selects another waiting bidder.
+ *  - The list unlocks when the buyer rejects, the seller releases a silent
+ *    buyer, or the order is cancelled; the seller then selects another bidder.
  *  - When goods are paid/committed, remaining waiting bids are RELEASED
  *    (status WITHDRAWN, shown as "Released") and bidders are notified.
  *
@@ -72,6 +72,22 @@ async function noticeWaitingLocked(db, { listingId, selectedOfferId, selectedBuy
   }
 }
 
+async function noticeBuyerReleased(db, { listingId, offerId, buyerId }) {
+  try {
+    const label = await listingLabel(db, listingId);
+    await createNotices(db, [{
+      userId: buyerId,
+      listingId,
+      offerId,
+      type: 'BUYER_RELEASED',
+      title: 'The seller released your negotiation',
+      body: `You did not respond in time, so the seller released your negotiation on ${label}. You can place a new bid if the listing is still open.`,
+    }]);
+  } catch (error) {
+    console.error('BUYER RELEASE NOTICE FAILED', error);
+  }
+}
+
 async function noticeWaitingUnlocked(db, { listingId, reason }) {
   try {
     const label = await listingLabel(db, listingId);
@@ -129,4 +145,4 @@ async function releaseWaitingBidders(db, { listingId, actorId = null, reason = '
   }
 }
 
-module.exports = { noticeWaitingLocked, noticeWaitingUnlocked, releaseWaitingBidders };
+module.exports = { noticeWaitingLocked, noticeWaitingUnlocked, noticeBuyerReleased, releaseWaitingBidders };
