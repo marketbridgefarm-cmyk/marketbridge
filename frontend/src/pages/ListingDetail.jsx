@@ -40,6 +40,7 @@ export default function ListingDetail() {
   const { showToast } = useToast();
 
   const [listing, setListing] = useState(null);
+  const [marketInsight, setMarketInsight] = useState(null);
 
   const [offerAmount, setOfferAmount] = useState('');
   const [message, setMessage] = useState('');
@@ -81,6 +82,18 @@ export default function ListingDetail() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    if (!listing || !user?.id || !['AGRICULTURAL', 'PRODUCT'].includes(listing.category)) {
+      setMarketInsight(null);
+      return;
+    }
+    let cancelled = false;
+    api.get(`/listings/${id}/price-insights`)
+      .then((response) => { if (!cancelled) setMarketInsight(response.data || null); })
+      .catch(() => { if (!cancelled) setMarketInsight(null); });
+    return () => { cancelled = true; };
+  }, [id, listing, user?.id]);
 
   useEffect(() => {
     if (!listing) return;
@@ -143,6 +156,11 @@ export default function ListingDetail() {
   const isBuyer = user?.roles?.includes('BUYER') && !isOwner;
   const isAgricultural = listing.category === 'AGRICULTURAL';
   const isProduct = listing.category === 'PRODUCT';
+
+  const marketUnitPrice = Number(marketInsight?.marketReference?.unitPrice);
+  const offerReferencePrice = Number.isFinite(marketUnitPrice) && marketUnitPrice > 0
+    ? marketUnitPrice
+    : Number(listing.askingPrice);
 
   const isAvailable =
     listing.status === 'ACTIVE' ||
@@ -577,7 +595,17 @@ export default function ListingDetail() {
                     </Link>
                   </>
                 ) : (
-                  <form onSubmit={submitOffer}>
+                  <>
+                    {marketInsight?.marketReference?.unitPrice && (
+                      <div className="card" style={{ margin: '0 0 12px', padding: 12, background: 'var(--surface-2, #f7faf8)' }}>
+                        <strong>Current market reference</strong>
+                        <p className="muted" style={{ margin: '4px 0 0' }}>
+                          {money(marketInsight.marketReference.unitPrice)} ETB / {listing.unit || 'unit'} · {marketInsight.marketReference.sampleSize || 1} comparable {marketInsight.marketReference.source === 'RECENT_COMPLETED_ORDERS' ? 'completed sales' : 'listings'}
+                        </p>
+                        <p className="muted small" style={{ margin: '4px 0 0' }}>This is an advisory reference for negotiation. It does not change your offer automatically.</p>
+                      </div>
+                    )}
+                    <form onSubmit={submitOffer}>
                     <label>
                       {isProduct
                         ? 'Offer amount (ETB)'
@@ -585,7 +613,7 @@ export default function ListingDetail() {
                     </label>
                     <AmountPicker
                       required
-                      reference={Number(listing.askingPrice)}
+                      reference={offerReferencePrice}
                       placeholder={
                         isProduct
                           ? 'Select the amount you want to offer'
@@ -613,6 +641,7 @@ export default function ListingDetail() {
                       {isProduct ? 'Make Offer' : 'Submit bid'}
                     </button>
                   </form>
+                  </>
                 )}
               </div>
             )}

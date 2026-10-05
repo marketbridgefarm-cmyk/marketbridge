@@ -393,6 +393,17 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
         {item.viewerRole && <span className="role-chip">You are the {item.viewerRole.toLowerCase()}</span>}
       </div>
 
+      {item.type === 'LISTING_OFFER' && item.marketReference?.unitPrice > 0 && (
+        <p className="neg-deal-context">
+          Market reference: <strong>{item.marketReference.unitPrice.toLocaleString()} ETB/{item.raw?.listing?.unit || 'unit'}</strong>
+          {item.marketReference.sampleSize ? ` · ${item.marketReference.sampleSize} comparable ${item.marketReference.source === 'RECENT_COMPLETED_ORDERS' ? 'sales' : 'listings'}` : ''}.
+          <span className="muted"> Advisory only — it does not change the negotiated price.</span>
+        </p>
+      )}
+      {item.type === 'LISTING_OFFER' && item.negotiationDeadlineAt && (
+        <p className="neg-deal-context small">Negotiation closes by {new Date(item.negotiationDeadlineAt).toLocaleString()}.</p>
+      )}
+
       {item.message && <p className="neg-deal-context">{item.message}</p>}
 
       {waitingMessage && <p className="neg-waiting">{waitingMessage}</p>}
@@ -530,6 +541,8 @@ export default function Negotiations() {
             : 'Listing offer · you are the buyer',
           linkTo:    offer.listingId ? `/listings/${offer.listingId}` : null,
           expiresAt: offer.expiresAt,
+          negotiationDeadlineAt: offer.negotiationDeadlineAt,
+          marketReference: offer.marketReferenceUnitPrice ? { unitPrice: Number(offer.marketReferenceUnitPrice), source: offer.marketReferenceSource, sampleSize: offer.marketSampleSize, minUnitPrice: Number(offer.marketMinUnitPrice || 0), maxUnitPrice: Number(offer.marketMaxUnitPrice || 0) } : null,
           raw:       offer,
         });
       });

@@ -578,11 +578,19 @@ const PRICE_REVIEW_REASON_OPTIONS = [
 ];
 
 function PriceReviewPanel({ order, i }) {
-  const [amount, setAmount] = useState(String(order.finalPrice ?? ''));
+  const suggested = order.priceReviewSuggestion?.suggestedPrice;
+  const [amount, setAmount] = useState(String(suggested ?? order.finalPrice ?? ''));
   const [reasonCode, setReasonCode] = useState('QUALITY_OR_QUANTITY_CHANGE');
   const [counterAmount, setCounterAmount] = useState('');
   const [counterReason, setCounterReason] = useState('QUALITY_OR_QUANTITY_CHANGE');
   const reviews = Array.isArray(order.priceReviews) ? order.priceReviews : [];
+  useEffect(() => {
+    const nextSuggested = order.priceReviewSuggestion?.suggestedPrice;
+    setAmount(String(nextSuggested ?? order.finalPrice ?? ''));
+    if (order.priceReviewSuggestion?.suggestedReasonCode) {
+      setReasonCode(order.priceReviewSuggestion.suggestedReasonCode);
+    }
+  }, [order.id, order.finalPrice, order.priceReviewSuggestion?.suggestedPrice, order.priceReviewSuggestion?.suggestedReasonCode]);
   const pending = [...reviews].reverse().find((review) => review.status === 'PENDING');
   const paymentStarted = (order.payments || []).some((payment) => payment.type === 'MARKETPLACE' && ['PENDING', 'PROCESSING', 'PAID'].includes(payment.status));
   const available = !paymentStarted && !['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(order.status);
@@ -593,8 +601,23 @@ function PriceReviewPanel({ order, i }) {
       <p className="muted">The current agreed price is protected from automatic market changes. A price changes only when the other party accepts a proposal. Inspection fees remain separate.</p>
       <div className="detail-facts">
         <div><span>Current agreed price</span><strong>{money(order.finalPrice)}</strong></div>
+        <div><span>Original negotiated total</span><strong>{money(order.originalFinalPrice ?? order.finalPrice)}</strong></div>
         <div><span>Price state</span><strong>{order.buyerDecision === 'BUY' ? 'Confirmed for payment' : pending ? 'Awaiting response' : 'Provisional'}</strong></div>
       </div>
+      {order.priceReviewSuggestion?.suggestedPrice && order.priceReviewSuggestion.requiresReview && (
+        <div className="card" style={{ marginTop: 12, padding: 12, background: 'var(--surface-2, #f7faf8)' }}>
+          <strong>Platform price-review suggestion</strong>
+          <p className="muted" style={{ margin: '5px 0' }}>
+            Suggested revised total: <strong>{money(order.priceReviewSuggestion.suggestedPrice)}</strong> ETB
+            {' '}({order.priceReviewSuggestion.adjustmentAmount > 0 ? '+' : ''}{money(order.priceReviewSuggestion.adjustmentAmount)} ETB / {Number(order.priceReviewSuggestion.adjustmentPercent || 0).toFixed(2)}%).
+          </p>
+          <p className="muted small" style={{ margin: 0 }}>
+            Inspection quantity: {Number(order.priceReviewSuggestion.inspectedQuantity).toLocaleString()} {order.listing?.unit || 'units'} · Original quantity: {Number(order.priceReviewSuggestion.orderedQuantity).toLocaleString()} {order.listing?.unit || 'units'}.
+            {order.priceReviewSuggestion.marketReference?.unitPrice ? ` Market reference: ${money(order.priceReviewSuggestion.marketReference.unitPrice)} ETB/${order.listing?.unit || 'unit'}.` : ''}
+          </p>
+          <p className="muted small" style={{ margin: '5px 0 0' }}>This is a non-binding calculation. Quality/damage findings are shown to both parties but are not converted into an arbitrary automatic discount.</p>
+        </div>
+      )}
       {reviews.length > 0 && (
         <div style={{ marginTop: 12 }}>
           <strong>Price-review history</strong>
@@ -628,6 +651,7 @@ function PriceReviewPanel({ order, i }) {
         <div style={{ marginTop: 12 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
             <label>Proposed total price (ETB)<input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+            {order.priceReviewSuggestion?.suggestedPrice && <p className="muted small" style={{ margin: '2px 0 0' }}>Platform suggestion: {money(order.priceReviewSuggestion.suggestedPrice)} ETB. You may propose another amount.</p>}
             <label>Reason<select value={reasonCode} onChange={(e) => setReasonCode(e.target.value)}>{PRICE_REVIEW_REASON_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
           </div>
           <Button variant="light" disabled={Boolean(i.busy) || !(Number(amount) > 0) || Number(amount) === Number(order.finalPrice)} onClick={() => i.createPriceReview(Number(amount), reasonCode)}>Request price review</Button>
