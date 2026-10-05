@@ -4,6 +4,7 @@ const {
   validationResult,
 } = require('express-validator');
 
+const { Prisma } = require('@prisma/client');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
@@ -78,6 +79,18 @@ function isOfferExpired(offer) {
     new Date(offer.expiresAt).getTime() <= Date.now()
   );
 }
+
+// A counter creates a child row and leaves its parent as COUNTERED for history.
+// Only the leaf of a chain may be acted on; otherwise a stale parent could be
+// accepted/countered at an outdated price, or branch the chain.
+async function assertLiveLeaf(tx, offer) {
+  const children = await tx.offer.count({ where: { parentOfferId: offer.id } });
+  if (children > 0) {
+    throw offerError('This offer was superseded by a newer counter. Refresh and try again.', 409);
+  }
+}
+
+const OPEN_OFFER_STATUSES = ['PENDING', 'SELECTED', 'COUNTERED'];
 
 async function expireOfferIfNeeded(tx, offer, actorId = null) {
   if (!offer || !isOfferExpired(offer)) return false;
@@ -214,28 +227,37 @@ router.post(
       const marketReference = await getMarketPriceReference(prisma, listing, { quantity: offerQuantity });
       const marketSnapshot = marketSnapshotData(marketReference, offerQuantity);
 
-      const existingOffer =
-        await prisma.offer.findFirst({
-          where: {
-            listingId,
-            buyerId: req.user.id,
-            status: {
-              in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'],
-            },
-            childOffers: { none: {} },
-          },
-        });
-
-      if (existingOffer) {
-        return res.status(409).json({
-          error:
-            'You already have an active negotiation on this listing',
-          offer: existingOffer,
-        });
-      }
-
       const offer = await prisma.$transaction(
         async (tx) => {
+          // Serialize offer creation per listing so two concurrent requests from
+          // the same buyer cannot both pass the "no active negotiation" check
+          // (the unique index that used to guard this was intentionally dropped).
+          await tx.$queryRaw`SELECT "id" FROM "Listing" WHERE "id" = ${listingId} FOR UPDATE`;
+
+          // An ACCEPTED offer only blocks while its order is still live. Once the
+          // order is COMPLETED or CANCELLED the buyer may bid on remaining stock.
+          const existingOffer = await tx.offer.findFirst({
+            where: {
+              listingId,
+              buyerId: req.user.id,
+              childOffers: { none: {} },
+              OR: [
+                { status: { in: OPEN_OFFER_STATUSES } },
+                {
+                  status: 'ACCEPTED',
+                  agreedOrder: { is: { status: { notIn: ['CANCELLED', 'COMPLETED'] } } },
+                },
+              ],
+            },
+          });
+
+          if (existingOffer) {
+            throw Object.assign(
+              offerError('You already have an active negotiation on this listing', 409),
+              { offer: existingOffer }
+            );
+          }
+
           const createdOffer =
             await tx.offer.create({
               data: {
@@ -275,6 +297,10 @@ router.post(
         offer,
       });
     } catch (error) {
+      if (error?.statusCode === 409 && error.offer) {
+        return res.status(409).json({ error: error.message, offer: error.offer });
+      }
+
       req.log.error({ err: error }, 'CREATE OFFER ERROR:');
 
       if (error?.code === 'P2002') {
@@ -425,6 +451,7 @@ router.get(
             },
 
             include: {
+              agreedOrder: { select: { id: true, status: true } },
               buyer: {
                 select: {
                   id: true,
@@ -548,13 +575,21 @@ async function acceptOfferAndCreateOrder(
 
   // amount is the negotiated PER-UNIT price. The order/payment amount is the
   // immutable server-calculated total.
-  const totalPrice = Math.round(unitPrice * requestedQuantity * 100) / 100;
+  // Decimal math avoids float drift (e.g. 0.285 * 100 = 28.499999999999996).
+  const totalPrice = new Prisma.Decimal(unitPrice)
+    .mul(new Prisma.Decimal(requestedQuantity))
+    .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)
+    .toNumber();
   const minimumUnitPrice = lockedListing.minAcceptablePrice == null
     ? null
     : Number(lockedListing.minAcceptablePrice);
   if (minimumUnitPrice != null && Number.isFinite(minimumUnitPrice) && unitPrice < minimumUnitPrice) {
+    // The minimum is private to the seller. Never echo it to the buyer.
+    const actorIsSeller = String(actorId) === String(sellerId);
     throw offerError(
-      `Offer price is below the seller's minimum acceptable unit price of ${minimumUnitPrice.toFixed(2)} ETB`,
+      actorIsSeller
+        ? `Offer price is below your minimum acceptable unit price of ${minimumUnitPrice.toFixed(2)} ETB`
+        : 'This price cannot be accepted by the seller. Try a different price.',
       409
     );
   }
@@ -767,7 +802,7 @@ router.patch(
         });
       }
 
-      if (isOfferExpired(offer)) {
+      if (OPEN_OFFER_STATUSES.includes(offer.status) && isOfferExpired(offer)) {
         await prisma.$transaction(async (tx) => {
           await expireOfferIfNeeded(tx, offer, req.user.id);
         }, { maxWait: 10000, timeout: 15000 });
@@ -922,6 +957,7 @@ router.patch(
             throw offerError('This selected bid has expired and can no longer be accepted', 409);
           }
           if (fresh.status !== 'SELECTED') throw offerError('This selected bid is no longer available', 409);
+          await assertLiveLeaf(tx, fresh);
           return acceptOfferAndCreateOrder(tx, fresh, Number(fresh.amount), fresh.listing.sellerId, req.user.id);
         }, { maxWait: 10000, timeout: 15000 });
         return res.json({ message: 'Selected buyer bid accepted and order created successfully', offer: result.offer, order: result.order, transportAutomaticallyAssigned: false });
@@ -994,6 +1030,7 @@ router.patch(
                   409
                 );
               }
+              await assertLiveLeaf(tx, freshOffer);
 
               if (freshOffer.status === 'COUNTERED' && freshOffer.counteredBy !== 'SELLER') {
                 throw offerError(
@@ -1105,6 +1142,7 @@ router.patch(
                   409
                 );
               }
+              await assertLiveLeaf(tx, freshOffer);
 
               if (
                 freshOffer.status === 'COUNTERED' &&
@@ -1232,6 +1270,7 @@ router.patch(
                   409
                 );
               }
+              await assertLiveLeaf(tx, freshOffer);
 
               if (
                 freshOffer.status ===
@@ -1364,10 +1403,22 @@ router.patch(
               });
 
               if (remainingActiveLeafOffers === 0) {
-                await tx.listing.update({
-                  where: { id: freshOffer.listingId },
-                  data: { status: 'ACTIVE' },
+                const liveOrder = await tx.order.findFirst({
+                  where: {
+                    listingId: freshOffer.listingId,
+                    status: { notIn: ['CANCELLED', 'COMPLETED'] },
+                  },
+                  select: { id: true },
                 });
+
+                // Only an UNDER_NEGOTIATION listing goes back to ACTIVE. Never
+                // overwrite SOLD / CANCELLED / EXPIRED / DRAFT.
+                if (!liveOrder) {
+                  await tx.listing.updateMany({
+                    where: { id: freshOffer.listingId, status: 'UNDER_NEGOTIATION' },
+                    data: { status: 'ACTIVE' },
+                  });
+                }
               }
 
               await recordAuditEvent(tx, {
@@ -1478,6 +1529,7 @@ router.patch(
                   409
                 );
               }
+              await assertLiveLeaf(tx, freshOffer);
 
               if (
                 freshOffer.status ===
