@@ -2131,3 +2131,99 @@ model OfferNotification {
   @@index([userId, readAt, createdAt])
   @@index([listingId])
 }
+
+// ============================================================================
+// INSPECTION COORDINATION (seller <-> inspector operational handoff)
+// ============================================================================
+//
+// Contact data is deliberately NOT stored on InspectionRequest, which is
+// read by buyer-facing endpoints (GET /orders/:id, GET /listings/:id).
+// It lives here, gated by the inspection status (ACCEPTED or later), so no
+// public / order / inspection endpoint can leak it accidentally.
+//
+// Access rule (enforced server-side, not in this schema):
+//   • Visible only to the seller of the listing and the assigned inspector.
+//   • Visible only once the inspection request is ACCEPTED or later.
+//   • NEVER visible to the buyer, even though the buyer may pay the fee.
+//   • Admin override for support, always audited.
+//
+// One row per inspection request (see the @unique below). Both parties write
+// into the same row using their own field prefix — the seller cannot write
+// inspector fields and vice versa. This keeps reassignment simple: close the
+// row, open a new one.
+
+model InspectionCoordination {
+  id String @id @default(uuid())
+
+  inspectionRequest   InspectionRequest @relation(fields: [inspectionRequestId], references: [id], onDelete: Cascade)
+  inspectionRequestId String            @unique
+
+  // ── Seller-side operational handoff (site host) ──────────────────────────
+  sellerContactName      String?
+  sellerPhone            String?
+  sellerAlternativePhone String?
+  sellerEmail            String?
+  sellerPreferredContact String? // "PHONE" | "EMAIL" | "IN_APP" | free text
+  inspectionSite         String?
+  meetingPoint           String?
+  accessInstructions     String?
+  sellerNotes            String?
+  sellerSubmittedAt      DateTime?
+
+  // ── Inspector-side operational handoff (travelling party) ────────────────
+  inspectorContactName      String?
+  inspectorPhone            String?
+  inspectorAlternativePhone String?
+  inspectorEmail            String?
+  inspectorPreferredContact String?
+  inspectorArrivalNotes     String?
+  inspectorNotes            String?
+  inspectorSubmittedAt      DateTime?
+
+  // ── Reassignment lifecycle ───────────────────────────────────────────────
+  // Set when an accepted inspector withdraws, admin reopens bidding, or a
+  // recovery request is approved. A superseded row is never returned to the
+  // next inspector — otherwise the previous inspector's phone number would
+  // leak on reassignment.
+  supersededAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([inspectionRequestId])
+  @@index([supersededAt])
+}
+
+// ============================================================================
+// INSPECTION AVAILABILITY (repeatable date/time slots per party)
+// ============================================================================
+//
+// One row per window. Separate rows (rather than a single text blob) so the
+// schedule can be queried, matched, edited, and conflict-checked later —
+// and so a future calendar feature has a clean shape to build on.
+//
+// party = 'SELLER' | 'INSPECTOR' — the party the slot belongs to.
+// date + startTime + endTime are stored as separate scalar fields rather than
+// a single DateTime range, because the two parties are coordinating a wall-
+// clock window in their own local time and the value is advisory until both
+// confirm. A future change to a real calendar can promote these to DateTime
+// ranges without changing the shape of the row.
+
+model InspectionAvailability {
+  id String @id @default(uuid())
+
+  inspectionRequest   InspectionRequest @relation(fields: [inspectionRequestId], references: [id], onDelete: Cascade)
+  inspectionRequestId String
+
+  party String // 'SELLER' | 'INSPECTOR'
+
+  date      DateTime @db.Date
+  startTime String   // "HH:MM" 24h, local
+  endTime   String   // "HH:MM" 24h, local
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([inspectionRequestId, party])
+  @@index([inspectionRequestId, date])
+}
