@@ -16,6 +16,13 @@ const {
   noContactInfo,
 } = require('../utils/contactGuard');
 
+const {
+  assertCoordinationStage,
+  viewerRoleFor,
+  closeCoordination,
+  ensureOpenCoordination,
+} = require('../services/inspectionCoordinationService');
+
 const router = express.Router();
 
 function validationError(res) {
