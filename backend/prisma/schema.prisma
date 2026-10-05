@@ -112,6 +112,13 @@ enum InspectionStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+  STALLED
+}
+
+enum InspectionFeePayer {
+  BUYER
+  SELLER
+  SPLIT
 }
 
 enum InspectionQuoteStatus {
@@ -396,6 +403,7 @@ model User {
   inspectionQuotes InspectionQuote[]
 
   inspectionEvidenceCreated InspectionEvidence[] @relation("InspectionEvidenceCreator")
+  inspectionReportAddendaCreated InspectionReportAddendum[] @relation("InspectionReportAddendumCreator")
 
   // Trucks
   trucks Truck[]
@@ -666,6 +674,10 @@ model Listing {
 
   status ListingStatus @default(DRAFT)
 
+  // Agricultural listings require inspection by policy; non-agricultural
+  // listings may opt into inspection.
+  inspectionRequired Boolean @default(false)
+
   createdByInspectorId String?
 
   createdAt DateTime @default(now())
@@ -712,6 +724,7 @@ model Offer {
   agreedOrder Order? @relation("AgreedOffer")
 
   expiresAt DateTime?
+  negotiationDeadlineAt DateTime?
 
   // Snapshot of the market reference used when this offer/counter was made.
   // These are informational/audit values; they never silently change the
@@ -746,6 +759,7 @@ model Offer {
   @@index([counteredBy])
   @@index([parentOfferId])
   @@index([expiresAt])
+  @@index([negotiationDeadlineAt])
 }
 
 // ============================================================================
@@ -784,7 +798,18 @@ model InspectionRequest {
   // in-progress inspections are never auto-expired by maintenance.
   workflowDueAt DateTime?
 
+  // Accepted inspections must start within this window; in-progress
+  // inspections must complete within completionDueAt.
+  startDueAt DateTime?
+  completionDueAt DateTime?
+  startedAt DateTime?
+  completedAt DateTime?
+
   fee Decimal? @db.Decimal(18, 2)
+
+  feePayer InspectionFeePayer @default(BUYER)
+  buyerFeeAmount Decimal? @db.Decimal(18, 2)
+  sellerFeeAmount Decimal? @db.Decimal(18, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -804,6 +829,8 @@ model InspectionRequest {
   @@index([status])
   @@index([location])
   @@index([workflowDueAt])
+  @@index([startDueAt])
+  @@index([completionDueAt])
 }
 
 // ============================================================================
@@ -868,6 +895,11 @@ model InspectionReport {
   damageNotes    String?
   packagingNotes String?
 
+  assessmentSummary String?
+  qualityFlags String[] @default([])
+  quantityVariancePercent Float?
+  reportLockedAt DateTime @default(now())
+
   photos String[]
   videos String[]
 
@@ -876,6 +908,33 @@ model InspectionReport {
   inspectedAt DateTime @default(now())
 
   evidence InspectionEvidence[]
+  addenda InspectionReportAddendum[]
+}
+
+// ============================================================================
+// INSPECTION REPORT ADDENDUM
+// ============================================================================
+
+model InspectionReportAddendum {
+  id String @id @default(uuid())
+
+  report   InspectionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  reportId String
+
+  createdBy   User   @relation("InspectionReportAddendumCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdById String
+
+  reason String
+  notes  String
+
+  photos String[] @default([])
+  videos String[] @default([])
+  gpsLocation String?
+
+  createdAt DateTime @default(now())
+
+  @@index([reportId, createdAt])
+  @@index([createdById, createdAt])
 }
 
 // ============================================================================
