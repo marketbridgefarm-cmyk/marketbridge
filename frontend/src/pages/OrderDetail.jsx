@@ -715,7 +715,6 @@ function InspectionCard({ order, title, i }) {
     </SideLabel>
   );
 
-  // ── Quotes / negotiation state ─────────────────────────────
   const isRequester = request.requestedById === i.currentUserId;
   const quotes = leafQuotes(request.quotes);
   const counterKeyFor = (quoteId) => `inspection-counter-${quoteId}`;
@@ -752,7 +751,6 @@ function InspectionCard({ order, title, i }) {
         {request.workDetails && <div className="od-work-details"><h4>Agreed inspection scope</h4>{request.workDetails.workDescription && <p>{request.workDetails.workDescription}</p>}<div className="od-work-detail-items">{request.workDetails.quantityToInspect && <span><b>Quantity:</b> {request.workDetails.quantityToInspect}</span>}{request.workDetails.lotCount && <span><b>Lots:</b> {request.workDetails.lotCount}</span>}{request.workDetails.requiredBy && <span><b>Deadline:</b> {formatDateTime(request.workDetails.requiredBy)}</span>}</div>{request.workDetails.checks?.length > 0 && <p><b>Checks:</b> {request.workDetails.checks.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>}{request.workDetails.reportRequirements && <p><b>Report:</b> {request.workDetails.reportRequirements}</p>}</div>}
       </Section>
 
-      {/* ── Inspector bids and negotiation (REQUESTED state) ── */}
       {request.status === 'REQUESTED' && (
         <Section
           title="Inspector bids"
@@ -897,7 +895,6 @@ function InspectionCard({ order, title, i }) {
         </Section>
       )}
 
-      {/* ── Provisional inspector agreement (ACCEPTED state) ── */}
       {request.status === 'ACCEPTED' && request.fee != null && (
         <Section title="Inspector assigned — fee due">
           <p className="muted">
@@ -2301,6 +2298,19 @@ export default function OrderDetail() {
           {inspectionApplies && isParticipant && orderOpen && (
             <InspectionCard order={order} title={title} i={inspectionProps} />
           )}
+
+          {/* ★ Seller coordination card.
+              Appears only for the seller, only once the inspection is
+              ACCEPTED or later. The buyer never sees this component; the
+              inspector has its own card on their dashboard. Server-side
+              access is enforced on /inspections/:id/coordination. */}
+          {currentInspection &&
+            ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(currentInspection.status) &&
+            isSeller && (
+              <InspectionCoordinationSeller
+                inspectionRequestId={currentInspection.id}
+              />
+            )}
 
           <div className="od-span-all">
             <TransportCard order={order} t={transportProps} />
