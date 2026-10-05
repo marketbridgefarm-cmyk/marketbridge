@@ -218,7 +218,7 @@ async function createPayment(data) {
 
           obligation = await findPaymentObligation(
             tx,
-            data
+            { ...data, payerId: data.createdById }
           );
 
           if (obligation) {

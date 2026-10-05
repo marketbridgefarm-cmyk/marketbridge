@@ -29,16 +29,21 @@ async function syncOrderPaymentObligations(tx, orderId) {
   }];
 
   for (const r of order.inspectionRequests || []) {
-    if (r.fee == null || Number(r.fee) <= 0) continue;
-    desired.push({
-      obligationKey: `ORDER:${order.id}:INSPECTOR:${r.id}`,
-      type: 'INSPECTOR',
-      payerId: r.mode === 'SELLER_REQUESTED' ? order.sellerId : order.buyerId,
-      beneficiaryId: r.inspectorId || null,
-      amount: r.fee,
-      inspectionRequestId: r.id,
-      transportJobId: null,
-    });
+    if (r.fee == null || Number(r.fee) <= 0 || !r.inspectorId) continue;
+    const totalFee = Number(r.fee);
+    const payerMode = r.feePayer || (r.mode === 'SELLER_REQUESTED' ? 'SELLER' : 'BUYER');
+    const buyerShare = payerMode === 'SELLER' ? 0 : payerMode === 'SPLIT' ? Math.round(totalFee * 50) / 100 : totalFee;
+    const sellerShare = payerMode === 'BUYER' ? 0 : payerMode === 'SPLIT' ? Math.round((totalFee - buyerShare) * 100) / 100 : totalFee;
+    const addInspection = (role, payerId, amount) => {
+      if (!amount || amount <= 0) return;
+      desired.push({
+        obligationKey: payerMode === 'SPLIT' ? `ORDER:${order.id}:INSPECTOR:${r.id}:${role}` : `ORDER:${order.id}:INSPECTOR:${r.id}`,
+        type: 'INSPECTOR', payerId, beneficiaryId: r.inspectorId, amount,
+        inspectionRequestId: r.id, transportJobId: null,
+      });
+    };
+    if (buyerShare > 0) addInspection('BUYER', order.buyerId, buyerShare);
+    if (sellerShare > 0) addInspection('SELLER', order.sellerId, sellerShare);
   }
 
   const job = order.transportJob;
@@ -67,7 +72,7 @@ async function syncOrderPaymentObligations(tx, orderId) {
     const matchingPayment = item.type === 'INSPECTOR'
       ? (order.inspectionRequests || [])
           .find(r => r.id === item.inspectionRequestId)
-          ?.payments?.find(p => p.type === 'INSPECTOR' && ['PENDING','PAID'].includes(p.status))
+          ?.payments?.find(p => p.type === 'INSPECTOR' && p.createdById === item.payerId && ['PENDING','PAID'].includes(p.status))
       : order.payments.find(p =>
           p.type === item.type &&
           ['PENDING','PAID'].includes(p.status) &&
@@ -114,7 +119,7 @@ async function syncOrderPaymentObligations(tx, orderId) {
 }
 
 async function findPaymentObligation(tx, {
-  orderId, type, inspectionRequestId = null,
+  orderId, type, inspectionRequestId = null, payerId = null,
 }) {
   if (!orderId) return null;
   const key = type === 'INSPECTOR'
@@ -122,6 +127,10 @@ async function findPaymentObligation(tx, {
     : type === 'TRANSPORT'
       ? `ORDER:${orderId}:TRANSPORT`
       : `ORDER:${orderId}:${type}`;
+  if (type === 'INSPECTOR' && payerId) {
+    const byPayer = await tx.paymentObligation.findFirst({ where: { orderId, type: 'INSPECTOR', inspectionRequestId, payerId } });
+    if (byPayer) return byPayer;
+  }
   return tx.paymentObligation.findUnique({ where: { obligationKey: key } });
 }
 

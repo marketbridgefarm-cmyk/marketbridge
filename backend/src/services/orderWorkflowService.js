@@ -79,23 +79,32 @@ function buildPaymentSnapshot(order) {
   const inspections = currentInspectionRequests
     .filter((r) => r.fee != null && Number(r.fee) > 0)
     .map((r) => {
-      const o = findObligation('INSPECTOR', r.id);
+      const obligations = durable.filter((o) => o.type === 'INSPECTOR' && o.inspectionRequestId === r.id);
+      const fallbackPayerId = r.feePayer === 'SELLER' || r.mode === 'SELLER_REQUESTED' ? order.sellerId : order.buyerId;
+      const totalAmount = Number(r.fee);
+      const fallbackAmount = r.feePayer === 'SPLIT'
+        ? null
+        : totalAmount;
+      const paid = obligations.length
+        ? obligations.every((o) => o.status === 'PAID' || o.payment?.status === 'PAID')
+        : (fallbackAmount != null && isPaid(r.payments, 'INSPECTOR'));
       return {
         type: 'INSPECTOR',
         label: 'Inspection fee',
         inspectionRequestId: r.id,
         requestedById: r.requestedById,
         mode: r.mode,
+        feePayer: r.feePayer || (r.mode === 'SELLER_REQUESTED' ? 'SELLER' : 'BUYER'),
         required: true,
-        amount: o?.amount ?? r.fee,
-        paid: o?.status === 'PAID' ||
-          isPaid(r.payments, 'INSPECTOR'),
-        payerRole: r.mode === 'SELLER_REQUESTED' ? 'SELLER' : 'BUYER',
-        payerId: o?.payerId || (r.mode === 'SELLER_REQUESTED' ? order.sellerId : order.buyerId),
+        amount: totalAmount,
+        paid,
+        payerRole: r.feePayer === 'SELLER' ? 'SELLER' : r.feePayer === 'SPLIT' ? 'BUYER_AND_SELLER' : 'BUYER',
+        payerId: obligations.length === 1 ? obligations[0].payerId : fallbackPayerId,
         beneficiaryRole: 'INSPECTOR',
-        beneficiaryId: o?.beneficiaryId || r.inspectorId || null,
+        beneficiaryId: r.inspectorId || null,
         inspectionStatus: r.status,
-        obligationId: o?.id || null,
+        obligationId: obligations.length === 1 ? obligations[0].id : null,
+        obligations: obligations.map((o) => ({ id: o.id, payerId: o.payerId, amount: o.amount, status: o.status, paymentId: o.payment?.id || null })),
       };
     });
 
@@ -169,14 +178,14 @@ function buildPaymentSnapshot(order) {
 function buildTimeline(order, payments) {
   const job = order.transportJob || null;
   const category = order.listing?.category;
-  const inspectionRequired = ['AGRICULTURAL', 'PRODUCT'].includes(category);
   const inspection = (order.inspectionRequests || order.listing?.inspectionRequests || [])
     .filter((r) => r.status !== 'CANCELLED')
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   const currentInspection = inspection[inspection.length - 1] || null;
+  const inspectionRequired = Boolean(order.listing?.inspectionRequired || currentInspection);
   const reportCompleted = payments.allInspectionsCompleted;
   const inspectionPaid = payments.allInspectionsPaid;
-  const buyerDecisionRequired = ['AGRICULTURAL', 'PRODUCT'].includes(category);
+  const buyerDecisionRequired = inspectionRequired;
   const buyerDecisionMade = !buyerDecisionRequired || Boolean(order.buyerDecision);
   const buyerApproved = !buyerDecisionRequired || order.buyerDecision === 'BUY';
   const goodsPaid = payments.marketplace.paid;
@@ -369,7 +378,7 @@ function computeStage(order, payments) {
 
   const job = order.transportJob || null;
   const agricultural = order.listing?.category === 'AGRICULTURAL';
-  const inspectionRequired = ['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category);
+  const inspectionRequired = Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist);
 
   // Agricultural and product orders use the same inspection gate. The
   // completed report must be available before the goods payment becomes a
@@ -526,7 +535,7 @@ function buildActions(order, payments, viewer) {
   // 3. Buyer purchase decision for both marketplaces. This is a real
   // server-side mutation: the buyer must review the completed inspection
   // report and explicitly choose BUY or CANCEL before goods payment.
-  if (['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category) && !order.buyerDecision && !terminal) {
+  if (Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist) && !order.buyerDecision && !terminal) {
     const decisionReady = payments.inspectionRequestsExist && payments.allInspectionsCompleted;
     const decisionReason = !payments.inspectionRequestsExist
       ? 'Complete the inspection before choosing BUY or CANCEL'
@@ -567,7 +576,7 @@ function buildActions(order, payments, viewer) {
   // decision after a completed inspection report. The same rule is enforced
   // server-side in /payments.
   if (!payments.marketplace.paid) {
-    const decisionRequired = ['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category);
+    const decisionRequired = Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist);
     const inspectionRequired = decisionRequired;
     const ready = !terminal && (!decisionRequired || order.buyerDecision === 'BUY') &&
       (!inspectionRequired || payments.allInspectionsCompleted);
@@ -597,15 +606,15 @@ function buildActions(order, payments, viewer) {
     if (obligation.paid) continue;
     const viewerIsRequester = obligation.requestedById === viewer.userId;
     const inspectionRequest = (order.inspectionRequests || []).find((r) => r.id === obligation.inspectionRequestId);
-    const inspectionPayerId = inspectionRequest?.mode === 'SELLER_REQUESTED' ? order.sellerId : order.buyerId;
+    const inspectionPayerId = obligation.payerId;
     push({
       code: 'PAY_INSPECTION',
       label: 'Pay inspection fee',
-      actorRole: inspectionRequest?.mode === 'SELLER_REQUESTED' ? 'SELLER' : 'BUYER',
+      actorRole: obligation.payerId === order.sellerId ? 'SELLER' : 'BUYER',
       inspectionRequestId: obligation.inspectionRequestId,
       viewerCanPerform: viewer.userId === inspectionPayerId || (viewerIsRequester && !order.id),
-      ready: !terminal,
-      reason: terminal ? 'Order is no longer active' : null,
+      ready: !terminal && Boolean(inspectionRequest?.sellerConfirmedAt),
+      reason: terminal ? 'Order is no longer active' : !inspectionRequest?.sellerConfirmedAt ? 'Seller must confirm the selected inspector before inspection payment can begin' : null,
       route: {
         method: 'POST',
         path: '/payments',
@@ -616,7 +625,7 @@ function buildActions(order, payments, viewer) {
 
   // 3. Arrange transport if nothing has been set up yet.
   if (!job) {
-    const buyerDecisionReady = !['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category) || order.buyerDecision === 'BUY';
+    const buyerDecisionReady = !Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist) || order.buyerDecision === 'BUY';
     const ready = !terminal && buyerDecisionReady && payments.marketplace.paid && ['CONFIRMED', 'PENDING_PAYMENT'].includes(order.status);
     push({
       code: 'ARRANGE_TRANSPORT',

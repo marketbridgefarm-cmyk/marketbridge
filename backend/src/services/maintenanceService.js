@@ -45,39 +45,51 @@ async function expireOffers(now = new Date()) {
 
 async function expireInspectionWorkflows(now = new Date()) {
   const candidates = await prisma.inspectionRequest.findMany({
-    where: { status: 'REQUESTED', workflowDueAt: { lte: now } },
-    select: { id: true, orderId: true, workflowDueAt: true }, take: 200,
+    where: {
+      OR: [
+        { status: 'REQUESTED', workflowDueAt: { lte: now } },
+        { status: 'ACCEPTED', startDueAt: { lte: now } },
+        { status: 'IN_PROGRESS', completionDueAt: { lte: now } },
+      ],
+    },
+    select: { id: true, orderId: true, status: true, workflowDueAt: true, startDueAt: true, completionDueAt: true }, take: 200,
   });
   let expired = 0;
   for (const candidate of candidates) {
     try {
       const changed = await prisma.$transaction(async (tx) => {
         const request = await tx.inspectionRequest.findUnique({ where: { id: candidate.id } });
-        if (!request || request.status !== 'REQUESTED' || !request.workflowDueAt || request.workflowDueAt > now) return false;
-        await tx.inspectionRequest.update({ where: { id: request.id }, data: { status: 'CANCELLED' } });
-        await tx.inspectionQuote.updateMany({
-          where: { inspectionRequestId: request.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
-          data: { status: 'EXPIRED' },
-        });
-        if (request.orderId) {
-          await recordOrderEvent(tx, {
-            orderId: request.orderId, actorId: null, type: 'INSPECTION_WORKFLOW_EXPIRED',
-            fromStatus: 'REQUESTED', toStatus: 'CANCELLED',
-            metadata: { inspectionRequestId: request.id, workflowDueAt: request.workflowDueAt.toISOString() },
-          });
+        if (!request) return false;
+
+        if (request.status === 'REQUESTED' && request.workflowDueAt && request.workflowDueAt <= now) {
+          await tx.inspectionRequest.update({ where: { id: request.id }, data: { status: 'CANCELLED' } });
+          await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: request.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } }, data: { status: 'EXPIRED' } });
+          if (request.orderId) await recordOrderEvent(tx, { orderId: request.orderId, actorId: null, type: 'INSPECTION_WORKFLOW_EXPIRED', fromStatus: 'REQUESTED', toStatus: 'CANCELLED', metadata: { inspectionRequestId: request.id, workflowDueAt: request.workflowDueAt.toISOString() } });
+          await recordAuditEvent(tx, { actorId: null, action: 'INSPECTION_WORKFLOW_EXPIRED', resourceType: 'InspectionRequest', resourceId: request.id, metadata: { orderId: request.orderId, workflowDueAt: request.workflowDueAt.toISOString() } });
+          return true;
         }
-        await recordAuditEvent(tx, {
-          actorId: null, action: 'INSPECTION_WORKFLOW_EXPIRED', resourceType: 'InspectionRequest', resourceId: request.id,
-          metadata: { orderId: request.orderId, workflowDueAt: request.workflowDueAt.toISOString() },
-        });
-        return true;
+
+        if (request.status === 'ACCEPTED' && request.startDueAt && request.startDueAt <= now) {
+          await tx.inspectionRequest.update({ where: { id: request.id }, data: { status: 'STALLED', startDueAt: null } });
+          if (request.orderId) await recordOrderEvent(tx, { orderId: request.orderId, actorId: null, type: 'INSPECTION_STALLED', fromStatus: 'ACCEPTED', toStatus: 'STALLED', metadata: { inspectionRequestId: request.id, reason: 'Inspector did not start within the allowed window' } });
+          await recordAuditEvent(tx, { actorId: null, action: 'INSPECTION_STALLED', resourceType: 'InspectionRequest', resourceId: request.id, metadata: { orderId: request.orderId, phase: 'START' } });
+          return true;
+        }
+
+        if (request.status === 'IN_PROGRESS' && request.completionDueAt && request.completionDueAt <= now) {
+          await tx.inspectionRequest.update({ where: { id: request.id }, data: { status: 'STALLED', completionDueAt: null } });
+          if (request.orderId) await recordOrderEvent(tx, { orderId: request.orderId, actorId: null, type: 'INSPECTION_STALLED', fromStatus: 'IN_PROGRESS', toStatus: 'STALLED', metadata: { inspectionRequestId: request.id, reason: 'Inspector did not complete the report within the allowed window' } });
+          await recordAuditEvent(tx, { actorId: null, action: 'INSPECTION_STALLED', resourceType: 'InspectionRequest', resourceId: request.id, metadata: { orderId: request.orderId, phase: 'COMPLETION' } });
+          return true;
+        }
+        return false;
       }, { maxWait: 10000, timeout: 15000 });
       if (changed) expired += 1;
     } catch (error) {
-      logger.error({ err: error, inspectionRequestId: candidate.id }, 'Failed to expire inspection workflow');
+      logger.error({ err: error, inspectionRequestId: candidate.id }, 'Failed to maintain inspection workflow');
     }
   }
-  return { expired };
+  return { expired, stalled: candidates.filter((c) => ['ACCEPTED', 'IN_PROGRESS'].includes(c.status)).length };
 }
 
 async function expireTransportWorkflows(now = new Date()) {
