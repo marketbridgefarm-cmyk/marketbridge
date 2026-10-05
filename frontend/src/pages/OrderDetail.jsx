@@ -15,6 +15,8 @@ import {
 } from '../utils/chapaCheckout';
 import { useAuth } from '../context/AuthContext.jsx';
 
+import InspectionCoordinationSeller from '../components/InspectionCoordinationSeller.jsx';
+
 import RatingBox from '../components/RatingBox.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
