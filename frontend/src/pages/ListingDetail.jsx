@@ -886,6 +886,25 @@ function OfferRow({ offer, onAction }) {
         </div>
       )}
 
+      {offer.releaseAvailableAt && (
+        <div className="offer-actions">
+          {new Date(offer.releaseAvailableAt).getTime() <= Date.now() ? (
+            <button
+              type="button"
+              className="btn btn-sm btn-light"
+              disabled={Boolean(busy)}
+              onClick={() => submit('RELEASE')}
+            >
+              {busy === 'RELEASE' ? 'Releasing…' : 'Release buyer (no response)'}
+            </button>
+          ) : (
+            <p className="offer-note small">
+              If the buyer stays silent you can release them from {new Date(offer.releaseAvailableAt).toLocaleString()}.
+            </p>
+          )}
+        </div>
+      )}
+
       {!sellerCanAct &&
         offer.status === 'COUNTERED' &&
         String(offer.counteredBy || '').toUpperCase() !== 'BUYER' && (
