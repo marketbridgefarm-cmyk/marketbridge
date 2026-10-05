@@ -15,7 +15,6 @@ const {
   validAmount,
   noContactInfo,
 } = require('../utils/contactGuard');
-
 const {
   assertCoordinationStage,
   viewerRoleFor,
@@ -237,6 +236,7 @@ router.patch('/:id/cancel', authenticate, async (req, res) => {
       if (['COMPLETED', 'IN_PROGRESS'].includes(fresh.status)) throw Object.assign(new Error(`An inspection cannot be cancelled while it is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
       const updated = await tx.inspectionRequest.update({ where: { id: fresh.id }, data: { inspectorId: null, fee: null, status: 'CANCELLED' } });
       await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } }, data: { status: 'EXPIRED' } });
+      await closeCoordination(tx, fresh.id, 'INSPECTION_CANCELLED');
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_REQUEST_CANCELLED', resourceType: 'InspectionRequest', resourceId: fresh.id, metadata: { orderId: fresh.orderId } });
       return updated;
     }, { maxWait: 10000, timeout: 15000 });
@@ -267,6 +267,7 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
       if (!['REQUESTED', 'ACCEPTED', 'STALLED'].includes(fresh.status)) throw Object.assign(new Error(`Inspection bidding cannot be reopened while the request is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
       await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
       const updated = await tx.inspectionRequest.update({ where: { id: fresh.id }, data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' } });
+      await closeCoordination(tx, fresh.id, 'ADMIN_REOPENED_BIDDING');
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_BIDDING_REOPENED', resourceType: 'InspectionRequest', resourceId: fresh.id, metadata: { orderId: fresh.orderId } });
       return updated;
     }, { maxWait: 10000, timeout: 15000 });
@@ -629,7 +630,6 @@ router.patch(
         return res.status(409).json({ error: 'This quote has expired' });
       }
 
-      // Turn check now allows null (either party may act on SELECTED)
       const turn = quoteTurn(quote);
       if (turn !== null && turn !== actorRole) {
         return res.status(409).json({
@@ -682,6 +682,12 @@ router.patch(
           },
         });
 
+        // Open the coordination sheet at the moment the agreement is locked.
+        // Coordination routes require ACCEPTED or later; creating the row here
+        // means GET /coordination returns an empty (not 404) sheet the instant
+        // both parties can start filling it in.
+        await ensureOpenCoordination(tx, request.id);
+
         const relatedOrders = await tx.order.findMany({
           where: { id: request.orderId },
           select: { id: true, status: true },
@@ -724,13 +730,10 @@ router.patch(
 );
 
 // ============================================================================
-// COUNTER INSPECTION QUOTE  (FIXED)
+// COUNTER INSPECTION QUOTE
 // ----------------------------------------------------------------------------
-// Root cause of the "Could not counter inspection quote" 500 was:
-//   Unique constraint failed on (inspectionRequestId, inspectorId)
-//
-// The schema enforces ONE quote row per inspector per inspection. The old
-// code tried to INSERT a brand-new counter row for the same inspector, which
+// Schema enforces ONE quote row per inspector per inspection. The old code
+// tried to INSERT a brand-new counter row for the same inspector, which
 // Prisma rejected with P2002 and rolled back the transaction.
 //
 // Fix: update the SAME row in place, storing the negotiation state in
@@ -768,7 +771,6 @@ router.post(
         return res.status(409).json({ error: 'This quote has expired' });
       }
 
-      // Turn check: SELECTED → both may act; COUNTERED → only the other side.
       const outerTurn = quoteTurn(quote);
       if (outerTurn !== null && outerTurn !== actorRole) {
         return res.status(409).json({
@@ -792,7 +794,6 @@ router.post(
           throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
         }
 
-        // ✅ UPDATE the same row — no new insert, so no unique-constraint violation.
         const updated = await tx.inspectionQuote.update({
           where: { id: freshQuote.id },
           data: {
@@ -886,6 +887,10 @@ router.patch(
           where: { id: request.id },
           data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' },
         });
+
+        // Close coordination so the next inspector does not inherit the
+        // previous inspector's phone number, availability, or notes.
+        await closeCoordination(tx, request.id, 'INSPECTOR_WITHDREW');
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
@@ -1031,6 +1036,7 @@ router.post('/:id/seller-message', authenticate, requireRole('SELLER'), async (r
   }
 });
 
+// ============================================================================
 // INSPECTOR STARTS INSPECTION
 // ============================================================================
 
@@ -1083,10 +1089,6 @@ router.post(
         });
       }
 
-      // A verified start is the payment trigger. The inspector may start only
-      // an accepted assignment; the fee must be settled before further service
-      // progression/report submission (the report route retains its state gate).
-
       const result = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection cannot be started until that is resolved');
 
@@ -1097,7 +1099,7 @@ router.post(
             status: 'ACCEPTED',
             sellerConfirmedAt: { not: null },
           },
-          data: { status: 'IN_PROGRESS', startedAt: new Date(), completionDueAt: computeInspectionCompletionDueAt(), },
+          data: { status: 'IN_PROGRESS', startedAt: new Date(), completionDueAt: computeInspectionCompletionDueAt() },
         });
 
         if (updatedCount.count !== 1) {
@@ -1560,5 +1562,254 @@ router.post('/:id/report/addenda', authenticate, requireRole('INSPECTOR'), [
     return res.status(500).json({ error: 'Could not create inspection report addendum' });
   }
 });
+
+// ============================================================================
+// INSPECTION COORDINATION (seller <-> inspector only)
+// ============================================================================
+//
+// Operational handoff for the physical site visit. Contact data lives here,
+// NOT on InspectionRequest, so no buyer-facing endpoint can leak it.
+//
+// Access rule (enforced below, mirrored in the service):
+//   • Seller of the listing and the assigned inspector only.
+//   • Inspection request must be ACCEPTED or later.
+//   • Buyer is intentionally excluded, even if the buyer pays the fee.
+//   • Admin override for support, always audited.
+
+async function loadCoordinationContext(req, res) {
+  const request = await prisma.inspectionRequest.findUnique({
+    where: { id: req.params.id },
+    include: {
+      listing: { select: { id: true, sellerId: true, title: true, cropType: true, location: true } },
+      coordination: true,
+      availability: { orderBy: [{ date: 'asc' }, { startTime: 'asc' }] },
+    },
+  });
+  if (!request) {
+    res.status(404).json({ error: 'Inspection request not found' });
+    return null;
+  }
+
+  const { allowed, role } = viewerRoleFor(request, req.user);
+  if (!allowed) {
+    res.status(403).json({ error: 'You are not authorized to view inspection coordination' });
+    return null;
+  }
+
+  try {
+    assertCoordinationStage(request);
+  } catch (err) {
+    res.status(err.statusCode || 409).json({ error: err.message, code: err.code || 'COORDINATION_NOT_OPEN' });
+    return null;
+  }
+
+  return { request, role };
+}
+
+// GET /inspections/:id/coordination
+router.get('/:id/coordination', authenticate, async (req, res) => {
+  try {
+    const ctx = await loadCoordinationContext(req, res);
+    if (!ctx) return;
+
+    const { request, role } = ctx;
+    const coordination = request.coordination && !request.coordination.supersededAt
+      ? request.coordination
+      : null;
+
+    return res.json({
+      role,
+      coordination,
+      availability: request.availability || [],
+    });
+  } catch (error) {
+    req.log.error({ err: error }, 'GET INSPECTION COORDINATION ERROR:');
+    return res.status(500).json({ error: 'Could not load inspection coordination' });
+  }
+});
+
+// PUT /inspections/:id/coordination
+// Writes only the calling party's own field prefix.
+router.put(
+  '/:id/coordination',
+  authenticate,
+  [
+    body('sellerContactName').optional({ nullable: true }).isString().trim().isLength({ max: 120 }),
+    body('sellerPhone').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
+    body('sellerAlternativePhone').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
+    body('sellerEmail').optional({ nullable: true }).isString().trim().isLength({ max: 160 }),
+    body('sellerPreferredContact').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
+    body('inspectionSite').optional({ nullable: true }).isString().trim().isLength({ max: 240 }),
+    body('meetingPoint').optional({ nullable: true }).isString().trim().isLength({ max: 240 }),
+    body('accessInstructions').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }),
+    body('sellerNotes').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }),
+
+    body('inspectorContactName').optional({ nullable: true }).isString().trim().isLength({ max: 120 }),
+    body('inspectorPhone').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
+    body('inspectorAlternativePhone').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
+    body('inspectorEmail').optional({ nullable: true }).isString().trim().isLength({ max: 160 }),
+    body('inspectorPreferredContact').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
+    body('inspectorArrivalNotes').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }),
+    body('inspectorNotes').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
+      }
+
+      const ctx = await loadCoordinationContext(req, res);
+      if (!ctx) return;
+      const { request, role } = ctx;
+
+      if (role === 'ADMIN') {
+        return res.status(403).json({ error: 'Administrators may view coordination but not write it' });
+      }
+
+      const SELLER_FIELDS = [
+        'sellerContactName', 'sellerPhone', 'sellerAlternativePhone', 'sellerEmail',
+        'sellerPreferredContact', 'inspectionSite', 'meetingPoint', 'accessInstructions', 'sellerNotes',
+      ];
+      const INSPECTOR_FIELDS = [
+        'inspectorContactName', 'inspectorPhone', 'inspectorAlternativePhone', 'inspectorEmail',
+        'inspectorPreferredContact', 'inspectorArrivalNotes', 'inspectorNotes',
+      ];
+      const allowedFields = role === 'SELLER' ? SELLER_FIELDS : INSPECTOR_FIELDS;
+
+      // Whitelist: never let the caller write the other side's fields.
+      const data = {};
+      for (const field of allowedFields) {
+        if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+          const value = req.body[field];
+          data[field] = value === '' || value === undefined ? null : value;
+        }
+      }
+
+      if (role === 'SELLER') data.sellerSubmittedAt = new Date();
+      else data.inspectorSubmittedAt = new Date();
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const row = await ensureOpenCoordination(tx, request.id);
+        return tx.inspectionCoordination.update({
+          where: { id: row.id },
+          data,
+        });
+      }, { maxWait: 10000, timeout: 15000 });
+
+      await recordAuditEvent(prisma, {
+        actorId: req.user.id,
+        action: role === 'SELLER'
+          ? 'INSPECTION_COORDINATION_SELLER_SUBMITTED'
+          : 'INSPECTION_COORDINATION_INSPECTOR_SUBMITTED',
+        resourceType: 'InspectionCoordination',
+        resourceId: updated.id,
+        metadata: {
+          inspectionRequestId: request.id,
+          role,
+          fields: Object.keys(data).filter((k) => !k.endsWith('SubmittedAt')),
+        },
+      });
+
+      return res.json({ message: 'Coordination information saved', coordination: updated });
+    } catch (error) {
+      req.log.error({ err: error }, 'PUT INSPECTION COORDINATION ERROR:');
+      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not save inspection coordination' });
+    }
+  }
+);
+
+// POST /inspections/:id/coordination/availability
+router.post(
+  '/:id/coordination/availability',
+  authenticate,
+  [
+    body('date').isISO8601().withMessage('date must be a valid date'),
+    body('startTime').matches(/^\d{2}:\d{2}$/).withMessage('startTime must be HH:MM'),
+    body('endTime').matches(/^\d{2}:\d{2}$/).withMessage('endTime must be HH:MM'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
+      }
+
+      const ctx = await loadCoordinationContext(req, res);
+      if (!ctx) return;
+      const { request, role } = ctx;
+
+      if (role !== 'SELLER' && role !== 'INSPECTOR') {
+        return res.status(403).json({ error: 'Only the seller or inspector can add availability slots' });
+      }
+
+      const { date, startTime, endTime } = req.body;
+      if (startTime >= endTime) {
+        return res.status(400).json({ error: 'startTime must be before endTime' });
+      }
+
+      const slot = await prisma.inspectionAvailability.create({
+        data: {
+          inspectionRequestId: request.id,
+          party: role,
+          date: new Date(date),
+          startTime,
+          endTime,
+        },
+      });
+
+      await recordAuditEvent(prisma, {
+        actorId: req.user.id,
+        action: 'INSPECTION_AVAILABILITY_ADDED',
+        resourceType: 'InspectionAvailability',
+        resourceId: slot.id,
+        metadata: { inspectionRequestId: request.id, party: role, date, startTime, endTime },
+      });
+
+      return res.status(201).json({ availability: slot });
+    } catch (error) {
+      req.log.error({ err: error }, 'POST INSPECTION AVAILABILITY ERROR:');
+      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not add availability slot' });
+    }
+  }
+);
+
+// DELETE /inspections/:id/coordination/availability/:slotId
+router.delete(
+  '/:id/coordination/availability/:slotId',
+  authenticate,
+  async (req, res) => {
+    try {
+      const ctx = await loadCoordinationContext(req, res);
+      if (!ctx) return;
+      const { request, role } = ctx;
+
+      const slot = await prisma.inspectionAvailability.findUnique({
+        where: { id: req.params.slotId },
+      });
+      if (!slot || slot.inspectionRequestId !== request.id) {
+        return res.status(404).json({ error: 'Availability slot not found' });
+      }
+      if (slot.party !== role) {
+        return res.status(403).json({ error: 'You can only remove your own availability slots' });
+      }
+
+      await prisma.inspectionAvailability.delete({ where: { id: slot.id } });
+
+      await recordAuditEvent(prisma, {
+        actorId: req.user.id,
+        action: 'INSPECTION_AVAILABILITY_REMOVED',
+        resourceType: 'InspectionAvailability',
+        resourceId: slot.id,
+        metadata: { inspectionRequestId: request.id, party: role },
+      });
+
+      return res.json({ message: 'Availability slot removed' });
+    } catch (error) {
+      req.log.error({ err: error }, 'DELETE INSPECTION AVAILABILITY ERROR:');
+      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not remove availability slot' });
+    }
+  }
+);
 
 module.exports = router;
