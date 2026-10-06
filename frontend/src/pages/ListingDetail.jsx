@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import ListingInspectionScope from '../components/ListingInspectionScope.jsx';
 import './listing-detail/ListingDetail.css';
 
 const money = (n) => Number(n || 0).toLocaleString();
@@ -400,6 +401,12 @@ export default function ListingDetail() {
                         Inspector: <strong>{activeInspectionRequest.inspector.name}</strong>
                       </p>
                     )}
+
+                    {/* Read-only scope of the current inspection. Renders only
+                        when the requester set workDetails at creation. Never
+                        shows contact info — that lives in InspectionCoordination
+                        and is gated to the seller + inspector. */}
+                    <ListingInspectionScope inspection={activeInspectionRequest} />
 
                     {myOrder ? (
                       <p className="detail-order-link">
