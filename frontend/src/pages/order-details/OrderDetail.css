@@ -1169,6 +1169,166 @@
 }
 
 
+/* ==========================================================================
+   ORDER DECISION PANEL
+   ========================================================================== */
+.od-decision-panel { }
+
+.od-decision-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0 0;
+}
+
+.od-decision-block-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.od-decision-eyebrow {
+  font-family: "'DM Sans', system-ui, sans-serif";
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.od-decision-block-price {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0d1b2a;
+}
+
+.od-decision-block-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 14px;
+  padding: 10px 12px;
+  border: 1px solid #e5e9ef;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.od-decision-block-facts > div { display: flex; flex-direction: column; gap: 2px; }
+
+.od-decision-block-facts > div > span {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.od-decision-block-facts > div > strong {
+  font-size: 13.5px;
+  color: #0d1b2a;
+}
+
+.od-decision-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.od-decision-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.od-decision-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: #334155;
+}
+
+.od-decision-form-grid input,
+.od-decision-form-grid select {
+  padding: 8px 10px;
+  border: 1px solid #d1d9e1;
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+}
+
+.od-decision-more {
+  margin-top: 4px;
+  padding: 8px 12px;
+  border: 1px solid #e5e9ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.od-decision-more > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e3a8a;
+}
+
+.od-decision-more > * { margin-top: 8px; }
+
+.od-decision-escape {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #d1d9e1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.od-decision-cancel-row {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e5e9ef;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.od-decision-state {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0 0;
+}
+
+.od-decision-state-icon {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.od-decision-state--buy .od-decision-state-icon { background: #0f7a44; }
+.od-decision-state--cancel .od-decision-state-icon { background: #dc2626; }
+
+.od-decision-state-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.od-decision-state-body > strong { font-size: 14.5px; color: #0d1b2a; }
+
+.od-decision-state-body button { margin-top: 8px; }
+
+
+
 /* Structured service scope: visible to requesters and bidders, with compact mobile layout. */
 .order-detail-page .od-inspection-work-form { display: grid; gap: 12px; margin-top: 14px; }
 .order-detail-page .od-inspection-work-form h3 { margin: 0; font-size: 17px; }
