@@ -872,6 +872,12 @@ router.get('/:id', optionalAuthenticate, async (req, res) => {
                 OR: [
                   { requestedById: req.user.id },
                   { inspectorId: req.user.id },
+                  // A buyer of an order on this listing must see the
+                  // inspection request that gates their payment, even when
+                  // the seller or a joint mode opened it. Without this, the
+                  // listing detail page shows no inspection and no scope for
+                  // that buyer.
+                  { order: { buyerId: req.user.id } },
                 ],
               },
           include: {
@@ -889,7 +895,7 @@ router.get('/:id', optionalAuthenticate, async (req, res) => {
               select: { id: true, status: true },
             },
             order: {
-              select: { id: true },
+              select: { id: true, buyerId: true },
             },
           },
           orderBy: { createdAt: 'desc' },
