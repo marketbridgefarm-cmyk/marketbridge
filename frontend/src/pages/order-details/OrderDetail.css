@@ -1168,6 +1168,118 @@
   color: #0d1b2a;
 }
 
+/* ==========================================================================
+   TRANSPORT LOADING REPORT
+   ========================================================================== */
+.tlr-root { }
+
+.tlr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 6px;
+}
+
+.tlr-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.tlr-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.tlr-field > span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.tlr-field select,
+.tlr-field input[type="text"],
+.tlr-field input[type="datetime-local"],
+.tlr-field textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d9e1;
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+}
+
+.tlr-field--full { grid-column: 1 / -1; }
+
+.tlr-fieldset {
+  border: 1px solid #e5e9ef;
+  border-radius: 10px;
+  padding: 10px 12px 12px;
+}
+
+.tlr-fieldset > legend {
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.tlr-check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px;
+}
+
+.tlr-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #0d1b2a;
+  cursor: pointer;
+}
+
+.tlr-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.tlr-summary { }
+.tlr-summary .tlr-issues { margin-top: 10px; }
+.tlr-summary .tlr-issues-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+.tlr-summary .tlr-issues-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tlr-summary .tlr-issues-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 600;
+}
+.tlr-summary .tlr-notes { margin-top: 10px; }
+
+
 
 /* ==========================================================================
    ORDER DECISION PANEL
