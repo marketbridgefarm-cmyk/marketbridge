@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../context/AuthContext.jsx';
 
 import InspectionCoordinationSeller from '../components/InspectionCoordinationSeller.jsx';
+import OrderDecisionPanel from '../components/OrderDecisionPanel.jsx';
 
 import RatingBox from '../components/RatingBox.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
@@ -571,99 +572,6 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
    5. Inspection (with full quote negotiation)
    ======================================================================== */
 
-const PRICE_REVIEW_REASON_OPTIONS = [
-  ['MARKET_PRICE_RISE', 'Market price increased'],
-  ['MARKET_PRICE_FALL', 'Market price decreased'],
-  ['QUALITY_OR_QUANTITY_CHANGE', 'Inspected quantity differs'],
-  ['FRESHNESS_OR_DAMAGE', 'Freshness or damage finding'],
-  ['OTHER_INSPECTION_FINDING', 'Other inspection finding'],
-];
-
-function PriceReviewPanel({ order, i }) {
-  const suggested = order.priceReviewSuggestion?.suggestedPrice;
-  const [amount, setAmount] = useState(String(suggested ?? order.finalPrice ?? ''));
-  const [reasonCode, setReasonCode] = useState('QUALITY_OR_QUANTITY_CHANGE');
-  const [counterAmount, setCounterAmount] = useState('');
-  const [counterReason, setCounterReason] = useState('QUALITY_OR_QUANTITY_CHANGE');
-  const reviews = Array.isArray(order.priceReviews) ? order.priceReviews : [];
-  useEffect(() => {
-    const nextSuggested = order.priceReviewSuggestion?.suggestedPrice;
-    setAmount(String(nextSuggested ?? order.finalPrice ?? ''));
-    if (order.priceReviewSuggestion?.suggestedReasonCode) {
-      setReasonCode(order.priceReviewSuggestion.suggestedReasonCode);
-    }
-  }, [order.id, order.finalPrice, order.priceReviewSuggestion?.suggestedPrice, order.priceReviewSuggestion?.suggestedReasonCode]);
-  const pending = [...reviews].reverse().find((review) => review.status === 'PENDING');
-  const paymentStarted = (order.payments || []).some((payment) => payment.type === 'MARKETPLACE' && ['PENDING', 'PROCESSING', 'PAID'].includes(payment.status));
-  const available = !paymentStarted && !['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(order.status);
-  const ownProposal = pending?.proposedById === i.currentUserId;
-  const money = (value) => `${Number(value || 0).toLocaleString()} ETB`;
-  return (
-    <Section title="Provisional price review">
-      <p className="muted">The current agreed price is protected from automatic market changes. A price changes only when the other party accepts a proposal. Inspection fees remain separate.</p>
-      <div className="detail-facts">
-        <div><span>Current agreed price</span><strong>{money(order.finalPrice)}</strong></div>
-        <div><span>Original negotiated total</span><strong>{money(order.originalFinalPrice ?? order.finalPrice)}</strong></div>
-        <div><span>Price state</span><strong>{order.buyerDecision === 'BUY' ? 'Confirmed for payment' : pending ? 'Awaiting response' : 'Provisional'}</strong></div>
-      </div>
-      {order.priceReviewSuggestion?.suggestedPrice && order.priceReviewSuggestion.requiresReview && (
-        <div className="card" style={{ marginTop: 12, padding: 12, background: 'var(--surface-2, #f7faf8)' }}>
-          <strong>Platform price-review suggestion</strong>
-          <p className="muted" style={{ margin: '5px 0' }}>
-            Suggested revised total: <strong>{money(order.priceReviewSuggestion.suggestedPrice)}</strong> ETB
-            {' '}({order.priceReviewSuggestion.adjustmentAmount > 0 ? '+' : ''}{money(order.priceReviewSuggestion.adjustmentAmount)} ETB / {Number(order.priceReviewSuggestion.adjustmentPercent || 0).toFixed(2)}%).
-          </p>
-          <p className="muted small" style={{ margin: 0 }}>
-            Inspection quantity: {Number(order.priceReviewSuggestion.inspectedQuantity).toLocaleString()} {order.listing?.unit || 'units'} · Original quantity: {Number(order.priceReviewSuggestion.orderedQuantity).toLocaleString()} {order.listing?.unit || 'units'}.
-            {order.priceReviewSuggestion.marketReference?.unitPrice ? ` Market reference: ${money(order.priceReviewSuggestion.marketReference.unitPrice)} ETB/${order.listing?.unit || 'unit'}.` : ''}
-          </p>
-          <p className="muted small" style={{ margin: '5px 0 0' }}>This is a non-binding calculation. Quality/damage findings are shown to both parties but are not converted into an arbitrary automatic discount.</p>
-        </div>
-      )}
-      {reviews.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <strong>Price-review history</strong>
-          {reviews.map((review) => (
-            <div key={review.id} style={{ borderTop: '1px solid var(--border-color, #ddd)', padding: '10px 0' }}>
-              <div><strong>{money(review.proposedPrice)}</strong> · {PRICE_REVIEW_REASON_OPTIONS.find(([key]) => key === review.reasonCode)?.[1] || review.reasonCode}</div>
-              <div className="muted small">{review.proposedBy?.name || (review.proposedById === i.currentUserId ? 'You' : 'Other party')} · {review.status}</div>
-            </div>
-          ))}
-        </div>
-      )}
-      {pending && available && (
-        <div style={{ marginTop: 12 }}>
-          <p><strong>Proposal awaiting response:</strong> {money(pending.proposedPrice)} — {PRICE_REVIEW_REASON_OPTIONS.find(([key]) => key === pending.reasonCode)?.[1] || pending.reasonCode}</p>
-          {ownProposal ? <p className="muted">Your proposal is waiting for the other party.</p> : (
-            <>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '8px 0' }}>
-                <Button variant="primary" disabled={Boolean(i.busy)} onClick={() => i.respondPriceReview(pending.id, 'ACCEPT')}>Accept revised price</Button>
-                <Button variant="light" disabled={Boolean(i.busy)} onClick={() => i.respondPriceReview(pending.id, 'REJECT')}>Reject proposal</Button>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-                <label>Counter price (ETB)<input type="number" min="0.01" step="0.01" value={counterAmount} onChange={(e) => setCounterAmount(e.target.value)} /></label>
-                <label>Reason<select value={counterReason} onChange={(e) => setCounterReason(e.target.value)}>{PRICE_REVIEW_REASON_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-              </div>
-              <Button variant="light" disabled={Boolean(i.busy) || !(Number(counterAmount) > 0)} onClick={() => i.respondPriceReview(pending.id, 'COUNTER', Number(counterAmount), counterReason)}>Send counter-proposal</Button>
-            </>
-          )}
-        </div>
-      )}
-      {!pending && available && order.buyerDecision !== 'BUY' && i.isParticipant && (
-        <div style={{ marginTop: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-            <label>Proposed total price (ETB)<input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
-            {order.priceReviewSuggestion?.suggestedPrice && <p className="muted small" style={{ margin: '2px 0 0' }}>Platform suggestion: {money(order.priceReviewSuggestion.suggestedPrice)} ETB. You may propose another amount.</p>}
-            <label>Reason<select value={reasonCode} onChange={(e) => setReasonCode(e.target.value)}>{PRICE_REVIEW_REASON_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-          </div>
-          <Button variant="light" disabled={Boolean(i.busy) || !(Number(amount) > 0) || Number(amount) === Number(order.finalPrice)} onClick={() => i.createPriceReview(Number(amount), reasonCode)}>Request price review</Button>
-        </div>
-      )}
-      {order.buyerDecision === 'BUY' && <p className="muted">The price has been confirmed for payment. Further price changes must use the applicable dispute/refund process.</p>}
-    </Section>
-  );
-}
-
 function InspectionCard({ order, title, i }) {
   const request = i.current;
 
@@ -1106,44 +1014,27 @@ function InspectionCard({ order, title, i }) {
             </Facts>
           </Section>
 
-          {i.decisionRequired && (
-            <Section title="Purchase decision">
-              {order.buyerDecision ? (
-                <div className={`inspection-decision-state ${order.buyerDecision === 'BUY' ? 'is-buy' : 'is-cancel'}`}>
-                  <span className="inspection-decision-icon" aria-hidden="true">{order.buyerDecision === 'BUY' ? '✓' : '×'}</span>
-                  <div>
-                    <strong>{order.buyerDecision === 'BUY' ? 'BUY decision recorded' : 'Purchase cancelled after inspection'}</strong>
-                    <p>
-                      {order.buyerDecision === 'BUY'
-                        ? 'Goods payment is unlocked. Transport can proceed once the required payments are confirmed.'
-                        : 'The purchase decision is closed.'}
-                    </p>
-                  </div>
-                </div>
-              ) : i.isBuyer ? (
-                <>
-                  <p className="muted">
-                    Choose <strong>Buy</strong> only after reviewing the findings. Buy unlocks goods payment; it does not
-                    complete payment or arrange transport.
-                  </p>
-                  <Actions>
-                    <Button variant="primary" disabled={Boolean(i.busy)} busy={i.busy === 'buyer-decision-buy'} busyText="Recording…" onClick={() => i.decide('BUY')}>
-                      Buy — continue purchase
-                    </Button>
-                    <Button variant="light" disabled={Boolean(i.busy)} busy={i.busy === 'buyer-decision-cancel'} busyText="Cancelling…" onClick={() => i.decide('CANCEL')}>
-                      Cancel after inspection
-                    </Button>
-                  </Actions>
-                </>
-              ) : (
-                <p className="muted">
-                  <strong>Awaiting buyer decision.</strong> The buyer must review this report and choose Buy or Cancel
-                  before payment opens.
-                </p>
-              )}
-            </Section>
+          {/*
+            Guided price review + buyer decision. Replaces the two separate
+            blocks that used to sit here. Only the buyer and seller see the
+            price negotiation and the buyer decision; an inspector viewing
+            this order still sees the findings above.
+          */}
+          {i.isParticipant && (
+            <OrderDecisionPanel
+              order={order}
+              currentUserId={i.currentUserId}
+              isBuyer={i.isBuyer}
+              isSeller={i.isSeller}
+              isParticipant={i.isParticipant}
+              busy={i.busy}
+              onBuy={i.onBuy}
+              onCancel={i.onCancel}
+              onProposePrice={i.onProposePrice}
+              onRespondReview={i.onRespondReview}
+              onScrollToPayment={i.onScrollToPayment}
+            />
           )}
-          {i.isParticipant && <PriceReviewPanel order={order} i={i} />}
         </>
       ) : (
         ['REQUESTED', 'ACCEPTED'].includes(request.status) && (i.isAdmin || i.isParticipant) && (
@@ -2084,6 +1975,22 @@ export default function OrderDetail() {
     },
   };
 
+  const decide = async (decision) => {
+    if (!order || !isBuyer || !decisionRequired) return false;
+    if (decision === 'BUY' && !(currentInspection?.report && currentInspection.status === 'COMPLETED')) {
+      setError('Review the completed inspection report before choosing BUY.');
+      return false;
+    }
+    if (decision === 'CANCEL' && !window.confirm('Cancel this purchase after reviewing the inspection report? This cannot be undone.')) return false;
+    const ok = await run(
+      `buyer-decision-${decision.toLowerCase()}`,
+      () => api.patch(`/orders/${order.id}/buyer-decision`, { decision }),
+      `Could not record ${decision === 'BUY' ? 'BUY' : 'cancellation'} decision`
+    );
+    if (ok) scrollToId(decision === 'BUY' ? 'payment-center' : 'inspection-section', 120);
+    return ok;
+  };
+
   const inspectionActions = {
     request: async (mode) => {
       if (!order?.listing) return;
@@ -2106,15 +2013,7 @@ export default function OrderDetail() {
       currentInspection &&
       window.confirm('Reopen inspection bidding? Previous bids will expire and inspectors can submit fresh bids.') &&
       run(`reopen-inspection-${currentInspection.id}`, () => api.patch(`/inspections/${currentInspection.id}/reopen-bidding`), 'Could not reopen inspection bidding'),
-    decide: async (decision) => {
-      if (!order || !isBuyer || !decisionRequired) return;
-      if (decision === 'BUY' && !(currentInspection?.report && currentInspection.status === 'COMPLETED')) {
-        return setError('Review the completed inspection report before choosing BUY.');
-      }
-      if (decision === 'CANCEL' && !window.confirm('Cancel this purchase after reviewing the inspection report? This cannot be undone.')) return;
-      const ok = await run(`buyer-decision-${decision.toLowerCase()}`, () => api.patch(`/orders/${order.id}/buyer-decision`, { decision }), `Could not record ${decision === 'BUY' ? 'BUY' : 'cancellation'} decision`);
-      if (ok) scrollToId(decision === 'BUY' ? 'payment-center' : 'inspection-section', 120);
-    },
+    decide,
     isBuyer,
     isSeller,
     isParticipant,
@@ -2209,6 +2108,26 @@ export default function OrderDetail() {
         ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
       )
     ),
+
+    // ── Decision panel wrappers ──────────────────────────────────────────
+    // These are the exact function signatures OrderDecisionPanel expects, so
+    // the panel can stay presentation-only and never reach into OrderDetail
+    // state directly.
+    onBuy: () => decide('BUY'),
+    onCancel: () => decide('CANCEL'),
+    onProposePrice: (proposedPrice, reasonCode) =>
+      run(
+        'price-review-create',
+        () => api.post(`/orders/${order.id}/price-reviews`, { proposedPrice, reasonCode }),
+        'Could not submit price review'
+      ),
+    onRespondReview: (reviewId, action, proposedPrice, reasonCode) =>
+      run(
+        `price-review-${reviewId}-${action.toLowerCase()}`,
+        () => api.patch(`/orders/${order.id}/price-reviews/${reviewId}/respond`, { action, ...(proposedPrice ? { proposedPrice, reasonCode } : {}) }),
+        'Could not respond to price review'
+      ),
+    onScrollToPayment: () => scrollToId('payment-center', 150),
   };
 
   const canCancelOrder = Boolean(
