@@ -9,6 +9,8 @@ const { releaseDuePayouts } = require('./payoutService');
 const { processRefund, verifyAndFinalizeRefund } = require('./paymentRefundService');
 const logger = require('../utils/logger');
 
+const { promoteNextWaitingBuyer } = require('./orderCancellationService');
+
 const LOCK_KEY = 82461327;
 
 function hoursFromNow(hours) {
