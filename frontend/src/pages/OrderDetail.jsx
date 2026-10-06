@@ -17,6 +17,9 @@ import { useAuth } from '../context/AuthContext.jsx';
 
 import InspectionCoordinationSeller from '../components/InspectionCoordinationSeller.jsx';
 import OrderDecisionPanel from '../components/OrderDecisionPanel.jsx';
+import TransportLoadingReport, {
+  TransportLoadingReportSummary,
+} from '../components/TransportLoadingReport.jsx';
 
 import RatingBox from '../components/RatingBox.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
@@ -1014,12 +1017,6 @@ function InspectionCard({ order, title, i }) {
             </Facts>
           </Section>
 
-          {/*
-            Guided price review + buyer decision. Replaces the two separate
-            blocks that used to sit here. Only the buyer and seller see the
-            price negotiation and the buyer decision; an inspector viewing
-            this order still sees the findings above.
-          */}
           {i.isParticipant && (
             <OrderDecisionPanel
               order={order}
@@ -1065,13 +1062,12 @@ function InspectionCard({ order, title, i }) {
    6. Transport
    ======================================================================== */
 
-function EvidenceForm({ kind, t }) {
-  const isPickup = kind === 'PICKUP';
+function DeliveryEvidenceForm({ t }) {
   const { evidence, setEvidence, notes, setNotes, evidenceBusy } = t;
   const ready = evidence.photoKeys.length || evidence.videoKeys.length || notes.trim();
   return (
-    <Notice title={isPickup ? 'Pickup evidence required' : 'Delivery evidence'}>
-      {!isPickup && <p className="muted">Upload delivery evidence before marking the trip delivered.</p>}
+    <Notice title="Delivery evidence">
+      <p className="muted">Upload delivery evidence before marking the trip delivered.</p>
       <EvidenceUploader
         uploadUrl={`/transport/${t.job.id}/evidence/media`}
         disabled={evidenceBusy}
@@ -1089,7 +1085,7 @@ function EvidenceForm({ kind, t }) {
         className="field"
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        placeholder={`Optional ${isPickup ? 'pickup' : 'delivery'} condition / handover notes…`}
+        placeholder="Optional delivery condition / handover notes…"
         rows={3}
         disabled={evidenceBusy}
       />
@@ -1098,9 +1094,9 @@ function EvidenceForm({ kind, t }) {
         disabled={evidenceBusy || !ready}
         busy={evidenceBusy}
         busyText="Submitting…"
-        onClick={() => t.submitEvidence(kind, isPickup ? 'IN_TRANSIT' : 'DELIVERED')}
+        onClick={() => t.submitEvidence('DELIVERY', 'DELIVERED')}
       >
-        {isPickup ? 'Submit pickup evidence & mark in transit' : 'Submit delivery evidence & mark delivered'}
+        Submit delivery evidence & mark delivered
       </Button>
     </Notice>
   );
@@ -1220,10 +1216,14 @@ function TransportCard({ order, t }) {
     );
   }
 
-  const evidenceAvailable =
-    t.isTransporter && (job.status === 'PICKUP' || job.status === 'IN_TRANSIT');
+  const loadingReportDone = Boolean(t.loadingReport);
+  const showLoadingSummary =
+    loadingReportDone && !(t.isTransporter && job.status === 'ACCEPTED');
+
   const hasEvidenceContent =
-    evidenceAvailable || job.status === 'DELIVERED' || job.incidentNotes;
+    job.status === 'IN_TRANSIT' ||
+    job.status === 'DELIVERED' ||
+    job.incidentNotes;
 
   return (
     <div className="od-card-grid">
@@ -1276,14 +1276,37 @@ function TransportCard({ order, t }) {
             )}
           </Section>
         )}
+
+        {/* Driver's form: appears only for the assigned truck owner while the
+            job is ACCEPTED and all payments are settled. The form checks the
+            same server gates and shows the driver exactly what is still
+            missing if it can't be submitted yet. */}
+        {t.isTransporter && job.status === 'ACCEPTED' && (
+          <TransportLoadingReport
+            transportJobId={job.id}
+            jobStatus={job.status}
+            sellerConfirmed={Boolean(job.sellerPickupConfirmedAt)}
+            paymentsReady={t.allOrderPaymentsSettled}
+            missingPayments={t.missingPayments}
+            onSubmitted={t.reload}
+          />
+        )}
+
+        {/* Read-only loading report for everyone else once it exists. */}
+        {showLoadingSummary && (
+          <TransportLoadingReportSummary
+            loadingReport={t.loadingReport}
+            evidence={t.loadingReportEvidence}
+          />
+        )}
       </Card>
 
       {hasEvidenceContent && (
         <Card
           id="transport-evidence-section"
           eyebrow="Evidence"
-          title="Pickup & delivery evidence"
-          subtitle="Photos, videos and handover notes uploaded by the transporter at pickup and delivery."
+          title="Trip evidence"
+          subtitle="Photos, videos and handover notes uploaded by the transporter during the trip."
           side={
             job.status === 'DELIVERED' ? (
               <SideLabel name="Delivery">
@@ -1294,11 +1317,11 @@ function TransportCard({ order, t }) {
         >
           <Section title="Evidence requirements">
             <p className="muted">
-              The transporter must upload pickup evidence before moving the trip from Pickup to In transit, and delivery
-              evidence before marking it Delivered.
+              Loading evidence is captured through the loading report above. The
+              transporter uploads delivery evidence before marking the trip
+              delivered.
             </p>
-            {t.isTransporter && job.status === 'PICKUP' && <EvidenceForm kind="PICKUP" t={t} />}
-            {t.isTransporter && job.status === 'IN_TRANSIT' && <EvidenceForm kind="DELIVERY" t={t} />}
+            {t.isTransporter && job.status === 'IN_TRANSIT' && <DeliveryEvidenceForm t={t} />}
           </Section>
 
           <Section title="Evidence gallery">
@@ -1603,6 +1626,9 @@ export default function OrderDetail() {
   const [requestingInspection, setRequestingInspection] = useState(false);
   const [inspectionWorkDetails, setInspectionWorkDetails] = useState({ workCategory: 'GENERAL_QUALITY', quantityToInspect: '', lotCount: '', checks: ['QUALITY_GRADE', 'VISIBLE_DEFECTS', 'PHOTOGRAPHS'], reportFormat: 'CHECKLIST_PHOTOS', requiredBy: '' });
 
+  const [loadingReport, setLoadingReport] = useState(null);
+  const [loadingReportEvidence, setLoadingReportEvidence] = useState(null);
+
   const [disputeAgainstId, setDisputeAgainstId] = useState('');
   const [disputeType, setDisputeType] = useState('NOT_DELIVERED');
   const [disputeDescription, setDisputeDescription] = useState('');
@@ -1642,6 +1668,23 @@ export default function OrderDetail() {
             ? recoveryRes.value.data?.recoveryRequests || []
             : []
         );
+
+        // Loading report is only meaningful once a transport job exists and
+        // has reached ACCEPTED or a later pickup state.
+        const job = nextOrder?.transportJob || null;
+        if (job && ['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status)) {
+          try {
+            const lr = await api.get(`/transport/${job.id}/loading-report`);
+            setLoadingReport(lr.data?.loadingReport || null);
+            setLoadingReportEvidence(lr.data?.evidence || null);
+          } catch (_) {
+            setLoadingReport(null);
+            setLoadingReportEvidence(null);
+          }
+        } else {
+          setLoadingReport(null);
+          setLoadingReportEvidence(null);
+        }
       } catch (err) {
         setError(getError(err, 'Could not load order'));
       } finally {
@@ -1769,6 +1812,23 @@ export default function OrderDetail() {
   const transportPending = transportPayments.some(active);
   const transportProcessing = transportPayments.some((p) => p.status === 'PROCESSING');
   const hiredTransport = transportJob?.method === 'HIRE_TRANSPORTER';
+
+  // ── All-payments-settled gate for the loading report ─────────────────────
+  // Mirrors the backend `checkLoadingReportGate` so the driver form can show
+  // what is still outstanding instead of failing on submit.
+  const missingPayments = useMemo(() => {
+    const missing = [];
+    if (!marketplacePaid) missing.push('MARKETPLACE');
+    for (const r of inspections) {
+      if (r.fee == null || Number(r.fee) <= 0) continue;
+      const paid = (r.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID');
+      if (!paid) missing.push(`INSPECTOR:${r.id}`);
+    }
+    if (hiredTransport && !transportPaid) missing.push('TRANSPORT');
+    return missing;
+  }, [marketplacePaid, inspections, hiredTransport, transportPaid]);
+
+  const allOrderPaymentsSettled = missingPayments.length === 0;
 
   const canPayMarketplace =
     Boolean(order) &&
@@ -2109,10 +2169,6 @@ export default function OrderDetail() {
       )
     ),
 
-    // ── Decision panel wrappers ──────────────────────────────────────────
-    // These are the exact function signatures OrderDecisionPanel expects, so
-    // the panel can stay presentation-only and never reach into OrderDetail
-    // state directly.
     onBuy: () => decide('BUY'),
     onCancel: () => decide('CANCEL'),
     onProposePrice: (proposedPrice, reasonCode) =>
@@ -2302,6 +2358,10 @@ export default function OrderDetail() {
     notes: evidenceNotes,
     setNotes: setEvidenceNotes,
     evidenceBusy,
+    loadingReport,
+    loadingReportEvidence,
+    allOrderPaymentsSettled,
+    missingPayments,
     ...transportActions,
   };
 
