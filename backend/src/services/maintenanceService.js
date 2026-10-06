@@ -17,10 +17,39 @@ function hoursFromNow(hours) {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
+/**
+ * Run `fn` under an exclusive maintenance lock.
+ *
+ * Uses pg_try_advisory_xact_lock (transaction-scoped) rather than
+ * pg_try_advisory_lock (session-scoped). The session-scoped variant is
+ * released only by an explicit pg_advisory_unlock() call OR when the client
+ * session ends. On Neon, a pooled session can linger after a crash, so the
+ * session-scoped lock would remain held and every subsequent cycle returned
+ * {skipped:true} — silently freezing all background work.
+ *
+ * The transaction-scoped lock is released automatically the instant the
+ * transaction commits, rolls back, or errors, so a crashed cycle can never
+ * strand it.
+ *
+ * The whole cycle runs inside this transaction, so nested per-item
+ * transactions inside `fn` become savepoints — that is fine for the current
+ * workload. If you ever need to run a job that cannot live inside a parent
+ * transaction, break it out with its own prisma.$transaction (Prisma
+ * promotes the outer one to a plain connection in that case, which would
+ * invalidate the lock — do not do that without revisiting this helper).
+ */
 async function withJobLock(fn) {
-  const rows = await prisma.$queryRaw`SELECT pg_try_advisory_lock(${LOCK_KEY}) AS locked`;
-  if (!rows?.[0]?.locked) return { skipped: true };
-  try { return await fn(); } finally { await prisma.$queryRaw`SELECT pg_advisory_unlock(${LOCK_KEY})`; }
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw`SELECT pg_try_advisory_xact_lock(${LOCK_KEY}) AS locked`;
+      if (!rows?.[0]?.locked) return { skipped: true };
+      return fn();
+    }, { maxWait: 10000, timeout: 120000 });
+  } catch (error) {
+    // Log and rethrow so startMaintenanceScheduler's catch can also record it.
+    logger.error({ err: error }, 'withJobLock transaction failed');
+    throw error;
+  }
 }
 
 async function expireOffers(now = new Date()) {
@@ -156,19 +185,6 @@ async function expireAdvertisements(now = new Date()) {
   return { expired: result.count };
 }
 
-/**
- * A campaign that was paid before its start date is left at SCHEDULED by
- * paymentService.settlePayment (see the ADVERTISING branch there) so that
- * nothing shows it as live before its window opens. Nothing else ever
- * flips it to PUBLISHED once that window arrives — GET /ads/active,
- * POST /ads/:id/events, and the admin overview count all independently
- * treat "SCHEDULED with startDate <= now <= endDate" as live, but the
- * stored row itself would otherwise sit at SCHEDULED for its entire run,
- * which is misleading for direct DB/reporting consumers and relies on
- * every future codepath re-deriving the same "is it actually live" rule.
- * This makes the persisted status converge with reality on the same
- * maintenance cadence as expireAdvertisements.
- */
 async function activateScheduledAdvertisements(now = new Date()) {
   const result = await prisma.advertisement.updateMany({
     where: { status: 'SCHEDULED', startDate: { lte: now }, endDate: { gt: now } },
@@ -177,19 +193,6 @@ async function activateScheduledAdvertisements(now = new Date()) {
   return { activated: result.count };
 }
 
-/**
- * Automatic inventory release for abandoned orders. An order sits in PENDING_PAYMENT after offer acceptance, but
- * inventory is intentionally NOT committed yet. If the buyer never completes
- * payment, the order is cancelled so the provisional winner is removed and
- * the next waiting buyer can be promoted without any inventory restoration. This finds every such order past its paymentDueAt
- * deadline and cancels it through the same path as a manual cancel
- * (cancelOrderInTransaction), which returns the quantity to the listing,
- * closes open payment obligations, and records the audit/event trail.
- *
- * Orders created before the paymentDueAt column existed have it as NULL
- * and are deliberately left alone here — only orders that were given an
- * explicit deadline at creation are auto-expired.
- */
 async function expireUnpaidOrders(now = new Date()) {
   const candidates = await prisma.order.findMany({
     where: { status: 'PENDING_PAYMENT', paymentDueAt: { lte: now } },
@@ -201,9 +204,6 @@ async function expireUnpaidOrders(now = new Date()) {
   for (const candidate of candidates) {
     try {
       await prisma.$transaction(async (tx) => {
-        // Re-read and re-check inside the transaction: a payment may have
-        // settled (or the buyer/seller may have already cancelled) between
-        // the query above and this job actually running on this order.
         const current = await tx.order.findUnique({
           where: { id: candidate.id },
           include: { transportJob: true, payments: true },
@@ -213,15 +213,6 @@ async function expireUnpaidOrders(now = new Date()) {
           return;
         }
 
-        // Belt-and-suspenders: settlePayment() (paymentService.js) is what
-        // normally moves an order out of PENDING_PAYMENT the moment its
-        // MARKETPLACE payment is marked PAID, so this order's status should
-        // already reflect a completed payment. If a PAID payment is
-        // somehow still attached to a PENDING_PAYMENT order — a narrow
-        // window between the payment write and the order-status write
-        // inside that same transaction — do not cancel and take the goods
-        // away from a buyer who already paid; skip and let the next cycle
-        // re-evaluate once the picture is consistent.
         if (current.payments.some((p) => p.status === 'PAID')) {
           logger.warn({ orderId: current.id }, 'Skipping auto-expire: order has a PAID payment despite PENDING_PAYMENT status');
           return;
@@ -267,12 +258,6 @@ async function createPickupReminders(now = new Date()) {
 
 const SMS_MAX_ATTEMPTS = 3;
 
-/**
- * Actually send queued SMS notifications (see services/notificationService.js,
- * which writes PENDING rows in the same DB transaction as the triggering
- * event — this is the "outbox" half of that pattern: send outside any
- * transaction, so a slow/flaky SMS provider never holds a DB lock).
- */
 async function sendPendingSms(now = new Date()) {
   const pending = await prisma.smsOutboxEntry.findMany({
     where: { status: 'PENDING' },
@@ -313,21 +298,6 @@ async function sendPendingSms(now = new Date()) {
   return { sent, failed, remaining: pending.length - sent - failed };
 }
 
-/**
- * Catches up any refund already submitted to Chapa (status PROCESSING,
- * providerRefundId set) but never confirmed one way or the other. A refund
- * raised from dispute resolution or an order cancellation is only ever
- * advanced by an admin's manual "verify" click today — if nobody comes
- * back to it, it sits in PROCESSING indefinitely even though Chapa has
- * long since resolved it. This sweep asks Chapa on the same maintenance
- * cadence as everything else here and lets verifyAndFinalizeRefund
- * complete or fail it automatically, exactly as the manual endpoint would.
- *
- * Per-item errors are caught and logged rather than thrown, matching
- * expireUnpaidOrders' pattern above: one provider hiccup on one refund
- * must not block the rest of the batch or fail the whole maintenance
- * cycle.
- */
 async function submitRequestedRefunds() {
   const pending = await prisma.paymentRefund.findMany({
     where: { status: 'REQUESTED' },
@@ -352,9 +322,6 @@ async function submitRequestedRefunds() {
       if (refund?.status === 'COMPLETED') completed += 1;
       else if (refund?.status === 'FAILED') failed += 1;
     } catch (error) {
-      // Operational/provider configuration errors must not stop the batch.
-      // A REFUND_BLOCKED_ORDER_ACTIVE or missing Chapa reference remains
-      // visible as REQUESTED/PROCESSING for an operator to resolve.
       if (error?.code === 'REFUND_BLOCKED_ORDER_ACTIVE') blocked += 1;
       logger.error({ err: error, refundId: item.id }, 'Failed to submit requested refund');
     }
