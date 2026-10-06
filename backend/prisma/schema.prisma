@@ -823,10 +823,14 @@ model InspectionRequest {
 
   quotes InspectionQuote[]
 
-  // ── NEW: seller <-> inspector operational coordination ──
+  // Structured scope-of-work sent by the requester at creation time. Every
+  // bidding inspector sees this before quoting, so it is a JSON object with
+  // an allow-listed shape (see POST /inspections in routes/inspections.js).
+  workDetails Json?
+
+  // ── Seller <-> inspector operational coordination ──
   coordination InspectionCoordination?
   availability InspectionAvailability[]
-  // ────────────────────────────────────────────────────────
 
   @@index([orderId])
   @@index([listingId])
@@ -838,6 +842,7 @@ model InspectionRequest {
   @@index([startDueAt])
   @@index([completionDueAt])
 }
+
 // ============================================================================
 // INSPECTION QUOTE
 // ============================================================================
@@ -1052,12 +1057,13 @@ model Order {
 
   messages Message[]
 
+  priceReviews PriceReview[]
+
   @@index([buyerId])
   @@index([sellerId])
   @@index([listingId])
   @@index([status])
   @@index([status, paymentDueAt])
-  priceReviews PriceReview[]
 }
 
 // ============================================================================
@@ -1138,6 +1144,10 @@ model TransportJob {
   deliveredConfirmedAt DateTime?
 
   incidentNotes String?
+
+  // Structured transport work requirements (weight, packages, vehicle type,
+  // handling, deadline). Allow-listed at write time by routes/transport.js.
+  workDetails Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
