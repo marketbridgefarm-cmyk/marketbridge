@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-
+import AmountPicker from './AmountPicker.jsx';
 
 // ============================================================================
 // ORDER DECISION PANEL
@@ -12,8 +12,11 @@ import React, { useEffect, useState } from 'react';
 // Backend guarantee this panel leans on: the buyer can always commit at the
 // current agreed price, even while a price review is pending. Doing so
 // automatically closes the pending proposal and records the commitment.
-// That is what keeps a stalled negotiation from freezing a willing buyer on
-// perishable produce.
+//
+// IMPORTANT: every numeric input in this panel goes through AmountPicker, not
+// a free <input type="number">. That is the only way a buyer or seller can
+// type a price on the platform, and it prevents a phone number or any other
+// contact string from being smuggled into a numeric field.
 // ============================================================================
 
 const REASON_OPTIONS = [
@@ -94,8 +97,8 @@ export default function OrderDecisionPanel({
   const [counterAmount, setCounterAmount] = useState('');
   const [counterReason, setCounterReason] = useState('QUALITY_OR_QUANTITY_CHANGE');
 
-  // Reset the propose form whenever the active review changes so an old
-  // proposal does not leak into a new negotiation.
+  // Reset the forms whenever the active review changes so a stale proposal
+  // does not leak into a new negotiation.
   useEffect(() => {
     setShowProposeForm(false);
     setProposedPrice('');
@@ -215,7 +218,6 @@ export default function OrderDecisionPanel({
             </div>
           </div>
 
-          {/* Response controls (buyer or seller can respond if it wasn't their proposal) */}
           {isParticipant && (
             <>
               <div className="od-decision-actions">
@@ -242,12 +244,14 @@ export default function OrderDecisionPanel({
                 <div className="od-decision-form-grid">
                   <label>
                     Your counter (ETB)
-                    <input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
+                    <AmountPicker
+                      reference={Number(pendingReview?.proposedPrice || currentPrice)}
+                      min={1}
+                      placeholder="Select your counter"
                       value={counterAmount}
-                      onChange={(e) => setCounterAmount(e.target.value)}
+                      disabled={Boolean(busy)}
+                      onChange={setCounterAmount}
+                      ariaLabel="Your counter in ETB"
                     />
                   </label>
                   <label>
@@ -281,7 +285,6 @@ export default function OrderDecisionPanel({
             </>
           )}
 
-          {/* Buyer-only escape hatch: commit at the current agreed price */}
           {isBuyer && (
             <div className="od-decision-escape">
               <p className="muted small">
@@ -385,7 +388,6 @@ export default function OrderDecisionPanel({
             </div>
           </div>
 
-          {/* Buyer's path: propose, or commit, or cancel */}
           {isBuyer && (
             <>
               <p className="muted">
@@ -417,13 +419,14 @@ export default function OrderDecisionPanel({
                   <div className="od-decision-form-grid">
                     <label>
                       Your proposed price (ETB)
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
+                      <AmountPicker
+                        reference={currentPrice}
+                        min={1}
+                        placeholder="Select your proposed price"
                         value={proposedPrice}
-                        placeholder={String(currentPrice)}
-                        onChange={(e) => setProposedPrice(e.target.value)}
+                        disabled={Boolean(busy)}
+                        onChange={setProposedPrice}
+                        ariaLabel="Your proposed price in ETB"
                       />
                     </label>
                     <label>
@@ -484,7 +487,6 @@ export default function OrderDecisionPanel({
             </>
           )}
 
-          {/* Seller's view: no decision, no proposal — waiting or proposing */}
           {isSeller && (
             <>
               <p className="muted">
@@ -507,13 +509,14 @@ export default function OrderDecisionPanel({
                   <div className="od-decision-form-grid">
                     <label>
                       Your proposed price (ETB)
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
+                      <AmountPicker
+                        reference={currentPrice}
+                        min={1}
+                        placeholder="Select your proposed price"
                         value={proposedPrice}
-                        placeholder={String(currentPrice)}
-                        onChange={(e) => setProposedPrice(e.target.value)}
+                        disabled={Boolean(busy)}
+                        onChange={setProposedPrice}
+                        ariaLabel="Your proposed price in ETB"
                       />
                     </label>
                     <label>
