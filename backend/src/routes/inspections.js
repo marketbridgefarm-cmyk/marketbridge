@@ -47,11 +47,6 @@ function quoteError(message, statusCode = 400) {
 // NEGOTIATION TURN + LIFECYCLE HELPERS
 // ============================================================================
 
-// Whose turn it is to respond to the current leaf quote.
-//   PENDING    → REQUESTER must respond
-//   SELECTED   → either party may act
-//   COUNTERED  → whichever side did NOT make the most recent counter
-// Returns null when there is no turn restriction.
 function quoteTurn(quote) {
   if (quote.status === 'PENDING') return 'REQUESTER';
   if (quote.status === 'SELECTED') return null;
@@ -61,16 +56,12 @@ function quoteTurn(quote) {
   return null;
 }
 
-// A "leaf" quote is the tip of a negotiation chain. Parent rows keep their
-// historical status but must never be actionable.
 async function findLeafQuote(tx, quoteId) {
   return tx.inspectionQuote.findFirst({
     where: { id: quoteId, childQuotes: { none: {} } },
   });
 }
 
-// Any other quote on the same request that currently owns the negotiation
-// slot. Only one request may have a live SELECTED or COUNTERED leaf at a time.
 async function findCompetingLiveQuote(tx, inspectionRequestId, exceptQuoteId) {
   return tx.inspectionQuote.findFirst({
     where: {
@@ -91,9 +82,6 @@ function quoteExpiry(hours = 24) {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
-// A silent selected inspector freezes the request. The requester may release
-// them after this many hours. 0 = allowed immediately (useful for testing).
-// Mirrors OFFER_RELEASE_AFTER_HOURS in offers.js.
 function inspectionReleaseAfterHours() {
   const configured = Number(process.env.INSPECTION_RELEASE_AFTER_HOURS);
   return Number.isFinite(configured) && configured >= 0 ? configured : 72;
@@ -101,9 +89,6 @@ function inspectionReleaseAfterHours() {
 
 function inspectionReleaseAvailableAt(quote) {
   if (!quote) return null;
-  // The requester can release only while the provider is expected to act:
-  //   SELECTED  -> provider has not yet accepted the requester's selection
-  //   COUNTERED -> the requester countered last; provider must respond
   const providerTurn =
     quote.status === 'SELECTED' ||
     (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
@@ -461,7 +446,7 @@ router.post(
         where: {
           inspectionRequestId: request.id,
           inspectorId: req.user.id,
-          status: { in: ['PENDING', 'COUNTERED'] },
+          status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
           childQuotes: { none: {} },
         },
       });
@@ -623,7 +608,6 @@ router.patch(
       if (isQuoteExpired(quote)) return res.status(409).json({ error: 'This quote has expired' });
 
       const selected = await prisma.$transaction(async (tx) => {
-        // Leaf-only: a parent row in a counter chain is history, not actionable.
         const fresh = await findLeafQuote(tx, quote.id);
         if (!fresh || fresh.status !== 'PENDING') {
           throw quoteError('This bid is no longer available', 409);
@@ -632,8 +616,6 @@ router.patch(
           throw quoteError('This bid has expired', 409);
         }
 
-        // One live negotiation per request. Refuse to select a second bid
-        // while another is still SELECTED or COUNTERED.
         const competing = await findCompetingLiveQuote(tx, request.id, fresh.id);
         if (competing) {
           throw quoteError(
@@ -689,7 +671,6 @@ router.patch(
       const result = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, request.orderId, 'an inspection quote cannot be accepted until the order dispute is resolved');
 
-        // Leaf-only: the quote may have been superseded by a later counter.
         const fresh = await findLeafQuote(tx, quote.id);
         if (!fresh || !['SELECTED', 'COUNTERED'].includes(fresh.status)) {
           throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
@@ -735,7 +716,6 @@ router.patch(
           },
         });
 
-        // Open the coordination sheet at the moment the agreement is locked.
         await ensureOpenCoordination(tx, request.id);
 
         const relatedOrders = await tx.order.findMany({
@@ -781,14 +761,6 @@ router.patch(
 
 // ============================================================================
 // COUNTER INSPECTION QUOTE
-// ----------------------------------------------------------------------------
-// Schema enforces ONE quote row per inspector per inspection. The old code
-// tried to INSERT a brand-new counter row for the same inspector, which
-// Prisma rejected with P2002 and rolled back the transaction.
-//
-// Fix: update the SAME row in place, storing the negotiation state in
-// (amount, counterAmount, counteredBy, status). No new row, no constraint
-// violation, and the negotiation loop works in both directions.
 // ============================================================================
 
 router.post(
@@ -833,7 +805,6 @@ router.post(
       const counterQuote = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, request.orderId, 'an inspection quote cannot be countered until the order dispute is resolved');
 
-        // Leaf-only: never counter a parent that has already been superseded.
         const freshQuote = await findLeafQuote(tx, quote.id);
         if (!freshQuote) {
           throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
@@ -847,8 +818,6 @@ router.post(
           throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
         }
 
-        // One live negotiation per request. Refuse to counter a second bid
-        // while another is still SELECTED or COUNTERED.
         const competing = await findCompetingLiveQuote(tx, request.id, freshQuote.id);
         if (competing) {
           throw quoteError(
@@ -905,14 +874,7 @@ router.post(
 );
 
 // ============================================================================
-// RELEASE PROVISIONAL INSPECTION AGREEMENT OR SILENT SELECTED INSPECTOR
-// ----------------------------------------------------------------------------
-// Two release paths:
-//   ACCEPTED  -> inspector already agreed; requester frees the slot. Payment
-//                must not have started.
-//   SELECTED / COUNTERED-by-REQUESTER -> the provider has gone silent past
-//                INSPECTION_RELEASE_AFTER_HOURS. Payment must not have
-//                started either (there cannot be one in this status).
+// RELEASE PROVISIONAL AGREEMENT OR SILENT SELECTED INSPECTOR
 // ============================================================================
 
 router.patch(
@@ -924,9 +886,6 @@ router.patch(
       if (!loaded) return;
       const { request, quote, actorRole } = loaded;
 
-      // Only the requester may release; the inspector cannot release
-      // themselves here (they would just withdraw their own bid on the
-      // waiting list, which is a different flow).
       if (actorRole !== 'REQUESTER') {
         return res.status(403).json({ error: 'Only the requester can release this negotiation' });
       }
@@ -967,22 +926,17 @@ router.patch(
           throw quoteError('This inspector cannot be released after inspection payment has started or completed', 409);
         }
 
-        // Leaf-only.
         const freshQuote = await findLeafQuote(tx, quote.id);
         if (!freshQuote) {
           throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
         }
 
         if (isAcceptedRelease) {
-          // Legacy / normal path: the agreement is locked to this inspector.
           const freshRequest = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
           if (!freshRequest || freshRequest.status !== 'ACCEPTED' || freshRequest.inspectorId !== freshQuote.inspectorId) {
             throw quoteError('This provisional inspection agreement is no longer active', 409);
           }
         } else {
-          // Silent-release path: the request is still REQUESTED, this quote
-          // owns the negotiation slot, and the provider has been silent past
-          // the release window. Re-check the window inside the transaction.
           const freshAvailableAt = inspectionReleaseAvailableAt(freshQuote);
           if (freshAvailableAt && freshAvailableAt.getTime() > Date.now()) {
             throw quoteError('This negotiation changed. Refresh and try again.', 409);
@@ -994,9 +948,6 @@ router.patch(
           data: { status: 'WITHDRAWN' },
         });
 
-        // When the released quote was the accepted inspector, reset the
-        // request to REQUESTED so the pool reopens. When it was a silent
-        // selected leaf, the request is already REQUESTED — leave it as-is.
         if (isAcceptedRelease) {
           await tx.inspectionRequest.update({
             where: { id: request.id },
@@ -1014,8 +965,6 @@ router.patch(
           });
         }
 
-        // Close coordination so the next inspector does not inherit the
-        // previous inspector's phone number, availability, or notes.
         await closeCoordination(tx, request.id, isAcceptedRelease ? 'INSPECTOR_WITHDREW' : 'SILENT_INSPECTOR_RELEASED');
 
         await recordAuditEvent(tx, {
@@ -1049,11 +998,70 @@ router.patch(
 );
 
 // ============================================================================
+// INSPECTOR WITHDRAWS A WAITING BID
+// ----------------------------------------------------------------------------
+// A waiting (PENDING) bid belongs to the inspector who submitted it. They may
+// remove it at any time before the requester acts on it. Once the requester
+// selects or counters it, this route refuses — the negotiation has started
+// and the requester's `withdraw` route is the only way to release it.
+// ============================================================================
+
+router.post(
+  '/:id/quotes/:quoteId/withdraw-bid',
+  authenticate,
+  requireRole('INSPECTOR'),
+  async (req, res) => {
+    try {
+      const loaded = await loadQuoteForNegotiation(req, res);
+      if (!loaded) return;
+      const { request, quote, actorRole } = loaded;
+
+      if (actorRole !== 'PROVIDER') {
+        return res.status(403).json({ error: 'Only the inspector who submitted the bid can withdraw it' });
+      }
+
+      if (quote.status !== 'PENDING') {
+        return res.status(409).json({
+          error: `Only a waiting bid can be withdrawn (current: ${quote.status})`,
+        });
+      }
+
+      const withdrawn = await prisma.$transaction(async (tx) => {
+        const fresh = await findLeafQuote(tx, quote.id);
+        if (!fresh || fresh.status !== 'PENDING') {
+          throw quoteError('This bid is no longer waiting. Refresh and try again.', 409);
+        }
+
+        const updated = await tx.inspectionQuote.update({
+          where: { id: fresh.id },
+          data: { status: 'WITHDRAWN' },
+        });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'INSPECTION_QUOTE_WITHDRAWN_BY_PROVIDER',
+          resourceType: 'InspectionQuote',
+          resourceId: updated.id,
+          metadata: { inspectionRequestId: request.id, inspectorId: fresh.inspectorId },
+        });
+
+        return updated;
+      }, { maxWait: 10000, timeout: 15000 });
+
+      return res.json({ message: 'Your bid has been withdrawn.', quote: withdrawn });
+    } catch (error) {
+      if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+      req.log.error({ err: error }, 'INSPECTOR WITHDRAW BID ERROR:');
+      return res.status(500).json({ error: 'Could not withdraw bid' });
+    }
+  }
+);
+
+// ============================================================================
 // REJECT INSPECTION QUOTE
 // ----------------------------------------------------------------------------
 // Waiting bids (PENDING) cannot be rejected — the requester is not in a
 // negotiation with them yet. Only the current live leaf can be rejected.
-// Mirrors offers.js where the seller cannot reject a waiting bid.
 // ============================================================================
 
 router.patch(
@@ -1166,7 +1174,7 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
     return res.json({ message: 'Inspection confirmed. The inspector may now start work.', sellerConfirmedAt: new Date().toISOString() });
   } catch (error) {
     req.log.error({ err: error }, 'SELLER INSPECTION CONFIRM ERROR');
-    return res.status(500).json({ error: 'Could not confirm inspection' });
+    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not confirm inspection' });
   }
 });
 
@@ -1177,6 +1185,15 @@ router.post('/:id/seller-message', authenticate, requireRole('SELLER'), async (r
     const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { listing: true } });
     if (!request) return res.status(404).json({ error: 'Inspection request not found' });
     if (request.listing.sellerId !== req.user.id) return res.status(403).json({ error: 'Only the listing seller can send inspection instructions' });
+
+    // Only once the agreement exists — coordination is the structured channel
+    // from that point on, and informal notes are not part of the bidding phase.
+    if (!['ACCEPTED', 'IN_PROGRESS', 'STALLED'].includes(request.status)) {
+      return res.status(409).json({
+        error: 'Seller instructions can only be added after an inspector has been accepted for this inspection.',
+      });
+    }
+
     const updated = await prisma.inspectionRequest.update({ where: { id: request.id }, data: { sellerMessage: message, sellerMessageAt: new Date() } });
     await prisma.$transaction(async (tx) => {
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_SELLER_MESSAGE', resourceType: 'InspectionRequest', resourceId: request.id, metadata: { message } });
@@ -1184,7 +1201,7 @@ router.post('/:id/seller-message', authenticate, requireRole('SELLER'), async (r
     return res.json({ message: 'Seller instructions saved to the inspection record. This does not confirm the inspection.', sellerMessage: updated.sellerMessage, sellerMessageAt: updated.sellerMessageAt });
   } catch (error) {
     req.log.error({ err: error }, 'SELLER INSPECTION MESSAGE ERROR');
-    return res.status(500).json({ error: 'Could not save seller instructions' });
+    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not save seller instructions' });
   }
 });
 
@@ -1313,7 +1330,7 @@ router.post(
         return res.status(error.status || 409).json({ error: error.message });
       }
 
-      return res.status(500).json({ error: 'Could not start inspection' });
+      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not start inspection' });
     }
   }
 );
@@ -1363,18 +1380,29 @@ router.get(
 
 // ============================================================================
 // INSPECTION EVIDENCE ACCESS
+// ----------------------------------------------------------------------------
+// The buyer of the order must be able to view the evidence, because they
+// decide BUY/CANCEL based on it — even when the inspection was requested by
+// the seller. This is inspection *evidence* access only; it does NOT grant
+// the buyer access to InspectionCoordination (that has its own gate).
 // ============================================================================
 
 async function canAccessInspection(req, requestId) {
   const request = await prisma.inspectionRequest.findUnique({
     where: { id: requestId },
-    include: { listing: { select: { sellerId: true } }, report: true },
+    include: {
+      listing: { select: { sellerId: true } },
+      report: true,
+      order: { select: { buyerId: true } },
+    },
   });
   if (!request) return { request: null, allowed: false };
-  const allowed = req.user.roles.includes('ADMIN') ||
+  const allowed =
+    req.user.roles.includes('ADMIN') ||
     request.requestedById === req.user.id ||
     request.inspectorId === req.user.id ||
-    request.listing.sellerId === req.user.id;
+    request.listing.sellerId === req.user.id ||
+    request.order?.buyerId === req.user.id;
   return { request, allowed };
 }
 
@@ -1456,6 +1484,9 @@ router.post('/:id/evidence/media', authenticate, requireRole('INSPECTOR'), evide
     const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id } });
     if (!request) return res.status(404).json({ error: 'Inspection request not found' });
     if (request.inspectorId !== req.user.id) return res.status(403).json({ error: 'Only the assigned inspector can add inspection evidence' });
+    if (!['IN_PROGRESS', 'COMPLETED'].includes(request.status)) {
+      return res.status(409).json({ error: 'Evidence can only be added while the inspection is in progress or completed.' });
+    }
     if (!req.files?.length) return res.status(400).json({ error: 'At least one file is required' });
 
     const { photoKeys, videoKeys } = await uploadEvidenceFiles('inspection', request.id, req.files);
@@ -1481,6 +1512,9 @@ router.post('/:id/evidence', authenticate, requireRole('INSPECTOR'), [
     const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { report: true } });
     if (!request) return res.status(404).json({ error: 'Inspection request not found' });
     if (request.inspectorId !== req.user.id) return res.status(403).json({ error: 'Only the assigned inspector can add inspection evidence' });
+    if (!['IN_PROGRESS', 'COMPLETED'].includes(request.status)) {
+      return res.status(409).json({ error: 'Evidence can only be added while the inspection is in progress or completed.' });
+    }
     if (!request.report) return res.status(400).json({ error: 'Submit the inspection report before adding supplemental evidence' });
     const photos = Array.isArray(req.body.photos) ? req.body.photos : [];
     const videos = Array.isArray(req.body.videos) ? req.body.videos : [];
@@ -1672,8 +1706,7 @@ router.post(
 // ============================================================================
 // REPORT ADDENDUM — immutable correction trail
 // ============================================================================
-// The original report is never edited after COMPLETED. If a factual correction
-// is required, the assigned inspector appends an auditable addendum instead.
+
 router.post('/:id/report/addenda', authenticate, requireRole('INSPECTOR'), [
   body('reason').isString().trim().isLength({ min: 3, max: 500 }),
   body('notes').isString().trim().isLength({ min: 3, max: 3000 }),
@@ -1718,15 +1751,6 @@ router.post('/:id/report/addenda', authenticate, requireRole('INSPECTOR'), [
 // ============================================================================
 // INSPECTION COORDINATION (seller <-> inspector only)
 // ============================================================================
-//
-// Operational handoff for the physical site visit. Contact data lives here,
-// NOT on InspectionRequest, so no buyer-facing endpoint can leak it.
-//
-// Access rule (enforced below, mirrored in the service):
-//   • Seller of the listing and the assigned inspector only.
-//   • Inspection request must be ACCEPTED or later.
-//   • Buyer is intentionally excluded, even if the buyer pays the fee.
-//   • Admin override for support, always audited.
 
 async function loadCoordinationContext(req, res) {
   const request = await prisma.inspectionRequest.findUnique({
@@ -1758,7 +1782,6 @@ async function loadCoordinationContext(req, res) {
   return { request, role };
 }
 
-// GET /inspections/:id/coordination
 router.get('/:id/coordination', authenticate, async (req, res) => {
   try {
     const ctx = await loadCoordinationContext(req, res);
@@ -1780,8 +1803,6 @@ router.get('/:id/coordination', authenticate, async (req, res) => {
   }
 });
 
-// PUT /inspections/:id/coordination
-// Writes only the calling party's own field prefix.
 router.put(
   '/:id/coordination',
   authenticate,
@@ -1829,7 +1850,6 @@ router.put(
       ];
       const allowedFields = role === 'SELLER' ? SELLER_FIELDS : INSPECTOR_FIELDS;
 
-      // Whitelist: never let the caller write the other side's fields.
       const data = {};
       for (const field of allowedFields) {
         if (Object.prototype.hasOwnProperty.call(req.body, field)) {
@@ -1871,7 +1891,6 @@ router.put(
   }
 );
 
-// POST /inspections/:id/coordination/availability
 router.post(
   '/:id/coordination/availability',
   authenticate,
@@ -1926,7 +1945,6 @@ router.post(
   }
 );
 
-// DELETE /inspections/:id/coordination/availability/:slotId
 router.delete(
   '/:id/coordination/availability/:slotId',
   authenticate,
