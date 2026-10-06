@@ -9,7 +9,12 @@ const { syncOrderPaymentObligations } = require('../services/paymentObligationSe
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
-const { computeInspectionWorkflowDueAt, computePaymentDueAt } = require('../utils/orderTiming');
+const {
+  computeInspectionWorkflowDueAt,
+  computeInspectionStartDueAt,
+  computeInspectionCompletionDueAt,
+  computePaymentDueAt,
+} = require('../utils/orderTiming');
 const {
   AMOUNT_LIMITS,
   validAmount,
