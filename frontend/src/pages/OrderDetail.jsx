@@ -911,6 +911,30 @@ function InspectionCard({ order, title, i }) {
             <p className="muted small">
               A payment for this inspection is pending or processing.
             </p>
+          ) : i.isSeller && !request.sellerConfirmedAt ? (
+            // Seller confirmation is the gate that unlocks payment. Give the
+            // seller a button instead of a silent disabled state, so the flow
+            // never stalls on "why can't the buyer pay?".
+            <>
+              <p className="muted small">
+                Confirm the inspector and agreed fee to unlock payment and let
+                work begin.
+              </p>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={Boolean(i.busy)}
+                busy={i.busy === `seller-confirm-${request.id}`}
+                busyText="Confirming…"
+                onClick={() => i.confirmSellerInspection(request.id)}
+              >
+                Confirm inspector &amp; fee
+              </Button>
+            </>
+          ) : request.sellerConfirmedAt ? (
+            <p className="muted small">
+              Seller confirmed. The designated payer can now pay the inspection fee.
+            </p>
           ) : i.canPayInspection ? (
             <Button
               variant="primary"
@@ -924,7 +948,8 @@ function InspectionCard({ order, title, i }) {
             </Button>
           ) : (
             <p className="muted small">
-              Only the buyer can pay the inspector fee.
+              Waiting for the seller to confirm the selected inspector before
+              payment can begin.
             </p>
           )}
 
@@ -2042,6 +2067,12 @@ export default function OrderDetail() {
         'Could not release inspection agreement'
       );
     },
+    confirmSellerInspection: (requestId) =>
+      run(
+        `seller-confirm-${requestId}`,
+        () => api.post(`/inspections/${requestId}/seller-confirm`),
+        'Could not confirm the inspector'
+      ),
     payInspection: (request) => payInspection(request),
     currentUserId,
     counterInputs,
@@ -2051,6 +2082,7 @@ export default function OrderDetail() {
       isBuyer &&
       currentInspection.status === 'ACCEPTED' &&
       currentInspection.fee != null &&
+      currentInspection.sellerConfirmedAt != null &&
       !(currentInspection.payments || []).some((p) =>
         ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
       )
@@ -2299,11 +2331,6 @@ export default function OrderDetail() {
             <InspectionCard order={order} title={title} i={inspectionProps} />
           )}
 
-          {/* ★ Seller coordination card.
-              Appears only for the seller, only once the inspection is
-              ACCEPTED or later. The buyer never sees this component; the
-              inspector has its own card on their dashboard. Server-side
-              access is enforced on /inspections/:id/coordination. */}
           {currentInspection &&
             ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(currentInspection.status) &&
             isSeller && (
