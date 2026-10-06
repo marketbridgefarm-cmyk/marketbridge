@@ -15,12 +15,7 @@ import {
 } from '../utils/chapaCheckout';
 import { useAuth } from '../context/AuthContext.jsx';
 
-const {
-  computeInspectionWorkflowDueAt,
-  computeInspectionStartDueAt,
-  computeInspectionCompletionDueAt,
-  computePaymentDueAt,
-} = require('../utils/orderTiming');
+import InspectionCoordinationSeller from '../components/InspectionCoordinationSeller.jsx';
 
 import RatingBox from '../components/RatingBox.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
@@ -31,20 +26,6 @@ import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
-
-const PAYMENT_METHODS = [
-  { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
-  { value: 'QR', label: 'QR Code' },
-];
-
-const DISPUTE_TYPES = [
-  ['NOT_DELIVERED', 'Goods not delivered'],
-  ['QUALITY_ISSUE', 'Quality issue'],
-  ['DAMAGED_GOODS', 'Damaged goods'],
-  ['PAYMENT_ISSUE', 'Payment issue'],
-  ['TRANSPORT_ISSUE', 'Transport issue'],
-  ['OTHER', 'Other'],
-];
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
