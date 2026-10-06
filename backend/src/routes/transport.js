@@ -33,6 +33,39 @@ const ACTIVE_TRUCK_JOB_STATUSES = [
 ];
 
 // ============================================================================
+// TRANSPORT LOADING REPORT — ENUM VALUES
+// ----------------------------------------------------------------------------
+// Structured, dropdown-only inputs. No free text can carry a phone number.
+// ============================================================================
+
+const LOADING_WHAT_OPTIONS = [
+  'AS_LISTED',
+  'SAME_PRODUCT_DIFFERENT_VARIETY',
+  'PARTIAL_OF_LISTED',
+  'DIFFERENT_PRODUCT',
+  'REFUSED_TO_LOAD',
+];
+
+const LOADING_QUALITY_OPTIONS = [
+  'AS_INSPECTED',
+  'MINOR_VARIANCE',
+  'MAJOR_VARIANCE',
+  'DAMAGED',
+  'NOT_INSPECTED',
+];
+
+const LOADING_ISSUE_OPTIONS = [
+  'NONE',
+  'FRESHNESS_CONCERN',
+  'PHYSICAL_DAMAGE',
+  'PACKAGING_DAMAGE',
+  'QUANTITY_SHORTFALL',
+  'WRONG_PRODUCT',
+  'CONTAMINATION',
+  'WEATHER_EXPOSURE',
+];
+
+// ============================================================================
 // VALIDATION
 // ============================================================================
 
