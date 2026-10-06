@@ -175,8 +175,12 @@ enum TransportStatus {
   CANCELLED
 }
 
+// LOADING is the driver's loading-report evidence, submitted at the pickup
+// site. PICKUP is retained for backward compatibility with rows uploaded
+// before the loading report was introduced.
 enum TransportEvidenceType {
   PICKUP
+  LOADING
   DELIVERY
   INCIDENT
 }
@@ -1159,6 +1163,11 @@ model TransportJob {
   payments Payment[]
 
   paymentObligations PaymentObligation[]
+
+  // ── Seller <-> transporter operational coordination ──────────────────────
+  coordination TransportCoordination?
+  availability TransportAvailability[]
+  // ─────────────────────────────────────────────────────────────────────────
 
   @@index([truckOwnerId])
   @@index([truckId])
@@ -2236,4 +2245,98 @@ model InspectionAvailability {
 
   @@index([inspectionRequestId, party])
   @@index([inspectionRequestId, date])
+}
+
+// ============================================================================
+// TRANSPORT COORDINATION (seller <-> transporter operational handoff)
+// ============================================================================
+//
+// Contact data is deliberately NOT stored on TransportJob, which is read by
+// buyer-facing endpoints (GET /orders/:id). It lives here, gated by the
+// transport status (ACCEPTED or later — which is only reached after the
+// transport payment settles), so no public / order / transport endpoint can
+// leak it accidentally.
+//
+// Access rule (enforced server-side, not in this schema):
+//   • Visible only to the seller of the listing and the assigned transporter.
+//   • Visible only once the transport job is ACCEPTED.
+//   • NEVER visible to the buyer, even though the buyer pays the transport fee.
+//   • Admin override for support, always audited.
+//
+// One row per transport job. Both parties write into the same row using their
+// own field prefix. On transporter reassignment the row is superseded rather
+// than deleted, so the previous driver's phone number does not leak to the
+// next one.
+
+model TransportCoordination {
+  id String @id @default(uuid())
+
+  transportJob   TransportJob @relation(fields: [transportJobId], references: [id], onDelete: Cascade)
+  transportJobId String       @unique
+
+  // ── Seller-side operational handoff (site host) ──────────────────────────
+  sellerContactName      String?
+  sellerPhone            String?
+  sellerAlternativePhone String?
+  sellerEmail            String?
+  sellerPreferredContact String?
+  pickupSite             String?
+  meetingPoint           String?
+  accessInstructions     String?
+  sellerPrepNotes        String?
+  sellerSitePhotos       String[] @default([])
+  sellerPrepPhotos       String[] @default([])
+  sellerSubmittedAt      DateTime?
+
+  // ── Transporter-side operational handoff (party arriving on site) ────────
+  driverContactName      String?
+  driverPhone            String?
+  driverAlternativePhone String?
+  driverEmail            String?
+  driverPreferredContact String?
+  driverArrivalEta       DateTime?
+  driverArrivalNotes     String?
+  driverEquipment        String[] @default([])
+  driverNotes            String?
+  driverSubmittedAt      DateTime?
+
+  // ── Reassignment lifecycle ───────────────────────────────────────────────
+  // Set when an accepted transporter is released, admin reopens bidding, or
+  // a recovery request is approved. A superseded row is never returned to the
+  // next driver — otherwise the previous driver's phone would leak.
+  supersededAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([transportJobId])
+  @@index([supersededAt])
+}
+
+// ============================================================================
+// TRANSPORT AVAILABILITY (repeatable date/time slots per party)
+// ============================================================================
+//
+// One row per window. Separate rows (rather than a single text blob) so the
+// schedule can be queried, matched, edited, and conflict-checked later.
+//
+// party = 'SELLER' | 'TRANSPORTER' — the party the slot belongs to.
+
+model TransportAvailability {
+  id String @id @default(uuid())
+
+  transportJob   TransportJob @relation(fields: [transportJobId], references: [id], onDelete: Cascade)
+  transportJobId String
+
+  party String // 'SELLER' | 'TRANSPORTER'
+
+  date      DateTime @db.Date
+  startTime String   // "HH:MM" 24h, local
+  endTime   String   // "HH:MM" 24h, local
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([transportJobId, party])
+  @@index([transportJobId, date])
 }
