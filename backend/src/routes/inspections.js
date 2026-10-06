@@ -1472,18 +1472,68 @@ async function canAccessInspection(req, requestId) {
   return { request, allowed };
 }
 
+// ============================================================================
+// BUYER MEDIA GATE
+// ----------------------------------------------------------------------------
+// Text-based contact guards cannot scan photos or videos for a phone number
+// written on a piece of paper. Until the buyer has actually paid for the
+// goods, the buyer sees the structured inspection findings (grade, quantity,
+// defects, notes) but not the media the inspector captured. Sellers,
+// assigned inspectors, and admins always see the full evidence.
+//
+// The gate opens the instant a MARKETPLACE payment reaches PAID. It does not
+// care whether that payment was instant, split, or in installments — the
+// parent MARKETPLACE payment is the trigger.
+// ============================================================================
+async function buyerCanSeeInspectionMedia(request, userId, userRoles) {
+  const isAdmin = Array.isArray(userRoles) && userRoles.includes('ADMIN');
+  if (isAdmin) return true;
+
+  const isBuyer = request.order?.buyerId === userId;
+  if (!isBuyer) return true;   // seller, inspector, requester-who-is-not-buyer
+  if (!request.orderId) return false;
+
+  const paid = await prisma.payment.findFirst({
+    where: { orderId: request.orderId, type: 'MARKETPLACE', status: 'PAID' },
+    select: { id: true },
+  });
+  return Boolean(paid);
+}
+
 router.get('/:id/evidence', authenticate, async (req, res) => {
   try {
     const access = await canAccessInspection(req, req.params.id);
     if (!access.request) return res.status(404).json({ error: 'Inspection request not found' });
     if (!access.allowed) return res.status(403).json({ error: 'You are not authorized to access this inspection evidence' });
     if (!access.request.report) return res.json({ evidence: [] });
+
+    const mediaAllowed = await buyerCanSeeInspectionMedia(
+      access.request,
+      req.user.id,
+      req.user.roles
+    );
+
     const evidence = await prisma.inspectionEvidence.findMany({
       where: { reportId: access.request.report.id },
       select: { id: true, reportId: true, type: true, photos: true, videos: true, gpsLocation: true, notes: true, capturedAt: true, createdById: true },
       orderBy: { capturedAt: 'asc' },
     });
-    return res.json({ evidence });
+
+    // Structured evidence (type, GPS, notes, timestamps) is always visible
+    // to any authorized viewer. Media is stripped for the buyer until the
+    // goods payment settles.
+    const sanitized = mediaAllowed
+      ? evidence
+      : evidence.map((row) => ({
+          ...row,
+          photos: [],
+          videos: [],
+          // Explicit flag so the frontend can say
+          // "Photos available after payment" instead of "no photos".
+          mediaLocked: true,
+        }));
+
+    return res.json({ evidence: sanitized, mediaAllowed });
   } catch (error) {
     req.log.error({ err: error }, 'GET INSPECTION EVIDENCE ERROR:');
     return res.status(500).json({ error: 'Could not load inspection evidence' });
@@ -1498,6 +1548,21 @@ router.get('/:id/evidence/:evidenceId/media', authenticate, [
     const access = await canAccessInspection(req, req.params.id);
     if (!access.request) return res.status(404).json({ error: 'Inspection request not found' });
     if (!access.allowed) return res.status(403).json({ error: 'You are not authorized to access this inspection evidence' });
+
+    // Buyer cannot fetch signed URLs for inspection media until goods
+    // payment has settled. Return 402 so the frontend can show the same
+    // "available after payment" message it already uses elsewhere.
+    const mediaAllowed = await buyerCanSeeInspectionMedia(
+      access.request,
+      req.user.id,
+      req.user.roles
+    );
+    if (!mediaAllowed) {
+      return res.status(402).json({
+        code: 'MEDIA_LOCKED_UNTIL_PAYMENT',
+        error: 'Inspection photos and videos become available to the buyer once the goods payment is settled.',
+      });
+    }
 
     const evidence = await prisma.inspectionEvidence.findFirst({
       where: { id: req.params.evidenceId, reportId: access.request.report?.id || '__none__' },
