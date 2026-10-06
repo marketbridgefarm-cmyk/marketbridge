@@ -20,6 +20,8 @@ import OrderDecisionPanel from '../components/OrderDecisionPanel.jsx';
 import TransportLoadingReport, {
   TransportLoadingReportSummary,
 } from '../components/TransportLoadingReport.jsx';
+import TransportCoordinationSeller from '../components/TransportCoordinationSeller.jsx';
+import TransportCoordinationTransporter from '../components/TransportCoordinationTransporter.jsx';
 
 import RatingBox from '../components/RatingBox.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
@@ -1275,6 +1277,21 @@ function TransportCard({ order, t }) {
               </p>
             )}
           </Section>
+        )}
+
+        {/* ★ Transport coordination — seller <-> transporter only.
+            Visible only when the truck is committed (payment settled) and only
+            to the seller of the listing and the assigned transporter. The
+            buyer never sees this. Server enforces the rule; this is a UX gate. */}
+        {['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status) && (
+          <>
+            {t.isSeller && (
+              <TransportCoordinationSeller transportJobId={job.id} />
+            )}
+            {t.isTransporter && (
+              <TransportCoordinationTransporter transportJobId={job.id} />
+            )}
+          </>
         )}
 
         {/* Driver's form: appears only for the assigned truck owner while the
