@@ -1506,6 +1506,62 @@ async function getTransportPaymentGate(client, jobId) {
 }
 
 // ============================================================================
+// ALL-PAYMENTS GATE FOR THE LOADING REPORT
+// ----------------------------------------------------------------------------
+// The truck must not begin loading until every payment on the order is
+// settled:
+//   1. Goods (MARKETPLACE) payment
+//   2. Every fee-bearing inspection (INSPECTOR) payment
+//   3. Transport payment, if hired
+// This is stricter than getTransportPaymentGate (which gates IN_TRANSIT on
+// transport fee alone). Both are enforced; the loading report is the earlier,
+// stronger gate.
+// ============================================================================
+async function checkLoadingReportGate(client, jobId) {
+  const job = await client.transportJob.findUnique({
+    where: { id: jobId },
+    include: {
+      order: {
+        include: {
+          payments: { select: { id: true, type: true, status: true } },
+          inspectionRequests: {
+            where: { status: { not: 'CANCELLED' } },
+            include: { payments: { select: { id: true, type: true, status: true } } },
+          },
+        },
+      },
+      payments: { select: { id: true, type: true, status: true } },
+    },
+  });
+
+  if (!job) return { ready: false, missing: ['TRANSPORT_JOB'] };
+
+  const missing = [];
+
+  const goodsPaid = (job.order.payments || []).some(
+    (p) => p.type === 'MARKETPLACE' && p.status === 'PAID'
+  );
+  if (!goodsPaid) missing.push('MARKETPLACE');
+
+  for (const r of job.order.inspectionRequests || []) {
+    if (r.fee == null || Number(r.fee) <= 0) continue;
+    const paid = (r.payments || []).some(
+      (p) => p.type === 'INSPECTOR' && p.status === 'PAID'
+    );
+    if (!paid) missing.push(`INSPECTOR:${r.id}`);
+  }
+
+  if (job.method === 'HIRE_TRANSPORTER') {
+    const transportPaid = (job.payments || []).some(
+      (p) => p.type === 'TRANSPORT' && p.status === 'PAID'
+    );
+    if (!transportPaid) missing.push('TRANSPORT');
+  }
+
+  return { ready: missing.length === 0, missing };
+}
+
+// ============================================================================
 // REOPEN TRANSPORT BIDDING
 // ============================================================================
 router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
@@ -1766,7 +1822,9 @@ router.patch(
 
       // Pickup evidence is required before IN_TRANSIT and delivery evidence
       // is required before DELIVERED.
-      if (next === 'IN_TRANSIT' && !job.evidence.some((item) => item.type === 'PICKUP')) {
+      // Accept either the legacy PICKUP evidence or the new LOADING evidence
+      // created by the loading report.
+      if (next === 'IN_TRANSIT' && !job.evidence.some((item) => item.type === 'PICKUP' || item.type === 'LOADING')) {
         return res.status(409).json({
           error: 'Pickup evidence is required before transport can enter IN_TRANSIT',
         });
@@ -2925,5 +2983,265 @@ router.ACTIVE_TRUCK_JOB_STATUSES =
 
 router.claimAvailableTruck =
   claimAvailableTruck;
+
+// ============================================================================
+// TRANSPORT LOADING REPORT
+// ============================================================================
+// The truck owner submits a structured loading report when they arrive at the
+// pickup site. Submission is atomic: the report, the LOADING evidence row,
+// and the ACCEPTED -> PICKUP status transition all commit together, or none
+// of them do.
+//
+// Gates:
+//   1. Caller must be the assigned truck owner (admin override available)
+//   2. Job must be ACCEPTED
+//   3. Seller must have confirmed pickup readiness
+//   4. EVERY order payment must be settled — goods, inspections, transport
+//   5. At least one photo or video of the loaded goods
+// ============================================================================
+
+router.post(
+  '/:id/loading-report',
+  authenticate,
+  requireRole('TRUCK_OWNER'),
+  idempotency('transport.loading-report'),
+  [
+    param('id').isUUID(),
+    body('whatLoaded').isIn(LOADING_WHAT_OPTIONS),
+    body('quantityLoaded').isFloat({ gt: 0 }),
+    body('quantityUnit').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
+    body('qualityAtLoading').optional({ nullable: true }).isIn(LOADING_QUALITY_OPTIONS),
+    body('visibleIssues').optional().isArray(),
+    body('arrivedAt').optional({ nullable: true }).isISO8601(),
+    body('loadingStartedAt').optional({ nullable: true }).isISO8601(),
+    body('loadingFinishedAt').optional({ nullable: true }).isISO8601(),
+    body('gpsLocation').optional({ nullable: true }).isString().trim().isLength({ max: 200 }),
+    body('notes').optional({ nullable: true }).isString().trim().isLength({ max: 2000 }).custom(noContactInfo),
+    body('photos').optional().isArray(),
+    body('videos').optional().isArray(),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const isAdminUser = isAdmin(req.user);
+
+      const job = await prisma.transportJob.findUnique({
+        where: { id: req.params.id },
+        include: { order: true },
+      });
+      if (!job) return res.status(404).json({ error: 'Transport job not found' });
+
+      if (job.truckOwnerId !== req.user.id && !isAdminUser) {
+        return res.status(403).json({
+          error: 'Only the assigned transporter can submit the loading report',
+        });
+      }
+      if (job.status !== 'ACCEPTED') {
+        return res.status(409).json({
+          code: 'LOADING_REPORT_NOT_OPEN',
+          error: `The loading report can be submitted only while the transport is ACCEPTED (current: ${job.status})`,
+        });
+      }
+      if (!job.sellerPickupConfirmedAt && !isAdminUser) {
+        return res.status(409).json({
+          code: 'SELLER_PICKUP_CONFIRMATION_REQUIRED',
+          error: 'The seller must confirm that the goods are ready for pickup before the loading report can be submitted.',
+        });
+      }
+
+      const issues = Array.isArray(req.body.visibleIssues)
+        ? req.body.visibleIssues.filter(Boolean)
+        : [];
+      const unknownIssues = issues.filter((i) => !LOADING_ISSUE_OPTIONS.includes(i));
+      if (unknownIssues.length) {
+        return res.status(400).json({
+          error: `Unknown issue flags: ${unknownIssues.join(', ')}`,
+        });
+      }
+
+      const parseOpt = (v) =>
+        v == null || v === '' ? null : new Date(v);
+      const arrivedAt = parseOpt(req.body.arrivedAt);
+      const loadingStartedAt = parseOpt(req.body.loadingStartedAt);
+      const loadingFinishedAt = parseOpt(req.body.loadingFinishedAt);
+
+      if (arrivedAt && loadingStartedAt && arrivedAt > loadingStartedAt) {
+        return res.status(400).json({ error: 'arrivedAt cannot be later than loadingStartedAt' });
+      }
+      if (loadingStartedAt && loadingFinishedAt && loadingStartedAt > loadingFinishedAt) {
+        return res.status(400).json({ error: 'loadingStartedAt cannot be later than loadingFinishedAt' });
+      }
+
+      const gate = await checkLoadingReportGate(prisma, job.id);
+      if (!gate.ready) {
+        return res.status(409).json({
+          code: 'PAYMENTS_REQUIRED_BEFORE_LOADING',
+          error: 'The truck cannot begin loading until every required payment on this order is settled (goods, inspection, transport).',
+          missingPayments: gate.missing,
+        });
+      }
+
+      const photos = Array.isArray(req.body.photos) ? req.body.photos.filter(Boolean) : [];
+      const videos = Array.isArray(req.body.videos) ? req.body.videos.filter(Boolean) : [];
+      if (!photos.length && !videos.length) {
+        return res.status(400).json({
+          error: 'At least one photo or video of the loaded goods is required',
+        });
+      }
+
+      const report = await prisma.$transaction(async (tx) => {
+        await lockOrderAndAssertNotClosed(tx, job.orderId, 'loading cannot begin until the order dispute is resolved');
+
+        const fresh = await tx.transportJob.findUnique({ where: { id: job.id } });
+        if (!fresh || fresh.status !== 'ACCEPTED') {
+          throw quoteError('This transport is no longer awaiting pickup', 409);
+        }
+
+        const existing = await tx.transportLoadingReport.findUnique({
+          where: { transportJobId: job.id },
+        });
+        if (existing) {
+          throw quoteError('A loading report has already been submitted for this transport', 409);
+        }
+
+        const created = await tx.transportLoadingReport.create({
+          data: {
+            transportJobId: job.id,
+            submittedById: req.user.id,
+            whatLoaded: req.body.whatLoaded,
+            quantityLoaded: Number(req.body.quantityLoaded),
+            quantityUnit: req.body.quantityUnit || null,
+            qualityAtLoading: req.body.qualityAtLoading || null,
+            visibleIssues: issues,
+            arrivedAt,
+            loadingStartedAt,
+            loadingFinishedAt,
+            gpsLocation: req.body.gpsLocation || null,
+            notes: req.body.notes || null,
+          },
+        });
+
+        await tx.transportEvidence.create({
+          data: {
+            transportJobId: job.id,
+            type: 'LOADING',
+            photos,
+            videos,
+            gpsLocation: req.body.gpsLocation || null,
+            notes: req.body.notes || null,
+            capturedAt: loadingFinishedAt || new Date(),
+            createdById: req.user.id,
+          },
+        });
+
+        await tx.transportJob.update({
+          where: { id: job.id },
+          data: {
+            status: 'PICKUP',
+            pickupConfirmedAt: new Date(),
+          },
+        });
+
+        await recordOrderEvent(tx, {
+          orderId: job.orderId,
+          actorId: req.user.id,
+          type: 'TRANSPORT_LOADING_REPORT_SUBMITTED',
+          fromStatus: 'ACCEPTED',
+          toStatus: 'PICKUP',
+          metadata: {
+            transportJobId: job.id,
+            whatLoaded: created.whatLoaded,
+            quantityLoaded: String(created.quantityLoaded),
+            quantityUnit: created.quantityUnit,
+            qualityAtLoading: created.qualityAtLoading,
+            visibleIssues: issues,
+          },
+        });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'TRANSPORT_LOADING_REPORT_SUBMITTED',
+          resourceType: 'TransportLoadingReport',
+          resourceId: created.id,
+          metadata: { transportJobId: job.id, orderId: job.orderId },
+        });
+
+        return created;
+      }, { maxWait: 10000, timeout: 20000 });
+
+      return res.status(201).json({
+        message: 'Loading report recorded. Transport is now marked as picked up.',
+        loadingReport: report,
+      });
+    } catch (error) {
+      req.log.error({ err: error }, 'TRANSPORT LOADING REPORT ERROR:');
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({ code: error.code, error: error.message });
+      }
+      if (error.code === 'ORDER_NOT_ACTIONABLE') {
+        return res.status(error.status || 409).json({ code: error.code, error: error.message });
+      }
+      return res.status(500).json({ error: error.message || 'Could not record loading report' });
+    }
+  }
+);
+
+// ============================================================================
+// GET TRANSPORT LOADING REPORT
+// ============================================================================
+// Read-only view for the buyer, seller, truck owner, or admin. Returns null
+// when no loading report exists yet, so the frontend can distinguish "not
+// submitted" from "loaded and empty".
+// ============================================================================
+
+router.get(
+  '/:id/loading-report',
+  authenticate,
+  [param('id').isUUID()],
+  validate,
+  async (req, res) => {
+    try {
+      const job = await prisma.transportJob.findUnique({
+        where: { id: req.params.id },
+        include: { order: true },
+      });
+      if (!job) return res.status(404).json({ error: 'Transport job not found' });
+
+      const isParticipant = isOrderParticipant(req.user.id, job.order);
+      const isTruckOwner = job.truckOwnerId === req.user.id;
+
+      if (!isParticipant && !isTruckOwner && !isAdmin(req)) {
+        return res.status(403).json({ error: 'Not authorized to view this loading report' });
+      }
+
+      const report = await prisma.transportLoadingReport.findUnique({
+        where: { transportJobId: job.id },
+        include: {
+          submittedBy: { select: { id: true, name: true } },
+        },
+      });
+
+      if (!report) return res.json({ loadingReport: null, evidence: null });
+
+      const evidence = await prisma.transportEvidence.findFirst({
+        where: { transportJobId: job.id, type: 'LOADING' },
+        select: {
+          id: true,
+          photos: true,
+          videos: true,
+          gpsLocation: true,
+          notes: true,
+          capturedAt: true,
+        },
+        orderBy: { capturedAt: 'desc' },
+      });
+
+      return res.json({ loadingReport: report, evidence });
+    } catch (error) {
+      req.log.error({ err: error }, 'GET TRANSPORT LOADING REPORT ERROR:');
+      return res.status(500).json({ error: 'Could not load loading report' });
+    }
+  }
+);
 
 module.exports = router;
