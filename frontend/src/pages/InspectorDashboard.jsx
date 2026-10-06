@@ -812,16 +812,6 @@ export default function InspectorDashboard() {
 
                           {createdLabel && <p className="sd-card-foot">Created {createdLabel}</p>}
 
-                         {/* ★ Site handoff — seller <-> inspector coordination.
-    Visible only to the assigned inspector on this
-    request; the server gates it by inspection
-    status and viewer role. */}
-{['ACCEPTED', 'IN_PROGRESS'].includes(r.status) && (
-  <InspectionCoordinationInspector
-    inspectionRequestId={r.id}
-  />
-)}
-                          
                           {/* Footer */}
                           {(canQuote || isMyTurn) && (
                             <div className="sd-card-actions">
@@ -1070,6 +1060,16 @@ export default function InspectorDashboard() {
                                   </Link>
                                 )}
                               </div>
+
+                              {/* ★ Site handoff — seller <-> inspector coordination.
+                                  Only the assigned inspector and the listing
+                                  seller can see this; the buyer never does.
+                                  Rendered only on active jobs. The server
+                                  gates access by role and inspection status,
+                                  so this is a UX guard, not security. */}
+                              <InspectionCoordinationInspector
+                                inspectionRequestId={r.id}
+                              />
                             </div>
                           </article>
                         );
