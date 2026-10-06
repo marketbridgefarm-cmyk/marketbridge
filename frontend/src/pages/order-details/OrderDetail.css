@@ -1144,6 +1144,30 @@
   .order-detail-page .od-confidence-promises { display: grid; gap: 7px; }
 }
 
+/* Multi-select for "Checks required" — tall enough to show all 7 options
+   without scrolling on desktop; browsers still allow scroll on mobile. */
+.od-inspection-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.od-inspection-checks-select {
+  width: 100%;
+  min-height: 180px;
+  padding: 6px 8px;
+  border: 1px solid #d1d9e1;
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+}
+.od-inspection-checks-select option {
+  padding: 4px 6px;
+}
+.od-inspection-checks-select option:checked {
+  background: #dcfce7;
+  color: #0d1b2a;
+}
+
 
 /* Structured service scope: visible to requesters and bidders, with compact mobile layout. */
 .order-detail-page .od-inspection-work-form { display: grid; gap: 12px; margin-top: 14px; }
