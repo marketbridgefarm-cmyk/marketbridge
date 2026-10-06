@@ -49,6 +49,79 @@ function quoteError(message, statusCode = 400) {
 }
 
 // ============================================================================
+// INSPECTION WORK DETAILS — allow-listed, size-capped
+// ----------------------------------------------------------------------------
+// The requester describes the scope of inspection work. Every bidding
+// inspector reads this before quoting, so it must never carry contact
+// information. It is stored as JSON on InspectionRequest.workDetails.
+// ============================================================================
+const WORK_CATEGORIES = new Set([
+  'GENERAL_QUALITY',
+  'AGRICULTURAL_PRODUCE',
+  'QUANTITY_VERIFICATION',
+  'DAMAGE_ASSESSMENT',
+  'FUNCTIONAL_TESTING',
+  'CONFORMITY_CHECK',
+  'SAFETY_COMPLIANCE',
+]);
+
+const WORK_CHECKS = new Set([
+  'QUALITY_GRADE',
+  'SIZE_WEIGHT',
+  'MOISTURE',
+  'VISIBLE_DEFECTS',
+  'PACKAGING',
+  'SAMPLING',
+  'PHOTOGRAPHS',
+]);
+
+const REPORT_FORMATS = new Set([
+  'CHECKLIST_PHOTOS',
+  'MEASUREMENTS',
+  'PASS_FAIL',
+  'FULL_REPORT',
+]);
+
+function sanitizeWorkDetails(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+
+  const out = {};
+
+  if (typeof input.workCategory === 'string' && WORK_CATEGORIES.has(input.workCategory)) {
+    out.workCategory = input.workCategory;
+  }
+
+  if (typeof input.quantityToInspect === 'string') {
+    const v = input.quantityToInspect.trim();
+    if (v) out.quantityToInspect = v.slice(0, 120);
+  }
+
+  if (input.lotCount != null && input.lotCount !== '') {
+    const n = Number(input.lotCount);
+    if (Number.isFinite(n) && n > 0 && n <= 10000) {
+      out.lotCount = Math.floor(n);
+    }
+  }
+
+  if (Array.isArray(input.checks)) {
+    out.checks = [
+      ...new Set(input.checks.filter((v) => typeof v === 'string' && WORK_CHECKS.has(v))),
+    ].slice(0, WORK_CHECKS.size);
+  }
+
+  if (typeof input.reportFormat === 'string' && REPORT_FORMATS.has(input.reportFormat)) {
+    out.reportFormat = input.reportFormat;
+  }
+
+  if (typeof input.requiredBy === 'string') {
+    const d = new Date(input.requiredBy);
+    if (!Number.isNaN(d.getTime())) out.requiredBy = d.toISOString();
+  }
+
+  return Object.keys(out).length ? out : null;
+}
+
+// ============================================================================
 // NEGOTIATION TURN + LIFECYCLE HELPERS
 // ============================================================================
 
@@ -193,6 +266,7 @@ router.post(
             feePayer: requestedFeePayer,
             buyerFeeAmount: null,
             sellerFeeAmount: null,
+            workDetails: sanitizeWorkDetails(req.body?.workDetails),
           },
           include: {
             listing: {
@@ -1004,11 +1078,6 @@ router.patch(
 
 // ============================================================================
 // INSPECTOR WITHDRAWS A WAITING BID
-// ----------------------------------------------------------------------------
-// A waiting (PENDING) bid belongs to the inspector who submitted it. They may
-// remove it at any time before the requester acts on it. Once the requester
-// selects or counters it, this route refuses — the negotiation has started
-// and the requester's `withdraw` route is the only way to release it.
 // ============================================================================
 
 router.post(
@@ -1064,9 +1133,6 @@ router.post(
 
 // ============================================================================
 // REJECT INSPECTION QUOTE
-// ----------------------------------------------------------------------------
-// Waiting bids (PENDING) cannot be rejected — the requester is not in a
-// negotiation with them yet. Only the current live leaf can be rejected.
 // ============================================================================
 
 router.patch(
@@ -1140,6 +1206,8 @@ router.patch('/:id/accept', authenticate, requireRole('INSPECTOR'), async (req, 
 
 // ============================================================================
 // Seller review queue: the seller must confirm before the inspector can start.
+// ============================================================================
+
 router.get('/seller-pending', authenticate, requireRole('SELLER'), async (req, res) => {
   try {
     const requests = await prisma.inspectionRequest.findMany({
@@ -1191,8 +1259,6 @@ router.post('/:id/seller-message', authenticate, requireRole('SELLER'), async (r
     if (!request) return res.status(404).json({ error: 'Inspection request not found' });
     if (request.listing.sellerId !== req.user.id) return res.status(403).json({ error: 'Only the listing seller can send inspection instructions' });
 
-    // Only once the agreement exists — coordination is the structured channel
-    // from that point on, and informal notes are not part of the bidding phase.
     if (!['ACCEPTED', 'IN_PROGRESS', 'STALLED'].includes(request.status)) {
       return res.status(409).json({
         error: 'Seller instructions can only be added after an inspector has been accepted for this inspection.',
@@ -1385,11 +1451,6 @@ router.get(
 
 // ============================================================================
 // INSPECTION EVIDENCE ACCESS
-// ----------------------------------------------------------------------------
-// The buyer of the order must be able to view the evidence, because they
-// decide BUY/CANCEL based on it — even when the inspection was requested by
-// the seller. This is inspection *evidence* access only; it does NOT grant
-// the buyer access to InspectionCoordination (that has its own gate).
 // ============================================================================
 
 async function canAccessInspection(req, requestId) {
