@@ -686,15 +686,140 @@ function InspectionCard({ order, title, i }) {
           <div className="od-inspection-work-form">
             <h3>Describe the inspection work</h3>
             <p className="muted">Inspectors will see these requirements before submitting a bid. Be specific so their fees cover the same work.</p>
-            <label>Inspection category<select value={i.workDetails.workCategory || 'GENERAL_QUALITY'} onChange={(e) => i.setWorkDetails({ ...i.workDetails, workCategory: e.target.value })}><option value="GENERAL_QUALITY">General quality and condition</option><option value="AGRICULTURAL_PRODUCE">Agricultural produce quality</option><option value="QUANTITY_VERIFICATION">Quantity and weight verification</option><option value="DAMAGE_ASSESSMENT">Damage and packaging assessment</option><option value="FUNCTIONAL_TESTING">Functionality / performance testing</option><option value="CONFORMITY_CHECK">Specification / conformity check</option><option value="SAFETY_COMPLIANCE">Safety-related checks</option></select></label>
+
+            <label>Inspection category
+              <select
+                value={i.workDetails.workCategory || 'GENERAL_QUALITY'}
+                onChange={(e) => i.setWorkDetails({ ...i.workDetails, workCategory: e.target.value })}
+              >
+                <option value="GENERAL_QUALITY">General quality and condition</option>
+                <option value="AGRICULTURAL_PRODUCE">Agricultural produce quality</option>
+                <option value="QUANTITY_VERIFICATION">Quantity and weight verification</option>
+                <option value="DAMAGE_ASSESSMENT">Damage and packaging assessment</option>
+                <option value="FUNCTIONAL_TESTING">Functionality / performance testing</option>
+                <option value="CONFORMITY_CHECK">Specification / conformity check</option>
+                <option value="SAFETY_COMPLIANCE">Safety-related checks</option>
+              </select>
+            </label>
+
             <div className="od-form-grid">
-              <label>Quantity to inspect<input value={i.workDetails.quantityToInspect} onChange={(e) => i.setWorkDetails({ ...i.workDetails, quantityToInspect: e.target.value })} placeholder="e.g. 500 kg or 20 crates" /></label>
-              <label>Number of lots / batches<input type="number" min="1" value={i.workDetails.lotCount} onChange={(e) => i.setWorkDetails({ ...i.workDetails, lotCount: e.target.value })} placeholder="e.g. 4" /></label>
-              <label>Inspection deadline<input type="datetime-local" value={i.workDetails.requiredBy} onChange={(e) => i.setWorkDetails({ ...i.workDetails, requiredBy: e.target.value })} /></label>
+              <label>Quantity to inspect
+                <select
+                  value={i.workDetails.quantityToInspect || ''}
+                  onChange={(e) => i.setWorkDetails({ ...i.workDetails, quantityToInspect: e.target.value })}
+                >
+                  <option value="">Select a quantity range…</option>
+                  <optgroup label="Small lots">
+                    <option value="Up to 10 kg">Up to 10 kg</option>
+                    <option value="10–50 kg">10–50 kg</option>
+                    <option value="50–100 kg">50–100 kg</option>
+                  </optgroup>
+                  <optgroup label="Medium lots">
+                    <option value="100–500 kg">100–500 kg</option>
+                    <option value="0.5–1 ton (5–10 quintals)">0.5–1 ton (5–10 quintals)</option>
+                    <option value="1–5 tons (10–50 quintals)">1–5 tons (10–50 quintals)</option>
+                  </optgroup>
+                  <optgroup label="Bulk lots">
+                    <option value="5–20 tons">5–20 tons</option>
+                    <option value="20–100 tons">20–100 tons</option>
+                    <option value="More than 100 tons">More than 100 tons</option>
+                  </optgroup>
+                  <optgroup label="By crate / bag">
+                    <option value="Up to 20 crates">Up to 20 crates</option>
+                    <option value="20–100 crates">20–100 crates</option>
+                    <option value="More than 100 crates">More than 100 crates</option>
+                    <option value="Up to 50 bags">Up to 50 bags</option>
+                    <option value="More than 50 bags">More than 50 bags</option>
+                  </optgroup>
+                  <optgroup label="Other">
+                    <option value="To be agreed with the inspector">To be agreed with the inspector</option>
+                  </optgroup>
+                </select>
+              </label>
+
+              <label>Number of lots / batches
+                <select
+                  value={
+                    i.workDetails.lotCount === undefined || i.workDetails.lotCount === null
+                      ? ''
+                      : String(i.workDetails.lotCount)
+                  }
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    i.setWorkDetails({
+                      ...i.workDetails,
+                      lotCount: raw === '' ? '' : Number(raw),
+                    });
+                  }}
+                >
+                  <option value="">Select number of lots…</option>
+                  <option value="1">1 lot</option>
+                  <option value="2">2 lots</option>
+                  <option value="3">3 lots</option>
+                  <option value="4">4 lots</option>
+                  <option value="5">5 lots</option>
+                  <option value="6">6 lots</option>
+                  <option value="7">7 lots</option>
+                  <option value="8">8 lots</option>
+                  <option value="9">9 lots</option>
+                  <option value="10">10 lots</option>
+                  <option value="15">More than 10 lots (approx. 15)</option>
+                  <option value="20">More than 20 lots (approx. 20)</option>
+                </select>
+              </label>
+
+              <label>Inspection deadline
+                <input
+                  type="datetime-local"
+                  value={i.workDetails.requiredBy}
+                  onChange={(e) => i.setWorkDetails({ ...i.workDetails, requiredBy: e.target.value })}
+                />
+              </label>
             </div>
-            <fieldset><legend>Checks required</legend><div className="od-check-grid">{[['QUALITY_GRADE','Quality / grading'],['SIZE_WEIGHT','Size / weight'],['MOISTURE','Moisture (if applicable)'],['VISIBLE_DEFECTS','Visible defects / damage'],['PACKAGING','Packaging condition'],['SAMPLING','Sampling / testing'],['PHOTOGRAPHS','Photos / evidence']].map(([value, label]) => <label key={value}><input type="checkbox" checked={i.workDetails.checks.includes(value)} onChange={(e) => i.setWorkDetails({ ...i.workDetails, checks: e.target.checked ? [...i.workDetails.checks, value] : i.workDetails.checks.filter((x) => x !== value) })} /> {label}</label>)}</div></fieldset>
-            <label>Report format<select value={i.workDetails.reportFormat || 'CHECKLIST_PHOTOS'} onChange={(e) => i.setWorkDetails({ ...i.workDetails, reportFormat: e.target.value })}><option value="CHECKLIST_PHOTOS">Checklist, findings and photos</option><option value="MEASUREMENTS">Measurements and test results</option><option value="PASS_FAIL">Pass / fail against agreed criteria</option><option value="FULL_REPORT">Full structured inspection report</option></select></label>
-            <Button variant="primary" disabled={i.requesting} busy={i.requesting} busyText="Requesting…" onClick={() => i.request(i.isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}>Open inspection competition</Button>
+
+            <label className="od-inspection-checks">
+              Checks required (hold Ctrl / Cmd to select multiple)
+              <select
+                multiple
+                size={7}
+                className="od-inspection-checks-select"
+                value={Array.isArray(i.workDetails.checks) ? i.workDetails.checks : []}
+                onChange={(e) => {
+                  const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+                  i.setWorkDetails({ ...i.workDetails, checks: selected });
+                }}
+              >
+                <option value="QUALITY_GRADE">Quality / grading</option>
+                <option value="SIZE_WEIGHT">Size / weight</option>
+                <option value="MOISTURE">Moisture (if applicable)</option>
+                <option value="VISIBLE_DEFECTS">Visible defects / damage</option>
+                <option value="PACKAGING">Packaging condition</option>
+                <option value="SAMPLING">Sampling / testing</option>
+                <option value="PHOTOGRAPHS">Photos / evidence</option>
+              </select>
+            </label>
+
+            <p className="muted small">
+              {Array.isArray(i.workDetails.checks) && i.workDetails.checks.length > 0
+                ? `Selected: ${i.workDetails.checks.map((c) => c.replaceAll('_', ' ').toLowerCase()).join(', ')}`
+                : 'No checks selected yet.'}
+            </p>
+
+            <label>Report format
+              <select
+                value={i.workDetails.reportFormat || 'CHECKLIST_PHOTOS'}
+                onChange={(e) => i.setWorkDetails({ ...i.workDetails, reportFormat: e.target.value })}
+              >
+                <option value="CHECKLIST_PHOTOS">Checklist, findings and photos</option>
+                <option value="MEASUREMENTS">Measurements and test results</option>
+                <option value="PASS_FAIL">Pass / fail against agreed criteria</option>
+                <option value="FULL_REPORT">Full structured inspection report</option>
+              </select>
+            </label>
+
+            <Button variant="primary" disabled={i.requesting} busy={i.requesting} busyText="Requesting…" onClick={() => i.request(i.isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}>
+              Open inspection competition
+            </Button>
           </div>
         )}
       </Card>
