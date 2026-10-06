@@ -928,10 +928,6 @@ function InspectionCard({ order, title, i }) {
                 Confirm inspector &amp; fee
               </Button>
             </>
-          ) : request.sellerConfirmedAt ? (
-            <p className="muted small">
-              Seller confirmed. The designated payer can now pay the inspection fee.
-            </p>
           ) : i.canPayInspection ? (
             <Button
               variant="primary"
@@ -943,6 +939,10 @@ function InspectionCard({ order, title, i }) {
             >
               Pay inspection fee
             </Button>
+          ) : request.sellerConfirmedAt ? (
+            <p className="muted small">
+              Seller confirmed. The designated payer can now pay the inspection fee.
+            </p>
           ) : (
             <p className="muted small">
               Waiting for the seller to confirm the selected inspector before
