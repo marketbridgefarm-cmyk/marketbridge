@@ -27,6 +27,20 @@ import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
 
+const PAYMENT_METHODS = [
+  { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
+  { value: 'QR', label: 'QR Code' },
+];
+
+const DISPUTE_TYPES = [
+  ['NOT_DELIVERED', 'Goods not delivered'],
+  ['QUALITY_ISSUE', 'Quality issue'],
+  ['DAMAGED_GOODS', 'Damaged goods'],
+  ['PAYMENT_ISSUE', 'Payment issue'],
+  ['TRANSPORT_ISSUE', 'Transport issue'],
+  ['OTHER', 'Other'],
+];
+
 const pad2 = (n) => String(n).padStart(2, '0');
 
 const shortId = (id) => id?.slice(0, 8) || '—';
@@ -898,9 +912,6 @@ function InspectionCard({ order, title, i }) {
               A payment for this inspection is pending or processing.
             </p>
           ) : i.isSeller && !request.sellerConfirmedAt ? (
-            // Seller confirmation is the gate that unlocks payment. Give the
-            // seller a button instead of a silent disabled state, so the flow
-            // never stalls on "why can't the buyer pay?".
             <>
               <p className="muted small">
                 Confirm the inspector and agreed fee to unlock payment and let
