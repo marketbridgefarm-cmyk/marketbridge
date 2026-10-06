@@ -37,17 +37,24 @@ function hoursFromNow(hours) {
  * transaction, break it out with its own prisma.$transaction (Prisma
  * promotes the outer one to a plain connection in that case, which would
  * invalidate the lock — do not do that without revisiting this helper).
+ *
+ * Diagnostic: logs pg_backend_pid() plus the gotLock result on every
+ * attempt so the Render log makes it obvious whether one instance is
+ * consistently winning (healthy) or two instances are racing / a stale
+ * holder exists.
  */
 async function withJobLock(fn) {
+  const pid = (await prisma.$queryRaw`SELECT pg_backend_pid() AS pid`)?.[0]?.pid;
   try {
     return await prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw`SELECT pg_try_advisory_xact_lock(${LOCK_KEY}) AS locked`;
+      logger.info({ pid, gotLock: rows?.[0]?.locked }, 'withJobLock attempt');
       if (!rows?.[0]?.locked) return { skipped: true };
       return fn();
     }, { maxWait: 10000, timeout: 120000 });
   } catch (error) {
     // Log and rethrow so startMaintenanceScheduler's catch can also record it.
-    logger.error({ err: error }, 'withJobLock transaction failed');
+    logger.error({ err: error, pid }, 'withJobLock transaction failed');
     throw error;
   }
 }
