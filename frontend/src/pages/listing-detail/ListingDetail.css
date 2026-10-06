@@ -868,3 +868,67 @@
   line-height: 1.6;
   color: var(--ld-muted);
 }
+
+/* ==========================================================================
+   LISTING INSPECTION SCOPE
+   ========================================================================== */
+.ld-inspection-scope {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #e5e9ef;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.ld-inspection-scope-eyebrow {
+  margin: 0 0 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+.ld-inspection-scope-title {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #0d1b2a;
+}
+.ld-inspection-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px 14px;
+}
+.ld-inspection-scope-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ld-inspection-scope-grid > div > span {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+.ld-inspection-scope-grid > div > strong {
+  font-size: 13px;
+  color: #0d1b2a;
+}
+.ld-inspection-scope-full {
+  grid-column: 1 / -1;
+}
+.ld-inspection-scope-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.ld-inspection-scope-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e0ecff;
+  color: #1e3a8a;
+  font-size: 12px;
+  font-weight: 600;
+}
