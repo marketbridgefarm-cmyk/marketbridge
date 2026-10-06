@@ -44,18 +44,14 @@ function quoteError(message, statusCode = 400) {
 }
 
 // ============================================================================
-// FIXED: quoteTurn
-// ----------------------------------------------------------------------------
-// Whose turn it is to respond to the current leaf quote.
-//
-//   PENDING    → REQUESTER must respond (select / reject / counter a raw bid)
-//   SELECTED   → either party may act (requester picked this inspector; the
-//                price negotiation is now open in BOTH directions until
-//                someone accepts)
-//   COUNTERED  → whichever side did NOT make the most recent counter
-//
-// Returns null when there is no turn restriction (both sides may act).
+// NEGOTIATION TURN + LIFECYCLE HELPERS
 // ============================================================================
+
+// Whose turn it is to respond to the current leaf quote.
+//   PENDING    → REQUESTER must respond
+//   SELECTED   → either party may act
+//   COUNTERED  → whichever side did NOT make the most recent counter
+// Returns null when there is no turn restriction.
 function quoteTurn(quote) {
   if (quote.status === 'PENDING') return 'REQUESTER';
   if (quote.status === 'SELECTED') return null;
@@ -65,12 +61,56 @@ function quoteTurn(quote) {
   return null;
 }
 
+// A "leaf" quote is the tip of a negotiation chain. Parent rows keep their
+// historical status but must never be actionable.
+async function findLeafQuote(tx, quoteId) {
+  return tx.inspectionQuote.findFirst({
+    where: { id: quoteId, childQuotes: { none: {} } },
+  });
+}
+
+// Any other quote on the same request that currently owns the negotiation
+// slot. Only one request may have a live SELECTED or COUNTERED leaf at a time.
+async function findCompetingLiveQuote(tx, inspectionRequestId, exceptQuoteId) {
+  return tx.inspectionQuote.findFirst({
+    where: {
+      inspectionRequestId,
+      id: { not: exceptQuoteId },
+      status: { in: ['SELECTED', 'COUNTERED'] },
+      childQuotes: { none: {} },
+    },
+    select: { id: true, inspectorId: true, status: true },
+  });
+}
+
 function isQuoteExpired(quote) {
   return Boolean(quote.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
 }
 
 function quoteExpiry(hours = 24) {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
+}
+
+// A silent selected inspector freezes the request. The requester may release
+// them after this many hours. 0 = allowed immediately (useful for testing).
+// Mirrors OFFER_RELEASE_AFTER_HOURS in offers.js.
+function inspectionReleaseAfterHours() {
+  const configured = Number(process.env.INSPECTION_RELEASE_AFTER_HOURS);
+  return Number.isFinite(configured) && configured >= 0 ? configured : 72;
+}
+
+function inspectionReleaseAvailableAt(quote) {
+  if (!quote) return null;
+  // The requester can release only while the provider is expected to act:
+  //   SELECTED  -> provider has not yet accepted the requester's selection
+  //   COUNTERED -> the requester countered last; provider must respond
+  const providerTurn =
+    quote.status === 'SELECTED' ||
+    (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
+  if (!providerTurn) return null;
+  const since = new Date(quote.updatedAt || quote.createdAt).getTime();
+  if (!Number.isFinite(since)) return null;
+  return new Date(since + inspectionReleaseAfterHours() * 60 * 60 * 1000);
 }
 
 // ============================================================================
@@ -124,11 +164,6 @@ router.post(
 
       if (!['AGRICULTURAL', 'PRODUCT'].includes(order.listing.category)) {
         return res.status(400).json({ error: 'Inspections are only available for agricultural and product listings' });
-      }
-      if (!order.listing.inspectionRequired && order.listing.category === 'PRODUCT') {
-        // Product inspections are opt-in. The buyer or seller may still request
-        // one explicitly from the order page; the listing flag controls whether
-        // the workflow is mandatory.
       }
 
       const resolvedListingId = order.listingId;
@@ -588,13 +623,25 @@ router.patch(
       if (isQuoteExpired(quote)) return res.status(409).json({ error: 'This quote has expired' });
 
       const selected = await prisma.$transaction(async (tx) => {
-        const fresh = await tx.inspectionQuote.findUnique({ where: { id: quote.id } });
-        if (!fresh || fresh.status !== 'PENDING') throw quoteError('This bid is no longer available', 409);
-        if (isQuoteExpired(fresh)) throw quoteError('This bid has expired', 409);
-        await tx.inspectionQuote.updateMany({
-          where: { inspectionRequestId: request.id, id: { not: fresh.id }, status: 'SELECTED' },
-          data: { status: 'PENDING' },
-        });
+        // Leaf-only: a parent row in a counter chain is history, not actionable.
+        const fresh = await findLeafQuote(tx, quote.id);
+        if (!fresh || fresh.status !== 'PENDING') {
+          throw quoteError('This bid is no longer available', 409);
+        }
+        if (isQuoteExpired(fresh)) {
+          throw quoteError('This bid has expired', 409);
+        }
+
+        // One live negotiation per request. Refuse to select a second bid
+        // while another is still SELECTED or COUNTERED.
+        const competing = await findCompetingLiveQuote(tx, request.id, fresh.id);
+        if (competing) {
+          throw quoteError(
+            'Another inspector bid is already in negotiation. Resolve it before selecting a different bid.',
+            409
+          );
+        }
+
         return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
       }, { maxWait: 10000, timeout: 15000 });
       return res.json({ message: 'Inspector bid selected for price negotiation', quote: selected });
@@ -642,6 +689,12 @@ router.patch(
       const result = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, request.orderId, 'an inspection quote cannot be accepted until the order dispute is resolved');
 
+        // Leaf-only: the quote may have been superseded by a later counter.
+        const fresh = await findLeafQuote(tx, quote.id);
+        if (!fresh || !['SELECTED', 'COUNTERED'].includes(fresh.status)) {
+          throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
+        }
+
         const claim = await tx.inspectionRequest.updateMany({
           where: {
             id: request.id,
@@ -649,7 +702,7 @@ router.patch(
             inspectorId: null,
           },
           data: {
-            inspectorId: quote.inspectorId,
+            inspectorId: fresh.inspectorId,
             fee: finalAmount,
             feePayer: request.feePayer,
             buyerFeeAmount: request.feePayer === 'SELLER' ? null : request.feePayer === 'SPLIT' ? Math.round(finalAmount * 50) / 100 : finalAmount,
@@ -670,7 +723,7 @@ router.patch(
         }
 
         const acceptedQuote = await tx.inspectionQuote.update({
-          where: { id: quote.id },
+          where: { id: fresh.id },
           data: {
             status: 'ACCEPTED',
             amount: finalAmount,
@@ -683,9 +736,6 @@ router.patch(
         });
 
         // Open the coordination sheet at the moment the agreement is locked.
-        // Coordination routes require ACCEPTED or later; creating the row here
-        // means GET /coordination returns an empty (not 404) sheet the instant
-        // both parties can start filling it in.
         await ensureOpenCoordination(tx, request.id);
 
         const relatedOrders = await tx.order.findMany({
@@ -724,7 +774,7 @@ router.patch(
       }
 
       req.log.error({ err: error }, 'ACCEPT INSPECTION QUOTE ERROR:');
-      return res.status(500).json({ error: 'Could not accept inspection quote' });
+      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not accept inspection quote' });
     }
   }
 );
@@ -783,8 +833,11 @@ router.post(
       const counterQuote = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, request.orderId, 'an inspection quote cannot be countered until the order dispute is resolved');
 
-        const freshQuote = await tx.inspectionQuote.findUnique({ where: { id: quote.id } });
-        if (!freshQuote) throw quoteError('Inspection quote not found', 404);
+        // Leaf-only: never counter a parent that has already been superseded.
+        const freshQuote = await findLeafQuote(tx, quote.id);
+        if (!freshQuote) {
+          throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
+        }
         if (!['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
           throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
         }
@@ -792,6 +845,16 @@ router.post(
         const freshTurn = quoteTurn(freshQuote);
         if (freshTurn !== null && freshTurn !== actorRole) {
           throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
+        }
+
+        // One live negotiation per request. Refuse to counter a second bid
+        // while another is still SELECTED or COUNTERED.
+        const competing = await findCompetingLiveQuote(tx, request.id, freshQuote.id);
+        if (competing) {
+          throw quoteError(
+            'Another inspector bid is already in negotiation. Resolve it before countering a different bid.',
+            409
+          );
         }
 
         const updated = await tx.inspectionQuote.update({
@@ -842,7 +905,14 @@ router.post(
 );
 
 // ============================================================================
-// RELEASE PROVISIONAL INSPECTION AGREEMENT
+// RELEASE PROVISIONAL INSPECTION AGREEMENT OR SILENT SELECTED INSPECTOR
+// ----------------------------------------------------------------------------
+// Two release paths:
+//   ACCEPTED  -> inspector already agreed; requester frees the slot. Payment
+//                must not have started.
+//   SELECTED / COUNTERED-by-REQUESTER -> the provider has gone silent past
+//                INSPECTION_RELEASE_AFTER_HOURS. Payment must not have
+//                started either (there cannot be one in this status).
 // ============================================================================
 
 router.patch(
@@ -854,8 +924,32 @@ router.patch(
       if (!loaded) return;
       const { request, quote, actorRole } = loaded;
 
-      if (quote.status !== 'ACCEPTED') {
-        return res.status(400).json({ error: `Only a provisionally accepted quote can be released (current: ${quote.status})` });
+      // Only the requester may release; the inspector cannot release
+      // themselves here (they would just withdraw their own bid on the
+      // waiting list, which is a different flow).
+      if (actorRole !== 'REQUESTER') {
+        return res.status(403).json({ error: 'Only the requester can release this negotiation' });
+      }
+
+      const isAcceptedRelease = quote.status === 'ACCEPTED';
+      const isSilentRelease =
+        quote.status === 'SELECTED' ||
+        (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
+
+      if (!isAcceptedRelease && !isSilentRelease) {
+        return res.status(400).json({
+          error: `This quote cannot be released in its current state (current: ${quote.status})`,
+        });
+      }
+
+      if (isSilentRelease) {
+        const availableAt = inspectionReleaseAvailableAt(quote);
+        if (availableAt && availableAt.getTime() > Date.now()) {
+          return res.status(409).json({
+            error: `This inspector has not been inactive long enough. You can release them from ${availableAt.toISOString()}.`,
+            releaseAvailableAt: availableAt,
+          });
+        }
       }
 
       const result = await prisma.$transaction(async (tx) => {
@@ -873,37 +967,79 @@ router.patch(
           throw quoteError('This inspector cannot be released after inspection payment has started or completed', 409);
         }
 
-        const freshRequest = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
-        if (!freshRequest || freshRequest.status !== 'ACCEPTED' || freshRequest.inspectorId !== quote.inspectorId) {
-          throw quoteError('This provisional inspection agreement is no longer active', 409);
+        // Leaf-only.
+        const freshQuote = await findLeafQuote(tx, quote.id);
+        if (!freshQuote) {
+          throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
+        }
+
+        if (isAcceptedRelease) {
+          // Legacy / normal path: the agreement is locked to this inspector.
+          const freshRequest = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
+          if (!freshRequest || freshRequest.status !== 'ACCEPTED' || freshRequest.inspectorId !== freshQuote.inspectorId) {
+            throw quoteError('This provisional inspection agreement is no longer active', 409);
+          }
+        } else {
+          // Silent-release path: the request is still REQUESTED, this quote
+          // owns the negotiation slot, and the provider has been silent past
+          // the release window. Re-check the window inside the transaction.
+          const freshAvailableAt = inspectionReleaseAvailableAt(freshQuote);
+          if (freshAvailableAt && freshAvailableAt.getTime() > Date.now()) {
+            throw quoteError('This negotiation changed. Refresh and try again.', 409);
+          }
         }
 
         const updatedQuote = await tx.inspectionQuote.update({
-          where: { id: quote.id },
+          where: { id: freshQuote.id },
           data: { status: 'WITHDRAWN' },
         });
 
-        await tx.inspectionRequest.update({
-          where: { id: request.id },
-          data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' },
-        });
+        // When the released quote was the accepted inspector, reset the
+        // request to REQUESTED so the pool reopens. When it was a silent
+        // selected leaf, the request is already REQUESTED — leave it as-is.
+        if (isAcceptedRelease) {
+          await tx.inspectionRequest.update({
+            where: { id: request.id },
+            data: {
+              inspectorId: null,
+              fee: null,
+              buyerFeeAmount: null,
+              sellerFeeAmount: null,
+              sellerConfirmedAt: null,
+              startDueAt: null,
+              completionDueAt: null,
+              startedAt: null,
+              status: 'REQUESTED',
+            },
+          });
+        }
 
         // Close coordination so the next inspector does not inherit the
         // previous inspector's phone number, availability, or notes.
-        await closeCoordination(tx, request.id, 'INSPECTOR_WITHDREW');
+        await closeCoordination(tx, request.id, isAcceptedRelease ? 'INSPECTOR_WITHDREW' : 'SILENT_INSPECTOR_RELEASED');
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
-          action: 'INSPECTION_QUOTE_WITHDRAWN',
+          action: isAcceptedRelease ? 'INSPECTION_QUOTE_WITHDRAWN' : 'INSPECTION_SILENT_INSPECTOR_RELEASED',
           resourceType: 'InspectionQuote',
           resourceId: updatedQuote.id,
-          metadata: { inspectionRequestId: request.id, inspectorId: quote.inspectorId, releasedBy: actorRole },
+          metadata: {
+            inspectionRequestId: request.id,
+            inspectorId: freshQuote.inspectorId,
+            releasedBy: actorRole,
+            previousStatus: freshQuote.status,
+          },
         });
 
         return updatedQuote;
       }, { maxWait: 10000, timeout: 15000 });
 
-      return res.json({ message: 'Provisional inspector agreement released. Other inspector bids are available again.', quote: result });
+      return res.json({
+        message: isAcceptedRelease
+          ? 'Provisional inspector agreement released. Other inspector bids are available again.'
+          : 'Silent inspector released. Other inspector bids are available again.',
+        quote: result,
+      });
     } catch (error) {
       if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
       req.log.error({ err: error }, 'WITHDRAW INSPECTION QUOTE ERROR:');
@@ -914,6 +1050,10 @@ router.patch(
 
 // ============================================================================
 // REJECT INSPECTION QUOTE
+// ----------------------------------------------------------------------------
+// Waiting bids (PENDING) cannot be rejected — the requester is not in a
+// negotiation with them yet. Only the current live leaf can be rejected.
+// Mirrors offers.js where the seller cannot reject a waiting bid.
 // ============================================================================
 
 router.patch(
@@ -925,7 +1065,13 @@ router.patch(
       if (!loaded) return;
       const { quote, actorRole } = loaded;
 
-      if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(quote.status)) {
+      if (quote.status === 'PENDING') {
+        return res.status(409).json({
+          error: 'Waiting bids cannot be rejected. Select the bid you want to negotiate with; the others will keep waiting.',
+        });
+      }
+
+      if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
         return res.status(400).json({ error: `Quote cannot be rejected because it is ${quote.status}` });
       }
 
@@ -939,8 +1085,13 @@ router.patch(
       const updated = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, loaded.request.orderId, 'an inspection quote cannot be rejected until the order dispute is resolved');
 
+        const fresh = await findLeafQuote(tx, quote.id);
+        if (!fresh || !['SELECTED', 'COUNTERED'].includes(fresh.status)) {
+          throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
+        }
+
         const rejected = await tx.inspectionQuote.update({
-          where: { id: quote.id },
+          where: { id: fresh.id },
           data: { status: 'REJECTED' },
         });
 
@@ -957,6 +1108,7 @@ router.patch(
 
       return res.json({ message: 'Quote rejected', quote: updated });
     } catch (error) {
+      if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
       req.log.error({ err: error }, 'REJECT INSPECTION QUOTE ERROR:');
       return res.status(500).json({ error: 'Could not reject inspection quote' });
     }
