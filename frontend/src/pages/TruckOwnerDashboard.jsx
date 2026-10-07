@@ -464,7 +464,10 @@ export default function TruckOwnerDashboard() {
     try {
       const reason = window.prompt('Why are you releasing this provisional transport agreement?');
       if (!reason || !reason.trim()) return;
-      await api.patch(`/transport/${jobId}/quotes/${quoteId}/withdraw`);
+      await api.patch(`/transport/${jobId}/quotes/${quoteId}/withdraw`, {
+        reason: 'PROVIDER_UNAVAILABLE',
+        note: reason.trim().slice(0, 200),
+      });
       toast('Agreement released. The requester can now choose another transporter.');
       await loadAll(false);
     } catch (err) {

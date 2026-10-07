@@ -345,7 +345,12 @@ export default function InspectorDashboard() {
     setMsg('');
     setRespondingQuoteId(quoteId);
     try {
-      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/withdraw`);
+      const reason = window.prompt('Why are you cancelling this provisional inspection agreement?');
+      if (!reason || !reason.trim()) return;
+      await api.patch(`/inspections/${requestId}/quotes/${quoteId}/withdraw`, {
+        reason: 'PROVIDER_UNAVAILABLE',
+        note: reason.trim().slice(0, 200),
+      });
       setMsg('Provisional inspection deal released. The buyer can select another inspector bid.');
       await loadAll();
     } catch (err) {

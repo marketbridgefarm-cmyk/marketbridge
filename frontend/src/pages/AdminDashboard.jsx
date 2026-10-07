@@ -878,6 +878,7 @@ export default function AdminDashboard() {
   const [auditEvents, setAuditEvents] = useState([]);
   const [refunds, setRefunds] = useState([]);
   const [recoveryRequests, setRecoveryRequests] = useState([]);
+  const [releaseReviews, setReleaseReviews] = useState([]);
 
   const [disputeDecision, setDisputeDecision] = useState(null);
   const [userSearch, setUserSearch] = useState('');
@@ -909,6 +910,7 @@ export default function AdminDashboard() {
         auditEventsRes,
         refundsRes,
         recoveryRes,
+        releaseReviewsRes,
       ] = await Promise.all([
         api.get('/admin/overview'),
         api.get('/admin/users'),
@@ -927,6 +929,7 @@ export default function AdminDashboard() {
         api.get('/admin/audit-events', { params: { limit: 100 } }),
         api.get('/admin/financial/refunds'),
         api.get('/recovery-requests/admin/pending'),
+        api.get('/admin/release-reviews').catch(() => ({ data: { reviews: [] } })),
       ]);
 
       setOverview(overviewRes.data);
@@ -942,6 +945,7 @@ export default function AdminDashboard() {
       setAuditEvents(auditEventsRes.data?.events || []);
       setRefunds(refundsRes.data?.refunds || []);
       setRecoveryRequests(recoveryRes.data?.recoveryRequests || []);
+      setReleaseReviews(releaseReviewsRes.data?.reviews || []);
     } catch (err) {
       if (err.response?.data?.code === 'MFA_SETUP_REQUIRED') {
         setMfaRequired(true);
@@ -1550,6 +1554,21 @@ export default function AdminDashboard() {
     }
   };
 
+  const approveReleaseReview = async (id) => {
+    setActionLoading(`release-review-${id}`);
+    setError('');
+    setSuccess('');
+    try {
+      await api.post(`/admin/release-reviews/${id}/approve`);
+      setReleaseReviews((items) => items.filter((item) => item.id !== id));
+      setSuccess('One additional release approved for that job. The requester can try again.');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not approve release review');
+    } finally {
+      setActionLoading('');
+    }
+  };
+
   const filteredUsers = useMemo(() => {
     const search = userSearch.trim().toLowerCase();
 
@@ -1663,7 +1682,7 @@ export default function AdminDashboard() {
     {
       key: 'recovery',
       label: 'Workflow Recovery',
-      count: recoveryRequests.length,
+      count: recoveryRequests.length + releaseReviews.length,
     },
     {
       key: 'orders',
@@ -3414,6 +3433,43 @@ export default function AdminDashboard() {
                               <button type="button" className="sd-btn sd-btn-primary" disabled={Boolean(actionLoading)} onClick={() => decideRecovery(item.id, 'approve')}>{actionLoading === `recovery-approve-${item.id}` ? 'Approving…' : 'Approve fresh service form'}</button>
                               <button type="button" className="sd-btn" disabled={Boolean(actionLoading)} onClick={() => decideRecovery(item.id, 'reject')}>{actionLoading === `recovery-reject-${item.id}` ? 'Rejecting…' : 'Reject'}</button>
                             </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
+
+          {tab === 'recovery' && (
+            <section className="ac-panel">
+              <div className="ac-panel-header">
+                <div>
+                  <span className="ac-section-label">RELEASE LIMIT REVIEWS</span>
+                  <h2>Blocked provider releases</h2>
+                  <p className="sd-muted">A requester reached the limit of 2 releases of an accepted transporter or inspector on one job. Approving allows exactly one more release for that job. Every release and approval is kept in the audit trail.</p>
+                </div>
+              </div>
+              {releaseReviews.length === 0 ? (
+                <div className="ac-empty">No release limit reviews are waiting.</div>
+              ) : (
+                <div className="ac-table-shell">
+                  <table className="ac-table">
+                    <thead><tr><th>Type</th><th>Order</th><th>Requester</th><th>Attempted reason</th><th>Releases used</th><th>Action</th></tr></thead>
+                    <tbody>
+                      {releaseReviews.map((item) => (
+                        <tr key={item.id}>
+                          <td><strong>{item.type}</strong></td>
+                          <td>#{String(item.orderId || '').slice(0, 8) || '—'}</td>
+                          <td>{item.requester?.name || '—'}<div className="sd-muted">{item.requester?.email || ''}</div></td>
+                          <td>{item.attemptedReason || '—'}</td>
+                          <td>{item.releasesUsed ?? '—'} / {item.limit ?? '—'}</td>
+                          <td>
+                            <button type="button" className="sd-btn sd-btn-primary" disabled={Boolean(actionLoading)} onClick={() => approveReleaseReview(item.id)}>
+                              {actionLoading === `release-review-${item.id}` ? 'Approving…' : 'Allow one more release'}
+                            </button>
                           </td>
                         </tr>
                       ))}
