@@ -1013,16 +1013,13 @@ function InspectionCard({ order, title, i }) {
 
           {isRequester && (
             <div style={{ marginTop: 12 }}>
-              <Button
-                variant="light"
-                size="sm"
-                disabled={Boolean(i.busy)}
+              <ReleaseAgreementControl
+                acceptedQuote={leafQuotes(request.quotes).find((q) => q.status === 'ACCEPTED')}
+                label="Inspector unavailable — choose another"
                 busy={i.busy === `withdraw-inspection-${request.id}`}
-                busyText="Releasing…"
-                onClick={() => i.withdrawInspectionAgreement(request.id)}
-              >
-                Inspector unavailable — choose another
-              </Button>
+                disabled={Boolean(i.busy)}
+                onConfirm={(reason, note) => i.withdrawInspectionAgreement(request.id, { reason, note })}
+              />
               <p className="muted small" style={{ marginTop: 6 }}>
                 Provisional agreement — release it if the inspector drops out
                 before payment.
@@ -1127,6 +1124,103 @@ function DeliveryEvidenceForm({ t }) {
   );
 }
 
+// Release limits for a provisional (ACCEPTED) transporter / inspector
+// agreement. Mirrors backend services/releaseLimitsService.js: a reason from
+// a list is required and release opens RELEASE_AFTER_ACCEPT_HOURS after
+// acceptance. The per-job cap (2, then admin review) is enforced server-side.
+const RELEASE_AFTER_ACCEPT_HOURS = (() => {
+  const configured = Number(import.meta?.env?.VITE_RELEASE_AFTER_ACCEPT_HOURS);
+  return Number.isFinite(configured) && configured >= 0 ? configured : 24;
+})();
+
+const RELEASE_REASONS = [
+  ['PROVIDER_UNAVAILABLE', 'Provider is unavailable'],
+  ['NO_RESPONSE', 'Provider is not responding'],
+  ['PRICE_CHANGED', 'Provider changed the price'],
+  ['SCHEDULE_CONFLICT', 'Schedule conflict'],
+  ['OTHER', 'Other (add a note)'],
+];
+
+function acceptedReleaseAvailableAt(acceptedQuote) {
+  if (!acceptedQuote) return null;
+  const since = new Date(acceptedQuote.updatedAt || acceptedQuote.createdAt).getTime();
+  if (!Number.isFinite(since)) return null;
+  return new Date(since + RELEASE_AFTER_ACCEPT_HOURS * 60 * 60 * 1000);
+}
+
+function ReleaseAgreementControl({ acceptedQuote, label, busy, disabled, onConfirm }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+  const availableAt = acceptedReleaseAvailableAt(acceptedQuote);
+  const now = useNowUntil(availableAt ? availableAt.getTime() : null);
+  const locked = availableAt !== null && availableAt.getTime() > now;
+  const needsNote = reason === 'OTHER';
+  const canSubmit = Boolean(reason) && (!needsNote || note.trim().length > 0);
+
+  if (locked) {
+    return (
+      <span className="muted small">
+        Release opens {formatDateTime(availableAt)} ({RELEASE_AFTER_ACCEPT_HOURS}h after acceptance).
+      </span>
+    );
+  }
+
+  if (!open) {
+    return (
+      <Button variant="light" size="sm" disabled={disabled} onClick={() => setOpen(true)}>
+        {label}
+      </Button>
+    );
+  }
+
+  return (
+    <div className="od-release-form" style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+      <label>
+        Reason for releasing
+        <select value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy}>
+          <option value="">Select a reason…</option>
+          {RELEASE_REASONS.map(([value, text]) => (
+            <option key={value} value={value}>{text}</option>
+          ))}
+        </select>
+      </label>
+      {needsNote && (
+        <input
+          type="text"
+          maxLength={200}
+          placeholder="Short note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          disabled={busy}
+        />
+      )}
+      <p className="muted small">
+        Each release is recorded against your account and visible to MarketBridge admin.
+        After 2 releases on this job, further releases need admin review.
+      </p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Button
+          variant="light"
+          size="sm"
+          disabled={disabled || !canSubmit}
+          busy={busy}
+          busyText="Releasing…"
+          onClick={async () => {
+            const ok = await onConfirm(reason, note.trim());
+            if (ok) { setOpen(false); setReason(''); setNote(''); }
+          }}
+        >
+          Confirm release
+        </Button>
+        <Button variant="light" size="sm" disabled={busy} onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function QuoteRow({ quote, t, hasActiveNegotiation }) {
   const key = `quote-${quote.id}`;
   const working = t.busy === key;
@@ -1224,9 +1318,13 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
           quote.status === 'ACCEPTED' ? (
             <>
               <span className="muted small">Provisional agreement — the truck is not committed until transport payment succeeds.</span>
-              <Button variant="light" size="sm" disabled={working} busy={working} busyText="Releasing…" onClick={() => t.releaseQuote(quote.id)}>
-                Transporter unavailable — choose another
-              </Button>
+              <ReleaseAgreementControl
+                acceptedQuote={quote}
+                label="Transporter unavailable — choose another"
+                busy={working}
+                disabled={working}
+                onConfirm={(reason, note) => t.releaseQuote(quote.id, { reason, note })}
+              />
             </>
           ) : (quote.status === 'SELECTED' ||
               (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER')) ? (
@@ -2071,11 +2169,11 @@ export default function OrderDetail() {
         'Could not select transport bid'
       );
     },
-    releaseQuote: (quoteId) => {
+    releaseQuote: (quoteId, body) => {
       if (!quoteId || !transportJob) return;
       return run(
         `quote-${quoteId}`,
-        () => api.patch(`/transport/${transportJob.id}/quotes/${quoteId}/withdraw`),
+        () => api.patch(`/transport/${transportJob.id}/quotes/${quoteId}/withdraw`, body),
         'Could not release the transporter agreement'
       );
     },
@@ -2237,22 +2335,18 @@ export default function OrderDetail() {
         'Could not reject inspection quote'
       );
     },
-    withdrawInspectionAgreement: (requestId) => {
+    withdrawInspectionAgreement: (requestId, { reason, note } = {}) => {
       if (!currentInspection) return;
       const accepted = leafQuotes(currentInspection.quotes).find(
         (q) => q.status === 'ACCEPTED'
       );
       if (!accepted) return;
-      const reason = window.prompt(
-        'Why are you releasing this provisional inspection agreement?',
-        'Inspector unavailable before payment'
-      );
-      if (reason === null) return;
       return run(
         `withdraw-inspection-${requestId}`,
         () =>
           api.patch(`/inspections/${requestId}/quotes/${accepted.id}/withdraw`, {
-            reason: (reason || '').trim() || undefined,
+            reason,
+            note: note || undefined,
           }),
         'Could not release inspection agreement'
       );
