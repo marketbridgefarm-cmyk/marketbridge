@@ -99,6 +99,29 @@ const leafQuotes = (quotes) => {
   return list.filter((q) => !parents.has(q.id));
 };
 
+// Mirrors the backend's transportReleaseAfterHours() in routes/transport.js.
+// The env var name matches so ops can pin the same value on both sides.
+// Defaults to 72h, identical to the backend default.
+const TRANSPORT_RELEASE_AFTER_HOURS = (() => {
+  const configured = Number(import.meta?.env?.VITE_TRANSPORT_RELEASE_AFTER_HOURS);
+  return Number.isFinite(configured) && configured >= 0 ? configured : 72;
+})();
+
+// For a SELECTED quote, or a COUNTERED quote where the requester made the
+// last move, returns the earliest time at which the requester may silently
+// release the truck owner. Returns null for any quote the release window
+// does not apply to (PENDING, ACCEPTED, provider-turn COUNTERED).
+function transportReleaseAvailableAt(quote) {
+  if (!quote) return null;
+  const providerTurn =
+    quote.status === 'SELECTED' ||
+    (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
+  if (!providerTurn) return null;
+  const since = new Date(quote.updatedAt || quote.createdAt).getTime();
+  if (!Number.isFinite(since)) return null;
+  return new Date(since + TRANSPORT_RELEASE_AFTER_HOURS * 60 * 60 * 1000);
+}
+
 function useNowUntil(targetMs) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -1109,6 +1132,13 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
   const working = t.busy === key;
   const amount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
 
+  // Silent-release gate. Mirrors the backend's transportReleaseAvailableAt:
+  // a SELECTED (or COUNTERED-by-requester) quote can only be released after
+  // the waiting window elapses. Until then, the release button is replaced
+  // by an explanation of the earliest release time.
+  const releaseAt = transportReleaseAvailableAt(quote);
+  const releaseLocked = releaseAt !== null && releaseAt.getTime() > Date.now();
+
   const isArrangerTurn =
     quote.status === 'SELECTED' ||
     (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
@@ -1198,14 +1228,21 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
             </>
           ) : (quote.status === 'SELECTED' ||
               (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER')) ? (
-            <>
+            releaseLocked ? (
               <span className="muted small">
-                You can release this truck owner if they stay silent. The backend enforces a waiting window.
+                The waiting window has not elapsed. If the truck owner stays
+                silent, you can release them from {formatDateTime(releaseAt)}.
               </span>
-              <Button variant="light" size="sm" disabled={working} busy={working} busyText="Releasing…" onClick={() => t.releaseQuote(quote.id)}>
-                Release silent truck owner
-              </Button>
-            </>
+            ) : (
+              <>
+                <span className="muted small">
+                  You can release this truck owner if they stay silent.
+                </span>
+                <Button variant="light" size="sm" disabled={working} busy={working} busyText="Releasing…" onClick={() => t.releaseQuote(quote.id)}>
+                  Release silent truck owner
+                </Button>
+              </>
+            )
           ) : null
         )}
       </div>
@@ -1218,10 +1255,6 @@ function TransportCard({ order, t }) {
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
 
-  // Mirror the inspection lock: once any transporter bid is SELECTED or
-  // COUNTERED, the competition is frozen to that thread. Other PENDING bids
-  // (existing and incoming) show a "Locked" message instead of a Select
-  // button, so the requester cannot hop between negotiations.
   const hasActiveNegotiation = quotes.some((q) =>
     ['SELECTED', 'COUNTERED'].includes(q.status)
   );
