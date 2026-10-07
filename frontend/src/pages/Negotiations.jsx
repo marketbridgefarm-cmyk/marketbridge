@@ -676,7 +676,7 @@ export default function Negotiations() {
               subtitle:    'You submitted this quote',
               linkTo:      null,
               expiresAt:   quote.expiresAt,
-              raw:         { quoteId: quote.id },
+              raw:         { jobId: job.id, quoteId: quote.id },
             });
           });
         });
@@ -730,13 +730,12 @@ export default function Negotiations() {
         if (action === 'COUNTER' || action === 'RE_COUNTER') { payload.counterAmount = Number(counterAmount); payload.reasonCode = reasonCode; }
         response = await api.patch(`/offers/${item.raw.id}`, payload);
       } else if (item.type === 'TRANSPORT_QUOTE') {
-        if (action === 'SELECT') {
-          response = await api.patch(`/transport/quotes/${item.raw.quoteId}/select`);
-        } else {
-          const payload = { action };
-          if (action === 'COUNTER') payload.counterAmount = Number(counterAmount);
-          response = await api.patch(`/transport/quotes/${item.raw.quoteId}`, payload);
-        }
+        const base = `/transport/${item.raw.jobId}/quotes/${item.raw.quoteId}`;
+        if (action === 'SELECT')       response = await api.patch(`${base}/select`);
+        else if (action === 'ACCEPT')  response = await api.patch(`${base}/accept`);
+        else if (action === 'REJECT')  response = await api.patch(`${base}/reject`);
+        else if (action === 'WITHDRAW') response = await api.patch(`${base}/withdraw`);
+        else if (action === 'COUNTER') response = await api.post(`${base}/counter`, { counterAmount: Number(counterAmount) });
       } else if (item.type === 'INSPECTION_QUOTE') {
         const { requestId, quoteId } = item.raw;
         if      (action === 'SELECT')  response = await api.patch(`/inspections/${requestId}/quotes/${quoteId}/select`);
@@ -767,13 +766,12 @@ export default function Negotiations() {
         else if (action === 'REJECT')  response = await api.patch(`/inspections/${requestId}/quotes/${quote.id}/reject`);
         else if (action === 'COUNTER') response = await api.post(`/inspections/${requestId}/quotes/${quote.id}/counter`, { counterAmount: Number(counterAmount) });
       } else if (group.type === 'TRANSPORT_QUOTE') {
-        if (action === 'SELECT') {
-          response = await api.patch(`/transport/quotes/${quote.id}/select`);
-        } else {
-          const payload = { action };
-          if (action === 'COUNTER') payload.counterAmount = Number(counterAmount);
-          response = await api.patch(`/transport/quotes/${quote.id}`, payload);
-        }
+        const base = `/transport/${group.jobId}/quotes/${quote.id}`;
+        if (action === 'SELECT')       response = await api.patch(`${base}/select`);
+        else if (action === 'ACCEPT')  response = await api.patch(`${base}/accept`);
+        else if (action === 'REJECT')  response = await api.patch(`${base}/reject`);
+        else if (action === 'WITHDRAW') response = await api.patch(`${base}/withdraw`);
+        else if (action === 'COUNTER') response = await api.post(`${base}/counter`, { counterAmount: Number(counterAmount) });
       }
       toast(
         response?.data?.message ||
