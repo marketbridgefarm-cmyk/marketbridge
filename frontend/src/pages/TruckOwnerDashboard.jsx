@@ -1077,9 +1077,9 @@ export default function TruckOwnerDashboard() {
                   myLeaf.status === 'COUNTERED' &&
                   myLeaf.counteredBy === 'REQUESTER';
                 const respondBusy = myLeaf && actionLoading === `quote-${myLeaf.id}`;
-                // Same rule as the inspector dashboard: a truck owner can bid
-                // again once an earlier quote was withdrawn, rejected or expired.
-                const canQuote = !hasAgreement && !hasActiveThread && !hasWaitingBid;
+                // One bid per job: once a truck owner has quoted (including
+                // after withdrawing), they cannot bid on that job again.
+                const canQuote = !myLeaf && !hasAgreement;
 
                 const quoteAmount = hasActiveThread
                   ? fmtMoney(
