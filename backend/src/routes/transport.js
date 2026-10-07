@@ -114,6 +114,20 @@ function quoteTurn(quote) {
   return null;
 }
 
+// Another live negotiation thread on the same job (mirrors
+// findCompetingLiveQuote in routes/inspections.js). Only leaf rows count.
+async function findCompetingLiveQuote(tx, transportJobId, exceptQuoteId) {
+  return tx.transportQuote.findFirst({
+    where: {
+      transportJobId,
+      id: { not: exceptQuoteId },
+      status: { in: ['SELECTED', 'COUNTERED'] },
+      childQuotes: { none: {} },
+    },
+    select: { id: true, truckOwnerId: true, status: true },
+  });
+}
+
 function isQuoteExpired(quote) {
   return Boolean(quote.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
 }
@@ -1334,20 +1348,6 @@ router.post(
         return res.status(400).json({ error: 'This job is not open for quotes' });
       }
 
-      const activeNegotiation = await prisma.transportQuote.findFirst({
-        where: {
-          transportJobId: job.id,
-          status: { in: ['SELECTED', 'COUNTERED', 'ACCEPTED'] },
-        },
-        select: { id: true, truckOwnerId: true, status: true },
-      });
-      if (activeNegotiation) {
-        return res.status(409).json({
-          code: 'TRANSPORT_COMPETITION_FROZEN',
-          error: 'A transporter has already been selected for negotiation. Existing waiting bids remain available; new bids cannot join this negotiation.',
-        });
-      }
-
       let truckId = req.body.truckId;
 
       if (!truckId) {
@@ -1379,14 +1379,14 @@ router.post(
         where: {
           transportJobId: job.id,
           truckOwnerId: req.user.id,
-          status: { in: ['PENDING', 'COUNTERED', 'ACCEPTED'] },
+          status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
           childQuotes: { none: {} },
         },
       });
 
       if (existing) {
         return res.status(409).json({
-          error: 'You already have a pending, negotiating, or accepted quote for this job',
+          error: 'You already have an active quote or negotiation for this job',
         });
       }
 
@@ -1626,14 +1626,7 @@ router.patch(
         if (!fresh || fresh.status !== 'PENDING') throw quoteError('This bid is no longer available', 409);
         if (isQuoteExpired(fresh)) throw quoteError('This quote has expired', 409);
 
-        const competingThread = await tx.transportQuote.findFirst({
-          where: {
-            transportJobId: job.id,
-            id: { not: fresh.id },
-            status: { in: ['SELECTED', 'COUNTERED'] },
-          },
-          select: { id: true },
-        });
+        const competingThread = await findCompetingLiveQuote(tx, job.id, fresh.id);
         if (competingThread) {
           throw quoteError(
             'Another transporter bid is already in active negotiation. Release or reject that thread before selecting a different bid.',
@@ -1641,15 +1634,27 @@ router.patch(
           );
         }
 
-        await tx.transportQuote.updateMany({
-          where: { transportJobId: job.id, id: { not: fresh.id }, status: 'ACCEPTED' },
-          data: { status: 'WITHDRAWN' },
+        // Mirrors inspections: a provisionally accepted transporter must be
+        // released explicitly (PATCH .../withdraw) before another bid can be
+        // selected, so an agreed deal is never dropped silently.
+        const acceptedElsewhere = await tx.transportQuote.findFirst({
+          where: { transportJobId: job.id, id: { not: fresh.id }, status: 'ACCEPTED', childQuotes: { none: {} } },
+          select: { id: true },
         });
+        if (acceptedElsewhere) {
+          throw quoteError(
+            'A transporter agreement is already provisionally accepted. Release that transporter first to select a different bid.',
+            409
+          );
+        }
 
         const selected = await tx.transportQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
-        await tx.transportJob.update({
-          where: { id: job.id },
-          data: { truckOwnerId: null, truckId: null, agreedAmount: null, status: 'QUOTED' },
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'TRANSPORT_QUOTE_SELECTED',
+          resourceType: 'TransportQuote',
+          resourceId: selected.id,
+          metadata: { transportJobId: job.id, truckOwnerId: selected.truckOwnerId },
         });
         return selected;
       }, { maxWait: 10000, timeout: 15000 });
@@ -1727,14 +1732,7 @@ router.patch(
           throw error;
         }
 
-        const competingThread = await tx.transportQuote.findFirst({
-          where: {
-            transportJobId: job.id,
-            id: { not: freshQuote.id },
-            status: { in: ['SELECTED', 'COUNTERED'] },
-          },
-          select: { id: true },
-        });
+        const competingThread = await findCompetingLiveQuote(tx, job.id, freshQuote.id);
         if (competingThread) {
           throw quoteError('Another transporter bid is already in active negotiation. This quote cannot be accepted until the competing thread is released.', 409);
         }
@@ -1772,6 +1770,8 @@ router.patch(
             status: 'QUOTED',
           },
         });
+
+        await syncOrderPaymentObligations(tx, freshJob.orderId);
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
@@ -1858,22 +1858,25 @@ router.patch(
         if (!freshQuote || !['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
           throw quoteError('This quote is no longer available for rejection', 409);
         }
-        const competingThread = await tx.transportQuote.findFirst({
-          where: {
-            transportJobId: job.id,
-            id: { not: freshQuote.id },
-            status: { in: ['SELECTED', 'COUNTERED'] },
-          },
-          select: { id: true },
-        });
+        const competingThread = await findCompetingLiveQuote(tx, job.id, freshQuote.id);
         if (competingThread) {
           throw quoteError('This quote is not the sole active negotiation thread', 409);
         }
 
-        return tx.transportQuote.update({
+        const rejected = await tx.transportQuote.update({
           where: { id: freshQuote.id },
           data: { status: 'REJECTED' },
         });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'TRANSPORT_QUOTE_REJECTED',
+          resourceType: 'TransportQuote',
+          resourceId: rejected.id,
+          metadata: { transportJobId: job.id, rejectedBy: effectiveRole },
+        });
+
+        return rejected;
       }, { maxWait: 10000, timeout: 15000 });
 
       return res.json({ message: 'Quote rejected', quote: updatedQuote });
@@ -1956,14 +1959,7 @@ router.post(
         if (!['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
           throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
         }
-        const competingThread = await tx.transportQuote.findFirst({
-          where: {
-            transportJobId: job.id,
-            id: { not: freshQuote.id },
-            status: { in: ['SELECTED', 'COUNTERED'] },
-          },
-          select: { id: true },
-        });
+        const competingThread = await findCompetingLiveQuote(tx, job.id, freshQuote.id);
         if (competingThread) {
           throw quoteError('Another transporter bid is already in active negotiation. Refresh and select only after that negotiation is released.', 409);
         }
