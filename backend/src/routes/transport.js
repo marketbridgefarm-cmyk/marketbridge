@@ -178,15 +178,6 @@ class ActiveTruckAssignmentError extends Error {
 // TRUCK STATE HELPERS
 // ============================================================================
 
-/**
- * Atomically changes AVAILABLE -> BUSY.
- *
- * This is the critical concurrency guard.
- *
- * Two concurrent transactions can both read AVAILABLE, but only one can
- * successfully execute this conditional update. The second transaction waits
- * for the row lock and then receives count === 0.
- */
 async function claimAvailableTruck(tx, truckId) {
   const result = await tx.truck.updateMany({
     where: {
@@ -211,12 +202,6 @@ async function claimAvailableTruck(tx, truckId) {
   });
 }
 
-/**
- * Release a truck after the transport job reaches a terminal state.
- *
- * The conditional BUSY check prevents an unrelated manual state change from
- * being overwritten.
- */
 async function releaseTruck(tx, truckId) {
   if (!truckId) return;
 
@@ -231,13 +216,6 @@ async function releaseTruck(tx, truckId) {
   });
 }
 
-/**
- * Lock the truck row before checking whether an active job exists.
- *
- * Updating the row to its current availability causes PostgreSQL to acquire
- * the row lock. This serializes manual availability changes against the
- * transaction that claims a truck for a job.
- */
 async function lockTruckRow(tx, truckId) {
   const truck = await tx.truck.findUnique({
     where: {
@@ -269,7 +247,6 @@ async function lockTruckRow(tx, truckId) {
 // TRUCK MANAGEMENT
 // ============================================================================
 
-// Register a truck
 router.post(
   '/trucks',
   authenticate,
@@ -320,7 +297,6 @@ router.post(
   }
 );
 
-// List my trucks
 router.get(
   '/trucks/mine',
   authenticate,
@@ -349,17 +325,6 @@ router.get(
     }
   }
 );
-
-// ============================================================================
-// UPDATE TRUCK AVAILABILITY
-// ============================================================================
-//
-// AVAILABLE is special: an owner cannot manually free a truck while an
-// active transport job is using it.
-//
-// BUSY/OFFLINE remain manually selectable, although BUSY should normally be
-// controlled by transport-job lifecycle.
-// ============================================================================
 
 router.patch(
   '/trucks/:id/availability',
@@ -472,10 +437,6 @@ router.patch(
   }
 );
 
-// ============================================================================
-// OPEN TRANSPORT JOBS
-// ============================================================================
-
 router.get(
   '/open',
   authenticate,
@@ -539,10 +500,6 @@ router.get(
   }
 );
 
-// ============================================================================
-// MY TRANSPORT JOBS
-// ============================================================================
-
 router.get(
   '/mine',
   authenticate,
@@ -603,10 +560,6 @@ router.get(
   }
 );
 
-// ============================================================================
-// MATCH AVAILABLE TRUCKS
-// ============================================================================
-
 router.get('/match', authenticate, async (req, res) => {
   try {
     const trucks = await matchTrucks({
@@ -620,10 +573,6 @@ router.get('/match', authenticate, async (req, res) => {
     return res.status(500).json({ error: 'Could not find matching trucks' });
   }
 });
-
-// ============================================================================
-// CREATE TRANSPORT JOB
-// ============================================================================
 
 router.post(
   '/',
@@ -696,11 +645,6 @@ router.post(
           include: {
             transportJob: true,
             listing: true,
-            // Needed by the agricultural gating checks below (goodsPaid /
-            // inspectionPaid) — without these, order.payments and
-            // order.inspectionRequests are undefined and every agricultural
-            // order is wrongly blocked with GOODS_PAYMENT_REQUIRED even
-            // after the buyer has actually paid.
             payments: true,
             inspectionRequests: { include: { payments: true } },
           },
@@ -745,10 +689,6 @@ router.post(
       const isAgricultural = order.listing?.category === 'AGRICULTURAL';
       const isPhysicalGoods = ['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category);
 
-      // Agricultural transport begins only after the buyer has explicitly
-      // chosen BUY following the inspection report. Arrangement itself does
-      // not create a transport payment; payment is created only after a
-      // transporter quote is accepted.
       if (isAgricultural && order.buyerDecision !== 'BUY') {
         return res.status(409).json({
           code: 'BUYER_DECISION_REQUIRED',
@@ -779,8 +719,7 @@ router.post(
         }
       }
 
-      let resolvedArrangingParty =
-        arrangingParty;
+      let resolvedArrangingParty = arrangingParty;
 
       if (isPhysicalGoods && method === 'HIRE_TRANSPORTER' && resolvedArrangingParty !== 'BUYER') {
         return res.status(409).json({
@@ -819,15 +758,6 @@ router.post(
       if (resolvedArrangingParty === 'JOINT' && !isOrderParticipant(req.user.id, order) && !isAdmin(req.user)) {
         return res.status(403).json({ error: 'Only the buyer or seller can create a JOINT transport arrangement' });
       }
-
-      // ----------------------------------------------------------------------
-      // HIRE_TRANSPORTER
-      // ----------------------------------------------------------------------
-      //
-      // No truck is claimed here. The selected truck is claimed atomically
-      // when its quote is accepted.
-      //
-      // ----------------------------------------------------------------------
 
       if (method === 'HIRE_TRANSPORTER') {
         const result =
@@ -945,10 +875,6 @@ router.post(
         });
       }
 
-      // ----------------------------------------------------------------------
-      // OWN_TRUCK
-      // ----------------------------------------------------------------------
-
       if (!truckId) {
         return res.status(400).json({
           error:
@@ -959,8 +885,6 @@ router.post(
       const result =
         await prisma.$transaction(
           async (tx) => {
-            // Re-read the order inside the transaction so the uniqueness
-            // check is not based solely on the earlier snapshot.
             const freshOrder =
               await tx.order.findUnique({
                 where: {
@@ -1016,11 +940,6 @@ router.post(
               throw error;
             }
 
-            // CRITICAL:
-            // Atomically claim AVAILABLE -> BUSY.
-            //
-            // This closes the TOCTOU race between checking availability and
-            // creating the transport job.
             await claimAvailableTruck(
               tx,
               truck.id
@@ -1061,7 +980,6 @@ router.post(
                     specialRequirements ||
                     null,
 
-                  // Always bind the actual truck owner.
                   truckOwnerId:
                     truck.ownerId,
 
@@ -1152,10 +1070,6 @@ router.post(
   }
 );
 
-// ============================================================================
-// GET TRANSPORT JOB FOR ORDER
-// ============================================================================
-
 router.get(
   '/order/:orderId',
   authenticate,
@@ -1237,11 +1151,6 @@ router.get(
   }
 );
 
-// ============================================================================
-// UPLOAD PICKUP / DELIVERY / INCIDENT EVIDENCE MEDIA
-// Returns private object-storage keys for use in POST /:id/evidence.
-// ============================================================================
-
 router.post(
   '/:id/evidence/media',
   authenticate,
@@ -1287,10 +1196,6 @@ router.post(
     }
   }
 );
-
-// ============================================================================
-// ADD PICKUP / DELIVERY / INCIDENT EVIDENCE
-// ============================================================================
 
 router.post(
   '/:id/evidence',
@@ -1382,10 +1287,6 @@ router.post(
   }
 );
 
-// ============================================================================
-// LIST TRANSPORT EVIDENCE
-// ============================================================================
-
 router.get(
   '/:id/evidence',
   authenticate,
@@ -1417,12 +1318,6 @@ router.get(
     }
   }
 );
-
-// ============================================================================
-// SIGN PROTECTED TRANSPORT EVIDENCE MEDIA
-// Only authorized order participants, truck owners, or admins can obtain
-// short-lived URLs for private object-storage evidence.
-// ============================================================================
 
 router.get(
   '/:id/evidence/:evidenceId/media',
@@ -1485,20 +1380,6 @@ router.get(
   }
 );
 
-// ============================================================================
-// PAYMENT GATE FOR TRUCK PICKUP
-// ============================================================================
-// PICKUP records physical handover. Transport payment is required before
-// IN_TRANSIT, so the truck cannot leave with the goods before settlement.
-//
-// Required payments:
-//   1. MARKETPLACE payment for the agricultural/physical order (to the seller).
-//   2. INSPECTOR payment for every non-cancelled inspection request with a fee.
-//   3. TRANSPORT payment when HIRE_TRANSPORTER is used.
-//
-// MarketBridge commission is already calculated inside each payment and
-// recorded in the financial ledger; it is not a second buyer checkout.
-// ============================================================================
 async function getTransportPaymentGate(client, jobId) {
   const job = await client.transportJob.findUnique({
     where: { id: jobId },
@@ -1519,9 +1400,6 @@ async function getTransportPaymentGate(client, jobId) {
 
   if (!job) return { ready: false, missing: ['TRANSPORT_JOB'] };
 
-  // The transport payment is a service-specific obligation. Marketplace and
-  // inspection payments have their own lifecycle and must not be used as a
-  // hidden gate for the transporter's departure.
   const transportRequired = job.method === 'HIRE_TRANSPORTER';
   const transportPaid = !transportRequired || job.payments.some(
     (p) => p.type === 'TRANSPORT' && p.status === 'PAID'
@@ -1535,18 +1413,6 @@ async function getTransportPaymentGate(client, jobId) {
   };
 }
 
-// ============================================================================
-// ALL-PAYMENTS GATE FOR THE LOADING REPORT
-// ----------------------------------------------------------------------------
-// The truck must not begin loading until every payment on the order is
-// settled:
-//   1. Goods (MARKETPLACE) payment
-//   2. Every fee-bearing inspection (INSPECTOR) payment
-//   3. Transport payment, if hired
-// This is stricter than getTransportPaymentGate (which gates IN_TRANSIT on
-// transport fee alone). Both are enforced; the loading report is the earlier,
-// stronger gate.
-// ============================================================================
 async function checkLoadingReportGate(client, jobId) {
   const job = await client.transportJob.findUnique({
     where: { id: jobId },
@@ -1591,9 +1457,6 @@ async function checkLoadingReportGate(client, jobId) {
   return { ready: missing.length === 0, missing };
 }
 
-// ============================================================================
-// REOPEN TRANSPORT BIDDING
-// ============================================================================
 router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
   try {
     const job = await prisma.transportJob.findUnique({ where: { id: req.params.id }, include: { order: true } });
@@ -1621,7 +1484,6 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
   }
 });
 
-// Seller confirmation gate: the selected transporter cannot record pickup until the seller confirms readiness.
 router.post('/:id/seller-confirm-pickup', authenticate, requireRole('SELLER'), [param('id').isUUID(), body('message').optional().isString().trim().isLength({ max: 500 })], validate, async (req, res) => {
   try {
     const job = await prisma.transportJob.findUnique({ where: { id: req.params.id }, include: { order: { select: { id: true, sellerId: true } } } });
@@ -1639,10 +1501,6 @@ router.post('/:id/seller-confirm-pickup', authenticate, requireRole('SELLER'), [
     return res.status(500).json({ error: 'Could not confirm transport pickup readiness' });
   }
 });
-
-// ============================================================================
-// UPDATE TRANSPORT JOB STATUS
-// ============================================================================
 
 router.patch(
   '/:id/status',
@@ -1737,11 +1595,6 @@ router.patch(
         });
       }
 
-      // HIRE_TRANSPORTER uses the competitive quote/payment workflow.
-      // ACCEPTED is deliberately NOT a client-settable transport status for
-      // hired transport: quote acceptance is provisional and payment
-      // settlement is the commitment boundary. OWN_TRUCK may retain its
-      // direct ACCEPTED lifecycle.
       if (job.method === 'HIRE_TRANSPORTER' && next === 'ACCEPTED') {
         return res.status(409).json({
           code: 'PAYMENT_BACKED_ACCEPTANCE_REQUIRED',
@@ -1756,10 +1609,6 @@ router.patch(
         });
       }
 
-      // Transport movement is controlled by the assigned transporter.
-      // Buyer/seller controls the commercial arrangement and payments, but
-      // must not be able to falsely mark a truck as picked up, in transit,
-      // or delivered. Admin remains available for controlled intervention.
       const movementStatus = ['PICKUP', 'IN_TRANSIT', 'DELIVERED'];
       if (movementStatus.includes(next) && !isTruckOwner && !isAdmin(req.user)) {
         return res.status(403).json({
@@ -1811,9 +1660,6 @@ router.patch(
         });
       }
 
-      // Once physical pickup has occurred, ordinary buyer/seller cancellation
-      // is no longer a valid transport transition. Dispute/admin intervention
-      // is the recovery path because the truck may already be carrying goods.
       if (next === 'CANCELLED' && ['PICKUP', 'IN_TRANSIT'].includes(current) && !isAdmin(req.user)) {
         return res.status(409).json({
           code: 'TRANSPORT_MOVEMENT_STARTED',
@@ -1821,8 +1667,6 @@ router.patch(
         });
       }
 
-      // A hired transport quote is only provisional until payment. Once a
-      // transport payment exists, the selected quote/payment pair is locked.
       if (next === 'CANCELLED' && job.method === 'HIRE_TRANSPORTER') {
         const activePayment = await prisma.payment.findFirst({
           where: {
@@ -1840,9 +1684,6 @@ router.patch(
         }
       }
 
-      // Perishable agricultural loads must be picked up within the seller's
-      // advertised pickup window. Once pickup has occurred, later transport
-      // states are not blocked by the original window.
       if (next === 'PICKUP' && job.order.listing?.category === 'AGRICULTURAL' && job.order.listing.pickupWindowEnd) {
         const pickupDeadline = new Date(job.order.listing.pickupWindowEnd).getTime();
         if (Number.isFinite(pickupDeadline) && pickupDeadline <= Date.now()) {
@@ -1852,10 +1693,6 @@ router.patch(
         }
       }
 
-      // Pickup evidence is required before IN_TRANSIT and delivery evidence
-      // is required before DELIVERED.
-      // Accept either the legacy PICKUP evidence or the new LOADING evidence
-      // created by the loading report.
       if (next === 'IN_TRANSIT' && !job.evidence.some((item) => item.type === 'PICKUP' || item.type === 'LOADING')) {
         return res.status(409).json({
           error: 'Pickup evidence is required before transport can enter IN_TRANSIT',
@@ -1868,8 +1705,6 @@ router.patch(
         });
       }
 
-      // Payment is triggered by verified pickup. The transporter may record
-      // physical handover, but cannot depart until the required payments settle.
       if (next === 'IN_TRANSIT') {
         const gate = await getTransportPaymentGate(prisma, job.id);
         if (!gate.ready) {
@@ -1940,10 +1775,6 @@ router.patch(
               } else if (freshOrder?.status === 'IN_TRANSIT') {
                 await transitionOrderStatus(tx, job.orderId, 'IN_TRANSIT', 'DELIVERED');
               } else if (freshOrder?.status === 'CONFIRMED') {
-                // Recovery for a stale but financially valid order: delivery
-                // must never leave the order in CONFIRMED because receipt
-                // confirmation only accepts DELIVERED. Record the missing
-                // arrangement transition before applying delivery.
                 await transitionOrderStatus(tx, job.orderId, 'CONFIRMED', 'TRANSPORT_ARRANGED');
                 await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'DELIVERED');
               }
@@ -2183,8 +2014,6 @@ router.post(
       const quote =
         await prisma.$transaction(
           async (tx) => {
-            // Re-check that the chosen truck still belongs to this owner
-            // and is available before creating the quote.
             const truck =
               await tx.truck.findUnique({
                 where: {
@@ -2301,10 +2130,6 @@ router.post(
     }
   }
 );
-
-// ============================================================================
-// LIST QUOTES FOR A JOB
-// ============================================================================
 
 router.get(
   '/:id/quotes',
@@ -2431,7 +2256,7 @@ async function loadTransportQuoteForNegotiation(req, res) {
 
   const job = quote.transportJob;
 
-  // Route shape is now /transport/:id/quotes/:quoteId/<action>, matching the
+  // Route shape is /transport/:id/quotes/:quoteId/<action>, matching the
   // inspection quote routes. Refuse to serve a quote whose parent job does
   // not match :id, so a caller cannot address a quote by its ID alone.
   if (req.params.id && job.id !== req.params.id) {
@@ -2440,6 +2265,17 @@ async function loadTransportQuoteForNegotiation(req, res) {
   }
 
   const order = job.order;
+
+  // Parity with the inspection loader: refuse negotiation operations while
+  // the parent order is disputed or cancelled. Without this, a transporter
+  // or arranger could still act on a quote attached to a frozen order.
+  if (order && ['DISPUTED', 'CANCELLED'].includes(order.status)) {
+    res.status(409).json({
+      code: 'ORDER_DISPUTED',
+      error: `This order is ${order.status.toLowerCase()}. Transport quote proceedings are paused until it is resolved.`,
+    });
+    return null;
+  }
 
   const isRequester = isArrangingParty(job, order, req.user.id);
   const isProvider = quote.truckOwnerId === req.user.id;
@@ -2459,10 +2295,6 @@ async function loadTransportQuoteForNegotiation(req, res) {
 
 // ============================================================================
 // SHARED LOOKUP: transport job + coordination row, with the caller's role
-// ============================================================================
-// The counterpart to loadTransportQuoteForNegotiation, but for the seller <->
-// transporter operational handoff. The buyer is intentionally not one of the
-// permitted roles here, even though the buyer pays the transport fee.
 // ============================================================================
 
 async function loadCoordinationContext(req, res) {
@@ -2501,10 +2333,11 @@ async function loadCoordinationContext(req, res) {
 
 // ============================================================================
 // SELECT TRANSPORT BID FOR DEAL NEGOTIATION
-// The arranging party compares sealed provider bids and selects one before
-// price negotiation. Selection alone does not assign the truck or authorize
-// transport payment.
 // ============================================================================
+// Mirrors the inspection select route: only one negotiation thread may be
+// active at a time. Selecting a new PENDING bid is refused while another
+// bid is SELECTED or COUNTERED, so the requester cannot hop between bids
+// without explicitly releasing the current thread first.
 
 router.patch(
   '/:id/quotes/:quoteId/select',
@@ -2554,6 +2387,26 @@ router.patch(
         const fresh = await tx.transportQuote.findUnique({ where: { id: quote.id } });
         if (!fresh || fresh.status !== 'PENDING') throw quoteError('This bid is no longer available', 409);
         if (isQuoteExpired(fresh)) throw quoteError('This quote has expired', 409);
+
+        // Lock the competition to the current negotiation thread. Once a
+        // transporter is SELECTED or COUNTERED, no other bid (existing or
+        // incoming) may be selected until that thread is explicitly released.
+        // Mirrors the inspection select route's findCompetingLiveQuote guard.
+        const competingThread = await tx.transportQuote.findFirst({
+          where: {
+            transportJobId: job.id,
+            id: { not: fresh.id },
+            status: { in: ['SELECTED', 'COUNTERED'] },
+          },
+          select: { id: true },
+        });
+        if (competingThread) {
+          throw quoteError(
+            'Another transporter bid is already in active negotiation. Release or reject that thread before selecting a different bid.',
+            409
+          );
+        }
+
         // A previously ACCEPTED quote is only provisional until transport
         // payment. Selecting another pending bid therefore releases the old
         // provisional transporter rather than consuming/closing the order.
@@ -2561,18 +2414,7 @@ router.patch(
           where: { transportJobId: job.id, id: { not: fresh.id }, status: 'ACCEPTED' },
           data: { status: 'WITHDRAWN' },
         });
-        await tx.transportQuote.updateMany({
-          where: {
-            transportJobId: job.id,
-            id: { not: fresh.id },
-            status: { in: ['SELECTED', 'COUNTERED'] },
-          },
-          data: {
-            status: 'PENDING',
-            counterAmount: null,
-            counteredBy: null,
-          },
-        });
+
         const selected = await tx.transportQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
         await tx.transportJob.update({
           where: { id: job.id },
@@ -2591,10 +2433,6 @@ router.patch(
 // ============================================================================
 // ACCEPT A TRANSPORT QUOTE
 // ============================================================================
-// Mirrors PATCH /inspections/:id/quotes/:quoteId/accept. Either side may
-// accept, whichever currently holds the turn. Acceptance is provisional
-// until transport payment settles — see the long comment inside the
-// transaction for the reasoning.
 
 router.patch(
   '/:id/quotes/:quoteId/accept',
@@ -2682,19 +2520,8 @@ router.patch(
           throw error;
         }
 
-        // A dispute doesn't touch the TransportJob itself (holdForDispute
-        // only freezes Payout rows), so without this the job's own status
-        // check above wouldn't catch an order that went DISPUTED while this
-        // quote was being negotiated — a transporter could still accept and
-        // commit a truck to a disputed order. (Cancellation is already safe:
-        // cancelOrderInTransaction cascade-cancels the transport job itself.)
         await lockOrderAndAssertNotClosed(tx, freshJob.orderId, 'a transport quote cannot be accepted until that is resolved');
 
-        // IMPORTANT: acceptance is provisional. Do NOT claim the truck or
-        // mark the transport job ACCEPTED here. The successful transport
-        // payment is the commercial commitment boundary. Keeping the job in
-        // QUOTED lets the buyer recover if the transporter becomes unavailable
-        // before payment, while payment settlement atomically claims the truck.
         const updatedQuote = await tx.transportQuote.update({
           where: { id: freshQuote.id },
           data: {
@@ -2703,9 +2530,6 @@ router.patch(
           },
         });
 
-        // Close only other in-progress negotiation threads. Keep PENDING
-        // competition bids available so a failed provisional deal can be
-        // replaced immediately without restarting transport setup.
         await tx.transportQuote.updateMany({
           where: {
             transportJobId: freshJob.id,
@@ -2763,10 +2587,6 @@ router.patch(
 // ============================================================================
 // REJECT A TRANSPORT QUOTE
 // ============================================================================
-// Mirrors PATCH /inspections/:id/quotes/:quoteId/reject. Waiting (PENDING)
-// bids cannot be rejected — they are a pool of alternatives and the requester
-// should select the one they want, not delete the rest one at a time. Only
-// the sole active negotiation thread (SELECTED or COUNTERED) can be rejected.
 
 router.patch(
   '/:id/quotes/:quoteId/reject',
@@ -2866,9 +2686,6 @@ router.patch(
 // ============================================================================
 // COUNTER A TRANSPORT QUOTE
 // ============================================================================
-// Mirrors POST /inspections/:id/quotes/:quoteId/counter. Updates the same
-// quote row in place — no child insert, no unique-constraint violation on
-// (transportJobId, truckOwnerId).
 
 router.post(
   '/:id/quotes/:quoteId/counter',
@@ -3009,12 +2826,6 @@ router.post(
 // ============================================================================
 // WITHDRAW / RELEASE A TRANSPORT QUOTE
 // ============================================================================
-// Mirrors PATCH /inspections/:id/quotes/:quoteId/withdraw. Covers two cases:
-//   • ACCEPTED   — release of a provisional agreement before transport payment
-//   • SELECTED / COUNTERED-by-requester — silent-release of a truck owner who
-//     has not responded within TRANSPORT_RELEASE_AFTER_HOURS (default 72h).
-// The window is enforced on the server so a requester cannot release a
-// provider who is actively negotiating.
 
 router.patch(
   '/:id/quotes/:quoteId/withdraw',
@@ -3159,11 +2970,6 @@ router.patch(
 // ============================================================================
 // TRUCK OWNER WITHDRAWS A WAITING BID
 // ============================================================================
-// Mirrors POST /inspections/:id/quotes/:quoteId/withdraw-bid. A truck owner
-// whose quote is still PENDING (i.e., the requester has not selected it for
-// negotiation) can leave cleanly instead of waiting for the 24h expiry.
-// Only the truck owner who submitted the bid may withdraw it.
-// ============================================================================
 
 router.post(
   '/:id/quotes/:quoteId/withdraw-bid',
@@ -3235,18 +3041,6 @@ router.claimAvailableTruck =
 
 // ============================================================================
 // TRANSPORT LOADING REPORT
-// ============================================================================
-// The truck owner submits a structured loading report when they arrive at the
-// pickup site. Submission is atomic: the report, the LOADING evidence row,
-// and the ACCEPTED -> PICKUP status transition all commit together, or none
-// of them do.
-//
-// Gates:
-//   1. Caller must be the assigned truck owner (admin override available)
-//   2. Job must be ACCEPTED
-//   3. Seller must have confirmed pickup readiness
-//   4. EVERY order payment must be settled — goods, inspections, transport
-//   5. At least one photo or video of the loaded goods
 // ============================================================================
 
 router.post(
@@ -3435,14 +3229,6 @@ router.post(
   }
 );
 
-// ============================================================================
-// GET TRANSPORT LOADING REPORT
-// ============================================================================
-// Read-only view for the buyer, seller, truck owner, or admin. Returns null
-// when no loading report exists yet, so the frontend can distinguish "not
-// submitted" from "loaded and empty".
-// ============================================================================
-
 router.get(
   '/:id/loading-report',
   authenticate,
@@ -3496,15 +3282,6 @@ router.get(
 // ============================================================================
 // TRANSPORT COORDINATION (seller <-> transporter only)
 // ============================================================================
-//
-// Operational handoff for the physical pickup. Contact data lives here, NOT
-// on TransportJob, so no buyer-facing endpoint can leak it.
-//
-// Access rule (mirrored from the service):
-//   • Seller of the listing and the assigned transporter only.
-//   • Transport job must be ACCEPTED or later (payment settled).
-//   • Buyer is intentionally excluded, even though the buyer pays the fee.
-//   • Admin override for support, always audited.
 
 router.get('/:id/coordination', authenticate, async (req, res) => {
   try {
@@ -3576,7 +3353,6 @@ router.put(
       ];
       const allowedFields = role === 'SELLER' ? SELLER_FIELDS : DRIVER_FIELDS;
 
-      // Whitelist: never let the caller write the other side's fields.
       const data = {};
       for (const field of allowedFields) {
         if (Object.prototype.hasOwnProperty.call(req.body, field)) {
