@@ -138,7 +138,7 @@ export default function OrderDecisionPanel({
         </h3>
         {currentPrice > 0 && (
           <div className="od-card-section-meta">
-            {money(currentPrice)} ETB
+            {money(currentPrice)} ETB total
           </div>
         )}
       </div>
@@ -227,7 +227,7 @@ export default function OrderDecisionPanel({
                   disabled={Boolean(busy)}
                   onClick={() => onRespondReview(pendingReview.id, 'ACCEPT')}
                 >
-                  {busy ? 'Accepting…' : `Accept ${money(pendingReview.proposedPrice)} ETB`}
+                  {busy ? 'Accepting…' : `Accept ${money(pendingReview.proposedPrice)} ETB total`}
                 </button>
                 <button
                   type="button"
@@ -243,7 +243,7 @@ export default function OrderDecisionPanel({
                 <summary>Counter this proposal</summary>
                 <div className="od-decision-form-grid">
                   <label>
-                    Your counter (ETB)
+                    Your counter total (ETB)
                     <AmountPicker
                       reference={Number(pendingReview?.proposedPrice || currentPrice)}
                       min={1}
