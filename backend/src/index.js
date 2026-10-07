@@ -35,6 +35,7 @@ const paymentRoutes = require('./routes/payments');
 const adRoutes = require('./routes/ads');
 const disputeRoutes = require('./routes/disputes');
 const ratingRoutes = require('./routes/ratings');
+const providerStandingRoutes = require('./routes/providerStanding');
 const digitalRoutes = require('./routes/digital');
 const messageRoutes = require('./routes/messages');
 const adminRoutes = require('./routes/admin');
@@ -365,6 +366,7 @@ app.use('/api/ads', adRoutes);
 app.use('/api/disputes', disputeRoutes);
 
 app.use('/api/ratings', ratingRoutes);
+app.use('/api/provider-standing', providerStandingRoutes);
 
 app.use('/api/digital-products', digitalRoutes);
 
