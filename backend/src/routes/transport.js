@@ -1375,6 +1375,19 @@ router.post(
         }
       }
 
+      // A truck owner who withdrew (or was released) cannot bid on the same
+      // job again, with any truck.
+      const withdrawnBefore = await prisma.transportQuote.findFirst({
+        where: { transportJobId: job.id, truckOwnerId: req.user.id, status: 'WITHDRAWN' },
+        select: { id: true },
+      });
+      if (withdrawnBefore) {
+        return res.status(409).json({
+          code: 'TRANSPORT_REBID_NOT_ALLOWED',
+          error: 'You withdrew your earlier bid on this transport job, so you cannot bid on it again.',
+        });
+      }
+
       const existing = await prisma.transportQuote.findFirst({
         where: {
           transportJobId: job.id,
