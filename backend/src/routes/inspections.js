@@ -2,30 +2,12 @@ const express = require('express');
 const { body, param, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
-const { requireRole, requireMfa } = require('../middleware/roleCheck');
+const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
-const { lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
-const {
-  computeInspectionWorkflowDueAt,
-  computeInspectionStartDueAt,
-  computeInspectionCompletionDueAt,
-  computePaymentDueAt,
-} = require('../utils/orderTiming');
-const {
-  AMOUNT_LIMITS,
-  validAmount,
-  noContactInfo,
-} = require('../utils/contactGuard');
-const {
-  assertCoordinationStage,
-  viewerRoleFor,
-  closeCoordination,
-  ensureOpenCoordination,
-} = require('../services/inspectionCoordinationService');
 
 const router = express.Router();
 
@@ -36,6 +18,12 @@ function validationError(res) {
   }
   return null;
 }
+
+// ============================================================================
+// QUOTE NEGOTIATION HELPERS
+// Mirrors the buyer <-> seller Offer negotiation chain: a counter creates a
+// new child quote row rather than mutating the previous one.
+// ============================================================================
 
 function isPositiveNumber(value) {
   const number = Number(value);
@@ -48,108 +36,15 @@ function quoteError(message, statusCode = 400) {
   return error;
 }
 
-// ============================================================================
-// INSPECTION WORK DETAILS — allow-listed, size-capped
-// ----------------------------------------------------------------------------
-// The requester describes the scope of inspection work. Every bidding
-// inspector reads this before quoting, so it must never carry contact
-// information. It is stored as JSON on InspectionRequest.workDetails.
-// ============================================================================
-const WORK_CATEGORIES = new Set([
-  'GENERAL_QUALITY',
-  'AGRICULTURAL_PRODUCE',
-  'QUANTITY_VERIFICATION',
-  'DAMAGE_ASSESSMENT',
-  'FUNCTIONAL_TESTING',
-  'CONFORMITY_CHECK',
-  'SAFETY_COMPLIANCE',
-]);
-
-const WORK_CHECKS = new Set([
-  'QUALITY_GRADE',
-  'SIZE_WEIGHT',
-  'MOISTURE',
-  'VISIBLE_DEFECTS',
-  'PACKAGING',
-  'SAMPLING',
-  'PHOTOGRAPHS',
-]);
-
-const REPORT_FORMATS = new Set([
-  'CHECKLIST_PHOTOS',
-  'MEASUREMENTS',
-  'PASS_FAIL',
-  'FULL_REPORT',
-]);
-
-function sanitizeWorkDetails(input) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
-
-  const out = {};
-
-  if (typeof input.workCategory === 'string' && WORK_CATEGORIES.has(input.workCategory)) {
-    out.workCategory = input.workCategory;
-  }
-
-  if (typeof input.quantityToInspect === 'string') {
-    const v = input.quantityToInspect.trim();
-    if (v) out.quantityToInspect = v.slice(0, 120);
-  }
-
-  if (input.lotCount != null && input.lotCount !== '') {
-    const n = Number(input.lotCount);
-    if (Number.isFinite(n) && n > 0 && n <= 10000) {
-      out.lotCount = Math.floor(n);
-    }
-  }
-
-  if (Array.isArray(input.checks)) {
-    out.checks = [
-      ...new Set(input.checks.filter((v) => typeof v === 'string' && WORK_CHECKS.has(v))),
-    ].slice(0, WORK_CHECKS.size);
-  }
-
-  if (typeof input.reportFormat === 'string' && REPORT_FORMATS.has(input.reportFormat)) {
-    out.reportFormat = input.reportFormat;
-  }
-
-  if (typeof input.requiredBy === 'string') {
-    const d = new Date(input.requiredBy);
-    if (!Number.isNaN(d.getTime())) out.requiredBy = d.toISOString();
-  }
-
-  return Object.keys(out).length ? out : null;
-}
-
-// ============================================================================
-// NEGOTIATION TURN + LIFECYCLE HELPERS
-// ============================================================================
-
+// Whose turn it is to respond to the current leaf quote.
+// PENDING (no counter yet) was created by the inspector, so the requester
+// must respond. COUNTERED flips based on who made the most recent counter.
 function quoteTurn(quote) {
   if (quote.status === 'PENDING') return 'REQUESTER';
-  if (quote.status === 'SELECTED') return null;
   if (quote.status === 'COUNTERED') {
     return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
   }
   return null;
-}
-
-async function findLeafQuote(tx, quoteId) {
-  return tx.inspectionQuote.findFirst({
-    where: { id: quoteId, childQuotes: { none: {} } },
-  });
-}
-
-async function findCompetingLiveQuote(tx, inspectionRequestId, exceptQuoteId) {
-  return tx.inspectionQuote.findFirst({
-    where: {
-      inspectionRequestId,
-      id: { not: exceptQuoteId },
-      status: { in: ['SELECTED', 'COUNTERED'] },
-      childQuotes: { none: {} },
-    },
-    select: { id: true, inspectorId: true, status: true },
-  });
 }
 
 function isQuoteExpired(quote) {
@@ -160,24 +55,9 @@ function quoteExpiry(hours = 24) {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
-function inspectionReleaseAfterHours() {
-  const configured = Number(process.env.INSPECTION_RELEASE_AFTER_HOURS);
-  return Number.isFinite(configured) && configured >= 0 ? configured : 72;
-}
-
-function inspectionReleaseAvailableAt(quote) {
-  if (!quote) return null;
-  const providerTurn =
-    quote.status === 'SELECTED' ||
-    (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
-  if (!providerTurn) return null;
-  const since = new Date(quote.updatedAt || quote.createdAt).getTime();
-  if (!Number.isFinite(since)) return null;
-  return new Date(since + inspectionReleaseAfterHours() * 60 * 60 * 1000);
-}
-
 // ============================================================================
 // CREATE INSPECTION REQUEST
+// Seller or buyer requests an inspection.
 // ============================================================================
 
 router.post(
@@ -190,10 +70,11 @@ router.post(
     body('mode')
       .isIn(['SELLER_REQUESTED', 'BUYER_REQUESTED', 'JOINT'])
       .withMessage('Invalid inspection mode'),
-    body('feePayer')
-      .optional()
-      .isIn(['BUYER', 'SELLER', 'SPLIT'])
-      .withMessage('feePayer must be BUYER, SELLER or SPLIT'),
+    body('inspectorId').optional({ nullable: true }).isString(),
+    body('fee')
+      .if(body('inspectorId').notEmpty())
+      .isFloat({ gt: 0 })
+      .withMessage('A fee is required when pre-selecting an inspector'),
   ],
   async (req, res) => {
     try {
@@ -202,10 +83,13 @@ router.post(
         return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
       }
 
-      const { orderId, listingId, mode } = req.body;
-      const requestedFeePayer = req.body.feePayer || (mode === 'SELLER_REQUESTED' ? 'SELLER' : mode === 'JOINT' ? 'SPLIT' : 'BUYER');
-      if (mode === 'SELLER_REQUESTED' && requestedFeePayer !== 'SELLER') return res.status(400).json({ error: 'Seller-requested inspections are seller-paid' });
-      if (mode === 'BUYER_REQUESTED' && requestedFeePayer !== 'BUYER') return res.status(400).json({ error: 'Buyer-requested inspections are buyer-paid' });
+      const {
+        orderId,
+        listingId,
+        mode,
+        inspectorId,
+        fee,
+      } = req.body;
 
       const order = await prisma.order.findUnique({
         where: { id: orderId },
@@ -217,28 +101,48 @@ router.post(
         return res.status(403).json({ error: 'Only the buyer or seller of the order can request inspection' });
       }
 
-      if (req.user.roles.includes('INSPECTOR') && (order.buyerId === req.user.id || order.sellerId === req.user.id || order.listing?.createdByInspectorId === req.user.id)) {
-        return res.status(403).json({ error: 'An inspector cannot request or perform an inspection on their own transaction or listing' });
-      }
-
-      if (['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(order.status)) {
+      if (order.status === 'CANCELLED' || order.status === 'COMPLETED') {
         return res.status(409).json({ error: `Inspection cannot be requested for an order that is ${order.status.toLowerCase()}` });
       }
 
-      if (!['AGRICULTURAL', 'PRODUCT'].includes(order.listing.category)) {
-        return res.status(400).json({ error: 'Inspections are only available for agricultural and product listings' });
+      if (order.listing.category !== 'AGRICULTURAL') {
+        return res.status(400).json({
+          error: 'Inspections are only available for agricultural listings',
+        });
       }
 
       const resolvedListingId = order.listingId;
 
-      if (req.body?.inspectorId || req.body?.fee) {
-        return res.status(400).json({
-          code: 'COMPETITIVE_INSPECTION_REQUIRED',
-          error: 'Choose an inspector from the submitted competitive quotes. Direct inspector selection is not available.',
+      if (inspectorId) {
+        const inspector = await prisma.user.findUnique({
+          where: { id: inspectorId },
         });
+
+        if (
+          !inspector ||
+          !inspector.roles.includes('INSPECTOR')
+        ) {
+          return res.status(400).json({
+            error: 'inspectorId does not belong to a registered inspector',
+          });
+        }
+
+        if (inspector.id === req.user.id) {
+          return res.status(400).json({
+            error: 'You cannot select yourself as the inspector',
+          });
+        }
       }
 
       const request = await prisma.$transaction(async (tx) => {
+        // An order may have only one active inspection workflow. The old UI
+        // exposed both "Request inspection" and "Find an inspector" even
+        // after an inspection already existed, which allowed duplicate
+        // requests on the same listing. A later pending request then blocked
+        // the agricultural goods payment even when an earlier inspection had
+        // already been completed. Reject a second active request at the
+        // database transaction boundary. Cancelled requests are historical
+        // records and do not block a new workflow.
         const existingActive = await tx.inspectionRequest.findFirst({
           where: { orderId: order.id, status: { not: 'CANCELLED' } },
           orderBy: { createdAt: 'desc' },
@@ -258,15 +162,11 @@ router.post(
             listingId: resolvedListingId,
             requestedById: req.user.id,
             mode,
+            // Preserve the location at the time the inspection was requested.
             location: order.listing.location || null,
-            inspectorId: null,
-            status: 'REQUESTED',
-            workflowDueAt: computeInspectionWorkflowDueAt(),
-            fee: null,
-            feePayer: requestedFeePayer,
-            buyerFeeAmount: null,
-            sellerFeeAmount: null,
-            workDetails: sanitizeWorkDetails(req.body?.workDetails),
+            inspectorId: inspectorId || null,
+            status: inspectorId ? 'ACCEPTED' : 'REQUESTED',
+            fee: inspectorId ? Number(fee) : null,
           },
           include: {
             listing: {
@@ -281,20 +181,16 @@ router.post(
           },
         });
 
-        if (order.id && order.status === 'PENDING_PAYMENT') {
-          await tx.order.update({ where: { id: order.id }, data: { paymentDueAt: computeInspectionWorkflowDueAt() } });
-        }
-
         await recordAuditEvent(tx, {
           actorId: req.user.id,
           action: 'INSPECTION_REQUEST_CREATED',
           resourceType: 'InspectionRequest',
           resourceId: created.id,
-          metadata: { orderId: order.id, listingId: resolvedListingId, mode, competitiveSelection: true },
+          metadata: { orderId: order.id, listingId: resolvedListingId, mode, inspectorId: inspectorId || null },
         });
 
         return created;
-      }, { maxWait: 10000, timeout: 15000 });
+      });
 
       return res.status(201).json({ request });
     } catch (error) {
@@ -307,75 +203,13 @@ router.post(
       }
 
       req.log.error({ err: error }, 'CREATE INSPECTION REQUEST ERROR:');
-      return res.status(500).json({ error: 'Could not create inspection request' });
+
+      return res.status(500).json({
+        error: 'Could not create inspection request',
+      });
     }
   }
 );
-
-// ============================================================================
-// CANCEL INSPECTION REQUEST
-// ============================================================================
-
-router.patch('/:id/cancel', authenticate, async (req, res) => {
-  try {
-    const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { order: true } });
-    if (!request) return res.status(404).json({ error: 'Inspection request not found' });
-    if (!request.order) return res.status(409).json({ error: 'This inspection is not attached to an order' });
-    if (request.order.buyerId !== req.user.id && request.order.sellerId !== req.user.id && !req.user.roles.includes('ADMIN')) return res.status(403).json({ error: 'Only an order participant can cancel this inspection request' });
-    if (request.status === 'CANCELLED') return res.json({ message: 'Inspection request is already cancelled', request });
-    if (['COMPLETED', 'IN_PROGRESS'].includes(request.status)) return res.status(409).json({ error: `An inspection cannot be cancelled while it is ${request.status.toLowerCase()}` });
-
-    const activePayment = await prisma.payment.findFirst({ where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true, status: true } });
-    if (activePayment) return res.status(409).json({ error: 'This inspection cannot be cancelled after inspection payment has started or completed' });
-
-    const cancelled = await prisma.$transaction(async (tx) => {
-      await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection cannot be cancelled until the order dispute is resolved');
-      const fresh = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
-      if (!fresh) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
-      if (['COMPLETED', 'IN_PROGRESS'].includes(fresh.status)) throw Object.assign(new Error(`An inspection cannot be cancelled while it is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
-      const updated = await tx.inspectionRequest.update({ where: { id: fresh.id }, data: { inspectorId: null, fee: null, status: 'CANCELLED' } });
-      await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } }, data: { status: 'EXPIRED' } });
-      await closeCoordination(tx, fresh.id, 'INSPECTION_CANCELLED');
-      await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_REQUEST_CANCELLED', resourceType: 'InspectionRequest', resourceId: fresh.id, metadata: { orderId: fresh.orderId } });
-      return updated;
-    }, { maxWait: 10000, timeout: 15000 });
-    return res.json({ message: 'Inspection request cancelled. You can open a new inspection request for this order.', request: cancelled });
-  } catch (error) {
-    req.log.error({ err: error }, 'CANCEL INSPECTION REQUEST ERROR:');
-    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not cancel inspection request' });
-  }
-});
-
-// ============================================================================
-// REOPEN INSPECTION BIDDING
-// ============================================================================
-
-router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
-  try {
-    const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { order: true } });
-    if (!request) return res.status(404).json({ error: 'Inspection request not found' });
-    if (!['REQUESTED', 'ACCEPTED', 'STALLED'].includes(request.status)) return res.status(409).json({ error: `Inspection bidding cannot be reopened while the request is ${request.status.toLowerCase()}` });
-
-    const activePayment = await prisma.payment.findFirst({ where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true, status: true } });
-    if (activePayment) return res.status(409).json({ error: 'Bidding cannot be reopened after inspection payment has started or completed' });
-
-    const reopened = await prisma.$transaction(async (tx) => {
-      await lockOrderAndAssertNotClosed(tx, request.orderId, 'inspection bidding cannot be reopened until the order dispute is resolved');
-      const fresh = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
-      if (!fresh) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
-      if (!['REQUESTED', 'ACCEPTED', 'STALLED'].includes(fresh.status)) throw Object.assign(new Error(`Inspection bidding cannot be reopened while the request is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
-      await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
-      const updated = await tx.inspectionRequest.update({ where: { id: fresh.id }, data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' } });
-      await closeCoordination(tx, fresh.id, 'ADMIN_REOPENED_BIDDING');
-      await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_BIDDING_REOPENED', resourceType: 'InspectionRequest', resourceId: fresh.id, metadata: { orderId: fresh.orderId } });
-      return updated;
-    }, { maxWait: 10000, timeout: 15000 });
-    return res.json({ message: 'Inspection bidding reopened. Previous bids were expired.', request: reopened });
-  } catch (error) {
-    req.log.error({ err: error }, 'REOPEN INSPECTION BIDDING ERROR:');
-    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not reopen inspection bidding' });
-  }
-});
 
 // ============================================================================
 // FIND INSPECTORS
@@ -387,9 +221,20 @@ router.get('/inspectors', authenticate, async (req, res) => {
 
     const inspectors = await prisma.user.findMany({
       where: {
-        roles: { has: 'INSPECTOR' },
-        ...(location ? { location: { contains: location, mode: 'insensitive' } } : {}),
+        roles: {
+          has: 'INSPECTOR',
+        },
+
+        ...(location
+          ? {
+              location: {
+                contains: location,
+                mode: 'insensitive',
+              },
+            }
+          : {}),
       },
+
       select: {
         id: true,
         name: true,
@@ -397,13 +242,24 @@ router.get('/inspectors', authenticate, async (req, res) => {
         location: true,
         verificationStatus: true,
       },
-      orderBy: [{ rating: 'desc' }, { name: 'asc' }],
+
+      orderBy: [
+        {
+          rating: 'desc',
+        },
+        {
+          name: 'asc',
+        },
+      ],
     });
 
     return res.json({ inspectors });
   } catch (error) {
     req.log.error({ err: error }, 'GET INSPECTORS ERROR:');
-    return res.status(500).json({ error: 'Could not load inspectors' });
+
+    return res.status(500).json({
+      error: 'Could not load inspectors',
+    });
   }
 });
 
@@ -423,8 +279,17 @@ router.get(
         where: {
           status: 'REQUESTED',
           inspectorId: null,
-          ...(location ? { location: { contains: location, mode: 'insensitive' } } : {}),
+
+          ...(location
+            ? {
+                location: {
+                  contains: location,
+                  mode: 'insensitive',
+                },
+              }
+            : {}),
         },
+
         include: {
           listing: {
             select: {
@@ -437,14 +302,26 @@ router.get(
               category: true,
             },
           },
+
           requestedBy: {
-            select: { id: true, name: true, rating: true },
+            select: {
+              id: true,
+              name: true,
+              rating: true,
+            },
           },
+
+          // Sealed-bid: an inspector browsing open requests only ever sees
+          // their OWN quote here, never anyone else's amount, message, or
+          // even the fact that other quotes exist. The requester is the
+          // only party who can see the full quote list, via the separate
+          // GET /:id/quotes route below.
           quotes: {
             where: {
               status: { in: ['PENDING', 'COUNTERED', 'ACCEPTED', 'REJECTED'] },
               inspectorId: req.user.id,
             },
+
             select: {
               id: true,
               inspectorId: true,
@@ -457,16 +334,23 @@ router.get(
               expiresAt: true,
               createdAt: true,
             },
+
             orderBy: { createdAt: 'asc' },
           },
         },
-        orderBy: { createdAt: 'desc' },
+
+        orderBy: {
+          createdAt: 'desc',
+        },
       });
 
       return res.json({ requests });
     } catch (error) {
       req.log.error({ err: error }, 'AVAILABLE INSPECTIONS ERROR:');
-      return res.status(500).json({ error: 'Could not load available inspections' });
+
+      return res.status(500).json({
+        error: 'Could not load available inspections',
+      });
     }
   }
 );
@@ -481,14 +365,17 @@ router.post(
   requireRole('INSPECTOR'),
   [
     param('id').notEmpty(),
-    body('amount').custom(validAmount(AMOUNT_LIMITS.inspection)),
+
+    body('amount')
+      .isFloat({ gt: 0 })
+      .withMessage('Quote amount must be greater than zero'),
+
     body('message')
       .optional({ nullable: true })
       .isString()
       .trim()
       .isLength({ max: 1000 })
-      .withMessage('Quote message is too long')
-      .custom(noContactInfo),
+      .withMessage('Quote message is too long'),
   ],
   async (req, res) => {
     try {
@@ -501,31 +388,34 @@ router.post(
       }
 
       const request = await prisma.inspectionRequest.findUnique({
-        where: { id: req.params.id },
+        where: {
+          id: req.params.id,
+        },
       });
 
       if (!request) {
-        return res.status(404).json({ error: 'Inspection request not found' });
+        return res.status(404).json({
+          error: 'Inspection request not found',
+        });
       }
 
       if (request.status !== 'REQUESTED') {
-        return res.status(400).json({ error: 'This inspection is no longer accepting quotes' });
-      }
-
-      const quoteOrder = request.orderId ? await prisma.order.findUnique({ where: { id: request.orderId }, select: { buyerId: true, sellerId: true, listing: { select: { createdByInspectorId: true } } } }) : null;
-      if (req.user.id === quoteOrder?.buyerId || req.user.id === quoteOrder?.sellerId || req.user.id === quoteOrder?.listing?.createdByInspectorId) {
-        return res.status(403).json({ error: 'You cannot inspect or quote on your own transaction or listing' });
+        return res.status(400).json({
+          error: 'This inspection is no longer accepting quotes',
+        });
       }
 
       if (request.requestedById === req.user.id) {
-        return res.status(403).json({ error: 'You cannot quote on your own inspection request' });
+        return res.status(403).json({
+          error: 'You cannot quote on your own inspection request',
+        });
       }
 
       const existing = await prisma.inspectionQuote.findFirst({
         where: {
           inspectionRequestId: request.id,
           inspectorId: req.user.id,
-          status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
+          status: { in: ['PENDING', 'COUNTERED'] },
           childQuotes: { none: {} },
         },
       });
@@ -537,8 +427,6 @@ router.post(
       }
 
       const quote = await prisma.$transaction(async (tx) => {
-        await lockOrderAndAssertNotClosed(tx, request.orderId, 'an inspection quote cannot be submitted until the order dispute is resolved');
-
         const created = await tx.inspectionQuote.create({
           data: {
             inspectionRequestId: request.id,
@@ -570,18 +458,24 @@ router.post(
         });
 
         return created;
-      }, { maxWait: 10000, timeout: 15000 });
+      });
 
-      return res.status(201).json({ quote });
+      return res.status(201).json({
+        quote,
+      });
     } catch (error) {
       req.log.error({ err: error }, 'CREATE INSPECTION QUOTE ERROR:');
-      return res.status(500).json({ error: 'Could not submit inspection quote' });
+
+      return res.status(500).json({
+        error: 'Could not submit inspection quote',
+      });
     }
   }
 );
 
 // ============================================================================
 // VIEW QUOTES FOR AN INSPECTION
+// Only the requester can view the quote marketplace.
 // ============================================================================
 
 router.get(
@@ -590,20 +484,36 @@ router.get(
   async (req, res) => {
     try {
       const request = await prisma.inspectionRequest.findUnique({
-        where: { id: req.params.id },
-        select: { id: true, requestedById: true },
+        where: {
+          id: req.params.id,
+        },
+
+        select: {
+          id: true,
+          requestedById: true,
+        },
       });
 
       if (!request) {
-        return res.status(404).json({ error: 'Inspection request not found' });
+        return res.status(404).json({
+          error: 'Inspection request not found',
+        });
       }
 
-      if (request.requestedById !== req.user.id && !req.user.roles.includes('ADMIN')) {
-        return res.status(403).json({ error: 'Only the inspection requester can view quotes' });
+      if (
+        request.requestedById !== req.user.id &&
+        !req.user.roles.includes('ADMIN')
+      ) {
+        return res.status(403).json({
+          error: 'Only the inspection requester can view quotes',
+        });
       }
 
       const quotes = await prisma.inspectionQuote.findMany({
-        where: { inspectionRequestId: request.id },
+        where: {
+          inspectionRequestId: request.id,
+        },
+
         include: {
           inspector: {
             select: {
@@ -615,37 +525,46 @@ router.get(
             },
           },
         },
-        orderBy: [{ status: 'asc' }, { amount: 'asc' }, { createdAt: 'asc' }],
+
+        orderBy: [
+          {
+            status: 'asc',
+          },
+          {
+            amount: 'asc',
+          },
+          {
+            createdAt: 'asc',
+          },
+        ],
       });
 
-      return res.json({ quotes });
+      return res.json({
+        quotes,
+      });
     } catch (error) {
       req.log.error({ err: error }, 'GET INSPECTION QUOTES ERROR:');
-      return res.status(500).json({ error: 'Could not load inspection quotes' });
+
+      return res.status(500).json({
+        error: 'Could not load inspection quotes',
+      });
     }
   }
 );
 
 // ============================================================================
-// SHARED LOOKUP: request + leaf quote, with the caller's role
+// SHARED LOOKUP: request + leaf quote, with the caller's role in the
+// negotiation (REQUESTER or PROVIDER/inspector). Returns null + a response
+// already sent if anything is invalid.
 // ============================================================================
 
 async function loadQuoteForNegotiation(req, res) {
   const request = await prisma.inspectionRequest.findUnique({
     where: { id: req.params.id },
-    include: { order: { select: { id: true, status: true } } },
   });
 
   if (!request) {
     res.status(404).json({ error: 'Inspection request not found' });
-    return null;
-  }
-
-  if (['DISPUTED', 'CANCELLED'].includes(request.order?.status)) {
-    res.status(409).json({
-      code: 'ORDER_DISPUTED',
-      error: `This order is ${request.order.status.toLowerCase()}. Inspection quote proceedings are paused until it is resolved.`,
-    });
     return null;
   }
 
@@ -670,51 +589,9 @@ async function loadQuoteForNegotiation(req, res) {
 }
 
 // ============================================================================
-// SELECT INSPECTION BID FOR DEAL NEGOTIATION
-// ============================================================================
-
-router.patch(
-  '/:id/quotes/:quoteId/select',
-  authenticate,
-  async (req, res) => {
-    try {
-      const loaded = await loadQuoteForNegotiation(req, res);
-      if (!loaded) return;
-      const { request, quote, actorRole } = loaded;
-      if (actorRole !== 'REQUESTER') return res.status(403).json({ error: 'Only the requester can select an inspection bid' });
-      if (request.status !== 'REQUESTED') return res.status(400).json({ error: 'This inspection is no longer accepting bids' });
-      if (quote.status !== 'PENDING') return res.status(400).json({ error: `Only a pending bid can be selected (current: ${quote.status})` });
-      if (isQuoteExpired(quote)) return res.status(409).json({ error: 'This quote has expired' });
-
-      const selected = await prisma.$transaction(async (tx) => {
-        const fresh = await findLeafQuote(tx, quote.id);
-        if (!fresh || fresh.status !== 'PENDING') {
-          throw quoteError('This bid is no longer available', 409);
-        }
-        if (isQuoteExpired(fresh)) {
-          throw quoteError('This bid has expired', 409);
-        }
-
-        const competing = await findCompetingLiveQuote(tx, request.id, fresh.id);
-        if (competing) {
-          throw quoteError(
-            'Another inspector bid is already in negotiation. Resolve it before selecting a different bid.',
-            409
-          );
-        }
-
-        return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
-      }, { maxWait: 10000, timeout: 15000 });
-      return res.json({ message: 'Inspector bid selected for price negotiation', quote: selected });
-    } catch (error) {
-      req.log.error({ err: error }, 'SELECT INSPECTION QUOTE ERROR:');
-      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not select inspection bid' });
-    }
-  }
-);
-
-// ============================================================================
 // ACCEPT INSPECTION QUOTE
+// Either the requester accepts the inspector's (counter-)offer, or the
+// inspector accepts the requester's counter — whichever party's turn it is.
 // ============================================================================
 
 router.patch(
@@ -727,19 +604,22 @@ router.patch(
       const { request, quote, actorRole } = loaded;
 
       if (request.status !== 'REQUESTED') {
-        return res.status(400).json({ error: 'This inspection is no longer accepting quotes' });
+        return res.status(400).json({
+          error: 'This inspection is no longer accepting quotes',
+        });
       }
 
-      if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
-        return res.status(400).json({ error: 'This quote is no longer available' });
+      if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
+        return res.status(400).json({
+          error: 'This quote is no longer available',
+        });
       }
 
       if (isQuoteExpired(quote)) {
         return res.status(409).json({ error: 'This quote has expired' });
       }
 
-      const turn = quoteTurn(quote);
-      if (turn !== null && turn !== actorRole) {
+      if (quoteTurn(quote) !== actorRole) {
         return res.status(409).json({
           error: 'It is the other party\u2019s turn to respond to this negotiation',
         });
@@ -748,33 +628,17 @@ router.patch(
       const finalAmount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
 
       const result = await prisma.$transaction(async (tx) => {
-        await lockOrderAndAssertNotClosed(tx, request.orderId, 'an inspection quote cannot be accepted until the order dispute is resolved');
-
-        const fresh = await findLeafQuote(tx, quote.id);
-        if (!fresh || !['SELECTED', 'COUNTERED'].includes(fresh.status)) {
-          throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
-        }
-
         const claim = await tx.inspectionRequest.updateMany({
           where: {
             id: request.id,
             status: 'REQUESTED',
             inspectorId: null,
           },
+
           data: {
-            inspectorId: fresh.inspectorId,
+            inspectorId: quote.inspectorId,
             fee: finalAmount,
-            feePayer: request.feePayer,
-            buyerFeeAmount: request.feePayer === 'SELLER' ? null : request.feePayer === 'SPLIT' ? Math.round(finalAmount * 50) / 100 : finalAmount,
-            sellerFeeAmount: request.feePayer === 'BUYER' ? null : request.feePayer === 'SPLIT' ? Math.round((finalAmount - Math.round(finalAmount * 50) / 100) * 100) / 100 : finalAmount,
             status: 'ACCEPTED',
-            startDueAt: null,
-            completionDueAt: null,
-            startedAt: null,
-            completedAt: null,
-            sellerConfirmedAt: null,
-            sellerMessage: null,
-            sellerMessageAt: null,
           },
         });
 
@@ -782,20 +646,37 @@ router.patch(
           throw new Error('INSPECTION_ALREADY_CLAIMED');
         }
 
+        // Close out every other negotiation thread on this request.
+        await tx.inspectionQuote.updateMany({
+          where: {
+            inspectionRequestId: request.id,
+            status: { in: ['PENDING', 'COUNTERED'] },
+            id: { not: quote.id },
+          },
+          data: { status: 'REJECTED' },
+        });
+
         const acceptedQuote = await tx.inspectionQuote.update({
-          where: { id: fresh.id },
+          where: {
+            id: quote.id,
+          },
+
           data: {
             status: 'ACCEPTED',
             amount: finalAmount,
           },
+
           include: {
             inspector: {
-              select: { id: true, name: true, rating: true, location: true },
+              select: {
+                id: true,
+                name: true,
+                rating: true,
+                location: true,
+              },
             },
           },
         });
-
-        await ensureOpenCoordination(tx, request.id);
 
         const relatedOrders = await tx.order.findMany({
           where: { id: request.orderId },
@@ -824,22 +705,33 @@ router.patch(
         });
 
         return acceptedQuote;
-      }, { maxWait: 10000, timeout: 15000 });
+      });
 
-      return res.json({ message: 'Inspection quote accepted', quote: result });
+      return res.json({
+        message: 'Inspection quote accepted',
+        quote: result,
+      });
     } catch (error) {
       if (error.message === 'INSPECTION_ALREADY_CLAIMED') {
-        return res.status(409).json({ error: 'This inspection was already assigned to another inspector' });
+        return res.status(409).json({
+          error: 'This inspection was already assigned to another inspector',
+        });
       }
 
       req.log.error({ err: error }, 'ACCEPT INSPECTION QUOTE ERROR:');
-      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not accept inspection quote' });
+
+      return res.status(500).json({
+        error: 'Could not accept inspection quote',
+      });
     }
   }
 );
 
 // ============================================================================
 // COUNTER INSPECTION QUOTE
+// Requester and inspector can go back and forth on price, same pattern as
+// buyer <-> seller offer negotiation. Whoever it is NOT waiting on can
+// propose a new amount, which becomes a new child quote in the chain.
 // ============================================================================
 
 router.post(
@@ -848,8 +740,8 @@ router.post(
   [
     param('id').notEmpty(),
     param('quoteId').notEmpty(),
-    body('counterAmount').custom(validAmount(AMOUNT_LIMITS.inspection)),
-    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }).custom(noContactInfo),
+    body('counterAmount').isFloat({ gt: 0 }).withMessage('counterAmount must be greater than zero'),
+    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }),
   ],
   async (req, res) => {
     try {
@@ -864,7 +756,7 @@ router.post(
         return res.status(400).json({ error: 'This inspection is no longer accepting quotes' });
       }
 
-      if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
+      if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
         return res.status(400).json({ error: `Quote cannot be countered because it is ${quote.status}` });
       }
 
@@ -872,8 +764,7 @@ router.post(
         return res.status(409).json({ error: 'This quote has expired' });
       }
 
-      const outerTurn = quoteTurn(quote);
-      if (outerTurn !== null && outerTurn !== actorRole) {
+      if (quoteTurn(quote) !== actorRole) {
         return res.status(409).json({
           error: 'It is the other party\u2019s turn to respond to this negotiation',
         });
@@ -882,37 +773,31 @@ router.post(
       const counterAmount = Number(req.body.counterAmount);
 
       const counterQuote = await prisma.$transaction(async (tx) => {
-        await lockOrderAndAssertNotClosed(tx, request.orderId, 'an inspection quote cannot be countered until the order dispute is resolved');
-
-        const freshQuote = await findLeafQuote(tx, quote.id);
-        if (!freshQuote) {
-          throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
-        }
-        if (!['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
+        const freshQuote = await tx.inspectionQuote.findUnique({ where: { id: quote.id } });
+        if (!freshQuote) throw quoteError('Inspection quote not found', 404);
+        if (!['PENDING', 'COUNTERED'].includes(freshQuote.status)) {
           throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
         }
-
-        const freshTurn = quoteTurn(freshQuote);
-        if (freshTurn !== null && freshTurn !== actorRole) {
+        if (quoteTurn(freshQuote) !== actorRole) {
           throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
         }
 
-        const competing = await findCompetingLiveQuote(tx, request.id, freshQuote.id);
-        if (competing) {
-          throw quoteError(
-            'Another inspector bid is already in negotiation. Resolve it before countering a different bid.',
-            409
-          );
-        }
-
-        const updated = await tx.inspectionQuote.update({
+        await tx.inspectionQuote.update({
           where: { id: freshQuote.id },
+          data: { status: 'COUNTERED' },
+        });
+
+        const created = await tx.inspectionQuote.create({
           data: {
-            status: 'COUNTERED',
+            inspectionRequestId: request.id,
+            inspectorId: freshQuote.inspectorId,
+            amount: counterAmount,
             counterAmount,
             counteredBy: actorRole,
-            message: req.body.message || freshQuote.message,
+            status: 'COUNTERED',
+            parentQuoteId: freshQuote.id,
             expiresAt: quoteExpiry(12),
+            message: req.body.message || freshQuote.message,
           },
           include: {
             inspector: { select: { id: true, name: true, rating: true, location: true } },
@@ -923,17 +808,18 @@ router.post(
           actorId: req.user.id,
           action: 'INSPECTION_QUOTE_COUNTERED',
           resourceType: 'InspectionQuote',
-          resourceId: updated.id,
+          resourceId: created.id,
           metadata: {
             inspectionRequestId: request.id,
+            parentQuoteId: freshQuote.id,
             counteredBy: actorRole,
-            previousAmount: String(freshQuote.counterAmount ?? freshQuote.amount),
-            counterAmount: String(counterAmount),
+            previousAmount: freshQuote.counterAmount ?? freshQuote.amount,
+            counterAmount,
           },
         });
 
-        return updated;
-      }, { maxWait: 10000, timeout: 15000 });
+        return created;
+      });
 
       return res.status(201).json({
         message: actorRole === 'REQUESTER'
@@ -947,192 +833,15 @@ router.post(
       }
 
       req.log.error({ err: error }, 'COUNTER INSPECTION QUOTE ERROR:');
+
       return res.status(500).json({ error: 'Could not counter inspection quote' });
     }
   }
 );
 
 // ============================================================================
-// RELEASE PROVISIONAL AGREEMENT OR SILENT SELECTED INSPECTOR
-// ============================================================================
-
-router.patch(
-  '/:id/quotes/:quoteId/withdraw',
-  authenticate,
-  async (req, res) => {
-    try {
-      const loaded = await loadQuoteForNegotiation(req, res);
-      if (!loaded) return;
-      const { request, quote, actorRole } = loaded;
-
-      if (actorRole !== 'REQUESTER') {
-        return res.status(403).json({ error: 'Only the requester can release this negotiation' });
-      }
-
-      const isAcceptedRelease = quote.status === 'ACCEPTED';
-      const isSilentRelease =
-        quote.status === 'SELECTED' ||
-        (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
-
-      if (!isAcceptedRelease && !isSilentRelease) {
-        return res.status(400).json({
-          error: `This quote cannot be released in its current state (current: ${quote.status})`,
-        });
-      }
-
-      if (isSilentRelease) {
-        const availableAt = inspectionReleaseAvailableAt(quote);
-        if (availableAt && availableAt.getTime() > Date.now()) {
-          return res.status(409).json({
-            error: `This inspector has not been inactive long enough. You can release them from ${availableAt.toISOString()}.`,
-            releaseAvailableAt: availableAt,
-          });
-        }
-      }
-
-      const result = await prisma.$transaction(async (tx) => {
-        await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection agreement cannot be released until the order dispute is resolved');
-
-        const activePayment = await tx.payment.findFirst({
-          where: {
-            inspectionRequestId: request.id,
-            type: 'INSPECTOR',
-            status: { in: ['PENDING', 'PROCESSING', 'PAID'] },
-          },
-          select: { id: true, status: true },
-        });
-        if (activePayment) {
-          throw quoteError('This inspector cannot be released after inspection payment has started or completed', 409);
-        }
-
-        const freshQuote = await findLeafQuote(tx, quote.id);
-        if (!freshQuote) {
-          throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
-        }
-
-        if (isAcceptedRelease) {
-          const freshRequest = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
-          if (!freshRequest || freshRequest.status !== 'ACCEPTED' || freshRequest.inspectorId !== freshQuote.inspectorId) {
-            throw quoteError('This provisional inspection agreement is no longer active', 409);
-          }
-        } else {
-          const freshAvailableAt = inspectionReleaseAvailableAt(freshQuote);
-          if (freshAvailableAt && freshAvailableAt.getTime() > Date.now()) {
-            throw quoteError('This negotiation changed. Refresh and try again.', 409);
-          }
-        }
-
-        const updatedQuote = await tx.inspectionQuote.update({
-          where: { id: freshQuote.id },
-          data: { status: 'WITHDRAWN' },
-        });
-
-        if (isAcceptedRelease) {
-          await tx.inspectionRequest.update({
-            where: { id: request.id },
-            data: {
-              inspectorId: null,
-              fee: null,
-              buyerFeeAmount: null,
-              sellerFeeAmount: null,
-              sellerConfirmedAt: null,
-              startDueAt: null,
-              completionDueAt: null,
-              startedAt: null,
-              status: 'REQUESTED',
-            },
-          });
-        }
-
-        await closeCoordination(tx, request.id, isAcceptedRelease ? 'INSPECTOR_WITHDREW' : 'SILENT_INSPECTOR_RELEASED');
-
-        await recordAuditEvent(tx, {
-          actorId: req.user.id,
-          action: isAcceptedRelease ? 'INSPECTION_QUOTE_WITHDRAWN' : 'INSPECTION_SILENT_INSPECTOR_RELEASED',
-          resourceType: 'InspectionQuote',
-          resourceId: updatedQuote.id,
-          metadata: {
-            inspectionRequestId: request.id,
-            inspectorId: freshQuote.inspectorId,
-            releasedBy: actorRole,
-            previousStatus: freshQuote.status,
-          },
-        });
-
-        return updatedQuote;
-      }, { maxWait: 10000, timeout: 15000 });
-
-      return res.json({
-        message: isAcceptedRelease
-          ? 'Provisional inspector agreement released. Other inspector bids are available again.'
-          : 'Silent inspector released. Other inspector bids are available again.',
-        quote: result,
-      });
-    } catch (error) {
-      if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
-      req.log.error({ err: error }, 'WITHDRAW INSPECTION QUOTE ERROR:');
-      return res.status(500).json({ error: 'Could not release inspection agreement' });
-    }
-  }
-);
-
-// ============================================================================
-// INSPECTOR WITHDRAWS A WAITING BID
-// ============================================================================
-
-router.post(
-  '/:id/quotes/:quoteId/withdraw-bid',
-  authenticate,
-  requireRole('INSPECTOR'),
-  async (req, res) => {
-    try {
-      const loaded = await loadQuoteForNegotiation(req, res);
-      if (!loaded) return;
-      const { request, quote, actorRole } = loaded;
-
-      if (actorRole !== 'PROVIDER') {
-        return res.status(403).json({ error: 'Only the inspector who submitted the bid can withdraw it' });
-      }
-
-      if (quote.status !== 'PENDING') {
-        return res.status(409).json({
-          error: `Only a waiting bid can be withdrawn (current: ${quote.status})`,
-        });
-      }
-
-      const withdrawn = await prisma.$transaction(async (tx) => {
-        const fresh = await findLeafQuote(tx, quote.id);
-        if (!fresh || fresh.status !== 'PENDING') {
-          throw quoteError('This bid is no longer waiting. Refresh and try again.', 409);
-        }
-
-        const updated = await tx.inspectionQuote.update({
-          where: { id: fresh.id },
-          data: { status: 'WITHDRAWN' },
-        });
-
-        await recordAuditEvent(tx, {
-          actorId: req.user.id,
-          action: 'INSPECTION_QUOTE_WITHDRAWN_BY_PROVIDER',
-          resourceType: 'InspectionQuote',
-          resourceId: updated.id,
-          metadata: { inspectionRequestId: request.id, inspectorId: fresh.inspectorId },
-        });
-
-        return updated;
-      }, { maxWait: 10000, timeout: 15000 });
-
-      return res.json({ message: 'Your bid has been withdrawn.', quote: withdrawn });
-    } catch (error) {
-      if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
-      req.log.error({ err: error }, 'INSPECTOR WITHDRAW BID ERROR:');
-      return res.status(500).json({ error: 'Could not withdraw bid' });
-    }
-  }
-);
-
-// ============================================================================
 // REJECT INSPECTION QUOTE
+// Either party can end a negotiation thread when it's their turn to respond.
 // ============================================================================
 
 router.patch(
@@ -1144,33 +853,19 @@ router.patch(
       if (!loaded) return;
       const { quote, actorRole } = loaded;
 
-      if (quote.status === 'PENDING') {
-        return res.status(409).json({
-          error: 'Waiting bids cannot be rejected. Select the bid you want to negotiate with; the others will keep waiting.',
-        });
-      }
-
-      if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
+      if (!['PENDING', 'COUNTERED'].includes(quote.status)) {
         return res.status(400).json({ error: `Quote cannot be rejected because it is ${quote.status}` });
       }
 
-      const turn = quoteTurn(quote);
-      if (turn !== null && turn !== actorRole) {
+      if (quoteTurn(quote) !== actorRole) {
         return res.status(409).json({
           error: 'It is the other party\u2019s turn to respond to this negotiation',
         });
       }
 
       const updated = await prisma.$transaction(async (tx) => {
-        await lockOrderAndAssertNotClosed(tx, loaded.request.orderId, 'an inspection quote cannot be rejected until the order dispute is resolved');
-
-        const fresh = await findLeafQuote(tx, quote.id);
-        if (!fresh || !['SELECTED', 'COUNTERED'].includes(fresh.status)) {
-          throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
-        }
-
         const rejected = await tx.inspectionQuote.update({
-          where: { id: fresh.id },
+          where: { id: quote.id },
           data: { status: 'REJECTED' },
         });
 
@@ -1183,11 +878,10 @@ router.patch(
         });
 
         return rejected;
-      }, { maxWait: 10000, timeout: 15000 });
+      });
 
       return res.json({ message: 'Quote rejected', quote: updated });
     } catch (error) {
-      if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
       req.log.error({ err: error }, 'REJECT INSPECTION QUOTE ERROR:');
       return res.status(500).json({ error: 'Could not reject inspection quote' });
     }
@@ -1195,89 +889,133 @@ router.patch(
 );
 
 // ============================================================================
-// INSPECTION ASSIGNMENT (legacy — disabled)
+// BACKWARD-COMPATIBLE DIRECT ACCEPT
+// Existing inspector workflow remains supported.
 // ============================================================================
 
-router.patch('/:id/accept', authenticate, requireRole('INSPECTOR'), async (req, res) => {
-  return res.status(410).json({
-    error: 'Direct inspection acceptance is no longer supported. Submit a competitive quote; the requester selects and negotiates the winning bid.',
-  });
-});
+router.patch(
+  '/:id/accept',
+  authenticate,
+  requireRole('INSPECTOR'),
+  [
+    body('fee')
+      .isFloat({ gt: 0 })
+      .withMessage('A fee greater than zero is required to accept a request'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          error: errors.array()[0]?.msg || 'Validation failed',
+          errors: errors.array(),
+        });
+      }
 
-// ============================================================================
-// Seller review queue: the seller must confirm before the inspector can start.
-// ============================================================================
+      const request = await prisma.inspectionRequest.findUnique({
+        where: {
+          id: req.params.id,
+        },
+      });
 
-router.get('/seller-pending', authenticate, requireRole('SELLER'), async (req, res) => {
-  try {
-    const requests = await prisma.inspectionRequest.findMany({
-      where: { listing: { sellerId: req.user.id }, status: { in: ['ACCEPTED', 'IN_PROGRESS', 'STALLED', 'COMPLETED'] } },
-      include: {
-        listing: { select: { id: true, title: true, cropType: true, location: true } },
-        requestedBy: { select: { id: true, name: true } },
-        inspector: { select: { id: true, name: true } },
-        quotes: { where: { status: { not: 'REJECTED' } }, select: { id: true, inspectorId: true, amount: true, status: true, message: true }, orderBy: { createdAt: 'asc' } },
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
-    return res.json({ requests });
-  } catch (error) {
-    req.log.error({ err: error }, 'SELLER INSPECTION QUEUE ERROR');
-    return res.status(500).json({ error: 'Could not load inspections awaiting seller review' });
-  }
-});
+      if (!request) {
+        return res.status(404).json({
+          error: 'Request not found',
+        });
+      }
 
-router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (req, res) => {
-  try {
-    const request = await prisma.inspectionRequest.findUnique({
-      where: { id: req.params.id }, include: { listing: true },
-    });
-    if (!request) return res.status(404).json({ error: 'Inspection request not found' });
-    if (request.listing.sellerId !== req.user.id) return res.status(403).json({ error: 'Only the listing seller can confirm this inspection' });
-    if (request.status !== 'ACCEPTED' || !request.inspectorId) return res.status(409).json({ error: 'Only a provisionally agreed inspection can be confirmed' });
-    const updated = await prisma.inspectionRequest.updateMany({
-      where: { id: request.id, status: 'ACCEPTED', inspectorId: request.inspectorId, sellerConfirmedAt: null },
-      data: { sellerConfirmedAt: new Date(), startDueAt: computeInspectionStartDueAt(), sellerMessage: typeof req.body?.message === 'string' ? req.body.message.trim().slice(0, 500) : null, sellerMessageAt: req.body?.message ? new Date() : null },
-    });
-    if (!updated.count) return res.status(409).json({ error: 'Inspection was already confirmed or its status changed' });
-    await prisma.$transaction(async (tx) => {
-      await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_SELLER_CONFIRMED', resourceType: 'InspectionRequest', resourceId: request.id, metadata: { inspectorId: request.inspectorId, message: req.body?.message || null } });
-      if (request.orderId) await recordOrderEvent(tx, { orderId: request.orderId, actorId: req.user.id, type: 'INSPECTION_ACCEPTED', metadata: { inspectionRequestId: request.id, sellerConfirmed: true, message: req.body?.message || null } });
-    });
-    return res.json({ message: 'Inspection confirmed. The inspector may now start work.', sellerConfirmedAt: new Date().toISOString() });
-  } catch (error) {
-    req.log.error({ err: error }, 'SELLER INSPECTION CONFIRM ERROR');
-    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not confirm inspection' });
-  }
-});
+      if (
+        request.status !== 'REQUESTED' ||
+        request.inspectorId
+      ) {
+        return res.status(400).json({
+          error: `This request is already ${
+            request.inspectorId
+              ? 'assigned'
+              : request.status.toLowerCase()
+          } and cannot be accepted`,
+        });
+      }
 
-router.post('/:id/seller-message', authenticate, requireRole('SELLER'), async (req, res) => {
-  try {
-    const message = String(req.body?.message || '').trim();
-    if (!message || message.length > 500) return res.status(400).json({ error: 'Message must contain 1–500 characters' });
-    const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { listing: true } });
-    if (!request) return res.status(404).json({ error: 'Inspection request not found' });
-    if (request.listing.sellerId !== req.user.id) return res.status(403).json({ error: 'Only the listing seller can send inspection instructions' });
+      const claim = await prisma.inspectionRequest.updateMany({
+        where: {
+          id: req.params.id,
+          status: 'REQUESTED',
+          inspectorId: null,
+        },
 
-    if (!['ACCEPTED', 'IN_PROGRESS', 'STALLED'].includes(request.status)) {
-      return res.status(409).json({
-        error: 'Seller instructions can only be added after an inspector has been accepted for this inspection.',
+        data: {
+          inspectorId: req.user.id,
+          status: 'ACCEPTED',
+          fee: Number(req.body.fee),
+        },
+      });
+
+      if (claim.count === 0) {
+        return res.status(409).json({
+          error: 'This request was just claimed by another inspector',
+        });
+      }
+
+      await recordAuditEvent(prisma, {
+        actorId: req.user.id,
+        action: 'INSPECTION_ASSIGNED',
+        resourceType: 'InspectionRequest',
+        resourceId: req.params.id,
+        metadata: { fee: Number(req.body.fee), inspectorId: req.user.id },
+      });
+
+      const updated = await prisma.inspectionRequest.findUnique({
+        where: {
+          id: req.params.id,
+        },
+
+        include: {
+          listing: {
+            select: {
+              id: true,
+              cropType: true,
+              title: true,
+              quantity: true,
+              unit: true,
+              location: true,
+            },
+          },
+
+          requestedBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+
+          inspector: {
+            select: {
+              id: true,
+              name: true,
+              rating: true,
+              location: true,
+            },
+          },
+        },
+      });
+
+      return res.json({
+        request: updated,
+      });
+    } catch (error) {
+      req.log.error({ err: error }, 'ACCEPT INSPECTION ERROR:');
+
+      return res.status(500).json({
+        error: 'Could not accept inspection request',
       });
     }
-
-    const updated = await prisma.inspectionRequest.update({ where: { id: request.id }, data: { sellerMessage: message, sellerMessageAt: new Date() } });
-    await prisma.$transaction(async (tx) => {
-      await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_SELLER_MESSAGE', resourceType: 'InspectionRequest', resourceId: request.id, metadata: { message } });
-    });
-    return res.json({ message: 'Seller instructions saved to the inspection record. This does not confirm the inspection.', sellerMessage: updated.sellerMessage, sellerMessageAt: updated.sellerMessageAt });
-  } catch (error) {
-    req.log.error({ err: error }, 'SELLER INSPECTION MESSAGE ERROR');
-    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not save seller instructions' });
   }
-});
+);
 
 // ============================================================================
 // INSPECTOR STARTS INSPECTION
+// ACCEPTED -> IN_PROGRESS
 // ============================================================================
 
 router.post(
@@ -1287,59 +1025,50 @@ router.post(
   async (req, res) => {
     try {
       const request = await prisma.inspectionRequest.findUnique({
-        where: { id: req.params.id },
+        where: {
+          id: req.params.id,
+        },
       });
 
       if (!request) {
-        return res.status(404).json({ error: 'Inspection request not found' });
-      }
-
-      if (request.inspectorId !== req.user.id) {
-        return res.status(403).json({ error: 'Only the assigned inspector can start this inspection' });
-      }
-
-      if (request.status !== 'ACCEPTED') {
-        return res.status(400).json({ error: `Only an accepted inspection can be started. Current status: ${request.status}` });
-      }
-      if (!request.sellerConfirmedAt) {
-        return res.status(409).json({ error: 'The seller must confirm the selected inspector and agreed fee before work can start.' });
-      }
-
-      const startPayments = await prisma.payment.findMany({
-        where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: 'PAID' },
-        select: { id: true, createdById: true, amount: true },
-      });
-      const startObligations = request.orderId
-        ? await prisma.paymentObligation.findMany({ where: { orderId: request.orderId, inspectionRequestId: request.id, type: 'INSPECTOR' }, select: { id: true, payerId: true, amount: true, status: true } })
-        : [];
-      const paymentComplete = startObligations.length
-        ? startObligations.every((o) => o.status === 'PAID')
-        : startPayments.some((p) => Number(p.amount) === Number(request.fee));
-      if (!paymentComplete) {
-        return res.status(402).json({ code: 'INSPECTION_PAYMENT_REQUIRED', error: 'The agreed inspection fee must be fully paid before the inspector can start.' });
-      }
-
-      const orderForStart = await prisma.order.findUnique({
-        where: { id: request.orderId },
-        select: { status: true },
-      });
-      if (orderForStart && ['DISPUTED', 'CANCELLED'].includes(orderForStart.status)) {
-        return res.status(409).json({
-          error: `This order is ${orderForStart.status.toLowerCase()}, so the inspection cannot be started until that is resolved.`,
+        return res.status(404).json({
+          error: 'Inspection request not found',
         });
       }
 
-      const result = await prisma.$transaction(async (tx) => {
-        await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection cannot be started until that is resolved');
+      if (request.inspectorId !== req.user.id) {
+        return res.status(403).json({
+          error: 'Only the assigned inspector can start this inspection',
+        });
+      }
 
+      if (request.status !== 'ACCEPTED') {
+        return res.status(400).json({
+          error: `Only an accepted inspection can be started. Current status: ${request.status}`,
+        });
+      }
+
+      if (request.fee != null && Number(request.fee) > 0) {
+        const paid = await prisma.payment.findFirst({
+          where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: 'PAID' },
+          select: { id: true },
+        });
+        if (!paid) {
+          return res.status(409).json({
+            code: 'INSPECTION_PAYMENT_REQUIRED',
+            error: 'The inspection fee must be paid before the inspector can start the inspection.',
+          });
+        }
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
         const updatedCount = await tx.inspectionRequest.updateMany({
           where: {
             id: request.id,
             inspectorId: req.user.id,
             status: 'ACCEPTED',
-            sellerConfirmedAt: { not: null },
           },
-          data: { status: 'IN_PROGRESS', startedAt: new Date(), completionDueAt: computeInspectionCompletionDueAt() },
+          data: { status: 'IN_PROGRESS' },
         });
 
         if (updatedCount.count !== 1) {
@@ -1367,41 +1096,62 @@ router.post(
         });
 
         return true;
-      }, { maxWait: 10000, timeout: 15000 });
+      });
 
       if (!result) {
-        return res.status(409).json({ error: 'This inspection was already started or its status changed' });
+        return res.status(409).json({
+          error: 'This inspection was already started or its status changed',
+        });
       }
 
       const updated = await prisma.inspectionRequest.findUnique({
-        where: { id: request.id },
+        where: {
+          id: request.id,
+        },
+
         include: {
           listing: {
             select: {
-              id: true, cropType: true, title: true, quantity: true, unit: true,
-              location: true, category: true,
+              id: true,
+              cropType: true,
+              title: true,
+              quantity: true,
+              unit: true,
+              location: true,
+              category: true,
             },
           },
-          requestedBy: { select: { id: true, name: true } },
-          inspector: { select: { id: true, name: true, rating: true, location: true } },
+
+          requestedBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+
+          inspector: {
+            select: {
+              id: true,
+              name: true,
+              rating: true,
+              location: true,
+            },
+          },
+
           report: true,
         },
       });
 
       return res.json({
         message: 'Inspection started',
-        paymentDue: updated.fee != null && Number(updated.fee) > 0,
-        paymentTrigger: 'INSPECTION_STARTED',
         request: updated,
       });
     } catch (error) {
       req.log.error({ err: error }, 'START INSPECTION ERROR:');
 
-      if (error.code === 'ORDER_NOT_ACTIONABLE') {
-        return res.status(error.status || 409).json({ error: error.message });
-      }
-
-      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not start inspection' });
+      return res.status(500).json({
+        error: 'Could not start inspection',
+      });
     }
   }
 );
@@ -1417,87 +1167,74 @@ router.get(
   async (req, res) => {
     try {
       const requests = await prisma.inspectionRequest.findMany({
-        where: { inspectorId: req.user.id },
+        where: {
+          inspectorId: req.user.id,
+        },
+
         include: {
           listing: {
             select: {
-              id: true, cropType: true, title: true, quantity: true, unit: true,
-              location: true, category: true,
-              orders: { select: { id: true, status: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+              id: true,
+              cropType: true,
+              title: true,
+              quantity: true,
+              unit: true,
+              location: true,
+              category: true,
+              orders: {
+                select: { id: true, status: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
             },
           },
-          requestedBy: { select: { id: true, name: true, rating: true } },
-          report: true,
-          payments: { select: { id: true, type: true, status: true, amount: true } },
-          quotes: {
-            where: { status: { not: 'REJECTED' } },
+
+          requestedBy: {
             select: {
-              id: true, inspectorId: true, amount: true, status: true, message: true,
-              parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
+              id: true,
+              name: true,
+              rating: true,
             },
-            orderBy: { createdAt: 'asc' },
           },
+
+          report: true,
         },
-        orderBy: { createdAt: 'desc' },
+
+        orderBy: {
+          createdAt: 'desc',
+        },
       });
 
-      return res.json({ requests });
+      return res.json({
+        requests,
+      });
     } catch (error) {
       req.log.error({ err: error }, 'MY INSPECTIONS ERROR:');
-      return res.status(500).json({ error: 'Could not load your inspections' });
+
+      return res.status(500).json({
+        error: 'Could not load your inspections',
+      });
     }
   }
 );
 
 // ============================================================================
 // INSPECTION EVIDENCE ACCESS
+// Evidence is private transaction data. Only the inspection requester,
+// listing seller, assigned inspector, or ADMIN may access it.
 // ============================================================================
 
 async function canAccessInspection(req, requestId) {
   const request = await prisma.inspectionRequest.findUnique({
     where: { id: requestId },
-    include: {
-      listing: { select: { sellerId: true } },
-      report: true,
-      order: { select: { buyerId: true } },
-    },
+    include: { listing: { select: { sellerId: true } }, report: true },
   });
   if (!request) return { request: null, allowed: false };
-  const allowed =
-    req.user.roles.includes('ADMIN') ||
+  const allowed = req.user.roles.includes('ADMIN') ||
     request.requestedById === req.user.id ||
     request.inspectorId === req.user.id ||
-    request.listing.sellerId === req.user.id ||
-    request.order?.buyerId === req.user.id;
+    request.listing.sellerId === req.user.id;
   return { request, allowed };
-}
-
-// ============================================================================
-// BUYER MEDIA GATE
-// ----------------------------------------------------------------------------
-// Text-based contact guards cannot scan photos or videos for a phone number
-// written on a piece of paper. Until the buyer has actually paid for the
-// goods, the buyer sees the structured inspection findings (grade, quantity,
-// defects, notes) but not the media the inspector captured. Sellers,
-// assigned inspectors, and admins always see the full evidence.
-//
-// The gate opens the instant a MARKETPLACE payment reaches PAID. It does not
-// care whether that payment was instant, split, or in installments — the
-// parent MARKETPLACE payment is the trigger.
-// ============================================================================
-async function buyerCanSeeInspectionMedia(request, userId, userRoles) {
-  const isAdmin = Array.isArray(userRoles) && userRoles.includes('ADMIN');
-  if (isAdmin) return true;
-
-  const isBuyer = request.order?.buyerId === userId;
-  if (!isBuyer) return true;   // seller, inspector, requester-who-is-not-buyer
-  if (!request.orderId) return false;
-
-  const paid = await prisma.payment.findFirst({
-    where: { orderId: request.orderId, type: 'MARKETPLACE', status: 'PAID' },
-    select: { id: true },
-  });
-  return Boolean(paid);
 }
 
 router.get('/:id/evidence', authenticate, async (req, res) => {
@@ -1506,34 +1243,12 @@ router.get('/:id/evidence', authenticate, async (req, res) => {
     if (!access.request) return res.status(404).json({ error: 'Inspection request not found' });
     if (!access.allowed) return res.status(403).json({ error: 'You are not authorized to access this inspection evidence' });
     if (!access.request.report) return res.json({ evidence: [] });
-
-    const mediaAllowed = await buyerCanSeeInspectionMedia(
-      access.request,
-      req.user.id,
-      req.user.roles
-    );
-
     const evidence = await prisma.inspectionEvidence.findMany({
       where: { reportId: access.request.report.id },
       select: { id: true, reportId: true, type: true, photos: true, videos: true, gpsLocation: true, notes: true, capturedAt: true, createdById: true },
       orderBy: { capturedAt: 'asc' },
     });
-
-    // Structured evidence (type, GPS, notes, timestamps) is always visible
-    // to any authorized viewer. Media is stripped for the buyer until the
-    // goods payment settles.
-    const sanitized = mediaAllowed
-      ? evidence
-      : evidence.map((row) => ({
-          ...row,
-          photos: [],
-          videos: [],
-          // Explicit flag so the frontend can say
-          // "Photos available after payment" instead of "no photos".
-          mediaLocked: true,
-        }));
-
-    return res.json({ evidence: sanitized, mediaAllowed });
+    return res.json({ evidence });
   } catch (error) {
     req.log.error({ err: error }, 'GET INSPECTION EVIDENCE ERROR:');
     return res.status(500).json({ error: 'Could not load inspection evidence' });
@@ -1548,21 +1263,6 @@ router.get('/:id/evidence/:evidenceId/media', authenticate, [
     const access = await canAccessInspection(req, req.params.id);
     if (!access.request) return res.status(404).json({ error: 'Inspection request not found' });
     if (!access.allowed) return res.status(403).json({ error: 'You are not authorized to access this inspection evidence' });
-
-    // Buyer cannot fetch signed URLs for inspection media until goods
-    // payment has settled. Return 402 so the frontend can show the same
-    // "available after payment" message it already uses elsewhere.
-    const mediaAllowed = await buyerCanSeeInspectionMedia(
-      access.request,
-      req.user.id,
-      req.user.roles
-    );
-    if (!mediaAllowed) {
-      return res.status(402).json({
-        code: 'MEDIA_LOCKED_UNTIL_PAYMENT',
-        error: 'Inspection photos and videos become available to the buyer once the goods payment is settled.',
-      });
-    }
 
     const evidence = await prisma.inspectionEvidence.findFirst({
       where: { id: req.params.evidenceId, reportId: access.request.report?.id || '__none__' },
@@ -1608,6 +1308,8 @@ router.get('/:id/evidence/:evidenceId/media', authenticate, [
 
 // ============================================================================
 // UPLOAD INSPECTION EVIDENCE MEDIA
+// Returns private object-storage keys for use in POST /:id/report or
+// POST /:id/evidence. Only the assigned inspector may upload.
 // ============================================================================
 
 router.post('/:id/evidence/media', authenticate, requireRole('INSPECTOR'), evidenceUpload.array('files', 5), async (req, res) => {
@@ -1615,9 +1317,6 @@ router.post('/:id/evidence/media', authenticate, requireRole('INSPECTOR'), evide
     const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id } });
     if (!request) return res.status(404).json({ error: 'Inspection request not found' });
     if (request.inspectorId !== req.user.id) return res.status(403).json({ error: 'Only the assigned inspector can add inspection evidence' });
-    if (!['IN_PROGRESS', 'COMPLETED'].includes(request.status)) {
-      return res.status(409).json({ error: 'Evidence can only be added while the inspection is in progress or completed.' });
-    }
     if (!req.files?.length) return res.status(400).json({ error: 'At least one file is required' });
 
     const { photoKeys, videoKeys } = await uploadEvidenceFiles('inspection', request.id, req.files);
@@ -1643,9 +1342,6 @@ router.post('/:id/evidence', authenticate, requireRole('INSPECTOR'), [
     const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { report: true } });
     if (!request) return res.status(404).json({ error: 'Inspection request not found' });
     if (request.inspectorId !== req.user.id) return res.status(403).json({ error: 'Only the assigned inspector can add inspection evidence' });
-    if (!['IN_PROGRESS', 'COMPLETED'].includes(request.status)) {
-      return res.status(409).json({ error: 'Evidence can only be added while the inspection is in progress or completed.' });
-    }
     if (!request.report) return res.status(400).json({ error: 'Submit the inspection report before adding supplemental evidence' });
     const photos = Array.isArray(req.body.photos) ? req.body.photos : [];
     const videos = Array.isArray(req.body.videos) ? req.body.videos : [];
@@ -1658,7 +1354,7 @@ router.post('/:id/evidence', authenticate, requireRole('INSPECTOR'), [
       });
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_EVIDENCE_ADDED', resourceType: 'InspectionEvidence', resourceId: created.id, metadata: { inspectionRequestId: request.id, reportId: request.report.id, type: created.type } });
       return created;
-    }, { maxWait: 10000, timeout: 15000 });
+    });
     return res.status(201).json({ evidence });
   } catch (error) {
     req.log.error({ err: error }, 'ADD INSPECTION EVIDENCE ERROR:');
@@ -1668,6 +1364,7 @@ router.post('/:id/evidence', authenticate, requireRole('INSPECTOR'), [
 
 // ============================================================================
 // SUBMIT INSPECTION REPORT
+// IN_PROGRESS -> COMPLETED
 // ============================================================================
 
 router.post(
@@ -1675,21 +1372,49 @@ router.post(
   authenticate,
   requireRole('INSPECTOR'),
   [
-    body('quantity').isFloat({ gt: 0 }).withMessage('Verified quantity must be greater than zero'),
-    body('grade').optional({ nullable: true }).isString(),
-    body('moisture').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('moisture must be zero or greater'),
-    body('visibleDefects').optional({ nullable: true }).isString(),
-    body('damageNotes').optional({ nullable: true }).isString(),
-    body('packagingNotes').optional({ nullable: true }).isString(),
-    body('assessmentSummary').optional({ nullable: true }).isString().trim().isLength({ max: 3000 }),
-    body('qualityFlags').optional().isArray().withMessage('qualityFlags must be an array'),
-    body('gpsLocation').optional({ nullable: true }).isString(),
-    body('photos').optional().isArray().withMessage('photos must be an array'),
-    body('videos').optional().isArray().withMessage('videos must be an array'),
+    body('quantity')
+      .isFloat({ gt: 0 })
+      .withMessage('Verified quantity must be greater than zero'),
+
+    body('grade')
+      .optional({ nullable: true })
+      .isString(),
+
+    body('moisture')
+      .optional({ nullable: true })
+      .isFloat({ min: 0 })
+      .withMessage('moisture must be zero or greater'),
+
+    body('visibleDefects')
+      .optional({ nullable: true })
+      .isString(),
+
+    body('damageNotes')
+      .optional({ nullable: true })
+      .isString(),
+
+    body('packagingNotes')
+      .optional({ nullable: true })
+      .isString(),
+
+    body('gpsLocation')
+      .optional({ nullable: true })
+      .isString(),
+
+    body('photos')
+      .optional()
+      .isArray()
+      .withMessage('photos must be an array'),
+
+    body('videos')
+      .optional()
+      .isArray()
+      .withMessage('videos must be an array'),
   ],
   async (req, res) => {
     try {
       const errors = validationResult(req);
+
       if (!errors.isEmpty()) {
         return res.status(400).json({
           error: errors.array()[0]?.msg || 'Validation failed',
@@ -1698,56 +1423,65 @@ router.post(
       }
 
       const request = await prisma.inspectionRequest.findUnique({
-        where: { id: req.params.id },
-        include: { report: true, listing: { select: { quantity: true, unit: true, category: true } } },
+        where: {
+          id: req.params.id,
+        },
+
+        include: {
+          report: true,
+        },
       });
 
-      if (!request) return res.status(404).json({ error: 'Request not found' });
-      if (request.inspectorId !== req.user.id) return res.status(403).json({ error: 'Only the assigned inspector can submit this report' });
-      if (request.status !== 'IN_PROGRESS') return res.status(400).json({ error: `Inspection must be IN_PROGRESS before submitting a report. Current status: ${request.status}` });
-      if (!request.sellerConfirmedAt) return res.status(409).json({ error: 'Seller confirmation is required before submitting an inspection report.' });
-      if (request.report) return res.status(409).json({ error: 'An inspection report has already been submitted' });
+      if (!request) {
+        return res.status(404).json({
+          error: 'Request not found',
+        });
+      }
 
-      const reportObligations = request.orderId
-        ? await prisma.paymentObligation.findMany({ where: { orderId: request.orderId, inspectionRequestId: request.id, type: 'INSPECTOR' }, select: { status: true } })
-        : [];
-      const reportPaid = reportObligations.length
-        ? reportObligations.every((o) => o.status === 'PAID')
-        : (await prisma.payment.findFirst({ where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: 'PAID' }, select: { id: true } })) != null;
-      if (!reportPaid) return res.status(402).json({ code: 'INSPECTION_PAYMENT_REQUIRED', error: 'The inspection fee must be fully paid before the report can be submitted.' });
+      if (request.inspectorId !== req.user.id) {
+        return res.status(403).json({
+          error: 'Only the assigned inspector can submit this report',
+        });
+      }
 
-      const orderForReport = await prisma.order.findUnique({
-        where: { id: request.orderId },
-        select: { status: true },
-      });
-      if (orderForReport && ['DISPUTED', 'CANCELLED'].includes(orderForReport.status)) {
+      if (request.status !== 'IN_PROGRESS') {
+        return res.status(400).json({
+          error: `Inspection must be IN_PROGRESS before submitting a report. Current status: ${request.status}`,
+        });
+      }
+
+      if (request.report) {
         return res.status(409).json({
-          error: `This order is ${orderForReport.status.toLowerCase()}, so a report cannot be submitted until that is resolved.`,
+          error: 'An inspection report has already been submitted',
         });
       }
 
       const {
-        quantity, grade, moisture, visibleDefects, damageNotes, packagingNotes, assessmentSummary, qualityFlags, photos, videos, gpsLocation,
+        quantity,
+        grade,
+        moisture,
+        visibleDefects,
+        damageNotes,
+        packagingNotes,
+        photos,
+        videos,
+        gpsLocation,
       } = req.body;
 
       const report = await prisma.$transaction(async (tx) => {
-        await lockOrderAndAssertNotClosed(tx, request.orderId, 'a report cannot be submitted until that is resolved');
-
         const createdReport = await tx.inspectionReport.create({
           data: {
             requestId: request.id,
-            quantity: Number(quantity),
-            grade: grade || null,
-            moisture: moisture !== undefined && moisture !== null && moisture !== '' ? Number(moisture) : null,
+            quantity: Number(quantity),            grade: grade || null,
+            moisture:
+              moisture !== undefined &&
+              moisture !== null &&
+              moisture !== ''
+                ? Number(moisture)
+                : null,
             visibleDefects: visibleDefects || null,
             damageNotes: damageNotes || null,
             packagingNotes: packagingNotes || null,
-            assessmentSummary: assessmentSummary || null,
-            qualityFlags: Array.isArray(qualityFlags) ? qualityFlags.map((v) => String(v).trim()).filter(Boolean).slice(0, 20) : [],
-            quantityVariancePercent: (() => {
-              const listingQuantity = Number(request.listing?.quantity || 0);
-              return listingQuantity > 0 ? ((Number(quantity) - listingQuantity) / listingQuantity) * 100 : null;
-            })(),
             photos: Array.isArray(photos) ? photos : [],
             videos: Array.isArray(videos) ? videos : [],
             gpsLocation: gpsLocation || null,
@@ -1773,18 +1507,14 @@ router.post(
             inspectorId: req.user.id,
             status: 'IN_PROGRESS',
           },
-          data: { status: 'COMPLETED', completedAt: new Date(), completionDueAt: null },
+
+          data: {
+            status: 'COMPLETED',
+          },
         });
 
         if (completed.count !== 1) {
           throw new Error('INSPECTION_STATUS_CHANGED');
-        }
-
-        if (request.orderId) {
-          await tx.order.updateMany({
-            where: { id: request.orderId, status: 'PENDING_PAYMENT', buyerDecision: null },
-            data: { paymentDueAt: computePaymentDueAt() },
-          });
         }
 
         const relatedOrders = await tx.order.findMany({
@@ -1810,23 +1540,37 @@ router.post(
         });
 
         return createdReport;
-      }, {
-        maxWait: 10000,
-        timeout: 15000,
       });
+      // Note on this transaction: it does report + evidence creation, an
+      // inspection status update, syncOrderPaymentObligations (which issues
+      // several sequential queries per obligation), an order-event write,
+      // and notification/SMS-outbox queuing — enough round trips that the
+      // default 5s interactive-transaction timeout was being exceeded in
+      // production (P2028 "Transaction not found... refers to an old
+      // closed transaction" on the final smsOutboxEntry.createMany once
+      // Prisma had already force-closed the transaction). Fixed via the
+      // raised default transactionOptions on the shared PrismaClient in
+      // config/db.js (covers every transaction, not just this one) rather
+      // than a per-call override here.
 
-      return res.status(201).json({ report });
+      return res.status(201).json({
+        report,
+      });
     } catch (error) {
       if (error.message === 'INSPECTION_STATUS_CHANGED') {
-        return res.status(409).json({ error: 'Inspection status changed before the report could be completed' });
-      }
-
-      if (error.code === 'ORDER_NOT_ACTIONABLE') {
-        return res.status(error.status || 409).json({ error: error.message });
+        return res.status(409).json({
+          error: 'Inspection status changed before the report could be completed',
+        });
       }
 
       req.log.error({ err: error }, 'CREATE INSPECTION REPORT ERROR:');
+
       return res.status(500).json({
+        // Surfacing error.message (like the sibling evidence-media upload
+        // route already does) instead of a fixed string, so a runtime
+        // failure here is diagnosable from the toast alone instead of only
+        // from server logs. req.requestId is also echoed so it can be
+        // correlated with the pino log line above if you have log access.
         error: error.message || 'Could not submit inspection report',
         requestId: req.requestId,
       });
@@ -1834,283 +1578,10 @@ router.post(
   }
 );
 
-// ============================================================================
-// REPORT ADDENDUM — immutable correction trail
-// ============================================================================
-
-router.post('/:id/report/addenda', authenticate, requireRole('INSPECTOR'), [
-  body('reason').isString().trim().isLength({ min: 3, max: 500 }),
-  body('notes').isString().trim().isLength({ min: 3, max: 3000 }),
-  body('photos').optional().isArray(),
-  body('videos').optional().isArray(),
-  body('gpsLocation').optional({ nullable: true }).isString(),
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed' });
-    const request = await prisma.inspectionRequest.findUnique({
-      where: { id: req.params.id },
-      include: { report: true },
-    });
-    if (!request) return res.status(404).json({ error: 'Inspection request not found' });
-    if (request.inspectorId !== req.user.id) return res.status(403).json({ error: 'Only the assigned inspector can add a report addendum' });
-    if (request.status !== 'COMPLETED' || !request.report) return res.status(409).json({ error: 'A report addendum is available only after the original report is completed' });
-
-    const addendum = await prisma.$transaction(async (tx) => {
-      const created = await tx.inspectionReportAddendum.create({
-        data: {
-          reportId: request.report.id,
-          createdById: req.user.id,
-          reason: req.body.reason,
-          notes: req.body.notes,
-          photos: Array.isArray(req.body.photos) ? req.body.photos : [],
-          videos: Array.isArray(req.body.videos) ? req.body.videos : [],
-          gpsLocation: req.body.gpsLocation || null,
-        },
-      });
-      await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_REPORT_ADDENDUM_CREATED', resourceType: 'InspectionReportAddendum', resourceId: created.id, metadata: { inspectionRequestId: request.id, reportId: request.report.id } });
-      if (request.orderId) await recordOrderEvent(tx, { orderId: request.orderId, actorId: req.user.id, type: 'INSPECTION_REPORT_ADDENDUM_ADDED', metadata: { inspectionRequestId: request.id, reportId: request.report.id, addendumId: created.id } });
-      return created;
-    });
-    return res.status(201).json({ message: 'Report addendum recorded. The original report remains unchanged.', addendum });
-  } catch (error) {
-    req.log.error({ err: error }, 'CREATE INSPECTION REPORT ADDENDUM ERROR');
-    return res.status(500).json({ error: 'Could not create inspection report addendum' });
-  }
-});
-
-// ============================================================================
-// INSPECTION COORDINATION (seller <-> inspector only)
-// ============================================================================
-
-async function loadCoordinationContext(req, res) {
-  const request = await prisma.inspectionRequest.findUnique({
-    where: { id: req.params.id },
-    include: {
-      listing: { select: { id: true, sellerId: true, title: true, cropType: true, location: true } },
-      coordination: true,
-      availability: { orderBy: [{ date: 'asc' }, { startTime: 'asc' }] },
-    },
-  });
-  if (!request) {
-    res.status(404).json({ error: 'Inspection request not found' });
-    return null;
-  }
-
-  const { allowed, role } = viewerRoleFor(request, req.user);
-  if (!allowed) {
-    res.status(403).json({ error: 'You are not authorized to view inspection coordination' });
-    return null;
-  }
-
-  try {
-    assertCoordinationStage(request);
-  } catch (err) {
-    res.status(err.statusCode || 409).json({ error: err.message, code: err.code || 'COORDINATION_NOT_OPEN' });
-    return null;
-  }
-
-  return { request, role };
-}
-
-router.get('/:id/coordination', authenticate, async (req, res) => {
-  try {
-    const ctx = await loadCoordinationContext(req, res);
-    if (!ctx) return;
-
-    const { request, role } = ctx;
-    const coordination = request.coordination && !request.coordination.supersededAt
-      ? request.coordination
-      : null;
-
-    return res.json({
-      role,
-      coordination,
-      availability: request.availability || [],
-    });
-  } catch (error) {
-    req.log.error({ err: error }, 'GET INSPECTION COORDINATION ERROR:');
-    return res.status(500).json({ error: 'Could not load inspection coordination' });
-  }
-});
-
-router.put(
-  '/:id/coordination',
-  authenticate,
-  [
-    body('sellerContactName').optional({ nullable: true }).isString().trim().isLength({ max: 120 }),
-    body('sellerPhone').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
-    body('sellerAlternativePhone').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
-    body('sellerEmail').optional({ nullable: true }).isString().trim().isLength({ max: 160 }),
-    body('sellerPreferredContact').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
-    body('inspectionSite').optional({ nullable: true }).isString().trim().isLength({ max: 240 }),
-    body('meetingPoint').optional({ nullable: true }).isString().trim().isLength({ max: 240 }),
-    body('accessInstructions').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }),
-    body('sellerNotes').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }),
-
-    body('inspectorContactName').optional({ nullable: true }).isString().trim().isLength({ max: 120 }),
-    body('inspectorPhone').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
-    body('inspectorAlternativePhone').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
-    body('inspectorEmail').optional({ nullable: true }).isString().trim().isLength({ max: 160 }),
-    body('inspectorPreferredContact').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
-    body('inspectorArrivalNotes').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }),
-    body('inspectorNotes').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
-      }
-
-      const ctx = await loadCoordinationContext(req, res);
-      if (!ctx) return;
-      const { request, role } = ctx;
-
-      if (role === 'ADMIN') {
-        return res.status(403).json({ error: 'Administrators may view coordination but not write it' });
-      }
-
-      const SELLER_FIELDS = [
-        'sellerContactName', 'sellerPhone', 'sellerAlternativePhone', 'sellerEmail',
-        'sellerPreferredContact', 'inspectionSite', 'meetingPoint', 'accessInstructions', 'sellerNotes',
-      ];
-      const INSPECTOR_FIELDS = [
-        'inspectorContactName', 'inspectorPhone', 'inspectorAlternativePhone', 'inspectorEmail',
-        'inspectorPreferredContact', 'inspectorArrivalNotes', 'inspectorNotes',
-      ];
-      const allowedFields = role === 'SELLER' ? SELLER_FIELDS : INSPECTOR_FIELDS;
-
-      const data = {};
-      for (const field of allowedFields) {
-        if (Object.prototype.hasOwnProperty.call(req.body, field)) {
-          const value = req.body[field];
-          data[field] = value === '' || value === undefined ? null : value;
-        }
-      }
-
-      if (role === 'SELLER') data.sellerSubmittedAt = new Date();
-      else data.inspectorSubmittedAt = new Date();
-
-      const updated = await prisma.$transaction(async (tx) => {
-        const row = await ensureOpenCoordination(tx, request.id);
-        return tx.inspectionCoordination.update({
-          where: { id: row.id },
-          data,
-        });
-      }, { maxWait: 10000, timeout: 15000 });
-
-      await recordAuditEvent(prisma, {
-        actorId: req.user.id,
-        action: role === 'SELLER'
-          ? 'INSPECTION_COORDINATION_SELLER_SUBMITTED'
-          : 'INSPECTION_COORDINATION_INSPECTOR_SUBMITTED',
-        resourceType: 'InspectionCoordination',
-        resourceId: updated.id,
-        metadata: {
-          inspectionRequestId: request.id,
-          role,
-          fields: Object.keys(data).filter((k) => !k.endsWith('SubmittedAt')),
-        },
-      });
-
-      return res.json({ message: 'Coordination information saved', coordination: updated });
-    } catch (error) {
-      req.log.error({ err: error }, 'PUT INSPECTION COORDINATION ERROR:');
-      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not save inspection coordination' });
-    }
-  }
-);
-
-router.post(
-  '/:id/coordination/availability',
-  authenticate,
-  [
-    body('date').isISO8601().withMessage('date must be a valid date'),
-    body('startTime').matches(/^\d{2}:\d{2}$/).withMessage('startTime must be HH:MM'),
-    body('endTime').matches(/^\d{2}:\d{2}$/).withMessage('endTime must be HH:MM'),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ error: errors.array()[0]?.msg || 'Validation failed', errors: errors.array() });
-      }
-
-      const ctx = await loadCoordinationContext(req, res);
-      if (!ctx) return;
-      const { request, role } = ctx;
-
-      if (role !== 'SELLER' && role !== 'INSPECTOR') {
-        return res.status(403).json({ error: 'Only the seller or inspector can add availability slots' });
-      }
-
-      const { date, startTime, endTime } = req.body;
-      if (startTime >= endTime) {
-        return res.status(400).json({ error: 'startTime must be before endTime' });
-      }
-
-      const slot = await prisma.inspectionAvailability.create({
-        data: {
-          inspectionRequestId: request.id,
-          party: role,
-          date: new Date(date),
-          startTime,
-          endTime,
-        },
-      });
-
-      await recordAuditEvent(prisma, {
-        actorId: req.user.id,
-        action: 'INSPECTION_AVAILABILITY_ADDED',
-        resourceType: 'InspectionAvailability',
-        resourceId: slot.id,
-        metadata: { inspectionRequestId: request.id, party: role, date, startTime, endTime },
-      });
-
-      return res.status(201).json({ availability: slot });
-    } catch (error) {
-      req.log.error({ err: error }, 'POST INSPECTION AVAILABILITY ERROR:');
-      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not add availability slot' });
-    }
-  }
-);
-
-router.delete(
-  '/:id/coordination/availability/:slotId',
-  authenticate,
-  async (req, res) => {
-    try {
-      const ctx = await loadCoordinationContext(req, res);
-      if (!ctx) return;
-      const { request, role } = ctx;
-
-      const slot = await prisma.inspectionAvailability.findUnique({
-        where: { id: req.params.slotId },
-      });
-      if (!slot || slot.inspectionRequestId !== request.id) {
-        return res.status(404).json({ error: 'Availability slot not found' });
-      }
-      if (slot.party !== role) {
-        return res.status(403).json({ error: 'You can only remove your own availability slots' });
-      }
-
-      await prisma.inspectionAvailability.delete({ where: { id: slot.id } });
-
-      await recordAuditEvent(prisma, {
-        actorId: req.user.id,
-        action: 'INSPECTION_AVAILABILITY_REMOVED',
-        resourceType: 'InspectionAvailability',
-        resourceId: slot.id,
-        metadata: { inspectionRequestId: request.id, party: role },
-      });
-
-      return res.json({ message: 'Availability slot removed' });
-    } catch (error) {
-      req.log.error({ err: error }, 'DELETE INSPECTION AVAILABILITY ERROR:');
-      return res.status(error.statusCode || 500).json({ error: error.message || 'Could not remove availability slot' });
-    }
-  }
-);
-
 module.exports = router;
+
+
+
+
+
+
