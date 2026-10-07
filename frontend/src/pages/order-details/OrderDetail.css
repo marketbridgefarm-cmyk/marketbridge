@@ -536,6 +536,13 @@
 .order-detail-page .transporter {
   display: flex;
   flex-direction: column;
+  /* The global .transporter rule sets align-items:center for a row layout;
+     in this column layout that made each card shrink-to-fit and centre its
+     content, so cards had different widths. Stretch them instead. */
+  align-items: stretch;
+  justify-content: flex-start;
+  text-align: left;
+  box-sizing: border-box;
   gap: 12px;
   padding: 14px;
   margin-bottom: 10px;
