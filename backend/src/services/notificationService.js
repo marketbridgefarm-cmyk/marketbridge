@@ -124,6 +124,12 @@ const EVENT_COPY = {
     body: 'The requester released the provisional agreement. You are no longer assigned to this job.',
     action: 'order',
   },
+  PROVIDER_STANDING_CHANGED: {
+    type: 'ORDER',
+    title: 'Your bidding standing changed',
+    body: 'Your provider standing changed because of cancelled agreements. Open your dashboard for details.',
+    action: 'order',
+  },
   PAYMENT_RECONCILIATION_RESOLVED: {
     type: 'PAYMENT',
     title: 'Payment reconciliation resolved',
@@ -147,6 +153,16 @@ function buildCopy(type, metadata = {}) {
   };
 
   let body = copy.body;
+
+  if (type === 'PROVIDER_STANDING_CHANGED') {
+    if (metadata.kind === 'WARNING') {
+      body = 'Warning: one more cancellation of an accepted agreement will suspend your bidding. Cancellations also lower your rating.';
+    } else if (metadata.kind === 'SUSPENDED') {
+      body = metadata.until
+        ? `Your bidding is suspended until ${new Date(metadata.until).toISOString().slice(0, 10)} because of repeated cancellations. You can appeal from your dashboard.`
+        : 'Your bidding is suspended until MarketBridge admin reviews your account. You can appeal from your dashboard.';
+    }
+  }
 
   if (type === 'PROVIDER_AGREEMENT_RELEASED' && metadata.service) {
     const who = metadata.service === 'TRANSPORT' ? 'transporter' : 'inspector';
@@ -213,6 +229,9 @@ async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) 
     case 'INSPECTION_STARTED':
     case 'INSPECTION_COMPLETED':
       recipients = [...buyerSeller, ...inspectionUsers];
+      break;
+    case 'PROVIDER_STANDING_CHANGED':
+      recipients = [metadata.providerId];
       break;
     case 'PROVIDER_AGREEMENT_RELEASED':
       recipients = [...buyerSeller];

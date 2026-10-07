@@ -362,14 +362,19 @@ async function syncProcessingRefunds() {
   return { checked: pending.length, completed, failed, stillPending };
 }
 
+async function sweepStandings(now = new Date()) {
+  const { sweepProviderStandings } = require('./providerStandingService');
+  return sweepProviderStandings(prisma, now);
+}
+
 async function runMaintenanceCycle() {
   return withJobLock(async () => {
     const startedAt = Date.now();
     const now = new Date();
-    const [offers, listings, ads, adsActivated, reminders, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync] = await Promise.all([
-      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), expireInspectionWorkflows(now), expireTransportWorkflows(now), sendPendingSms(now), releaseDuePayouts(prisma, now), submitRequestedRefunds(), syncProcessingRefunds(),
+    const [offers, listings, ads, adsActivated, reminders, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync, providerStandings] = await Promise.all([
+      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), expireInspectionWorkflows(now), expireTransportWorkflows(now), sendPendingSms(now), releaseDuePayouts(prisma, now), submitRequestedRefunds(), syncProcessingRefunds(), sweepStandings(now),
     ]);
-    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync };
+    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync, providerStandings };
   });
 }
 

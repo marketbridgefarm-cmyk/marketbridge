@@ -39,6 +39,7 @@ const TITLES = {
     TRANSPORT_QUOTE_WITHDRAWN: 'Transporter agreement released',
     PROVIDER_AGREEMENT_RELEASED: 'Provider cancelled the agreement',
     REQUESTER_AGREEMENT_RELEASED: 'Agreement released',
+    PROVIDER_STANDING_CHANGED: 'Your bidding standing changed',
   },
 
   // Amharic — draft, needs native-speaker review (see header).
