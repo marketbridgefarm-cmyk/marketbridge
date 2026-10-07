@@ -26,6 +26,14 @@ const {
   ensureOpenCoordination,
 } = require('../services/transportCoordinationService');
 
+const {
+  parseReleaseReason,
+  assertAcceptedReleaseWindowElapsed,
+  countAcceptedReleases,
+  maxAcceptedReleases,
+  LIMIT_MESSAGE,
+} = require('../services/releaseLimitsService');
+
 const router = express.Router();
 
 // ============================================================================
@@ -2088,11 +2096,52 @@ router.patch(
         }
       }
 
+      // Release limits for a provisional (ACCEPTED) agreement: reason + wait.
+      let releaseInfo = { reason: 'NO_RESPONSE', note: null };
+      if (isAcceptedRelease) {
+        try {
+          releaseInfo = parseReleaseReason(req.body);
+          assertAcceptedReleaseWindowElapsed(quote);
+        } catch (limitErr) {
+          return res.status(limitErr.statusCode || 400).json({
+            error: limitErr.message,
+            ...(limitErr.releaseAvailableAt ? { releaseAvailableAt: limitErr.releaseAvailableAt } : {}),
+          });
+        }
+      }
+
       const result = await prisma.$transaction(async (tx) => {
         await tx.$queryRawUnsafe(
           'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
           job.id
         );
+
+        let releaseNumber = null;
+        if (isAcceptedRelease) {
+          const used = await countAcceptedReleases(tx, {
+            action: 'TRANSPORT_QUOTE_WITHDRAWN',
+            metadataKey: 'transportJobId',
+            jobId: job.id,
+          });
+          if (used >= maxAcceptedReleases()) {
+            await recordAuditEvent(tx, {
+              actorId: req.user.id,
+              action: 'TRANSPORT_RELEASE_BLOCKED_ADMIN_REVIEW',
+              resourceType: 'TransportQuote',
+              resourceId: quote.id,
+              metadata: {
+                transportJobId: job.id,
+                orderId: job.orderId,
+                requesterId: req.user.id,
+                attemptedReason: releaseInfo.reason,
+                releasesUsed: used,
+                limit: maxAcceptedReleases(),
+              },
+            });
+            return { blocked: true };
+          }
+          releaseNumber = used + 1;
+        }
 
         const freshQuote = await tx.transportQuote.findUnique({
           where: { id: quote.id },
@@ -2120,6 +2169,14 @@ router.patch(
           const freshAvailableAt = transportReleaseAvailableAt(freshQuote);
           if (freshAvailableAt && freshAvailableAt.getTime() > Date.now()) {
             throw quoteError('This negotiation changed. Refresh and try again.', 409);
+          }
+        }
+
+        if (isAcceptedRelease) {
+          try {
+            assertAcceptedReleaseWindowElapsed(freshQuote);
+          } catch (e) {
+            throw quoteError(e.message, 409);
           }
         }
 
@@ -2161,12 +2218,20 @@ router.patch(
             transportJobId: freshQuote.transportJobId,
             orderId: freshQuote.transportJob.orderId,
             releasedBy: effectiveRole,
+            requesterId: req.user.id,
             previousStatus: freshQuote.status,
+            reason: releaseInfo.reason,
+            note: releaseInfo.note,
+            releaseNumber,
           },
         });
 
         return updatedQuote;
       }, { maxWait: 10000, timeout: 15000 });
+
+      if (result && result.blocked) {
+        return res.status(409).json({ error: LIMIT_MESSAGE, code: 'RELEASE_LIMIT_REACHED' });
+      }
 
       return res.json({
         message: isAcceptedRelease

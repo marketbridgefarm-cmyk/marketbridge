@@ -27,6 +27,14 @@ const {
   ensureOpenCoordination,
 } = require('../services/inspectionCoordinationService');
 
+const {
+  parseReleaseReason,
+  assertAcceptedReleaseWindowElapsed,
+  countAcceptedReleases,
+  maxAcceptedReleases,
+  LIMIT_MESSAGE,
+} = require('../services/releaseLimitsService');
+
 const router = express.Router();
 
 function validationError(res) {
@@ -990,8 +998,49 @@ router.patch(
         }
       }
 
+      // Release limits for a provisional (ACCEPTED) agreement: reason + wait.
+      let releaseInfo = { reason: 'NO_RESPONSE', note: null };
+      if (isAcceptedRelease) {
+        try {
+          releaseInfo = parseReleaseReason(req.body);
+          assertAcceptedReleaseWindowElapsed(quote);
+        } catch (limitErr) {
+          return res.status(limitErr.statusCode || 400).json({
+            error: limitErr.message,
+            ...(limitErr.releaseAvailableAt ? { releaseAvailableAt: limitErr.releaseAvailableAt } : {}),
+          });
+        }
+      }
+
       const result = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection agreement cannot be released until the order dispute is resolved');
+
+        let releaseNumber = null;
+        if (isAcceptedRelease) {
+          const used = await countAcceptedReleases(tx, {
+            action: 'INSPECTION_QUOTE_WITHDRAWN',
+            metadataKey: 'inspectionRequestId',
+            jobId: request.id,
+          });
+          if (used >= maxAcceptedReleases()) {
+            await recordAuditEvent(tx, {
+              actorId: req.user.id,
+              action: 'INSPECTION_RELEASE_BLOCKED_ADMIN_REVIEW',
+              resourceType: 'InspectionQuote',
+              resourceId: quote.id,
+              metadata: {
+                inspectionRequestId: request.id,
+                orderId: request.orderId,
+                requesterId: req.user.id,
+                attemptedReason: releaseInfo.reason,
+                releasesUsed: used,
+                limit: maxAcceptedReleases(),
+              },
+            });
+            return { blocked: true };
+          }
+          releaseNumber = used + 1;
+        }
 
         const activePayment = await tx.payment.findFirst({
           where: {
@@ -1011,6 +1060,11 @@ router.patch(
         }
 
         if (isAcceptedRelease) {
+          try {
+            assertAcceptedReleaseWindowElapsed(freshQuote);
+          } catch (e) {
+            throw quoteError(e.message, 409);
+          }
           const freshRequest = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
           if (!freshRequest || freshRequest.status !== 'ACCEPTED' || freshRequest.inspectorId !== freshQuote.inspectorId) {
             throw quoteError('This provisional inspection agreement is no longer active', 409);
@@ -1055,12 +1109,20 @@ router.patch(
             inspectionRequestId: request.id,
             inspectorId: freshQuote.inspectorId,
             releasedBy: actorRole,
+            requesterId: req.user.id,
             previousStatus: freshQuote.status,
+            reason: releaseInfo.reason,
+            note: releaseInfo.note,
+            releaseNumber,
           },
         });
 
         return updatedQuote;
       }, { maxWait: 10000, timeout: 15000 });
+
+      if (result && result.blocked) {
+        return res.status(409).json({ error: LIMIT_MESSAGE, code: 'RELEASE_LIMIT_REACHED' });
+      }
 
       return res.json({
         message: isAcceptedRelease
