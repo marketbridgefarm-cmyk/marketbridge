@@ -84,6 +84,20 @@ async function countAcceptedReleases(tx, { action, metadataKey, jobId }) {
   });
 }
 
+const OVERRIDE_ACTION = 'RELEASE_LIMIT_OVERRIDE';
+
+// { used, allowed }: allowed = cap + one extra release per admin override
+// recorded for this job. Call inside the transaction after the row lock.
+async function releaseAllowance(tx, { action, metadataKey, jobId }) {
+  const [used, overrides] = await Promise.all([
+    countAcceptedReleases(tx, { action, metadataKey, jobId }),
+    tx.auditEvent.count({
+      where: { action: OVERRIDE_ACTION, metadata: { path: ['jobId'], equals: jobId } },
+    }),
+  ]);
+  return { used, allowed: maxAcceptedReleases() + overrides };
+}
+
 const LIMIT_MESSAGE =
   'Release limit reached for this job. MarketBridge admin has been flagged to review before another provider can be released.';
 
@@ -95,6 +109,8 @@ module.exports = {
   acceptedReleaseAvailableAt,
   assertAcceptedReleaseWindowElapsed,
   countAcceptedReleases,
+  releaseAllowance,
+  OVERRIDE_ACTION,
   releaseError,
   LIMIT_MESSAGE,
 };
