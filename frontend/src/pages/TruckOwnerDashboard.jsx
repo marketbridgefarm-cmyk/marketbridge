@@ -224,7 +224,7 @@ export default function TruckOwnerDashboard() {
   const [showTruckModal, setShowTruckModal] = useState(false);
   // Select-only price entry for quotes / counters (no free typing, so no
   // phone numbers can be slipped into a price box).
-  const [amountModal, setAmountModal] = useState(null); // { kind, job?, quoteId?, reference }
+  const [amountModal, setAmountModal] = useState(null); // { kind, job?, jobId?, quoteId?, reference }
   const [amountDraft, setAmountDraft] = useState('');
 
   // Evidence capture, required by the backend before PICKUP -> IN_TRANSIT
@@ -451,16 +451,20 @@ export default function TruckOwnerDashboard() {
     return Boolean(quote?.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
   }
 
+  // Transport quote URLs now match the inspection shape:
+  //   /transport/:jobId/quotes/:quoteId/<action>
+  // Every caller already has the job in scope; jobId is threaded explicitly.
+
   // Release a provisionally accepted deal (before transport payment) or a
   // silent negotiator (SELECTED / COUNTERED-by-requester) once the backend's
   // release window has elapsed. This is a WITHDRAW, not a REJECT: the backend
   // only allows REJECT on quotes that are still being negotiated.
-  async function releaseTransportAgreement(quoteId) {
+  async function releaseTransportAgreement(jobId, quoteId) {
     setActionLoading(`quote-${quoteId}`);
     try {
       const reason = window.prompt('Why are you releasing this provisional transport agreement?');
       if (!reason || !reason.trim()) return;
-      await api.patch(`/transport/quotes/${quoteId}`, { action: 'WITHDRAW', reason: reason.trim() });
+      await api.patch(`/transport/${jobId}/quotes/${quoteId}/withdraw`);
       toast('Agreement released. The requester can now choose another transporter.');
       await loadAll(false);
     } catch (err) {
@@ -470,10 +474,10 @@ export default function TruckOwnerDashboard() {
     }
   }
 
-  async function acceptTransportQuote(quoteId) {
+  async function acceptTransportQuote(jobId, quoteId) {
     setActionLoading(`quote-${quoteId}`);
     try {
-      await api.patch(`/transport/quotes/${quoteId}`, { action: 'ACCEPT' });
+      await api.patch(`/transport/${jobId}/quotes/${quoteId}/accept`);
       toast('Requester\u2019s price accepted. The transport deal is provisional until payment settles.');
       await loadAll(false);
       setActiveTab('jobs');
@@ -484,17 +488,16 @@ export default function TruckOwnerDashboard() {
     }
   }
 
-  function counterTransportQuote(quoteId, reference) {
+  function counterTransportQuote(jobId, quoteId, reference) {
     setAmountDraft('');
-    setAmountModal({ kind: 'counter', quoteId, reference: Number(reference) || null });
+    setAmountModal({ kind: 'counter', jobId, quoteId, reference: Number(reference) || null });
   }
 
-  async function submitTransportCounter(quoteId, amount) {
+  async function submitTransportCounter(jobId, quoteId, amount) {
     setActionLoading(`quote-${quoteId}`);
 
     try {
-      await api.patch(`/transport/quotes/${quoteId}`, {
-        action: 'COUNTER',
+      await api.post(`/transport/${jobId}/quotes/${quoteId}/counter`, {
         counterAmount: Number(amount),
       });
       toast('Counter-offer sent to the requester.');
@@ -506,10 +509,10 @@ export default function TruckOwnerDashboard() {
     }
   }
 
-  async function rejectTransportQuote(quoteId) {
+  async function rejectTransportQuote(jobId, quoteId) {
     setActionLoading(`quote-${quoteId}`);
     try {
-      await api.patch(`/transport/quotes/${quoteId}`, { action: 'REJECT' });
+      await api.patch(`/transport/${jobId}/quotes/${quoteId}/reject`);
       toast('Negotiation ended.');
       await loadAll(false);
     } catch (err) {
@@ -522,10 +525,10 @@ export default function TruckOwnerDashboard() {
   // Withdraw a waiting bid that the requester has not yet selected for
   // negotiation. Mirrors the inspection flow: only a PENDING bid can be
   // withdrawn, so a live negotiation is never abandoned by accident.
-  async function withdrawWaitingBid(quoteId) {
+  async function withdrawWaitingBid(jobId, quoteId) {
     setActionLoading(`quote-${quoteId}`);
     try {
-      await api.post(`/transport/quotes/${quoteId}/withdraw-bid`);
+      await api.post(`/transport/${jobId}/quotes/${quoteId}/withdraw-bid`);
       toast('Your bid has been withdrawn. You can submit a new one on any other request.');
       await loadAll(false);
     } catch (err) {
@@ -665,7 +668,7 @@ export default function TruckOwnerDashboard() {
                 type="button"
                 className="sd-btn sd-btn-outline"
                 disabled={actionLoading === `quote-${agreedQuote.id}`}
-                onClick={() => releaseTransportAgreement(agreedQuote.id)}
+                onClick={() => releaseTransportAgreement(job.id, agreedQuote.id)}
               >
                 {actionLoading === `quote-${agreedQuote.id}` ? 'Releasing…' : 'Cancel provisional deal'}
               </button>
@@ -735,7 +738,7 @@ export default function TruckOwnerDashboard() {
               type="button"
               className="sd-btn sd-btn-outline"
               disabled={actionLoading === `quote-${acceptedQuote.id}`}
-              onClick={() => releaseTransportAgreement(acceptedQuote.id)}
+              onClick={() => releaseTransportAgreement(job.id, acceptedQuote.id)}
             >
               {actionLoading === `quote-${acceptedQuote.id}` ? 'Cancelling…' : 'Cancel provisional deal'}
             </button>
@@ -1238,7 +1241,7 @@ export default function TruckOwnerDashboard() {
                               type="button"
                               className="sd-btn sd-btn-outline"
                               disabled={respondBusy}
-                              onClick={() => withdrawWaitingBid(myLeaf.id)}
+                              onClick={() => withdrawWaitingBid(job.id, myLeaf.id)}
                             >
                               {respondBusy ? 'Withdrawing…' : 'Withdraw waiting bid'}
                             </button>
@@ -1250,7 +1253,7 @@ export default function TruckOwnerDashboard() {
                                 type="button"
                                 className="sd-btn sd-btn-primary"
                                 disabled={respondBusy}
-                                onClick={() => acceptTransportQuote(myLeaf.id)}
+                                onClick={() => acceptTransportQuote(job.id, myLeaf.id)}
                               >
                                 {respondBusy ? 'Accepting…' : 'Accept'}
                               </button>
@@ -1258,7 +1261,7 @@ export default function TruckOwnerDashboard() {
                                 type="button"
                                 className="sd-btn sd-btn-outline"
                                 disabled={respondBusy}
-                                onClick={() => counterTransportQuote(myLeaf.id, myLeaf.counterAmount ?? myLeaf.amount)}
+                                onClick={() => counterTransportQuote(job.id, myLeaf.id, myLeaf.counterAmount ?? myLeaf.amount)}
                               >
                                 {respondBusy ? 'Sending…' : 'Counter'}
                               </button>
@@ -1266,7 +1269,7 @@ export default function TruckOwnerDashboard() {
                                 type="button"
                                 className="sd-btn sd-btn-outline"
                                 disabled={respondBusy}
-                                onClick={() => rejectTransportQuote(myLeaf.id)}
+                                onClick={() => rejectTransportQuote(job.id, myLeaf.id)}
                               >
                                 {respondBusy ? 'Rejecting…' : 'Reject'}
                               </button>
@@ -1716,7 +1719,7 @@ export default function TruckOwnerDashboard() {
                   const amount = Number(amountDraft);
                   setAmountModal(null);
                   if (m.kind === 'quote') submitJobQuote(m.job, amount);
-                  else submitTransportCounter(m.quoteId, amount);
+                  else submitTransportCounter(m.jobId, m.quoteId, amount);
                 }}
               >
                 {amountModal.kind === 'quote' ? 'Submit quote' : 'Send counter'}
