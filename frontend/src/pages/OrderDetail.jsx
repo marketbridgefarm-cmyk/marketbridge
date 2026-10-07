@@ -2018,21 +2018,53 @@ export default function OrderDetail() {
       })
     : [];
 
+  // Transport quote URLs now match the inspection shape:
+  //   /transport/:id/quotes/:quoteId/<action>
+  // The job ID is the outer resource; the quote ID is nested under it.
   const transportActions = {
-    selectQuote: (id) => id && run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}/select`), 'Could not select transport bid'),
-    releaseQuote: (id) => id && run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'WITHDRAW' }), 'Could not release the transporter agreement'),
-    rejectQuote: (id) => id && run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'REJECT' }), 'Could not reject transport quote'),
-    acceptQuote: async (id) => {
-      if (!id) return;
-      const ok = await run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'ACCEPT' }), 'Could not accept transport quote');
+    selectQuote: (quoteId) => {
+      if (!quoteId || !transportJob) return;
+      return run(
+        `quote-${quoteId}`,
+        () => api.patch(`/transport/${transportJob.id}/quotes/${quoteId}/select`),
+        'Could not select transport bid'
+      );
+    },
+    releaseQuote: (quoteId) => {
+      if (!quoteId || !transportJob) return;
+      return run(
+        `quote-${quoteId}`,
+        () => api.patch(`/transport/${transportJob.id}/quotes/${quoteId}/withdraw`),
+        'Could not release the transporter agreement'
+      );
+    },
+    rejectQuote: (quoteId) => {
+      if (!quoteId || !transportJob) return;
+      return run(
+        `quote-${quoteId}`,
+        () => api.patch(`/transport/${transportJob.id}/quotes/${quoteId}/reject`),
+        'Could not reject transport quote'
+      );
+    },
+    acceptQuote: async (quoteId) => {
+      if (!quoteId || !transportJob) return;
+      const ok = await run(
+        `quote-${quoteId}`,
+        () => api.patch(`/transport/${transportJob.id}/quotes/${quoteId}/accept`),
+        'Could not accept transport quote'
+      );
       if (ok) scrollToId('payment-center', 150);
     },
-    counterQuote: async (id) => {
-      if (!id) return;
-      const amount = Number(counterInputs[id]);
+    counterQuote: async (quoteId) => {
+      if (!quoteId || !transportJob) return;
+      const amount = Number(counterInputs[quoteId]);
       if (!Number.isFinite(amount) || amount <= 0) return setError('Enter a valid counter amount before sending.');
-      const ok = await run(`quote-${id}`, () => api.patch(`/transport/quotes/${id}`, { action: 'COUNTER', counterAmount: amount }), 'Could not send counter-offer');
-      if (ok) setCounterInputs((q) => ({ ...q, [id]: '' }));
+      const ok = await run(
+        `quote-${quoteId}`,
+        () => api.post(`/transport/${transportJob.id}/quotes/${quoteId}/counter`, { counterAmount: amount }),
+        'Could not send counter-offer'
+      );
+      if (ok) setCounterInputs((q) => ({ ...q, [quoteId]: '' }));
     },
     requestRecovery: () =>
       run('recovery-TRANSPORT', async () => {
