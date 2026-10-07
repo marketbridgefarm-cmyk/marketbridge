@@ -46,3 +46,23 @@ test('releaseAllowance adds one extra release per admin override', async () => {
   const r = await svc.releaseAllowance(tx, { action: 'TRANSPORT_QUOTE_WITHDRAWN', metadataKey: 'transportJobId', jobId: 'j1' });
   assert.deepEqual(r, { used: 2, allowed: 3 });
 });
+
+test('provider reasons use their own list', () => {
+  assert.throws(() => svc.parseReleaseReason({ reason: 'NO_RESPONSE' }, { provider: true }), { statusCode: 400 });
+  assert.deepEqual(
+    svc.parseReleaseReason({ reason: 'schedule_conflict' }, { provider: true }),
+    { reason: 'SCHEDULE_CONFLICT', note: null }
+  );
+  assert.throws(() => svc.parseReleaseReason({ reason: 'VEHICLE_OR_EQUIPMENT_ISSUE' }), { statusCode: 400 });
+  assert.throws(() => svc.parseReleaseReason({ reason: 'OTHER' }, { provider: true }), { statusCode: 400 });
+});
+
+test('provider release count looks at the last 30 days of provider-release audit events', async () => {
+  let seen;
+  const tx = { auditEvent: { count: async (a) => { seen = a; return 4; } } };
+  assert.equal(await svc.providerReleaseCountLast30d(tx, 'u1'), 4);
+  assert.equal(seen.where.actorId, 'u1');
+  assert.deepEqual(seen.where.action.in, svc.PROVIDER_RELEASE_ACTIONS);
+  assert.ok(seen.where.createdAt.gte instanceof Date);
+  assert.equal(svc.providerFlagThreshold(), 3);
+});
