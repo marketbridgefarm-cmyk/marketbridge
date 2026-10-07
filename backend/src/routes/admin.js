@@ -17,6 +17,8 @@ const { processRefund, verifyAndFinalizeRefund, retryRefund, failRefund } = requ
 const { resolveReconciliation } = require('../services/paymentReconciliationService');
 const { markPaidOut } = require('../services/payoutService');
 
+const { PROVIDER_RELEASE_ACTIONS, providerFlagThreshold } = require('../services/releaseLimitsService');
+
 const router = express.Router();
 
 
@@ -3088,6 +3090,27 @@ router.get('/release-reviews', async (req, res) => {
         select: { metadata: true },
       }),
     ]);
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const providerEvents = await prisma.auditEvent.findMany({
+      where: {
+        action: { in: PROVIDER_RELEASE_ACTIONS },
+        createdAt: { gte: since },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 1000,
+      include: { actor: { select: { id: true, name: true, email: true } } },
+    });
+    const byProvider = new Map();
+    for (const e of providerEvents) {
+      const row = byProvider.get(e.actorId) || { provider: e.actor, count: 0, lastAt: e.createdAt, reasons: {} };
+      row.count += 1;
+      const reason = e.metadata?.reason || 'UNKNOWN';
+      row.reasons[reason] = (row.reasons[reason] || 0) + 1;
+      byProvider.set(e.actorId, row);
+    }
+    const frequentProviders = [...byProvider.values()]
+      .filter((r) => r.count >= providerFlagThreshold())
+      .sort((a, b) => b.count - a.count);
     const approved = new Set(overrides.map((o) => o.metadata?.blockedEventId).filter(Boolean));
     const reviews = blocked
       .filter((e) => !approved.has(e.id))
@@ -3105,7 +3128,7 @@ router.get('/release-reviews', async (req, res) => {
           createdAt: e.createdAt,
         };
       });
-    return res.json({ reviews, count: reviews.length });
+    return res.json({ reviews, count: reviews.length, frequentProviders });
   } catch (error) {
     req.log.error({ err: error }, 'ADMIN RELEASE REVIEWS ERROR:');
     return res.status(500).json({ error: 'Could not load release reviews' });

@@ -30,6 +30,8 @@ const {
   parseReleaseReason,
   assertAcceptedReleaseWindowElapsed,
   releaseAllowance,
+  providerFlagThreshold,
+  providerReleaseCountLast30d,
   LIMIT_MESSAGE,
 } = require('../services/releaseLimitsService');
 
@@ -2107,7 +2109,7 @@ router.patch(
       let releaseInfo = { reason: 'NO_RESPONSE', note: null };
       if (isAcceptedRelease) {
         try {
-          releaseInfo = parseReleaseReason(req.body);
+          releaseInfo = parseReleaseReason(req.body, { provider: isProviderRelease });
           if (!isProviderRelease) assertAcceptedReleaseWindowElapsed(quote);
         } catch (limitErr) {
           return res.status(limitErr.statusCode || 400).json({
@@ -2218,6 +2220,11 @@ router.patch(
           });
         }
 
+        let providerReleases30d = null;
+        if (isProviderRelease) {
+          providerReleases30d = (await providerReleaseCountLast30d(tx, req.user.id)) + 1;
+        }
+
         await recordAuditEvent(tx, {
           actorId: req.user.id,
           action: isProviderRelease
@@ -2234,6 +2241,24 @@ router.patch(
             reason: releaseInfo.reason,
             note: releaseInfo.note,
             releaseNumber,
+            ...(isProviderRelease
+              ? {
+                  providerReleases30d,
+                  flagged: providerReleases30d >= providerFlagThreshold(),
+                }
+              : {}),
+          },
+        });
+
+        // Tell the other side (in-app + SMS opt-in) what happened.
+        await recordOrderEvent(tx, {
+          orderId: freshQuote.transportJob.orderId,
+          actorId: req.user.id,
+          type: isProviderRelease ? 'PROVIDER_AGREEMENT_RELEASED' : 'REQUESTER_AGREEMENT_RELEASED',
+          metadata: {
+            service: 'TRANSPORT',
+            providerId: freshQuote.truckOwnerId,
+            reason: releaseInfo.reason,
           },
         });
 
