@@ -40,8 +40,6 @@ const ACTIVE_TRUCK_JOB_STATUSES = [
 
 // ============================================================================
 // TRANSPORT LOADING REPORT — ENUM VALUES
-// ----------------------------------------------------------------------------
-// Structured, dropdown-only inputs. No free text can carry a phone number.
 // ============================================================================
 
 const LOADING_WHAT_OPTIONS = [
@@ -101,13 +99,6 @@ class TruckConflictError extends Error {
   }
 }
 
-// ============================================================================
-// TRANSPORT QUOTE NEGOTIATION HELPERS
-// Counter mutates the existing quote row in place (same pattern as the
-// inspection quote negotiation) to satisfy the unique
-// (transportJobId, truckOwnerId) constraint on TransportQuote.
-// ============================================================================
-
 function quoteError(message, statusCode = 400) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -133,12 +124,8 @@ function quoteExpiry(hours = 24) {
 
 // ============================================================================
 // SILENT-RELEASE WINDOW (mirrors INSPECTION_RELEASE_AFTER_HOURS)
-// ----------------------------------------------------------------------------
-// If the requester has selected a truck owner (or countered them) and the
-// truck owner goes silent, the requester needs a way to release the abandoned
-// negotiation and negotiate with another waiting bid. The window is measured
-// from the quote's last update so a fresh counter resets the clock.
 // ============================================================================
+
 function transportReleaseAfterHours() {
   const configured = Number(process.env.TRANSPORT_RELEASE_AFTER_HOURS);
   return Number.isFinite(configured) && configured >= 0 ? configured : 72;
@@ -180,67 +167,30 @@ class ActiveTruckAssignmentError extends Error {
 
 async function claimAvailableTruck(tx, truckId) {
   const result = await tx.truck.updateMany({
-    where: {
-      id: truckId,
-      availability: 'AVAILABLE',
-    },
-    data: {
-      availability: 'BUSY',
-    },
+    where: { id: truckId, availability: 'AVAILABLE' },
+    data: { availability: 'BUSY' },
   });
 
   if (result.count !== 1) {
-    throw new TruckConflictError(
-      'Selected truck is no longer available'
-    );
+    throw new TruckConflictError('Selected truck is no longer available');
   }
 
-  return tx.truck.findUnique({
-    where: {
-      id: truckId,
-    },
-  });
+  return tx.truck.findUnique({ where: { id: truckId } });
 }
 
 async function releaseTruck(tx, truckId) {
   if (!truckId) return;
-
   await tx.truck.updateMany({
-    where: {
-      id: truckId,
-      availability: 'BUSY',
-    },
-    data: {
-      availability: 'AVAILABLE',
-    },
+    where: { id: truckId, availability: 'BUSY' },
+    data: { availability: 'AVAILABLE' },
   });
 }
 
 async function lockTruckRow(tx, truckId) {
-  const truck = await tx.truck.findUnique({
-    where: {
-      id: truckId,
-    },
-  });
-
-  if (!truck) {
-    return null;
-  }
-
-  await tx.truck.update({
-    where: {
-      id: truckId,
-    },
-    data: {
-      availability: truck.availability,
-    },
-  });
-
-  return tx.truck.findUnique({
-    where: {
-      id: truckId,
-    },
-  });
+  const truck = await tx.truck.findUnique({ where: { id: truckId } });
+  if (!truck) return null;
+  await tx.truck.update({ where: { id: truckId }, data: { availability: truck.availability } });
+  return tx.truck.findUnique({ where: { id: truckId } });
 }
 
 // ============================================================================
@@ -260,12 +210,7 @@ router.post(
   validate,
   async (req, res) => {
     try {
-      const {
-        registration,
-        truckType,
-        capacity,
-        operatingArea,
-      } = req.body;
+      const { registration, truckType, capacity, operatingArea } = req.body;
 
       const truck = await prisma.truck.create({
         data: {
@@ -277,22 +222,15 @@ router.post(
         },
       });
 
-      return res.status(201).json({
-        truck,
-      });
+      return res.status(201).json({ truck });
     } catch (error) {
       req.log.error({ err: error }, 'REGISTER TRUCK ERROR:');
 
       if (error.code === 'P2002') {
-        return res.status(409).json({
-          error:
-            'A truck with this registration already exists',
-        });
+        return res.status(409).json({ error: 'A truck with this registration already exists' });
       }
 
-      return res.status(500).json({
-        error: 'Could not register truck',
-      });
+      return res.status(500).json({ error: 'Could not register truck' });
     }
   }
 );
@@ -303,25 +241,15 @@ router.get(
   requireRole('TRUCK_OWNER'),
   async (req, res) => {
     try {
-      const trucks =
-        await prisma.truck.findMany({
-          where: {
-            ownerId: req.user.id,
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        });
-
-      return res.json({
-        trucks,
+      const trucks = await prisma.truck.findMany({
+        where: { ownerId: req.user.id },
+        orderBy: { createdAt: 'desc' },
       });
+
+      return res.json({ trucks });
     } catch (error) {
       req.log.error({ err: error }, 'MY TRUCKS ERROR:');
-
-      return res.status(500).json({
-        error: 'Could not load your trucks',
-      });
+      return res.status(500).json({ error: 'Could not load your trucks' });
     }
   }
 );
@@ -332,107 +260,60 @@ router.patch(
   requireRole('TRUCK_OWNER'),
   [
     param('id').isUUID(),
-    body('availability').isIn([
-      'AVAILABLE',
-      'BUSY',
-      'OFFLINE',
-    ]),
+    body('availability').isIn(['AVAILABLE', 'BUSY', 'OFFLINE']),
   ],
   validate,
   async (req, res) => {
     try {
-      const requestedAvailability =
-        req.body.availability;
+      const requestedAvailability = req.body.availability;
 
-      const result = await prisma.$transaction(
-        async (tx) => {
-          const truck = await lockTruckRow(
-            tx,
-            req.params.id
-          );
+      const result = await prisma.$transaction(async (tx) => {
+        const truck = await lockTruckRow(tx, req.params.id);
 
-          if (!truck) {
-            const error = new Error(
-              'Truck not found'
-            );
-            error.statusCode = 404;
-            throw error;
-          }
+        if (!truck) {
+          const error = new Error('Truck not found');
+          error.statusCode = 404;
+          throw error;
+        }
 
-          if (
-            truck.ownerId !== req.user.id &&
-            !isAdmin(req.user)
-          ) {
-            const error = new Error(
-              'Not your truck'
-            );
-            error.statusCode = 403;
-            throw error;
-          }
+        if (truck.ownerId !== req.user.id && !isAdmin(req.user)) {
+          const error = new Error('Not your truck');
+          error.statusCode = 403;
+          throw error;
+        }
 
-          if (
-            requestedAvailability === 'AVAILABLE'
-          ) {
-            const activeJob =
-              await tx.transportJob.findFirst({
-                where: {
-                  truckId: truck.id,
-                  status: {
-                    in:
-                      ACTIVE_TRUCK_JOB_STATUSES,
-                  },
-                },
-                select: {
-                  id: true,
-                  status: true,
-                },
-              });
-
-            if (activeJob) {
-              throw new ActiveTruckAssignmentError(
-                'Truck cannot be made AVAILABLE while it has an active transport job'
-              );
-            }
-          }
-
-          return tx.truck.update({
-            where: {
-              id: truck.id,
-            },
-            data: {
-              availability:
-                requestedAvailability,
-            },
+        if (requestedAvailability === 'AVAILABLE') {
+          const activeJob = await tx.transportJob.findFirst({
+            where: { truckId: truck.id, status: { in: ACTIVE_TRUCK_JOB_STATUSES } },
+            select: { id: true, status: true },
           });
-        },
-        { maxWait: 10000, timeout: 15000 }
-      );
 
-      return res.json({
-        truck: result,
-      });
+          if (activeJob) {
+            throw new ActiveTruckAssignmentError(
+              'Truck cannot be made AVAILABLE while it has an active transport job'
+            );
+          }
+        }
+
+        return tx.truck.update({
+          where: { id: truck.id },
+          data: { availability: requestedAvailability },
+        });
+      }, { maxWait: 10000, timeout: 15000 });
+
+      return res.json({ truck: result });
     } catch (error) {
       req.log.error({ err: error }, 'UPDATE TRUCK AVAILABILITY ERROR:');
 
       if (error.statusCode) {
-        return res.status(error.statusCode).json({
-          error: error.message,
-        });
+        return res.status(error.statusCode).json({ error: error.message });
       }
 
-      if (
-        error.code ===
-        'ACTIVE_TRUCK_ASSIGNMENT'
-      ) {
-        return res.status(409).json({
-          error: error.message,
-        });
+      if (error.code === 'ACTIVE_TRUCK_ASSIGNMENT') {
+        return res.status(409).json({ error: error.message });
       }
 
-      return res.status(500).json({
-        error:
-          'Could not update truck availability',
-      });
+      return res.status(500).json({ error: 'Could not update truck availability' });
     }
   }
 );
@@ -443,59 +324,36 @@ router.get(
   requireRole('TRUCK_OWNER'),
   async (req, res) => {
     try {
-      const jobs =
-        await prisma.transportJob.findMany({
-          where: {
-            method: 'HIRE_TRANSPORTER',
-            status: {
-              in: ['REQUESTED', 'QUOTED'],
-            },
-            payments: {
-              none: {
-                type: 'TRANSPORT',
-                status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
-              },
+      const jobs = await prisma.transportJob.findMany({
+        where: {
+          method: 'HIRE_TRANSPORTER',
+          status: { in: ['REQUESTED', 'QUOTED'] },
+          payments: {
+            none: {
+              type: 'TRANSPORT',
+              status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
             },
           },
-          include: {
-            order: {
-              include: {
-                buyer: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
-                seller: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
-              },
-            },
-            quotes: {
-              where: {
-                truckOwnerId: req.user.id,
-              },
-              orderBy: { createdAt: 'asc' },
+        },
+        include: {
+          order: {
+            include: {
+              buyer: { select: { id: true, name: true } },
+              seller: { select: { id: true, name: true } },
             },
           },
-          orderBy: {
-            createdAt: 'desc',
+          quotes: {
+            where: { truckOwnerId: req.user.id },
+            orderBy: { createdAt: 'asc' },
           },
-        });
-
-      return res.json({
-        jobs,
+        },
+        orderBy: { createdAt: 'desc' },
       });
+
+      return res.json({ jobs });
     } catch (error) {
       req.log.error({ err: error }, 'OPEN TRANSPORT JOBS ERROR:');
-
-      return res.status(500).json({
-        error:
-          'Could not load open transport jobs',
-      });
+      return res.status(500).json({ error: 'Could not load open transport jobs' });
     }
   }
 );
@@ -506,56 +364,33 @@ router.get(
   requireRole('TRUCK_OWNER'),
   async (req, res) => {
     try {
-      const jobs =
-        await prisma.transportJob.findMany({
-          where: {
-            truckOwnerId: req.user.id,
-          },
-          include: {
-            order: {
-              include: {
-                payments: { select: { type: true, status: true } },
-                listing: { select: { category: true } },
-                inspectionRequests: {
-                  where: { status: { not: 'CANCELLED' } },
-                  select: { id: true, status: true, fee: true, payments: { select: { type: true, status: true } } },
-                },
-                buyer: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
-                seller: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
+      const jobs = await prisma.transportJob.findMany({
+        where: { truckOwnerId: req.user.id },
+        include: {
+          order: {
+            include: {
+              payments: { select: { type: true, status: true } },
+              listing: { select: { category: true } },
+              inspectionRequests: {
+                where: { status: { not: 'CANCELLED' } },
+                select: { id: true, status: true, fee: true, payments: { select: { type: true, status: true } } },
               },
-            },
-            truck: true,
-            quotes: {
-              where: {
-                truckOwnerId: req.user.id,
-              },
+              buyer: { select: { id: true, name: true } },
+              seller: { select: { id: true, name: true } },
             },
           },
-          orderBy: {
-            createdAt: 'desc',
+          truck: true,
+          quotes: {
+            where: { truckOwnerId: req.user.id },
           },
-        });
-
-      return res.json({
-        jobs,
+        },
+        orderBy: { createdAt: 'desc' },
       });
+
+      return res.json({ jobs });
     } catch (error) {
       req.log.error({ err: error }, 'MY TRANSPORT JOBS ERROR:');
-
-      return res.status(500).json({
-        error:
-          'Could not load your transport jobs',
-      });
+      return res.status(500).json({ error: 'Could not load your transport jobs' });
     }
   }
 );
@@ -574,116 +409,56 @@ router.get('/match', authenticate, async (req, res) => {
   }
 });
 
+// ============================================================================
+// CREATE TRANSPORT JOB
+// ============================================================================
+
 router.post(
   '/',
   authenticate,
   [
-    body('orderId')
-      .isUUID()
-      .withMessage('orderId is required'),
-
-    body('arrangingParty').isIn([
-      'SELLER',
-      'BUYER',
-      'JOINT',
-    ]),
-
-    body('method').isIn([
-      'OWN_TRUCK',
-      'HIRE_TRANSPORTER',
-    ]),
-
-    body('pickupLocation')
-      .isString()
-      .trim()
-      .notEmpty(),
-
-    body('destination')
-      .isString()
-      .trim()
-      .notEmpty(),
-
-    body('load')
-      .isString()
-      .trim()
-      .notEmpty(),
-
-    body('requiredCapacity')
-      .optional()
-      .isFloat({ min: 0 }),
-
-    body('specialRequirements')
-      .optional()
-      .isString()
-      .trim()
-      .custom(noContactInfo),
-
-    body('truckId')
-      .optional()
-      .isUUID(),
+    body('orderId').isUUID().withMessage('orderId is required'),
+    body('arrangingParty').isIn(['SELLER', 'BUYER', 'JOINT']),
+    body('method').isIn(['OWN_TRUCK', 'HIRE_TRANSPORTER']),
+    body('pickupLocation').isString().trim().notEmpty(),
+    body('destination').isString().trim().notEmpty(),
+    body('load').isString().trim().notEmpty(),
+    body('requiredCapacity').optional().isFloat({ min: 0 }),
+    body('specialRequirements').optional().isString().trim().custom(noContactInfo),
+    body('truckId').optional().isUUID(),
   ],
   validate,
   async (req, res) => {
     try {
       const {
-        orderId,
-        arrangingParty,
-        method,
-        pickupLocation,
-        destination,
-        load,
-        requiredCapacity,
-        specialRequirements,
-        truckId,
+        orderId, arrangingParty, method, pickupLocation, destination,
+        load, requiredCapacity, specialRequirements, truckId,
       } = req.body;
 
-      const order =
-        await prisma.order.findUnique({
-          where: {
-            id: orderId,
-          },
-          include: {
-            transportJob: true,
-            listing: true,
-            payments: true,
-            inspectionRequests: { include: { payments: true } },
-          },
-        });
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+          transportJob: true,
+          listing: true,
+          payments: true,
+          inspectionRequests: { include: { payments: true } },
+        },
+      });
 
-      if (!order) {
-        return res.status(404).json({
-          error: 'Order not found',
-        });
+      if (!order) return res.status(404).json({ error: 'Order not found' });
+
+      if (!isOrderParticipant(req.user.id, order) && !isAdmin(req.user)) {
+        return res.status(403).json({ error: 'Not authorized to arrange transport for this order' });
       }
 
-      if (
-        !isOrderParticipant(
-          req.user.id,
-          order
-        ) &&
-        !isAdmin(req.user)
-      ) {
-        return res.status(403).json({
-          error:
-            'Not authorized to arrange transport for this order',
-        });
-      }
-
-      if (
-        order.status !== 'CONFIRMED' &&
-        order.status !== 'PENDING_PAYMENT'
-      ) {
+      if (order.status !== 'CONFIRMED' && order.status !== 'PENDING_PAYMENT') {
         return res.status(400).json({
-          error:
-            `Transport can only be arranged for orders in CONFIRMED or PENDING_PAYMENT state (current: ${order.status})`,
+          error: `Transport can only be arranged for orders in CONFIRMED or PENDING_PAYMENT state (current: ${order.status})`,
         });
       }
 
       if (order.transportJob && order.transportJob.status !== 'CANCELLED') {
-        return res.status(409).json({
-          error:
-            'A transport job already exists for this order',
-        });
+        return res.status(409).json({ error: 'A transport job already exists for this order' });
       }
 
       const isAgricultural = order.listing?.category === 'AGRICULTURAL';
@@ -736,15 +511,11 @@ router.post(
       }
 
       if (!['SELLER', 'BUYER', 'JOINT'].includes(resolvedArrangingParty)) {
-        return res.status(400).json({
-          error: 'arrangingParty must be SELLER, BUYER, or JOINT',
-        });
+        return res.status(400).json({ error: 'arrangingParty must be SELLER, BUYER, or JOINT' });
       }
 
       if (method === 'OWN_TRUCK' && resolvedArrangingParty === 'JOINT') {
-        return res.status(400).json({
-          error: 'JOINT arrangements must use HIRE_TRANSPORTER. Select SELLER or BUYER when using an own truck.',
-        });
+        return res.status(400).json({ error: 'JOINT arrangements must use HIRE_TRANSPORTER. Select SELLER or BUYER when using an own truck.' });
       }
 
       if (resolvedArrangingParty === 'SELLER' && order.sellerId !== req.user.id && !isAdmin(req.user)) {
@@ -760,312 +531,182 @@ router.post(
       }
 
       if (method === 'HIRE_TRANSPORTER') {
-        const result =
-          await prisma.$transaction(
-            async (tx) => {
-              const freshOrder =
-                await tx.order.findUnique({
-                  where: {
-                    id: order.id,
-                  },
-                  include: {
-                    transportJob: true,
-                  },
-                });
+        const result = await prisma.$transaction(async (tx) => {
+          const freshOrder = await tx.order.findUnique({
+            where: { id: order.id },
+            include: { transportJob: true },
+          });
 
-              if (!freshOrder) {
-                const error = new Error(
-                  'Order not found'
-                );
-                error.statusCode = 404;
-                throw error;
-              }
+          if (!freshOrder) {
+            const error = new Error('Order not found');
+            error.statusCode = 404;
+            throw error;
+          }
 
-              await lockOrderAndAssertNotClosed(tx, freshOrder.id, 'transport cannot be arranged until that is resolved');
+          await lockOrderAndAssertNotClosed(tx, freshOrder.id, 'transport cannot be arranged until that is resolved');
 
-              if (freshOrder.transportJob && freshOrder.transportJob.status !== 'CANCELLED') {
-                const error = new Error(
-                  'A transport job already exists for this order'
-                );
-                error.statusCode = 409;
-                throw error;
-              }
+          if (freshOrder.transportJob && freshOrder.transportJob.status !== 'CANCELLED') {
+            const error = new Error('A transport job already exists for this order');
+            error.statusCode = 409;
+            throw error;
+          }
 
-              const transportJob = freshOrder.transportJob?.status === 'CANCELLED'
-                ? await (async () => {
-                    await tx.transportQuote.deleteMany({ where: { transportJobId: freshOrder.transportJob.id } });
-                    return tx.transportJob.update({
-                      where: { id: freshOrder.transportJob.id },
-                      data: {
-                        arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
-                        requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
-                        truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED',
-                        pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
-                      },
-                    });
-                  })()
-                : await tx.transportJob.create({
+          const transportJob = freshOrder.transportJob?.status === 'CANCELLED'
+            ? await (async () => {
+                await tx.transportQuote.deleteMany({ where: { transportJobId: freshOrder.transportJob.id } });
+                return tx.transportJob.update({
+                  where: { id: freshOrder.transportJob.id },
                   data: {
-                    orderId:
-                      freshOrder.id,
-
-                    arrangingParty:
-                      resolvedArrangingParty,
-
-                    method,
-
-                    pickupLocation,
-                    destination,
-                    load,
-
-                    requiredCapacity:
-                      requiredCapacity ||
-                      null,
-
-                    specialRequirements:
-                      specialRequirements ||
-                      null,
-
-                    truckOwnerId: null,
-                    truckId: null,
-
-                    status: 'REQUESTED',
+                    arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
+                    requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
+                    truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED',
+                    pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
                   },
                 });
+              })()
+            : await tx.transportJob.create({
+              data: {
+                orderId: freshOrder.id,
+                arrangingParty: resolvedArrangingParty,
+                method, pickupLocation, destination, load,
+                requiredCapacity: requiredCapacity || null,
+                specialRequirements: specialRequirements || null,
+                truckOwnerId: null, truckId: null,
+                status: 'REQUESTED',
+              },
+            });
 
-              await tx.order.update({
-                where: {
-                  id: freshOrder.id,
-                },
-                data: {
-                  arrangingParty:
-                    resolvedArrangingParty,
-
-                  ...(freshOrder.status ===
-                  'CONFIRMED'
-                    ? {
-                        status:
-                          'TRANSPORT_ARRANGED',
-                      }
-                    : {}),
-                },
-              });
-
-              await recordAuditEvent(tx, {
-                actorId: req.user.id,
-                action: 'TRANSPORT_JOB_CREATED',
-                resourceType: 'TransportJob',
-                resourceId: transportJob.id,
-                metadata: {
-                  orderId: freshOrder.id,
-                  method,
-                  arrangingParty: resolvedArrangingParty,
-                  truckId: null,
-                  status: transportJob.status,
-                },
-              });
-
-              return transportJob;
+          await tx.order.update({
+            where: { id: freshOrder.id },
+            data: {
+              arrangingParty: resolvedArrangingParty,
+              ...(freshOrder.status === 'CONFIRMED' ? { status: 'TRANSPORT_ARRANGED' } : {}),
             },
-            { maxWait: 10000, timeout: 15000 }
-          );
+          });
 
-        return res.status(201).json({
-          transportJob: result,
-        });
+          await recordAuditEvent(tx, {
+            actorId: req.user.id,
+            action: 'TRANSPORT_JOB_CREATED',
+            resourceType: 'TransportJob',
+            resourceId: transportJob.id,
+            metadata: { orderId: freshOrder.id, method, arrangingParty: resolvedArrangingParty, truckId: null, status: transportJob.status },
+          });
+
+          return transportJob;
+        }, { maxWait: 10000, timeout: 15000 });
+
+        return res.status(201).json({ transportJob: result });
       }
 
       if (!truckId) {
-        return res.status(400).json({
-          error:
-            'truckId is required for OWN_TRUCK',
-        });
+        return res.status(400).json({ error: 'truckId is required for OWN_TRUCK' });
       }
 
-      const result =
-        await prisma.$transaction(
-          async (tx) => {
-            const freshOrder =
-              await tx.order.findUnique({
-                where: {
-                  id: order.id,
-                },
-                include: {
-                  transportJob: true,
-                },
-              });
+      const result = await prisma.$transaction(async (tx) => {
+        const freshOrder = await tx.order.findUnique({
+          where: { id: order.id },
+          include: { transportJob: true },
+        });
 
-            if (!freshOrder) {
-              const error = new Error(
-                'Order not found'
-              );
-              error.statusCode = 404;
-              throw error;
-            }
+        if (!freshOrder) {
+          const error = new Error('Order not found');
+          error.statusCode = 404;
+          throw error;
+        }
 
-            await lockOrderAndAssertNotClosed(tx, freshOrder.id, 'transport cannot be arranged until that is resolved');
+        await lockOrderAndAssertNotClosed(tx, freshOrder.id, 'transport cannot be arranged until that is resolved');
 
-            if (freshOrder.transportJob && freshOrder.transportJob.status !== 'CANCELLED') {
-              const error = new Error(
-                'A transport job already exists for this order'
-              );
-              error.statusCode = 409;
-              throw error;
-            }
+        if (freshOrder.transportJob && freshOrder.transportJob.status !== 'CANCELLED') {
+          const error = new Error('A transport job already exists for this order');
+          error.statusCode = 409;
+          throw error;
+        }
 
-            const truck =
-              await tx.truck.findUnique({
-                where: {
-                  id: truckId,
-                },
-              });
+        const truck = await tx.truck.findUnique({ where: { id: truckId } });
 
-            if (!truck) {
-              const error = new Error(
-                'Truck not found'
-              );
-              error.statusCode = 404;
-              throw error;
-            }
+        if (!truck) {
+          const error = new Error('Truck not found');
+          error.statusCode = 404;
+          throw error;
+        }
 
-            if (
-              truck.ownerId !==
-                req.user.id &&
-              !isAdmin(req.user)
-            ) {
-              const error = new Error(
-                'You do not own this truck'
-              );
-              error.statusCode = 403;
-              throw error;
-            }
+        if (truck.ownerId !== req.user.id && !isAdmin(req.user)) {
+          const error = new Error('You do not own this truck');
+          error.statusCode = 403;
+          throw error;
+        }
 
-            await claimAvailableTruck(
-              tx,
-              truck.id
-            );
+        await claimAvailableTruck(tx, truck.id);
 
-            const transportJob = freshOrder.transportJob?.status === 'CANCELLED'
-              ? await (async () => {
-                  await tx.transportQuote.deleteMany({ where: { transportJobId: freshOrder.transportJob.id } });
-                  return tx.transportJob.update({
-                    where: { id: freshOrder.transportJob.id },
-                    data: {
-                      arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
-                      requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
-                      truckOwnerId: truck.ownerId, truckId: truck.id, agreedAmount: null, status: 'ACCEPTED',
-                      pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
-                    },
-                  });
-                })()
-              : await tx.transportJob.create({
+        const transportJob = freshOrder.transportJob?.status === 'CANCELLED'
+          ? await (async () => {
+              await tx.transportQuote.deleteMany({ where: { transportJobId: freshOrder.transportJob.id } });
+              return tx.transportJob.update({
+                where: { id: freshOrder.transportJob.id },
                 data: {
-                  orderId:
-                    freshOrder.id,
-
-                  arrangingParty:
-                    resolvedArrangingParty,
-
-                  method,
-
-                  pickupLocation,
-                  destination,
-                  load,
-
-                  requiredCapacity:
-                    requiredCapacity ||
-                    null,
-
-                  specialRequirements:
-                    specialRequirements ||
-                    null,
-
-                  truckOwnerId:
-                    truck.ownerId,
-
-                  truckId:
-                    truck.id,
-
-                  status: 'ACCEPTED',
+                  arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
+                  requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
+                  truckOwnerId: truck.ownerId, truckId: truck.id, agreedAmount: null, status: 'ACCEPTED',
+                  pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
                 },
               });
+            })()
+          : await tx.transportJob.create({
+            data: {
+              orderId: freshOrder.id,
+              arrangingParty: resolvedArrangingParty,
+              method, pickupLocation, destination, load,
+              requiredCapacity: requiredCapacity || null,
+              specialRequirements: specialRequirements || null,
+              truckOwnerId: truck.ownerId,
+              truckId: truck.id,
+              status: 'ACCEPTED',
+            },
+          });
 
-            await tx.order.update({
-              where: {
-                id: freshOrder.id,
-              },
-              data: {
-                arrangingParty:
-                  resolvedArrangingParty,
-
-                ...(freshOrder.status ===
-                'CONFIRMED'
-                  ? {
-                      status:
-                        'TRANSPORT_ARRANGED',
-                    }
-                  : {}),
-              },
-            });
-
-            await recordAuditEvent(tx, {
-              actorId: req.user.id,
-              action: 'TRANSPORT_ASSIGNED',
-              resourceType: 'TransportJob',
-              resourceId: transportJob.id,
-              metadata: {
-                orderId: freshOrder.id,
-                method,
-                arrangingParty: resolvedArrangingParty,
-                truckId: truck.id,
-                truckOwnerId: truck.ownerId,
-                status: transportJob.status,
-              },
-            });
-
-            return transportJob;
+        await tx.order.update({
+          where: { id: freshOrder.id },
+          data: {
+            arrangingParty: resolvedArrangingParty,
+            ...(freshOrder.status === 'CONFIRMED' ? { status: 'TRANSPORT_ARRANGED' } : {}),
           },
-          { maxWait: 10000, timeout: 15000 }
-        );
+        });
 
-      return res.status(201).json({
-        transportJob: result,
-      });
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'TRANSPORT_ASSIGNED',
+          resourceType: 'TransportJob',
+          resourceId: transportJob.id,
+          metadata: {
+            orderId: freshOrder.id, method, arrangingParty: resolvedArrangingParty,
+            truckId: truck.id, truckOwnerId: truck.ownerId, status: transportJob.status,
+          },
+        });
+
+        return transportJob;
+      }, { maxWait: 10000, timeout: 15000 });
+
+      return res.status(201).json({ transportJob: result });
     } catch (error) {
       req.log.error({ err: error }, 'CREATE TRANSPORT ERROR:');
 
       if (error.statusCode) {
-        return res.status(
-          error.statusCode
-        ).json({
-          error: error.message,
-        });
+        return res.status(error.statusCode).json({ error: error.message });
       }
 
-      if (
-        error.code ===
-        'TRUCK_CONFLICT'
-      ) {
-        return res.status(409).json({
-          error: error.message,
-        });
+      if (error.code === 'TRUCK_CONFLICT') {
+        return res.status(409).json({ error: error.message });
       }
 
       if (error.code === 'P2002') {
-        return res.status(409).json({
-          error:
-            'A transport job already exists for this order',
-        });
+        return res.status(409).json({ error: 'A transport job already exists for this order' });
       }
 
       if (error.code === 'ORDER_NOT_ACTIONABLE') {
         return res.status(error.status || 409).json({ error: error.message });
       }
 
-      return res.status(500).json({
-        error:
-          'Could not create transport job',
-      });
+      return res.status(500).json({ error: 'Could not create transport job' });
     }
   }
 );
@@ -1073,80 +714,39 @@ router.post(
 router.get(
   '/order/:orderId',
   authenticate,
-  [
-    param('orderId').isUUID(),
-  ],
+  [param('orderId').isUUID()],
   validate,
   async (req, res) => {
     try {
-      const order =
-        await prisma.order.findUnique({
-          where: {
-            id: req.params.orderId,
-          },
-          include: {
-            transportJob: {
-              include: {
-                truckOwner: {
-                  select: {
-                    id: true,
-                    name: true,
-                    rating: true,
-                  },
+      const order = await prisma.order.findUnique({
+        where: { id: req.params.orderId },
+        include: {
+          transportJob: {
+            include: {
+              truckOwner: { select: { id: true, name: true, rating: true } },
+              truck: true,
+              quotes: {
+                include: {
+                  truckOwner: { select: { id: true, name: true, rating: true } },
+                  truck: true,
                 },
-
-                truck: true,
-
-                quotes: {
-                  include: {
-                    truckOwner: {
-                      select: {
-                        id: true,
-                        name: true,
-                        rating: true,
-                      },
-                    },
-                    truck: true,
-                  },
-                  orderBy: {
-                    amount: 'asc',
-                  },
-                },
+                orderBy: { amount: 'asc' },
               },
             },
           },
-        });
-
-      if (!order) {
-        return res.status(404).json({
-          error: 'Order not found',
-        });
-      }
-
-      if (
-        !isOrderParticipant(
-          req.user.id,
-          order
-        ) &&
-        !isAdmin(req.user)
-      ) {
-        return res.status(403).json({
-          error: 'Not authorized',
-        });
-      }
-
-      return res.json({
-        transportJob:
-          order.transportJob ||
-          null,
+        },
       });
+
+      if (!order) return res.status(404).json({ error: 'Order not found' });
+
+      if (!isOrderParticipant(req.user.id, order) && !isAdmin(req.user)) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      return res.json({ transportJob: order.transportJob || null });
     } catch (error) {
       req.log.error({ err: error }, 'GET TRANSPORT ERROR:');
-
-      return res.status(500).json({
-        error:
-          'Could not load transport job',
-      });
+      return res.status(500).json({ error: 'Could not load transport job' });
     }
   }
 );
@@ -1164,9 +764,7 @@ router.post(
         include: { order: true },
       });
 
-      if (!job) {
-        return res.status(404).json({ error: 'Transport job not found' });
-      }
+      if (!job) return res.status(404).json({ error: 'Transport job not found' });
 
       const isArranging =
         (job.arrangingParty === 'SELLER' && job.order.sellerId === req.user.id) ||
@@ -1217,9 +815,7 @@ router.post(
         include: { order: true },
       });
 
-      if (!job) {
-        return res.status(404).json({ error: 'Transport job not found' });
-      }
+      if (!job) return res.status(404).json({ error: 'Transport job not found' });
 
       const isArranging =
         (job.arrangingParty === 'SELLER' && job.order.sellerId === req.user.id) ||
@@ -1252,10 +848,7 @@ router.post(
           data: {
             transportJobId: job.id,
             type: req.body.type,
-            photos,
-            videos,
-            gpsLocation,
-            notes,
+            photos, videos, gpsLocation, notes,
             capturedAt: req.body.capturedAt ? new Date(req.body.capturedAt) : new Date(),
             createdById: req.user.id,
           },
@@ -1267,12 +860,8 @@ router.post(
           resourceType: 'TransportEvidence',
           resourceId: created.id,
           metadata: {
-            transportJobId: job.id,
-            orderId: job.orderId,
-            type: created.type,
-            photoCount: photos.length,
-            videoCount: videos.length,
-            hasGps: Boolean(gpsLocation),
+            transportJobId: job.id, orderId: job.orderId, type: created.type,
+            photoCount: photos.length, videoCount: videos.length, hasGps: Boolean(gpsLocation),
           },
         });
 
@@ -1405,12 +994,7 @@ async function getTransportPaymentGate(client, jobId) {
     (p) => p.type === 'TRANSPORT' && p.status === 'PAID'
   );
   const missing = transportPaid ? [] : ['TRANSPORT'];
-  return {
-    ready: missing.length === 0,
-    missing,
-    transportRequired,
-    transportPaid,
-  };
+  return { ready: missing.length === 0, missing, transportRequired, transportPaid };
 }
 
 async function checkLoadingReportGate(client, jobId) {
@@ -1507,82 +1091,31 @@ router.patch(
   authenticate,
   [
     param('id').isUUID(),
-
-    body('status').isIn([
-      'REQUESTED',
-      'ACCEPTED',
-      'QUOTED',
-      'PICKUP',
-      'IN_TRANSIT',
-      'DELIVERED',
-      'CANCELLED',
-    ]),
-
-    body('incidentNotes')
-      .optional()
-      .isString()
-      .trim(),
+    body('status').isIn(['REQUESTED', 'ACCEPTED', 'QUOTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED']),
+    body('incidentNotes').optional().isString().trim(),
   ],
   validate,
   async (req, res) => {
     try {
-      const job =
-        await prisma.transportJob.findUnique({
-          where: {
-            id: req.params.id,
-          },
-          include: {
-            order: { include: { listing: true } },
-            evidence: {
-              select: { id: true, type: true },
-            },
-          },
-        });
+      const job = await prisma.transportJob.findUnique({
+        where: { id: req.params.id },
+        include: {
+          order: { include: { listing: true } },
+          evidence: { select: { id: true, type: true } },
+        },
+      });
 
-      if (!job) {
-        return res.status(404).json({
-          error:
-            'Transport job not found',
-        });
-      }
+      if (!job) return res.status(404).json({ error: 'Transport job not found' });
 
       const isArranging =
-        (
-          job.arrangingParty ===
-            'SELLER' &&
-          job.order.sellerId ===
-            req.user.id
-        ) ||
-        (
-          job.arrangingParty ===
-            'BUYER' &&
-          job.order.buyerId ===
-            req.user.id
-        ) ||
-        (
-          job.arrangingParty ===
-            'JOINT' &&
-          (
-            job.order.buyerId ===
-              req.user.id ||
-            job.order.sellerId ===
-              req.user.id
-          )
-        );
+        (job.arrangingParty === 'SELLER' && job.order.sellerId === req.user.id) ||
+        (job.arrangingParty === 'BUYER' && job.order.buyerId === req.user.id) ||
+        (job.arrangingParty === 'JOINT' && (job.order.buyerId === req.user.id || job.order.sellerId === req.user.id));
 
-      const isTruckOwner =
-        job.truckOwnerId ===
-        req.user.id;
+      const isTruckOwner = job.truckOwnerId === req.user.id;
 
-      if (
-        !isArranging &&
-        !isTruckOwner &&
-        !isAdmin(req.user)
-      ) {
-        return res.status(403).json({
-          error:
-            'Not authorized to update this transport job',
-        });
+      if (!isArranging && !isTruckOwner && !isAdmin(req.user)) {
+        return res.status(403).json({ error: 'Not authorized to update this transport job' });
       }
 
       const current = job.status;
@@ -1618,46 +1151,17 @@ router.patch(
       }
 
       const validTransitions = {
-        REQUESTED: [
-          'ACCEPTED',
-          'QUOTED',
-          'CANCELLED',
-        ],
-
-        QUOTED: [
-          'ACCEPTED',
-          'CANCELLED',
-        ],
-
-        ACCEPTED: [
-          'PICKUP',
-          'CANCELLED',
-        ],
-
-        PICKUP: [
-          'IN_TRANSIT',
-        ],
-
-        IN_TRANSIT: [
-          'DELIVERED',
-        ],
-
-        DELIVERED: [
-          'DELIVERED',
-        ],
-
+        REQUESTED: ['ACCEPTED', 'QUOTED', 'CANCELLED'],
+        QUOTED: ['ACCEPTED', 'CANCELLED'],
+        ACCEPTED: ['PICKUP', 'CANCELLED'],
+        PICKUP: ['IN_TRANSIT'],
+        IN_TRANSIT: ['DELIVERED'],
+        DELIVERED: ['DELIVERED'],
         CANCELLED: [],
       };
 
-      if (
-        !validTransitions[
-          current
-        ]?.includes(next)
-      ) {
-        return res.status(400).json({
-          error:
-            `Invalid status transition from ${current} to ${next}`,
-        });
+      if (!validTransitions[current]?.includes(next)) {
+        return res.status(400).json({ error: `Invalid status transition from ${current} to ${next}` });
       }
 
       if (next === 'CANCELLED' && ['PICKUP', 'IN_TRANSIT'].includes(current) && !isAdmin(req.user)) {
@@ -1669,11 +1173,7 @@ router.patch(
 
       if (next === 'CANCELLED' && job.method === 'HIRE_TRANSPORTER') {
         const activePayment = await prisma.payment.findFirst({
-          where: {
-            transportJobId: job.id,
-            type: 'TRANSPORT',
-            status: { in: ['PENDING', 'PROCESSING', 'PAID'] },
-          },
+          where: { transportJobId: job.id, type: 'TRANSPORT', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } },
           select: { id: true, status: true },
         });
         if (activePayment && !isAdmin(req.user)) {
@@ -1694,15 +1194,11 @@ router.patch(
       }
 
       if (next === 'IN_TRANSIT' && !job.evidence.some((item) => item.type === 'PICKUP' || item.type === 'LOADING')) {
-        return res.status(409).json({
-          error: 'Pickup evidence is required before transport can enter IN_TRANSIT',
-        });
+        return res.status(409).json({ error: 'Pickup evidence is required before transport can enter IN_TRANSIT' });
       }
 
       if (next === 'DELIVERED' && !job.evidence.some((item) => item.type === 'DELIVERY')) {
-        return res.status(409).json({
-          error: 'Delivery evidence is required before transport can be marked DELIVERED',
-        });
+        return res.status(409).json({ error: 'Delivery evidence is required before transport can be marked DELIVERED' });
       }
 
       if (next === 'IN_TRANSIT') {
@@ -1716,113 +1212,74 @@ router.patch(
         }
       }
 
-      const result =
-        await prisma.$transaction(
-          async (tx) => {
-            await lockOrderAndAssertNotClosed(tx, job.orderId, 'transport cannot proceed until the order dispute is resolved');
+      const result = await prisma.$transaction(async (tx) => {
+        await lockOrderAndAssertNotClosed(tx, job.orderId, 'transport cannot proceed until the order dispute is resolved');
 
-            const updated =
-              await tx.transportJob.update({
-                where: {
-                  id: job.id,
-                },
-
-                data: {
-                  status: next,
-
-                  incidentNotes:
-                    req.body.incidentNotes ||
-                    job.incidentNotes,
-
-                  pickupConfirmedAt:
-                    next === 'PICKUP'
-                      ? new Date()
-                      : job.pickupConfirmedAt,
-
-                  deliveredConfirmedAt:
-                    next === 'DELIVERED'
-                      ? new Date()
-                      : job.deliveredConfirmedAt,
-                },
-              });
-
-            await syncOrderPaymentObligations(tx, job.orderId);
-            await recordOrderEvent(tx, {
-              orderId: job.orderId,
-              actorId: req.user.id,
-              type: 'TRANSPORT_STATUS_CHANGED',
-              fromStatus: current,
-              toStatus: next,
-              metadata: {
-                transportJobId: job.id,
-                truckId: job.truckId,
-                arrangingParty: job.arrangingParty,
-                method: job.method,
-              },
-            });
-
-            if (next === 'IN_TRANSIT') {
-              const freshOrder = await tx.order.findUnique({ where: { id: job.orderId }, select: { status: true } });
-              if (freshOrder?.status === 'TRANSPORT_ARRANGED') {
-                await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'IN_TRANSIT');
-              }
-            }
-
-            if (next === 'DELIVERED') {
-              const freshOrder = await tx.order.findUnique({ where: { id: job.orderId }, select: { status: true } });
-              if (freshOrder?.status === 'TRANSPORT_ARRANGED') {
-                await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'DELIVERED');
-              } else if (freshOrder?.status === 'IN_TRANSIT') {
-                await transitionOrderStatus(tx, job.orderId, 'IN_TRANSIT', 'DELIVERED');
-              } else if (freshOrder?.status === 'CONFIRMED') {
-                await transitionOrderStatus(tx, job.orderId, 'CONFIRMED', 'TRANSPORT_ARRANGED');
-                await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'DELIVERED');
-              }
-
-              await releaseTruck(
-                tx,
-                job.truckId
-              );
-            }
-
-            if (next === 'CANCELLED') {
-              await releaseTruck(
-                tx,
-                job.truckId
-              );
-            }
-
-            await recordAuditEvent(tx, {
-              actorId: req.user.id,
-              action: 'TRANSPORT_STATUS_CHANGED',
-              resourceType: 'TransportJob',
-              resourceId: job.id,
-              metadata: {
-                orderId: job.orderId,
-                fromStatus: current,
-                toStatus: next,
-                truckId: job.truckId,
-              },
-            });
-
-            return updated;
-          }
-        , {
-          maxWait: 10000,
-          timeout: 20000,
+        const updated = await tx.transportJob.update({
+          where: { id: job.id },
+          data: {
+            status: next,
+            incidentNotes: req.body.incidentNotes || job.incidentNotes,
+            pickupConfirmedAt: next === 'PICKUP' ? new Date() : job.pickupConfirmedAt,
+            deliveredConfirmedAt: next === 'DELIVERED' ? new Date() : job.deliveredConfirmedAt,
+          },
         });
 
-      return res.json({
-        transportJob: result,
-      });
+        await syncOrderPaymentObligations(tx, job.orderId);
+        await recordOrderEvent(tx, {
+          orderId: job.orderId,
+          actorId: req.user.id,
+          type: 'TRANSPORT_STATUS_CHANGED',
+          fromStatus: current,
+          toStatus: next,
+          metadata: {
+            transportJobId: job.id, truckId: job.truckId,
+            arrangingParty: job.arrangingParty, method: job.method,
+          },
+        });
+
+        if (next === 'IN_TRANSIT') {
+          const freshOrder = await tx.order.findUnique({ where: { id: job.orderId }, select: { status: true } });
+          if (freshOrder?.status === 'TRANSPORT_ARRANGED') {
+            await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'IN_TRANSIT');
+          }
+        }
+
+        if (next === 'DELIVERED') {
+          const freshOrder = await tx.order.findUnique({ where: { id: job.orderId }, select: { status: true } });
+          if (freshOrder?.status === 'TRANSPORT_ARRANGED') {
+            await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'DELIVERED');
+          } else if (freshOrder?.status === 'IN_TRANSIT') {
+            await transitionOrderStatus(tx, job.orderId, 'IN_TRANSIT', 'DELIVERED');
+          } else if (freshOrder?.status === 'CONFIRMED') {
+            await transitionOrderStatus(tx, job.orderId, 'CONFIRMED', 'TRANSPORT_ARRANGED');
+            await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'DELIVERED');
+          }
+
+          await releaseTruck(tx, job.truckId);
+        }
+
+        if (next === 'CANCELLED') {
+          await releaseTruck(tx, job.truckId);
+        }
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'TRANSPORT_STATUS_CHANGED',
+          resourceType: 'TransportJob',
+          resourceId: job.id,
+          metadata: { orderId: job.orderId, fromStatus: current, toStatus: next, truckId: job.truckId },
+        });
+
+        return updated;
+      }, { maxWait: 10000, timeout: 20000 });
+
+      return res.json({ transportJob: result });
     } catch (error) {
       req.log.error({ err: error }, 'UPDATE TRANSPORT STATUS ERROR:');
 
       if (error.statusCode) {
-        return res.status(error.statusCode).json({
-          code: error.code,
-          error: error.message,
-        });
+        return res.status(error.statusCode).json({ code: error.code, error: error.message });
       }
 
       if (error?.code === 'P2028') {
@@ -1839,9 +1296,7 @@ router.patch(
         });
       }
 
-      return res.status(500).json({
-        error: error?.message || 'Could not update transport status',
-      });
+      return res.status(500).json({ error: error?.message || 'Could not update transport status' });
     }
   }
 );
@@ -1857,65 +1312,28 @@ router.post(
   requireRole('TRUCK_OWNER'),
   [
     param('id').isUUID(),
-
     body('amount').custom(validAmount(AMOUNT_LIMITS.transport)),
-
-    body('message')
-      .optional()
-      .isString()
-      .trim()
-      .custom(noContactInfo),
-
-    body('truckId')
-      .optional()
-      .isUUID(),
+    body('message').optional().isString().trim().custom(noContactInfo),
+    body('truckId').optional().isUUID(),
   ],
   validate,
   async (req, res) => {
     try {
-      const job =
-        await prisma.transportJob.findUnique({
-          where: {
-            id: req.params.id,
-          },
-          include: {
-            order: true,
-          },
-        });
+      const job = await prisma.transportJob.findUnique({
+        where: { id: req.params.id },
+        include: { order: true },
+      });
 
-      if (!job) {
-        return res.status(404).json({
-          error:
-            'Transport job not found',
-        });
+      if (!job) return res.status(404).json({ error: 'Transport job not found' });
+
+      if (job.method !== 'HIRE_TRANSPORTER') {
+        return res.status(400).json({ error: 'Quotes are only for HIRE_TRANSPORTER jobs' });
       }
 
-      if (
-        job.method !==
-        'HIRE_TRANSPORTER'
-      ) {
-        return res.status(400).json({
-          error:
-            'Quotes are only for HIRE_TRANSPORTER jobs',
-        });
+      if (job.status !== 'REQUESTED' && job.status !== 'QUOTED') {
+        return res.status(400).json({ error: 'This job is not open for quotes' });
       }
 
-      if (
-        job.status !== 'REQUESTED' &&
-        job.status !== 'QUOTED'
-      ) {
-        return res.status(400).json({
-          error:
-            'This job is not open for quotes',
-        });
-      }
-
-      // Once the arranging party selects a transporter bid, the competition
-      // phase is frozen: only that selected negotiation thread may counter.
-      // Other already-submitted PENDING bids remain available as waiting
-      // alternatives and can be selected if the provisional agreement is
-      // released before payment. This prevents a new provider from entering
-      // midway through an active bilateral negotiation.
       const activeNegotiation = await prisma.transportQuote.findFirst({
         where: {
           transportJobId: job.id,
@@ -1930,203 +1348,106 @@ router.post(
         });
       }
 
-      let truckId =
-        req.body.truckId;
+      let truckId = req.body.truckId;
 
       if (!truckId) {
-        const truck =
-          await prisma.truck.findFirst({
-            where: {
-              ownerId: req.user.id,
-              availability: 'AVAILABLE',
-            },
-            orderBy: {
-              createdAt: 'asc',
-            },
-          });
+        const truck = await prisma.truck.findFirst({
+          where: { ownerId: req.user.id, availability: 'AVAILABLE' },
+          orderBy: { createdAt: 'asc' },
+        });
 
         if (!truck) {
-          return res.status(400).json({
-            error:
-              'You must have an available truck to quote',
-          });
+          return res.status(400).json({ error: 'You must have an available truck to quote' });
         }
 
         truckId = truck.id;
       } else {
-        const truck =
-          await prisma.truck.findUnique({
-            where: {
-              id: truckId,
-            },
-          });
+        const truck = await prisma.truck.findUnique({ where: { id: truckId } });
 
-        if (!truck) {
-          return res.status(404).json({
-            error: 'Truck not found',
-          });
+        if (!truck) return res.status(404).json({ error: 'Truck not found' });
+
+        if (truck.ownerId !== req.user.id) {
+          return res.status(403).json({ error: 'Not your truck' });
         }
 
-        if (
-          truck.ownerId !==
-          req.user.id
-        ) {
-          return res.status(403).json({
-            error: 'Not your truck',
-          });
-        }
-
-        if (
-          truck.availability !==
-          'AVAILABLE'
-        ) {
-          return res.status(400).json({
-            error:
-              'Selected truck is not available',
-          });
+        if (truck.availability !== 'AVAILABLE') {
+          return res.status(400).json({ error: 'Selected truck is not available' });
         }
       }
 
-      const existing =
-        await prisma.transportQuote.findFirst({
-          where: {
-            transportJobId: job.id,
-            truckOwnerId:
-              req.user.id,
-            status: {
-              in: [
-                'PENDING',
-                'COUNTERED',
-                'ACCEPTED',
-              ],
-            },
-            childQuotes: { none: {} },
-          },
-        });
+      const existing = await prisma.transportQuote.findFirst({
+        where: {
+          transportJobId: job.id,
+          truckOwnerId: req.user.id,
+          status: { in: ['PENDING', 'COUNTERED', 'ACCEPTED'] },
+          childQuotes: { none: {} },
+        },
+      });
 
       if (existing) {
         return res.status(409).json({
-          error:
-            'You already have a pending, negotiating, or accepted quote for this job',
+          error: 'You already have a pending, negotiating, or accepted quote for this job',
         });
       }
 
-      const quote =
-        await prisma.$transaction(
-          async (tx) => {
-            const truck =
-              await tx.truck.findUnique({
-                where: {
-                  id: truckId,
-                },
-              });
+      const quote = await prisma.$transaction(async (tx) => {
+        const truck = await tx.truck.findUnique({ where: { id: truckId } });
 
-            if (!truck) {
-              const error = new Error(
-                'Truck not found'
-              );
-              error.statusCode = 404;
-              throw error;
-            }
+        if (!truck) {
+          const error = new Error('Truck not found');
+          error.statusCode = 404;
+          throw error;
+        }
 
-            if (
-              truck.ownerId !==
-              req.user.id
-            ) {
-              const error = new Error(
-                'Not your truck'
-              );
-              error.statusCode = 403;
-              throw error;
-            }
+        if (truck.ownerId !== req.user.id) {
+          const error = new Error('Not your truck');
+          error.statusCode = 403;
+          throw error;
+        }
 
-            if (
-              truck.availability !==
-              'AVAILABLE'
-            ) {
-              throw new TruckConflictError(
-                'Selected truck is no longer available'
-              );
-            }
+        if (truck.availability !== 'AVAILABLE') {
+          throw new TruckConflictError('Selected truck is no longer available');
+        }
 
-            const createdQuote =
-              await tx.transportQuote.create({
-                data: {
-                  transportJobId:
-                    job.id,
-
-                  truckOwnerId:
-                    req.user.id,
-
-                  truckId,
-
-                  amount:
-                    Number(
-                      req.body.amount
-                    ),
-
-                  message:
-                    req.body.message ||
-                    null,
-
-                  status: 'PENDING',
-                  expiresAt: quoteExpiry(),
-                },
-              });
-
-            if (
-              job.status ===
-              'REQUESTED'
-            ) {
-              await tx.transportJob.update({
-                where: {
-                  id: job.id,
-                },
-                data: {
-                  status: 'QUOTED',
-                },
-              });
-            }
-
-            return createdQuote;
+        const createdQuote = await tx.transportQuote.create({
+          data: {
+            transportJobId: job.id,
+            truckOwnerId: req.user.id,
+            truckId,
+            amount: Number(req.body.amount),
+            message: req.body.message || null,
+            status: 'PENDING',
+            expiresAt: quoteExpiry(),
           },
-          { maxWait: 10000, timeout: 15000 }
-        );
+        });
 
-      return res.status(201).json({
-        quote,
-      });
+        if (job.status === 'REQUESTED') {
+          await tx.transportJob.update({
+            where: { id: job.id },
+            data: { status: 'QUOTED' },
+          });
+        }
+
+        return createdQuote;
+      }, { maxWait: 10000, timeout: 15000 });
+
+      return res.status(201).json({ quote });
     } catch (error) {
       req.log.error({ err: error }, 'CREATE QUOTE ERROR:');
 
       if (error.statusCode) {
-        return res.status(
-          error.statusCode
-        ).json({
-          error: error.message,
-        });
+        return res.status(error.statusCode).json({ error: error.message });
       }
 
-      if (
-        error.code ===
-        'TRUCK_CONFLICT'
-      ) {
-        return res.status(409).json({
-          error: error.message,
-        });
+      if (error.code === 'TRUCK_CONFLICT') {
+        return res.status(409).json({ error: error.message });
       }
 
       if (error.code === 'P2002') {
-        return res.status(409).json({
-          error:
-            'A quote for this truck and job already exists',
-        });
+        return res.status(409).json({ error: 'A quote for this truck and job already exists' });
       }
 
-      return res.status(500).json({
-        error:
-          'Could not submit quote',
-      });
+      return res.status(500).json({ error: 'Could not submit quote' });
     }
   }
 );
@@ -2134,118 +1455,55 @@ router.post(
 router.get(
   '/:id/quotes',
   authenticate,
-  [
-    param('id').isUUID(),
-  ],
+  [param('id').isUUID()],
   validate,
   async (req, res) => {
     try {
-      const job =
-        await prisma.transportJob.findUnique({
-          where: {
-            id: req.params.id,
-          },
-          include: {
-            order: true,
-          },
-        });
+      const job = await prisma.transportJob.findUnique({
+        where: { id: req.params.id },
+        include: { order: true },
+      });
 
-      if (!job) {
-        return res.status(404).json({
-          error:
-            'Transport job not found',
-        });
-      }
+      if (!job) return res.status(404).json({ error: 'Transport job not found' });
 
       const isArranging =
-        (
-          job.arrangingParty ===
-            'SELLER' &&
-          job.order.sellerId ===
-            req.user.id
-        ) ||
-        (
-          job.arrangingParty ===
-            'BUYER' &&
-          job.order.buyerId ===
-            req.user.id
-        ) ||
-        (
-          job.arrangingParty ===
-            'JOINT' &&
-          (
-            job.order.buyerId ===
-              req.user.id ||
-            job.order.sellerId ===
-              req.user.id
-          )
-        );
+        (job.arrangingParty === 'SELLER' && job.order.sellerId === req.user.id) ||
+        (job.arrangingParty === 'BUYER' && job.order.buyerId === req.user.id) ||
+        (job.arrangingParty === 'JOINT' && (job.order.buyerId === req.user.id || job.order.sellerId === req.user.id));
 
-      const isTruckOwner =
-        job.truckOwnerId ===
-        req.user.id;
+      const isTruckOwner = job.truckOwnerId === req.user.id;
 
-      if (
-        !isArranging &&
-        !isTruckOwner &&
-        !isAdmin(req.user)
-      ) {
-        return res.status(403).json({
-          error:
-            'Not authorized to view these quotes',
-        });
+      if (!isArranging && !isTruckOwner && !isAdmin(req.user)) {
+        return res.status(403).json({ error: 'Not authorized to view these quotes' });
       }
 
-      const quotes =
-        await prisma.transportQuote.findMany({
-          where: {
-            transportJobId: job.id,
-          },
-
-          include: {
-            truckOwner: {
-              select: {
-                id: true,
-                name: true,
-                rating: true,
-              },
-            },
-
-            truck: true,
-          },
-
-          orderBy: {
-            amount: 'asc',
-          },
-        });
-
-      return res.json({
-        quotes,
+      const quotes = await prisma.transportQuote.findMany({
+        where: { transportJobId: job.id },
+        include: {
+          truckOwner: { select: { id: true, name: true, rating: true } },
+          truck: true,
+        },
+        orderBy: { amount: 'asc' },
       });
+
+      return res.json({ quotes });
     } catch (error) {
       req.log.error({ err: error }, 'LIST QUOTES ERROR:');
-
-      return res.status(500).json({
-        error:
-          'Could not load quotes',
-      });
+      return res.status(500).json({ error: 'Could not load quotes' });
     }
   }
 );
 
 
 // ============================================================================
-// SHARED LOOKUP: quote + job + order, with the caller's role in the
-// negotiation (REQUESTER = arranging party, PROVIDER = truck owner).
+// SHARED LOOKUP
 // ============================================================================
 
 async function loadTransportQuoteForNegotiation(req, res) {
   const quote = await prisma.transportQuote.findUnique({
     where: { id: req.params.quoteId },
     include: {
-      transportJob: {
-        include: { order: true },
-      },
+      transportJob: { include: { order: true } },
     },
   });
 
@@ -2256,9 +1514,6 @@ async function loadTransportQuoteForNegotiation(req, res) {
 
   const job = quote.transportJob;
 
-  // Route shape is /transport/:id/quotes/:quoteId/<action>, matching the
-  // inspection quote routes. Refuse to serve a quote whose parent job does
-  // not match :id, so a caller cannot address a quote by its ID alone.
   if (req.params.id && job.id !== req.params.id) {
     res.status(404).json({ error: 'Quote not found for this transport job' });
     return null;
@@ -2266,9 +1521,6 @@ async function loadTransportQuoteForNegotiation(req, res) {
 
   const order = job.order;
 
-  // Parity with the inspection loader: refuse negotiation operations while
-  // the parent order is disputed or cancelled. Without this, a transporter
-  // or arranger could still act on a quote attached to a frozen order.
   if (order && ['DISPUTED', 'CANCELLED'].includes(order.status)) {
     res.status(409).json({
       code: 'ORDER_DISPUTED',
@@ -2292,10 +1544,6 @@ async function loadTransportQuoteForNegotiation(req, res) {
     actorRole: isRequester ? 'REQUESTER' : 'PROVIDER',
   };
 }
-
-// ============================================================================
-// SHARED LOOKUP: transport job + coordination row, with the caller's role
-// ============================================================================
 
 async function loadCoordinationContext(req, res) {
   const job = await prisma.transportJob.findUnique({
@@ -2321,10 +1569,7 @@ async function loadCoordinationContext(req, res) {
   try {
     assertCoordinationStage(job);
   } catch (err) {
-    res.status(err.statusCode || 409).json({
-      error: err.message,
-      code: err.code || 'COORDINATION_NOT_OPEN',
-    });
+    res.status(err.statusCode || 409).json({ error: err.message, code: err.code || 'COORDINATION_NOT_OPEN' });
     return null;
   }
 
@@ -2334,10 +1579,6 @@ async function loadCoordinationContext(req, res) {
 // ============================================================================
 // SELECT TRANSPORT BID FOR DEAL NEGOTIATION
 // ============================================================================
-// Mirrors the inspection select route: only one negotiation thread may be
-// active at a time. Selecting a new PENDING bid is refused while another
-// bid is SELECTED or COUNTERED, so the requester cannot hop between bids
-// without explicitly releasing the current thread first.
 
 router.patch(
   '/:id/quotes/:quoteId/select',
@@ -2353,9 +1594,6 @@ router.patch(
       if (isQuoteExpired(quote)) return res.status(409).json({ error: 'This quote has expired' });
 
       const selected = await prisma.$transaction(async (tx) => {
-        // Serialize quote selection against transport-payment creation. Both
-        // operations lock the same job row, so a payment can never bind to a
-        // quote that is simultaneously being replaced.
         await tx.$queryRawUnsafe(
           'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
           job.id
@@ -2388,10 +1626,6 @@ router.patch(
         if (!fresh || fresh.status !== 'PENDING') throw quoteError('This bid is no longer available', 409);
         if (isQuoteExpired(fresh)) throw quoteError('This quote has expired', 409);
 
-        // Lock the competition to the current negotiation thread. Once a
-        // transporter is SELECTED or COUNTERED, no other bid (existing or
-        // incoming) may be selected until that thread is explicitly released.
-        // Mirrors the inspection select route's findCompetingLiveQuote guard.
         const competingThread = await tx.transportQuote.findFirst({
           where: {
             transportJobId: job.id,
@@ -2407,9 +1641,6 @@ router.patch(
           );
         }
 
-        // A previously ACCEPTED quote is only provisional until transport
-        // payment. Selecting another pending bid therefore releases the old
-        // provisional transporter rather than consuming/closing the order.
         await tx.transportQuote.updateMany({
           where: { transportJobId: job.id, id: { not: fresh.id }, status: 'ACCEPTED' },
           data: { status: 'WITHDRAWN' },
@@ -2448,9 +1679,7 @@ router.patch(
       const effectiveRole = actorRole;
 
       if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
-        return res.status(400).json({
-          error: `This quote is already ${quote.status.toLowerCase()}`,
-        });
+        return res.status(400).json({ error: `This quote is already ${quote.status.toLowerCase()}` });
       }
 
       if (isQuoteExpired(quote)) {
@@ -2458,9 +1687,7 @@ router.patch(
       }
 
       if (quoteTurn(quote) !== effectiveRole && !isAdmin(req.user)) {
-        return res.status(409).json({
-          error: 'It is the other party\u2019s turn to respond to this negotiation',
-        });
+        return res.status(409).json({ error: 'It is the other party\u2019s turn to respond to this negotiation' });
       }
 
       const finalAmount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
@@ -2524,10 +1751,7 @@ router.patch(
 
         const updatedQuote = await tx.transportQuote.update({
           where: { id: freshQuote.id },
-          data: {
-            status: 'ACCEPTED',
-            amount: finalAmount,
-          },
+          data: { status: 'ACCEPTED', amount: finalAmount },
         });
 
         await tx.transportQuote.updateMany({
@@ -2560,10 +1784,7 @@ router.patch(
         return updatedQuote;
       }, { maxWait: 10000, timeout: 15000 });
 
-      return res.json({
-        message: 'Quote accepted',
-        quote: result,
-      });
+      return res.json({ message: 'Quote accepted', quote: result });
     } catch (error) {
       req.log.error({ err: error }, 'ACCEPT TRANSPORT QUOTE ERROR:');
 
@@ -2608,15 +1829,11 @@ router.patch(
       }
 
       if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
-        return res.status(400).json({
-          error: `This quote is already ${quote.status.toLowerCase()}`,
-        });
+        return res.status(400).json({ error: `This quote is already ${quote.status.toLowerCase()}` });
       }
 
       if (quoteTurn(quote) !== effectiveRole && !isAdmin(req.user)) {
-        return res.status(409).json({
-          error: 'It is the other party\u2019s turn to respond to this negotiation',
-        });
+        return res.status(409).json({ error: 'It is the other party\u2019s turn to respond to this negotiation' });
       }
 
       const updatedQuote = await prisma.$transaction(async (tx) => {
@@ -2659,10 +1876,7 @@ router.patch(
         });
       }, { maxWait: 10000, timeout: 15000 });
 
-      return res.json({
-        message: 'Quote rejected',
-        quote: updatedQuote,
-      });
+      return res.json({ message: 'Quote rejected', quote: updatedQuote });
     } catch (error) {
       req.log.error({ err: error }, 'REJECT TRANSPORT QUOTE ERROR:');
 
@@ -2695,12 +1909,7 @@ router.post(
     param('id').isUUID(),
     param('quoteId').isUUID(),
     body('counterAmount').custom(validAmount(AMOUNT_LIMITS.transport)),
-    body('message')
-      .optional({ nullable: true })
-      .isString()
-      .trim()
-      .isLength({ max: 1000 })
-      .custom(noContactInfo),
+    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }).custom(noContactInfo),
   ],
   validate,
   async (req, res) => {
@@ -2711,9 +1920,7 @@ router.post(
       const effectiveRole = actorRole;
 
       if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
-        return res.status(400).json({
-          error: `Quote cannot be countered because it is ${quote.status}`,
-        });
+        return res.status(400).json({ error: `Quote cannot be countered because it is ${quote.status}` });
       }
 
       if (isQuoteExpired(quote)) {
@@ -2721,9 +1928,7 @@ router.post(
       }
 
       if (quoteTurn(quote) !== effectiveRole) {
-        return res.status(409).json({
-          error: 'It is the other party\u2019s turn to respond to this negotiation',
-        });
+        return res.status(409).json({ error: 'It is the other party\u2019s turn to respond to this negotiation' });
       }
 
       const counterAmount = Number(req.body.counterAmount);
@@ -2826,6 +2031,9 @@ router.post(
 // ============================================================================
 // WITHDRAW / RELEASE A TRANSPORT QUOTE
 // ============================================================================
+// Mirrors PATCH /inspections/:id/quotes/:quoteId/withdraw.
+// Only the arranging party (REQUESTER) may release. The truck owner uses
+// POST /withdraw-bid while their quote is still PENDING.
 
 router.patch(
   '/:id/quotes/:quoteId/withdraw',
@@ -2839,6 +2047,16 @@ router.patch(
       if (!loaded) return;
       const { quote, job, actorRole } = loaded;
       const effectiveRole = actorRole;
+
+      // Only the requester can release a negotiation. A truck owner who no
+      // longer wants to proceed uses POST /withdraw-bid while PENDING. Once
+      // SELECTED or COUNTERED, the truck owner must respond to keep or end
+      // the thread; they cannot unilaterally abandon a live negotiation.
+      if (actorRole !== 'REQUESTER') {
+        return res.status(403).json({
+          error: 'Only the arranging party can release this negotiation',
+        });
+      }
 
       const isAcceptedRelease = quote.status === 'ACCEPTED';
       const isSilentRelease =
@@ -3033,11 +2251,8 @@ router.post(
 // TESTABLE INTERNAL CONSTANTS
 // ============================================================================
 
-router.ACTIVE_TRUCK_JOB_STATUSES =
-  ACTIVE_TRUCK_JOB_STATUSES;
-
-router.claimAvailableTruck =
-  claimAvailableTruck;
+router.ACTIVE_TRUCK_JOB_STATUSES = ACTIVE_TRUCK_JOB_STATUSES;
+router.claimAvailableTruck = claimAvailableTruck;
 
 // ============================================================================
 // TRANSPORT LOADING REPORT
@@ -3075,9 +2290,7 @@ router.post(
       if (!job) return res.status(404).json({ error: 'Transport job not found' });
 
       if (job.truckOwnerId !== req.user.id && !isAdminUser) {
-        return res.status(403).json({
-          error: 'Only the assigned transporter can submit the loading report',
-        });
+        return res.status(403).json({ error: 'Only the assigned transporter can submit the loading report' });
       }
       if (job.status !== 'ACCEPTED') {
         return res.status(409).json({
@@ -3092,18 +2305,13 @@ router.post(
         });
       }
 
-      const issues = Array.isArray(req.body.visibleIssues)
-        ? req.body.visibleIssues.filter(Boolean)
-        : [];
+      const issues = Array.isArray(req.body.visibleIssues) ? req.body.visibleIssues.filter(Boolean) : [];
       const unknownIssues = issues.filter((i) => !LOADING_ISSUE_OPTIONS.includes(i));
       if (unknownIssues.length) {
-        return res.status(400).json({
-          error: `Unknown issue flags: ${unknownIssues.join(', ')}`,
-        });
+        return res.status(400).json({ error: `Unknown issue flags: ${unknownIssues.join(', ')}` });
       }
 
-      const parseOpt = (v) =>
-        v == null || v === '' ? null : new Date(v);
+      const parseOpt = (v) => (v == null || v === '' ? null : new Date(v));
       const arrivedAt = parseOpt(req.body.arrivedAt);
       const loadingStartedAt = parseOpt(req.body.loadingStartedAt);
       const loadingFinishedAt = parseOpt(req.body.loadingFinishedAt);
@@ -3127,9 +2335,7 @@ router.post(
       const photos = Array.isArray(req.body.photos) ? req.body.photos.filter(Boolean) : [];
       const videos = Array.isArray(req.body.videos) ? req.body.videos.filter(Boolean) : [];
       if (!photos.length && !videos.length) {
-        return res.status(400).json({
-          error: 'At least one photo or video of the loaded goods is required',
-        });
+        return res.status(400).json({ error: 'At least one photo or video of the loaded goods is required' });
       }
 
       const report = await prisma.$transaction(async (tx) => {
@@ -3140,9 +2346,7 @@ router.post(
           throw quoteError('This transport is no longer awaiting pickup', 409);
         }
 
-        const existing = await tx.transportLoadingReport.findUnique({
-          where: { transportJobId: job.id },
-        });
+        const existing = await tx.transportLoadingReport.findUnique({ where: { transportJobId: job.id } });
         if (existing) {
           throw quoteError('A loading report has already been submitted for this transport', 409);
         }
@@ -3156,9 +2360,7 @@ router.post(
             quantityUnit: req.body.quantityUnit || null,
             qualityAtLoading: req.body.qualityAtLoading || null,
             visibleIssues: issues,
-            arrivedAt,
-            loadingStartedAt,
-            loadingFinishedAt,
+            arrivedAt, loadingStartedAt, loadingFinishedAt,
             gpsLocation: req.body.gpsLocation || null,
             notes: req.body.notes || null,
           },
@@ -3168,8 +2370,7 @@ router.post(
           data: {
             transportJobId: job.id,
             type: 'LOADING',
-            photos,
-            videos,
+            photos, videos,
             gpsLocation: req.body.gpsLocation || null,
             notes: req.body.notes || null,
             capturedAt: loadingFinishedAt || new Date(),
@@ -3179,10 +2380,7 @@ router.post(
 
         await tx.transportJob.update({
           where: { id: job.id },
-          data: {
-            status: 'PICKUP',
-            pickupConfirmedAt: new Date(),
-          },
+          data: { status: 'PICKUP', pickupConfirmedAt: new Date() },
         });
 
         await recordOrderEvent(tx, {
@@ -3251,23 +2449,14 @@ router.get(
 
       const report = await prisma.transportLoadingReport.findUnique({
         where: { transportJobId: job.id },
-        include: {
-          submittedBy: { select: { id: true, name: true } },
-        },
+        include: { submittedBy: { select: { id: true, name: true } } },
       });
 
       if (!report) return res.json({ loadingReport: null, evidence: null });
 
       const evidence = await prisma.transportEvidence.findFirst({
         where: { transportJobId: job.id, type: 'LOADING' },
-        select: {
-          id: true,
-          photos: true,
-          videos: true,
-          gpsLocation: true,
-          notes: true,
-          capturedAt: true,
-        },
+        select: { id: true, photos: true, videos: true, gpsLocation: true, notes: true, capturedAt: true },
         orderBy: { capturedAt: 'desc' },
       });
 
@@ -3289,15 +2478,9 @@ router.get('/:id/coordination', authenticate, async (req, res) => {
     if (!ctx) return;
 
     const { job, role } = ctx;
-    const coordination = job.coordination && !job.coordination.supersededAt
-      ? job.coordination
-      : null;
+    const coordination = job.coordination && !job.coordination.supersededAt ? job.coordination : null;
 
-    return res.json({
-      role,
-      coordination,
-      availability: job.availability || [],
-    });
+    return res.json({ role, coordination, availability: job.availability || [] });
   } catch (error) {
     req.log.error({ err: error }, 'GET TRANSPORT COORDINATION ERROR:');
     return res.status(500).json({ error: 'Could not load transport coordination' });
@@ -3319,7 +2502,6 @@ router.put(
     body('sellerPrepNotes').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }),
     body('sellerSitePhotos').optional().isArray(),
     body('sellerPrepPhotos').optional().isArray(),
-
     body('driverContactName').optional({ nullable: true }).isString().trim().isLength({ max: 120 }),
     body('driverPhone').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
     body('driverAlternativePhone').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
@@ -3372,10 +2554,7 @@ router.put(
 
       const updated = await prisma.$transaction(async (tx) => {
         const row = await ensureOpenCoordination(tx, job.id);
-        return tx.transportCoordination.update({
-          where: { id: row.id },
-          data,
-        });
+        return tx.transportCoordination.update({ where: { id: row.id }, data });
       }, { maxWait: 10000, timeout: 15000 });
 
       await recordAuditEvent(prisma, {
@@ -3426,13 +2605,7 @@ router.post(
       }
 
       const slot = await prisma.transportAvailability.create({
-        data: {
-          transportJobId: job.id,
-          party: role,
-          date: new Date(date),
-          startTime,
-          endTime,
-        },
+        data: { transportJobId: job.id, party: role, date: new Date(date), startTime, endTime },
       });
 
       await recordAuditEvent(prisma, {
@@ -3460,9 +2633,7 @@ router.delete(
       if (!ctx) return;
       const { job, role } = ctx;
 
-      const slot = await prisma.transportAvailability.findUnique({
-        where: { id: req.params.slotId },
-      });
+      const slot = await prisma.transportAvailability.findUnique({ where: { id: req.params.slotId } });
       if (!slot || slot.transportJobId !== job.id) {
         return res.status(404).json({ error: 'Availability slot not found' });
       }
