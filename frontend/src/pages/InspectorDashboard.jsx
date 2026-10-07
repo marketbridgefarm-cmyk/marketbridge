@@ -9,6 +9,7 @@ import RecentActivity from '../components/RecentActivity.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/InspectorDashboard.css';
 import ProviderReleaseDialog from '../components/ProviderReleaseDialog.jsx';
+import ProviderStandingBanner from '../components/ProviderStandingBanner.jsx';
 import InspectionCoordinationInspector from '../components/InspectionCoordinationInspector.jsx';
 
 const EMPTY_REPORT = {
@@ -529,6 +530,7 @@ export default function InspectorDashboard() {
 
   return (
     <div className="sd-dashboard">
+      <ProviderStandingBanner />
 
       {/* =========================================================
           HEADER / SUMMARY

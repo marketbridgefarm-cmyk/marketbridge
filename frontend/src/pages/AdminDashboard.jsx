@@ -880,6 +880,7 @@ export default function AdminDashboard() {
   const [recoveryRequests, setRecoveryRequests] = useState([]);
   const [releaseReviews, setReleaseReviews] = useState([]);
   const [frequentProviders, setFrequentProviders] = useState([]);
+  const [providerStandings, setProviderStandings] = useState([]);
 
   const [disputeDecision, setDisputeDecision] = useState(null);
   const [userSearch, setUserSearch] = useState('');
@@ -912,6 +913,7 @@ export default function AdminDashboard() {
         refundsRes,
         recoveryRes,
         releaseReviewsRes,
+        providerStandingsRes,
       ] = await Promise.all([
         api.get('/admin/overview'),
         api.get('/admin/users'),
@@ -931,6 +933,7 @@ export default function AdminDashboard() {
         api.get('/admin/financial/refunds'),
         api.get('/recovery-requests/admin/pending'),
         api.get('/admin/release-reviews').catch(() => ({ data: { reviews: [], frequentProviders: [] } })),
+        api.get('/admin/provider-standings').catch(() => ({ data: { standings: [] } })),
       ]);
 
       setOverview(overviewRes.data);
@@ -948,6 +951,7 @@ export default function AdminDashboard() {
       setRecoveryRequests(recoveryRes.data?.recoveryRequests || []);
       setReleaseReviews(releaseReviewsRes.data?.reviews || []);
       setFrequentProviders(releaseReviewsRes.data?.frequentProviders || []);
+      setProviderStandings(providerStandingsRes.data?.standings || []);
     } catch (err) {
       if (err.response?.data?.code === 'MFA_SETUP_REQUIRED') {
         setMfaRequired(true);
@@ -1556,6 +1560,24 @@ export default function AdminDashboard() {
     }
   };
 
+  const reinstateProvider = async (userId, to, clearPenalty) => {
+    setActionLoading(`standing-${userId}-${to}`);
+    setError('');
+    setSuccess('');
+    try {
+      const note = window.prompt('Optional note for the audit trail (why are you reinstating?)') || undefined;
+      await api.post(`/admin/provider-standings/${userId}/reinstate`, { to, clearPenalty, note });
+      setProviderStandings((items) => items.filter((item) => item.userId !== userId || to === 'PROBATION'));
+      setSuccess(to === 'GOOD' ? 'Provider restored to good standing.' : 'Provider reinstated on probation.');
+      const res = await api.get('/admin/provider-standings');
+      setProviderStandings(res.data?.standings || []);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not reinstate provider');
+    } finally {
+      setActionLoading('');
+    }
+  };
+
   const approveReleaseReview = async (id) => {
     setActionLoading(`release-review-${id}`);
     setError('');
@@ -1684,7 +1706,7 @@ export default function AdminDashboard() {
     {
       key: 'recovery',
       label: 'Workflow Recovery',
-      count: recoveryRequests.length + releaseReviews.length,
+      count: recoveryRequests.length + releaseReviews.length + providerStandings.filter((p) => p.status === 'SUSPENDED' && p.appealedAt).length,
     },
     {
       key: 'orders',
@@ -3502,6 +3524,46 @@ export default function AdminDashboard() {
                           <td>{row.lastAt ? new Date(row.lastAt).toLocaleString() : '—'}</td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="ac-panel-header" style={{ marginTop: 24 }}>
+                <div>
+                  <span className="ac-section-label">PROVIDER STANDINGS</span>
+                  <h2>Suspensions, appeals and probation</h2>
+                  <p className="sd-muted">Automatic: rating -0.1 per cancellation; 3 cancellations in 30 days suspends bidding (3, 14, 30 days, then until admin review); a cancellation on probation suspends immediately. Providers rejoin on 30-day probation after acknowledging the rules. You can reinstate early below.</p>
+                </div>
+              </div>
+              {providerStandings.length === 0 ? (
+                <div className="ac-empty">No provider is suspended or on probation.</div>
+              ) : (
+                <div className="ac-table-shell">
+                  <table className="ac-table">
+                    <thead><tr><th>Provider</th><th>Status</th><th>Suspensions</th><th>Until</th><th>Rating penalty</th><th>Appeal</th><th>Action</th></tr></thead>
+                    <tbody>
+                      {providerStandings.map((row) => {
+                        const suspended = row.status === 'SUSPENDED' || row.status === 'REJOIN_PENDING';
+                        return (
+                          <tr key={row.id}>
+                            <td>{row.user?.name || '—'}<div className="sd-muted">{row.user?.email || ''}</div></td>
+                            <td><strong>{row.status}</strong><div className="sd-muted">{row.lastReason || ''}</div></td>
+                            <td>{row.suspensionCount}</td>
+                            <td>{row.status === 'PROBATION' ? (row.probationUntil ? new Date(row.probationUntil).toLocaleDateString() : '—') : (row.suspendedUntil ? new Date(row.suspendedUntil).toLocaleString() : 'Until admin review')}</td>
+                            <td>-{Number(row.ratingPenalty || 0).toFixed(1)}</td>
+                            <td>{row.appealMessage || '—'}</td>
+                            <td>
+                              {suspended ? (
+                                <div className="ac-actions">
+                                  <button type="button" className="sd-btn sd-btn-primary" disabled={Boolean(actionLoading)} onClick={() => reinstateProvider(row.userId, 'PROBATION', false)}>Reinstate on probation</button>
+                                  <button type="button" className="sd-btn" disabled={Boolean(actionLoading)} onClick={() => reinstateProvider(row.userId, 'GOOD', true)}>Clear fully</button>
+                                </div>
+                              ) : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

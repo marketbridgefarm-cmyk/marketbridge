@@ -9,6 +9,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/TruckOwnerDashboard.css';
 import ProviderReleaseDialog from '../components/ProviderReleaseDialog.jsx';
+import ProviderStandingBanner from '../components/ProviderStandingBanner.jsx';
 
 const TABS = [
   { id: 'trucks', label: 'My Trucks' },
@@ -806,6 +807,7 @@ export default function TruckOwnerDashboard() {
 
   return (
     <div className="sd-dashboard">
+      <ProviderStandingBanner />
 
       {/* =========================================================
           HEADER / SUMMARY
