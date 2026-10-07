@@ -98,37 +98,6 @@ function isOfferExpired(offer) {
   );
 }
 
-async function assertLiveLeafOffer(tx, offer) {
-  // Every counter creates a new child Offer and leaves the parent in COUNTERED
-  // for history. Only the leaf is the current negotiation state. Lock the
-  // parent row before checking children so a concurrent counter cannot race an
-  // accept/counter/release request against this check.
-  const locked = await tx.$queryRaw`
-    SELECT "id", "status"
-    FROM "Offer"
-    WHERE "id" = ${offer.id}
-    FOR UPDATE
-  `;
-
-  if (!locked?.length) {
-    throw offerError('Offer not found', 404);
-  }
-
-  const child = await tx.offer.findFirst({
-    where: { parentOfferId: offer.id },
-    select: { id: true },
-  });
-
-  if (child) {
-    throw offerError(
-      'This negotiation step has been superseded by a newer counter-offer. Refresh to continue with the latest price.',
-      409
-    );
-  }
-
-  return locked[0];
-}
-
 async function expireOfferIfNeeded(tx, offer, actorId = null) {
   if (!offer || !isOfferExpired(offer)) return false;
   if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(offer.status)) return false;
@@ -232,13 +201,15 @@ router.post(
         });
       }
 
-      if (
-        !['ACTIVE', 'UNDER_NEGOTIATION'].includes(
-          listing.status
-        )
-      ) {
-        return res.status(400).json({
-          error: 'Listing is not open for offers',
+      // New root offers are only accepted while the listing is in the open
+      // competition phase. Once the seller selects a buyer, the listing moves
+      // to UNDER_NEGOTIATION: existing waiting bids remain available to the
+      // seller, but brand-new buyers must not enter after exclusive negotiation
+      // has started. Child counter-offers use the negotiation actions below and
+      // therefore do not pass through this root-offer gate.
+      if (listing.status !== 'ACTIVE') {
+        return res.status(409).json({
+          error: 'This listing is no longer accepting new buyer offers because a buyer is already in negotiation or the inventory is no longer available',
         });
       }
 
@@ -607,10 +578,8 @@ async function acceptOfferAndCreateOrder(
     ? null
     : Number(lockedListing.minAcceptablePrice);
   if (minimumUnitPrice != null && Number.isFinite(minimumUnitPrice) && unitPrice < minimumUnitPrice) {
-    // Never disclose the seller's private reservation price to the buyer.
-    // The exact threshold is intentionally omitted from the API error.
     throw offerError(
-      "The agreed unit price does not meet the seller's configured terms.",
+      `Offer price is below the seller's minimum acceptable unit price of ${minimumUnitPrice.toFixed(2)} ETB`,
       409
     );
   }
@@ -939,6 +908,14 @@ router.patch(
             );
           }
 
+          // Selection starts the exclusive bilateral negotiation stage. Keep
+          // the listing public/readable, but close the root-offer entry point
+          // until this negotiation is released, rejected, or completed.
+          await tx.listing.update({
+            where: { id: fresh.listingId },
+            data: { status: 'UNDER_NEGOTIATION' },
+          });
+
           await recordAuditEvent(tx, {
             actorId: req.user.id,
             action: 'OFFER_SELECTED',
@@ -1040,8 +1017,6 @@ router.patch(
                   404
                 );
               }
-
-              await assertLiveLeafOffer(tx, freshOffer);
 
               if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
                 throw offerError('Offer has expired and can no longer be acted on', 409);
@@ -1150,8 +1125,6 @@ router.patch(
                 );
               }
 
-              await assertLiveLeafOffer(tx, freshOffer);
-
               if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
                 throw offerError('Offer has expired and can no longer be acted on', 409);
               }
@@ -1186,13 +1159,6 @@ router.patch(
               const counterExpiresAt = offerExpiry(freshOffer.listing);
               if (counterExpiresAt && counterExpiresAt.getTime() <= Date.now()) {
                 throw offerError('The agricultural pickup window is too close or has expired.', 409);
-              }
-
-              const minimumUnitPrice = freshOffer.listing.minAcceptablePrice == null
-                ? null
-                : Number(freshOffer.listing.minAcceptablePrice);
-              if (minimumUnitPrice != null && Number.isFinite(minimumUnitPrice) && numericCounter < minimumUnitPrice) {
-                throw offerError("Counter price is below the seller's configured terms.", 409);
               }
 
               await tx.offer.update({
@@ -1289,8 +1255,6 @@ router.patch(
                   404
                 );
               }
-
-              await assertLiveLeafOffer(tx, freshOffer);
 
               if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
                 throw offerError('Offer has expired and can no longer be accepted', 409);
@@ -1391,8 +1355,6 @@ router.patch(
             const freshOffer = await tx.offer.findUnique({ where: { id: offer.id } });
             if (!freshOffer) throw offerError('Offer not found', 404);
 
-            await assertLiveLeafOffer(tx, freshOffer);
-
             const freshAvailableAt = releaseAvailableAt(freshOffer);
             if (!freshAvailableAt || (!admin && freshAvailableAt.getTime() > Date.now())) {
               throw offerError('This negotiation changed. Refresh and try again.', 409);
@@ -1408,6 +1370,14 @@ router.patch(
               data: { status: 'WITHDRAWN' },
             });
 
+            const activeNegotiationLeaf = await tx.offer.count({
+              where: {
+                listingId: freshOffer.listingId,
+                status: { in: ['SELECTED', 'COUNTERED'] },
+                childOffers: { none: {} },
+              },
+            });
+
             const remainingActiveLeafOffers = await tx.offer.count({
               where: {
                 listingId: freshOffer.listingId,
@@ -1416,7 +1386,7 @@ router.patch(
               },
             });
 
-            if (remainingActiveLeafOffers === 0) {
+            if (activeNegotiationLeaf === 0) {
               await tx.listing.update({
                 where: { id: freshOffer.listingId },
                 data: { status: 'ACTIVE' },
@@ -1497,8 +1467,6 @@ router.patch(
                 throw offerError('Offer not found', 404);
               }
 
-              await assertLiveLeafOffer(tx, freshOffer);
-
               if (!allowedStatuses.includes(freshOffer.status)) {
                 throw offerError(
                   `Offer is no longer ${allowedStatuses.join('/')} (current: ${freshOffer.status})`,
@@ -1517,7 +1485,18 @@ router.patch(
                   data: { status: terminalStatus },
                 });
 
-              // Live offers = leaves still waiting or in negotiation.
+              // Waiting PENDING bids are competition candidates, not an active
+              // bilateral negotiation. Once the selected/countered negotiation
+              // disappears, reopen the listing so the seller can start a fresh
+              // selection round and new buyers may enter again.
+              const activeNegotiationLeaf = await tx.offer.count({
+                where: {
+                  listingId: freshOffer.listingId,
+                  status: { in: ['SELECTED', 'COUNTERED'] },
+                  childOffers: { none: {} },
+                },
+              });
+
               const remainingActiveLeafOffers = await tx.offer.count({
                 where: {
                   listingId: freshOffer.listingId,
@@ -1526,7 +1505,7 @@ router.patch(
                 },
               });
 
-              if (remainingActiveLeafOffers === 0) {
+              if (activeNegotiationLeaf === 0) {
                 await tx.listing.update({
                   where: { id: freshOffer.listingId },
                   data: { status: 'ACTIVE' },
@@ -1626,8 +1605,6 @@ router.patch(
                   404
                 );
               }
-
-              await assertLiveLeafOffer(tx, freshOffer);
 
               if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
                 throw offerError('Offer has expired and can no longer be countered', 409);
