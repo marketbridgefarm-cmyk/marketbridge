@@ -3060,4 +3060,99 @@ router.get(
 );
 
 
+// ============================================================================
+// RELEASE LIMIT REVIEWS
+// ============================================================================
+// A requester who hits the per-job cap on releasing accepted transporter /
+// inspector agreements is blocked and flagged. Approving here grants exactly
+// one more release for that job (recorded as a RELEASE_LIMIT_OVERRIDE event).
+
+const RELEASE_BLOCK_ACTIONS = {
+  TRANSPORT_RELEASE_BLOCKED_ADMIN_REVIEW: { type: 'TRANSPORT', key: 'transportJobId' },
+  INSPECTION_RELEASE_BLOCKED_ADMIN_REVIEW: { type: 'INSPECTION', key: 'inspectionRequestId' },
+};
+
+router.get('/release-reviews', async (req, res) => {
+  try {
+    const [blocked, overrides] = await Promise.all([
+      prisma.auditEvent.findMany({
+        where: { action: { in: Object.keys(RELEASE_BLOCK_ACTIONS) } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        include: { actor: { select: { id: true, name: true, email: true } } },
+      }),
+      prisma.auditEvent.findMany({
+        where: { action: 'RELEASE_LIMIT_OVERRIDE' },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: { metadata: true },
+      }),
+    ]);
+    const approved = new Set(overrides.map((o) => o.metadata?.blockedEventId).filter(Boolean));
+    const reviews = blocked
+      .filter((e) => !approved.has(e.id))
+      .map((e) => {
+        const def = RELEASE_BLOCK_ACTIONS[e.action];
+        return {
+          id: e.id,
+          type: def.type,
+          jobId: e.metadata?.[def.key] || null,
+          orderId: e.metadata?.orderId || null,
+          attemptedReason: e.metadata?.attemptedReason || null,
+          releasesUsed: e.metadata?.releasesUsed ?? null,
+          limit: e.metadata?.limit ?? null,
+          requester: e.actor,
+          createdAt: e.createdAt,
+        };
+      });
+    return res.json({ reviews, count: reviews.length });
+  } catch (error) {
+    req.log.error({ err: error }, 'ADMIN RELEASE REVIEWS ERROR:');
+    return res.status(500).json({ error: 'Could not load release reviews' });
+  }
+});
+
+router.post('/release-reviews/:eventId/approve', async (req, res) => {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const event = await tx.auditEvent.findUnique({ where: { id: req.params.eventId } });
+      const def = event && RELEASE_BLOCK_ACTIONS[event.action];
+      if (!def) return { status: 404, error: 'Release review not found' };
+      const jobId = event.metadata?.[def.key];
+      if (!jobId) return { status: 409, error: 'Release review has no job reference' };
+
+      const already = await tx.auditEvent.count({
+        where: {
+          action: 'RELEASE_LIMIT_OVERRIDE',
+          metadata: { path: ['blockedEventId'], equals: event.id },
+        },
+      });
+      if (already > 0) return { status: 409, error: 'This release review was already approved' };
+
+      await recordAuditEvent(tx, {
+        actorId: req.user.id,
+        action: 'RELEASE_LIMIT_OVERRIDE',
+        resourceType: def.type === 'TRANSPORT' ? 'TransportJob' : 'InspectionRequest',
+        resourceId: jobId,
+        metadata: {
+          type: def.type,
+          jobId,
+          orderId: event.metadata?.orderId || null,
+          blockedEventId: event.id,
+          requesterId: event.actorId,
+          approvedBy: req.user.id,
+          extraReleases: 1,
+        },
+      });
+      return { status: 200 };
+    });
+    if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+    return res.json({ message: 'One additional release approved for this job. The requester can try again.' });
+  } catch (error) {
+    req.log.error({ err: error }, 'ADMIN RELEASE REVIEW APPROVE ERROR:');
+    return res.status(500).json({ error: 'Could not approve release review' });
+  }
+});
+
+
 module.exports = router;

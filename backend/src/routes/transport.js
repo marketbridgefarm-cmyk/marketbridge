@@ -29,8 +29,7 @@ const {
 const {
   parseReleaseReason,
   assertAcceptedReleaseWindowElapsed,
-  countAcceptedReleases,
-  maxAcceptedReleases,
+  releaseAllowance,
   LIMIT_MESSAGE,
 } = require('../services/releaseLimitsService');
 
@@ -2069,7 +2068,15 @@ router.patch(
       // longer wants to proceed uses POST /withdraw-bid while PENDING. Once
       // SELECTED or COUNTERED, the truck owner must respond to keep or end
       // the thread; they cannot unilaterally abandon a live negotiation.
-      if (actorRole !== 'REQUESTER') {
+      // Exception: the truck owner on a provisionally ACCEPTED quote may
+      // drop out before transport payment (reason required and recorded; no
+      // wait period, and it does not count against the requester's cap).
+      const isProviderRelease =
+        actorRole === 'PROVIDER' &&
+        quote.status === 'ACCEPTED' &&
+        quote.truckOwnerId === req.user.id;
+
+      if (actorRole !== 'REQUESTER' && !isProviderRelease) {
         return res.status(403).json({
           error: 'Only the arranging party can release this negotiation',
         });
@@ -2101,7 +2108,7 @@ router.patch(
       if (isAcceptedRelease) {
         try {
           releaseInfo = parseReleaseReason(req.body);
-          assertAcceptedReleaseWindowElapsed(quote);
+          if (!isProviderRelease) assertAcceptedReleaseWindowElapsed(quote);
         } catch (limitErr) {
           return res.status(limitErr.statusCode || 400).json({
             error: limitErr.message,
@@ -2117,13 +2124,13 @@ router.patch(
         );
 
         let releaseNumber = null;
-        if (isAcceptedRelease) {
-          const used = await countAcceptedReleases(tx, {
+        if (isAcceptedRelease && !isProviderRelease) {
+          const { used, allowed } = await releaseAllowance(tx, {
             action: 'TRANSPORT_QUOTE_WITHDRAWN',
             metadataKey: 'transportJobId',
             jobId: job.id,
           });
-          if (used >= maxAcceptedReleases()) {
+          if (used >= allowed) {
             await recordAuditEvent(tx, {
               actorId: req.user.id,
               action: 'TRANSPORT_RELEASE_BLOCKED_ADMIN_REVIEW',
@@ -2135,7 +2142,7 @@ router.patch(
                 requesterId: req.user.id,
                 attemptedReason: releaseInfo.reason,
                 releasesUsed: used,
-                limit: maxAcceptedReleases(),
+                limit: allowed,
               },
             });
             return { blocked: true };
@@ -2173,10 +2180,12 @@ router.patch(
         }
 
         if (isAcceptedRelease) {
-          try {
-            assertAcceptedReleaseWindowElapsed(freshQuote);
-          } catch (e) {
-            throw quoteError(e.message, 409);
+          if (!isProviderRelease) {
+            try {
+              assertAcceptedReleaseWindowElapsed(freshQuote);
+            } catch (e) {
+              throw quoteError(e.message, 409);
+            }
           }
         }
 
@@ -2211,14 +2220,16 @@ router.patch(
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
-          action: isAcceptedRelease ? 'TRANSPORT_QUOTE_WITHDRAWN' : 'TRANSPORT_SILENT_QUOTE_RELEASED',
+          action: isProviderRelease
+            ? 'TRANSPORT_ACCEPTED_RELEASED_BY_PROVIDER'
+            : isAcceptedRelease ? 'TRANSPORT_QUOTE_WITHDRAWN' : 'TRANSPORT_SILENT_QUOTE_RELEASED',
           resourceType: 'TransportQuote',
           resourceId: updatedQuote.id,
           metadata: {
             transportJobId: freshQuote.transportJobId,
             orderId: freshQuote.transportJob.orderId,
             releasedBy: effectiveRole,
-            requesterId: req.user.id,
+            ...(isProviderRelease ? { providerId: req.user.id } : { requesterId: req.user.id }),
             previousStatus: freshQuote.status,
             reason: releaseInfo.reason,
             note: releaseInfo.note,
@@ -2234,7 +2245,9 @@ router.patch(
       }
 
       return res.json({
-        message: isAcceptedRelease
+        message: isProviderRelease
+          ? 'Provisional agreement cancelled. The requester can choose another transporter.'
+          : isAcceptedRelease
           ? 'Provisional transporter agreement released. Other transport bids are available again.'
           : 'Silent truck owner released. Other transport bids are available again.',
         quote: result,

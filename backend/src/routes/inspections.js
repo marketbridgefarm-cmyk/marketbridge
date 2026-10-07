@@ -30,8 +30,7 @@ const {
 const {
   parseReleaseReason,
   assertAcceptedReleaseWindowElapsed,
-  countAcceptedReleases,
-  maxAcceptedReleases,
+  releaseAllowance,
   LIMIT_MESSAGE,
 } = require('../services/releaseLimitsService');
 
@@ -973,7 +972,15 @@ router.patch(
       if (!loaded) return;
       const { request, quote, actorRole } = loaded;
 
-      if (actorRole !== 'REQUESTER') {
+      // Exception: the inspector on a provisionally ACCEPTED quote may drop
+      // out before payment (reason required and recorded; no wait period, and
+      // it does not count against the requester's cap).
+      const isProviderRelease =
+        actorRole === 'PROVIDER' &&
+        quote.status === 'ACCEPTED' &&
+        quote.inspectorId === req.user.id;
+
+      if (actorRole !== 'REQUESTER' && !isProviderRelease) {
         return res.status(403).json({ error: 'Only the requester can release this negotiation' });
       }
 
@@ -1003,7 +1010,7 @@ router.patch(
       if (isAcceptedRelease) {
         try {
           releaseInfo = parseReleaseReason(req.body);
-          assertAcceptedReleaseWindowElapsed(quote);
+          if (!isProviderRelease) assertAcceptedReleaseWindowElapsed(quote);
         } catch (limitErr) {
           return res.status(limitErr.statusCode || 400).json({
             error: limitErr.message,
@@ -1016,13 +1023,13 @@ router.patch(
         await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection agreement cannot be released until the order dispute is resolved');
 
         let releaseNumber = null;
-        if (isAcceptedRelease) {
-          const used = await countAcceptedReleases(tx, {
+        if (isAcceptedRelease && !isProviderRelease) {
+          const { used, allowed } = await releaseAllowance(tx, {
             action: 'INSPECTION_QUOTE_WITHDRAWN',
             metadataKey: 'inspectionRequestId',
             jobId: request.id,
           });
-          if (used >= maxAcceptedReleases()) {
+          if (used >= allowed) {
             await recordAuditEvent(tx, {
               actorId: req.user.id,
               action: 'INSPECTION_RELEASE_BLOCKED_ADMIN_REVIEW',
@@ -1034,7 +1041,7 @@ router.patch(
                 requesterId: req.user.id,
                 attemptedReason: releaseInfo.reason,
                 releasesUsed: used,
-                limit: maxAcceptedReleases(),
+                limit: allowed,
               },
             });
             return { blocked: true };
@@ -1060,10 +1067,12 @@ router.patch(
         }
 
         if (isAcceptedRelease) {
-          try {
-            assertAcceptedReleaseWindowElapsed(freshQuote);
-          } catch (e) {
-            throw quoteError(e.message, 409);
+          if (!isProviderRelease) {
+            try {
+              assertAcceptedReleaseWindowElapsed(freshQuote);
+            } catch (e) {
+              throw quoteError(e.message, 409);
+            }
           }
           const freshRequest = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
           if (!freshRequest || freshRequest.status !== 'ACCEPTED' || freshRequest.inspectorId !== freshQuote.inspectorId) {
@@ -1102,14 +1111,16 @@ router.patch(
 
         await recordAuditEvent(tx, {
           actorId: req.user.id,
-          action: isAcceptedRelease ? 'INSPECTION_QUOTE_WITHDRAWN' : 'INSPECTION_SILENT_INSPECTOR_RELEASED',
+          action: isProviderRelease
+            ? 'INSPECTION_ACCEPTED_RELEASED_BY_PROVIDER'
+            : isAcceptedRelease ? 'INSPECTION_QUOTE_WITHDRAWN' : 'INSPECTION_SILENT_INSPECTOR_RELEASED',
           resourceType: 'InspectionQuote',
           resourceId: updatedQuote.id,
           metadata: {
             inspectionRequestId: request.id,
             inspectorId: freshQuote.inspectorId,
             releasedBy: actorRole,
-            requesterId: req.user.id,
+            ...(isProviderRelease ? { providerId: req.user.id } : { requesterId: req.user.id }),
             previousStatus: freshQuote.status,
             reason: releaseInfo.reason,
             note: releaseInfo.note,
@@ -1125,7 +1136,9 @@ router.patch(
       }
 
       return res.json({
-        message: isAcceptedRelease
+        message: isProviderRelease
+          ? 'Provisional agreement cancelled. The requester can choose another inspector.'
+          : isAcceptedRelease
           ? 'Provisional inspector agreement released. Other inspector bids are available again.'
           : 'Silent inspector released. Other inspector bids are available again.',
         quote: result,
