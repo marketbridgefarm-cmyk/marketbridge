@@ -664,4 +664,25 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
     assert.equal(newOffer.status, 201, JSON.stringify(newOffer.body));
   });
 
+
+  test('rejects superseded negotiation parents', async () => {
+    const suffix = `leaf-${Date.now()}`;
+    const seller = await createUser({ role: 'SELLER', name: `Seller ${suffix}` });
+    const buyer = await createUser({ role: 'BUYER', name: `Buyer ${suffix}` });
+    const listingResponse = await api('/api/listings', { token: seller.token, method: 'POST', body: {
+      category: 'PRODUCT', sellerId: seller.user.id, title: `Leaf ${suffix}`, quantity: 10, unit: 'unit',
+      askingPrice: 100, minAcceptablePrice: 50, location: 'Addis Ababa', description: 'Leaf regression',
+    }});
+    assert.equal(listingResponse.status, 201, JSON.stringify(listingResponse.body));
+    const listingId = listingResponse.body.listing.id;
+    const offer = await api('/api/offers', { token: buyer.token, method: 'POST', idempotencyKey: `leaf-offer-${suffix}`, body: { listingId, amount: 80, quantity: 10 }});
+    assert.equal(offer.status, 201, JSON.stringify(offer.body));
+    const selected = await api(`/api/offers/${offer.body.offer.id}`, { token: seller.token, method: 'PATCH', idempotencyKey: `leaf-select-${suffix}`, body: { action: 'SELECT' }});
+    assert.equal(selected.status, 200, JSON.stringify(selected.body));
+    const counter = await api(`/api/offers/${offer.body.offer.id}`, { token: seller.token, method: 'PATCH', idempotencyKey: `leaf-counter-${suffix}`, body: { action: 'COUNTER', counterAmount: 90 }});
+    assert.equal(counter.status, 201, JSON.stringify(counter.body));
+    const stale = await api(`/api/offers/${offer.body.offer.id}`, { token: buyer.token, method: 'PATCH', idempotencyKey: `leaf-stale-${suffix}`, body: { action: 'ACCEPT_COUNTER' }});
+    assert.equal(stale.status, 409, JSON.stringify(stale.body));
+  });
+
 }
