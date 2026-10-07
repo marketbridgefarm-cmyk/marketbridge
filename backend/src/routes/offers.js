@@ -98,6 +98,37 @@ function isOfferExpired(offer) {
   );
 }
 
+async function assertLiveLeafOffer(tx, offer) {
+  // Every counter creates a new child Offer and leaves the parent in COUNTERED
+  // for history. Only the leaf is the current negotiation state. Lock the
+  // parent row before checking children so a concurrent counter cannot race an
+  // accept/counter/release request against this check.
+  const locked = await tx.$queryRaw`
+    SELECT "id", "status"
+    FROM "Offer"
+    WHERE "id" = ${offer.id}
+    FOR UPDATE
+  `;
+
+  if (!locked?.length) {
+    throw offerError('Offer not found', 404);
+  }
+
+  const child = await tx.offer.findFirst({
+    where: { parentOfferId: offer.id },
+    select: { id: true },
+  });
+
+  if (child) {
+    throw offerError(
+      'This negotiation step has been superseded by a newer counter-offer. Refresh to continue with the latest price.',
+      409
+    );
+  }
+
+  return locked[0];
+}
+
 async function expireOfferIfNeeded(tx, offer, actorId = null) {
   if (!offer || !isOfferExpired(offer)) return false;
   if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(offer.status)) return false;
@@ -576,8 +607,10 @@ async function acceptOfferAndCreateOrder(
     ? null
     : Number(lockedListing.minAcceptablePrice);
   if (minimumUnitPrice != null && Number.isFinite(minimumUnitPrice) && unitPrice < minimumUnitPrice) {
+    // Never disclose the seller's private reservation price to the buyer.
+    // The exact threshold is intentionally omitted from the API error.
     throw offerError(
-      `Offer price is below the seller's minimum acceptable unit price of ${minimumUnitPrice.toFixed(2)} ETB`,
+      "The agreed unit price does not meet the seller's configured terms.",
       409
     );
   }
@@ -1008,6 +1041,8 @@ router.patch(
                 );
               }
 
+              await assertLiveLeafOffer(tx, freshOffer);
+
               if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
                 throw offerError('Offer has expired and can no longer be acted on', 409);
               }
@@ -1115,6 +1150,8 @@ router.patch(
                 );
               }
 
+              await assertLiveLeafOffer(tx, freshOffer);
+
               if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
                 throw offerError('Offer has expired and can no longer be acted on', 409);
               }
@@ -1149,6 +1186,13 @@ router.patch(
               const counterExpiresAt = offerExpiry(freshOffer.listing);
               if (counterExpiresAt && counterExpiresAt.getTime() <= Date.now()) {
                 throw offerError('The agricultural pickup window is too close or has expired.', 409);
+              }
+
+              const minimumUnitPrice = freshOffer.listing.minAcceptablePrice == null
+                ? null
+                : Number(freshOffer.listing.minAcceptablePrice);
+              if (minimumUnitPrice != null && Number.isFinite(minimumUnitPrice) && numericCounter < minimumUnitPrice) {
+                throw offerError("Counter price is below the seller's configured terms.", 409);
               }
 
               await tx.offer.update({
@@ -1245,6 +1289,8 @@ router.patch(
                   404
                 );
               }
+
+              await assertLiveLeafOffer(tx, freshOffer);
 
               if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
                 throw offerError('Offer has expired and can no longer be accepted', 409);
@@ -1344,6 +1390,8 @@ router.patch(
           async (tx) => {
             const freshOffer = await tx.offer.findUnique({ where: { id: offer.id } });
             if (!freshOffer) throw offerError('Offer not found', 404);
+
+            await assertLiveLeafOffer(tx, freshOffer);
 
             const freshAvailableAt = releaseAvailableAt(freshOffer);
             if (!freshAvailableAt || (!admin && freshAvailableAt.getTime() > Date.now())) {
@@ -1448,6 +1496,8 @@ router.patch(
               if (!freshOffer) {
                 throw offerError('Offer not found', 404);
               }
+
+              await assertLiveLeafOffer(tx, freshOffer);
 
               if (!allowedStatuses.includes(freshOffer.status)) {
                 throw offerError(
@@ -1576,6 +1626,8 @@ router.patch(
                   404
                 );
               }
+
+              await assertLiveLeafOffer(tx, freshOffer);
 
               if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
                 throw offerError('Offer has expired and can no longer be countered', 409);
