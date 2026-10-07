@@ -131,6 +131,30 @@ function quoteExpiry(hours = 24) {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
+// ============================================================================
+// SILENT-RELEASE WINDOW (mirrors INSPECTION_RELEASE_AFTER_HOURS)
+// ----------------------------------------------------------------------------
+// If the requester has selected a truck owner (or countered them) and the
+// truck owner goes silent, the requester needs a way to release the abandoned
+// negotiation and negotiate with another waiting bid. The window is measured
+// from the quote's last update so a fresh counter resets the clock.
+// ============================================================================
+function transportReleaseAfterHours() {
+  const configured = Number(process.env.TRANSPORT_RELEASE_AFTER_HOURS);
+  return Number.isFinite(configured) && configured >= 0 ? configured : 72;
+}
+
+function transportReleaseAvailableAt(quote) {
+  if (!quote) return null;
+  const providerTurn =
+    quote.status === 'SELECTED' ||
+    (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
+  if (!providerTurn) return null;
+  const since = new Date(quote.updatedAt || quote.createdAt).getTime();
+  if (!Number.isFinite(since)) return null;
+  return new Date(since + transportReleaseAfterHours() * 60 * 60 * 1000);
+}
+
 function isArrangingParty(job, order, userId) {
   return (
     (job.arrangingParty === 'SELLER' && order.sellerId === userId) ||
@@ -2708,20 +2732,43 @@ router.patch(
       }
 
       // ----------------------------------------------------------------------
-      // WITHDRAW / RELEASE PROVISIONAL TRANSPORT AGREEMENT
+      // WITHDRAW / RELEASE PROVISIONAL OR SILENT TRANSPORT AGREEMENT
       // ----------------------------------------------------------------------
-      // Negotiation acceptance is provisional. Before transport payment,
-      // either side may release an accepted transporter so the buyer can
-      // continue with another competing quote. No truck is committed here.
-      // This is intentionally blocked once a Chapa transport payment has
-      // started or settled, because payment is the commitment boundary.
+      // Two release modes, mirroring the inspection side:
+      //
+      //   1. Provisional release — the quote is ACCEPTED but transport
+      //      payment has not started. Either party may free the transporter
+      //      so another waiting bid can be selected.
+      //
+      //   2. Silent release — the requester selected a truck owner (or
+      //      countered them) and the truck owner has been silent past
+      //      TRANSPORT_RELEASE_AFTER_HOURS. The requester can free the
+      //      abandoned negotiation thread and pick a different bid.
+      //
+      // Both are blocked once a Chapa transport payment has started or
+      // settled, because payment is the commitment boundary.
       // ----------------------------------------------------------------------
 
       if (req.body.action === 'WITHDRAW') {
-        if (quote.status !== 'ACCEPTED') {
+        const isAcceptedRelease = quote.status === 'ACCEPTED';
+        const isSilentRelease =
+          quote.status === 'SELECTED' ||
+          (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
+
+        if (!isAcceptedRelease && !isSilentRelease) {
           return res.status(400).json({
-            error: `Only a provisionally accepted quote can be released (current: ${quote.status})`,
+            error: `This quote cannot be released in its current state (current: ${quote.status})`,
           });
+        }
+
+        if (isSilentRelease) {
+          const availableAt = transportReleaseAvailableAt(quote);
+          if (availableAt && availableAt.getTime() > Date.now()) {
+            return res.status(409).json({
+              error: `This truck owner has not been inactive long enough. You can release them from ${availableAt.toISOString()}.`,
+              releaseAvailableAt: availableAt,
+            });
+          }
         }
 
         const result = await prisma.$transaction(async (tx) => {
@@ -2752,48 +2799,68 @@ router.patch(
             throw quoteError(`This transport agreement cannot be released while the job is ${freshQuote.transportJob.status}`, 409);
           }
 
+          if (isSilentRelease) {
+            // Re-check the release window inside the transaction so two racing
+            // releases cannot both succeed. The freshQuote's updatedAt resets
+            // the window whenever the provider (not the requester) has acted.
+            const freshAvailableAt = transportReleaseAvailableAt(freshQuote);
+            if (freshAvailableAt && freshAvailableAt.getTime() > Date.now()) {
+              throw quoteError('This negotiation changed. Refresh and try again.', 409);
+            }
+          }
+
           const updatedQuote = await tx.transportQuote.update({
             where: { id: freshQuote.id },
             data: { status: 'WITHDRAWN' },
           });
 
-          // Keep all still-pending competition bids available. The buyer can
-          // immediately select another transporter without creating a new
-          // transport job or disturbing seller/inspection payments.
-          await tx.transportJob.update({
-            where: { id: freshQuote.transportJobId },
-            data: {
-              truckOwnerId: null,
-              truckId: null,
-              agreedAmount: null,
-              status: 'QUOTED',
-            },
-          });
+          // Provisional agreement release clears the (uncommitted) truck
+          // assignment and closes the seller <-> transporter coordination
+          // sheet so the next driver does not inherit the previous driver's
+          // phone, ETA, or availability notes.
+          //
+          // Silent release only abandons the negotiation thread — SELECTED
+          // and COUNTERED never set truckOwnerId on the job, so there is
+          // nothing to clear.
+          if (isAcceptedRelease) {
+            // Keep all still-pending competition bids available. The buyer can
+            // immediately select another transporter without creating a new
+            // transport job or disturbing seller/inspection payments.
+            await tx.transportJob.update({
+              where: { id: freshQuote.transportJobId },
+              data: {
+                truckOwnerId: null,
+                truckId: null,
+                agreedAmount: null,
+                status: 'QUOTED',
+              },
+            });
 
-          // Close the seller <-> transporter coordination sheet so the next
-          // driver does not inherit the previous driver's phone, ETA, or
-          // availability notes.
-          await closeCoordination(tx, freshQuote.transportJobId, 'TRANSPORTER_RELEASED');
+            await closeCoordination(tx, freshQuote.transportJobId, 'TRANSPORTER_RELEASED');
 
-          await recordOrderEvent(tx, {
-            orderId: freshQuote.transportJob.orderId,
-            actorId: req.user.id,
-            type: 'TRANSPORT_COORDINATION_CLOSED',
-            metadata: {
-              transportJobId: freshQuote.transportJobId,
-              reason: 'TRANSPORTER_RELEASED',
-            },
-          });
+            await recordOrderEvent(tx, {
+              orderId: freshQuote.transportJob.orderId,
+              actorId: req.user.id,
+              type: 'TRANSPORT_COORDINATION_CLOSED',
+              metadata: {
+                transportJobId: freshQuote.transportJobId,
+                reason: 'TRANSPORTER_RELEASED',
+              },
+            });
+          }
 
           await recordAuditEvent(tx, {
             actorId: req.user.id,
-            action: 'TRANSPORT_QUOTE_WITHDRAWN',
+            action: isAcceptedRelease
+              ? 'TRANSPORT_QUOTE_WITHDRAWN'
+              : 'TRANSPORT_SILENT_QUOTE_RELEASED',
             resourceType: 'TransportQuote',
             resourceId: updatedQuote.id,
             metadata: {
               transportJobId: freshQuote.transportJobId,
               orderId: freshQuote.transportJob.orderId,
               releasedBy: effectiveRole,
+              previousStatus: freshQuote.status,
             },
           });
 
@@ -2801,7 +2868,9 @@ router.patch(
         }, { maxWait: 10000, timeout: 15000 });
 
         return res.json({
-          message: 'Provisional transporter agreement released. Other transport bids are available again.',
+          message: isAcceptedRelease
+            ? 'Provisional transporter agreement released. Other transport bids are available again.'
+            : 'Silent truck owner released. Other transport bids are available again.',
           quote: result,
         });
       }
@@ -2809,9 +2878,20 @@ router.patch(
       // ----------------------------------------------------------------------
       // REJECT
       // ----------------------------------------------------------------------
+      // A PENDING bid is a waiting alternative in the competition pool, not
+      // an active negotiation. Rejecting it would delete it from the pool,
+      // which is exactly what the inspection flow forbids. The requester
+      // should select the bid they want; the others keep waiting.
+      // ----------------------------------------------------------------------
 
       if (req.body.action === 'REJECT') {
-        if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(quote.status)) {
+        if (quote.status === 'PENDING') {
+          return res.status(409).json({
+            error: 'Waiting bids cannot be rejected. Select the bid you want to negotiate with; the others will keep waiting.',
+          });
+        }
+
+        if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
           return res.status(400).json({
             error: `This quote is already ${quote.status.toLowerCase()}`,
           });
@@ -2842,7 +2922,7 @@ router.patch(
           }
 
           const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
-          if (!freshQuote || !['PENDING', 'SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
+          if (!freshQuote || !['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
             throw quoteError('This quote is no longer available for rejection', 409);
           }
           if (['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
@@ -3038,6 +3118,72 @@ router.patch(
   }
 );
 
+// ============================================================================
+// TRUCK OWNER WITHDRAWS A WAITING BID
+// ============================================================================
+// Mirrors POST /inspections/:id/quotes/:quoteId/withdraw-bid. A truck owner
+// whose quote is still PENDING (i.e., the requester has not selected it for
+// negotiation) can leave cleanly instead of waiting for the 24h expiry.
+// Only the truck owner who submitted the bid may withdraw it.
+// ============================================================================
+
+router.post(
+  '/quotes/:quoteId/withdraw-bid',
+  authenticate,
+  requireRole('TRUCK_OWNER'),
+  async (req, res) => {
+    try {
+      const loaded = await loadTransportQuoteForNegotiation(req, res);
+      if (!loaded) return;
+      const { quote, job, actorRole } = loaded;
+
+      if (actorRole !== 'PROVIDER') {
+        return res.status(403).json({
+          error: 'Only the truck owner who submitted the bid can withdraw it',
+        });
+      }
+
+      if (quote.status !== 'PENDING') {
+        return res.status(409).json({
+          error: `Only a waiting bid can be withdrawn (current: ${quote.status})`,
+        });
+      }
+
+      const withdrawn = await prisma.$transaction(async (tx) => {
+        const fresh = await tx.transportQuote.findUnique({ where: { id: quote.id } });
+        if (!fresh || fresh.status !== 'PENDING') {
+          throw quoteError('This bid is no longer waiting. Refresh and try again.', 409);
+        }
+
+        const updated = await tx.transportQuote.update({
+          where: { id: fresh.id },
+          data: { status: 'WITHDRAWN' },
+        });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'TRANSPORT_QUOTE_WITHDRAWN_BY_PROVIDER',
+          resourceType: 'TransportQuote',
+          resourceId: updated.id,
+          metadata: {
+            transportJobId: job.id,
+            truckOwnerId: fresh.truckOwnerId,
+          },
+        });
+
+        return updated;
+      }, { maxWait: 10000, timeout: 15000 });
+
+      return res.json({ message: 'Your bid has been withdrawn.', quote: withdrawn });
+    } catch (error) {
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      req.log.error({ err: error }, 'TRUCK OWNER WITHDRAW BID ERROR:');
+      return res.status(500).json({ error: 'Could not withdraw bid' });
+    }
+  }
+);
 
 // ============================================================================
 // TESTABLE INTERNAL CONSTANTS
