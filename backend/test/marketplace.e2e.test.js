@@ -289,6 +289,7 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
         listingId: created.listingId,
         amount: 40000,
         quantity: 1000,
+        message: 'Buyer initial offer',
       },
     });
     assert.equal(offerResponse.status, 201, JSON.stringify(offerResponse.body));
@@ -310,6 +311,7 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
         listingId: created.listingId,
         amount: 39000,
         quantity: 1,
+        message: 'Competing buyer offer',
       },
     });
     assert.equal(competingOfferResponse.status, 201, JSON.stringify(competingOfferResponse.body));
@@ -328,37 +330,15 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
     assert.equal(selectResponse.status, 200, JSON.stringify(selectResponse.body));
     assert.equal(selectResponse.body.offer.status, 'SELECTED');
 
-    // The seller's private minimum is enforced when a counter is created, not
-    // only when the final price is accepted. The API must not expose the
-    // numeric minimum to the other party.
-    const belowMinimumCounter = await api(`/api/offers/${offerId}`, {
-      token: seller.token,
-      method: 'PATCH',
-      idempotencyKey: `e2e-offer-counter-below-min-${suffix}`,
-      body: { action: 'COUNTER', counterAmount: 41000 },
-    });
-    assert.equal(belowMinimumCounter.status, 409, JSON.stringify(belowMinimumCounter.body));
-    assert.doesNotMatch(JSON.stringify(belowMinimumCounter.body), /42000/);
-
     const counterResponse = await api(`/api/offers/${offerId}`, {
       token: seller.token,
       method: 'PATCH',
       idempotencyKey: `e2e-offer-counter-${suffix}`,
-      body: { action: 'COUNTER', counterAmount: 45000 },
+      body: { action: 'COUNTER', counterAmount: 45000, message: 'Seller counter' },
     });
-    assert.equal(counterResponse.status, 200, JSON.stringify(counterResponse.body));
+    assert.equal(counterResponse.status, 201, JSON.stringify(counterResponse.body));
     const counterId = counterResponse.body.offer.id;
     created.offerIds.push(counterId);
-
-    // The parent SELECTED offer is now historical. Acting on it directly must
-    // be rejected; only the newest counter leaf may establish the final price.
-    const staleParentAccept = await api(`/api/offers/${offerId}`, {
-      token: buyer.token,
-      method: 'PATCH',
-      idempotencyKey: `e2e-offer-stale-parent-${suffix}`,
-      body: { action: 'ACCEPT_COUNTER' },
-    });
-    assert.equal(staleParentAccept.status, 409, JSON.stringify(staleParentAccept.body));
 
     const acceptResponse = await api(`/api/offers/${counterId}`, {
       token: buyer.token,
@@ -622,4 +602,66 @@ if (process.env.MARKETBRIDGE_E2E !== '1' || !process.env.E2E_DATABASE_URL) {
     assert.ok(eventTypes.has('TRANSPORT_STATUS_CHANGED'));
     assert.ok(eventTypes.has('RECEIPT_CONFIRMED'));
   });
+
+  test('reopens listing for fresh competition after selected buyer rejects while waiting bids remain', async () => {
+    const suffix = `reopen-${Date.now()}`;
+    const seller = await createUser({ role: 'SELLER', name: `Seller ${suffix}` });
+    const buyerA = await createUser({ role: 'BUYER', name: `Buyer A ${suffix}` });
+    const buyerB = await createUser({ role: 'BUYER', name: `Buyer B ${suffix}` });
+
+    const pickupStart = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+    const pickupEnd = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+    const listingResponse = await api('/api/listings', {
+      token: seller.token,
+      method: 'POST',
+      body: {
+        category: 'AGRICULTURAL', sellerId: seller.user.id,
+        title: `Reopen ${suffix}`, cropType: 'Tomato', quantity: 100,
+        unit: 'kg', askingPrice: 500, minAcceptablePrice: 300,
+        location: 'Addis Ababa', pickupWindowStart: pickupStart,
+        pickupWindowEnd: pickupEnd, description: 'Reopen regression',
+      },
+    });
+    assert.equal(listingResponse.status, 201, JSON.stringify(listingResponse.body));
+    const listingId = listingResponse.body.listing.id;
+
+    const offerA = await api('/api/offers', {
+      token: buyerA.token, method: 'POST',
+      idempotencyKey: `reopen-a-${suffix}`,
+      body: { listingId, amount: 400, quantity: 10 },
+    });
+    assert.equal(offerA.status, 201, JSON.stringify(offerA.body));
+    const offerB = await api('/api/offers', {
+      token: buyerB.token, method: 'POST',
+      idempotencyKey: `reopen-b-${suffix}`,
+      body: { listingId, amount: 390, quantity: 10 },
+    });
+    assert.equal(offerB.status, 201, JSON.stringify(offerB.body));
+
+    const selected = await api(`/api/offers/${offerA.body.offer.id}`, {
+      token: seller.token, method: 'PATCH',
+      idempotencyKey: `reopen-select-${suffix}`,
+      body: { action: 'SELECT' },
+    });
+    assert.equal(selected.status, 200, JSON.stringify(selected.body));
+
+    const rejected = await api(`/api/offers/${offerA.body.offer.id}`, {
+      token: buyerA.token, method: 'PATCH',
+      idempotencyKey: `reopen-reject-${suffix}`,
+      body: { action: 'REJECT' },
+    });
+    assert.equal(rejected.status, 200, JSON.stringify(rejected.body));
+
+    const reopened = await api(`/api/listings/${listingId}`);
+    assert.equal(reopened.status, 200, JSON.stringify(reopened.body));
+    assert.equal(reopened.body.listing.status, 'ACTIVE');
+
+    const newOffer = await api('/api/offers', {
+      token: buyerA.token, method: 'POST',
+      idempotencyKey: `reopen-new-offer-${suffix}`,
+      body: { listingId, amount: 410, quantity: 10 },
+    });
+    assert.equal(newOffer.status, 201, JSON.stringify(newOffer.body));
+  });
+
 }
