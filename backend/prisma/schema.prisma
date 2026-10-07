@@ -26,6 +26,15 @@ enum AccountStatus {
   SUSPENDED
 }
 
+// Standing of a truck owner / inspector for BIDDING only. The user's account
+// (login, buying, selling) is never touched by this.
+enum ProviderStandingStatus {
+  GOOD
+  PROBATION
+  SUSPENDED
+  REJOIN_PENDING
+}
+
 enum ListingCategory {
   AGRICULTURAL
   PRODUCT
@@ -387,6 +396,8 @@ model User {
   passwordResetTokens PasswordResetToken[]
 
   rating Float @default(0)
+
+  providerStanding ProviderStanding?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2339,4 +2350,37 @@ model TransportAvailability {
 
   @@index([transportJobId, party])
   @@index([transportJobId, date])
+}
+
+
+// ============================================================================
+// PROVIDER STANDING (penalties for frequent cancellations + rejoin path)
+// ============================================================================
+model ProviderStanding {
+  id String @id @default(uuid())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @unique
+
+  status ProviderStandingStatus @default(GOOD)
+
+  // How many suspensions this provider has had; drives the length of the next.
+  suspensionCount Int       @default(0)
+  suspendedAt     DateTime?
+  // null while SUSPENDED means indefinite: only an admin can reinstate.
+  suspendedUntil  DateTime?
+  probationUntil  DateTime?
+
+  // Subtracted from the average rating (see releaseStandingService).
+  ratingPenalty Float @default(0)
+
+  lastReason    String?
+  appealMessage String?
+  appealedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, suspendedUntil])
+  @@index([status, probationUntil])
 }
