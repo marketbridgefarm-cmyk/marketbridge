@@ -190,6 +190,23 @@ function AmountRow({ value, unit = 'ETB' }) {
   );
 }
 
+// Renders the structured workDetails of a transport job as a compact string.
+// Split out so the JSX isn't one 400-character line, and so the same output
+// is produced in one place.
+function workDetailsSummary(workDetails) {
+  if (!workDetails) return null;
+  const parts = [
+    workDetails.weight && `Weight: ${workDetails.weight}`,
+    workDetails.packageCount && `Packages: ${workDetails.packageCount}`,
+    workDetails.vehicleType && `Vehicle: ${workDetails.vehicleType}`,
+    workDetails.loadingHelp && `Loading: ${workDetails.loadingHelp}`,
+    workDetails.unloadingHelp && `Unloading: ${workDetails.unloadingHelp}`,
+    workDetails.deliveryDeadline && `Deadline: ${new Date(workDetails.deliveryDeadline).toLocaleString()}`,
+    ...(workDetails.handling || []),
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'No additional structured requirements';
+}
+
 export default function TruckOwnerDashboard() {
   const { user } = useAuth();
   const [trucks, setTrucks] = useState([]);
@@ -434,9 +451,10 @@ export default function TruckOwnerDashboard() {
     return Boolean(quote?.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
   }
 
-  // Release a provisionally accepted deal (before transport payment). This is
-  // a WITHDRAW, not a REJECT: the backend only allows REJECT on quotes that
-  // are still being negotiated, so rejecting an ACCEPTED quote always failed.
+  // Release a provisionally accepted deal (before transport payment) or a
+  // silent negotiator (SELECTED / COUNTERED-by-requester) once the backend's
+  // release window has elapsed. This is a WITHDRAW, not a REJECT: the backend
+  // only allows REJECT on quotes that are still being negotiated.
   async function releaseTransportAgreement(quoteId) {
     setActionLoading(`quote-${quoteId}`);
     try {
@@ -496,6 +514,22 @@ export default function TruckOwnerDashboard() {
       await loadAll(false);
     } catch (err) {
       toast(getErrorMessage(err, 'Could not reject this negotiation.'));
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  // Withdraw a waiting bid that the requester has not yet selected for
+  // negotiation. Mirrors the inspection flow: only a PENDING bid can be
+  // withdrawn, so a live negotiation is never abandoned by accident.
+  async function withdrawWaitingBid(quoteId) {
+    setActionLoading(`quote-${quoteId}`);
+    try {
+      await api.post(`/transport/quotes/${quoteId}/withdraw-bid`);
+      toast('Your bid has been withdrawn. You can submit a new one on any other request.');
+      await loadAll(false);
+    } catch (err) {
+      toast(getErrorMessage(err, 'Could not withdraw this bid.'));
     } finally {
       setActionLoading(null);
     }
@@ -668,7 +702,10 @@ export default function TruckOwnerDashboard() {
         job.method !== 'HIRE_TRANSPORTER' ||
         orderPayments.some((p) => p.type === 'TRANSPORT' && p.status === 'PAID') ||
         (job.payments || []).some((p) => p.type === 'TRANSPORT' && p.status === 'PAID');
-      const inspectionRequests = job.order?.listing?.inspectionRequests || [];
+      // FIX: /transport/mine attaches inspectionRequests to the ORDER, not to
+      // order.listing. The previous path (job.order.listing.inspectionRequests)
+      // was always undefined, so this check silently passed.
+      const inspectionRequests = job.order?.inspectionRequests || [];
       const inspectionPaid = inspectionRequests
         .filter((r) => r.status !== 'CANCELLED' && r.fee != null && Number(r.fee) > 0)
         .every((r) =>
@@ -1029,7 +1066,9 @@ export default function TruckOwnerDashboard() {
                 // pending); show that instead of offering to quote again.
                 const hasAgreement = Boolean(myLeaf) && myLeaf.status === 'ACCEPTED';
                 const hasActiveThread =
-                  myLeaf && !leafExpired && ['PENDING', 'SELECTED', 'COUNTERED'].includes(myLeaf.status);
+                  myLeaf && !leafExpired && ['SELECTED', 'COUNTERED'].includes(myLeaf.status);
+                const hasWaitingBid =
+                  myLeaf && !leafExpired && myLeaf.status === 'PENDING';
                 const isMyTurn =
                   hasActiveThread &&
                   myLeaf.status === 'COUNTERED' &&
@@ -1046,7 +1085,11 @@ export default function TruckOwnerDashboard() {
 
                 const arranger = arrangerShort(job.arrangingParty);
                 const createdLabel = fmtDate(job.createdAt);
-                const showFooter = (!hasActiveThread && !hasAgreement) || isMyTurn;
+                const showFooter =
+                  (!myLeaf && !hasAgreement) ||
+                  isMyTurn ||
+                  hasWaitingBid;
+                const workSummary = workDetailsSummary(job.workDetails);
 
                 return (
                   <article className="sd-card sd-job-card" key={job.id}>
@@ -1108,8 +1151,12 @@ export default function TruckOwnerDashboard() {
                             </div>
                           </div>
 
-                          {job.workDetails && <div className="sd-job-requirements"><span className="sd-job-requirements-label">Work details</span><p>{[job.workDetails.weight && `Weight: ${job.workDetails.weight}`, job.workDetails.packageCount && `Packages: ${job.workDetails.packageCount}`, job.workDetails.vehicleType && `Vehicle: ${job.workDetails.vehicleType}`, job.workDetails.loadingHelp && `Loading: ${job.workDetails.loadingHelp}`, job.workDetails.unloadingHelp && `Unloading: ${job.workDetails.unloadingHelp}`, job.workDetails.deliveryDeadline && `Deadline: ${new Date(job.workDetails.deliveryDeadline).toLocaleString()}`, ...(job.workDetails.handling || [])].filter(Boolean).join(' · ') || 'No additional structured requirements'}</p></div>}
-                          {job.workDetails && <div className="sd-job-requirements"><span className="sd-job-requirements-label">Work details</span><p>{[job.workDetails.weight && `Weight: ${job.workDetails.weight}`, job.workDetails.packageCount && `Packages: ${job.workDetails.packageCount}`, job.workDetails.vehicleType && `Vehicle: ${job.workDetails.vehicleType}`, job.workDetails.loadingHelp && `Loading: ${job.workDetails.loadingHelp}`, job.workDetails.unloadingHelp && `Unloading: ${job.workDetails.unloadingHelp}`, job.workDetails.deliveryDeadline && `Deadline: ${new Date(job.workDetails.deliveryDeadline).toLocaleString()}`, ...(job.workDetails.handling || [])].filter(Boolean).join(' · ') || 'No additional structured requirements'}</p></div>}
+                          {workSummary && (
+                            <div className="sd-job-requirements">
+                              <span className="sd-job-requirements-label">Work details</span>
+                              <p>{workSummary}</p>
+                            </div>
+                          )}
                           {job.specialRequirements && (
                             <div className="sd-job-requirements">
                               <span className="sd-job-requirements-label">Requirements</span>
@@ -1139,6 +1186,22 @@ export default function TruckOwnerDashboard() {
                         </section>
                       )}
 
+                      {hasWaitingBid && (
+                        <section className="sd-card-block">
+                          <div className="sd-card-block-title">
+                            <h4>Your waiting bid</h4>
+                            <span className="sd-card-block-note">Pending</span>
+                          </div>
+                          <div className="sd-card-block-body">
+                            <AmountRow value={fmtMoney(myLeaf.amount)} />
+                            <p className="sd-amount-note">
+                              The requester has not selected your bid yet. You can withdraw
+                              it to stop waiting, or leave it open for selection.
+                            </p>
+                          </div>
+                        </section>
+                      )}
+
                       {hasAgreement && (
                         <section className="sd-card-block">
                           <div className="sd-card-block-title">
@@ -1159,7 +1222,7 @@ export default function TruckOwnerDashboard() {
                       {/* Footer */}
                       {showFooter && (
                         <div className="sd-card-actions">
-                          {!hasActiveThread && !hasAgreement && (
+                          {!myLeaf && !hasAgreement && (
                             <button
                               type="button"
                               className="sd-btn sd-btn-primary"
@@ -1167,6 +1230,17 @@ export default function TruckOwnerDashboard() {
                               onClick={() => respondToJob(job)}
                             >
                               {quoting ? 'Sending…' : 'Submit transport quote'}
+                            </button>
+                          )}
+
+                          {hasWaitingBid && (
+                            <button
+                              type="button"
+                              className="sd-btn sd-btn-outline"
+                              disabled={respondBusy}
+                              onClick={() => withdrawWaitingBid(myLeaf.id)}
+                            >
+                              {respondBusy ? 'Withdrawing…' : 'Withdraw waiting bid'}
                             </button>
                           )}
 
