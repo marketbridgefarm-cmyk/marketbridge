@@ -247,7 +247,14 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
         if (job) {
           const activePayment = await tx.payment.findFirst({ where: { transportJobId: job.id, type: 'TRANSPORT', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true } });
           if (activePayment) throw Object.assign(new Error('Transport recovery is blocked because transport payment has already started'), { statusCode: 409 });
-          await tx.transportQuote.updateMany({ where: { transportJobId: job.id, truckOwnerId: job.truckOwnerId, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
+          // job.truckOwnerId is null when the previous transporter already
+          // withdrew (the job was released at that point). Prisma rejects a
+          // null in a non-nullable `truckOwnerId` filter, so only scope the
+          // expiry to the previous transporter when one is still assigned.
+          // With no assigned transporter there is no arrangement to expire.
+          if (job.truckOwnerId) {
+            await tx.transportQuote.updateMany({ where: { transportJobId: job.id, truckOwnerId: job.truckOwnerId, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
+          }
           await tx.transportJob.update({ where: { id: job.id }, data: { truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED' } });
         }
       }
