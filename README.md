@@ -1,8 +1,12 @@
-# MarketBridge — Negotiation Leaf & Waiting-Buyer Quantity Fix
+# MarketBridge — Next Price Authority Fix
 
-- Superseded parent negotiation rows can no longer be acted on as the live leaf.
-- Seller selection validates the bid quantity against current listing availability.
-- Automatic waiting-buyer promotion ignores offers whose quantity exceeds remaining inventory.
-- Regression coverage protects the stale-parent invariant.
+Fixes the post-inspection price-review boundary and closes a private-price leakage in offer errors.
 
-Extract at the repository root and replace the included files.
+- Below-minimum offer errors no longer disclose the seller's numeric minimum.
+- Inspection-driven price proposals and counters are server-validated against the seller's minimum total price (minimum unit price × order quantity).
+- Price-review UI labels the amount as a total price, distinguishing it from the listing's per-unit offer price.
+
+Replacement files:
+- backend/src/routes/offers.js
+- backend/src/routes/orders.js
+- frontend/src/components/OrderDecisionPanel.jsx
