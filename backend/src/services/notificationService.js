@@ -112,6 +112,18 @@ const EVENT_COPY = {
     body: 'A payment connected to this order requires financial reconciliation before it can be treated as settled.',
     action: 'order',
   },
+  PROVIDER_AGREEMENT_RELEASED: {
+    type: 'ORDER',
+    title: 'Provider cancelled the agreement',
+    body: 'The provider cancelled the provisional agreement before payment. Choose another provider from the available bids.',
+    action: 'order',
+  },
+  REQUESTER_AGREEMENT_RELEASED: {
+    type: 'ORDER',
+    title: 'Agreement released',
+    body: 'The requester released the provisional agreement. You are no longer assigned to this job.',
+    action: 'order',
+  },
   PAYMENT_RECONCILIATION_RESOLVED: {
     type: 'PAYMENT',
     title: 'Payment reconciliation resolved',
@@ -135,6 +147,16 @@ function buildCopy(type, metadata = {}) {
   };
 
   let body = copy.body;
+
+  if (type === 'PROVIDER_AGREEMENT_RELEASED' && metadata.service) {
+    const who = metadata.service === 'TRANSPORT' ? 'transporter' : 'inspector';
+    body = `The ${who} cancelled the provisional agreement before payment. Choose another ${who} from the available bids.`;
+  }
+
+  if (type === 'REQUESTER_AGREEMENT_RELEASED' && metadata.service) {
+    const what = metadata.service === 'TRANSPORT' ? 'transport' : 'inspection';
+    body = `The requester released the provisional ${what} agreement. You are no longer assigned to this job.`;
+  }
 
   if (type === 'TRANSPORT_STATUS_CHANGED' && metadata.toStatus) {
     body = `Transport status is now ${String(metadata.toStatus).replace(/_/g, ' ').toLowerCase()}. Review the order for the next step.`;
@@ -191,6 +213,14 @@ async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) 
     case 'INSPECTION_STARTED':
     case 'INSPECTION_COMPLETED':
       recipients = [...buyerSeller, ...inspectionUsers];
+      break;
+    case 'PROVIDER_AGREEMENT_RELEASED':
+      recipients = [...buyerSeller];
+      break;
+    case 'REQUESTER_AGREEMENT_RELEASED':
+      // The released provider is no longer on the job, so the id travels in
+      // the event metadata.
+      recipients = [metadata.providerId];
       break;
     case 'BUYER_DECISION_MADE':
       recipients = [...buyerSeller];

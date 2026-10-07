@@ -37,6 +37,8 @@ const TITLES = {
     WORKFLOW_RECOVERY_REJECTED: 'Workflow recovery rejected',
     INSPECTION_QUOTE_WITHDRAWN: 'Inspector agreement released',
     TRANSPORT_QUOTE_WITHDRAWN: 'Transporter agreement released',
+    PROVIDER_AGREEMENT_RELEASED: 'Provider cancelled the agreement',
+    REQUESTER_AGREEMENT_RELEASED: 'Agreement released',
   },
 
   // Amharic — draft, needs native-speaker review (see header).

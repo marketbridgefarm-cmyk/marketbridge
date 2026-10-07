@@ -9,7 +9,10 @@
  *     acceptance before releasing.
  *  3. At most MAX_ACCEPTED_RELEASES (default 2) accepted releases per job;
  *     after that the release is blocked and flagged for admin review.
- *  4. Every release is recorded in the audit trail against the requester
+ *  4. Providers cancelling an accepted deal must also give a reason (their own
+ *     list), are recorded, notified-to-others, barred from re-bidding on the
+ *     same job, and listed for admin when they do it often (30 days).
+ *  5. Every release is recorded in the audit trail against the requester
  *     (reason, note, release number) and is visible to admin through
  *     GET /admin/audit-events.
  *
@@ -24,6 +27,31 @@ const RELEASE_REASONS = Object.freeze([
   'SCHEDULE_CONFLICT',
   'OTHER',
 ]);
+
+// Provider-side (truck owner / inspector) reasons for cancelling an accepted
+// agreement. PROVIDER_UNAVAILABLE is kept for older clients.
+const PROVIDER_RELEASE_REASONS = Object.freeze([
+  'VEHICLE_OR_EQUIPMENT_ISSUE',
+  'SCHEDULE_CONFLICT',
+  'PRICE_NOT_VIABLE',
+  'REQUESTER_UNRESPONSIVE',
+  'SITE_OR_ROUTE_ISSUE',
+  'PROVIDER_UNAVAILABLE',
+  'OTHER',
+]);
+
+const PROVIDER_RELEASE_ACTIONS = Object.freeze([
+  'TRANSPORT_ACCEPTED_RELEASED_BY_PROVIDER',
+  'INSPECTION_ACCEPTED_RELEASED_BY_PROVIDER',
+]);
+
+// Provider cancels of accepted deals within 30 days that put them on the
+// admin "frequent provider releases" list. Informational only: no automatic
+// penalty is applied.
+function providerFlagThreshold() {
+  const configured = Number(process.env.PROVIDER_RELEASE_FLAG_THRESHOLD);
+  return Number.isInteger(configured) && configured > 0 ? configured : 3;
+}
 
 const NOTE_MAX_LENGTH = 200;
 
@@ -45,11 +73,12 @@ function releaseError(message, statusCode = 400, extra = {}) {
 }
 
 // Returns { reason, note } or throws a 400 error.
-function parseReleaseReason(body) {
+function parseReleaseReason(body, { provider = false } = {}) {
+  const allowedReasons = provider ? PROVIDER_RELEASE_REASONS : RELEASE_REASONS;
   const reason = String(body?.reason || '').trim().toUpperCase();
   const note = String(body?.note || '').trim().slice(0, NOTE_MAX_LENGTH);
-  if (!RELEASE_REASONS.includes(reason)) {
-    throw releaseError(`Choose a release reason: ${RELEASE_REASONS.join(', ')}.`, 400);
+  if (!allowedReasons.includes(reason)) {
+    throw releaseError(`Choose a release reason: ${allowedReasons.join(', ')}.`, 400);
   }
   if (reason === 'OTHER' && !note) {
     throw releaseError('Add a short note when the release reason is OTHER.', 400);
@@ -84,6 +113,17 @@ async function countAcceptedReleases(tx, { action, metadataKey, jobId }) {
   });
 }
 
+// How many accepted deals this provider cancelled in the last 30 days.
+async function providerReleaseCountLast30d(tx, userId) {
+  return tx.auditEvent.count({
+    where: {
+      actorId: userId,
+      action: { in: [...PROVIDER_RELEASE_ACTIONS] },
+      createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+    },
+  });
+}
+
 const OVERRIDE_ACTION = 'RELEASE_LIMIT_OVERRIDE';
 
 // { used, allowed }: allowed = cap + one extra release per admin override
@@ -103,6 +143,10 @@ const LIMIT_MESSAGE =
 
 module.exports = {
   RELEASE_REASONS,
+  PROVIDER_RELEASE_REASONS,
+  PROVIDER_RELEASE_ACTIONS,
+  providerFlagThreshold,
+  providerReleaseCountLast30d,
   acceptedReleaseWaitHours,
   maxAcceptedReleases,
   parseReleaseReason,
