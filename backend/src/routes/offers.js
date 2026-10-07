@@ -201,15 +201,13 @@ router.post(
         });
       }
 
-      // New root offers are only accepted while the listing is in the open
-      // competition phase. Once the seller selects a buyer, the listing moves
-      // to UNDER_NEGOTIATION: existing waiting bids remain available to the
-      // seller, but brand-new buyers must not enter after exclusive negotiation
-      // has started. Child counter-offers use the negotiation actions below and
-      // therefore do not pass through this root-offer gate.
-      if (listing.status !== 'ACTIVE') {
-        return res.status(409).json({
-          error: 'This listing is no longer accepting new buyer offers because a buyer is already in negotiation or the inventory is no longer available',
+      if (
+        !['ACTIVE', 'UNDER_NEGOTIATION'].includes(
+          listing.status
+        )
+      ) {
+        return res.status(400).json({
+          error: 'Listing is not open for offers',
         });
       }
 
@@ -579,7 +577,7 @@ async function acceptOfferAndCreateOrder(
     : Number(lockedListing.minAcceptablePrice);
   if (minimumUnitPrice != null && Number.isFinite(minimumUnitPrice) && unitPrice < minimumUnitPrice) {
     throw offerError(
-      `Offer price is below the seller's minimum acceptable unit price of ${minimumUnitPrice.toFixed(2)} ETB`,
+      "Offer price is below the seller's minimum acceptable price",
       409
     );
   }
@@ -907,14 +905,6 @@ router.patch(
               409
             );
           }
-
-          // Selection starts the exclusive bilateral negotiation stage. Keep
-          // the listing public/readable, but close the root-offer entry point
-          // until this negotiation is released, rejected, or completed.
-          await tx.listing.update({
-            where: { id: fresh.listingId },
-            data: { status: 'UNDER_NEGOTIATION' },
-          });
 
           await recordAuditEvent(tx, {
             actorId: req.user.id,
@@ -1370,14 +1360,6 @@ router.patch(
               data: { status: 'WITHDRAWN' },
             });
 
-            const activeNegotiationLeaf = await tx.offer.count({
-              where: {
-                listingId: freshOffer.listingId,
-                status: { in: ['SELECTED', 'COUNTERED'] },
-                childOffers: { none: {} },
-              },
-            });
-
             const remainingActiveLeafOffers = await tx.offer.count({
               where: {
                 listingId: freshOffer.listingId,
@@ -1386,7 +1368,7 @@ router.patch(
               },
             });
 
-            if (activeNegotiationLeaf === 0) {
+            if (remainingActiveLeafOffers === 0) {
               await tx.listing.update({
                 where: { id: freshOffer.listingId },
                 data: { status: 'ACTIVE' },
@@ -1485,18 +1467,7 @@ router.patch(
                   data: { status: terminalStatus },
                 });
 
-              // Waiting PENDING bids are competition candidates, not an active
-              // bilateral negotiation. Once the selected/countered negotiation
-              // disappears, reopen the listing so the seller can start a fresh
-              // selection round and new buyers may enter again.
-              const activeNegotiationLeaf = await tx.offer.count({
-                where: {
-                  listingId: freshOffer.listingId,
-                  status: { in: ['SELECTED', 'COUNTERED'] },
-                  childOffers: { none: {} },
-                },
-              });
-
+              // Live offers = leaves still waiting or in negotiation.
               const remainingActiveLeafOffers = await tx.offer.count({
                 where: {
                   listingId: freshOffer.listingId,
@@ -1505,7 +1476,7 @@ router.patch(
                 },
               });
 
-              if (activeNegotiationLeaf === 0) {
+              if (remainingActiveLeafOffers === 0) {
                 await tx.listing.update({
                   where: { id: freshOffer.listingId },
                   data: { status: 'ACTIVE' },

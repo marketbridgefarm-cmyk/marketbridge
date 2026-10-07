@@ -374,7 +374,7 @@ router.post('/:id/price-reviews', authenticate, idempotency('orders.price-review
 ], validate, async (req, res) => {
   try {
     const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: {
-      listing: { select: { id: true, category: true, title: true, cropType: true, unit: true, quantity: true, askingPrice: true, location: true, region: true } },
+      listing: { select: { id: true, category: true, title: true, cropType: true, unit: true, quantity: true, askingPrice: true, location: true, region: true, minAcceptablePrice: true } },
       inspectionRequests: { where: { status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' }, take: 1, include: { report: true } },
       payments: { where: { type: 'MARKETPLACE', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true, status: true } },
       priceReviews: { where: { status: 'PENDING' }, select: { id: true } },
@@ -391,6 +391,8 @@ router.post('/:id/price-reviews', authenticate, idempotency('orders.price-review
     const suggestion = await getInspectionPriceSuggestion(prisma, order);
     const amount = req.body.proposedPrice == null ? Number(suggestion?.suggestedPrice) : Number(req.body.proposedPrice);
     if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'A valid proposed price is required. The platform could not calculate a price suggestion from the available market/inspection data.' });
+    const minimumTotal = order.listing?.minAcceptablePrice == null ? null : Number(order.listing.minAcceptablePrice) * Number(order.quantity || 0);
+    if (Number.isFinite(minimumTotal) && minimumTotal > 0 && amount < minimumTotal) return res.status(409).json({ error: "The proposed price is below the seller's minimum acceptable price" });
     const reasonCode = req.body.reasonCode || suggestion?.suggestedReasonCode || 'OTHER_INSPECTION_FINDING';
     if (!PRICE_REVIEW_REASONS.has(reasonCode)) return res.status(400).json({ error: 'A valid price-review reason is required' });
     const snapshot = marketSnapshotData(suggestion?.marketReference, suggestion?.inspectedQuantity || order.quantity);
@@ -418,7 +420,7 @@ router.patch('/:id/price-reviews/:reviewId/respond', authenticate, idempotency('
 ], validate, async (req, res) => {
   try {
     const result = await prisma.$transaction(async tx => {
-      const order = await tx.order.findUnique({ where: { id: req.params.id }, select: { id: true, buyerId: true, sellerId: true, finalPrice: true, originalFinalPrice: true, quantity: true, buyerDecision: true, status: true, paymentDueAt: true, listing: { select: { id: true, category: true, title: true, cropType: true, unit: true, quantity: true, askingPrice: true, location: true, region: true } }, inspectionRequests: { where: { status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' }, take: 1, include: { report: true } }, payments: { where: { type: 'MARKETPLACE', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true, status: true } } } });
+      const order = await tx.order.findUnique({ where: { id: req.params.id }, select: { id: true, buyerId: true, sellerId: true, finalPrice: true, originalFinalPrice: true, quantity: true, buyerDecision: true, status: true, paymentDueAt: true, listing: { select: { id: true, category: true, title: true, cropType: true, unit: true, quantity: true, askingPrice: true, location: true, region: true, minAcceptablePrice: true } }, inspectionRequests: { where: { status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' }, take: 1, include: { report: true } }, payments: { where: { type: 'MARKETPLACE', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true, status: true } } } });
       if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
       if (![order.buyerId, order.sellerId].includes(req.user.id)) throw Object.assign(new Error('Only the buyer or seller can respond'), { status: 403 });
       if (['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(order.status) || order.payments.length || order.buyerDecision === 'BUY') throw Object.assign(new Error('Price review is closed for this order once goods payment has started or the order is no longer active'), { status: 409 });
@@ -431,6 +433,8 @@ router.patch('/:id/price-reviews/:reviewId/respond', authenticate, idempotency('
         if (claimed.count !== 1) throw Object.assign(new Error('This proposal was already answered. Refresh and try again.'), { status: 409 });
         if (!req.body.proposedPrice || !req.body.reasonCode) throw Object.assign(new Error('Counter price and reason are required'), { status: 400 });
         if (Number(req.body.proposedPrice) === Number(review.proposedPrice)) throw Object.assign(new Error('Counter price must differ from the current proposal'), { status: 400 });
+        const minimumTotal = order.listing?.minAcceptablePrice == null ? null : Number(order.listing.minAcceptablePrice) * Number(order.quantity || 0);
+        if (Number.isFinite(minimumTotal) && minimumTotal > 0 && Number(req.body.proposedPrice) < minimumTotal) throw Object.assign(new Error('The counter price is below the seller\'s minimum acceptable price'), { status: 409 });
         const suggestion = await getInspectionPriceSuggestion(tx, order);
         const counterSnapshot = marketSnapshotData(suggestion?.marketReference, suggestion?.inspectedQuantity || order.quantity);
         const child = await tx.priceReview.create({ data: { orderId: order.id, proposedById: req.user.id, proposedPrice: Number(req.body.proposedPrice), reasonCode: req.body.reasonCode, parentId: review.id, ...counterSnapshot, originalUnitPrice: suggestion?.originalUnitPrice ?? null, inspectedQuantity: suggestion?.inspectedQuantity ?? null, quantityAdjustedPrice: suggestion?.quantityAdjustedPrice ?? null, suggestedPrice: suggestion?.suggestedPrice ?? null, adjustmentAmount: Number(req.body.proposedPrice) - Number(order.finalPrice), adjustmentPercent: Number(order.finalPrice) > 0 ? ((Number(req.body.proposedPrice) - Number(order.finalPrice)) / Number(order.finalPrice)) * 100 : null, calculationVersion: suggestion?.calculationVersion ?? null }, include: { proposedBy: { select: { id: true, name: true } } } });
