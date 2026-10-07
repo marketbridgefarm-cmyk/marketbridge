@@ -86,6 +86,13 @@ function CompetitionGroup({ group, busyKey, onRespond }) {
     PREVIOUS_QUOTE_STATUSES.includes(q.status)
   );
 
+  // Once any bid is SELECTED or COUNTERED, the pool is locked to that
+  // negotiation thread. Mirrors the backend select guard so the UI cannot
+  // offer a "Select" button that the server would refuse.
+  const hasActiveNegotiation = activeQuotes.some((q) =>
+    ['SELECTED', 'COUNTERED'].includes(q.status)
+  );
+
   const typeLabel =
     group.type === 'INSPECTION_QUOTE' ? 'Inspection' : 'Transport';
 
@@ -125,6 +132,7 @@ function CompetitionGroup({ group, busyKey, onRespond }) {
                 group={group}
                 busyKey={busyKey}
                 onRespond={onRespond}
+                hasActiveNegotiation={hasActiveNegotiation}
               />
             ))}
           </ul>
@@ -178,7 +186,7 @@ function CompetitionGroup({ group, busyKey, onRespond }) {
 // ============================================================================
 // QuoteRow — one active bid (competitive or in negotiation)
 // ============================================================================
-function QuoteRow({ quote, group, busyKey, onRespond }) {
+function QuoteRow({ quote, group, busyKey, onRespond, hasActiveNegotiation }) {
   const provider = providerOf(quote);
   const amount = amountOf(quote);
   const busy = (action) => busyKey === `bid:${quote.id}:${action}`;
@@ -230,14 +238,20 @@ function QuoteRow({ quote, group, busyKey, onRespond }) {
       {myTurn && (
         <div className="neg-quote-actions">
           {isPending && (
-            <button
-              type="button"
-              className="sd-btn sd-btn-primary"
-              disabled={anyBusy}
-              onClick={() => onRespond(quote, 'SELECT')}
-            >
-              {busy('SELECT') ? 'Selecting…' : 'Select for negotiation'}
-            </button>
+            hasActiveNegotiation ? (
+              <p className="neg-waiting">
+                Locked — another bidder is currently in active negotiation.
+              </p>
+            ) : (
+              <button
+                type="button"
+                className="sd-btn sd-btn-primary"
+                disabled={anyBusy}
+                onClick={() => onRespond(quote, 'SELECT')}
+              >
+                {busy('SELECT') ? 'Selecting…' : 'Select for negotiation'}
+              </button>
+            )
           )}
 
           {!isPending && (
@@ -549,7 +563,6 @@ export default function Negotiations() {
     const collected = [];
     const groups    = [];
 
-    // Waiting-list notices are best-effort and never block the page.
     api.get('/offers/notices')
       .then((res) => setNotices(res.data?.notices || []))
       .catch(() => {});
@@ -575,8 +588,6 @@ export default function Negotiations() {
       );
 
       const leafOffers = leavesOnly([...buyerOffers, ...sellerOffers], 'parentOfferId');
-      // A listing's waiting list is locked while one buyer is in exclusive
-      // negotiation or has an agreed (unpaid) order.
       const lockedListingIds = new Set(
         leafOffers
           .filter((o) => o.viewerRole === 'SELLER' && ['SELECTED', 'COUNTERED', 'ACCEPTED'].includes(o.status))
