@@ -8,6 +8,7 @@ import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import RecentActivity from '../components/RecentActivity.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/InspectorDashboard.css';
+import ProviderReleaseDialog from '../components/ProviderReleaseDialog.jsx';
 import InspectionCoordinationInspector from '../components/InspectionCoordinationInspector.jsx';
 
 const EMPTY_REPORT = {
@@ -167,6 +168,7 @@ export default function InspectorDashboard() {
   const [quotedRequestIds, setQuotedRequestIds] = useState(() => new Set());
   const [quoteCounterInputs, setQuoteCounterInputs] = useState({});
   const [respondingQuoteId, setRespondingQuoteId] = useState('');
+  const [releaseTarget, setReleaseTarget] = useState(null);
   const [activeRequestId, setActiveRequestId] = useState('');
   const [report, setReport] = useState(EMPTY_REPORT);
   const [reportEvidence, setReportEvidence] = useState({ photoKeys: [], videoKeys: [] });
@@ -340,18 +342,23 @@ export default function InspectorDashboard() {
     }
   }
 
-  async function cancelAcceptedInspection(requestId, quoteId) {
+  function cancelAcceptedInspection(requestId, quoteId) {
+    setReleaseTarget({ requestId, quoteId });
+  }
+
+  async function confirmCancelAcceptedInspection({ reason, note }) {
+    if (!releaseTarget) return;
+    const { requestId, quoteId } = releaseTarget;
     setError('');
     setMsg('');
     setRespondingQuoteId(quoteId);
     try {
-      const reason = window.prompt('Why are you cancelling this provisional inspection agreement?');
-      if (!reason || !reason.trim()) return;
       await api.patch(`/inspections/${requestId}/quotes/${quoteId}/withdraw`, {
-        reason: 'PROVIDER_UNAVAILABLE',
-        note: reason.trim().slice(0, 200),
+        reason,
+        note: note || undefined,
       });
-      setMsg('Provisional inspection deal released. The buyer can select another inspector bid.');
+      setReleaseTarget(null);
+      setMsg('Provisional inspection deal cancelled. The requester can select another inspector bid.');
       await loadAll();
     } catch (err) {
       setError(err.response?.data?.error || 'Could not cancel the provisional inspection deal.');
@@ -1449,6 +1456,13 @@ export default function InspectorDashboard() {
           </button>
         </div>
       )}
+      <ProviderReleaseDialog
+        open={Boolean(releaseTarget)}
+        serviceLabel="inspection agreement"
+        busy={Boolean(releaseTarget) && respondingQuoteId === releaseTarget.quoteId}
+        onConfirm={confirmCancelAcceptedInspection}
+        onClose={() => setReleaseTarget(null)}
+      />
     </div>
   );
 }

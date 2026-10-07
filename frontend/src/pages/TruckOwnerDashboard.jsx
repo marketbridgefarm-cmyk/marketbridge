@@ -8,6 +8,7 @@ import AmountPicker from '../components/AmountPicker.jsx';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/TruckOwnerDashboard.css';
+import ProviderReleaseDialog from '../components/ProviderReleaseDialog.jsx';
 
 const TABS = [
   { id: 'trucks', label: 'My Trucks' },
@@ -216,6 +217,7 @@ export default function TruckOwnerDashboard() {
   const [activeTab, setActiveTab] = useState('trucks');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
+  const [releaseTarget, setReleaseTarget] = useState(null);
 
   const [toastMsg, setToastMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -459,16 +461,21 @@ export default function TruckOwnerDashboard() {
   // silent negotiator (SELECTED / COUNTERED-by-requester) once the backend's
   // release window has elapsed. This is a WITHDRAW, not a REJECT: the backend
   // only allows REJECT on quotes that are still being negotiated.
-  async function releaseTransportAgreement(jobId, quoteId) {
+  function releaseTransportAgreement(jobId, quoteId) {
+    setReleaseTarget({ jobId, quoteId });
+  }
+
+  async function confirmReleaseTransportAgreement({ reason, note }) {
+    if (!releaseTarget) return;
+    const { jobId, quoteId } = releaseTarget;
     setActionLoading(`quote-${quoteId}`);
     try {
-      const reason = window.prompt('Why are you releasing this provisional transport agreement?');
-      if (!reason || !reason.trim()) return;
       await api.patch(`/transport/${jobId}/quotes/${quoteId}/withdraw`, {
-        reason: 'PROVIDER_UNAVAILABLE',
-        note: reason.trim().slice(0, 200),
+        reason,
+        note: note || undefined,
       });
-      toast('Agreement released. The requester can now choose another transporter.');
+      setReleaseTarget(null);
+      toast('Agreement cancelled. The requester can now choose another transporter.');
       await loadAll(false);
     } catch (err) {
       toast(getErrorMessage(err, 'Could not release this agreement.'));
@@ -1829,6 +1836,13 @@ export default function TruckOwnerDashboard() {
           </div>
         </div>
       )}
+      <ProviderReleaseDialog
+        open={Boolean(releaseTarget)}
+        serviceLabel="transport agreement"
+        busy={Boolean(releaseTarget) && actionLoading === `quote-${releaseTarget.quoteId}`}
+        onConfirm={confirmReleaseTransportAgreement}
+        onClose={() => setReleaseTarget(null)}
+      />
     </div>
   );
 }

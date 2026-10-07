@@ -879,6 +879,7 @@ export default function AdminDashboard() {
   const [refunds, setRefunds] = useState([]);
   const [recoveryRequests, setRecoveryRequests] = useState([]);
   const [releaseReviews, setReleaseReviews] = useState([]);
+  const [frequentProviders, setFrequentProviders] = useState([]);
 
   const [disputeDecision, setDisputeDecision] = useState(null);
   const [userSearch, setUserSearch] = useState('');
@@ -929,7 +930,7 @@ export default function AdminDashboard() {
         api.get('/admin/audit-events', { params: { limit: 100 } }),
         api.get('/admin/financial/refunds'),
         api.get('/recovery-requests/admin/pending'),
-        api.get('/admin/release-reviews').catch(() => ({ data: { reviews: [] } })),
+        api.get('/admin/release-reviews').catch(() => ({ data: { reviews: [], frequentProviders: [] } })),
       ]);
 
       setOverview(overviewRes.data);
@@ -946,6 +947,7 @@ export default function AdminDashboard() {
       setRefunds(refundsRes.data?.refunds || []);
       setRecoveryRequests(recoveryRes.data?.recoveryRequests || []);
       setReleaseReviews(releaseReviewsRes.data?.reviews || []);
+      setFrequentProviders(releaseReviewsRes.data?.frequentProviders || []);
     } catch (err) {
       if (err.response?.data?.code === 'MFA_SETUP_REQUIRED') {
         setMfaRequired(true);
@@ -3471,6 +3473,33 @@ export default function AdminDashboard() {
                               {actionLoading === `release-review-${item.id}` ? 'Approving…' : 'Allow one more release'}
                             </button>
                           </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="ac-panel-header" style={{ marginTop: 24 }}>
+                <div>
+                  <span className="ac-section-label">PROVIDER CANCELLATIONS</span>
+                  <h2>Frequent provider cancellations (30 days)</h2>
+                  <p className="sd-muted">Truck owners and inspectors who cancelled several provisional agreements before payment. No automatic penalty is applied; review and act through the user controls if needed.</p>
+                </div>
+              </div>
+              {frequentProviders.length === 0 ? (
+                <div className="ac-empty">No provider has repeatedly cancelled recently.</div>
+              ) : (
+                <div className="ac-table-shell">
+                  <table className="ac-table">
+                    <thead><tr><th>Provider</th><th>Cancellations</th><th>Reasons</th><th>Last</th></tr></thead>
+                    <tbody>
+                      {frequentProviders.map((row) => (
+                        <tr key={row.provider?.id || row.lastAt}>
+                          <td>{row.provider?.name || '—'}<div className="sd-muted">{row.provider?.email || ''}</div></td>
+                          <td><strong>{row.count}</strong></td>
+                          <td>{Object.entries(row.reasons || {}).map(([reason, n]) => `${reason} ×${n}`).join(', ')}</td>
+                          <td>{row.lastAt ? new Date(row.lastAt).toLocaleString() : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
