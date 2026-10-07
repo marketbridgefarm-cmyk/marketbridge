@@ -445,7 +445,7 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
           >
             {busy(acceptAction)
               ? (acceptAction === 'SELECT' ? 'Selecting…' : 'Accepting…')
-              : (acceptAction === 'SELECT' ? 'Select buyer for negotiation' : 'Accept provisional deal')}
+              : (acceptAction === 'SELECT' ? 'Select buyer for negotiation' : 'Agree price & create order')}
           </button>
 
           {!(item.type === 'LISTING_OFFER' && item.viewerRole === 'SELLER') && (
@@ -786,7 +786,7 @@ export default function Negotiations() {
       }
       toast(
         response?.data?.message ||
-        (action === 'ACCEPT' ? '✓ Provider hired!'
+        (action === 'ACCEPT' ? '✓ Provider selected and agreed!'
           : action === 'SELECT' ? 'Bid selected — negotiation opened.'
           : 'Offer sent.')
       );

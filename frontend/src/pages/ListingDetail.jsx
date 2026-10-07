@@ -44,7 +44,7 @@ export default function ListingDetail() {
   const [marketInsight, setMarketInsight] = useState(null);
 
   const [offerAmount, setOfferAmount] = useState('');
-  const [message, setMessage] = useState('');
+  const [offerQuantity, setOfferQuantity] = useState('');
 
   const [buyerCounter, setBuyerCounter] = useState('');
 
@@ -118,14 +118,14 @@ export default function ListingDetail() {
       await api.post('/offers', {
         listingId: id,
         amount: Number(offerAmount),
-        message,
+        quantity: Number(offerQuantity || listing.availableQuantity),
       });
       showToast(
         'Offer submitted. Other buyers can still see this listing until an offer is accepted.',
         'success'
       );
       setOfferAmount('');
-      setMessage('');
+      setOfferQuantity('');
       load();
     } catch (e) {
       showToast(e.response?.data?.error || 'Could not submit offer', 'error');
@@ -453,8 +453,8 @@ export default function ListingDetail() {
                   <>
                     <p className="muted negotiation-note">
                       <strong>The seller selected your bid.</strong> Competition is
-                      complete for this deal. Accept the selected price or make your
-                      counter.
+                      complete for this deal. Accept the selected price to agree, or
+                      make your counter.
                     </p>
                     <div className="negotiation-actions">
                       <button
@@ -638,16 +638,20 @@ export default function ListingDetail() {
                       onChange={setOfferAmount}
                       ariaLabel="Your bid amount in ETB"
                     />
-                    <label>Message</label>
-                    <textarea
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      placeholder={
-                        isProduct
-                          ? 'Optional message to the seller'
-                          : 'Optional message to the farmer'
-                      }
+                    <label>Quantity ({listing.unit || 'units'})</label>
+                    <input
+                      type="number"
+                      min="0.0001"
+                      max={Number(listing.availableQuantity) || undefined}
+                      step="any"
+                      value={offerQuantity}
+                      onChange={(e) => setOfferQuantity(e.target.value)}
+                      placeholder={`Up to ${money(listing.availableQuantity)} ${listing.unit || 'units'}`}
+                      required
                     />
+                    <p className="muted small" style={{ margin: '2px 0 10px' }}>
+                      This is the quantity you want to negotiate. Your offer does not reserve the goods until the transaction reaches its payment commitment stage.
+                    </p>
                     <button
                       type="submit"
                       className="btn btn-primary full"
@@ -868,7 +872,7 @@ function OfferRow({ offer, onAction }) {
             disabled={Boolean(busy)}
             onClick={() => submit('ACCEPT')}
           >
-            {busy === 'ACCEPT' ? 'Accepting…' : 'Accept'}
+            {busy === 'ACCEPT' ? 'Agreeing…' : 'Agree price'}
           </button>
           <AmountPicker
             className="inline-picker"
@@ -922,8 +926,8 @@ function OfferRow({ offer, onAction }) {
 
       {offer.status === 'ACCEPTED' && (
         <p className="offer-note small">
-          Agreed price: <strong>{Number(amount).toLocaleString()} ETB</strong>. The
-          order can now continue to inspection and payment.
+          Price agreed: <strong>{Number(amount).toLocaleString()} ETB / unit</strong>. The
+          order can now continue through inspection and payment gates.
         </p>
       )}
     </div>
