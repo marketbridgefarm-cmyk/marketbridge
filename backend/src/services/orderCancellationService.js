@@ -61,10 +61,17 @@ async function promoteNextWaitingBuyer(tx, listingId, actorId = null) {
     }
   }
 
+  const listingForPromotion = await tx.listing.findUnique({
+    where: { id: listingId },
+    select: { availableQuantity: true },
+  });
+  const availableQuantity = Number(listingForPromotion?.availableQuantity);
+
   const next = await tx.offer.findFirst({
     where: {
       listingId,
       status: 'PENDING',
+      quantity: { gt: 0, lte: Number.isFinite(availableQuantity) ? availableQuantity : 0 },
       OR: [
         { expiresAt: null },
         { expiresAt: { gt: new Date() } },
