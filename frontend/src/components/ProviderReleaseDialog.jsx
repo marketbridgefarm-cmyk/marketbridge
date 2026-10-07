@@ -59,9 +59,10 @@ export default function ProviderReleaseDialog({
         <h3 style={{ margin: 0 }}>Cancel provisional {serviceLabel}?</h3>
         <p className="sd-muted" style={{ margin: 0 }}>
           The requester will be notified and can choose someone else. You
-          won&apos;t be able to bid on this job again. Cancellations are
-          recorded, and frequent cancellations are reviewed by MarketBridge
-          admin.
+          won&apos;t be able to bid on this job again. Each cancellation lowers
+          your rating by 0.1. A third cancellation within 30 days suspends
+          your bidding (3 days, then 14, then 30, then until admin review),
+          and cancelling while on probation suspends you immediately.
         </p>
 
         <label style={{ display: 'grid', gap: 4 }}>
