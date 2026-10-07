@@ -1104,7 +1104,7 @@ function DeliveryEvidenceForm({ t }) {
   );
 }
 
-function QuoteRow({ quote, t }) {
+function QuoteRow({ quote, t, hasActiveNegotiation }) {
   const key = `quote-${quote.id}`;
   const working = t.busy === key;
   const amount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
@@ -1144,12 +1144,24 @@ function QuoteRow({ quote, t }) {
       <div>
         <strong>{money(amount)} ETB</strong>
 
+        {/* Select for negotiation. Blocked when another transporter bid is
+            already in a live negotiation thread — the requester must release
+            or reject that thread first. Mirrors the inspection flow. */}
         {t.canChooseQuote && quote.status === 'PENDING' && (
           <>
-            <Button variant="primary" size="sm" disabled={working} busy={working} busyText="Selecting…" onClick={() => t.selectQuote(quote.id)}>
-              Select bid for deal
-            </Button>
-            <span className="muted small">Selecting opens price negotiation.</span>
+            {hasActiveNegotiation ? (
+              <span className="muted small">
+                Locked — another transporter bid is currently in active negotiation.
+                Release it first to select this bid.
+              </span>
+            ) : (
+              <>
+                <Button variant="primary" size="sm" disabled={working} busy={working} busyText="Selecting…" onClick={() => t.selectQuote(quote.id)}>
+                  Select bid for deal
+                </Button>
+                <span className="muted small">Selecting opens price negotiation.</span>
+              </>
+            )}
           </>
         )}
 
@@ -1176,12 +1188,6 @@ function QuoteRow({ quote, t }) {
           </div>
         )}
 
-        {/* Release paths for the arranging party. ACCEPTED = provisional
-            agreement release (before transport payment). SELECTED /
-            COUNTERED-by-requester = silent-release of an unresponsive
-            truck owner, gated by TRANSPORT_RELEASE_AFTER_HOURS on the
-            backend. The server enforces the window; this button just
-            offers the action. */}
         {t.isArranger && !t.pending && (
           quote.status === 'ACCEPTED' ? (
             <>
@@ -1211,6 +1217,14 @@ function TransportCard({ order, t }) {
   const job = t.job;
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
+
+  // Mirror the inspection lock: once any transporter bid is SELECTED or
+  // COUNTERED, the competition is frozen to that thread. Other PENDING bids
+  // (existing and incoming) show a "Locked" message instead of a Select
+  // button, so the requester cannot hop between negotiations.
+  const hasActiveNegotiation = quotes.some((q) =>
+    ['SELECTED', 'COUNTERED'].includes(q.status)
+  );
 
   if (!job) {
     return (
@@ -1298,10 +1312,6 @@ function TransportCard({ order, t }) {
           </Section>
         )}
 
-        {/* ★ Transport coordination — seller <-> transporter only.
-            Visible only when the truck is committed (payment settled) and only
-            to the seller of the listing and the assigned transporter. The
-            buyer never sees this. Server enforces the rule; this is a UX gate. */}
         {['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status) && (
           <>
             {t.isSeller && (
@@ -1313,10 +1323,6 @@ function TransportCard({ order, t }) {
           </>
         )}
 
-        {/* Driver's form: appears only for the assigned truck owner while the
-            job is ACCEPTED and all payments are settled. The form checks the
-            same server gates and shows the driver exactly what is still
-            missing if it can't be submitted yet. */}
         {t.isTransporter && job.status === 'ACCEPTED' && (
           <TransportLoadingReport
             transportJobId={job.id}
@@ -1328,7 +1334,6 @@ function TransportCard({ order, t }) {
           />
         )}
 
-        {/* Read-only loading report for everyone else once it exists. */}
         {showLoadingSummary && (
           <TransportLoadingReportSummary
             loadingReport={t.loadingReport}
@@ -1400,7 +1405,14 @@ function TransportCard({ order, t }) {
         {hired && !t.paid && (
           <Section title="Transport quotes" meta="Bids">
             {quotes.length ? (
-              quotes.map((q) => <QuoteRow key={q.id} quote={q} t={t} />)
+              quotes.map((q) => (
+                <QuoteRow
+                  key={q.id}
+                  quote={q}
+                  t={t}
+                  hasActiveNegotiation={hasActiveNegotiation}
+                />
+              ))
             ) : (
               <p className="muted">
                 Waiting for registered truck owners to submit quotes.
@@ -1705,8 +1717,6 @@ export default function OrderDetail() {
             : []
         );
 
-        // Loading report is only meaningful once a transport job exists and
-        // has reached ACCEPTED or a later pickup state.
         const job = nextOrder?.transportJob || null;
         if (job && ['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status)) {
           try {
@@ -1849,9 +1859,6 @@ export default function OrderDetail() {
   const transportProcessing = transportPayments.some((p) => p.status === 'PROCESSING');
   const hiredTransport = transportJob?.method === 'HIRE_TRANSPORTER';
 
-  // ── All-payments-settled gate for the loading report ─────────────────────
-  // Mirrors the backend `checkLoadingReportGate` so the driver form can show
-  // what is still outstanding instead of failing on submit.
   const missingPayments = useMemo(() => {
     const missing = [];
     if (!marketplacePaid) missing.push('MARKETPLACE');
@@ -2018,9 +2025,6 @@ export default function OrderDetail() {
       })
     : [];
 
-  // Transport quote URLs now match the inspection shape:
-  //   /transport/:id/quotes/:quoteId/<action>
-  // The job ID is the outer resource; the quote ID is nested under it.
   const transportActions = {
     selectQuote: (quoteId) => {
       if (!quoteId || !transportJob) return;
