@@ -36,3 +36,13 @@ test('countAcceptedReleases queries audit events by job id in metadata', async (
   assert.equal(n, 2);
   assert.deepEqual(seen.where.metadata, { path: ['transportJobId'], equals: 'j1' });
 });
+
+test('releaseAllowance adds one extra release per admin override', async () => {
+  const tx = {
+    auditEvent: {
+      count: async ({ where }) => (where.action === 'RELEASE_LIMIT_OVERRIDE' ? 1 : 2),
+    },
+  };
+  const r = await svc.releaseAllowance(tx, { action: 'TRANSPORT_QUOTE_WITHDRAWN', metadataKey: 'transportJobId', jobId: 'j1' });
+  assert.deepEqual(r, { used: 2, allowed: 3 });
+});
