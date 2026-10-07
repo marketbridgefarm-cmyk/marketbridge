@@ -2430,6 +2430,15 @@ async function loadTransportQuoteForNegotiation(req, res) {
   }
 
   const job = quote.transportJob;
+
+  // Route shape is now /transport/:id/quotes/:quoteId/<action>, matching the
+  // inspection quote routes. Refuse to serve a quote whose parent job does
+  // not match :id, so a caller cannot address a quote by its ID alone.
+  if (req.params.id && job.id !== req.params.id) {
+    res.status(404).json({ error: 'Quote not found for this transport job' });
+    return null;
+  }
+
   const order = job.order;
 
   const isRequester = isArrangingParty(job, order, req.user.id);
@@ -2498,7 +2507,7 @@ async function loadCoordinationContext(req, res) {
 // ============================================================================
 
 router.patch(
-  '/quotes/:quoteId/select',
+  '/:id/quotes/:quoteId/select',
   authenticate,
   async (req, res) => {
     try {
@@ -2580,380 +2589,25 @@ router.patch(
 );
 
 // ============================================================================
-// ACCEPT / REJECT / COUNTER QUOTE
-// Either the arranging party (buyer/seller) accepts or counters the truck
-// owner's (counter-)quote, or the truck owner accepts or counters the
-// arranging party's counter — whichever side's turn it is.
+// ACCEPT A TRANSPORT QUOTE
 // ============================================================================
+// Mirrors PATCH /inspections/:id/quotes/:quoteId/accept. Either side may
+// accept, whichever currently holds the turn. Acceptance is provisional
+// until transport payment settles — see the long comment inside the
+// transaction for the reasoning.
 
 router.patch(
-  '/quotes/:quoteId',
+  '/:id/quotes/:quoteId/accept',
   authenticate,
-  idempotency('transport.quote-action'),
-  [
-    param('quoteId').isUUID(),
-
-    body('action').isIn([
-      'ACCEPT',
-      'REJECT',
-      'COUNTER',
-      'WITHDRAW',
-    ]),
-
-    body('counterAmount')
-      .if(body('action').equals('COUNTER'))
-      .custom(validAmount(AMOUNT_LIMITS.transport)),
-
-    body('message')
-      .optional({ nullable: true })
-      .isString()
-      .trim()
-      .isLength({ max: 1000 })
-      .custom(noContactInfo),
-  ],
+  idempotency('transport.quote-accept'),
+  [param('id').isUUID(), param('quoteId').isUUID()],
   validate,
   async (req, res) => {
     try {
       const loaded = await loadTransportQuoteForNegotiation(req, res);
       if (!loaded) return;
       const { quote, job, actorRole } = loaded;
-
-      // Admins acting on behalf of a stuck negotiation are treated as the
-      // requester side for turn-taking purposes.
       const effectiveRole = actorRole;
-
-      // ----------------------------------------------------------------------
-      // COUNTER  (FIXED)
-      // ----------------------------------------------------------------------
-      // Previously inserted a NEW child quote row for the same
-      // (transportJobId, truckOwnerId), which violates the schema's unique
-      // constraint on that pair → P2002 → 500 "Could not process quote action".
-      //
-      // Now updates the EXISTING row in place, storing the live negotiation
-      // state in (amount, counterAmount, counteredBy, status). This mirrors
-      // the inspection counter fix and satisfies the unique constraint.
-      // ----------------------------------------------------------------------
-
-      if (req.body.action === 'COUNTER') {
-        if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
-          return res.status(400).json({
-            error: `Quote cannot be countered because it is ${quote.status}`,
-          });
-        }
-
-        if (isQuoteExpired(quote)) {
-          return res.status(409).json({ error: 'This quote has expired' });
-        }
-
-        if (quoteTurn(quote) !== effectiveRole) {
-          return res.status(409).json({
-            error: 'It is the other party\u2019s turn to respond to this negotiation',
-          });
-        }
-
-        const counterAmount = Number(req.body.counterAmount);
-
-        const counterQuote = await prisma.$transaction(async (tx) => {
-          await tx.$queryRawUnsafe(
-            'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
-            job.id
-          );
-
-          const activePayment = await tx.payment.findFirst({
-            where: {
-              transportJobId: job.id,
-              type: 'TRANSPORT',
-              status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
-            },
-            select: { id: true },
-          });
-          if (activePayment) {
-            throw quoteError('Transport negotiation is locked because a transport payment has already started', 409);
-          }
-
-          const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
-          if (!freshQuote) throw quoteError('Quote not found', 404);
-          if (!['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
-            throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
-          }
-          const competingThread = await tx.transportQuote.findFirst({
-            where: {
-              transportJobId: job.id,
-              id: { not: freshQuote.id },
-              status: { in: ['SELECTED', 'COUNTERED'] },
-            },
-            select: { id: true },
-          });
-          if (competingThread) {
-            throw quoteError('Another transporter bid is already in active negotiation. Refresh and select only after that negotiation is released.', 409);
-          }
-          if (quoteTurn(freshQuote) !== effectiveRole) {
-            throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
-          }
-
-          // ✅ Update the SAME row — no new insert, so no unique-constraint violation.
-          const updated = await tx.transportQuote.update({
-            where: { id: freshQuote.id },
-            data: {
-              status: 'COUNTERED',
-              counterAmount,
-              counteredBy: effectiveRole,
-              message: req.body.message || freshQuote.message,
-              expiresAt: quoteExpiry(12),
-            },
-            include: {
-              truckOwner: { select: { id: true, name: true, rating: true } },
-              truck: true,
-            },
-          });
-
-          await recordAuditEvent(tx, {
-            actorId: req.user.id,
-            action: 'TRANSPORT_QUOTE_COUNTERED',
-            resourceType: 'TransportQuote',
-            resourceId: updated.id,
-            metadata: {
-              transportJobId: freshQuote.transportJobId,
-              counteredBy: effectiveRole,
-              previousAmount: String(freshQuote.counterAmount ?? freshQuote.amount),
-              counterAmount: String(counterAmount),
-            },
-          });
-
-          return updated;
-        }, { maxWait: 10000, timeout: 15000 });
-
-        return res.status(201).json({
-          message: effectiveRole === 'REQUESTER'
-            ? 'Counter-offer sent. The transporter must respond next.'
-            : 'Counter-offer sent. The requester must respond next.',
-          quote: counterQuote,
-        });
-      }
-
-      // ----------------------------------------------------------------------
-      // WITHDRAW / RELEASE PROVISIONAL OR SILENT TRANSPORT AGREEMENT
-      // ----------------------------------------------------------------------
-      // Two release modes, mirroring the inspection side:
-      //
-      //   1. Provisional release — the quote is ACCEPTED but transport
-      //      payment has not started. Either party may free the transporter
-      //      so another waiting bid can be selected.
-      //
-      //   2. Silent release — the requester selected a truck owner (or
-      //      countered them) and the truck owner has been silent past
-      //      TRANSPORT_RELEASE_AFTER_HOURS. The requester can free the
-      //      abandoned negotiation thread and pick a different bid.
-      //
-      // Both are blocked once a Chapa transport payment has started or
-      // settled, because payment is the commitment boundary.
-      // ----------------------------------------------------------------------
-
-      if (req.body.action === 'WITHDRAW') {
-        const isAcceptedRelease = quote.status === 'ACCEPTED';
-        const isSilentRelease =
-          quote.status === 'SELECTED' ||
-          (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
-
-        if (!isAcceptedRelease && !isSilentRelease) {
-          return res.status(400).json({
-            error: `This quote cannot be released in its current state (current: ${quote.status})`,
-          });
-        }
-
-        if (isSilentRelease) {
-          const availableAt = transportReleaseAvailableAt(quote);
-          if (availableAt && availableAt.getTime() > Date.now()) {
-            return res.status(409).json({
-              error: `This truck owner has not been inactive long enough. You can release them from ${availableAt.toISOString()}.`,
-              releaseAvailableAt: availableAt,
-            });
-          }
-        }
-
-        const result = await prisma.$transaction(async (tx) => {
-          await tx.$queryRawUnsafe(
-            'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
-            job.id
-          );
-
-          const freshQuote = await tx.transportQuote.findUnique({
-            where: { id: quote.id },
-            include: { transportJob: { include: { order: true } } },
-          });
-          if (!freshQuote) throw quoteError('Quote not found', 404);
-
-          const activePayment = await tx.payment.findFirst({
-            where: {
-              transportJobId: freshQuote.transportJobId,
-              type: 'TRANSPORT',
-              status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
-            },
-            select: { id: true, status: true },
-          });
-          if (activePayment) {
-            throw quoteError('This transporter cannot be released after transport payment has started or completed', 409);
-          }
-
-          if (freshQuote.transportJob.status !== 'QUOTED') {
-            throw quoteError(`This transport agreement cannot be released while the job is ${freshQuote.transportJob.status}`, 409);
-          }
-
-          if (isSilentRelease) {
-            // Re-check the release window inside the transaction so two racing
-            // releases cannot both succeed. The freshQuote's updatedAt resets
-            // the window whenever the provider (not the requester) has acted.
-            const freshAvailableAt = transportReleaseAvailableAt(freshQuote);
-            if (freshAvailableAt && freshAvailableAt.getTime() > Date.now()) {
-              throw quoteError('This negotiation changed. Refresh and try again.', 409);
-            }
-          }
-
-          const updatedQuote = await tx.transportQuote.update({
-            where: { id: freshQuote.id },
-            data: { status: 'WITHDRAWN' },
-          });
-
-          // Provisional agreement release clears the (uncommitted) truck
-          // assignment and closes the seller <-> transporter coordination
-          // sheet so the next driver does not inherit the previous driver's
-          // phone, ETA, or availability notes.
-          //
-          // Silent release only abandons the negotiation thread — SELECTED
-          // and COUNTERED never set truckOwnerId on the job, so there is
-          // nothing to clear.
-          if (isAcceptedRelease) {
-            // Keep all still-pending competition bids available. The buyer can
-            // immediately select another transporter without creating a new
-            // transport job or disturbing seller/inspection payments.
-            await tx.transportJob.update({
-              where: { id: freshQuote.transportJobId },
-              data: {
-                truckOwnerId: null,
-                truckId: null,
-                agreedAmount: null,
-                status: 'QUOTED',
-              },
-            });
-
-            await closeCoordination(tx, freshQuote.transportJobId, 'TRANSPORTER_RELEASED');
-
-            await recordOrderEvent(tx, {
-              orderId: freshQuote.transportJob.orderId,
-              actorId: req.user.id,
-              type: 'TRANSPORT_COORDINATION_CLOSED',
-              metadata: {
-                transportJobId: freshQuote.transportJobId,
-                reason: 'TRANSPORTER_RELEASED',
-              },
-            });
-          }
-
-          await recordAuditEvent(tx, {
-            actorId: req.user.id,
-            action: isAcceptedRelease
-              ? 'TRANSPORT_QUOTE_WITHDRAWN'
-              : 'TRANSPORT_SILENT_QUOTE_RELEASED',
-            resourceType: 'TransportQuote',
-            resourceId: updatedQuote.id,
-            metadata: {
-              transportJobId: freshQuote.transportJobId,
-              orderId: freshQuote.transportJob.orderId,
-              releasedBy: effectiveRole,
-              previousStatus: freshQuote.status,
-            },
-          });
-
-          return updatedQuote;
-        }, { maxWait: 10000, timeout: 15000 });
-
-        return res.json({
-          message: isAcceptedRelease
-            ? 'Provisional transporter agreement released. Other transport bids are available again.'
-            : 'Silent truck owner released. Other transport bids are available again.',
-          quote: result,
-        });
-      }
-
-      // ----------------------------------------------------------------------
-      // REJECT
-      // ----------------------------------------------------------------------
-      // A PENDING bid is a waiting alternative in the competition pool, not
-      // an active negotiation. Rejecting it would delete it from the pool,
-      // which is exactly what the inspection flow forbids. The requester
-      // should select the bid they want; the others keep waiting.
-      // ----------------------------------------------------------------------
-
-      if (req.body.action === 'REJECT') {
-        if (quote.status === 'PENDING') {
-          return res.status(409).json({
-            error: 'Waiting bids cannot be rejected. Select the bid you want to negotiate with; the others will keep waiting.',
-          });
-        }
-
-        if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
-          return res.status(400).json({
-            error: `This quote is already ${quote.status.toLowerCase()}`,
-          });
-        }
-
-        if (quoteTurn(quote) !== effectiveRole && !isAdmin(req.user)) {
-          return res.status(409).json({
-            error: 'It is the other party\u2019s turn to respond to this negotiation',
-          });
-        }
-
-        const updatedQuote = await prisma.$transaction(async (tx) => {
-          await tx.$queryRawUnsafe(
-            'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
-            job.id
-          );
-
-          const activePayment = await tx.payment.findFirst({
-            where: {
-              transportJobId: job.id,
-              type: 'TRANSPORT',
-              status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
-            },
-            select: { id: true },
-          });
-          if (activePayment) {
-            throw quoteError('Transport negotiation is locked because a transport payment has already started', 409);
-          }
-
-          const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
-          if (!freshQuote || !['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
-            throw quoteError('This quote is no longer available for rejection', 409);
-          }
-          if (['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
-            const competingThread = await tx.transportQuote.findFirst({
-              where: {
-                transportJobId: job.id,
-                id: { not: freshQuote.id },
-                status: { in: ['SELECTED', 'COUNTERED'] },
-              },
-              select: { id: true },
-            });
-            if (competingThread) {
-              throw quoteError('This quote is not the sole active negotiation thread', 409);
-            }
-          }
-
-          return tx.transportQuote.update({
-            where: { id: freshQuote.id },
-            data: { status: 'REJECTED' },
-          });
-        }, { maxWait: 10000, timeout: 15000 });
-
-        return res.json({
-          message: 'Quote rejected',
-          quote: updatedQuote,
-        });
-      }
-
-      // ----------------------------------------------------------------------
-      // ACCEPT
-      // ----------------------------------------------------------------------
 
       if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
         return res.status(400).json({
@@ -3087,33 +2741,417 @@ router.patch(
         quote: result,
       });
     } catch (error) {
-      req.log.error({ err: error }, 'ACCEPT/REJECT/COUNTER QUOTE ERROR:');
+      req.log.error({ err: error }, 'ACCEPT TRANSPORT QUOTE ERROR:');
 
       if (error.statusCode) {
-        return res.status(
-          error.statusCode
-        ).json({
-          error: error.message,
-        });
+        return res.status(error.statusCode).json({ error: error.message });
       }
 
-      if (
-        error.code ===
-        'TRUCK_CONFLICT'
-      ) {
-        return res.status(409).json({
-          error: error.message,
-        });
+      if (error.code === 'TRUCK_CONFLICT') {
+        return res.status(409).json({ error: error.message });
       }
 
       if (error.code === 'ORDER_NOT_ACTIONABLE') {
         return res.status(error.status || 409).json({ error: error.message });
       }
 
-      return res.status(500).json({
-        error:
-          'Could not process quote action',
+      return res.status(500).json({ error: 'Could not process quote action' });
+    }
+  }
+);
+
+// ============================================================================
+// REJECT A TRANSPORT QUOTE
+// ============================================================================
+// Mirrors PATCH /inspections/:id/quotes/:quoteId/reject. Waiting (PENDING)
+// bids cannot be rejected — they are a pool of alternatives and the requester
+// should select the one they want, not delete the rest one at a time. Only
+// the sole active negotiation thread (SELECTED or COUNTERED) can be rejected.
+
+router.patch(
+  '/:id/quotes/:quoteId/reject',
+  authenticate,
+  idempotency('transport.quote-reject'),
+  [param('id').isUUID(), param('quoteId').isUUID()],
+  validate,
+  async (req, res) => {
+    try {
+      const loaded = await loadTransportQuoteForNegotiation(req, res);
+      if (!loaded) return;
+      const { quote, job, actorRole } = loaded;
+      const effectiveRole = actorRole;
+
+      if (quote.status === 'PENDING') {
+        return res.status(409).json({
+          error: 'Waiting bids cannot be rejected. Select the bid you want to negotiate with; the others will keep waiting.',
+        });
+      }
+
+      if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
+        return res.status(400).json({
+          error: `This quote is already ${quote.status.toLowerCase()}`,
+        });
+      }
+
+      if (quoteTurn(quote) !== effectiveRole && !isAdmin(req.user)) {
+        return res.status(409).json({
+          error: 'It is the other party\u2019s turn to respond to this negotiation',
+        });
+      }
+
+      const updatedQuote = await prisma.$transaction(async (tx) => {
+        await tx.$queryRawUnsafe(
+          'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
+          job.id
+        );
+
+        const activePayment = await tx.payment.findFirst({
+          where: {
+            transportJobId: job.id,
+            type: 'TRANSPORT',
+            status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
+          },
+          select: { id: true },
+        });
+        if (activePayment) {
+          throw quoteError('Transport negotiation is locked because a transport payment has already started', 409);
+        }
+
+        const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
+        if (!freshQuote || !['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
+          throw quoteError('This quote is no longer available for rejection', 409);
+        }
+        const competingThread = await tx.transportQuote.findFirst({
+          where: {
+            transportJobId: job.id,
+            id: { not: freshQuote.id },
+            status: { in: ['SELECTED', 'COUNTERED'] },
+          },
+          select: { id: true },
+        });
+        if (competingThread) {
+          throw quoteError('This quote is not the sole active negotiation thread', 409);
+        }
+
+        return tx.transportQuote.update({
+          where: { id: freshQuote.id },
+          data: { status: 'REJECTED' },
+        });
+      }, { maxWait: 10000, timeout: 15000 });
+
+      return res.json({
+        message: 'Quote rejected',
+        quote: updatedQuote,
       });
+    } catch (error) {
+      req.log.error({ err: error }, 'REJECT TRANSPORT QUOTE ERROR:');
+
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+
+      if (error.code === 'TRUCK_CONFLICT') {
+        return res.status(409).json({ error: error.message });
+      }
+
+      if (error.code === 'ORDER_NOT_ACTIONABLE') {
+        return res.status(error.status || 409).json({ error: error.message });
+      }
+
+      return res.status(500).json({ error: 'Could not process quote action' });
+    }
+  }
+);
+
+// ============================================================================
+// COUNTER A TRANSPORT QUOTE
+// ============================================================================
+// Mirrors POST /inspections/:id/quotes/:quoteId/counter. Updates the same
+// quote row in place — no child insert, no unique-constraint violation on
+// (transportJobId, truckOwnerId).
+
+router.post(
+  '/:id/quotes/:quoteId/counter',
+  authenticate,
+  idempotency('transport.quote-counter'),
+  [
+    param('id').isUUID(),
+    param('quoteId').isUUID(),
+    body('counterAmount').custom(validAmount(AMOUNT_LIMITS.transport)),
+    body('message')
+      .optional({ nullable: true })
+      .isString()
+      .trim()
+      .isLength({ max: 1000 })
+      .custom(noContactInfo),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const loaded = await loadTransportQuoteForNegotiation(req, res);
+      if (!loaded) return;
+      const { quote, job, actorRole } = loaded;
+      const effectiveRole = actorRole;
+
+      if (!['SELECTED', 'COUNTERED'].includes(quote.status)) {
+        return res.status(400).json({
+          error: `Quote cannot be countered because it is ${quote.status}`,
+        });
+      }
+
+      if (isQuoteExpired(quote)) {
+        return res.status(409).json({ error: 'This quote has expired' });
+      }
+
+      if (quoteTurn(quote) !== effectiveRole) {
+        return res.status(409).json({
+          error: 'It is the other party\u2019s turn to respond to this negotiation',
+        });
+      }
+
+      const counterAmount = Number(req.body.counterAmount);
+
+      const counterQuote = await prisma.$transaction(async (tx) => {
+        await tx.$queryRawUnsafe(
+          'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
+          job.id
+        );
+
+        const activePayment = await tx.payment.findFirst({
+          where: {
+            transportJobId: job.id,
+            type: 'TRANSPORT',
+            status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
+          },
+          select: { id: true },
+        });
+        if (activePayment) {
+          throw quoteError('Transport negotiation is locked because a transport payment has already started', 409);
+        }
+
+        const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
+        if (!freshQuote) throw quoteError('Quote not found', 404);
+        if (!['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
+          throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
+        }
+        const competingThread = await tx.transportQuote.findFirst({
+          where: {
+            transportJobId: job.id,
+            id: { not: freshQuote.id },
+            status: { in: ['SELECTED', 'COUNTERED'] },
+          },
+          select: { id: true },
+        });
+        if (competingThread) {
+          throw quoteError('Another transporter bid is already in active negotiation. Refresh and select only after that negotiation is released.', 409);
+        }
+        if (quoteTurn(freshQuote) !== effectiveRole) {
+          throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
+        }
+
+        const updated = await tx.transportQuote.update({
+          where: { id: freshQuote.id },
+          data: {
+            status: 'COUNTERED',
+            counterAmount,
+            counteredBy: effectiveRole,
+            message: req.body.message || freshQuote.message,
+            expiresAt: quoteExpiry(12),
+          },
+          include: {
+            truckOwner: { select: { id: true, name: true, rating: true } },
+            truck: true,
+          },
+        });
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: 'TRANSPORT_QUOTE_COUNTERED',
+          resourceType: 'TransportQuote',
+          resourceId: updated.id,
+          metadata: {
+            transportJobId: freshQuote.transportJobId,
+            counteredBy: effectiveRole,
+            previousAmount: String(freshQuote.counterAmount ?? freshQuote.amount),
+            counterAmount: String(counterAmount),
+          },
+        });
+
+        return updated;
+      }, { maxWait: 10000, timeout: 15000 });
+
+      return res.status(201).json({
+        message: effectiveRole === 'REQUESTER'
+          ? 'Counter-offer sent. The transporter must respond next.'
+          : 'Counter-offer sent. The requester must respond next.',
+        quote: counterQuote,
+      });
+    } catch (error) {
+      req.log.error({ err: error }, 'COUNTER TRANSPORT QUOTE ERROR:');
+
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+
+      if (error.code === 'TRUCK_CONFLICT') {
+        return res.status(409).json({ error: error.message });
+      }
+
+      if (error.code === 'ORDER_NOT_ACTIONABLE') {
+        return res.status(error.status || 409).json({ error: error.message });
+      }
+
+      return res.status(500).json({ error: 'Could not process quote action' });
+    }
+  }
+);
+
+// ============================================================================
+// WITHDRAW / RELEASE A TRANSPORT QUOTE
+// ============================================================================
+// Mirrors PATCH /inspections/:id/quotes/:quoteId/withdraw. Covers two cases:
+//   • ACCEPTED   — release of a provisional agreement before transport payment
+//   • SELECTED / COUNTERED-by-requester — silent-release of a truck owner who
+//     has not responded within TRANSPORT_RELEASE_AFTER_HOURS (default 72h).
+// The window is enforced on the server so a requester cannot release a
+// provider who is actively negotiating.
+
+router.patch(
+  '/:id/quotes/:quoteId/withdraw',
+  authenticate,
+  idempotency('transport.quote-withdraw'),
+  [param('id').isUUID(), param('quoteId').isUUID()],
+  validate,
+  async (req, res) => {
+    try {
+      const loaded = await loadTransportQuoteForNegotiation(req, res);
+      if (!loaded) return;
+      const { quote, job, actorRole } = loaded;
+      const effectiveRole = actorRole;
+
+      const isAcceptedRelease = quote.status === 'ACCEPTED';
+      const isSilentRelease =
+        quote.status === 'SELECTED' ||
+        (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
+
+      if (!isAcceptedRelease && !isSilentRelease) {
+        return res.status(400).json({
+          error: `This quote cannot be released in its current state (current: ${quote.status})`,
+        });
+      }
+
+      if (isSilentRelease) {
+        const availableAt = transportReleaseAvailableAt(quote);
+        if (availableAt && availableAt.getTime() > Date.now()) {
+          return res.status(409).json({
+            error: `This truck owner has not been inactive long enough. You can release them from ${availableAt.toISOString()}.`,
+            releaseAvailableAt: availableAt,
+          });
+        }
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        await tx.$queryRawUnsafe(
+          'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
+          job.id
+        );
+
+        const freshQuote = await tx.transportQuote.findUnique({
+          where: { id: quote.id },
+          include: { transportJob: { include: { order: true } } },
+        });
+        if (!freshQuote) throw quoteError('Quote not found', 404);
+
+        const activePayment = await tx.payment.findFirst({
+          where: {
+            transportJobId: freshQuote.transportJobId,
+            type: 'TRANSPORT',
+            status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
+          },
+          select: { id: true, status: true },
+        });
+        if (activePayment) {
+          throw quoteError('This transporter cannot be released after transport payment has started or completed', 409);
+        }
+
+        if (freshQuote.transportJob.status !== 'QUOTED') {
+          throw quoteError(`This transport agreement cannot be released while the job is ${freshQuote.transportJob.status}`, 409);
+        }
+
+        if (isSilentRelease) {
+          const freshAvailableAt = transportReleaseAvailableAt(freshQuote);
+          if (freshAvailableAt && freshAvailableAt.getTime() > Date.now()) {
+            throw quoteError('This negotiation changed. Refresh and try again.', 409);
+          }
+        }
+
+        const updatedQuote = await tx.transportQuote.update({
+          where: { id: freshQuote.id },
+          data: { status: 'WITHDRAWN' },
+        });
+
+        if (isAcceptedRelease) {
+          await tx.transportJob.update({
+            where: { id: freshQuote.transportJobId },
+            data: {
+              truckOwnerId: null,
+              truckId: null,
+              agreedAmount: null,
+              status: 'QUOTED',
+            },
+          });
+
+          await closeCoordination(tx, freshQuote.transportJobId, 'TRANSPORTER_RELEASED');
+
+          await recordOrderEvent(tx, {
+            orderId: freshQuote.transportJob.orderId,
+            actorId: req.user.id,
+            type: 'TRANSPORT_COORDINATION_CLOSED',
+            metadata: {
+              transportJobId: freshQuote.transportJobId,
+              reason: 'TRANSPORTER_RELEASED',
+            },
+          });
+        }
+
+        await recordAuditEvent(tx, {
+          actorId: req.user.id,
+          action: isAcceptedRelease ? 'TRANSPORT_QUOTE_WITHDRAWN' : 'TRANSPORT_SILENT_QUOTE_RELEASED',
+          resourceType: 'TransportQuote',
+          resourceId: updatedQuote.id,
+          metadata: {
+            transportJobId: freshQuote.transportJobId,
+            orderId: freshQuote.transportJob.orderId,
+            releasedBy: effectiveRole,
+            previousStatus: freshQuote.status,
+          },
+        });
+
+        return updatedQuote;
+      }, { maxWait: 10000, timeout: 15000 });
+
+      return res.json({
+        message: isAcceptedRelease
+          ? 'Provisional transporter agreement released. Other transport bids are available again.'
+          : 'Silent truck owner released. Other transport bids are available again.',
+        quote: result,
+      });
+    } catch (error) {
+      req.log.error({ err: error }, 'WITHDRAW TRANSPORT QUOTE ERROR:');
+
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+
+      if (error.code === 'TRUCK_CONFLICT') {
+        return res.status(409).json({ error: error.message });
+      }
+
+      if (error.code === 'ORDER_NOT_ACTIONABLE') {
+        return res.status(error.status || 409).json({ error: error.message });
+      }
+
+      return res.status(500).json({ error: 'Could not process quote action' });
     }
   }
 );
@@ -3128,7 +3166,7 @@ router.patch(
 // ============================================================================
 
 router.post(
-  '/quotes/:quoteId/withdraw-bid',
+  '/:id/quotes/:quoteId/withdraw-bid',
   authenticate,
   requireRole('TRUCK_OWNER'),
   async (req, res) => {
