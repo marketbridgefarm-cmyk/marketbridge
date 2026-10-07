@@ -1142,9 +1142,11 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
   const isArrangerTurn =
     quote.status === 'SELECTED' ||
     (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+  // The truck owner only acts after the arranging party counters; on a freshly
+  // selected bid the arranging party is the one to accept/counter (the backend
+  // rejects a provider response on SELECTED with a 409).
   const isTransporterTurn =
-    quote.status === 'SELECTED' ||
-    (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
+    quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
 
   const isOwner = quote.truckOwnerId === t.currentUserId;
   const canRespond =
@@ -1181,8 +1183,8 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
           <>
             {hasActiveNegotiation ? (
               <span className="muted small">
-                Locked — another transporter bid is currently in active negotiation.
-                Release it first to select this bid.
+                Locked — another transporter bid is currently in negotiation or
+                provisionally accepted. Release it first to select this bid.
               </span>
             ) : (
               <>
@@ -1255,8 +1257,10 @@ function TransportCard({ order, t }) {
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
 
+  // Mirrors the backend: selecting is blocked while another bid is in
+  // negotiation or provisionally accepted (it must be released first).
   const hasActiveNegotiation = quotes.some((q) =>
-    ['SELECTED', 'COUNTERED'].includes(q.status)
+    ['SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)
   );
 
   if (!job) {

@@ -1077,6 +1077,9 @@ export default function TruckOwnerDashboard() {
                   myLeaf.status === 'COUNTERED' &&
                   myLeaf.counteredBy === 'REQUESTER';
                 const respondBusy = myLeaf && actionLoading === `quote-${myLeaf.id}`;
+                // Same rule as the inspector dashboard: a truck owner can bid
+                // again once an earlier quote was withdrawn, rejected or expired.
+                const canQuote = !hasAgreement && !hasActiveThread && !hasWaitingBid;
 
                 const quoteAmount = hasActiveThread
                   ? fmtMoney(
@@ -1088,10 +1091,7 @@ export default function TruckOwnerDashboard() {
 
                 const arranger = arrangerShort(job.arrangingParty);
                 const createdLabel = fmtDate(job.createdAt);
-                const showFooter =
-                  (!myLeaf && !hasAgreement) ||
-                  isMyTurn ||
-                  hasWaitingBid;
+                const showFooter = canQuote || isMyTurn || hasWaitingBid;
                 const workSummary = workDetailsSummary(job.workDetails);
 
                 return (
@@ -1225,7 +1225,7 @@ export default function TruckOwnerDashboard() {
                       {/* Footer */}
                       {showFooter && (
                         <div className="sd-card-actions">
-                          {!myLeaf && !hasAgreement && (
+                          {canQuote && (
                             <button
                               type="button"
                               className="sd-btn sd-btn-primary"
