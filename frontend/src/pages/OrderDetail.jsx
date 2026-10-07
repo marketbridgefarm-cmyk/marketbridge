@@ -1176,13 +1176,31 @@ function QuoteRow({ quote, t }) {
           </div>
         )}
 
-        {quote.status === 'ACCEPTED' && t.isArranger && !t.pending && (
-          <>
-            <span className="muted small">Provisional agreement — the truck is not committed until transport payment succeeds.</span>
-            <Button variant="light" size="sm" disabled={working} busy={working} busyText="Releasing…" onClick={() => t.releaseQuote(quote.id)}>
-              Transporter unavailable — choose another
-            </Button>
-          </>
+        {/* Release paths for the arranging party. ACCEPTED = provisional
+            agreement release (before transport payment). SELECTED /
+            COUNTERED-by-requester = silent-release of an unresponsive
+            truck owner, gated by TRANSPORT_RELEASE_AFTER_HOURS on the
+            backend. The server enforces the window; this button just
+            offers the action. */}
+        {t.isArranger && !t.pending && (
+          quote.status === 'ACCEPTED' ? (
+            <>
+              <span className="muted small">Provisional agreement — the truck is not committed until transport payment succeeds.</span>
+              <Button variant="light" size="sm" disabled={working} busy={working} busyText="Releasing…" onClick={() => t.releaseQuote(quote.id)}>
+                Transporter unavailable — choose another
+              </Button>
+            </>
+          ) : (quote.status === 'SELECTED' ||
+              (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER')) ? (
+            <>
+              <span className="muted small">
+                You can release this truck owner if they stay silent. The backend enforces a waiting window.
+              </span>
+              <Button variant="light" size="sm" disabled={working} busy={working} busyText="Releasing…" onClick={() => t.releaseQuote(quote.id)}>
+                Release silent truck owner
+              </Button>
+            </>
+          ) : null
         )}
       </div>
     </div>
@@ -1209,6 +1227,7 @@ function TransportCard({ order, t }) {
             destinationDefault={order.buyer?.location}
             canBuyer={t.isBuyer}
             canSeller={t.isSeller}
+            buyerOnlyCompetition={['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category)}
             onCreated={t.reload}
           />
         ) : (
@@ -2326,8 +2345,6 @@ export default function OrderDetail() {
     );
   }
 
-  const counterpartId = isBuyer ? order.sellerId : isSeller ? order.buyerId : null;
-  const counterpartName = isBuyer ? order.seller?.name : isSeller ? order.buyer?.name : null;
   const orderOpen = !['COMPLETED', 'CANCELLED'].includes(order.status);
 
   const inspectionProps = {
@@ -2530,11 +2547,6 @@ export default function OrderDetail() {
           )}
 
           <RatingBox order={order} userId={currentUserId} onRated={reload} />
-
-          {counterpartId && (
-            <div className="od-span-all">
-            </div>
-          )}
 
           {isAdmin && (
             <Card eyebrow="Admin" title="Administrator view" subtitle="You are viewing this order with administrator access." />
