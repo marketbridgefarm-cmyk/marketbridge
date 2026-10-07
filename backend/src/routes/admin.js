@@ -19,6 +19,8 @@ const { markPaidOut } = require('../services/payoutService');
 
 const { PROVIDER_RELEASE_ACTIONS, providerFlagThreshold } = require('../services/releaseLimitsService');
 
+const providerStandingService = require('../services/providerStandingService');
+
 const router = express.Router();
 
 
@@ -3174,6 +3176,43 @@ router.post('/release-reviews/:eventId/approve', async (req, res) => {
   } catch (error) {
     req.log.error({ err: error }, 'ADMIN RELEASE REVIEW APPROVE ERROR:');
     return res.status(500).json({ error: 'Could not approve release review' });
+  }
+});
+
+
+// ============================================================================
+// PROVIDER STANDINGS (suspensions, appeals, early reinstatement)
+// ============================================================================
+
+router.get('/provider-standings', async (req, res) => {
+  try {
+    const standings = await prisma.providerStanding.findMany({
+      where: { status: { in: ['SUSPENDED', 'REJOIN_PENDING', 'PROBATION'] } },
+      orderBy: [{ appealedAt: 'desc' }, { updatedAt: 'desc' }],
+      take: 200,
+      include: { user: { select: { id: true, name: true, email: true, roles: true, rating: true } } },
+    });
+    return res.json({ standings, count: standings.length });
+  } catch (error) {
+    req.log.error({ err: error }, 'ADMIN PROVIDER STANDINGS ERROR:');
+    return res.status(500).json({ error: 'Could not load provider standings' });
+  }
+});
+
+router.post('/provider-standings/:userId/reinstate', async (req, res) => {
+  try {
+    const updated = await providerStandingService.adminReinstate(prisma, {
+      userId: req.params.userId,
+      adminId: req.user.id,
+      to: String(req.body?.to || 'PROBATION').toUpperCase(),
+      clearPenalty: req.body?.clearPenalty === true,
+      note: req.body?.note || null,
+    });
+    return res.json({ message: 'Provider reinstated.', standing: updated });
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    req.log.error({ err: error }, 'ADMIN PROVIDER REINSTATE ERROR:');
+    return res.status(500).json({ error: 'Could not reinstate provider' });
   }
 });
 

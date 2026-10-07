@@ -3,6 +3,8 @@ const { body, validationResult } = require('express-validator');
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 
+const { recomputeUserRating } = require('../services/providerStandingService');
+
 const router = express.Router();
 
 router.post(
@@ -74,15 +76,8 @@ router.post(
         data: { orderId, fromUserId: req.user.id, toUserId, role, score, comment },
       });
 
-      const aggregate = await prisma.rating.aggregate({
-        where: { toUserId },
-        _avg: { score: true },
-      });
-
-      await prisma.user.update({
-        where: { id: toUserId },
-        data: { rating: aggregate._avg.score || 0 },
-      });
+      // Average rating minus any provider-standing penalty.
+      await recomputeUserRating(prisma, toUserId);
 
       return res.status(201).json({ rating });
     } catch (error) {

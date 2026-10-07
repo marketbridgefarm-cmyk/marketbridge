@@ -36,6 +36,11 @@ const {
   LIMIT_MESSAGE,
 } = require('../services/releaseLimitsService');
 
+const {
+  applyProviderCancellation,
+  assertProviderCanBid,
+} = require('../services/providerStandingService');
+
 const router = express.Router();
 
 function validationError(res) {
@@ -517,6 +522,8 @@ router.post(
         return res.status(404).json({ error: 'Inspection request not found' });
       }
 
+      await assertProviderCanBid(prisma, req.user.id);
+
       if (request.status !== 'REQUESTED') {
         return res.status(400).json({ error: 'This inspection is no longer accepting quotes' });
       }
@@ -599,6 +606,12 @@ router.post(
       return res.status(201).json({ quote });
     } catch (error) {
       req.log.error({ err: error }, 'CREATE INSPECTION QUOTE ERROR:');
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({
+          error: error.message,
+          ...(String(error.code || '').startsWith('PROVIDER_') ? { code: error.code } : {}),
+        });
+      }
       return res.status(500).json({ error: 'Could not submit inspection quote' });
     }
   }
@@ -1036,6 +1049,7 @@ router.patch(
         }
       }
 
+      let standingOutcome = null;
       const result = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection agreement cannot be released until the order dispute is resolved');
 
@@ -1156,6 +1170,15 @@ router.patch(
           },
         });
 
+        // Automatic penalties for frequent provider cancellations.
+        if (isProviderRelease) {
+          standingOutcome = await applyProviderCancellation(tx, {
+            userId: req.user.id,
+            orderId: request.orderId,
+            reason: releaseInfo.reason,
+          });
+        }
+
         // Tell the other side (in-app + SMS opt-in) what happened.
         await recordOrderEvent(tx, {
           orderId: request.orderId,
@@ -1176,6 +1199,7 @@ router.patch(
       }
 
       return res.json({
+        ...(standingOutcome ? { standing: standingOutcome } : {}),
         message: isProviderRelease
           ? 'Provisional agreement cancelled. The requester can choose another inspector.'
           : isAcceptedRelease

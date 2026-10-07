@@ -35,6 +35,11 @@ const {
   LIMIT_MESSAGE,
 } = require('../services/releaseLimitsService');
 
+const {
+  applyProviderCancellation,
+  assertProviderCanBid,
+} = require('../services/providerStandingService');
+
 const router = express.Router();
 
 // ============================================================================
@@ -1349,6 +1354,8 @@ router.post(
 
       if (!job) return res.status(404).json({ error: 'Transport job not found' });
 
+      await assertProviderCanBid(prisma, req.user.id);
+
       if (job.method !== 'HIRE_TRANSPORTER') {
         return res.status(400).json({ error: 'Quotes are only for HIRE_TRANSPORTER jobs' });
       }
@@ -1458,7 +1465,10 @@ router.post(
       req.log.error({ err: error }, 'CREATE QUOTE ERROR:');
 
       if (error.statusCode) {
-        return res.status(error.statusCode).json({ error: error.message });
+        return res.status(error.statusCode).json({
+          error: error.message,
+          ...(String(error.code || '').startsWith('PROVIDER_') ? { code: error.code } : {}),
+        });
       }
 
       if (error.code === 'TRUCK_CONFLICT') {
@@ -2119,6 +2129,7 @@ router.patch(
         }
       }
 
+      let standingOutcome = null;
       const result = await prisma.$transaction(async (tx) => {
         await tx.$queryRawUnsafe(
           'SELECT "id" FROM "TransportJob" WHERE "id" = $1 FOR UPDATE',
@@ -2250,6 +2261,15 @@ router.patch(
           },
         });
 
+        // Automatic penalties for frequent provider cancellations.
+        if (isProviderRelease) {
+          standingOutcome = await applyProviderCancellation(tx, {
+            userId: req.user.id,
+            orderId: freshQuote.transportJob.orderId,
+            reason: releaseInfo.reason,
+          });
+        }
+
         // Tell the other side (in-app + SMS opt-in) what happened.
         await recordOrderEvent(tx, {
           orderId: freshQuote.transportJob.orderId,
@@ -2270,6 +2290,7 @@ router.patch(
       }
 
       return res.json({
+        ...(standingOutcome ? { standing: standingOutcome } : {}),
         message: isProviderRelease
           ? 'Provisional agreement cancelled. The requester can choose another transporter.'
           : isAcceptedRelease
