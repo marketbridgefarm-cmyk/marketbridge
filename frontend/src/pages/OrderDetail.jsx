@@ -33,8 +33,6 @@ import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
 
-import '.order-details/OrderDetail.css';
-
 const PAYMENT_METHODS = [
   { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
   { value: 'QR', label: 'QR Code' },
@@ -56,10 +54,7 @@ const shortId = (id) => id?.slice(0, 8) || '—';
 const label = (value) => String(value || '').replace(/_/g, ' ');
 
 const money = (value, fraction = 2) =>
-  Number(value || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: fraction,
-  });
+  Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: fraction });
 
 const formatDateTime = (value) => {
   if (!value) return '—';
@@ -70,28 +65,19 @@ const formatDateTime = (value) => {
 };
 
 const getError = (error, fallback) =>
-  error?.response?.data?.error ||
-  error?.response?.data?.message ||
-  error?.message ||
-  fallback;
+  error?.response?.data?.error || error?.response?.data?.message || error?.message || fallback;
 
 const statusTone = (status) => {
   const value = String(status || '').toUpperCase();
   if (['COMPLETED', 'DELIVERED', 'PAID', 'ACCEPTED', 'CONFIRMED'].includes(value)) return 'good';
   if (['CANCELLED', 'REJECTED', 'FAILED', 'DISPUTED'].includes(value)) return 'bad';
   if (['TRANSPORT_ARRANGED', 'ARRANGED', 'QUOTED'].includes(value)) return 'info';
-  if (['PENDING', 'AWAITING_PAYMENT', 'IN_PROGRESS', 'PROCESSING', 'PENDING_PAYMENT'].includes(value)) return 'wait';
+  if (['PENDING', 'AWAITING_PAYMENT', 'IN_PROGRESS', 'PROCESSING'].includes(value)) return 'wait';
   return 'neutral';
 };
 
 const initials = (name) =>
-  String(name || '?')
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0])
-    .join('')
-    .toUpperCase() || '?';
+  String(name || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
 
 const scrollToId = (id, delay = 0) => {
   const go = () => {
@@ -113,11 +99,18 @@ const leafQuotes = (quotes) => {
   return list.filter((q) => !parents.has(q.id));
 };
 
+// Mirrors the backend's transportReleaseAfterHours() in routes/transport.js.
+// The env var name matches so ops can pin the same value on both sides.
+// Defaults to 72h, identical to the backend default.
 const TRANSPORT_RELEASE_AFTER_HOURS = (() => {
   const configured = Number(import.meta?.env?.VITE_TRANSPORT_RELEASE_AFTER_HOURS);
   return Number.isFinite(configured) && configured >= 0 ? configured : 72;
 })();
 
+// For a SELECTED quote, or a COUNTERED quote where the requester made the
+// last move, returns the earliest time at which the requester may silently
+// release the truck owner. Returns null for any quote the release window
+// does not apply to (PENDING, ACCEPTED, provider-turn COUNTERED).
 function transportReleaseAvailableAt(quote) {
   if (!quote) return null;
   const providerTurn =
@@ -150,17 +143,10 @@ function useNowUntil(targetMs) {
 
 function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, className, children }) {
   return (
-    <section
-      className={`card${tone ? ` od-card-${tone}` : ''}${className ? ` ${className}` : ''}`}
-      id={id}
-    >
+    <section className={`card${tone ? ` od-card-${tone}` : ''}${className ? ` ${className}` : ''}`} id={id}>
       <header className="od-card-head">
         <div className="od-card-head-main">
-          {eyebrow && (
-            <span className={`od-eyebrow${eyebrowClass ? ` ${eyebrowClass}` : ''}`}>
-              {eyebrow}
-            </span>
-          )}
+          {eyebrow && <span className={`od-eyebrow${eyebrowClass ? ` ${eyebrowClass}` : ''}`}>{eyebrow}</span>}
           <h2 className="od-card-title">{title}</h2>
           {subtitle && <p className="od-card-subtitle">{subtitle}</p>}
         </div>
@@ -171,20 +157,14 @@ function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, classNam
   );
 }
 
-function Section({ title, meta, strong, bare, children }) {
+function Section({ title, meta, strong, children }) {
   return (
     <div className="od-card-section">
       {(title || meta) && (
         <div className="od-card-section-head">
           <h3 className="od-card-section-title">{title}</h3>
           {meta != null && (
-            <div
-              className={
-                'od-card-section-meta' +
-                (strong ? ' is-strong' : '') +
-                (bare ? ' is-bare' : '')
-              }
-            >
+            <div className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>
               {meta}
             </div>
           )}
@@ -214,13 +194,7 @@ function PartyBadge({ role, name }) {
 }
 
 const Finding = ({ text, empty }) =>
-  text ? (
-    <span className="od-finding-flag">{text}</span>
-  ) : (
-    <Pill tone="good" dot={false}>
-      {empty}
-    </Pill>
-  );
+  text ? <span className="od-finding-flag">{text}</span> : <Pill tone="good" dot={false}>{empty}</Pill>;
 
 const Facts = ({ children }) => <div className="od-detail-facts">{children}</div>;
 
@@ -238,9 +212,7 @@ const Pill = ({ tone = 'neutral', dot = true, children }) => (
   </span>
 );
 
-const YouTag = ({ inline }) => (
-  <span className={`od-party-you${inline ? ' od-party-you-inline' : ''}`}>You</span>
-);
+const YouTag = ({ inline }) => <span className={`od-party-you${inline ? ' od-party-you-inline' : ''}`}>You</span>;
 
 const Actions = ({ children }) => <div className="od-actions">{children}</div>;
 
@@ -260,18 +232,10 @@ function Notice({ title, children }) {
   );
 }
 
-const Button = ({
-  variant = 'default',
-  size,
-  busy,
-  busyText,
-  className,
-  children,
-  ...rest
-}) => (
+const Button = ({ variant = 'default', size, busy, busyText, children, ...rest }) => (
   <button
     type="button"
-    className={`btn${variant !== 'default' ? ` btn-${variant}` : ''}${size ? ` btn-${size}` : ''}${className ? ` ${className}` : ''}`}
+    className={`btn${variant !== 'default' ? ` btn-${variant}` : ''}${size ? ` btn-${size}` : ''}`}
     {...rest}
   >
     {busy ? busyText : children}
@@ -285,20 +249,8 @@ const Button = ({
 function PayoutStatusCard({ payouts, names, you }) {
   const parties = [
     { key: 'seller', label: 'SR', name: names.seller, you: you.seller, payout: payouts.seller },
-    payouts.inspector && {
-      key: 'inspector',
-      label: 'IR',
-      name: names.inspector,
-      you: you.inspector,
-      payout: payouts.inspector,
-    },
-    payouts.transporter && {
-      key: 'transporter',
-      label: 'TR',
-      name: names.transporter,
-      you: you.transporter,
-      payout: payouts.transporter,
-    },
+    payouts.inspector && { key: 'inspector', label: 'IR', name: names.inspector, you: you.inspector, payout: payouts.inspector },
+    payouts.transporter && { key: 'transporter', label: 'TR', name: names.transporter, you: you.transporter, payout: payouts.transporter },
   ]
     .filter(Boolean)
     .map((p) => ({ ...p, status: p.payout?.status || null }));
@@ -322,9 +274,7 @@ function PayoutStatusCard({ payouts, names, you }) {
     if (!status) return { text: 'Pending', tone: 'neutral' };
     if (status === 'HELD') {
       const at = releaseMs(payout);
-      return at !== null && now >= at
-        ? { text: 'Released', tone: 'good' }
-        : { text: 'Held', tone: 'wait' };
+      return at !== null && now >= at ? { text: 'Released', tone: 'good' } : { text: 'Held', tone: 'wait' };
     }
     if (status === 'RELEASED') return { text: 'Released', tone: 'good' };
     if (status === 'PAID_OUT') return { text: 'Paid out', tone: 'good' };
@@ -333,9 +283,7 @@ function PayoutStatusCard({ payouts, names, you }) {
     return { text: label(status), tone: 'neutral' };
   };
 
-  const anyFraction = parties.some(
-    (p) => p.payout?.amount != null && Number(p.payout.amount) % 1 !== 0
-  );
+  const anyFraction = parties.some((p) => p.payout?.amount != null && Number(p.payout.amount) % 1 !== 0);
   const amountText = (v) =>
     Number(v || 0).toLocaleString(undefined, {
       minimumFractionDigits: anyFraction ? 2 : 0,
@@ -347,11 +295,7 @@ function PayoutStatusCard({ payouts, names, you }) {
   const clock = `${pad2(Math.floor(secs / 3600))}:${pad2(Math.floor((secs % 3600) / 60))}:${pad2(secs % 60)}`;
   const dueDate =
     dueMs !== null
-      ? new Date(dueMs).toLocaleDateString(undefined, {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric',
-        })
+      ? new Date(dueMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
       : null;
   const duePassed = dueMs !== null && remainingMs === 0;
 
@@ -462,33 +406,22 @@ function PayoutStatusCard({ payouts, names, you }) {
       id="order-payout-status"
       eyebrow="Order Payout"
       title="After Buyer Paid"
-      side={
-        dueDate && (
-          <SideLabel name="Due Date">
-            <span className="od-card-side-value">{dueDate}</span>
-          </SideLabel>
-        )
-      }
+      side={dueDate && <SideLabel name="Due Date"><span className="od-card-side-value">{dueDate}</span></SideLabel>}
     >
       <Section title="Order Payout Status">
         <table className="payout-table">
           <thead>
             <tr>
               <th scope="col">Party</th>
-              <th scope="col" className="payout-amount-col">
-                Amount
-              </th>
-              <th scope="col" className="payout-status-col">
-                Status
-              </th>
+              <th scope="col" className="payout-amount-col">Amount</th>
+              <th scope="col" className="payout-status-col">Status</th>
             </tr>
           </thead>
           <tbody>
             {parties.map((party) => {
               const { key, name, payout, status } = party;
               const badge = badgeOf(party);
-              const currency =
-                payout?.currency && payout.currency !== 'ETB' ? payout.currency : null;
+              const currency = payout?.currency && payout.currency !== 'ETB' ? payout.currency : null;
               return (
                 <tr key={key}>
                   <th scope="row" className="payout-party">
@@ -500,14 +433,10 @@ function PayoutStatusCard({ payouts, names, you }) {
                         {party.you && <YouTag />}
                       </span>
                       {status === 'RELEASED' && payout?.releasedAt && (
-                        <span className="payout-party-note">
-                          Released {formatDateTime(payout.releasedAt)}
-                        </span>
+                        <span className="payout-party-note">Released {formatDateTime(payout.releasedAt)}</span>
                       )}
                       {status === 'PAID_OUT' && payout?.paidOutAt && (
-                        <span className="payout-party-note">
-                          Paid out {formatDateTime(payout.paidOutAt)}
-                        </span>
+                        <span className="payout-party-note">Paid out {formatDateTime(payout.paidOutAt)}</span>
                       )}
                       {payout?.payoutReference && (
                         <span className="payout-party-note">Ref {payout.payoutReference}</span>
@@ -555,13 +484,7 @@ function PayoutStatusCard({ payouts, names, you }) {
       {dueMs === null && holdNotStarted && (
         <div style={dueStripStyle} role="group" aria-label="Due date">
           <span style={dueLabelStyle}>Due Date</span>
-          <span
-            style={{
-              fontFamily: "'DM Sans', system-ui, sans-serif",
-              fontSize: 13,
-              color: '#64748b',
-            }}
-          >
+          <span style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: 13, color: '#64748b' }}>
             Starts after payment settles
           </span>
         </div>
@@ -614,11 +537,7 @@ function OrderProgress({ steps }) {
       {steps.map((s, idx) => {
         const state = s.done ? 'done' : idx === current ? 'current' : 'todo';
         return (
-          <li
-            key={s.label}
-            className={`order-progress-step is-${state}`}
-            aria-current={state === 'current' ? 'step' : undefined}
-          >
+          <li key={s.label} className={`order-progress-step is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
             <span className="order-progress-dot" aria-hidden="true" />
             <span className="order-progress-label">{s.label}</span>
           </li>
@@ -629,23 +548,18 @@ function OrderProgress({ steps }) {
 }
 
 function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
-  const { isBuyer, isSeller, marketplacePaid, transportJob } = flags;
+  const { isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob } = flags;
   const role = isBuyer ? 'Buying' : isSeller ? 'Selling' : 'Order';
-  const counterpartyRole = isSeller ? 'Buyer' : 'Seller';
-  const other = isSeller ? order.buyer : order.seller;
-  const delivered =
-    ['DELIVERED', 'COMPLETED'].includes(order.status) ||
-    transportJob?.status === 'DELIVERED';
+  const showBuyer = isSeller;
+  const other = showBuyer ? order.buyer : order.seller;
+  const delivered = ['DELIVERED', 'COMPLETED'].includes(order.status) || transportJob?.status === 'DELIVERED';
 
   const steps = [
-    { label: 'Order placed', done: true },
-    { label: 'Payment', done: marketplacePaid },
-    { label: 'Transport', done: Boolean(transportJob) },
+    { label: 'Ordered', done: true },
+    { label: 'Paid', done: marketplacePaid },
     { label: 'Delivered', done: delivered },
+    { label: 'Completed', done: order.status === 'COMPLETED' },
   ];
-
-  const tone = statusTone(order.status);
-  const statusText = label(order.status);
 
   return (
     <Card
@@ -653,60 +567,28 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
       eyebrow={role}
       eyebrowClass={isSeller ? 'is-selling' : ''}
       title={title}
-      side={<PartyBadge role={counterpartyRole} name={other?.name} />}
+      side={<Avatar name={other?.name} />}
     >
-      <Section
-        title="Order status"
-        meta={
-          <span className={`od-section-status od-text-${tone}`}>{statusText}</span>
-        }
-        bare
-      >
+      <Section title="Order status" meta={`ORD ${shortId(order.id).toUpperCase()}`}>
         <OrderProgress steps={steps} />
       </Section>
 
-      <Section title="Amount">
-        <div className="od-price">
-          <span className="od-price-amount">{money(order.finalPrice)}</span>
-          <span className="od-price-currency">ETB</span>
-        </div>
-      </Section>
-
-      <Section title="Order Details">
+      <Section title="Details">
         <Facts>
-          <Fact name="Buyer">
-            {order.buyer?.name || '—'}
-            {isBuyer && <YouTag inline />}
-          </Fact>
-          <Fact name="Seller">
-            {order.seller?.name || '—'}
-            {isSeller && <YouTag inline />}
-          </Fact>
+          <Fact name="Amount">{money(order.finalPrice)} ETB</Fact>
+          <Fact name="Buyer">{order.buyer?.name || '—'}{isBuyer && <YouTag inline />}</Fact>
+          <Fact name="Seller">{order.seller?.name || '—'}{isSeller && <YouTag inline />}</Fact>
           {order.listing?.cropType && <Fact name="Product">{order.listing.cropType}</Fact>}
-          {order.listing?.quantity != null && (
-            <Fact name="Quantity">{order.listing.quantity} units</Fact>
-          )}
+          {order.listing?.quantity != null && <Fact name="Quantity">{order.listing.quantity} units</Fact>}
           <Fact name="Ordered from">{order.listing?.location || '—'}</Fact>
           {order.buyer?.location && <Fact name="Deliver to">{order.buyer.location}</Fact>}
         </Facts>
       </Section>
 
-      <div className="od-meta">
-        <span className="od-meta-time">
-          Created {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}
-        </span>
-        <span className="od-meta-code">ORD {shortId(order.id).toUpperCase()}</span>
-      </div>
+      <p className="od-card-created">Created {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}</p>
 
       {canCancel && (
-        <Button
-          variant="outline"
-          className="btn-block"
-          disabled={busy === 'cancel'}
-          onClick={onCancel}
-          busy={busy === 'cancel'}
-          busyText="Cancelling…"
-        >
+        <Button className="btn btn-outline btn-block" disabled={busy === 'cancel'} onClick={onCancel} busy={busy === 'cancel'} busyText="Cancelling…">
           Cancel order
         </Button>
       )}
@@ -724,44 +606,27 @@ function InspectionCard({ order, title, i }) {
   if (!request) {
     const needsApproval = i.all.length > 0 && !i.formReleased;
     return (
-      <Card
-        eyebrow="Inspection"
-        title={
-          needsApproval
-            ? 'Inspection request awaiting admin approval'
-            : 'Request an inspection'
-        }
-      >
+      <Card id="inspection-section" eyebrow="Inspection" title={needsApproval ? 'Inspection request awaiting admin approval' : 'Request an inspection'}>
         <Section title="How it works">
           <p className="muted">
-            Get an independent quality check before the purchase is committed.
-            Registered inspectors compete by sending a sealed fee quote. You compare
-            bids, pick one to negotiate with, and the accepted quote assigns the
-            inspector. You review the finished report before paying for the goods.
+            Get an independent quality check before the purchase is committed. Registered inspectors compete by sending a
+            sealed fee quote. You compare bids, pick one to negotiate with, and the accepted quote assigns the inspector.
+            You review the finished report before paying for the goods.
           </p>
         </Section>
         {needsApproval ? (
           <Notice title="Admin approval required">
-            <p>
-              Ask MarketBridge admin to release a fresh inspection form before opening
-              another competition.
-            </p>
+            <p>Ask MarketBridge admin to release a fresh inspection form before opening another competition.</p>
           </Notice>
         ) : (
           <div className="od-inspection-work-form">
             <h3>Describe the inspection work</h3>
-            <p className="muted">
-              Inspectors will see these requirements before submitting a bid. Be
-              specific so their fees cover the same work.
-            </p>
+            <p className="muted">Inspectors will see these requirements before submitting a bid. Be specific so their fees cover the same work.</p>
 
-            <label>
-              Inspection category
+            <label>Inspection category
               <select
                 value={i.workDetails.workCategory || 'GENERAL_QUALITY'}
-                onChange={(e) =>
-                  i.setWorkDetails({ ...i.workDetails, workCategory: e.target.value })
-                }
+                onChange={(e) => i.setWorkDetails({ ...i.workDetails, workCategory: e.target.value })}
               >
                 <option value="GENERAL_QUALITY">General quality and condition</option>
                 <option value="AGRICULTURAL_PRODUCE">Agricultural produce quality</option>
@@ -774,16 +639,10 @@ function InspectionCard({ order, title, i }) {
             </label>
 
             <div className="od-form-grid">
-              <label>
-                Quantity to inspect
+              <label>Quantity to inspect
                 <select
                   value={i.workDetails.quantityToInspect || ''}
-                  onChange={(e) =>
-                    i.setWorkDetails({
-                      ...i.workDetails,
-                      quantityToInspect: e.target.value,
-                    })
-                  }
+                  onChange={(e) => i.setWorkDetails({ ...i.workDetails, quantityToInspect: e.target.value })}
                 >
                   <option value="">Select a quantity range…</option>
                   <optgroup label="Small lots">
@@ -793,12 +652,8 @@ function InspectionCard({ order, title, i }) {
                   </optgroup>
                   <optgroup label="Medium lots">
                     <option value="100–500 kg">100–500 kg</option>
-                    <option value="0.5–1 ton (5–10 quintals)">
-                      0.5–1 ton (5–10 quintals)
-                    </option>
-                    <option value="1–5 tons (10–50 quintals)">
-                      1–5 tons (10–50 quintals)
-                    </option>
+                    <option value="0.5–1 ton (5–10 quintals)">0.5–1 ton (5–10 quintals)</option>
+                    <option value="1–5 tons (10–50 quintals)">1–5 tons (10–50 quintals)</option>
                   </optgroup>
                   <optgroup label="Bulk lots">
                     <option value="5–20 tons">5–20 tons</option>
@@ -813,15 +668,12 @@ function InspectionCard({ order, title, i }) {
                     <option value="More than 50 bags">More than 50 bags</option>
                   </optgroup>
                   <optgroup label="Other">
-                    <option value="To be agreed with the inspector">
-                      To be agreed with the inspector
-                    </option>
+                    <option value="To be agreed with the inspector">To be agreed with the inspector</option>
                   </optgroup>
                 </select>
               </label>
 
-              <label>
-                Number of lots / batches
+              <label>Number of lots / batches
                 <select
                   value={
                     i.workDetails.lotCount === undefined || i.workDetails.lotCount === null
@@ -852,14 +704,11 @@ function InspectionCard({ order, title, i }) {
                 </select>
               </label>
 
-              <label>
-                Inspection deadline
+              <label>Inspection deadline
                 <input
                   type="datetime-local"
                   value={i.workDetails.requiredBy}
-                  onChange={(e) =>
-                    i.setWorkDetails({ ...i.workDetails, requiredBy: e.target.value })
-                  }
+                  onChange={(e) => i.setWorkDetails({ ...i.workDetails, requiredBy: e.target.value })}
                 />
               </label>
             </div>
@@ -888,19 +737,14 @@ function InspectionCard({ order, title, i }) {
 
             <p className="muted small">
               {Array.isArray(i.workDetails.checks) && i.workDetails.checks.length > 0
-                ? `Selected: ${i.workDetails.checks
-                    .map((c) => c.replaceAll('_', ' ').toLowerCase())
-                    .join(', ')}`
+                ? `Selected: ${i.workDetails.checks.map((c) => c.replaceAll('_', ' ').toLowerCase()).join(', ')}`
                 : 'No checks selected yet.'}
             </p>
 
-            <label>
-              Report format
+            <label>Report format
               <select
                 value={i.workDetails.reportFormat || 'CHECKLIST_PHOTOS'}
-                onChange={(e) =>
-                  i.setWorkDetails({ ...i.workDetails, reportFormat: e.target.value })
-                }
+                onChange={(e) => i.setWorkDetails({ ...i.workDetails, reportFormat: e.target.value })}
               >
                 <option value="CHECKLIST_PHOTOS">Checklist, findings and photos</option>
                 <option value="MEASUREMENTS">Measurements and test results</option>
@@ -909,15 +753,7 @@ function InspectionCard({ order, title, i }) {
               </select>
             </label>
 
-            <Button
-              variant="primary"
-              disabled={i.requesting}
-              busy={i.requesting}
-              busyText="Requesting…"
-              onClick={() =>
-                i.request(i.isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')
-              }
-            >
+            <Button variant="primary" disabled={i.requesting} busy={i.requesting} busyText="Requesting…" onClick={() => i.request(i.isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}>
               Open inspection competition
             </Button>
           </div>
@@ -930,12 +766,7 @@ function InspectionCard({ order, title, i }) {
   const reportReady = request.status === 'COMPLETED' && Boolean(report);
   const inspectorName = request.inspector?.name || null;
   const inspectionDate =
-    report?.inspectedAt ||
-    report?.completedAt ||
-    request.completedAt ||
-    request.updatedAt ||
-    request.createdAt ||
-    null;
+    report?.inspectedAt || report?.completedAt || request.completedAt || request.updatedAt || request.createdAt || null;
 
   const side = inspectorName ? (
     <PartyBadge role="Inspector" name={inspectorName} />
@@ -954,89 +785,38 @@ function InspectionCard({ order, title, i }) {
   const inspectionObligations = (order?.paymentObligations || []).filter(
     (o) => o.type === 'INSPECTOR' && o.inspectionRequestId === request.id
   );
-  const myInspectionObligation =
-    inspectionObligations.find((o) => o.payerId === i.currentUserId) || null;
+  const myInspectionObligation = inspectionObligations.find(
+    (o) => o.payerId === i.currentUserId
+  ) || null;
   const feePaid = inspectionObligations.length
-    ? inspectionObligations.every(
-        (o) => o.status === 'PAID' || o.payment?.status === 'PAID'
-      )
-    : (request.payments || []).some(
-        (p) => p.type === 'INSPECTOR' && p.status === 'PAID'
-      );
+    ? inspectionObligations.every((o) => o.status === 'PAID' || o.payment?.status === 'PAID')
+    : (request.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID');
   const feePending = Boolean(
     myInspectionObligation?.payment?.status === 'PENDING' ||
-      myInspectionObligation?.payment?.status === 'PROCESSING'
+    myInspectionObligation?.payment?.status === 'PROCESSING'
   );
 
   return (
     <Card
+      id="inspection-section"
       eyebrow="Inspection"
       title={reportReady ? 'Quality report' : 'Inspection status'}
-      subtitle={
-        reportReady ? 'Review the findings before the purchase is committed.' : null
-      }
+      subtitle={reportReady ? 'Review the findings before the purchase is committed.' : null}
       side={side}
     >
       <Section title="Inspection details" meta={`INS ${shortId(request.id).toUpperCase()}`}>
         <Facts>
           {reportReady && <Fact name="Product">{order.listing?.cropType || title}</Fact>}
-          {reportReady && (
-            <Fact name="Quantity">
-              {order.listing?.quantity != null ? `${order.listing.quantity} units` : '—'}
-            </Fact>
-          )}
+          {reportReady && <Fact name="Quantity">{order.listing?.quantity != null ? `${order.listing.quantity} units` : '—'}</Fact>}
           {reportReady && <Fact name="Location">{order.listing?.location || '—'}</Fact>}
-          <Fact name="Requested by">
-            {request.mode === 'SELLER_REQUESTED' ? 'Seller' : 'Buyer'}
-          </Fact>
+          <Fact name="Requested by">{request.mode === 'SELLER_REQUESTED' ? 'Seller' : 'Buyer'}</Fact>
           <Fact name="Requested on">{formatDateTime(request.createdAt)}</Fact>
-          {reportReady && (
-            <Fact name="Inspection date">{formatDateTime(inspectionDate)}</Fact>
-          )}
+          {reportReady && <Fact name="Inspection date">{formatDateTime(inspectionDate)}</Fact>}
           {inspectorName && <Fact name="Inspected by">{inspectorName}</Fact>}
-          {request.fee != null && (
-            <Fact name="Inspection fee">{money(request.fee)} ETB</Fact>
-          )}
+          {request.fee != null && <Fact name="Inspection fee">{money(request.fee)} ETB</Fact>}
           {!inspectorName && <Fact name="Status">{label(request.status)}</Fact>}
         </Facts>
-        {request.workDetails && (
-          <div className="od-work-details">
-            <h4>Agreed inspection scope</h4>
-            {request.workDetails.workDescription && (
-              <p>{request.workDetails.workDescription}</p>
-            )}
-            <div className="od-work-detail-items">
-              {request.workDetails.quantityToInspect && (
-                <span>
-                  <b>Quantity:</b> {request.workDetails.quantityToInspect}
-                </span>
-              )}
-              {request.workDetails.lotCount && (
-                <span>
-                  <b>Lots:</b> {request.workDetails.lotCount}
-                </span>
-              )}
-              {request.workDetails.requiredBy && (
-                <span>
-                  <b>Deadline:</b> {formatDateTime(request.workDetails.requiredBy)}
-                </span>
-              )}
-            </div>
-            {request.workDetails.checks?.length > 0 && (
-              <p>
-                <b>Checks:</b>{' '}
-                {request.workDetails.checks
-                  .map((v) => v.replaceAll('_', ' ').toLowerCase())
-                  .join(', ')}
-              </p>
-            )}
-            {request.workDetails.reportRequirements && (
-              <p>
-                <b>Report:</b> {request.workDetails.reportRequirements}
-              </p>
-            )}
-          </div>
-        )}
+        {request.workDetails && <div className="od-work-details"><h4>Agreed inspection scope</h4>{request.workDetails.workDescription && <p>{request.workDetails.workDescription}</p>}<div className="od-work-detail-items">{request.workDetails.quantityToInspect && <span><b>Quantity:</b> {request.workDetails.quantityToInspect}</span>}{request.workDetails.lotCount && <span><b>Lots:</b> {request.workDetails.lotCount}</span>}{request.workDetails.requiredBy && <span><b>Deadline:</b> {formatDateTime(request.workDetails.requiredBy)}</span>}</div>{request.workDetails.checks?.length > 0 && <p><b>Checks:</b> {request.workDetails.checks.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>}{request.workDetails.reportRequirements && <p><b>Report:</b> {request.workDetails.reportRequirements}</p>}</div>}
       </Section>
 
       {request.status === 'REQUESTED' && (
@@ -1088,7 +868,8 @@ function InspectionCard({ order, title, i }) {
                       </p>
                       {quote.message && <p className="muted">{quote.message}</p>}
                       <p>
-                        Status: <span className="badge">{label(quote.status || 'PENDING')}</span>
+                        Status:{' '}
+                        <span className="badge">{label(quote.status || 'PENDING')}</span>
                       </p>
                       {isCounteredByRequester && (
                         <p className="muted small">
@@ -1135,7 +916,9 @@ function InspectionCard({ order, title, i }) {
                             reference={Number(quote.counterAmount ?? quote.amount)}
                             min={1}
                             placeholder="Counter (ETB)"
-                            value={i.counterInputs[counterKeyFor(quote.id)] || ''}
+                            value={
+                              i.counterInputs[counterKeyFor(quote.id)] || ''
+                            }
                             onChange={(v) =>
                               i.setCounterInputs((prev) => ({
                                 ...prev,
@@ -1181,13 +964,7 @@ function InspectionCard({ order, title, i }) {
       )}
 
       {request.status === 'ACCEPTED' && request.fee != null && (
-        <Section
-          title={
-            request.sellerConfirmedAt
-              ? 'Inspector confirmed — fee payment'
-              : 'Inspector provisionally selected'
-          }
-        >
+        <Section title={request.sellerConfirmedAt ? 'Inspector confirmed — fee payment' : 'Inspector provisionally selected'}>
           <p className="muted">
             {request.sellerConfirmedAt
               ? 'The seller confirmed the inspector and agreed fee. The designated payer(s) can now pay the inspection obligation.'
@@ -1206,12 +983,10 @@ function InspectionCard({ order, title, i }) {
           ) : i.isSeller && !request.sellerConfirmedAt ? (
             <>
               <p className="muted small">
-                Confirm the inspector and agreed fee to unlock payment and let work
-                begin. If you do not respond
-                {request.workflowDueAt
-                  ? ` by ${new Date(request.workflowDueAt).toLocaleString()}`
-                  : ' in time'}
-                , the provisional purchase is closed automatically.
+                Confirm the inspector and agreed fee to unlock payment and let
+                work begin. If you do not respond
+                {request.workflowDueAt ? ` by ${new Date(request.workflowDueAt).toLocaleString()}` : ' in time'},
+                the provisional purchase is closed automatically.
               </p>
               <Button
                 variant="primary"
@@ -1230,11 +1005,7 @@ function InspectionCard({ order, title, i }) {
                 busy={i.busy === `seller-decline-${request.id}`}
                 busyText="Declining…"
                 onClick={() => {
-                  if (
-                    window.confirm(
-                      'Decline this inspector and fee? The provisional purchase will be closed and the buyer notified.'
-                    )
-                  ) {
+                  if (window.confirm('Decline this inspector and fee? The provisional purchase will be closed and the buyer notified.')) {
                     i.declineSellerInspection(request.id);
                   }
                 }}
@@ -1256,38 +1027,28 @@ function InspectionCard({ order, title, i }) {
           ) : request.sellerConfirmedAt ? (
             <p className="muted small">
               Seller confirmed. The designated payer can now pay the inspection fee
-              {request.workflowDueAt
-                ? ` before ${new Date(request.workflowDueAt).toLocaleString()}`
-                : ''}
-              .
+              {request.workflowDueAt ? ` before ${new Date(request.workflowDueAt).toLocaleString()}` : ''}.
             </p>
           ) : (
             <p className="muted small">
-              Waiting for the seller to confirm the selected inspector before payment
-              can begin
-              {request.workflowDueAt
-                ? `. If the seller does not respond by ${new Date(request.workflowDueAt).toLocaleString()}, this purchase is closed automatically`
-                : ''}
-              .
+              Waiting for the seller to confirm the selected inspector before
+              payment can begin
+              {request.workflowDueAt ? `. If the seller does not respond by ${new Date(request.workflowDueAt).toLocaleString()}, this purchase is closed automatically` : ''}.
             </p>
           )}
 
           {isRequester && (
             <div style={{ marginTop: 12 }}>
               <ReleaseAgreementControl
-                acceptedQuote={leafQuotes(request.quotes).find(
-                  (q) => q.status === 'ACCEPTED'
-                )}
+                acceptedQuote={leafQuotes(request.quotes).find((q) => q.status === 'ACCEPTED')}
                 label="Inspector unavailable — choose another"
                 busy={i.busy === `withdraw-inspection-${request.id}`}
                 disabled={Boolean(i.busy)}
-                onConfirm={(reason, note) =>
-                  i.withdrawInspectionAgreement(request.id, { reason, note })
-                }
+                onConfirm={(reason, note) => i.withdrawInspectionAgreement(request.id, { reason, note })}
               />
               <p className="muted small" style={{ marginTop: 6 }}>
-                Provisional agreement — release it if the inspector drops out before
-                payment.
+                Provisional agreement — release it if the inspector drops out
+                before payment.
               </p>
             </div>
           )}
@@ -1298,15 +1059,9 @@ function InspectionCard({ order, title, i }) {
         <>
           <Section title="Findings">
             <Facts>
-              <Fact name="Visible defects">
-                <Finding text={report.visibleDefects} empty="No defects" />
-              </Fact>
-              <Fact name="Damage notes">
-                <Finding text={report.damageNotes} empty="No damage" />
-              </Fact>
-              <Fact name="Packaging">
-                <Finding text={report.packagingNotes} empty="Fully packed" />
-              </Fact>
+              <Fact name="Visible defects"><Finding text={report.visibleDefects} empty="No defects" /></Fact>
+              <Fact name="Damage notes"><Finding text={report.damageNotes} empty="No damage" /></Fact>
+              <Fact name="Packaging"><Finding text={report.packagingNotes} empty="Fully packed" /></Fact>
             </Facts>
           </Section>
 
@@ -1327,8 +1082,7 @@ function InspectionCard({ order, title, i }) {
           )}
         </>
       ) : (
-        ['REQUESTED', 'ACCEPTED'].includes(request.status) &&
-        (i.isAdmin || i.isParticipant) && (
+        ['REQUESTED', 'ACCEPTED'].includes(request.status) && (i.isAdmin || i.isParticipant) && (
           <Section title="Inspection recovery">
             <p className="muted">
               {i.isAdmin
@@ -1337,23 +1091,11 @@ function InspectionCard({ order, title, i }) {
             </p>
             <Actions>
               {i.isAdmin && (
-                <Button
-                  variant="primary"
-                  disabled={Boolean(i.busy)}
-                  busy={i.busy === `reopen-inspection-${request.id}`}
-                  busyText="Reopening…"
-                  onClick={i.reopenBidding}
-                >
+                <Button variant="primary" disabled={Boolean(i.busy)} busy={i.busy === `reopen-inspection-${request.id}`} busyText="Reopening…" onClick={i.reopenBidding}>
                   Reopen inspection bidding
                 </Button>
               )}
-              <Button
-                variant="light"
-                disabled={Boolean(i.busy)}
-                busy={i.busy === `cancel-inspection-${request.id}`}
-                busyText="Cancelling…"
-                onClick={i.cancel}
-              >
+              <Button variant="light" disabled={Boolean(i.busy)} busy={i.busy === `cancel-inspection-${request.id}`} busyText="Cancelling…" onClick={i.cancel}>
                 Cancel inspection request
               </Button>
             </Actions>
@@ -1364,126 +1106,13 @@ function InspectionCard({ order, title, i }) {
   );
 }
 
-/* ------------------------------------------------------------------------
-   Compact on-page card that opens the inspection popup.
-   ------------------------------------------------------------------------ */
-
-function InspectionSummaryCard({ i, onOpen }) {
-  const request = i.current;
-  const reportReady = request?.status === 'COMPLETED' && Boolean(request.report);
-  const statusText = request ? label(request.status) : 'Not started';
-  const tone = request ? statusTone(request.status) : 'neutral';
-
-  const blurb = !request
-    ? 'Get an independent quality check before the purchase is committed. Inspectors bid for the job; you negotiate and pay only the accepted fee.'
-    : reportReady
-    ? 'The inspection report is ready. Open it to review findings before you commit to the purchase.'
-    : 'The inspection is running. Open it to see bids, negotiate the fee, and coordinate the visit.';
-
-  return (
-    <Card
-      id="inspection-section"
-      eyebrow="Inspection"
-      title={
-        reportReady
-          ? 'Quality report ready'
-          : request
-          ? 'Inspection in progress'
-          : 'Request an inspection'
-      }
-      side={
-        <SideLabel name="Status">
-          <Pill tone={tone}>{statusText}</Pill>
-        </SideLabel>
-      }
-    >
-      <Section>
-        <p className="muted">{blurb}</p>
-        <Actions>
-          <Button variant="primary" onClick={onOpen}>
-            {reportReady
-              ? 'View inspection report'
-              : request
-              ? 'Open inspection'
-              : 'Start inspection'}
-          </Button>
-        </Actions>
-      </Section>
-    </Card>
-  );
-}
-
-/* ------------------------------------------------------------------------
-   Popup dialog hosting the full inspection experience.
-   ------------------------------------------------------------------------ */
-
-function InspectionModal({
-  open,
-  onClose,
-  order,
-  title,
-  i,
-  currentInspection,
-  isSeller,
-}) {
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="od-modal-backdrop"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="od-modal" role="dialog" aria-modal="true" aria-label="Inspection">
-        <div className="od-modal-head">
-          <span className="od-modal-title">Inspection</span>
-          <button
-            type="button"
-            className="od-modal-close"
-            onClick={onClose}
-            aria-label="Close inspection"
-          >
-            ×
-          </button>
-        </div>
-        <div className="od-modal-body">
-          <InspectionCard order={order} title={title} i={i} />
-
-          {currentInspection &&
-            ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(currentInspection.status) &&
-            isSeller && (
-              <InspectionCoordinationSeller inspectionRequestId={currentInspection.id} />
-            )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ========================================================================
    6. Transport
    ======================================================================== */
 
 function DeliveryEvidenceForm({ t }) {
   const { evidence, setEvidence, notes, setNotes, evidenceBusy } = t;
-  const ready =
-    evidence.photoKeys.length || evidence.videoKeys.length || notes.trim();
+  const ready = evidence.photoKeys.length || evidence.videoKeys.length || notes.trim();
   return (
     <Notice title="Delivery evidence">
       <p className="muted">Upload delivery evidence before marking the trip delivered.</p>
@@ -1498,10 +1127,7 @@ function DeliveryEvidenceForm({ t }) {
         }
       />
       {(evidence.photoKeys.length > 0 || evidence.videoKeys.length > 0) && (
-        <p className="muted small">
-          {evidence.photoKeys.length} photo(s), {evidence.videoKeys.length} video(s)
-          ready.
-        </p>
+        <p className="muted small">{evidence.photoKeys.length} photo(s), {evidence.videoKeys.length} video(s) ready.</p>
       )}
       <textarea
         className="field"
@@ -1524,6 +1150,10 @@ function DeliveryEvidenceForm({ t }) {
   );
 }
 
+// Release limits for a provisional (ACCEPTED) transporter / inspector
+// agreement. Mirrors backend services/releaseLimitsService.js: a reason from
+// a list is required and release opens RELEASE_AFTER_ACCEPT_HOURS after
+// acceptance. The per-job cap (2, then admin review) is enforced server-side.
 const RELEASE_AFTER_ACCEPT_HOURS = (() => {
   const configured = Number(import.meta?.env?.VITE_RELEASE_AFTER_ACCEPT_HOURS);
   return Number.isFinite(configured) && configured >= 0 ? configured : 24;
@@ -1539,9 +1169,7 @@ const RELEASE_REASONS = [
 
 function acceptedReleaseAvailableAt(acceptedQuote) {
   if (!acceptedQuote) return null;
-  const since = new Date(
-    acceptedQuote.updatedAt || acceptedQuote.createdAt
-  ).getTime();
+  const since = new Date(acceptedQuote.updatedAt || acceptedQuote.createdAt).getTime();
   if (!Number.isFinite(since)) return null;
   return new Date(since + RELEASE_AFTER_ACCEPT_HOURS * 60 * 60 * 1000);
 }
@@ -1559,8 +1187,7 @@ function ReleaseAgreementControl({ acceptedQuote, label, busy, disabled, onConfi
   if (locked) {
     return (
       <span className="muted small">
-        Release opens {formatDateTime(availableAt)} ({RELEASE_AFTER_ACCEPT_HOURS}h after
-        acceptance).
+        Release opens {formatDateTime(availableAt)} ({RELEASE_AFTER_ACCEPT_HOURS}h after acceptance).
       </span>
     );
   }
@@ -1580,9 +1207,7 @@ function ReleaseAgreementControl({ acceptedQuote, label, busy, disabled, onConfi
         <select value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy}>
           <option value="">Select a reason…</option>
           {RELEASE_REASONS.map(([value, text]) => (
-            <option key={value} value={value}>
-              {text}
-            </option>
+            <option key={value} value={value}>{text}</option>
           ))}
         </select>
       </label>
@@ -1609,11 +1234,7 @@ function ReleaseAgreementControl({ acceptedQuote, label, busy, disabled, onConfi
           busyText="Releasing…"
           onClick={async () => {
             const ok = await onConfirm(reason, note.trim());
-            if (ok) {
-              setOpen(false);
-              setReason('');
-              setNote('');
-            }
+            if (ok) { setOpen(false); setReason(''); setNote(''); }
           }}
         >
           Confirm release
@@ -1629,25 +1250,29 @@ function ReleaseAgreementControl({ acceptedQuote, label, busy, disabled, onConfi
 function QuoteRow({ quote, t, hasActiveNegotiation }) {
   const key = `quote-${quote.id}`;
   const working = t.busy === key;
-  const amount =
-    quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
+  const amount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
 
+  // Silent-release gate. Mirrors the backend's transportReleaseAvailableAt:
+  // a SELECTED (or COUNTERED-by-requester) quote can only be released after
+  // the waiting window elapses. Until then, the release button is replaced
+  // by an explanation of the earliest release time.
   const releaseAt = transportReleaseAvailableAt(quote);
   const releaseLocked = releaseAt !== null && releaseAt.getTime() > Date.now();
 
   const isArrangerTurn =
     quote.status === 'SELECTED' ||
     (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
+  // The truck owner only acts after the arranging party counters; on a freshly
+  // selected bid the arranging party is the one to accept/counter (the backend
+  // rejects a provider response on SELECTED with a 409).
   const isTransporterTurn =
     quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
 
   const isOwner = quote.truckOwnerId === t.currentUserId;
   const canRespond =
-    (t.canChooseQuote && isArrangerTurn) || (isOwner && isTransporterTurn);
-  const rating =
-    typeof quote.truckOwner?.rating === 'number'
-      ? quote.truckOwner.rating.toFixed(1)
-      : '—';
+    (t.canChooseQuote && isArrangerTurn) ||
+    (isOwner && isTransporterTurn);
+  const rating = typeof quote.truckOwner?.rating === 'number' ? quote.truckOwner.rating.toFixed(1) : '—';
   const ownerName = quote.truckOwner?.name || 'Truck owner';
 
   return (
@@ -1658,24 +1283,22 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
           <strong>{ownerName}</strong>
         </div>
         <p>
-          {quote.truck?.truckType || 'Truck'} ·{' '}
-          {quote.truck?.capacity != null ? `${quote.truck.capacity}t` : 'Capacity —'} ·{' '}
+          {quote.truck?.truckType || 'Truck'} · {quote.truck?.capacity != null ? `${quote.truck.capacity}t` : 'Capacity —'} ·{' '}
           {quote.truck?.registration || 'Registration —'} · ★ {rating}
         </p>
         {quote.message && <p className="muted">{quote.message}</p>}
-        <p>
-          Status: <span className="badge">{quote.status || 'PENDING'}</span>
-        </p>
+        <p>Status: <span className="badge">{quote.status || 'PENDING'}</span></p>
         {quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER' && (
-          <p className="muted">
-            You countered {money(amount)} ETB — waiting for the transporter.
-          </p>
+          <p className="muted">You countered {money(amount)} ETB — waiting for the transporter.</p>
         )}
       </div>
 
       <div>
         <strong>{money(amount)} ETB</strong>
 
+        {/* Select for negotiation. Blocked when another transporter bid is
+            already in a live negotiation thread — the requester must release
+            or reject that thread first. Mirrors the inspection flow. */}
         {t.canChooseQuote && quote.status === 'PENDING' && (
           <>
             {hasActiveNegotiation ? (
@@ -1685,14 +1308,7 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
               </span>
             ) : (
               <>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  disabled={working}
-                  busy={working}
-                  busyText="Selecting…"
-                  onClick={() => t.selectQuote(quote.id)}
-                >
+                <Button variant="primary" size="sm" disabled={working} busy={working} busyText="Selecting…" onClick={() => t.selectQuote(quote.id)}>
                   Select bid for deal
                 </Button>
                 <span className="muted small">Selecting opens price negotiation.</span>
@@ -1703,16 +1319,8 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
 
         {canRespond && (
           <div className="od-quote-actions">
-            <Button
-              size="sm"
-              disabled={working}
-              busy={working}
-              busyText="Accepting…"
-              onClick={() => t.acceptQuote(quote.id)}
-            >
-              {isTransporterTurn && quote.status === 'COUNTERED'
-                ? 'Accept buyer counter'
-                : 'Accept quote'}
+            <Button size="sm" disabled={working} busy={working} busyText="Accepting…" onClick={() => t.acceptQuote(quote.id)}>
+              {isTransporterTurn && quote.status === 'COUNTERED' ? 'Accept buyer counter' : 'Accept quote'}
             </Button>
             <AmountPicker
               className="field-inline"
@@ -1723,37 +1331,19 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
               onChange={(v) => t.setCounterInputs((q) => ({ ...q, [quote.id]: v }))}
               ariaLabel="Counter amount in ETB"
             />
-            <Button
-              variant="light"
-              size="sm"
-              disabled={working}
-              busy={working}
-              busyText="Sending…"
-              onClick={() => t.counterQuote(quote.id)}
-            >
+            <Button variant="light" size="sm" disabled={working} busy={working} busyText="Sending…" onClick={() => t.counterQuote(quote.id)}>
               Counter
             </Button>
-            <Button
-              variant="light"
-              size="sm"
-              disabled={working}
-              busy={working}
-              busyText="Rejecting…"
-              onClick={() => t.rejectQuote(quote.id)}
-            >
+            <Button variant="light" size="sm" disabled={working} busy={working} busyText="Rejecting…" onClick={() => t.rejectQuote(quote.id)}>
               Reject
             </Button>
           </div>
         )}
 
-        {t.isArranger &&
-          !t.pending &&
-          (quote.status === 'ACCEPTED' ? (
+        {t.isArranger && !t.pending && (
+          quote.status === 'ACCEPTED' ? (
             <>
-              <span className="muted small">
-                Provisional agreement — the truck is not committed until transport
-                payment succeeds.
-              </span>
+              <span className="muted small">Provisional agreement — the truck is not committed until transport payment succeeds.</span>
               <ReleaseAgreementControl
                 acceptedQuote={quote}
                 label="Transporter unavailable — choose another"
@@ -1762,31 +1352,25 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
                 onConfirm={(reason, note) => t.releaseQuote(quote.id, { reason, note })}
               />
             </>
-          ) : quote.status === 'SELECTED' ||
-            (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER') ? (
+          ) : (quote.status === 'SELECTED' ||
+              (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER')) ? (
             releaseLocked ? (
               <span className="muted small">
-                The waiting window has not elapsed. If the truck owner stays silent, you
-                can release them from {formatDateTime(releaseAt)}.
+                The waiting window has not elapsed. If the truck owner stays
+                silent, you can release them from {formatDateTime(releaseAt)}.
               </span>
             ) : (
               <>
                 <span className="muted small">
                   You can release this truck owner if they stay silent.
                 </span>
-                <Button
-                  variant="light"
-                  size="sm"
-                  disabled={working}
-                  busy={working}
-                  busyText="Releasing…"
-                  onClick={() => t.releaseQuote(quote.id)}
-                >
+                <Button variant="light" size="sm" disabled={working} busy={working} busyText="Releasing…" onClick={() => t.releaseQuote(quote.id)}>
                   Release silent truck owner
                 </Button>
               </>
             )
-          ) : null)}
+          ) : null
+        )}
       </div>
     </div>
   );
@@ -1797,6 +1381,8 @@ function TransportCard({ order, t }) {
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
 
+  // Mirrors the backend: selecting is blocked while another bid is in
+  // negotiation or provisionally accepted (it must be released first).
   const hasActiveNegotiation = quotes.some((q) =>
     ['SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)
   );
@@ -1804,6 +1390,7 @@ function TransportCard({ order, t }) {
   if (!job) {
     return (
       <Card
+        id="transport-section"
         eyebrow="Logistics"
         title="Transport"
         subtitle="The buyer or seller arranges transport. MarketBridge does not assign a transporter automatically."
@@ -1815,9 +1402,7 @@ function TransportCard({ order, t }) {
             destinationDefault={order.buyer?.location}
             canBuyer={t.isBuyer}
             canSeller={t.isSeller}
-            buyerOnlyCompetition={['AGRICULTURAL', 'PRODUCT'].includes(
-              order.listing?.category
-            )}
+            buyerOnlyCompetition={['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category)}
             onCreated={t.reload}
           />
         ) : (
@@ -1832,11 +1417,14 @@ function TransportCard({ order, t }) {
     loadingReportDone && !(t.isTransporter && job.status === 'ACCEPTED');
 
   const hasEvidenceContent =
-    job.status === 'IN_TRANSIT' || job.status === 'DELIVERED' || job.incidentNotes;
+    job.status === 'IN_TRANSIT' ||
+    job.status === 'DELIVERED' ||
+    job.incidentNotes;
 
   return (
     <div className="od-card-grid">
       <Card
+        id="transport-section"
         eyebrow="Logistics"
         title="Transport"
         subtitle="The physical trip — who drives, where from, and where to."
@@ -1858,41 +1446,7 @@ function TransportCard({ order, t }) {
               <Fact name="Required capacity">{job.requiredCapacity}</Fact>
             )}
           </Facts>
-          {job.workDetails && (
-            <div className="od-work-details">
-              <h4>Transport work requirements</h4>
-              <div className="od-work-detail-items">
-                {job.workDetails.weight && (
-                  <span>
-                    <b>Weight:</b> {job.workDetails.weight}
-                  </span>
-                )}
-                {job.workDetails.packageCount && (
-                  <span>
-                    <b>Packages:</b> {job.workDetails.packageCount}
-                  </span>
-                )}
-                {job.workDetails.vehicleType && (
-                  <span>
-                    <b>Vehicle:</b> {job.workDetails.vehicleType}
-                  </span>
-                )}
-                {job.workDetails.deliveryDeadline && (
-                  <span>
-                    <b>Deadline:</b> {formatDateTime(job.workDetails.deliveryDeadline)}
-                  </span>
-                )}
-              </div>
-              {job.workDetails.handling?.length > 0 && (
-                <p>
-                  <b>Handling:</b>{' '}
-                  {job.workDetails.handling
-                    .map((v) => v.replaceAll('_', ' ').toLowerCase())
-                    .join(', ')}
-                </p>
-              )}
-            </div>
-          )}
+          {job.workDetails && <div className="od-work-details"><h4>Transport work requirements</h4><div className="od-work-detail-items">{job.workDetails.weight && <span><b>Weight:</b> {job.workDetails.weight}</span>}{job.workDetails.packageCount && <span><b>Packages:</b> {job.workDetails.packageCount}</span>}{job.workDetails.vehicleType && <span><b>Vehicle:</b> {job.workDetails.vehicleType}</span>}{job.workDetails.deliveryDeadline && <span><b>Deadline:</b> {formatDateTime(job.workDetails.deliveryDeadline)}</span>}</div>{job.workDetails.handling?.length > 0 && <p><b>Handling:</b> {job.workDetails.handling.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>}</div>}
         </Section>
 
         {job.truckOwner && (
@@ -1921,7 +1475,9 @@ function TransportCard({ order, t }) {
 
         {['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status) && (
           <>
-            {t.isSeller && <TransportCoordinationSeller transportJobId={job.id} />}
+            {t.isSeller && (
+              <TransportCoordinationSeller transportJobId={job.id} />
+            )}
             {t.isTransporter && (
               <TransportCoordinationTransporter transportJobId={job.id} />
             )}
@@ -1945,47 +1501,30 @@ function TransportCard({ order, t }) {
               loadingReport={t.loadingReport}
               evidence={t.loadingReportEvidence}
             />
-            {t.isBuyer &&
-              job.status === 'ACCEPTED' &&
-              t.loadingReport &&
-              !job.buyerLoadingConfirmedAt && (
-                <div className="od-card-section">
-                  <div className="od-card-section-head">
-                    <h3 className="od-card-section-title">Review before loading</h3>
-                  </div>
-                  <p className="muted small">
-                    Review what the transporter plans to load, the quantity, timing and
-                    condition. Approve it before physical loading begins.
-                  </p>
-                  {job.buyerLoadingDueAt && (
-                    <p className="muted small">
-                      Approval deadline:{' '}
-                      <strong>{formatDateTime(job.buyerLoadingDueAt)}</strong>
-                    </p>
-                  )}
-                  <Button
-                    variant="primary"
-                    disabled={t.busy === 'confirm-loading'}
-                    busy={t.busy === 'confirm-loading'}
-                    busyText="Confirming…"
-                    onClick={() =>
-                      t.run(
-                        'confirm-loading',
-                        () => api.post(`/transport/${job.id}/confirm-loading`),
-                        'Could not approve the loading report'
-                      )
-                    }
-                  >
-                    Approve loading report
-                  </Button>
+            {t.isBuyer && job.status === 'ACCEPTED' && t.loadingReport && !job.buyerLoadingConfirmedAt && (
+              <div className="od-card-section">
+                <div className="od-card-section-head">
+                  <h3 className="od-card-section-title">Review before loading</h3>
                 </div>
-              )}
+                <p className="muted small">Review what the transporter plans to load, the quantity, timing and condition. Approve it before physical loading begins.</p>
+                <Button
+                  variant="primary"
+                  disabled={busy === 'confirm-loading'}
+                  busy={busy === 'confirm-loading'}
+                  busyText="Confirming…"
+                  onClick={() => run('confirm-loading', () => api.post(`/transport/${job.id}/confirm-loading`), 'Could not approve the loading report')}
+                >
+                  Approve loading report
+                </Button>
+              </div>
+            )}
           </>
         )}
       </Card>
 
       {hasEvidenceContent && (
         <Card
+          id="transport-evidence-section"
           eyebrow="Evidence"
           title="Trip evidence"
           subtitle="Photos, videos and handover notes uploaded by the transporter during the trip."
@@ -2000,7 +1539,8 @@ function TransportCard({ order, t }) {
           <Section title="Evidence requirements">
             <p className="muted">
               Loading evidence is captured through the loading report above. The
-              transporter uploads delivery evidence before marking the trip delivered.
+              transporter uploads delivery evidence before marking the trip
+              delivered.
             </p>
             {t.isTransporter && job.status === 'IN_TRANSIT' && <DeliveryEvidenceForm t={t} />}
           </Section>
@@ -2008,17 +1548,13 @@ function TransportCard({ order, t }) {
           <Section title="Evidence gallery">
             <EvidenceGallery
               listUrl={`/transport/${job.id}/evidence`}
-              mediaUrl={(evidenceId) =>
-                `/transport/${job.id}/evidence/${evidenceId}/media`
-              }
+              mediaUrl={(evidenceId) => `/transport/${job.id}/evidence/${evidenceId}/media`}
             />
           </Section>
 
           {job.status === 'DELIVERED' && (
             <Section title="Delivery">
-              <p>
-                <strong>✓ Transport marked as delivered.</strong>
-              </p>
+              <p><strong>✓ Transport marked as delivered.</strong></p>
               {job.deliveredConfirmedAt && (
                 <p className="muted">Delivery confirmed.</p>
               )}
@@ -2034,15 +1570,14 @@ function TransportCard({ order, t }) {
       )}
 
       <Card
+        id="transport-payment-section"
         eyebrow="Payment"
         title="Transport payment"
         subtitle="Select and pay the transporter. Separate from the seller payment and any inspection fee."
         side={
           hired && job.agreedAmount != null ? (
             <SideLabel name="Fee">
-              <span className="od-card-side-value">
-                {money(job.agreedAmount)} ETB
-              </span>
+              <span className="od-card-side-value">{money(job.agreedAmount)} ETB</span>
             </SideLabel>
           ) : null
         }
@@ -2059,16 +1594,16 @@ function TransportCard({ order, t }) {
                 />
               ))
             ) : (
-              <p className="muted">Waiting for registered truck owners to submit quotes.</p>
+              <p className="muted">
+                Waiting for registered truck owners to submit quotes.
+              </p>
             )}
           </Section>
         )}
 
         {job.method === 'OWN_TRUCK' && (
           <Section title="Transport payment">
-            <p>
-              <strong>No separate transporter payment is required.</strong>
-            </p>
+            <p><strong>No separate transporter payment is required.</strong></p>
             <p className="muted">
               This order uses the owner's own truck, so no transport payment is created.
             </p>
@@ -2082,10 +1617,7 @@ function TransportCard({ order, t }) {
             strong
           >
             <p className="muted">
-              Transport payment is separate from the seller payment. It becomes
-              available only after the buyer makes the final BUY decision and the seller
-              payment is confirmed. The transporter cannot start loading until the
-              required payments and loading approvals are complete.
+              Transport payment is separate from the seller payment. It becomes available only after the buyer makes the final BUY decision and the seller payment is confirmed. The transporter cannot start loading until the required payments and loading approvals are complete.
             </p>
 
             {t.canStartPayment && (
@@ -2097,9 +1629,7 @@ function TransportCard({ order, t }) {
                   disabled={t.busy === 'pay-transport'}
                 >
                   {PAYMENT_METHODS.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
+                    <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
                 </select>
                 <Button
@@ -2148,10 +1678,7 @@ function TransportCard({ order, t }) {
           ['REQUESTED', 'QUOTED', 'ACCEPTED', 'CANCELLED'].includes(job.status) && (
             <Section title="Transport recovery">
               <p className="muted">
-                If the transporter withdrew or the arrangement was cancelled, request
-                admin review. The order stays separate from this service issue; a fresh
-                competition opens only after approval and any required refund is
-                resolved.
+                If the transporter withdrew or the arrangement was cancelled, request admin review. The order stays separate from this service issue; a fresh competition opens only after approval and any required refund is resolved.
               </p>
               {t.recoveryRequests
                 .filter((r) => r.type === 'TRANSPORT')
@@ -2184,168 +1711,17 @@ function TransportCard({ order, t }) {
   );
 }
 
-/* ------------------------------------------------------------------------
-   Compact on-page card that opens the transport popup.
-   ------------------------------------------------------------------------ */
-
-function TransportSummaryCard({ order, t, onOpen }) {
-  const job = t.job;
-
-  const methodLabel =
-    job?.method === 'HIRE_TRANSPORTER'
-      ? 'Hired transporter'
-      : job?.method === 'OWN_TRUCK'
-      ? "Owner's own truck"
-      : null;
-
-  const statusText = job ? label(job.status) : 'Not arranged';
-  const tone = job ? statusTone(job.status) : 'neutral';
-
-  const title = !job
-    ? 'Transport not arranged'
-    : job.status === 'DELIVERED'
-    ? 'Delivered'
-    : job.status === 'IN_TRANSIT'
-    ? 'In transit'
-    : job.status === 'PICKUP'
-    ? 'Pickup in progress'
-    : job.status === 'ACCEPTED'
-    ? 'Transporter selected'
-    : job.status === 'QUOTED'
-    ? 'Transport quotes received'
-    : 'Transport in progress';
-
-  const blurb = !job
-    ? 'Arrange a transporter or use the owner’s own truck. MarketBridge does not assign a transporter automatically.'
-    : job.status === 'DELIVERED'
-    ? 'The trip has been delivered. Open to review the trip evidence and delivery confirmation.'
-    : 'Open to see the trip details, negotiate transporter quotes, upload evidence and manage the transport payment.';
-
-  const ctaLabel = !job
-    ? t.canArrange
-      ? 'Arrange transport'
-      : 'View transport'
-    : job.status === 'DELIVERED'
-    ? 'View trip details'
-    : 'Open transport';
-
-  return (
-    <Card
-      id="transport-section"
-      eyebrow="Logistics"
-      title={title}
-      subtitle={methodLabel}
-      side={
-        <SideLabel name="Status">
-          <Pill tone={tone}>{statusText}</Pill>
-        </SideLabel>
-      }
-    >
-      <Section>
-        <p className="muted">{blurb}</p>
-        {job && (
-          <Facts>
-            <Fact name="Arranged by">{job.arrangingParty || '—'}</Fact>
-            <Fact name="Pickup">{job.pickupLocation || '—'}</Fact>
-            <Fact name="Destination">{job.destination || '—'}</Fact>
-            {job.truckOwner?.name && <Fact name="Transporter">{job.truckOwner.name}</Fact>}
-            {job.agreedAmount != null && (
-              <Fact name="Fee">{money(job.agreedAmount)} ETB</Fact>
-            )}
-          </Facts>
-        )}
-        <Actions>
-          <Button variant="primary" onClick={onOpen}>
-            {ctaLabel}
-          </Button>
-        </Actions>
-      </Section>
-    </Card>
-  );
-}
-
-/* ------------------------------------------------------------------------
-   Popup dialog hosting the full transport experience.
-   ------------------------------------------------------------------------ */
-
-function TransportModal({ open, onClose, order, t }) {
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="od-modal-backdrop"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        className="od-modal od-modal--wide"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Transport"
-      >
-        <div className="od-modal-head">
-          <span className="od-modal-title">Transport</span>
-          <button
-            type="button"
-            className="od-modal-close"
-            onClick={onClose}
-            aria-label="Close transport"
-          >
-            ×
-          </button>
-        </div>
-        <div className="od-modal-body">
-          <TransportCard order={order} t={t} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ========================================================================
    7. Offer, receipt, dispute, completed, admin
    ======================================================================== */
 
 function OfferCard({ amount, setAmount, reference, submitting, onSubmit }) {
   return (
-    <Card
-      id="make-offer"
-      eyebrow="Product marketplace"
-      title="Make an offer"
-      subtitle="Your offer enters the seller's competition. It does not charge you or reserve the product."
-    >
+    <Card id="make-offer" eyebrow="Product marketplace" title="Make an offer" subtitle="Your offer enters the seller's competition. It does not charge you or reserve the product.">
       <form onSubmit={onSubmit} className="form">
         <label htmlFor="offer-amount">Offer amount (ETB)</label>
-        <AmountPicker
-          id="offer-amount"
-          reference={reference}
-          min={1}
-          placeholder="Select your offer"
-          value={amount}
-          onChange={setAmount}
-          disabled={submitting}
-          required
-          ariaLabel="Offer amount in ETB"
-        />
-        <button type="submit" className="btn btn-primary" disabled={submitting}>
-          {submitting ? 'Submitting…' : 'Make offer'}
-        </button>
+        <AmountPicker id="offer-amount" reference={reference} min={1} placeholder="Select your offer" value={amount} onChange={setAmount} disabled={submitting} required ariaLabel="Offer amount in ETB" />
+        <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Submitting…' : 'Make offer'}</button>
       </form>
     </Card>
   );
@@ -2353,30 +1729,10 @@ function OfferCard({ amount, setAmount, reference, submitting, onSubmit }) {
 
 function ReceiptCard({ marketplacePaid, transportBlocked, busy, onConfirm }) {
   return (
-    <Card
-      id="confirm-receipt"
-      eyebrow="Final step"
-      title="Confirm receipt"
-      subtitle="Confirm only after you have physically received the produce or product."
-    >
-      {!marketplacePaid && (
-        <div className="alert error">
-          Marketplace payment must be confirmed before receipt can be completed.
-        </div>
-      )}
-      {transportBlocked && (
-        <div className="alert error">
-          Transport payment must be confirmed before receipt can be completed.
-        </div>
-      )}
-      <Button
-        variant="primary"
-        className="btn-block"
-        disabled={busy === 'receipt' || !marketplacePaid || transportBlocked}
-        busy={busy === 'receipt'}
-        busyText="Confirming…"
-        onClick={onConfirm}
-      >
+    <Card id="confirm-receipt" eyebrow="Final step" title="Confirm receipt" subtitle="Confirm only after you have physically received the produce or product.">
+      {!marketplacePaid && <div className="alert error">Marketplace payment must be confirmed before receipt can be completed.</div>}
+      {transportBlocked && <div className="alert error">Transport payment must be confirmed before receipt can be completed.</div>}
+      <Button variant="primary" className="btn btn-primary btn-block" disabled={busy === 'receipt' || !marketplacePaid || transportBlocked} busy={busy === 'receipt'} busyText="Confirming…" onClick={onConfirm}>
         Confirm receipt & complete order
       </Button>
     </Card>
@@ -2388,10 +1744,8 @@ function DisputeCard({ order, d }) {
     return (
       <Card id="raise-dispute" tone="warning" eyebrow="Dispute" title="Dispute open">
         <p className="muted">
-          An admin is reviewing this order.{' '}
-          <strong>Payments, transport, inspection and payouts are paused</strong> while
-          the dispute is open. The order will either resume or be cancelled and refunded
-          after review.
+          An admin is reviewing this order. <strong>Payments, transport, inspection and payouts are paused</strong> while
+          the dispute is open. The order will either resume or be cancelled and refunded after review.
         </p>
       </Card>
     );
@@ -2399,65 +1753,23 @@ function DisputeCard({ order, d }) {
   if (!d.canRaise) return null;
 
   return (
-    <Card
-      id="raise-dispute"
-      eyebrow="Dispute"
-      title="Raise a dispute"
-      subtitle="Use this if something went wrong — goods not delivered, quality issues, or a payment problem."
-    >
+    <Card id="raise-dispute" eyebrow="Dispute" title="Raise a dispute" subtitle="Use this if something went wrong — goods not delivered, quality issues, or a payment problem.">
       {d.submitted ? (
-        <div className="alert success">
-          Dispute submitted. The order is marked as disputed while an admin reviews it.
-        </div>
+        <div className="alert success">Dispute submitted. The order is marked as disputed while an admin reviews it.</div>
       ) : (
         <form onSubmit={d.submit} className="form">
           <label htmlFor="dispute-against">Dispute against</label>
-          <select
-            id="dispute-against"
-            className="field"
-            value={d.againstId}
-            onChange={(e) => d.setAgainstId(e.target.value)}
-            required
-          >
+          <select id="dispute-against" className="field" value={d.againstId} onChange={(e) => d.setAgainstId(e.target.value)} required>
             <option value="">Select who this is about…</option>
-            {d.counterparties.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p.role})
-              </option>
-            ))}
+            {d.counterparties.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.role})</option>)}
           </select>
           <label htmlFor="dispute-type">Type</label>
-          <select
-            id="dispute-type"
-            className="field"
-            value={d.type}
-            onChange={(e) => d.setType(e.target.value)}
-          >
-            {DISPUTE_TYPES.map(([value, text]) => (
-              <option key={value} value={value}>
-                {text}
-              </option>
-            ))}
+          <select id="dispute-type" className="field" value={d.type} onChange={(e) => d.setType(e.target.value)}>
+            {DISPUTE_TYPES.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
           </select>
           <label htmlFor="dispute-description">What happened?</label>
-          <select
-            id="dispute-description"
-            className="field"
-            value={d.description}
-            onChange={(e) => d.setDescription(e.target.value)}
-            required
-          >
-            <option value="">Select a dispute reason</option>
-            <option value="ITEM_NOT_AS_DESCRIBED">Item differs from agreed description</option>
-            <option value="INSPECTION_CONCERN">Inspection or quality concern</option>
-            <option value="PAYMENT_ISSUE">Payment issue</option>
-            <option value="DELIVERY_ISSUE">Delivery or transport issue</option>
-            <option value="DAMAGE_OR_LOSS">Damage or loss</option>
-            <option value="OTHER_REVIEW_REQUIRED">Other issue requiring admin review</option>
-          </select>
-          <button type="submit" className="btn btn-outline" disabled={d.submitting}>
-            {d.submitting ? 'Submitting…' : 'Raise dispute'}
-          </button>
+          <select id="dispute-description" className="field" value={d.description} onChange={(e) => d.setDescription(e.target.value)} required><option value="">Select a dispute reason</option><option value="ITEM_NOT_AS_DESCRIBED">Item differs from agreed description</option><option value="INSPECTION_CONCERN">Inspection or quality concern</option><option value="PAYMENT_ISSUE">Payment issue</option><option value="DELIVERY_ISSUE">Delivery or transport issue</option><option value="DAMAGE_OR_LOSS">Damage or loss</option><option value="OTHER_REVIEW_REQUIRED">Other issue requiring admin review</option></select>
+          <button type="submit" className="btn btn-outline" disabled={d.submitting}>{d.submitting ? 'Submitting…' : 'Raise dispute'}</button>
         </form>
       )}
     </Card>
@@ -2465,8 +1777,8 @@ function DisputeCard({ order, d }) {
 }
 
 function BuyerConfidenceCard({ order, recoveryRequests }) {
-  const latest = [...(recoveryRequests || [])].sort(
-    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  const latest = [...(recoveryRequests || [])].sort((a, b) =>
+    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
   )[0];
   const hasOpenDispute = order?.status === 'DISPUTED';
   const recoveryPending = latest?.status === 'PENDING';
@@ -2474,13 +1786,11 @@ function BuyerConfidenceCard({ order, recoveryRequests }) {
   const recoveryRejected = latest?.status === 'REJECTED';
 
   let status = 'Order remains active';
-  let detail =
-    'If an inspection or transport arrangement changes, the affected service can be reviewed separately. Your goods order is not automatically cancelled.';
+  let detail = 'If an inspection or transport arrangement changes, the affected service can be reviewed separately. Your goods order is not automatically cancelled.';
   let tone = 'is-safe';
   if (hasOpenDispute) {
     status = 'Admin review in progress';
-    detail =
-      'The case is under review. Payments affected by the dispute remain protected while the decision is pending. You will see the next permitted action here after review.';
+    detail = 'The case is under review. Payments affected by the dispute remain protected while the decision is pending. You will see the next permitted action here after review.';
     tone = 'is-review';
   } else if (recoveryPending) {
     status = 'Waiting for admin approval';
@@ -2488,35 +1798,25 @@ function BuyerConfidenceCard({ order, recoveryRequests }) {
     tone = 'is-review';
   } else if (formReleased) {
     status = 'Fresh competition available';
-    detail =
-      'Admin approved recovery. Follow the released form to invite new bids. The replacement provider must have its own agreement and payment.';
+    detail = 'Admin approved recovery. Follow the released form to invite new bids. The replacement provider must have its own agreement and payment.';
     tone = 'is-safe';
   } else if (recoveryRejected) {
     status = 'Recovery request reviewed';
-    detail =
-      'The latest recovery request was not approved. Review the decision and reason, then contact MarketBridge support if you need help.';
+    detail = 'The latest recovery request was not approved. Review the decision and reason, then contact MarketBridge support if you need help.';
     tone = 'is-review';
   }
 
   return (
     <section className={`card od-buyer-confidence ${tone}`} aria-live="polite">
-      <div className="od-confidence-icon" aria-hidden="true">
-        {hasOpenDispute || recoveryPending ? 'i' : '✓'}
-      </div>
+      <div className="od-confidence-icon" aria-hidden="true">{hasOpenDispute || recoveryPending ? 'i' : '✓'}</div>
       <div className="od-confidence-main">
         <span className="od-eyebrow">MARKETBRIDGE ORDER PROTECTION</span>
         <h2>{status}</h2>
         <p>{detail}</p>
         <div className="od-confidence-promises">
-          <span>
-            <b aria-hidden="true">✓</b> Service issues reviewed separately
-          </span>
-          <span>
-            <b aria-hidden="true">✓</b> No automatic replacement charge
-          </span>
-          <span>
-            <b aria-hidden="true">✓</b> Payment and refund status stays visible
-          </span>
+          <span><b aria-hidden="true">✓</b> Service issues reviewed separately</span>
+          <span><b aria-hidden="true">✓</b> No automatic replacement charge</span>
+          <span><b aria-hidden="true">✓</b> Payment and refund status stays visible</span>
         </div>
       </div>
     </section>
@@ -2551,14 +1851,7 @@ export default function OrderDetail() {
   const [offerAmount, setOfferAmount] = useState('');
   const [submittingOffer, setSubmittingOffer] = useState(false);
   const [requestingInspection, setRequestingInspection] = useState(false);
-  const [inspectionWorkDetails, setInspectionWorkDetails] = useState({
-    workCategory: 'GENERAL_QUALITY',
-    quantityToInspect: '',
-    lotCount: '',
-    checks: ['QUALITY_GRADE', 'VISIBLE_DEFECTS', 'PHOTOGRAPHS'],
-    reportFormat: 'CHECKLIST_PHOTOS',
-    requiredBy: '',
-  });
+  const [inspectionWorkDetails, setInspectionWorkDetails] = useState({ workCategory: 'GENERAL_QUALITY', quantityToInspect: '', lotCount: '', checks: ['QUALITY_GRADE', 'VISIBLE_DEFECTS', 'PHOTOGRAPHS'], reportFormat: 'CHECKLIST_PHOTOS', requiredBy: '' });
 
   const [loadingReport, setLoadingReport] = useState(null);
   const [loadingReportEvidence, setLoadingReportEvidence] = useState(null);
@@ -2568,14 +1861,6 @@ export default function OrderDetail() {
   const [disputeDescription, setDisputeDescription] = useState('');
   const [submittingDispute, setSubmittingDispute] = useState(false);
   const [disputeSubmitted, setDisputeSubmitted] = useState(false);
-
-  const [inspectionModalOpen, setInspectionModalOpen] = useState(false);
-  const openInspectionModal = useCallback(() => setInspectionModalOpen(true), []);
-  const closeInspectionModal = useCallback(() => setInspectionModalOpen(false), []);
-
-  const [transportModalOpen, setTransportModalOpen] = useState(false);
-  const openTransportModal = useCallback(() => setTransportModalOpen(true), []);
-  const closeTransportModal = useCallback(() => setTransportModalOpen(false), []);
 
   useEffect(() => {
     if (!error) return undefined;
@@ -2635,9 +1920,7 @@ export default function OrderDetail() {
     [orderId]
   );
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
   const reload = useCallback(() => load({ silent: true }), [load]);
 
   useEffect(() => {
@@ -2666,9 +1949,7 @@ export default function OrderDetail() {
   const isBuyer = Boolean(order && currentUserId && currentUserId === order.buyerId);
   const isSeller = Boolean(order && currentUserId && currentUserId === order.sellerId);
   const isParticipant = isBuyer || isSeller;
-  const buyerIdentityMismatch = Boolean(
-    order && currentUserId && !isParticipant && !isAdmin
-  );
+  const buyerIdentityMismatch = Boolean(order && currentUserId && !isParticipant && !isAdmin);
 
   const isAgricultural = order?.listing?.category === 'AGRICULTURAL';
   const isProduct = order?.listing?.category === 'PRODUCT';
@@ -2679,80 +1960,47 @@ export default function OrderDetail() {
     () =>
       (order?.inspectionRequests || order?.listing?.inspectionRequests || [])
         .slice()
-        .sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        ),
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [order?.inspectionRequests, order?.listing?.inspectionRequests]
   );
-  const inspections = useMemo(
-    () => allInspections.filter((r) => r.status !== 'CANCELLED'),
-    [allInspections]
-  );
+  const inspections = useMemo(() => allInspections.filter((r) => r.status !== 'CANCELLED'), [allInspections]);
   const currentInspection = inspections[0] || null;
-  const assignedInspection =
-    inspections.find((r) => r.inspectorId === currentUserId) || null;
+  const assignedInspection = inspections.find((r) => r.inspectorId === currentUserId) || null;
   const isInspector = Boolean(assignedInspection);
-  const inspectionFormReleased = recoveryRequests.some(
-    (r) => r.type === 'INSPECTION' && r.status === 'APPROVED' && r.formReleasedAt
-  );
-  const inspectorName =
-    (order?.inspectionRequests || inspections).find((r) => r?.inspector?.name)?.inspector
-      ?.name || null;
+  const inspectionFormReleased = recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'APPROVED' && r.formReleasedAt);
+  const inspectorName = (order?.inspectionRequests || inspections).find((r) => r?.inspector?.name)?.inspector?.name || null;
 
   const inspectionGateMet =
-    !inspectionApplies ||
-    Boolean(
-      currentInspection &&
-        currentInspection.status === 'COMPLETED' &&
-        currentInspection.report
-    );
+    !inspectionApplies || Boolean(currentInspection && currentInspection.status === 'COMPLETED' && currentInspection.report);
   const decisionRequired = inspectionApplies;
   const decisionGateMet = !decisionRequired || order?.buyerDecision === 'BUY';
   const negotiatedGateMet = !isProduct || Boolean(order?.agreedOfferId);
 
   const rawJob = order?.transportJob || null;
   const transportJob = rawJob?.status === 'CANCELLED' ? null : rawJob;
-  const isTransporter = Boolean(
-    transportJob?.truckOwnerId && transportJob.truckOwnerId === currentUserId
-  );
+  const isTransporter = Boolean(transportJob?.truckOwnerId && transportJob.truckOwnerId === currentUserId);
   const isTransportArranger = Boolean(
     transportJob &&
       ((transportJob.arrangingParty === 'BUYER' && isBuyer) ||
         (transportJob.arrangingParty === 'SELLER' && isSeller) ||
         (transportJob.arrangingParty === 'JOINT' && isParticipant))
   );
-  const transportInMotion = Boolean(
-    transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status)
-  );
-  const acceptedQuote = Array.isArray(transportJob?.quotes)
-    ? transportJob.quotes.find((q) => q.status === 'ACCEPTED')
-    : null;
+  const transportInMotion = Boolean(transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status));
+  const acceptedQuote = Array.isArray(transportJob?.quotes) ? transportJob.quotes.find((q) => q.status === 'ACCEPTED') : null;
 
   const payments = Array.isArray(order?.payments) ? order.payments : [];
   const active = (p) => ['PENDING', 'PROCESSING'].includes(p.status);
-  const pick = (list) =>
-    list.find(active) || list.find((p) => p.status === 'PAID') || null;
+  const pick = (list) => list.find(active) || list.find((p) => p.status === 'PAID') || null;
 
-  const marketplacePayments = useMemo(
-    () => payments.filter((p) => p.type === 'MARKETPLACE'),
-    [payments]
-  );
-  const transportPayments = useMemo(
-    () => payments.filter((p) => p.type === 'TRANSPORT'),
-    [payments]
-  );
-  const marketplacePayment = useMemo(
-    () => pick(marketplacePayments),
-    [marketplacePayments]
-  );
+  const marketplacePayments = useMemo(() => payments.filter((p) => p.type === 'MARKETPLACE'), [payments]);
+  const transportPayments = useMemo(() => payments.filter((p) => p.type === 'TRANSPORT'), [payments]);
+  const marketplacePayment = useMemo(() => pick(marketplacePayments), [marketplacePayments]);
   const transportPayment = useMemo(() => pick(transportPayments), [transportPayments]);
 
   const installmentPlan = useMemo(
     () =>
       marketplacePayments.find(
-        (p) =>
-          p.installmentCount != null &&
-          ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
+        (p) => p.installmentCount != null && ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
       ) || null,
     [marketplacePayments]
   );
@@ -2765,9 +2013,7 @@ export default function OrderDetail() {
             p.installmentSequence != null &&
             (!installmentPlan || p.parentPaymentId === installmentPlan.id)
         )
-        .sort(
-          (a, b) => (a.installmentSequence || 0) - (b.installmentSequence || 0)
-        ),
+        .sort((a, b) => (a.installmentSequence || 0) - (b.installmentSequence || 0)),
     [payments, installmentPlan]
   );
 
@@ -2779,25 +2025,17 @@ export default function OrderDetail() {
       installmentPayments.length !== installmentPlan.installmentCount ||
       !installmentPayments.every((p) => p.status === 'PAID') ||
       planHealRef.current === installmentPlan.id
-    )
-      return;
+    ) return;
     planHealRef.current = installmentPlan.id;
-    api
-      .get(`/payments/${installmentPlan.id}/chapa/verify`)
-      .then(reload)
-      .catch(() => {});
+    api.get(`/payments/${installmentPlan.id}/chapa/verify`).then(reload).catch(() => {});
   }, [installmentPlan, installmentPayments, reload]);
 
   const marketplacePaid = marketplacePayments.some((p) => p.status === 'PAID');
   const marketplacePending = marketplacePayments.some(active);
-  const marketplaceProcessing = marketplacePayments.some(
-    (p) => p.status === 'PROCESSING'
-  );
+  const marketplaceProcessing = marketplacePayments.some((p) => p.status === 'PROCESSING');
   const transportPaid = transportPayments.some((p) => p.status === 'PAID');
   const transportPending = transportPayments.some(active);
-  const transportProcessing = transportPayments.some(
-    (p) => p.status === 'PROCESSING'
-  );
+  const transportProcessing = transportPayments.some((p) => p.status === 'PROCESSING');
   const hiredTransport = transportJob?.method === 'HIRE_TRANSPORTER';
 
   const missingPayments = useMemo(() => {
@@ -2805,9 +2043,7 @@ export default function OrderDetail() {
     if (!marketplacePaid) missing.push('MARKETPLACE');
     for (const r of inspections) {
       if (r.fee == null || Number(r.fee) <= 0) continue;
-      const paid = (r.payments || []).some(
-        (p) => p.type === 'INSPECTOR' && p.status === 'PAID'
-      );
+      const paid = (r.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID');
       if (!paid) missing.push(`INSPECTOR:${r.id}`);
     }
     if (hiredTransport && !transportPaid) missing.push('TRANSPORT');
@@ -2823,9 +2059,7 @@ export default function OrderDetail() {
     inspectionGateMet &&
     decisionGateMet &&
     negotiatedGateMet &&
-    !marketplacePayments.some((p) =>
-      ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
-    );
+    !marketplacePayments.some((p) => ['PENDING', 'PROCESSING', 'PAID'].includes(p.status));
 
   const marketplaceBlockedReason =
     isProduct && !negotiatedGateMet
@@ -2835,9 +2069,7 @@ export default function OrderDetail() {
         ? 'Request and complete the inspection before paying for the goods.'
         : 'Complete the current inspection and make sure its report is published before paying for the goods.'
       : decisionRequired && !decisionGateMet
-      ? `Choose BUY after reviewing the ${
-          isAgricultural ? 'agricultural ' : ''
-        }inspection report before paying for the goods.`
+      ? `Choose BUY after reviewing the ${isAgricultural ? 'agricultural ' : ''}inspection report before paying for the goods.`
       : null;
 
   const canStartTransportPayment =
@@ -2850,9 +2082,7 @@ export default function OrderDetail() {
     ['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
     order?.buyerDecision === 'BUY' &&
     marketplacePaid &&
-    !transportPayments.some((p) =>
-      ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
-    ) &&
+    !transportPayments.some((p) => ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)) &&
     isBuyer;
 
   const payouts = order?.payouts || [];
@@ -2868,9 +2098,7 @@ export default function OrderDetail() {
         const res = await api.get(`/payments/${paymentId}/chapa/verify`);
         await reload();
         if (res.data?.status === 'PENDING') {
-          setError(
-            'Chapa has not confirmed this payment yet. If you cancelled or the checkout failed, return to the order and retry once the payment shows FAILED.'
-          );
+          setError('Chapa has not confirmed this payment yet. If you cancelled or the checkout failed, return to the order and retry once the payment shows FAILED.');
         }
       } catch (err) {
         setError(getError(err, 'Could not check payment status'));
@@ -2880,111 +2108,56 @@ export default function OrderDetail() {
     })();
 
   const resumePayment = (paymentId, key) =>
-    paymentId &&
-    run(key, () => chapaInitializeAndRedirect(paymentId), 'Could not resume payment');
+    paymentId && run(key, () => chapaInitializeAndRedirect(paymentId), 'Could not resume payment');
 
   const payMarketplace = () => {
     if (!isBuyer) return setError('Only the buyer can make the marketplace payment');
     const amount = Number(order.finalPrice);
-    if (!Number.isFinite(amount) || amount <= 0)
-      return setError('Invalid marketplace payment amount');
-    return run(
-      'pay-marketplace',
-      () =>
-        startChapaPayment({
-          type: 'MARKETPLACE',
-          orderId: order.id,
-          amount,
-          method: payMethod,
-        }),
-      'Could not start marketplace payment'
-    );
+    if (!Number.isFinite(amount) || amount <= 0) return setError('Invalid marketplace payment amount');
+    return run('pay-marketplace', () => startChapaPayment({ type: 'MARKETPLACE', orderId: order.id, amount, method: payMethod }), 'Could not start marketplace payment');
   };
 
   const payTransport = () => {
-    if (!isParticipant)
-      return setError('You are not authorized to pay for this transport');
-    if (!hiredTransport)
-      return setError('Transport payment is only required for hired transport');
-    if (!transportJob.truckOwnerId)
-      return setError('A transporter must be selected before transport payment');
+    if (!isParticipant) return setError('You are not authorized to pay for this transport');
+    if (!hiredTransport) return setError('Transport payment is only required for hired transport');
+    if (!transportJob.truckOwnerId) return setError('A transporter must be selected before transport payment');
     const amount = Number(transportJob.agreedAmount);
-    if (!Number.isFinite(amount) || amount <= 0)
-      return setError('Invalid transport payment amount');
-    return run(
-      'pay-transport',
-      () =>
-        startChapaPayment({
-          type: 'TRANSPORT',
-          orderId: order.id,
-          amount,
-          method: payMethod,
-        }),
-      'Could not start transport payment'
-    );
+    if (!Number.isFinite(amount) || amount <= 0) return setError('Invalid transport payment amount');
+    return run('pay-transport', () => startChapaPayment({ type: 'TRANSPORT', orderId: order.id, amount, method: payMethod }), 'Could not start transport payment');
   };
 
   const payInspection = (request) => {
     if (!request?.id || !request.fee) return;
     const obligation = (order?.paymentObligations || []).find(
-      (o) =>
-        o.type === 'INSPECTOR' &&
+      (o) => o.type === 'INSPECTOR' &&
         o.inspectionRequestId === request.id &&
         o.payerId === currentUserId &&
         o.status !== 'PAID' &&
         o.payment?.status !== 'PAID'
     );
-    const amount =
-      obligation?.amount != null
-        ? Number(obligation.amount)
-        : request.feePayer === 'SPLIT'
-        ? Number(
-            currentUserId === order.buyerId
-              ? request.buyerFeeAmount
-              : request.sellerFeeAmount
-          )
+    const amount = obligation?.amount != null
+      ? Number(obligation.amount)
+      : request.feePayer === 'SPLIT'
+        ? Number(currentUserId === order.buyerId ? request.buyerFeeAmount : request.sellerFeeAmount)
         : Number(request.fee);
     if (!Number.isFinite(amount) || amount <= 0) {
       setError('No payable inspection obligation is assigned to your account.');
       return;
     }
-    return run(
-      `pay-inspection-${request.id}`,
-      () =>
-        startChapaPayment({
-          type: 'INSPECTOR',
-          inspectionRequestId: request.id,
-          orderId: order.id,
-          amount,
-          method: payMethod,
-        }),
-      'Could not start inspector payment'
-    );
+    return run(`pay-inspection-${request.id}`, () =>
+      startChapaPayment({ type: 'INSPECTOR', inspectionRequestId: request.id, orderId: order.id, amount, method: payMethod }),
+      'Could not start inspector payment');
   };
 
   const startInstallments = () => {
     if (!isBuyer) return setError('Only the buyer can make the marketplace payment');
-    return run(
-      'start-installments',
-      () =>
-        api.post('/payments', {
-          type: 'MARKETPLACE',
-          orderId: order.id,
-          amount: Number(order.finalPrice),
-          method: payMethod,
-          installments: true,
-        }),
-      'Could not set up installments'
-    );
+    return run('start-installments', () =>
+      api.post('/payments', { type: 'MARKETPLACE', orderId: order.id, amount: Number(order.finalPrice), method: payMethod, installments: true }),
+      'Could not set up installments');
   };
 
   const retryInstallment = (inst) =>
-    inst?.id &&
-    run(
-      `installment-${inst.id}`,
-      () => api.post(`/payments/${inst.id}/retry-installment`),
-      'Could not retry this installment'
-    );
+    inst?.id && run(`installment-${inst.id}`, () => api.post(`/payments/${inst.id}/retry-installment`), 'Could not retry this installment');
 
   const marketplaceObligation = {
     amount: order?.finalPrice,
@@ -2992,16 +2165,8 @@ export default function OrderDetail() {
     pending: marketplacePending,
     processing: marketplaceProcessing,
     canPay: canPayMarketplace,
-    canResume:
-      Boolean(marketplacePayment) &&
-      !installmentPlan &&
-      marketplacePayment.status === 'PENDING' &&
-      isBuyer,
-    canCheck:
-      Boolean(marketplacePayment) &&
-      !installmentPlan &&
-      marketplacePayment.status === 'PROCESSING' &&
-      isBuyer,
+    canResume: Boolean(marketplacePayment) && !installmentPlan && marketplacePayment.status === 'PENDING' && isBuyer,
+    canCheck: Boolean(marketplacePayment) && !installmentPlan && marketplacePayment.status === 'PROCESSING' && isBuyer,
     onPay: payMarketplace,
     onResume: () => resumePayment(marketplacePayment?.id, 'resume-marketplace'),
     onCheck: () => checkPayment(marketplacePayment?.id, 'check-marketplace'),
@@ -3017,77 +2182,56 @@ export default function OrderDetail() {
   const transportObligation = transportJob
     ? {
         required: hiredTransport,
-        readyToPay:
-          ['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
-          Boolean(acceptedQuote) &&
-          transportJob.agreedAmount != null &&
-          order?.buyerDecision === 'BUY' &&
-          marketplacePaid &&
-          Boolean(transportJob.buyerLoadingConfirmedAt),
+        readyToPay: ['QUOTED', 'ACCEPTED'].includes(transportJob.status) && Boolean(acceptedQuote) && transportJob.agreedAmount != null && order?.buyerDecision === 'BUY' && marketplacePaid,
         amount: transportJob.agreedAmount,
         paid: transportPaid,
         pending: transportPending,
         processing: transportProcessing,
         note:
-          hiredTransport &&
-          !['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
-          !transportPaid &&
-          !transportPending
-            ? 'Transporter payment becomes available only after the final BUY decision, confirmed seller payment, and buyer approval of the loading report.'
+          hiredTransport && !['QUOTED', 'ACCEPTED'].includes(transportJob.status) && !transportPaid && !transportPending
+            ? 'Transporter payment becomes available after the final BUY decision and confirmed seller payment.'
             : null,
         canStart: canStartTransportPayment,
         canResume: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
-        canCheck:
-          Boolean(transportPayment) && transportPayment.status === 'PROCESSING' && isBuyer,
+        canCheck: Boolean(transportPayment) && transportPayment.status === 'PROCESSING' && isBuyer,
         onStart: payTransport,
         onResume: () => resumePayment(transportPayment?.id, 'resume-transport'),
         onCheck: () => checkPayment(transportPayment?.id, 'check-transport'),
       }
     : null;
 
-  const inspectionPaymentGroups =
-    inspectionApplies && currentInspection && Number(currentInspection.fee) > 0
-      ? [currentInspection].map((request) => {
-          const obligations = (order?.paymentObligations || []).filter(
-            (o) => o.type === 'INSPECTOR' && o.inspectionRequestId === request.id
-          );
-          const mine = obligations.find((o) => o.payerId === currentUserId) || null;
-          const open = mine?.payment || null;
-          const key = `${
-            open?.status === 'PROCESSING' ? 'check' : open ? 'resume' : 'pay'
-          }-inspection-${request.id}`;
-          const allPaid =
-            obligations.length > 0 &&
-            obligations.every(
-              (o) => o.status === 'PAID' || o.payment?.status === 'PAID'
-            );
-          return {
-            id: request.id,
-            label: `${request.inspector?.name || 'Inspector'} — inspection fee`,
-            amount: mine?.amount ?? request.fee,
-            paid: allPaid,
-            pending: Boolean(open && ['PENDING', 'PROCESSING'].includes(open.status)),
-            processing: open?.status === 'PROCESSING',
-            note: !request.sellerConfirmedAt
-              ? 'Waiting for seller confirmation before inspection payment can begin.'
-              : !mine
+  const inspectionPaymentGroups = inspectionApplies && currentInspection && Number(currentInspection.fee) > 0
+    ? [currentInspection].map((request) => {
+        const obligations = (order?.paymentObligations || []).filter(
+          (o) => o.type === 'INSPECTOR' && o.inspectionRequestId === request.id
+        );
+        const mine = obligations.find((o) => o.payerId === currentUserId) || null;
+        const open = mine?.payment || null;
+        const key = `${open?.status === 'PROCESSING' ? 'check' : open ? 'resume' : 'pay'}-inspection-${request.id}`;
+        const allPaid = obligations.length > 0 && obligations.every((o) => o.status === 'PAID' || o.payment?.status === 'PAID');
+        return {
+          id: request.id,
+          label: `${request.inspector?.name || 'Inspector'} — inspection fee`,
+          amount: mine?.amount ?? request.fee,
+          paid: allPaid,
+          pending: Boolean(open && ['PENDING', 'PROCESSING'].includes(open.status)),
+          processing: open?.status === 'PROCESSING',
+          note: !request.sellerConfirmedAt
+            ? 'Waiting for seller confirmation before inspection payment can begin.'
+            : !mine
               ? 'No inspection payment obligation is assigned to your account.'
               : request.feePayer === 'SPLIT'
-              ? `Your share of the inspection fee is ${Number(
-                  mine.amount
-                ).toLocaleString()} ETB.`
-              : request.status !== 'COMPLETED'
-              ? `Inspection status: ${request.status}`
-              : null,
-            busyKey: key,
-            canCheck: Boolean(open) && open.status === 'PROCESSING',
-            canResume: Boolean(open) && open.status !== 'PROCESSING',
-            onCheck: () => checkPayment(open?.id, key),
-            onResume: () => resumePayment(open?.id, key),
-            onPay: () => payInspection(request),
-          };
-        })
-      : [];
+                ? `Your share of the inspection fee is ${Number(mine.amount).toLocaleString()} ETB.`
+                : request.status !== 'COMPLETED' ? `Inspection status: ${request.status}` : null,
+          busyKey: key,
+          canCheck: Boolean(open) && open.status === 'PROCESSING',
+          canResume: Boolean(open) && open.status !== 'PROCESSING',
+          onCheck: () => checkPayment(open?.id, key),
+          onResume: () => resumePayment(open?.id, key),
+          onPay: () => payInspection(request),
+        };
+      })
+    : [];
 
   const transportActions = {
     selectQuote: (quoteId) => {
@@ -3102,8 +2246,7 @@ export default function OrderDetail() {
       if (!quoteId || !transportJob) return;
       return run(
         `quote-${quoteId}`,
-        () =>
-          api.patch(`/transport/${transportJob.id}/quotes/${quoteId}/withdraw`, body),
+        () => api.patch(`/transport/${transportJob.id}/quotes/${quoteId}/withdraw`, body),
         'Could not release the transporter agreement'
       );
     },
@@ -3122,48 +2265,34 @@ export default function OrderDetail() {
         () => api.patch(`/transport/${transportJob.id}/quotes/${quoteId}/accept`),
         'Could not accept transport quote'
       );
-      if (ok) {
-        setTransportModalOpen(false);
-        scrollToId('payment-center', 150);
-      }
+      if (ok) scrollToId('payment-center', 150);
     },
     counterQuote: async (quoteId) => {
       if (!quoteId || !transportJob) return;
       const amount = Number(counterInputs[quoteId]);
-      if (!Number.isFinite(amount) || amount <= 0)
-        return setError('Enter a valid counter amount before sending.');
+      if (!Number.isFinite(amount) || amount <= 0) return setError('Enter a valid counter amount before sending.');
       const ok = await run(
         `quote-${quoteId}`,
-        () =>
-          api.post(`/transport/${transportJob.id}/quotes/${quoteId}/counter`, {
-            counterAmount: amount,
-          }),
+        () => api.post(`/transport/${transportJob.id}/quotes/${quoteId}/counter`, { counterAmount: amount }),
         'Could not send counter-offer'
       );
       if (ok) setCounterInputs((q) => ({ ...q, [quoteId]: '' }));
     },
     requestRecovery: () =>
-      run(
-        'recovery-TRANSPORT',
-        async () => {
-          await api.post('/recovery-requests', {
-            orderId: order.id,
-            type: 'TRANSPORT',
-            targetParties: isBuyer ? ['BUYER'] : ['SELLER'],
-            reason:
-              'Transport competition has no usable live bid or the previous transporter arrangement is no longer available.',
-          });
-          setError('Recovery request sent to MarketBridge admin for approval.');
-        },
-        'Could not request workflow recovery'
-      ),
+      run('recovery-TRANSPORT', async () => {
+        await api.post('/recovery-requests', {
+          orderId: order.id,
+          type: 'TRANSPORT',
+          targetParties: isBuyer ? ['BUYER'] : ['SELLER'],
+          reason: 'Transport competition has no usable live bid or the previous transporter arrangement is no longer available.',
+        });
+        setError('Recovery request sent to MarketBridge admin for approval.');
+      }, 'Could not request workflow recovery'),
     submitEvidence: async (type, nextStatus) => {
       if (!transportJob || !isTransporter) return;
       const { photoKeys, videoKeys } = evidence;
       if (!photoKeys.length && !videoKeys.length && !evidenceNotes.trim()) {
-        return setError(
-          `Add at least one ${type.toLowerCase()} photo/video or note before continuing.`
-        );
+        return setError(`Add at least one ${type.toLowerCase()} photo/video or note before continuing.`);
       }
       setEvidenceBusy(true);
       setError('');
@@ -3174,8 +2303,7 @@ export default function OrderDetail() {
           videos: videoKeys,
           notes: evidenceNotes.trim() || undefined,
         });
-        if (nextStatus)
-          await api.patch(`/transport/${transportJob.id}/status`, { status: nextStatus });
+        if (nextStatus) await api.patch(`/transport/${transportJob.id}/status`, { status: nextStatus });
         setEvidence({ photoKeys: [], videoKeys: [] });
         setEvidenceNotes('');
         await reload();
@@ -3189,29 +2317,17 @@ export default function OrderDetail() {
 
   const decide = async (decision) => {
     if (!order || !isBuyer || !decisionRequired) return false;
-    if (
-      decision === 'BUY' &&
-      !(currentInspection?.report && currentInspection.status === 'COMPLETED')
-    ) {
+    if (decision === 'BUY' && !(currentInspection?.report && currentInspection.status === 'COMPLETED')) {
       setError('Review the completed inspection report before choosing BUY.');
       return false;
     }
-    if (
-      decision === 'CANCEL' &&
-      !window.confirm(
-        'Cancel this purchase after reviewing the inspection report? This cannot be undone.'
-      )
-    )
-      return false;
+    if (decision === 'CANCEL' && !window.confirm('Cancel this purchase after reviewing the inspection report? This cannot be undone.')) return false;
     const ok = await run(
       `buyer-decision-${decision.toLowerCase()}`,
       () => api.patch(`/orders/${order.id}/buyer-decision`, { decision }),
       `Could not record ${decision === 'BUY' ? 'BUY' : 'cancellation'} decision`
     );
-    if (ok) {
-      setInspectionModalOpen(false);
-      if (decision === 'BUY') scrollToId('payment-center', 120);
-    }
+    if (ok) scrollToId(decision === 'BUY' ? 'payment-center' : 'inspection-section', 120);
     return ok;
   };
 
@@ -3221,12 +2337,7 @@ export default function OrderDetail() {
       setRequestingInspection(true);
       setError('');
       try {
-        await api.post('/inspections', {
-          orderId: order.id,
-          listingId: order.listing.id,
-          mode,
-          workDetails: inspectionWorkDetails,
-        });
+        await api.post('/inspections', { orderId: order.id, listingId: order.listing.id, mode, workDetails: inspectionWorkDetails });
         await reload();
       } catch (err) {
         setError(getError(err, 'Could not request inspection'));
@@ -3236,44 +2347,26 @@ export default function OrderDetail() {
     },
     cancel: () =>
       currentInspection &&
-      window.confirm(
-        'Cancel this inspection request without cancelling the order? You can open a new request afterward.'
-      ) &&
-      run(
-        `cancel-inspection-${currentInspection.id}`,
-        () => api.patch(`/inspections/${currentInspection.id}/cancel`),
-        'Could not cancel inspection request'
-      ),
+      window.confirm('Cancel this inspection request without cancelling the order? You can open a new request afterward.') &&
+      run(`cancel-inspection-${currentInspection.id}`, () => api.patch(`/inspections/${currentInspection.id}/cancel`), 'Could not cancel inspection request'),
     reopenBidding: () =>
       currentInspection &&
-      window.confirm(
-        'Reopen inspection bidding? Previous bids will expire and inspectors can submit fresh bids.'
-      ) &&
-      run(
-        `reopen-inspection-${currentInspection.id}`,
-        () => api.patch(`/inspections/${currentInspection.id}/reopen-bidding`),
-        'Could not reopen inspection bidding'
-      ),
+      window.confirm('Reopen inspection bidding? Previous bids will expire and inspectors can submit fresh bids.') &&
+      run(`reopen-inspection-${currentInspection.id}`, () => api.patch(`/inspections/${currentInspection.id}/reopen-bidding`), 'Could not reopen inspection bidding'),
     decide,
     isBuyer,
     isSeller,
     isParticipant,
-    createPriceReview: (proposedPrice, reasonCode) =>
-      run(
-        'price-review-create',
-        () => api.post(`/orders/${order.id}/price-reviews`, { proposedPrice, reasonCode }),
-        'Could not submit price review'
-      ),
-    respondPriceReview: (reviewId, action, proposedPrice, reasonCode) =>
-      run(
-        `price-review-${reviewId}-${action.toLowerCase()}`,
-        () =>
-          api.patch(`/orders/${order.id}/price-reviews/${reviewId}/respond`, {
-            action,
-            ...(proposedPrice ? { proposedPrice, reasonCode } : {}),
-          }),
-        'Could not respond to price review'
-      ),
+    createPriceReview: (proposedPrice, reasonCode) => run(
+      'price-review-create',
+      () => api.post(`/orders/${order.id}/price-reviews`, { proposedPrice, reasonCode }),
+      'Could not submit price review'
+    ),
+    respondPriceReview: (reviewId, action, proposedPrice, reasonCode) => run(
+      `price-review-${reviewId}-${action.toLowerCase()}`,
+      () => api.patch(`/orders/${order.id}/price-reviews/${reviewId}/respond`, { action, ...(proposedPrice ? { proposedPrice, reasonCode } : {}) }),
+      'Could not respond to price review'
+    ),
     selectInspectionQuote: (quoteId) => {
       if (!currentInspection) return;
       return run(
@@ -3349,18 +2442,17 @@ export default function OrderDetail() {
     setCounterInputs,
     canPayInspection: Boolean(
       currentInspection &&
-        currentInspection.status === 'ACCEPTED' &&
-        currentInspection.fee != null &&
-        currentInspection.sellerConfirmedAt != null &&
-        (order?.paymentObligations || []).some(
-          (o) =>
-            o.type === 'INSPECTOR' &&
-            o.inspectionRequestId === currentInspection.id &&
-            o.payerId === currentUserId &&
-            o.status !== 'PAID' &&
-            o.payment?.status !== 'PAID' &&
-            !['PENDING', 'PROCESSING'].includes(o.payment?.status)
-        )
+      currentInspection.status === 'ACCEPTED' &&
+      currentInspection.fee != null &&
+      currentInspection.sellerConfirmedAt != null &&
+      (order?.paymentObligations || []).some(
+        (o) => o.type === 'INSPECTOR' &&
+          o.inspectionRequestId === currentInspection.id &&
+          o.payerId === currentUserId &&
+          o.status !== 'PAID' &&
+          o.payment?.status !== 'PAID' &&
+          !['PENDING', 'PROCESSING'].includes(o.payment?.status)
+      )
     ),
 
     onBuy: () => decide('BUY'),
@@ -3374,11 +2466,7 @@ export default function OrderDetail() {
     onRespondReview: (reviewId, action, proposedPrice, reasonCode) =>
       run(
         `price-review-${reviewId}-${action.toLowerCase()}`,
-        () =>
-          api.patch(`/orders/${order.id}/price-reviews/${reviewId}/respond`, {
-            action,
-            ...(proposedPrice ? { proposedPrice, reasonCode } : {}),
-          }),
+        () => api.patch(`/orders/${order.id}/price-reviews/${reviewId}/respond`, { action, ...(proposedPrice ? { proposedPrice, reasonCode } : {}) }),
         'Could not respond to price review'
       ),
     onScrollToPayment: () => scrollToId('payment-center', 150),
@@ -3395,34 +2483,16 @@ export default function OrderDetail() {
 
   const cancelOrder = () => {
     if (!canCancelOrder) return;
-    if (
-      !window.confirm(
-        'Cancel this order? This cannot be undone. The listing becomes available again and completed payments are flagged for refund.'
-      )
-    )
-      return;
-    const reason =
-      window.prompt(
-        'Optional: add a reason for cancelling (shown in the order history).'
-      ) || undefined;
-    return run(
-      'cancel',
-      () => api.patch(`/orders/${order.id}/cancel`, reason ? { reason } : {}),
-      'Could not cancel order'
-    );
+    if (!window.confirm('Cancel this order? This cannot be undone. The listing becomes available again and completed payments are flagged for refund.')) return;
+    const reason = window.prompt('Optional: add a reason for cancelling (shown in the order history).') || undefined;
+    return run('cancel', () => api.patch(`/orders/${order.id}/cancel`, reason ? { reason } : {}), 'Could not cancel order');
   };
 
   const confirmReceipt = () => {
     if (!isBuyer) return setError('Only the buyer can confirm receipt');
-    if (!marketplacePaid)
-      return setError('Marketplace payment must be confirmed before receipt');
-    if (hiredTransport && !transportPaid)
-      return setError('Transport payment must be confirmed before receipt');
-    return run(
-      'receipt',
-      () => api.patch(`/orders/${order.id}/confirm-receipt`),
-      'Could not confirm receipt'
-    );
+    if (!marketplacePaid) return setError('Marketplace payment must be confirmed before receipt');
+    if (hiredTransport && !transportPaid) return setError('Transport payment must be confirmed before receipt');
+    return run('receipt', () => api.patch(`/orders/${order.id}/confirm-receipt`), 'Could not confirm receipt');
   };
 
   const submitOffer = async (event) => {
@@ -3432,11 +2502,7 @@ export default function OrderDetail() {
       return setError('Enter a valid offer amount before submitting.');
     }
     setSubmittingOffer(true);
-    const ok = await run(
-      'offer',
-      () => api.post('/offers', { listingId: order.listingId, amount }),
-      'Could not submit your offer'
-    );
+    const ok = await run('offer', () => api.post('/offers', { listingId: order.listingId, amount }), 'Could not submit your offer');
     setSubmittingOffer(false);
     if (ok) {
       setOfferAmount('');
@@ -3445,30 +2511,18 @@ export default function OrderDetail() {
   };
 
   const refundAction = (refund) =>
-    run(
-      `refund-${refund.id}`,
-      () => {
-        const base = `/admin/financial/refunds/${refund.id}`;
-        if (refund.status === 'PROCESSING') return api.post(`${base}/verify`);
-        if (refund.status === 'FAILED') return api.post(`${base}/retry`);
-        return api.post(`${base}/process`);
-      },
-      'Could not process or verify the refund with Chapa'
-    );
+    run(`refund-${refund.id}`, () => {
+      const base = `/admin/financial/refunds/${refund.id}`;
+      if (refund.status === 'PROCESSING') return api.post(`${base}/verify`);
+      if (refund.status === 'FAILED') return api.post(`${base}/retry`);
+      return api.post(`${base}/process`);
+    }, 'Could not process or verify the refund with Chapa');
 
   const failRefund = (refund) => {
     const reason = window.prompt('Why did this refund fail?', '');
     if (reason === null) return;
-    if (!reason.trim())
-      return setError('Enter a reason before marking a refund as failed.');
-    return run(
-      `refund-${refund.id}`,
-      () =>
-        api.patch(`/admin/financial/refunds/${refund.id}/fail`, {
-          failureReason: reason.trim(),
-        }),
-      'Could not mark the refund as failed'
-    );
+    if (!reason.trim()) return setError('Enter a reason before marking a refund as failed.');
+    return run(`refund-${refund.id}`, () => api.patch(`/admin/financial/refunds/${refund.id}/fail`, { failureReason: reason.trim() }), 'Could not mark the refund as failed');
   };
 
   const disputeCounterparties = useMemo(() => {
@@ -3476,14 +2530,8 @@ export default function OrderDetail() {
     return [
       order.buyer && { id: order.buyer.id, name: order.buyer.name, role: 'Buyer' },
       order.seller && { id: order.seller.id, name: order.seller.name, role: 'Seller' },
-      ...inspections
-        .filter((r) => r.inspector)
-        .map((r) => ({ id: r.inspector.id, name: r.inspector.name, role: 'Inspector' })),
-      transportJob?.truckOwner && {
-        id: transportJob.truckOwner.id,
-        name: transportJob.truckOwner.name,
-        role: 'Truck owner',
-      },
+      ...inspections.filter((r) => r.inspector).map((r) => ({ id: r.inspector.id, name: r.inspector.name, role: 'Inspector' })),
+      transportJob?.truckOwner && { id: transportJob.truckOwner.id, name: transportJob.truckOwner.name, role: 'Truck owner' },
     ]
       .filter(Boolean)
       .filter((p) => p.id !== currentUserId);
@@ -3515,13 +2563,8 @@ export default function OrderDetail() {
       await reload();
     } catch (err) {
       const message = getError(err, 'Could not raise dispute');
-      if (
-        /cannot be disputed/i.test(message) ||
-        /already has an open dispute/i.test(message)
-      ) {
-        setError(
-          `${message} If the order was cancelled, any payments already made (including an inspection fee) are refunded automatically — check the Payment Center for its status instead of disputing.`
-        );
+      if (/cannot be disputed/i.test(message) || /already has an open dispute/i.test(message)) {
+        setError(`${message} If the order was cancelled, any payments already made (including an inspection fee) are refunded automatically — check the Payment Center for its status instead of disputing.`);
         await reload();
       } else {
         setError(message);
@@ -3535,9 +2578,7 @@ export default function OrderDetail() {
     return (
       <main className="section order-detail-page">
         <div className="container-narrow">
-          <div className="card loading">
-            <p>Loading order…</p>
-          </div>
+          <div className="card loading"><p>Loading order…</p></div>
         </div>
       </main>
     );
@@ -3547,9 +2588,7 @@ export default function OrderDetail() {
     return (
       <main className="section order-detail-page">
         <div className="container-narrow">
-          <button type="button" className="back-link" onClick={() => navigate(-1)}>
-            ← Back
-          </button>
+          <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
           <div className="alert error">{error || 'Order not found'}</div>
         </div>
       </main>
@@ -3582,14 +2621,9 @@ export default function OrderDetail() {
     isTransporter,
     isArranger: isTransportArranger,
     canArrange: Boolean(!transportJob && order.status !== 'CANCELLED' && isParticipant),
-    canChooseQuote: Boolean(
-      transportJob &&
-        isTransportArranger &&
-        ['REQUESTED', 'QUOTED'].includes(transportJob.status)
-    ),
+    canChooseQuote: Boolean(transportJob && isTransportArranger && ['REQUESTED', 'QUOTED'].includes(transportJob.status)),
     canStartPayment: canStartTransportPayment,
-    canResumePayment:
-      Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
+    canResumePayment: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
     paid: transportPaid,
     paidAmount: transportPayments.find((p) => p.status === 'PAID')?.amount,
     pending: transportPending,
@@ -3599,7 +2633,6 @@ export default function OrderDetail() {
     pay: payTransport,
     resume: resumePayment,
     busy,
-    run,
     reload,
     recoveryRequests,
     counterInputs,
@@ -3635,18 +2668,8 @@ export default function OrderDetail() {
     <main className="section order-detail-page">
       <div className="container-narrow">
         <div className="row-between page-bar">
-          <button type="button" className="back-link" onClick={() => navigate(-1)}>
-            ← Back
-          </button>
-          <Button
-            size="sm"
-            disabled={refreshing}
-            busy={refreshing}
-            busyText="Refreshing…"
-            onClick={reload}
-          >
-            Refresh
-          </Button>
+          <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
+          <Button size="sm" disabled={refreshing} busy={refreshing} busyText="Refreshing…" onClick={reload}>Refresh</Button>
         </div>
 
         <div className="od-page-grid">
@@ -3668,31 +2691,14 @@ export default function OrderDetail() {
           )}
 
           {workflow ? (
-            <ActionCenter
-              workflow={workflow}
-              onScroll={scrollToId}
-              onActionComplete={reload}
-            />
+            <ActionCenter workflow={workflow} onScroll={scrollToId} onActionComplete={reload} />
           ) : (
             isInspector && (
               <Card id="next-action" tone="accent" eyebrow="Next step" title="Inspector action">
-                {assignedInspection.status === 'ACCEPTED' && (
-                  <p>Start the accepted inspection.</p>
-                )}
-                {assignedInspection.status === 'IN_PROGRESS' && (
-                  <p>Complete the inspection and publish the evidence report.</p>
-                )}
-                {assignedInspection.status === 'COMPLETED' && (
-                  <p>
-                    The report is published. The buyer can now complete any required
-                    inspection payment and continue.
-                  </p>
-                )}
-                <Actions>
-                  <Link className="btn btn-primary" to="/dashboard/inspector">
-                    Open inspection dashboard
-                  </Link>
-                </Actions>
+                {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
+                {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
+                {assignedInspection.status === 'COMPLETED' && <p>The report is published. The buyer can now complete any required inspection payment and continue.</p>}
+                <Actions><Link className="btn btn-primary" to="/dashboard/inspector">Open inspection dashboard</Link></Actions>
               </Card>
             )
           )}
@@ -3708,15 +2714,19 @@ export default function OrderDetail() {
           )}
 
           {inspectionApplies && isParticipant && orderOpen && (
-            <InspectionSummaryCard i={inspectionProps} onOpen={openInspectionModal} />
+            <InspectionCard order={order} title={title} i={inspectionProps} />
           )}
 
+          {currentInspection &&
+            ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(currentInspection.status) &&
+            isSeller && (
+              <InspectionCoordinationSeller
+                inspectionRequestId={currentInspection.id}
+              />
+            )}
+
           <div className="od-span-all">
-            <TransportSummaryCard
-              order={order}
-              t={transportProps}
-              onOpen={openTransportModal}
-            />
+            <TransportCard order={order} t={transportProps} />
           </div>
 
           {(!isProduct || order.agreedOfferId) && (
@@ -3749,21 +2759,9 @@ export default function OrderDetail() {
 
           <div className="od-span-all">
             <PayoutStatusCard
-              payouts={{
-                seller: payoutBy('SELLER'),
-                inspector: payoutBy('INSPECTOR'),
-                transporter: payoutBy('TRANSPORTER'),
-              }}
-              names={{
-                seller: order.seller?.name || null,
-                inspector: inspectorName,
-                transporter: transportJob?.truckOwner?.name || null,
-              }}
-              you={{
-                seller: isSeller,
-                inspector: isInspector,
-                transporter: isTransporter,
-              }}
+              payouts={{ seller: payoutBy('SELLER'), inspector: payoutBy('INSPECTOR'), transporter: payoutBy('TRANSPORTER') }}
+              names={{ seller: order.seller?.name || null, inspector: inspectorName, transporter: transportJob?.truckOwner?.name || null }}
+              you={{ seller: isSeller, inspector: isInspector, transporter: isTransporter }}
             />
           </div>
 
@@ -3773,10 +2771,7 @@ export default function OrderDetail() {
             people={{
               SELLER: { name: order.seller?.name || null, you: isSeller },
               INSPECTOR: { name: inspectorName, you: isInspector },
-              TRANSPORTER: {
-                name: transportJob?.truckOwner?.name || null,
-                you: isTransporter,
-              },
+              TRANSPORTER: { name: transportJob?.truckOwner?.name || null, you: isTransporter },
             }}
             isAdmin={isAdmin}
             busy={busy}
@@ -3786,15 +2781,8 @@ export default function OrderDetail() {
 
           {workflow && (
             <div className="od-span-all">
-              <Card
-                eyebrow="History"
-                title="Order timeline"
-                subtitle="Everything that has happened on this order"
-              >
-                <OrderTimeline
-                  steps={workflow.timeline?.steps}
-                  events={workflow.timeline?.events}
-                />
+              <Card eyebrow="History" title="Order timeline" subtitle="Everything that has happened on this order">
+                <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
               </Card>
             </div>
           )}
@@ -3812,46 +2800,16 @@ export default function OrderDetail() {
           <RatingBox order={order} userId={currentUserId} onRated={reload} />
 
           {isAdmin && (
-            <Card
-              eyebrow="Admin"
-              title="Administrator view"
-              subtitle="You are viewing this order with administrator access."
-            />
+            <Card eyebrow="Admin" title="Administrator view" subtitle="You are viewing this order with administrator access." />
           )}
         </div>
       </div>
 
-      <InspectionModal
-        open={inspectionModalOpen}
-        onClose={closeInspectionModal}
-        order={order}
-        title={title}
-        i={inspectionProps}
-        currentInspection={currentInspection}
-        isSeller={isSeller}
-      />
-
-      <TransportModal
-        open={transportModalOpen}
-        onClose={closeTransportModal}
-        order={order}
-        t={transportProps}
-      />
-
       {error && (
         <div className="order-detail-toast" role="alert" aria-live="assertive">
-          <span className="order-detail-toast-icon" aria-hidden="true">
-            !
-          </span>
+          <span className="order-detail-toast-icon" aria-hidden="true">!</span>
           <span className="order-detail-toast-message">{error}</span>
-          <button
-            type="button"
-            className="order-detail-toast-close"
-            onClick={() => setError('')}
-            aria-label="Dismiss message"
-          >
-            ×
-          </button>
+          <button type="button" className="order-detail-toast-close" onClick={() => setError('')} aria-label="Dismiss message">×</button>
         </div>
       )}
     </main>
