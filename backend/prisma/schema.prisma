@@ -432,6 +432,7 @@ model User {
   // Transport
   transportJobsHauled TransportJob[] @relation("TruckOwnerJobs")
   transportQuotes     TransportQuote[] @relation("TruckOwnerQuotes")
+  transportLoadingReports TransportLoadingReport[] @relation("TransportLoadingReportSubmitter")
 
   // Digital products
   digitalProducts DigitalProduct[]
@@ -1155,6 +1156,9 @@ model TransportJob {
   sellerPickupMessage String?
   sellerPickupMessageAt DateTime?
 
+  // Buyer reviews the transporter's pre-loading report before physical loading begins.
+  buyerLoadingConfirmedAt DateTime?
+
   pickupConfirmedAt   DateTime?
   deliveredConfirmedAt DateTime?
 
@@ -1170,6 +1174,7 @@ model TransportJob {
   quotes TransportQuote[]
 
   evidence TransportEvidence[]
+  loadingReport TransportLoadingReport?
 
   payments Payment[]
 
@@ -1185,6 +1190,40 @@ model TransportJob {
   @@index([status])
   @@index([method])
   @@index([workflowDueAt])
+}
+
+
+// ============================================================================
+// TRANSPORT LOADING REPORT
+// ============================================================================
+
+model TransportLoadingReport {
+  id String @id @default(uuid())
+
+  transportJob   TransportJob @relation(fields: [transportJobId], references: [id], onDelete: Cascade)
+  transportJobId String @unique
+
+  submittedBy   User @relation("TransportLoadingReportSubmitter", fields: [submittedById], references: [id])
+  submittedById String
+
+  whatLoaded String
+  quantityLoaded Decimal @db.Decimal(18, 2)
+  quantityUnit String?
+  qualityAtLoading String?
+  visibleIssues String[] @default([])
+
+  arrivedAt DateTime?
+  loadingStartedAt DateTime?
+  loadingFinishedAt DateTime?
+  gpsLocation String?
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([transportJobId])
+  @@index([submittedById])
+  @@index([createdAt])
 }
 
 // ============================================================================
