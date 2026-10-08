@@ -1,7 +1,7 @@
 /* ==========================================================================
    mb-card.css — shared MarketBridge card system (from the Orders page style)
    Load order: mb-tokens.css → mb-card.css → page stylesheet.
-   Scope: add the class `mb-page` to a page's root element. Every rule is
+   Scope: add  the class `mb-page` to a page's root element. Every rule is
    prefixed with `.mb-page` so it never leaks into pages that don't opt in.
    Shared: card shell + head, section headers, facts, pills, progress,
    amount/meta, buttons, fields, notices, avatars, focus + motion.
