@@ -2,48 +2,15 @@
    OrderDetail.css  →  src/pages/order-details/OrderDetail.css
    --------------------------------------------------------------------------
    Order detail page, restyled to match the MarketBridge card language used
-   by Orders.jsx / Orders.css.
+   by Orders.jsx / Orders.css and the reference order-summary mockup.
 
      • Single warm accent (#c2410c)
-     • 28px card radius, tinted surface, one soft shadow
+     • 28px card radius, white surface, one soft shadow
      • Card title = 2px bottom line + 44px accent segment
      • Sub-headers = 1.5px bottom line only
-     • Progress rail is vertical on narrow cards, horizontal on wide ones
-       (via container queries on .card)
-
-   Responsive card grid
-     phones   (default)  → 1 card per row
-     tablets  (≥ 640px)  → 2 cards per row
-     desktops (≥ 1000px) → 3 cards per row
-   .od-span-all always spans every column.
-
-   Contents
-   --------
-    1.  Design tokens
-    2.  Base & reset
-    3.  Layout: page bar, containers, grids
-    4.  Cards: shell + head
-    5.  Sections inside cards
-    6.  Facts, findings, "you" pill
-    7.  Status pills, badges, progress
-    8.  Buttons & actions
-    9.  Forms & fields
-   10.  Notices & alerts
-   11.  Inspection work scope form
-   12.  Inspection checklist multi-select
-   13.  Transport quotes
-   14.  Payout table
-   15.  Avatars
-   16.  Buyer confidence panel
-   17.  Next-step card + flash highlight
-   18.  Transport loading report
-   19.  Order decision panel
-   20.  Toast
-   21.  Accessibility & motion
-   22.  Responsive breakpoints (viewport)
-   23.  Container queries (card internals)
-   24.  Inspection & transport popups
-   25.  Print
+     • Vertical progress rail with green / orange bullseye / gray states
+     • Details facts are wrapped in a bordered container and stacked
+       vertically (single column) instead of a cramped 2-column grid
    ========================================================================== */
 
 
@@ -51,7 +18,6 @@
    1. DESIGN TOKENS
    ========================================================================== */
 .order-detail-page {
-  /* MarketBridge palette (matches Orders.css) */
   --mb-ink:            #0f172a;
   --mb-ink-2:          #334155;
   --mb-muted:          #64748b;
@@ -62,7 +28,7 @@
   --mb-ok:             #047857;
   --mb-danger:         #b91c1c;
   --mb-line:           #cbd5e1;
-  --mb-card:           rgba(248, 251, 255, 0.95);
+  --mb-card:           #ffffff;
   --mb-radius-card:    28px;
   --mb-radius-field:   16px;
 
@@ -203,7 +169,6 @@
   color: var(--od-muted);
 }
 
-/* Tone variants (e.g. dispute card) */
 .order-detail-page .od-card-warning {
   border-left: 4px solid var(--mb-accent);
   background: var(--mb-accent-tint);
@@ -213,8 +178,6 @@
 }
 
 /* ---- 4b. Head layout ---------------------------------------------------- */
-/* Card title = eyebrow + title + optional party at right. Under the row:
-   a 2px rule with a 44px accent segment marking the card. */
 .order-detail-page .od-card-head {
   position: relative;
   display: flex;
@@ -265,7 +228,7 @@
 .order-detail-page .od-card-title {
   margin: 0;
   color: var(--mb-ink);
-  font: 800 clamp(20px, 4.4vw, 24px) / 1.25 var(--od-font-head);
+  font: 800 clamp(22px, 4.6vw, 26px) / 1.25 var(--od-font-head);
   letter-spacing: -0.3px;
   overflow-wrap: anywhere;
 }
@@ -295,8 +258,6 @@
 .order-detail-page .od-card-side-label {
   color: var(--mb-muted);
   font: 700 13px var(--od-font-head);
-  letter-spacing: 0;
-  text-transform: none;
   white-space: nowrap;
 }
 
@@ -335,7 +296,7 @@
   font-weight: 800;
 }
 
-/* ---- 4d. Single warm accent (matches Orders) --------------------------- */
+/* ---- 4d. Single warm accent -------------------------------------------- */
 .order-detail-page .card                       { --od-accent: var(--mb-accent); }
 .order-detail-page #make-offer                 { --od-accent: var(--mb-accent); }
 .order-detail-page #inspection-section         { --od-accent: var(--mb-accent); }
@@ -356,10 +317,10 @@
 .order-detail-page .od-card-section {
   padding: 0;
   border-top: 0;
-  margin-top: 20px;
+  margin-top: 24px;
 }
 .order-detail-page .od-card-section + .od-card-section {
-  padding-top: 20px;
+  padding-top: 24px;
   border-top: 1.5px solid var(--mb-line);
 }
 
@@ -368,7 +329,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 0 14px;
+  margin: 0 0 16px;
   padding-bottom: 8px;
   border-bottom: 1.5px solid var(--mb-line);
 }
@@ -376,11 +337,11 @@
 .order-detail-page .od-card-section-title {
   margin: 0;
   color: var(--mb-ink);
-  font: 700 15px var(--od-font-head);
+  font: 800 16px var(--od-font-head);
 }
 
 .order-detail-page .od-card-section-meta {
-  padding: 2px 10px;
+  padding: 4px 12px;
   background: #fff;
   border: 1.5px solid var(--mb-line);
   border-radius: 999px;
@@ -397,28 +358,41 @@
 
 /* ==========================================================================
    6. FACTS, FINDINGS, "YOU" PILL
+   --------------------------------------------------------------------------
+   Facts are wrapped in a bordered container and stacked vertically so
+   each field reads as its own row (label above value).
    ========================================================================== */
+
+/* The wrap */
 .order-detail-page .od-detail-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 20px;
+  background: #f8fafc;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
 }
+
 .order-detail-page .od-detail-facts > div {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
 }
+
 .order-detail-page .od-detail-facts span {
   color: var(--mb-muted);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
+  letter-spacing: 0.01em;
 }
+
 .order-detail-page .od-detail-facts strong {
   color: var(--mb-ink);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 800;
-  line-height: 1.4;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
@@ -435,12 +409,12 @@
 
 .order-detail-page .od-party-you {
   display: inline-block;
-  margin-left: 6px;
-  padding: 2px 8px;
+  margin-left: 8px;
+  padding: 2px 10px;
   border-radius: 999px;
   background: var(--mb-accent-tint);
   color: var(--mb-accent-ink);
-  font: 800 11px var(--od-font-head);
+  font: 800 12px var(--od-font-head);
   letter-spacing: 0.04em;
   vertical-align: middle;
 }
@@ -492,34 +466,40 @@
   font-weight: 700;
 }
 
-/* Progress tracker: vertical by default, horizontal on wide cards. */
+/* --------------------------------------------------------------------------
+   Progress tracker (matches the reference mockup)
+   Vertical rail with 22px dots. Done = solid green. Current = orange
+   bullseye. Todo = gray hollow.
+   -------------------------------------------------------------------------- */
 .order-detail-page .order-progress {
   display: flex;
   flex-direction: column;
-  margin: 18px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
+
 .order-detail-page .order-progress-step {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-bottom: 16px;
+  gap: 16px;
+  padding: 0 0 22px 0;
   color: var(--mb-muted);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
-  line-height: 18px;
+  line-height: 22px;
   text-align: left;
 }
 .order-detail-page .order-progress-step:last-child { padding-bottom: 0; }
 
+/* Connector rail between dots */
 .order-detail-page .order-progress-step::before {
   content: '';
   position: absolute;
-  left: 8px;
-  top: 18px;
-  bottom: 0;
+  left: 10px;
+  top: 24px;
+  bottom: 2px;
   width: 2px;
   background: var(--mb-line);
 }
@@ -528,28 +508,34 @@
 .order-detail-page .order-progress-dot {
   flex: none;
   box-sizing: border-box;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   background: #fff;
   border: 2px solid var(--mb-line);
   border-radius: 50%;
   box-shadow: none;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
-.order-detail-page .order-progress-step.is-done    { color: var(--mb-ink-2); }
+/* Done state — solid green dot + green connector */
+.order-detail-page .order-progress-step.is-done        { color: var(--mb-ink); }
 .order-detail-page .order-progress-step.is-done::before { background: var(--mb-ok); }
 .order-detail-page .order-progress-step.is-done .order-progress-dot {
   background: var(--mb-ok);
   border-color: var(--mb-ok);
 }
-.order-detail-page .order-progress-step.is-current { color: var(--mb-ink); }
+
+/* Current state — orange bullseye (solid orange ring + solid center) */
+.order-detail-page .order-progress-step.is-current    { color: var(--mb-ink); }
+.order-detail-page .order-progress-step.is-current::before { background: var(--mb-line); }
 .order-detail-page .order-progress-step.is-current .order-progress-dot {
   background: var(--mb-accent);
   border-color: var(--mb-accent);
-  box-shadow: inset 0 0 0 3px #fff;
+  box-shadow: inset 0 0 0 4px #fff;
 }
+
 .order-detail-page .order-progress-label {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
 }
 
@@ -576,7 +562,7 @@
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
-.order-detail-page .btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.8); }
+.order-detail-page .btn:hover:not(:disabled) { background: rgba(241, 245, 249, 0.8); }
 .order-detail-page .btn:disabled             { opacity: 0.55; cursor: not-allowed; }
 
 .order-detail-page .btn-primary {
@@ -942,6 +928,18 @@
   font-size: 11px;
 }
 .order-detail-page .payout-party-line .od-party-avatar--sm { order: -1; }
+
+/* --------------------------------------------------------------------------
+   OverviewCard hero avatar (larger, matches the reference mockup)
+   -------------------------------------------------------------------------- */
+.order-detail-page .od-card-overview .od-party-avatar {
+  width: 56px;
+  height: 56px;
+  background: #f1f5f9;
+  border: 1.5px solid #e2e8f0;
+  color: var(--mb-ink);
+  font: 800 18px var(--od-font-head);
+}
 
 
 /* ==========================================================================
@@ -1441,7 +1439,39 @@
 
 
 /* ==========================================================================
-   20. TOAST (rendered inside .order-detail-page, inherits tokens)
+   20. OVERVIEW CARD FINAL TOUCHES
+   --------------------------------------------------------------------------
+   Small polish specific to the OverviewCard that the shared rules can't
+   cover cleanly.
+   ========================================================================== */
+
+/* Title is bigger in the mockup */
+.order-detail-page .od-card-overview .od-card-title {
+  font-size: clamp(24px, 6vw, 30px);
+  line-height: 1.15;
+}
+
+/* The "Created ..." line sits below the wrapped facts container */
+.order-detail-page .od-card-overview .od-card-created {
+  margin: 18px 0 0;
+  color: var(--mb-muted);
+  font-size: 14px;
+}
+
+/* Cancel button is slightly taller and full-width in the mockup */
+.order-detail-page .od-card-overview .btn-outline {
+  margin-top: 18px;
+  min-height: 52px;
+  border-width: 2px;
+  font-size: 16px;
+}
+
+/* Remove the default section top margin so sections only separate on rule */
+.order-detail-page .od-card-overview .od-card-section:first-of-type { margin-top: 0; }
+
+
+/* ==========================================================================
+   21. TOAST
    ========================================================================== */
 .order-detail-toast {
   position: fixed;
@@ -1497,7 +1527,7 @@
 
 
 /* ==========================================================================
-   21. ACCESSIBILITY & MOTION
+   22. ACCESSIBILITY & MOTION
    ========================================================================== */
 .order-detail-page a:focus-visible,
 .order-detail-page button:focus-visible,
@@ -1518,33 +1548,30 @@
 
 
 /* ==========================================================================
-   22. RESPONSIVE BREAKPOINTS (viewport)
+   23. RESPONSIVE BREAKPOINTS (viewport)
    ========================================================================== */
 
-/* Very small phones */
 @media (max-width: 380px) {
   .order-detail-page { --od-pad: 18px; --od-gap: 14px; }
-  .order-detail-page .od-card-title        { font-size: 20px; }
-  .order-detail-page .order-progress-label { font-size: 13px; }
+  .order-detail-page .od-card-title        { font-size: 22px; }
+  .order-detail-page .order-progress-label { font-size: 14px; }
   .order-detail-page .payout-table th,
   .order-detail-page .payout-table td      { padding: 12px 4px; }
   .order-detail-page .payout-table         { font-size: 13px; }
 }
 
-/* Small phones: buyer confidence tighter */
 @media (max-width: 520px) {
   .order-detail-page .od-buyer-confidence    { gap: 12px; padding: 16px; }
   .order-detail-page .od-confidence-icon     { flex-basis: 34px; width: 34px; height: 34px; font-size: 18px; }
   .order-detail-page .od-confidence-promises { display: grid; gap: 8px; }
+  .order-detail-page .od-detail-facts        { padding: 18px; gap: 20px; }
 }
 
-/* Phones: work-scope grids collapse to single column */
 @media (max-width: 560px) {
   .order-detail-page .od-form-grid,
   .order-detail-page .od-check-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* Tablets */
 @media (min-width: 640px) {
   .order-detail-page {
     --od-pad: 26px;
@@ -1601,7 +1628,6 @@
   }
 }
 
-/* Desktops */
 @media (min-width: 1000px) {
   .order-detail-page {
     --od-pad: 28px;
@@ -1613,8 +1639,8 @@
   .order-detail-page .od-page-grid,
   .order-detail-page .od-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-  .order-detail-page .od-card-title        { font-size: 24px; }
-  .order-detail-page .order-progress-label { font-size: 14.5px; }
+  .order-detail-page .od-card-title        { font-size: 26px; }
+  .order-detail-page .order-progress-label { font-size: 15.5px; }
 
   .order-detail-page .card.od-next { padding: 32px 40px 14px; }
   .order-detail-page .od-next-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -1630,49 +1656,36 @@
 
 
 /* ==========================================================================
-   23. CONTAINER QUERIES (card internals react to the card's own width)
+   24. CONTAINER QUERIES (card internals react to the card's own width)
    ========================================================================== */
 
-/* Card is wide enough: progress rail turns horizontal */
+/* Wide card: keep the facts in a single column but let long values wrap
+   without feeling cramped */
 @container (min-width: 520px) {
-  .order-detail-page .order-progress {
+  .order-detail-page .od-detail-facts > div {
     flex-direction: row;
-    margin: 8px 0 0;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 24px;
   }
-  .order-detail-page .order-progress-step {
-    flex: 1 1 0;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 0 10px 0 0;
-  }
-  .order-detail-page .order-progress-step::before {
-    left: 27px;
-    right: 6px;
-    top: 9px;
-    bottom: auto;
-    width: auto;
-    height: 2px;
-  }
-  .order-detail-page .order-progress-dot { width: 20px; height: 20px; }
+  .order-detail-page .od-detail-facts > div > span   { flex: 0 0 auto; }
+  .order-detail-page .od-detail-facts > div > strong { text-align: right; }
 }
 
-/* Card is wide enough: action rows go horizontal */
+/* Wide card: action rows go horizontal */
 @container (min-width: 460px) {
   .order-detail-page .od-actions      { flex-direction: row; flex-wrap: wrap; }
   .order-detail-page .od-actions .btn { width: auto; }
 }
 
-/* Card is wide enough: give the party info more room */
+/* Wide card: give the party info more room */
 @container (min-width: 720px) {
   .order-detail-page .od-card-side-party > div { max-width: 220px; }
 }
 
 
 /* ==========================================================================
-   24. INSPECTION & TRANSPORT POPUPS
-   --------------------------------------------------------------------------
-   Rendered inside .order-detail-page, so tokens are inherited.
+   25. INSPECTION & TRANSPORT POPUPS
    ========================================================================== */
 .od-modal-backdrop {
   position: fixed;
@@ -1694,7 +1707,7 @@
   max-height: min(90vh, 900px);
   display: flex;
   flex-direction: column;
-  background: var(--mb-card, #f8fbff);
+  background: #fff;
   border-radius: var(--mb-radius-card, 28px);
   box-shadow: 0 24px 64px rgba(15, 23, 42, 0.28);
   overflow: hidden;
@@ -1737,7 +1750,6 @@
 .od-modal-close:hover         { background: #f1f5f9; color: var(--mb-ink, #0f172a); }
 .od-modal-close:focus-visible { outline: 3px solid var(--mb-accent-border, #fed7aa); outline-offset: 2px; }
 
-/* Body is the container for the inner card so its container queries work */
 .od-modal-body {
   padding: 22px 26px 26px;
   overflow-y: auto;
@@ -1781,7 +1793,7 @@
 
 
 /* ==========================================================================
-   25. PRINT
+   26. PRINT
    ========================================================================== */
 @media print {
   .order-detail-page             { background: #fff; padding: 0; }
