@@ -1,884 +1,463 @@
-/* ============================================================
-   MarketBridge — Negotiations
-   pages/negotiations/Negotiations.css
-
-   One card per competition group; bilateral deals render as
-   their own cards. No boxes inside cards — every section is a
-   flat block with a green heading and a hairline under.
-   ============================================================ */
+/* ==========================================================================
+   Negotiations — MarketBridge card style
+   Replaces src/pages/negotiations/Negotiations.css. No JSX changes needed.
+   Rules: title = 2px line + short accent segment; sub-titles and section
+   headers = 1.5px line only (no accent segment).
+   ========================================================================== */
 
 .neg-page {
-  --ng-accent:      #1e9e5a;
-  --ng-accent-2:    #0f7a44;
-  --ng-accent-ink:  #12734a;
-  --ng-accent-soft: #ecfdf3;
-  --ng-accent-line: #c6eccf;
+  --mb-ink: #0f172a;
+  --mb-ink-2: #334155;
+  --mb-muted: #64748b;
+  --mb-accent: #c2410c;
+  --mb-accent-ink: #9a3412;
+  --mb-accent-tint: #fff7ed;
+  --mb-accent-border: #fed7aa;
+  --mb-ok: #047857;
+  --mb-ok-border: #a7f3d0;
+  --mb-danger: #b91c1c;
+  --mb-danger-border: #fecaca;
+  --mb-line: #cbd5e1;
+  --mb-card: rgba(248, 251, 255, 0.95);
+  --mb-radius-card: 28px;
+  --mb-radius-field: 16px;
 
-  --ng-ink:         #0d1b2a;
-  --ng-ink-soft:    #2c3a4a;
-  --ng-muted:       #64748b;
-  --ng-muted-2:     #94a3b8;
-
-  --ng-line:        #e5e9ef;
-  --ng-line-soft:   #eef1f5;
-
-  --ng-gold:        #a86f10;
-  --ng-gold-soft:   #fdf6e7;
-  --ng-gold-line:   #f4e0b6;
-
-  --ng-danger:      #b42318;
-  --ng-danger-soft: #fef2f2;
-  --ng-danger-line: #fecaca;
-
-  --ng-radius:      20px;
-  --ng-radius-sm:   12px;
-
-  --ng-shadow:      0 1px 2px rgba(15, 30, 45, .04),
-                    0 8px 24px rgba(15, 30, 45, .05);
-  --ng-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
-  --ng-ring:        0 0 0 3px rgba(30, 158, 90, .18);
-  --ng-ease:        cubic-bezier(.2, .7, .3, 1);
-
-  min-height: calc(100vh - 72px);
-  color: var(--ng-ink);
-  font-family: var(--mb-font-body, 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif);
-  -webkit-font-smoothing: antialiased;
-
-  background:
-    radial-gradient(circle at 88% 0%,  rgba(230, 245, 236, .85), transparent 40%),
-    radial-gradient(circle at 5% 100%, rgba(231, 235, 245, .8),  transparent 40%),
-    linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
-  background-attachment: fixed;
+  background: linear-gradient(135deg, #eef0ff 0%, #dbe8f8 55%, #e6f6ee 100%);
+  min-height: 100%;
 }
 
-.neg-page .container-narrow {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 40px 24px 80px;
-}
+/* ---- Page-level section headers ---------------------------------------- */
+.neg-section { margin: 0 0 28px; }
 
-/* ── Page header ───────────────────────────────────────── */
-
-.neg-page .eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 12px;
-  color: var(--ng-accent-ink);
-  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .16em;
-  text-transform: uppercase;
-}
-
-.neg-page .eyebrow::before {
-  content: '';
-  flex: 0 0 20px;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
-}
-
-.neg-page h1 {
-  margin: 0 0 8px;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: clamp(24px, 2.6vw, 32px);
-  font-weight: 800;
-  letter-spacing: -.7px;
-  line-height: 1.15;
-  color: var(--ng-ink);
-}
-
-.neg-page .lead {
-  margin: 0;
-  max-width: 62ch;
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--ng-muted);
-}
-
-/* ── Filter tabs — single-line, no wrap, swipe on overflow ── */
-
-.neg-page .sd-tabs {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--ng-line);
-  border-radius: 999px;
-  background: #fff;
-  box-shadow: var(--ng-shadow-sm);
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  max-width: 100%;
-}
-
-.neg-page .sd-tabs::-webkit-scrollbar { display: none; }
-
-.neg-page .sd-tab {
-  flex: 0 0 auto;
-  appearance: none;
-  border: 1px solid transparent;
-  background: transparent !important;
-  background-image: none !important;
-  padding: 8px 16px;
-  border-radius: 999px;
-  color: var(--ng-muted);
-  font: 600 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color .15s var(--ng-ease), background .15s var(--ng-ease);
-}
-
-.neg-page .sd-tab:hover {
-  color: var(--ng-ink);
-  background: var(--ng-line-soft) !important;
-  background-image: none !important;
-}
-
-.neg-page .sd-tab:focus-visible { outline: none; box-shadow: var(--ng-ring); }
-
-.neg-page .sd-tab.sd-active {
-  background: var(--ng-accent-soft) !important;
-  background-image: none !important;
-  color: var(--ng-accent-ink) !important;
-  font-weight: 700;
-  border: 1px solid var(--ng-accent-line) !important;
-  box-shadow: none !important;
-}
-
-/* ── Sections ──────────────────────────────────────────── */
-
-.neg-page .neg-section { margin: 28px 0 0; }
-
-.neg-page .neg-section-title {
-  margin: 0 0 18px;
-  padding: 0 0 14px;
-  border-bottom: 1px solid var(--ng-line);
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 17px;
-  font-weight: 800;
-  letter-spacing: -.3px;
-  line-height: 1.3;
-  color: var(--ng-ink);
-}
-
-.neg-page .neg-section-sub {
-  display: block;
-  margin: 6px 0 0;
-  font-family: var(--mb-font-body, 'DM Sans', sans-serif);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0;
-  color: var(--ng-muted);
-  line-height: 1.55;
-  max-width: 70ch;
-}
-
-/* ── Competition group (one card per request / job) ────── */
-
-.neg-page .neg-group {
-  margin: 0 0 20px;
-  padding: 22px 24px 24px;
-  border: 1px solid var(--ng-line);
-  border-radius: var(--ng-radius);
-  background: #fff;
-  box-shadow: var(--ng-shadow);
-}
-
-.neg-page .neg-group:last-child { margin-bottom: 0; }
-
-.neg-page .neg-group-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  column-gap: 16px;
-  padding: 0 0 14px;
+.neg-section-title {
   margin: 0 0 16px;
-  border-bottom: 1px solid var(--ng-line);
-  background: transparent;
-}
-
-.neg-page .neg-group-head-main {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-width: 0;
-}
-
-.neg-page .neg-group-head-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  min-width: 0;
-  max-width: 180px;
-  text-align: right;
-}
-
-.neg-page .neg-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ng-accent-ink);
-  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .16em;
-  text-transform: uppercase;
-}
-
-.neg-page .neg-eyebrow::before {
-  content: '';
-  flex: 0 0 18px;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
-}
-
-.neg-page .neg-group-title {
-  margin: 0;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 17px;
+  padding-bottom: 12px;
+  border-bottom: 1.5px solid var(--mb-line);
+  color: var(--mb-ink);
+  font-size: 20px;
   font-weight: 800;
-  letter-spacing: -.3px;
-  line-height: 1.25;
-  color: var(--ng-ink);
-  overflow-wrap: anywhere;
+  line-height: 1.3;
 }
 
-.neg-page .neg-side-label {
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--ng-accent-2);
-}
-
-.neg-page .neg-side-value {
-  font: 700 14px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--ng-ink);
-  letter-spacing: -.1px;
-  white-space: nowrap;
-}
-
-/* ── Subsection head (Active bids / Previous bids) ─────── */
-
-.neg-page .neg-subsection { margin: 0 0 4px; }
-
-.neg-page .neg-subsection--previous { margin-top: 14px; }
-
-.neg-page .neg-subsection-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 0 0 10px;
-  margin: 0 0 6px;
-  border-bottom: 1px solid var(--ng-line-soft);
-}
-
-.neg-page .neg-subsection-title {
-  margin: 0;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: -.1px;
-  color: var(--ng-accent-2);
-}
-
-.neg-page .neg-subsection-meta {
-  font: 700 11.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--ng-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.neg-page .neg-empty {
-  margin: 12px 0 4px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ng-muted);
-}
-
-/* ── Quote list (flat rows) ────────────────────────────── */
-
-.neg-page .neg-quote-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.neg-page .neg-quote-row {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--ng-line-soft);
-}
-
-.neg-page .neg-quote-row:last-child { border-bottom: none; }
-.neg-page .neg-quote-row--muted { padding: 12px 0; }
-
-.neg-page .neg-quote-main { min-width: 0; }
-
-.neg-page .neg-quote-head {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.neg-page .neg-quote-name {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 14.5px;
-  font-weight: 800;
-  letter-spacing: -.15px;
-  color: var(--ng-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-.neg-page .neg-quote-amount {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -.2px;
-  color: var(--ng-ink);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  margin-left: auto;
-}
-
-.neg-page .neg-quote-amount small {
-  margin-left: 3px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .1em;
-  color: var(--ng-muted);
-  text-transform: uppercase;
-}
-
-.neg-page .neg-quote-meta {
-  margin: 4px 0 0;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--ng-muted);
-}
-
-.neg-page .neg-quote-message {
-  margin: 6px 0 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--ng-ink-soft);
-  font-style: italic;
-}
-
-.neg-page .neg-quote-waiting {
-  margin: 6px 0 0;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--ng-gold);
-}
-
-.neg-page .neg-quote-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 4px 0 0;
-}
-
-/* ── Previous bids (collapsible details) ───────────────── */
-
-.neg-page .neg-previous {
-  margin: 0;
-  padding: 0;
-  border-top: none;
-}
-
-.neg-page .neg-previous-summary {
+.neg-section-sub {
   display: block;
-  padding: 6px 0 4px;
-  font: 700 12.5px/1.4 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--ng-muted);
-  cursor: pointer;
-  list-style: none;
-  transition: color .15s var(--ng-ease);
-}
-
-.neg-page .neg-previous-summary::-webkit-details-marker { display: none; }
-
-.neg-page .neg-previous-summary::before {
-  content: '▸';
-  display: inline-block;
-  width: 14px;
-  margin-right: 4px;
-  color: var(--ng-muted-2);
-  transition: transform .15s var(--ng-ease);
-}
-
-.neg-page .neg-previous[open] .neg-previous-summary::before { transform: rotate(90deg); }
-.neg-page .neg-previous-summary:hover { color: var(--ng-ink); }
-
-.neg-page .neg-quote-list--muted .neg-quote-name,
-.neg-page .neg-quote-list--muted .neg-quote-amount { color: var(--ng-muted); }
-.neg-page .neg-quote-list--muted .role-chip { opacity: .8; }
-
-/* ── Group footer (notice + action) ────────────────────── */
-
-.neg-page .neg-group-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 16px 0 0;
-  margin: 14px 0 0;
-  border-top: 1px solid var(--ng-line-soft);
-}
-
-/* ── Notice line (numbered) ────────────────────────────── */
-
-.neg-page .neg-notice {
-  margin: 0;
-  padding: 0;
-  font-size: 13px;
+  margin-top: 6px;
+  color: var(--mb-muted);
+  font-size: 15px;
+  font-weight: 400;
   line-height: 1.6;
-  color: var(--ng-ink-soft);
 }
 
-.neg-page .neg-notice-prefix {
-  display: inline-block;
-  margin: 0 0 8px;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--ng-accent-2);
-}
-
-.neg-page .neg-notice-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  counter-reset: notice;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.neg-page .neg-notice-list li {
+/* ---- Cards (competition group + bilateral deal) ------------------------ */
+.neg-group,
+.neg-card {
   position: relative;
-  padding-left: 24px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ng-ink-soft);
+  margin: 0 0 20px;
+  padding: 24px;
+  background: var(--mb-card);
+  border-radius: var(--mb-radius-card);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
 }
 
-.neg-page .neg-notice-list li::before {
-  counter-increment: notice;
-  content: counter(notice) ")";
+.neg-card--my-turn {
+  box-shadow: 0 0 0 2px var(--mb-accent-border), 0 8px 30px rgba(15, 23, 42, 0.08);
+}
+
+.neg-turn-label {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 4px 12px;
+  background: var(--mb-accent-tint);
+  border: 1.5px solid var(--mb-accent-border);
+  border-radius: 999px;
+  color: var(--mb-accent-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---- Card title block (eyebrow + title + side value) ------------------- */
+.neg-group-head,
+.neg-card-head {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--mb-line);
+}
+
+.neg-group-head::after,
+.neg-card-head::after {
+  content: "";
   position: absolute;
   left: 0;
-  top: 0;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--ng-accent-2);
+  bottom: -2px;
+  width: 44px;
+  height: 4px;
+  background: var(--mb-accent);
 }
 
-/* ── Bilateral deal list ───────────────────────────────── */
+.neg-group-head-main,
+.neg-card-head-main { flex: 1 1 200px; min-width: 0; }
 
-.neg-page .neg-deal-list { display: grid; gap: 14px; }
-
-.neg-page .neg-card {
-  position: relative;
-  padding: 20px 22px 22px;
-  border: 1px solid var(--ng-line);
-  border-radius: var(--ng-radius);
-  background: #fff;
-  box-shadow: var(--ng-shadow-sm);
-  transition: border-color .18s var(--ng-ease), box-shadow .18s var(--ng-ease);
-}
-
-.neg-page .neg-card:hover {
-  border-color: rgba(30, 158, 90, .28);
-  box-shadow: var(--ng-shadow);
-}
-
-.neg-page .neg-card--my-turn {
-  border-color: var(--ng-accent-line);
-  box-shadow: 0 0 0 3px rgba(30, 158, 90, .08), var(--ng-shadow-sm);
-}
-
-.neg-page .neg-turn-label {
-  position: absolute;
-  top: -10px;
-  left: 20px;
-  display: inline-flex;
+.neg-eyebrow {
+  display: flex;
   align-items: center;
-  height: 22px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: var(--ng-accent-soft);
-  border: 1px solid var(--ng-accent-line);
-  color: var(--ng-accent-ink);
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .12em;
+  gap: 12px;
+  margin: 0 0 8px;
+  color: var(--mb-accent);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
   text-transform: uppercase;
 }
 
-.neg-page .neg-card-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  column-gap: 16px;
-  padding: 0 0 14px;
-  margin: 0 0 14px;
-  border-bottom: 1px solid var(--ng-line);
+.neg-eyebrow::before {
+  content: "";
+  flex: none;
+  width: 32px;
+  height: 3px;
+  background: var(--mb-accent);
+  border-radius: 2px;
 }
 
-.neg-page .neg-card-head-main {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-width: 0;
-}
-
-.neg-page .neg-card-head-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  min-width: 0;
-  max-width: 180px;
-  text-align: right;
-}
-
-.neg-page .neg-title {
+.neg-group-title,
+.neg-title {
   margin: 0;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 16px;
+  color: var(--mb-ink);
+  font-size: 24px;
   font-weight: 800;
-  letter-spacing: -.25px;
-  line-height: 1.3;
-  color: var(--ng-ink);
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
-.neg-page .neg-card-subtitle {
-  margin: 2px 0 0;
-  font-size: 12.5px;
+.neg-card-subtitle {
+  margin: 6px 0 0;
+  color: var(--mb-muted);
+  font-size: 15px;
   line-height: 1.5;
-  color: var(--ng-muted);
 }
 
-.neg-page .neg-deal-status {
+.neg-group-head-side,
+.neg-card-head-side {
+  flex: none;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin: 0 0 10px;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
 }
 
-.neg-page .role-chip {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 9px;
-  border-radius: 999px;
-  background: var(--ng-line-soft);
-  border: 1px solid var(--ng-line);
-  color: var(--ng-ink-soft);
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .08em;
-  text-transform: uppercase;
+.neg-side-label {
+  color: var(--mb-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.neg-side-value {
+  color: var(--mb-ink);
+  font-size: 20px;
+  font-weight: 800;
   white-space: nowrap;
 }
 
-.neg-page .neg-card--my-turn .role-chip:first-child {
-  background: var(--ng-accent-soft);
-  border-color: var(--ng-accent-line);
-  color: var(--ng-accent-ink);
-}
+/* ---- Sub-headers inside a card (line only) ----------------------------- */
+.neg-subsection { margin-top: 22px; }
 
-.neg-page .neg-deal-context {
-  margin: 8px 0 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ng-ink-soft);
-}
-
-.neg-page .neg-deal-context strong { color: var(--ng-ink); font-weight: 800; }
-
-.neg-page .neg-waiting {
-  margin: 10px 0 0;
-  padding: 8px 0 8px 12px;
-  border-left: 3px solid var(--ng-line);
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--ng-muted);
-}
-
-/* ── Action rows ───────────────────────────────────────── */
-
-.neg-page .neg-actions {
+.neg-subsection-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 14px 0 0;
-  padding: 14px 0 0;
-  border-top: 1px solid var(--ng-line-soft);
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1.5px solid var(--mb-line);
 }
 
-.neg-page .neg-counter-input {
-  width: 120px;
-  flex: 0 0 auto;
-  padding: 8px 10px;
-  border: 1px solid var(--ng-line);
-  border-radius: 10px;
+.neg-subsection-title {
+  margin: 0;
+  color: var(--mb-ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.neg-subsection-meta {
+  min-width: 26px;
+  padding: 2px 10px;
   background: #fff;
-  color: var(--ng-ink);
-  font: inherit;
+  border: 1.5px solid var(--mb-line);
+  border-radius: 999px;
+  color: var(--mb-ink-2);
   font-size: 13px;
-  line-height: 1.4;
-  -webkit-appearance: none;
-  appearance: none;
-  transition: border-color .18s var(--ng-ease), box-shadow .18s var(--ng-ease);
+  font-weight: 700;
+  text-align: center;
 }
 
-.neg-page .neg-counter-input::placeholder { color: var(--ng-muted-2); }
-.neg-page .neg-counter-input:focus {
-  outline: none;
-  border-color: var(--ng-accent);
-  box-shadow: var(--ng-ring);
+.neg-empty {
+  margin: 0;
+  color: var(--mb-muted);
+  font-size: 15px;
+  line-height: 1.6;
 }
 
-/* ── Card footer ───────────────────────────────────────── */
-
-.neg-page .neg-card-footer {
-  padding: 14px 0 0;
-  margin: 12px 0 0;
-  border-top: 1px solid var(--ng-line-soft);
+/* ---- Bid rows ----------------------------------------------------------- */
+.neg-quote-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-/* ── Buttons — white bg, green outline ─────────────────── */
+.neg-quote-row {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+}
 
-.neg-page .sd-btn,
-.neg-page .btn {
+.neg-quote-row--muted { background: rgba(255, 255, 255, 0.65); }
+
+.neg-quote-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.neg-quote-name {
+  flex: 1 1 140px;
+  min-width: 0;
+  color: var(--mb-ink);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.neg-quote-amount {
+  color: var(--mb-ink);
+  font-size: 18px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.neg-quote-amount small {
+  color: var(--mb-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.neg-quote-meta,
+.neg-quote-message {
+  margin: 6px 0 0;
+  color: var(--mb-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.neg-quote-message { color: var(--mb-ink-2); font-style: italic; }
+
+.neg-quote-waiting {
+  margin: 8px 0 0;
+  color: var(--mb-accent-ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ---- Status chips ------------------------------------------------------- */
+.neg-page .role-chip {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #f1f5f9;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 999px;
+  color: var(--mb-ink-2);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.neg-deal-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+
+/* ---- Context + waiting messages ---------------------------------------- */
+.neg-deal-context {
+  margin: 14px 0 0;
+  color: var(--mb-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.neg-deal-context strong { color: var(--mb-ink); }
+
+.neg-waiting {
+  margin: 14px 0 0;
+  padding: 12px 16px;
+  background: var(--mb-accent-tint);
+  border: 1.5px solid var(--mb-accent-border);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-accent-ink);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* ---- Actions ------------------------------------------------------------ */
+.neg-actions,
+.neg-quote-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.neg-quote-actions { margin-top: 0; }
+
+.neg-group .sd-btn,
+.neg-card .sd-btn,
+.neg-group .btn,
+.neg-card .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 14px;
-  border-radius: 10px;
-  border: 1px solid var(--ng-line);
-  background: #fff;
-  color: var(--ng-ink);
-  font: 700 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .01em;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 18px;
+  background: transparent;
+  border: 2px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink-2);
+  font-size: 16px;
+  font-weight: 700;
   text-decoration: none;
   cursor: pointer;
-  white-space: nowrap;
-  transition: border-color .15s var(--ng-ease),
-              background .15s var(--ng-ease),
-              color .15s var(--ng-ease),
-              box-shadow .15s var(--ng-ease);
+  transition: background-color 0.15s ease;
 }
 
-.neg-page .sd-btn:hover:not(:disabled),
-.neg-page .btn:hover:not(:disabled) {
-  border-color: var(--ng-accent);
-  background: var(--ng-accent-soft);
-  color: var(--ng-accent-2);
+.neg-group .sd-btn:hover:not(:disabled),
+.neg-card .sd-btn:hover:not(:disabled),
+.neg-group .btn:hover,
+.neg-card .btn:hover { background: rgba(255, 255, 255, 0.8); }
+
+.neg-group .sd-btn-primary,
+.neg-card .sd-btn-primary {
+  border-color: var(--mb-ok-border);
+  color: var(--mb-ok);
 }
 
-.neg-page .sd-btn:focus-visible,
-.neg-page .btn:focus-visible { outline: none; box-shadow: var(--ng-ring); }
-.neg-page .sd-btn:disabled,
-.neg-page .btn:disabled { opacity: .55; cursor: not-allowed; }
+.neg-group .sd-btn-primary:hover:not(:disabled),
+.neg-card .sd-btn-primary:hover:not(:disabled) { background: #ecfdf5; }
 
-.neg-page .sd-btn-primary,
-.neg-page .btn-primary,
-.neg-page .btn-outline {
+.neg-group .sd-btn:disabled,
+.neg-card .sd-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.neg-group .sd-btn:focus-visible,
+.neg-card .sd-btn:focus-visible,
+.neg-group .btn:focus-visible,
+.neg-card .btn:focus-visible,
+.neg-reason-picker:focus-visible,
+.neg-previous-summary:focus-visible {
+  outline: 3px solid var(--mb-accent-border);
+  outline-offset: 2px;
+}
+
+/* Reject buttons: add className="sd-btn sd-btn-outline sd-btn-danger" in JSX */
+.neg-group .sd-btn-danger,
+.neg-card .sd-btn-danger {
+  border-color: var(--mb-danger-border);
+  color: var(--mb-danger);
+}
+
+.neg-group .sd-btn-danger:hover:not(:disabled),
+.neg-card .sd-btn-danger:hover:not(:disabled) { background: #fef2f2; }
+
+/* ---- Fields (reason picker, counter amount) ---------------------------- */
+.neg-reason-picker,
+.neg-counter-picker,
+.neg-counter-picker input,
+.neg-counter-picker select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px;
   background: #fff;
-  color: var(--ng-accent-2);
-  border-color: var(--ng-accent-line);
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink);
+  font-size: 16px;
 }
 
-.neg-page .sd-btn-primary:hover:not(:disabled),
-.neg-page .btn-primary:hover:not(:disabled),
-.neg-page .btn-outline:hover:not(:disabled) {
-  background: var(--ng-accent-soft);
-  color: var(--ng-accent-ink);
-  border-color: var(--ng-accent);
-  box-shadow: 0 1px 2px rgba(30, 158, 90, .12);
-}
+.neg-counter-picker { padding: 0; border: 0; background: transparent; min-height: 0; }
 
-.neg-page .sd-btn-outline {
+/* ---- Previous bids ------------------------------------------------------ */
+.neg-previous-summary {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 16px;
   background: #fff;
-  color: var(--ng-ink-soft);
-  border-color: var(--ng-line);
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink-2);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-.neg-page .sd-btn-outline:hover:not(:disabled) {
-  background: var(--ng-line-soft);
-  color: var(--ng-ink);
-  border-color: var(--ng-line);
+.neg-previous[open] .neg-previous-summary { margin-bottom: 12px; }
+
+/* ---- Footer + notice ---------------------------------------------------- */
+.neg-group-footer,
+.neg-card-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 22px;
 }
 
-/* ── Empty state / alerts / toast ──────────────────────── */
-
-.neg-page .card.notice {
-  padding: 40px 24px;
-  margin: 24px 0 0;
-  border: 1px dashed var(--ng-line);
-  border-radius: var(--ng-radius);
-  background: rgba(255, 255, 255, .7);
-  color: var(--ng-muted);
-  text-align: center;
-  font-size: 14.5px;
-  box-shadow: none;
-}
-
-.neg-page .alert {
+.neg-notice {
   padding: 12px 16px;
-  margin: 14px 0;
-  border-radius: var(--ng-radius-sm);
-  border: 1px solid var(--ng-gold-line);
-  background: var(--ng-gold-soft);
-  color: #7c4f0b;
-  font-size: 13.5px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1.5px solid #e2e8f0;
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-muted);
+  font-size: 14px;
   line-height: 1.55;
 }
 
-.neg-page .alert.error {
-  border-color: var(--ng-danger-line);
-  background: var(--ng-danger-soft);
-  color: var(--ng-danger);
-}
+.neg-notice-prefix { color: var(--mb-ink); font-weight: 700; }
 
-.neg-page .sd-toast {
-  position: fixed;
-  left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%);
-  z-index: 9999;
-  padding: 12px 18px;
-  border-radius: 12px;
-  background: #0d1b2a;
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, .08);
-  box-shadow: 0 12px 30px rgba(15, 30, 45, .35);
-  font-size: 13.5px;
-  line-height: 1.45;
-  animation: neg-toast-in .22s var(--ng-ease);
-  max-width: min(480px, calc(100vw - 32px));
-}
+.neg-notice-list { margin: 6px 0 0; padding-left: 20px; }
+.neg-notice-list li + li { margin-top: 4px; }
 
-@keyframes neg-toast-in {
-  from { opacity: 0; transform: translate(-50%, 8px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
-}
+.neg-deal-list { display: flex; flex-direction: column; }
 
-.neg-page .loading,
-.neg-page > .container-narrow > p {
-  font-size: 14px;
-  color: var(--ng-muted);
-}
+/* ---- Wider screens ------------------------------------------------------ */
+@media (min-width: 640px) {
+  .neg-actions,
+  .neg-quote-actions { flex-direction: row; flex-wrap: wrap; }
 
-/* ── Responsive ────────────────────────────────────────── */
+  .neg-group .sd-btn,
+  .neg-card .sd-btn { width: auto; flex: 1 1 180px; }
 
-@media (max-width: 719px) {
-  .neg-page .container-narrow { padding: 24px 16px 56px; }
-
-  /* Keep tab strips single-line: scroll horizontally instead of wrapping */
-  .neg-page .sd-tabs {
-    display: flex;
-    flex-wrap: nowrap;
-    width: 100%;
-    max-width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    padding: 4px;
-  }
-  .neg-page .sd-tabs::-webkit-scrollbar { display: none; }
-
-  .neg-page .sd-tab {
-    flex: 0 0 auto;
-    padding: 8px 14px;
-    font-size: 12.5px;
-  }
-
-  .neg-page .neg-group { padding: 18px 18px 20px; }
-  .neg-page .neg-card { padding: 18px 18px 20px; }
-
-  .neg-page .neg-group-head,
-  .neg-page .neg-card-head { column-gap: 12px; }
-  .neg-page .neg-group-head-side,
-  .neg-page .neg-card-head-side { max-width: 130px; }
-
-  .neg-page .neg-actions,
-  .neg-page .neg-quote-actions { flex-direction: column; align-items: stretch; }
-
-  .neg-page .neg-actions .sd-btn,
-  .neg-page .neg-actions .neg-counter-input,
-  .neg-page .neg-quote-actions .sd-btn,
-  .neg-page .neg-quote-actions .neg-counter-input { width: 100%; }
-}
-
-@media (max-width: 420px) {
-  .neg-page h1 { font-size: 22px; }
-  .neg-page .neg-section-title { font-size: 16px; }
-  .neg-page .neg-group-title { font-size: 15px; }
-  .neg-page .neg-title { font-size: 15px; }
-  .neg-page .neg-quote-amount { font-size: 14px; }
-  .neg-page .sd-toast { bottom: 12px; padding: 10px 14px; font-size: 13px; }
+  .neg-reason-picker { flex: 1 1 100%; width: auto; }
+  .neg-counter-picker { flex: 1 1 180px; }
+  .neg-quote-row { flex-direction: row; align-items: center; justify-content: space-between; }
+  .neg-quote-main { flex: 1 1 auto; min-width: 0; }
+  .neg-quote-actions { flex: 0 1 320px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .neg-page .sd-btn,
-  .neg-page .btn,
-  .neg-page .sd-tab,
-  .neg-page .neg-card,
-  .neg-page .neg-previous-summary { transition: none; }
-
-  .neg-page .sd-toast { animation: none; }
-}
-
-/* Controlled, auditable price-review reasons; no free-text negotiation messages. */
-.neg-reason-picker {
-  width: 100%;
-  min-width: 220px;
-  min-height: 42px;
-  padding: 0.65rem 0.8rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  background: #fff;
-  color: #1f2937;
-  font: inherit;
-  font-size: 0.9rem;
-  box-sizing: border-box;
-}
-.neg-reason-picker:focus {
-  outline: 3px solid rgba(22, 101, 52, 0.16);
-  border-color: #166534;
-}
-.neg-reason-picker:disabled { opacity: 0.65; cursor: not-allowed; }
-@media (min-width: 760px) {
-  .neg-reason-picker { max-width: 360px; }
+  .neg-group .sd-btn,
+  .neg-card .sd-btn { transition: none; }
 }
