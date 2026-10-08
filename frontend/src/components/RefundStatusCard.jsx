@@ -17,10 +17,9 @@ import React from 'react';
 // inspection), so each row lines up with a party in the payout card.
 // The backend gives no refund ETA, so none is shown — only real dates.
 //
-// Visual note: the card head, the 4-step track, and the reason footnote are
-// inline-styled so the card renders flat and correctly even when only the
-// page-level stylesheet is loaded. OrderDetail.css adds the per-card accent
-// colour and the accent bar under the header (see section 17).
+// Visual note: no inline styles. The card uses the shared card system
+// (mb-card.css) and the payout-table / progress classes in OrderDetail.css,
+// so it matches the payout card and the Orders cards.
 // ============================================================================
 
 const ROLE_ORDER = { SELLER: 0, INSPECTOR: 1, TRANSPORTER: 2 };
@@ -56,185 +55,6 @@ const shortDateTime = (value) => {
     hour: 'numeric',
     minute: '2-digit',
   });
-};
-
-/* ── Inline style objects ─────────────────────────────────── */
-
-const styles = {
-  cardHead: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) auto',
-    alignItems: 'start',
-    columnGap: 16,
-    paddingBottom: 16,
-    marginBottom: 20,
-    borderBottom: '1px solid #e5e9ef',
-  },
-  headMain: { minWidth: 0 },
-  eyebrow: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    color: '#12734a',
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 11,
-    fontWeight: 700,
-    letterSpacing: '.16em',
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  eyebrowLine: {
-    display: 'inline-block',
-    width: 18,
-    height: 2,
-    borderRadius: 2,
-    background: 'currentColor',
-  },
-  title: {
-    margin: 0,
-    fontFamily: "'Manrope', system-ui, sans-serif",
-    fontSize: 19,
-    fontWeight: 800,
-    letterSpacing: '-.4px',
-    lineHeight: 1.22,
-    color: '#0d1b2a',
-  },
-  intro: {
-    margin: '0 0 4px',
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 13.5,
-    lineHeight: 1.6,
-    color: '#64748b',
-  },
-  trackWrap: {
-    listStyle: 'none',
-    display: 'grid',
-    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-    gap: 0,
-    padding: '16px 4px 0',
-    margin: '18px 0 0',
-    borderTop: '1px solid #e5e9ef',
-  },
-  trackStep: {
-    position: 'relative',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 8,
-    textAlign: 'center',
-    minWidth: 0,
-  },
-  trackLabel: {
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 10.5,
-    fontWeight: 600,
-    lineHeight: 1.3,
-    color: '#94a3b8',
-    maxWidth: 90,
-  },
-  trackLabelCurrent: { color: '#0f7a44', fontWeight: 700 },
-  trackLabelComplete: { color: '#2c3a4a' },
-  trackLabelFailed: { color: '#b42318', fontWeight: 700 },
-  trackNote: {
-    display: 'block',
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 10,
-    lineHeight: 1.3,
-    color: '#94a3b8',
-    fontVariantNumeric: 'tabular-nums',
-    marginTop: -4,
-  },
-  reason: {
-    margin: '16px 0 0',
-    paddingTop: 14,
-    borderTop: '1px solid #eef1f5',
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 12.5,
-    lineHeight: 1.55,
-    color: '#64748b',
-  },
-  failureNote: {
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 11.5,
-    lineHeight: 1.4,
-    color: '#b42318',
-  },
-  actionsRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-    marginTop: 8,
-  },
-  totalLabel: {
-    padding: '14px 0',
-    textAlign: 'left',
-    fontFamily: "'Manrope', system-ui, sans-serif",
-    fontSize: 13,
-    fontWeight: 800,
-    letterSpacing: '-.1px',
-    color: '#0d1b2a',
-    borderTop: '1px solid #e5e9ef',
-  },
-  totalAmount: {
-    padding: '14px 0',
-    textAlign: 'right',
-    fontFamily: "'Manrope', system-ui, sans-serif",
-    fontSize: 15,
-    fontWeight: 800,
-    letterSpacing: '-.2px',
-    color: '#0d1b2a',
-    fontVariantNumeric: 'tabular-nums',
-    borderTop: '1px solid #e5e9ef',
-  },
-  totalEmpty: {
-    padding: '14px 0',
-    borderTop: '1px solid #e5e9ef',
-  },
-};
-
-const dotStyle = (state) => {
-  const base = {
-    width: 16,
-    height: 16,
-    borderRadius: '50%',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    zIndex: 1,
-    flex: '0 0 auto',
-    background: '#fff',
-    border: '2px solid #e5e9ef',
-    boxSizing: 'border-box',
-  };
-  if (state === 'is-complete') {
-    return { ...base, background: '#1e9e5a', borderColor: '#1e9e5a', color: '#fff' };
-  }
-  if (state === 'is-current') {
-    return { ...base, background: '#fff', borderColor: '#1e9e5a', boxShadow: '0 0 0 4px rgba(30,158,90,.16)' };
-  }
-  if (state === 'is-failed') {
-    return { ...base, background: '#fff', borderColor: '#b42318', boxShadow: '0 0 0 4px rgba(180,35,24,.16)' };
-  }
-  return base;
-};
-
-const connectorStyle = (prevState) => ({
-  position: 'absolute',
-  top: 7,
-  right: '50%',
-  left: '-50%',
-  height: 2,
-  background: prevState === 'is-complete' ? '#1e9e5a' : '#e5e9ef',
-  zIndex: 0,
-});
-
-const labelStyleFor = (state) => {
-  if (state === 'is-current') return { ...styles.trackLabel, ...styles.trackLabelCurrent };
-  if (state === 'is-complete') return { ...styles.trackLabel, ...styles.trackLabelComplete };
-  if (state === 'is-failed') return { ...styles.trackLabel, ...styles.trackLabelFailed };
-  return styles.trackLabel;
 };
 
 export default function RefundStatusCard({
@@ -300,8 +120,8 @@ export default function RefundStatusCard({
       note: completedAt.length ? shortDate(Math.max(...completedAt)) : null,
     },
   ].map((step, index) => {
-    let state = 'is-pending';
-    if (index < current) state = 'is-complete';
+    let state = 'is-todo';
+    if (index < current) state = 'is-done';
     else if (index === current) state = index === 2 && anyFailed ? 'is-failed' : 'is-current';
     return { ...step, state };
   });
@@ -336,166 +156,145 @@ export default function RefundStatusCard({
   const reason = rows.find((r) => r.reason)?.reason || null;
 
   return (
-    <div className="card refund-summary-card" id="order-refund-status">
-      {/* ── Card head ──────────────────────────────────── */}
-      <header style={styles.cardHead}>
-        <div style={styles.headMain}>
-          <span style={styles.eyebrow}>
-            <span style={styles.eyebrowLine} aria-hidden="true" />
-            Refunds
-          </span>
-          <h2 style={styles.title}>Refund Status</h2>
+    <section className="card od-card-refund" id="order-refund-status">
+      <header className="od-card-head">
+        <div className="od-card-head-main">
+          <span className="od-eyebrow">Refunds</span>
+          <h2 className="od-card-title">Refund Status</h2>
         </div>
       </header>
 
-      {/* ── Intro ─────────────────────────────────────── */}
-      <p style={styles.intro}>{intro}</p>
+      <div className="od-card-section is-indented">
+        <div className="od-card-section-head">
+          <h3 className="od-card-section-title">Refund progress</h3>
+        </div>
+        <p className="od-card-text">{intro}</p>
+        <ol className="order-progress" aria-label="Refund progress">
+          {steps.map((step) => (
+            <li
+              key={step.label}
+              className={`order-progress-step ${step.state}`}
+              aria-current={step.state === 'is-current' || step.state === 'is-failed' ? 'step' : undefined}
+            >
+              <span className="order-progress-dot" aria-hidden="true" />
+              <span className="order-progress-text">
+                <span className="order-progress-label">{step.label}</span>
+                {step.note && <span className="order-progress-note">{step.note}</span>}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
 
-      {/* ── 4-step track ──────────────────────────────── */}
-      <ol style={styles.trackWrap} aria-label="Refund progress">
-        {steps.map((step, i) => (
-          <li
-            key={step.label}
-            style={styles.trackStep}
-            aria-current={step.state === 'is-current' || step.state === 'is-failed' ? 'step' : undefined}
-          >
-            {i > 0 && (
-              <span
-                style={connectorStyle(steps[i - 1]?.state)}
-                aria-hidden="true"
-              />
-            )}
-            <span style={dotStyle(step.state)} aria-hidden="true">
-              {step.state === 'is-complete' && (
-                <span style={{ fontSize: 10, fontWeight: 800, lineHeight: 1, color: '#fff' }}>✓</span>
-              )}
-              {step.state === 'is-current' && (
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: '#1e9e5a',
-                    display: 'block',
-                  }}
-                />
-              )}
-              {step.state === 'is-failed' && (
-                <span style={{ fontSize: 10, fontWeight: 800, lineHeight: 1, color: '#b42318' }}>!</span>
-              )}
-            </span>
-            <span style={labelStyleFor(step.state)}>{step.label}</span>
-            {step.note && <span style={styles.trackNote}>{step.note}</span>}
-          </li>
-        ))}
-      </ol>
-
-      {/* ── Table ─────────────────────────────────────── */}
       {rows.length > 0 && (
-        <table className="payout-table refund-table">
-          <thead>
-            <tr>
-              <th scope="col">Parties</th>
-              <th scope="col" className="payout-amount-col">Refund (ETB)</th>
-              <th scope="col" className="payout-status-col">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((refund) => {
-              const person = people?.[refund.payeeRole] || {};
-              const badge = statusBadge(refund.status);
-              const currency = refund.currency && refund.currency !== 'ETB' ? refund.currency : null;
-              const open = ['REQUESTED', 'PROCESSING', 'FAILED'].includes(refund.status);
-              const working = busy === `refund-${refund.id}`;
+        <div className="od-card-section">
+          <div className="od-card-section-head">
+            <h3 className="od-card-section-title">Refund details</h3>
+          </div>
+          <table className="payout-table refund-table">
+            <thead>
+              <tr>
+                <th scope="col">Parties</th>
+                <th scope="col" className="payout-amount-col">Refund (ETB)</th>
+                <th scope="col" className="payout-status-col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((refund) => {
+                const person = people?.[refund.payeeRole] || {};
+                const badge = statusBadge(refund.status);
+                const currency = refund.currency && refund.currency !== 'ETB' ? refund.currency : null;
+                const open = ['REQUESTED', 'PROCESSING', 'FAILED'].includes(refund.status);
+                const working = busy === `refund-${refund.id}`;
 
-              return (
-                <tr key={refund.id}>
-                  <th scope="row" className="payout-party">
-                    <div className="payout-party-body">
-                      <span className="payout-party-line">
-                        {person.name && (
-                          <span className="od-party-avatar od-party-avatar--sm" aria-hidden="true">
-                            {initials(person.name)}
+                return (
+                  <tr key={refund.id}>
+                    <th scope="row" className="payout-party">
+                      <div className="payout-party-body">
+                        <span className="payout-party-line">
+                          {person.name && (
+                            <span className="od-party-avatar od-party-avatar--sm" aria-hidden="true">
+                              {initials(person.name)}
+                            </span>
+                          )}
+                          <span className="payout-party-role">
+                            {ROLE_LABEL[refund.payeeRole] || 'Payment'}
+                          </span>
+                          {person.name && <span className="payout-party-name">({person.name})</span>}
+                          {person.you && <span className="od-party-you">You</span>}
+                        </span>
+
+                        {refund.status === 'COMPLETED' && refund.completedAt ? (
+                          <span className="payout-party-note">
+                            Refunded {shortDateTime(refund.completedAt)}
+                          </span>
+                        ) : (
+                          <span className="payout-party-note">
+                            Requested {shortDateTime(refund.requestedAt)}
                           </span>
                         )}
-                        <span className="payout-party-role">
-                          {ROLE_LABEL[refund.payeeRole] || 'Payment'}
-                        </span>
-                        {person.name && <span className="payout-party-name">({person.name})</span>}
-                        {person.you && <span className="od-party-you">You</span>}
-                      </span>
 
-                      {refund.status === 'COMPLETED' && refund.completedAt ? (
-                        <span className="payout-party-note">
-                          Refunded {shortDateTime(refund.completedAt)}
-                        </span>
-                      ) : (
-                        <span className="payout-party-note">
-                          Requested {shortDateTime(refund.requestedAt)}
-                        </span>
-                      )}
+                        {isAdmin && refund.status === 'FAILED' && refund.failureReason && (
+                          <span className="payout-party-note is-error">
+                            Failed: {refund.failureReason}
+                          </span>
+                        )}
 
-                      {isAdmin && refund.status === 'FAILED' && refund.failureReason && (
-                        <span className="payout-party-note" style={styles.failureNote}>
-                          Failed: {refund.failureReason}
-                        </span>
-                      )}
-
-                      {isAdmin && open && (
-                        <span style={styles.actionsRow}>
-                          <button
-                            type="button"
-                            className="btn btn-primary btn-sm"
-                            disabled={Boolean(busy)}
-                            onClick={() => onComplete(refund)}
-                          >
-                            {working
-                              ? 'Working…'
-                              : refund.status === 'PROCESSING'
-                              ? 'Check Chapa status'
-                              : refund.status === 'FAILED'
-                              ? 'Retry with Chapa'
-                              : 'Process with Chapa'}
-                          </button>
-                          {refund.status !== 'PROCESSING' && (
+                        {isAdmin && open && (
+                          <span className="od-actions-inline refund-actions">
                             <button
                               type="button"
-                              className="btn btn-light btn-sm"
+                              className="btn btn-primary btn-sm"
                               disabled={Boolean(busy)}
-                              onClick={() => onFail(refund)}
+                              onClick={() => onComplete(refund)}
                             >
-                              Mark failed
+                              {working
+                                ? 'Working…'
+                                : refund.status === 'PROCESSING'
+                                ? 'Check Chapa status'
+                                : refund.status === 'FAILED'
+                                ? 'Retry with Chapa'
+                                : 'Process with Chapa'}
                             </button>
-                          )}
-                        </span>
-                      )}
-                    </div>
-                  </th>
-                  <td className="payout-amount">
-                    {amountText(refund.amount)}
-                    {currency && <span className="payout-currency">{currency}</span>}
-                  </td>
-                  <td className="payout-status">
-                    <span className={`od-status-pill od-tone-${badge.tone}`}>{badge.label}</span>
-                  </td>
+                            {refund.status !== 'PROCESSING' && (
+                              <button
+                                type="button"
+                                className="btn btn-light btn-sm"
+                                disabled={Boolean(busy)}
+                                onClick={() => onFail(refund)}
+                              >
+                                Mark failed
+                              </button>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                    <td className="payout-amount">
+                      {amountText(refund.amount)}
+                      {currency && <span className="payout-currency">{currency}</span>}
+                    </td>
+                    <td className="payout-status">
+                      <span className={`od-status-pill od-tone-${badge.tone}`}>{badge.label}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            {rows.length > 1 && singleCurrency && (
+              <tfoot>
+                <tr>
+                  <th scope="row" className="refund-total-label">Total refund</th>
+                  <td className="refund-total-amount">{amountText(total)} ETB</td>
+                  <td />
                 </tr>
-              );
-            })}
-          </tbody>
-          {rows.length > 1 && singleCurrency && (
-            <tfoot>
-              <tr>
-                <th scope="row" style={styles.totalLabel}>Total refund</th>
-                <td style={styles.totalAmount}>{amountText(total)} ETB</td>
-                <td style={styles.totalEmpty} />
-              </tr>
-            </tfoot>
-          )}
-        </table>
+              </tfoot>
+            )}
+          </table>
+        </div>
       )}
 
-      {/* ── Reason ────────────────────────────────────── */}
-      {reason && <p style={styles.reason}>Reason: {reason}</p>}
-    </div>
+      {reason && <p className="refund-reason">Reason: {reason}</p>}
+    </section>
   );
 }
