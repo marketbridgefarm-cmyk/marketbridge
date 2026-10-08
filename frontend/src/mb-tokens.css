@@ -1,82 +1,155 @@
-/* ============================================================
-   MarketBridge — Canonical Design Tokens  (mb-tokens.css)
-   SAFE TO ADD: drop this file, import before styles.css.
-   It only ADDS aliases. It breaks nothing in the existing code.
-   ============================================================ */
+/* ==========================================================================
+   MarketBridge — Canonical Design Tokens (mb-tokens.css)
+   Source of truth = the Orders page style (slate ink, orange accent, card
+   system). Import once, before any page stylesheet.
+
+   Once this is loaded, the token blocks at the top of Orders.css
+   (.orders-page { --mb-… }) and OrderDetail.css (.order-detail-page) are
+   redundant: they hold the same values and can be deleted.
+   Do NOT also load mb-home.css — it is an old minified copy of the previous
+   green token file and would override these values.
+   ========================================================================== */
 
 :root {
-  /* ── Brand ─────────────────────────────────────────── */
-  --mb-primary:          #176b3a;
-  --mb-primary-dark:     #0e4b29;
-  --mb-primary-light:    #2f9159;
-  --mb-primary-soft:     #eef5ef;
-  --mb-primary-subtle:   #effdf0;
+  /* ── Ink + neutrals ─────────────────────────────────── */
+  --mb-ink:            #0f172a;
+  --mb-ink-2:          #334155;
+  --mb-muted:          #64748b;
+  --mb-line:           #cbd5e1;   /* rules, field borders, button outline */
+  --mb-line-soft:      #e2e8f0;   /* pills, avatars, hairlines */
+  --mb-surface:        #ffffff;
+  --mb-soft:           #f8fafc;
+  --mb-neutral:        #475569;
+  --mb-neutral-bg:     #f1f5f9;
 
-  /* ── Surfaces ───────────────────────────────────────── */
-  --mb-bg:               #f7f9f6;
-  --mb-card:             #ffffff;
-  --mb-surface:          #ffffff;
-  --mb-surface-soft:     #f3f7f3;
+  /* ── Cards + page ───────────────────────────────────── */
+  --mb-card:           rgba(248, 251, 255, 0.95);
+  --mb-page-bg:        linear-gradient(135deg, #eef0ff 0%, #dbe8f8 55%, #e6f6ee 100%);
 
-  /* ── Text ───────────────────────────────────────────── */
-  --mb-ink:              #17231b;
-  --mb-text:             #17231b;
-  --mb-text-muted:       #667168;
-  --mb-muted:            #667168;
+  /* ── Accent (brand + primary action + "current") ────── */
+  --mb-accent:         #c2410c;
+  --mb-accent-ink:     #9a3412;
+  --mb-accent-tint:    #fff7ed;
+  --mb-accent-border:  #fed7aa;
 
-  /* ── Borders ────────────────────────────────────────── */
-  --mb-border:           #dfe7df;
-  --mb-border-strong:    #c5d5c8;
-  --mb-border-subtle:    rgba(223,231,223,.6);
+  /* ── Tones: one vocabulary — ok / danger / wait / info / neutral ──
+     Each = ink color, tint background, border. */
+  --mb-ok:             #047857;
+  --mb-ok-bg:          #ecfdf5;
+  --mb-ok-border:      #a7f3d0;
 
-  /* ── Semantic colours (pair with icon + text) ───────── */
-  --mb-gold:             #b77b1b;
-  --mb-gold-light:       #fef8ee;
-  --mb-gold-border:      #fae1b8;
-  --mb-warning:          #b77b1b;
-  --mb-warning-soft:     #fef8ee;
+  --mb-danger:         #b91c1c;
+  --mb-danger-bg:      #fef2f2;
+  --mb-danger-border:  #fecaca;
 
-  --mb-danger:           #b42318;
-  --mb-danger-light:     #fef3f2;
-  --mb-danger-border:    #fecdca;
+  --mb-wait:           #92400e;
+  --mb-wait-bg:        #fffbeb;
+  --mb-wait-border:    #fde68a;
 
-  --mb-info:             #026aa2;
-  --mb-info-light:       #f0f9ff;
-  --mb-info-border:      #b9e6fe;
+  --mb-info:           #1d4ed8;
+  --mb-info-bg:        #eff6ff;
+  --mb-info-border:    #bfdbfe;
 
-  --mb-success:          #176b3a;
-  --mb-success-light:    #effdf0;
-  --mb-success-border:   #bbf7d0;
+  /* ── Shape ──────────────────────────────────────────── */
+  --mb-radius-card:    22px;      /* 18px ≤480 (see below) */
+  --mb-radius-field:   16px;      /* fields, buttons, notices, panels */
+  --mb-radius-sm:      12px;      /* small buttons, compact inputs */
+  --mb-radius-pill:    999px;
 
-  /* ── Radii ───────────────────────────────────────────── */
-  --mb-radius-sm:        8px;
-  --mb-radius-md:        14px;
-  --mb-radius-lg:        20px;
-  --mb-radius-pill:      9999px;
+  --mb-bw:             1.5px;     /* rules, field + pill borders */
+  --mb-bw-strong:      2px;       /* buttons, card title rule */
 
-  /* ── Elevation ───────────────────────────────────────── */
-  --mb-shadow-card:      0 2px 8px rgba(23,107,58,.04);
-  --mb-shadow-elevated:  0 4px 16px rgba(14,75,41,.08);
-  --mb-shadow-modal:     0 12px 32px rgba(14,75,41,.16);
+  /* ── Elevation ──────────────────────────────────────── */
+  --mb-shadow-card:    0 8px 30px rgba(15, 23, 42, 0.08);
+  --mb-shadow-modal:   0 24px 64px rgba(15, 23, 42, 0.28);
+  --mb-shadow-toast:   0 12px 32px rgba(15, 23, 42, 0.30);
 
-  /* ── Interaction ─────────────────────────────────────── */
-  --mb-touch-min:        44px;
-  --mb-focus-ring:       2px solid #176b3a;
+  /* ── Spacing ────────────────────────────────────────── */
+  --mb-card-pad:       24px;      /* 18px ≤480, 14px ≤360 (see below) */
+  --mb-gap:            20px;      /* between cards */
+  --mb-indent:         clamp(16px, 13cqw, 48px);   /* inside a .card container */
 
-  /* ── Typography ──────────────────────────────────────── */
-  --mb-font-head:        'Manrope', system-ui, sans-serif;
-  --mb-font-body:        'DM Sans',  system-ui, sans-serif;
+  /* ── Controls ───────────────────────────────────────── */
+  --mb-touch-min:      44px;
+  --mb-btn-h:          48px;
+  --mb-btn-h-sm:       40px;
+  --mb-field-h:        52px;
+  --mb-focus-ring:     3px solid var(--mb-accent-border);
+  --mb-focus-offset:   2px;
 
-  /* ── Backward-compat aliases (delete after full migration) ── */
-  --green:               var(--mb-primary);
-  --green-dark:          var(--mb-primary-dark);
-  --green-light:         var(--mb-primary-light);
-  --ink:                 var(--mb-ink);
-  --muted:               var(--mb-text-muted);
-  --line:                var(--mb-border);
-  --bg:                  var(--mb-bg);
-  --paper:               var(--mb-card);
-  --soft:                var(--mb-primary-soft);
-  --gold:                var(--mb-gold);
-  --danger:              var(--mb-danger);
+  /* ── Typography ─────────────────────────────────────── */
+  --mb-font-head:      'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mb-font-body:      'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Type scale — use these instead of ad-hoc 11 / 12.5 / 13.5 / 17 / 19px */
+  --mb-fs-xs:          12px;      /* table heads, role chips, units */
+  --mb-fs-sm:          13px;      /* labels, notes, pills, eyebrow */
+  --mb-fs-md:          14px;      /* body in cards, meta */
+  --mb-fs-base:        16px;      /* buttons, inputs (≥16px stops iOS zoom) */
+  --mb-fs-lg:          20px;      /* sub-titles, state-card titles */
+  --mb-fs-xl:          24px;      /* card title (22 ≤480, 20 ≤360) */
+  --mb-fs-2xl:         30px;      /* amounts (28 ≤480) */
+  /* 15px (section titles, party names) stays as the one in-between step */
+  --mb-fs-title-sm:    15px;
+
+  /* ── Legacy aliases (delete once pages are migrated) ──
+     Old canonical names now resolve to the Orders values so every page
+     already moves toward the new look. */
+  --mb-text:           var(--mb-ink);
+  --mb-text-muted:     var(--mb-muted);
+  --mb-border:         var(--mb-line);
+  --mb-border-strong:  var(--mb-line);
+  --mb-border-subtle:  var(--mb-line-soft);
+  --mb-bg:             var(--mb-soft);
+  --mb-surface-soft:   var(--mb-soft);
+
+  --mb-primary:        var(--mb-accent);
+  --mb-primary-dark:   var(--mb-accent-ink);
+  --mb-primary-light:  var(--mb-accent);
+  --mb-primary-soft:   var(--mb-accent-tint);
+  --mb-primary-subtle: var(--mb-accent-tint);
+
+  --mb-success:        var(--mb-ok);
+  --mb-success-light:  var(--mb-ok-bg);
+  --mb-success-border: var(--mb-ok-border);
+  --mb-danger-light:   var(--mb-danger-bg);
+  --mb-warning:        var(--mb-wait);
+  --mb-warning-soft:   var(--mb-wait-bg);
+  --mb-gold:           var(--mb-wait);
+  --mb-gold-light:     var(--mb-wait-bg);
+  --mb-gold-border:    var(--mb-wait-border);
+  --mb-info-light:     var(--mb-info-bg);
+
+  --mb-radius-md:      var(--mb-radius-field);
+  --mb-radius-lg:      var(--mb-radius-card);
+  --mb-shadow-elevated: var(--mb-shadow-card);
+
+  /* Pre-`mb-` names. These stay GREEN on purpose: older pages use them for
+     "success" as well as brand, so flipping them blindly would turn
+     success states orange. Move each page to --mb-accent / --mb-ok as you
+     migrate it, then delete these. */
+  --green:             #047857;
+  --green-dark:        #065f46;
+  --green-light:       #059669;
+  --ink:               var(--mb-ink);
+  --muted:             var(--mb-muted);
+  --line:              var(--mb-line);
+  --bg:                var(--mb-soft);
+  --paper:             var(--mb-surface);
+  --soft:              var(--mb-accent-tint);
+  --gold:              var(--mb-wait);
+  --danger:            var(--mb-danger);
+}
+
+/* Phones: same breakpoints as Orders.css */
+@media (max-width: 480px) {
+  :root {
+    --mb-radius-card: 18px;
+    --mb-card-pad:    18px;
+  }
+}
+@media (max-width: 360px) {
+  :root {
+    --mb-card-pad:    14px;
+  }
 }
