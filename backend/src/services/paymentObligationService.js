@@ -53,10 +53,16 @@ async function syncOrderPaymentObligations(tx, orderId) {
     // confirms the selected inspector and agreed fee.
     if (!r.sellerConfirmedAt) continue;
     if (r.fee == null || Number(r.fee) <= 0 || !r.inspectorId) continue;
-    const totalFee = Number(r.fee);
-    const payerMode = r.feePayer || (r.mode === 'SELLER_REQUESTED' ? 'SELLER' : 'BUYER');
-    const buyerShare = payerMode === 'SELLER' ? 0 : payerMode === 'SPLIT' ? Math.round(totalFee * 50) / 100 : totalFee;
-    const sellerShare = payerMode === 'BUYER' ? 0 : payerMode === 'SPLIT' ? Math.round((totalFee - buyerShare) * 100) / 100 : totalFee;
+    const totalFee = Number(r.feeTermsLockedAt && r.lockedFee != null ? r.lockedFee : r.fee);
+    const payerMode = r.feeTermsLockedAt && r.lockedFeePayer
+      ? r.lockedFeePayer
+      : (r.feePayer || (r.mode === 'SELLER_REQUESTED' ? 'SELLER' : 'BUYER'));
+    const buyerShare = r.feeTermsLockedAt && r.lockedBuyerFeeAmount != null
+      ? Number(r.lockedBuyerFeeAmount)
+      : payerMode === 'SELLER' ? 0 : payerMode === 'SPLIT' ? Math.round(totalFee * 50) / 100 : totalFee;
+    const sellerShare = r.feeTermsLockedAt && r.lockedSellerFeeAmount != null
+      ? Number(r.lockedSellerFeeAmount)
+      : payerMode === 'BUYER' ? 0 : payerMode === 'SPLIT' ? Math.round((totalFee - buyerShare) * 100) / 100 : totalFee;
     const addInspection = (role, payerId, amount) => {
       if (!amount || amount <= 0) return;
       desired.push({

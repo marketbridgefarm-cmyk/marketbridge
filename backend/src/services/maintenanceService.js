@@ -3,6 +3,7 @@
 const prisma = require('../config/db');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('./orderEventService');
+const { recordWorkflowTimeout } = require('./workflowEventService');
 const { cancelOrderInTransaction } = require('./orderCancellationService');
 const { sendSms } = require('./smsService');
 const { releaseDuePayouts } = require('./payoutService');
@@ -482,11 +483,13 @@ async function expireStep5Deadlines(now = new Date()) {
         if (!current.buyerDecisionDueAt || current.buyerDecisionDueAt > now) return false;
         if (current.payments.some((p) => ['PAID', 'PROCESSING'].includes(p.status))) return false;
 
-        await recordOrderEvent(tx, {
+        await recordWorkflowTimeout(tx, {
           orderId: current.id,
-          actorId: null,
-          type: 'BUYER_DECISION_DEADLINE_EXPIRED',
-          metadata: { deadline: current.buyerDecisionDueAt.toISOString(), faultParty: 'BUYER' },
+          eventType: 'BUYER_DECISION_DEADLINE_EXPIRED',
+          workflowPhase: 'BUYER_DECISION',
+          deadline: current.buyerDecisionDueAt,
+          faultParty: 'BUYER',
+          consequence: 'ORDER_CANCELLED',
         });
         await cancelOrderInTransaction(tx, {
           order: current,
@@ -518,20 +521,18 @@ async function expireStep5Deadlines(now = new Date()) {
           data: { status: 'EXPIRED' },
         });
         if (job.truckId) await tx.truck.updateMany({ where: { id: job.truckId, availability: 'BUSY' }, data: { availability: 'AVAILABLE' } });
-        await recordOrderEvent(tx, {
+        await recordWorkflowTimeout(tx, {
           orderId: job.orderId,
-          actorId: null,
-          type: 'SELLER_PREPARATION_DEADLINE_EXPIRED',
-          fromStatus: 'ACCEPTED',
-          toStatus: 'CANCELLED',
-          metadata: { transportJobId: job.id, deadline: job.sellerPreparationDueAt.toISOString(), faultParty: 'SELLER' },
-        });
-        await recordAuditEvent(tx, {
-          actorId: null,
-          action: 'SELLER_PREPARATION_DEADLINE_EXPIRED',
+          eventType: 'SELLER_PREPARATION_DEADLINE_EXPIRED',
           resourceType: 'TransportJob',
           resourceId: job.id,
-          metadata: { orderId: job.orderId, deadline: job.sellerPreparationDueAt.toISOString(), faultParty: 'SELLER' },
+          workflowPhase: 'SELLER_TRANSPORT_PREPARATION',
+          deadline: job.sellerPreparationDueAt,
+          faultParty: 'SELLER',
+          consequence: 'TRANSPORT_CANCELLED',
+          fromStatus: 'ACCEPTED',
+          toStatus: 'CANCELLED',
+          metadata: { transportJobId: job.id },
         });
         return true;
       }, { maxWait: 10000, timeout: 15000 });
@@ -559,20 +560,18 @@ async function expireStep5Deadlines(now = new Date()) {
           data: { status: 'EXPIRED' },
         });
         if (job.truckId) await tx.truck.updateMany({ where: { id: job.truckId, availability: 'BUSY' }, data: { availability: 'AVAILABLE' } });
-        await recordOrderEvent(tx, {
+        await recordWorkflowTimeout(tx, {
           orderId: job.orderId,
-          actorId: null,
-          type: 'BUYER_LOADING_DEADLINE_EXPIRED',
-          fromStatus: 'ACCEPTED',
-          toStatus: 'CANCELLED',
-          metadata: { transportJobId: job.id, deadline: job.buyerLoadingDueAt.toISOString(), faultParty: 'BUYER' },
-        });
-        await recordAuditEvent(tx, {
-          actorId: null,
-          action: 'BUYER_LOADING_DEADLINE_EXPIRED',
+          eventType: 'BUYER_LOADING_DEADLINE_EXPIRED',
           resourceType: 'TransportJob',
           resourceId: job.id,
-          metadata: { orderId: job.orderId, deadline: job.buyerLoadingDueAt.toISOString(), faultParty: 'BUYER' },
+          workflowPhase: 'BUYER_LOADING_APPROVAL',
+          deadline: job.buyerLoadingDueAt,
+          faultParty: 'BUYER',
+          consequence: 'TRANSPORT_CANCELLED_SELLER_PAYMENT_PRESERVED',
+          fromStatus: 'ACCEPTED',
+          toStatus: 'CANCELLED',
+          metadata: { transportJobId: job.id },
         });
         return true;
       }, { maxWait: 10000, timeout: 15000 });

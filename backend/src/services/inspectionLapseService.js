@@ -4,9 +4,8 @@
  * Inspection agreement lifecycle deadlines and closure.
  *
  * A provisional inspector agreement (InspectionRequest.status = ACCEPTED) must
- * never stay open forever. Two windows apply while it is ACCEPTED, both stored
- * in InspectionRequest.workflowDueAt (that column is only meaningful for
- * REQUESTED otherwise, so no schema change is needed):
+ * never stay open forever. Two windows apply while it is ACCEPTED, with the current deadline stored
+ * in InspectionRequest.workflowDueAt:
  *
  *   1. before seller confirmation  -> SELLER_CONFIRM window
  *   2. after seller confirmation, until the inspection fee is fully paid
@@ -99,7 +98,16 @@ async function lapseInspectionAgreement(tx, { inspectionRequestId, code, actorId
     action: `INSPECTION_AGREEMENT_${code}`,
     resourceType: 'InspectionRequest',
     resourceId: request.id,
-    metadata: { orderId: request.orderId, actorRole, faultParty: code === 'SELLER_CONFIRMATION_EXPIRED' || code === 'SELLER_DECLINED' ? 'SELLER' : 'INSPECTION_PAYER' },
+    metadata: {
+      orderId: request.orderId,
+      eventVersion: 1,
+      workflowPhase: code === 'SELLER_CONFIRMATION_EXPIRED' ? 'INSPECTION_SELLER_CONFIRMATION' : 'INSPECTION_PAYMENT',
+      deadline: request.workflowDueAt ? request.workflowDueAt.toISOString() : null,
+      automatic: code === 'SELLER_CONFIRMATION_EXPIRED' || code === 'INSPECTION_PAYMENT_EXPIRED',
+      actorRole,
+      faultParty: code === 'SELLER_CONFIRMATION_EXPIRED' || code === 'SELLER_DECLINED' ? 'SELLER' : 'INSPECTION_PAYER',
+      consequence: 'ORDER_CANCELLED',
+    },
   });
 
   if (request.orderId) {
@@ -109,7 +117,19 @@ async function lapseInspectionAgreement(tx, { inspectionRequestId, code, actorId
       type: 'INSPECTION_AGREEMENT_CLOSED',
       fromStatus: 'ACCEPTED',
       toStatus: 'CANCELLED',
-      metadata: { inspectionRequestId: request.id, code, actorRole, inspectorId: request.inspectorId, reason: meta.notice, faultParty: code === 'SELLER_CONFIRMATION_EXPIRED' || code === 'SELLER_DECLINED' ? 'SELLER' : 'INSPECTION_PAYER' },
+      metadata: {
+        inspectionRequestId: request.id,
+        code,
+        eventVersion: 1,
+        workflowPhase: code === 'SELLER_CONFIRMATION_EXPIRED' ? 'INSPECTION_SELLER_CONFIRMATION' : 'INSPECTION_PAYMENT',
+        deadline: request.workflowDueAt ? request.workflowDueAt.toISOString() : null,
+        automatic: code === 'SELLER_CONFIRMATION_EXPIRED' || code === 'INSPECTION_PAYMENT_EXPIRED',
+        actorRole,
+        inspectorId: request.inspectorId,
+        reason: meta.notice,
+        faultParty: code === 'SELLER_CONFIRMATION_EXPIRED' || code === 'SELLER_DECLINED' ? 'SELLER' : 'INSPECTION_PAYER',
+        consequence: 'ORDER_CANCELLED',
+      },
     });
 
     const order = await tx.order.findUnique({

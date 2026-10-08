@@ -9,7 +9,7 @@
 // Access rule (single source of truth, enforced here and called by every
 // coordination route):
 //   • Visible only to the seller of the listing and the assigned transporter.
-//   • Visible only once the transport job reaches ACCEPTED (payment settled).
+//   • Visible once the transport job reaches ACCEPTED (commercially agreed; payment may still be pending).
 //   • NEVER visible to the buyer, even though the buyer pays the transport fee.
 //   • Admin override for support, always audited.
 //
@@ -38,7 +38,7 @@ function assertCoordinationStage(job) {
   }
   if (!OPEN_STATUSES.has(job.status)) {
     const err = new Error(
-      'Coordination is available only after the transport payment has been settled and the truck is committed'
+      'Coordination is available only after the transport arrangement has been commercially agreed; payment may still be pending'
     );
     err.statusCode = 409;
     err.code = 'COORDINATION_NOT_OPEN';
@@ -108,7 +108,7 @@ async function closeCoordination(tx, transportJobId, reason = null) {
 
 /**
  * Ensures exactly one OPEN coordination row exists for the job. Called when
- * a transport job transitions into ACCEPTED (payment settled) or when an
+ * a transport job transitions into ACCEPTED (commercial agreement) or when an
  * admin reopens bidding and the row needs to be cleared for the next driver.
  *
  * If the existing row was superseded, its content is cleared instead of
