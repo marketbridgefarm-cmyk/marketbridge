@@ -9,8 +9,8 @@
      • Card title = 2px bottom line + 44px accent segment
      • Sub-headers = 1.5px bottom line only
      • Vertical progress rail with green / orange bullseye / gray states
-     • Details facts are wrapped in a bordered, transparent container and
-       laid out in a compact 2-column grid so the card stays short
+     • Details facts flow in 2 / 3 / 4 columns based on the card's width,
+       with no wrapper box, so the card stays compact
    ========================================================================== */
 
 
@@ -359,19 +359,19 @@
 /* ==========================================================================
    6. FACTS, FINDINGS, "YOU" PILL
    --------------------------------------------------------------------------
-   Facts wrap is bordered but transparent (no background fill).
-   Facts are laid out in a 2-column grid so the card stays compact.
+   No wrapper box. Facts flow in 2 / 3 / 4 columns based on the card's own
+   width (see container queries in §24), so the card stays compact.
    ========================================================================== */
 
-/* The wrap */
 .order-detail-page .od-detail-facts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px 24px;
-  padding: 18px 20px;
+  gap: 18px 20px;
   background: transparent;
-  border: 1.5px solid var(--mb-line);
-  border-radius: var(--mb-radius-field);
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
 }
 
 .order-detail-page .od-detail-facts > div {
@@ -1438,7 +1438,7 @@
 }
 
 .order-detail-page .od-card-overview .od-card-created {
-  margin: 18px 0 0;
+  margin: 20px 0 0;
   color: var(--mb-muted);
   font-size: 14px;
 }
@@ -1534,22 +1534,20 @@
    23. RESPONSIVE BREAKPOINTS (viewport)
    ========================================================================== */
 
-/* Very small phones: collapse facts to a single column */
 @media (max-width: 360px) {
   .order-detail-page { --od-pad: 18px; --od-gap: 14px; }
-  .order-detail-page .od-detail-facts      { grid-template-columns: minmax(0, 1fr); }
   .order-detail-page .od-card-title        { font-size: 22px; }
   .order-detail-page .order-progress-label { font-size: 14px; }
   .order-detail-page .payout-table th,
   .order-detail-page .payout-table td      { padding: 12px 4px; }
   .order-detail-page .payout-table         { font-size: 13px; }
+  .order-detail-page .od-detail-facts      { gap: 16px 14px; }
 }
 
 @media (max-width: 520px) {
   .order-detail-page .od-buyer-confidence    { gap: 12px; padding: 16px; }
   .order-detail-page .od-confidence-icon     { flex-basis: 34px; width: 34px; height: 34px; font-size: 18px; }
   .order-detail-page .od-confidence-promises { display: grid; gap: 8px; }
-  .order-detail-page .od-detail-facts        { padding: 16px; gap: 18px 16px; }
 }
 
 @media (max-width: 560px) {
@@ -1627,8 +1625,6 @@
   .order-detail-page .od-card-title        { font-size: 26px; }
   .order-detail-page .order-progress-label { font-size: 15.5px; }
 
-  .order-detail-page .od-detail-facts      { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-
   .order-detail-page .card.od-next { padding: 32px 40px 14px; }
   .order-detail-page .od-next-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
@@ -1644,16 +1640,32 @@
 
 /* ==========================================================================
    24. CONTAINER QUERIES (card internals react to the card's own width)
+   --------------------------------------------------------------------------
+   Facts go 2 → 3 → 4 columns as the card gets wider. Because `.card` has
+   `container-type: inline-size`, these fire based on the card's own width,
+   not the viewport — so a wide full-width card gets 4 columns even on a
+   laptop, while a narrow grid-column card stays at 2.
    ========================================================================== */
+
+/* Medium-wide card: 3 columns */
+@container (min-width: 520px) {
+  .order-detail-page .od-detail-facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px 22px;
+  }
+}
+
+/* Wide card: 4 columns */
+@container (min-width: 760px) {
+  .order-detail-page .od-detail-facts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 22px 24px;
+  }
+}
 
 /* Wide card: give the party info more room */
 @container (min-width: 720px) {
   .order-detail-page .od-card-side-party > div { max-width: 220px; }
-}
-
-/* Very wide card: allow a third facts column even on smaller viewports */
-@container (min-width: 720px) {
-  .order-detail-page .od-detail-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 
