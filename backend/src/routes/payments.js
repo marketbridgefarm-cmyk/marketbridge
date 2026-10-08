@@ -608,6 +608,17 @@ router.post(
             });
           }
 
+          // Loading-report approval is a hard commercial gate: the buyer must
+          // review the transporter's loading report before any transport money
+          // can be committed. This is deliberately checked here as well as in
+          // paymentService so old/new clients receive the same server response.
+          if (!order.transportJob.buyerLoadingConfirmedAt) {
+            return res.status(409).json({
+              code: 'BUYER_LOADING_CONFIRMATION_REQUIRED',
+              error: 'The buyer must approve the loading report before the transporter can be paid.',
+            });
+          }
+
           // Transport is a buyer-to-transporter transaction on MarketBridge.
           // The party who arranged the transport (BUYER, SELLER or JOINT)
           // does not change who pays the hired transporter: the buyer does.
@@ -1147,6 +1158,28 @@ router.post(
           return res.status(409).json({
             code: 'INSPECTION_NOT_READY_FOR_PAYMENT',
             error: 'The inspection is not in an accepted state for payment.',
+          });
+        }
+      }
+
+      // A transport payment intent may be resumed only after the buyer has
+      // approved the loading report. This protects old PENDING intents created
+      // before the loading gate was introduced.
+      if (payment.type === 'TRANSPORT' && payment.transportJobId) {
+        const transport = await prisma.transportJob.findUnique({
+          where: { id: payment.transportJobId },
+          select: { id: true, buyerLoadingConfirmedAt: true, status: true },
+        });
+        if (!transport?.buyerLoadingConfirmedAt) {
+          return res.status(409).json({
+            code: 'BUYER_LOADING_CONFIRMATION_REQUIRED',
+            error: 'The buyer must approve the loading report before transport payment can begin.',
+          });
+        }
+        if (transport.status !== 'ACCEPTED') {
+          return res.status(409).json({
+            code: 'TRANSPORT_NOT_READY_FOR_PAYMENT',
+            error: 'The transport arrangement is no longer ready for payment.',
           });
         }
       }
