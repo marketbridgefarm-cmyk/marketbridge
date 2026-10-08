@@ -467,6 +467,21 @@
   box-shadow: inset 0 0 0 3px #fff;
 }
 
+/* Vertical stepper: center the block in the card; dots and labels stay
+   left-aligned inside it. The horizontal layout still fills the row. */
+.orders-page .card-block-body > .order-progress,
+.order-progress {
+  width: fit-content;
+  min-width: min(240px, 100%);
+  max-width: 100%;
+  margin-inline: auto;
+}
+
+@container (min-width: 520px) {
+  .orders-page .card-block-body > .order-progress,
+  .order-progress { width: 100%; }
+}
+
 /* ---- Amount ------------------------------------------------------------- */
 .order-price {
   display: flex;
