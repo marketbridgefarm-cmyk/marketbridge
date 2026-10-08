@@ -1132,7 +1132,7 @@ function InspectionSummaryCard({ i, onOpen }) {
         </SideLabel>
       }
     >
-      <Section title="Inspection">
+      <Section>
         <p className="muted">{blurb}</p>
         <Actions>
           <Button variant="primary" onClick={onOpen}>
@@ -1490,7 +1490,6 @@ function TransportCard({ order, t }) {
   if (!job) {
     return (
       <Card
-        id="transport-section"
         eyebrow="Logistics"
         title="Transport"
         subtitle="The buyer or seller arranges transport. MarketBridge does not assign a transporter automatically."
@@ -1524,7 +1523,6 @@ function TransportCard({ order, t }) {
   return (
     <div className="od-card-grid">
       <Card
-        id="transport-section"
         eyebrow="Logistics"
         title="Transport"
         subtitle="The physical trip — who drives, where from, and where to."
@@ -1614,10 +1612,10 @@ function TransportCard({ order, t }) {
                 )}
                 <Button
                   variant="primary"
-                  disabled={busy === 'confirm-loading'}
-                  busy={busy === 'confirm-loading'}
+                  disabled={t.busy === 'confirm-loading'}
+                  busy={t.busy === 'confirm-loading'}
                   busyText="Confirming…"
-                  onClick={() => run('confirm-loading', () => api.post(`/transport/${job.id}/confirm-loading`), 'Could not approve the loading report')}
+                  onClick={() => t.run('confirm-loading', () => api.post(`/transport/${job.id}/confirm-loading`), 'Could not approve the loading report')}
                 >
                   Approve loading report
                 </Button>
@@ -1629,7 +1627,6 @@ function TransportCard({ order, t }) {
 
       {hasEvidenceContent && (
         <Card
-          id="transport-evidence-section"
           eyebrow="Evidence"
           title="Trip evidence"
           subtitle="Photos, videos and handover notes uploaded by the transporter during the trip."
@@ -1675,7 +1672,6 @@ function TransportCard({ order, t }) {
       )}
 
       <Card
-        id="transport-payment-section"
         eyebrow="Payment"
         title="Transport payment"
         subtitle="Select and pay the transporter. Separate from the seller payment and any inspection fee."
@@ -1812,6 +1808,138 @@ function TransportCard({ order, t }) {
             </Section>
           )}
       </Card>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------------
+   Compact on-page card that opens the transport popup.
+   ------------------------------------------------------------------------ */
+
+function TransportSummaryCard({ order, t, onOpen }) {
+  const job = t.job;
+
+  const methodLabel =
+    job?.method === 'HIRE_TRANSPORTER'
+      ? 'Hired transporter'
+      : job?.method === 'OWN_TRUCK'
+        ? "Owner's own truck"
+        : null;
+
+  const statusText = job ? label(job.status) : 'Not arranged';
+  const tone = job ? statusTone(job.status) : 'neutral';
+
+  const title = !job
+    ? 'Transport not arranged'
+    : job.status === 'DELIVERED'
+      ? 'Delivered'
+      : job.status === 'IN_TRANSIT'
+        ? 'In transit'
+        : job.status === 'PICKUP'
+          ? 'Pickup in progress'
+          : job.status === 'ACCEPTED'
+            ? 'Transporter selected'
+            : job.status === 'QUOTED'
+              ? 'Transport quotes received'
+              : 'Transport in progress';
+
+  const blurb = !job
+    ? 'Arrange a transporter or use the owner’s own truck. MarketBridge does not assign a transporter automatically.'
+    : job.status === 'DELIVERED'
+      ? 'The trip has been delivered. Open to review the trip evidence and delivery confirmation.'
+      : 'Open to see the trip details, negotiate transporter quotes, upload evidence and manage the transport payment.';
+
+  const ctaLabel = !job
+    ? t.canArrange
+      ? 'Arrange transport'
+      : 'View transport'
+    : job.status === 'DELIVERED'
+      ? 'View trip details'
+      : 'Open transport';
+
+  return (
+    <Card
+      id="transport-section"
+      eyebrow="Logistics"
+      title={title}
+      subtitle={methodLabel}
+      side={
+        <SideLabel name="Status">
+          <Pill tone={tone}>{statusText}</Pill>
+        </SideLabel>
+      }
+    >
+      <Section>
+        <p className="muted">{blurb}</p>
+        {job && (
+          <Facts>
+            <Fact name="Arranged by">{job.arrangingParty || '—'}</Fact>
+            <Fact name="Pickup">{job.pickupLocation || '—'}</Fact>
+            <Fact name="Destination">{job.destination || '—'}</Fact>
+            {job.truckOwner?.name && <Fact name="Transporter">{job.truckOwner.name}</Fact>}
+            {job.agreedAmount != null && <Fact name="Fee">{money(job.agreedAmount)} ETB</Fact>}
+          </Facts>
+        )}
+        <Actions>
+          <Button variant="primary" onClick={onOpen}>
+            {ctaLabel}
+          </Button>
+        </Actions>
+      </Section>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------------
+   Popup dialog hosting the full transport experience.
+   ------------------------------------------------------------------------ */
+
+function TransportModal({ open, onClose, order, t }) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="od-modal-backdrop"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="od-modal od-modal--wide"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Transport"
+      >
+        <div className="od-modal-head">
+          <span className="od-modal-title">Transport</span>
+          <button
+            type="button"
+            className="od-modal-close"
+            onClick={onClose}
+            aria-label="Close transport"
+          >
+            ×
+          </button>
+        </div>
+        <div className="od-modal-body">
+          <TransportCard order={order} t={t} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -1967,10 +2095,14 @@ export default function OrderDetail() {
   const [submittingDispute, setSubmittingDispute] = useState(false);
   const [disputeSubmitted, setDisputeSubmitted] = useState(false);
 
-  // Inspection popup visibility.
+  // Popup visibility.
   const [inspectionModalOpen, setInspectionModalOpen] = useState(false);
   const openInspectionModal = useCallback(() => setInspectionModalOpen(true), []);
   const closeInspectionModal = useCallback(() => setInspectionModalOpen(false), []);
+
+  const [transportModalOpen, setTransportModalOpen] = useState(false);
+  const openTransportModal = useCallback(() => setTransportModalOpen(true), []);
+  const closeTransportModal = useCallback(() => setTransportModalOpen(false), []);
 
   useEffect(() => {
     if (!error) return undefined;
@@ -2375,7 +2507,11 @@ export default function OrderDetail() {
         () => api.patch(`/transport/${transportJob.id}/quotes/${quoteId}/accept`),
         'Could not accept transport quote'
       );
-      if (ok) scrollToId('payment-center', 150);
+      if (ok) {
+        // Close the transport popup and send the user to the payment centre.
+        setTransportModalOpen(false);
+        scrollToId('payment-center', 150);
+      }
     },
     counterQuote: async (quoteId) => {
       if (!quoteId || !transportJob) return;
@@ -2746,6 +2882,7 @@ export default function OrderDetail() {
     pay: payTransport,
     resume: resumePayment,
     busy,
+    run,
     reload,
     recoveryRequests,
     counterInputs,
@@ -2831,7 +2968,7 @@ export default function OrderDetail() {
           )}
 
           <div className="od-span-all">
-            <TransportCard order={order} t={transportProps} />
+            <TransportSummaryCard order={order} t={transportProps} onOpen={openTransportModal} />
           </div>
 
           {(!isProduct || order.agreedOfferId) && (
@@ -2918,6 +3055,13 @@ export default function OrderDetail() {
         i={inspectionProps}
         currentInspection={currentInspection}
         isSeller={isSeller}
+      />
+
+      <TransportModal
+        open={transportModalOpen}
+        onClose={closeTransportModal}
+        order={order}
+        t={transportProps}
       />
 
       {error && (
