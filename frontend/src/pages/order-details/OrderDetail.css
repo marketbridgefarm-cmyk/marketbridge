@@ -258,6 +258,20 @@
   min-width: 0;
   text-align: right;
 }
+
+/* New wrap for Order ID + Party in the header side */
+.order-detail-page .od-card-side-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.order-detail-page .od-card-side-code {
+  color: var(--mb-muted);
+  font: 700 13px var(--od-font-body);
+  font-variant-numeric: tabular-nums;
+}
+
 .order-detail-page .od-card-side-label {
   display: block;
   color: var(--mb-muted);
@@ -377,21 +391,11 @@
   white-space: nowrap;
 }
 
-.order-detail-page .od-text-good {
-  color: #047857;
-}
-.order-detail-page .od-text-bad {
-  color: #b91c1c;
-}
-.order-detail-page .od-text-wait {
-  color: #92400e;
-}
-.order-detail-page .od-text-info {
-  color: #1d4ed8;
-}
-.order-detail-page .od-text-neutral {
-  color: #475569;
-}
+.order-detail-page .od-text-good { color: #047857; }
+.order-detail-page .od-text-bad { color: #b91c1c; }
+.order-detail-page .od-text-wait { color: #92400e; }
+.order-detail-page .od-text-info { color: #1d4ed8; }
+.order-detail-page .od-text-neutral { color: #475569; }
 
 .order-detail-page .od-card-section-body {
   padding-inline-start: var(--od-indent);
@@ -500,31 +504,11 @@
   border-radius: 50%;
   background: currentColor;
 }
-.order-detail-page .od-tone-good {
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-  color: #047857;
-}
-.order-detail-page .od-tone-bad {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
-}
-.order-detail-page .od-tone-wait {
-  background: #fffbeb;
-  border-color: #fde68a;
-  color: #92400e;
-}
-.order-detail-page .od-tone-info {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #1d4ed8;
-}
-.order-detail-page .od-tone-neutral {
-  background: #f1f5f9;
-  border-color: #e2e8f0;
-  color: #475569;
-}
+.order-detail-page .od-tone-good { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.order-detail-page .od-tone-bad { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.order-detail-page .od-tone-wait { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.order-detail-page .od-tone-info { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.order-detail-page .od-tone-neutral { background: #f1f5f9; border-color: #e2e8f0; color: #475569; }
 
 .order-detail-page .badge {
   display: inline-block;
