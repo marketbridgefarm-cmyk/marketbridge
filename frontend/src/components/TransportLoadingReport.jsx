@@ -400,6 +400,7 @@ export default function TransportLoadingReport({
         <label className="tlr-field">
           <span>What will be loaded</span>
           <select
+            className="field"
             value={form.whatLoaded}
             onChange={(e) => set('whatLoaded')(e.target.value)}
           >
@@ -425,6 +426,7 @@ export default function TransportLoadingReport({
           <label className="tlr-field">
             <span>Unit</span>
             <select
+              className="field"
               value={form.quantityUnit}
               onChange={(e) => set('quantityUnit')(e.target.value)}
             >
@@ -439,6 +441,7 @@ export default function TransportLoadingReport({
         <label className="tlr-field">
           <span>Expected condition at loading</span>
           <select
+            className="field"
             value={form.qualityAtLoading}
             onChange={(e) => set('qualityAtLoading')(e.target.value)}
           >
@@ -474,6 +477,7 @@ export default function TransportLoadingReport({
           <label className="tlr-field">
             <span>Arrived at site</span>
             <input
+              className="field"
               type="datetime-local"
               value={form.arrivedAt}
               onChange={(e) => set('arrivedAt')(e.target.value)}
@@ -482,6 +486,7 @@ export default function TransportLoadingReport({
           <label className="tlr-field">
             <span>Loading started</span>
             <input
+              className="field"
               type="datetime-local"
               value={form.loadingStartedAt}
               onChange={(e) => set('loadingStartedAt')(e.target.value)}
@@ -490,6 +495,7 @@ export default function TransportLoadingReport({
           <label className="tlr-field">
             <span>Loading finished</span>
             <input
+              className="field"
               type="datetime-local"
               value={form.loadingFinishedAt}
               onChange={(e) => set('loadingFinishedAt')(e.target.value)}
@@ -501,6 +507,7 @@ export default function TransportLoadingReport({
         <label className="tlr-field">
           <span>GPS at pickup site (optional)</span>
           <input
+            className="field"
             type="text"
             value={form.gpsLocation}
             onChange={(e) => set('gpsLocation')(e.target.value)}
@@ -512,6 +519,7 @@ export default function TransportLoadingReport({
         <label className="tlr-field tlr-field--full">
           <span>Driver notes (optional)</span>
           <textarea
+            className="field"
             value={form.notes}
             onChange={(e) => set('notes')(e.target.value)}
             rows={3}
