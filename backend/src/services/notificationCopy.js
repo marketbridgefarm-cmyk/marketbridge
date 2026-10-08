@@ -17,6 +17,15 @@
 
 const TITLES = {
   en: {
+    INSPECTION_SELLER_CONFIRMATION_WAITING: 'Waiting for seller confirmation',
+    INSPECTION_SELLER_CONFIRMATION_REMINDER: 'Inspection confirmation deadline approaching',
+    INSPECTION_AGREEMENT_CLOSED: 'Inspection arrangement closed',
+    SELLER_PREPARATION_DEADLINE_APPROACHING: 'Transport preparation deadline approaching',
+    BUYER_DECISION_DEADLINE_APPROACHING: 'Purchase decision deadline approaching',
+    BUYER_LOADING_DEADLINE_APPROACHING: 'Loading approval deadline approaching',
+    BUYER_DECISION_DEADLINE_EXPIRED: 'Purchase closed: decision deadline expired',
+    SELLER_PREPARATION_DEADLINE_EXPIRED: 'Transport arrangement closed',
+    BUYER_LOADING_DEADLINE_EXPIRED: 'Loading approval deadline expired',
     PICKUP_WINDOW_REMINDER: 'Pickup window approaching',
     ORDER_CREATED: 'New order created',
     INSPECTION_ACCEPTED: 'Inspection accepted',
@@ -44,6 +53,15 @@ const TITLES = {
 
   // Amharic — draft, needs native-speaker review (see header).
   am: {
+    INSPECTION_SELLER_CONFIRMATION_WAITING: 'Waiting for seller confirmation',
+    INSPECTION_SELLER_CONFIRMATION_REMINDER: 'Inspection confirmation deadline approaching',
+    INSPECTION_AGREEMENT_CLOSED: 'Inspection arrangement closed',
+    SELLER_PREPARATION_DEADLINE_APPROACHING: 'Transport preparation deadline approaching',
+    BUYER_DECISION_DEADLINE_APPROACHING: 'Purchase decision deadline approaching',
+    BUYER_LOADING_DEADLINE_APPROACHING: 'Loading approval deadline approaching',
+    BUYER_DECISION_DEADLINE_EXPIRED: 'Purchase closed: decision deadline expired',
+    SELLER_PREPARATION_DEADLINE_EXPIRED: 'Transport arrangement closed',
+    BUYER_LOADING_DEADLINE_EXPIRED: 'Loading approval deadline expired',
     PICKUP_WINDOW_REMINDER: 'የመረከቢያ ጊዜ እየተቃረበ ነው',
     ORDER_CREATED: 'አዲስ ትዕዛዝ ተፈጥሯል',
     INSPECTION_ACCEPTED: 'ምርመራ ተቀባይነት አግኝቷል',

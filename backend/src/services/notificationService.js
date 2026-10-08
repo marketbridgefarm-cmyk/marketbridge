@@ -58,6 +58,60 @@ const EVENT_COPY = {
     body: 'The inspection report is now available for review.',
     action: 'order',
   },
+  INSPECTION_SELLER_CONFIRMATION_WAITING: {
+    type: 'INSPECTION',
+    title: 'Waiting for seller confirmation',
+    body: 'The selected inspector is waiting for the seller to confirm the inspection arrangement.',
+    action: 'order',
+  },
+  INSPECTION_SELLER_CONFIRMATION_REMINDER: {
+    type: 'INSPECTION',
+    title: 'Inspection confirmation deadline approaching',
+    body: 'Confirm or decline the selected inspector before the deadline.',
+    action: 'order',
+  },
+  INSPECTION_AGREEMENT_CLOSED: {
+    type: 'INSPECTION',
+    title: 'Inspection arrangement closed',
+    body: 'The provisional inspection arrangement has been closed. Review the order for the next step.',
+    action: 'order',
+  },
+  SELLER_PREPARATION_DEADLINE_APPROACHING: {
+    type: 'TRANSPORT',
+    title: 'Transport preparation deadline approaching',
+    body: 'The seller must confirm transporter preparation soon.',
+    action: 'order',
+  },
+  BUYER_DECISION_DEADLINE_APPROACHING: {
+    type: 'ORDER',
+    title: 'Purchase decision deadline approaching',
+    body: 'Choose BUY or CANCEL before the purchase decision deadline.',
+    action: 'order',
+  },
+  BUYER_LOADING_DEADLINE_APPROACHING: {
+    type: 'TRANSPORT',
+    title: 'Loading approval deadline approaching',
+    body: 'Review the loading report and approve it before the deadline.',
+    action: 'order',
+  },
+  BUYER_DECISION_DEADLINE_EXPIRED: {
+    type: 'ORDER',
+    title: 'Purchase closed: decision deadline expired',
+    body: 'The buyer did not choose BUY or CANCEL before the deadline, so the purchase was closed.',
+    action: 'order',
+  },
+  SELLER_PREPARATION_DEADLINE_EXPIRED: {
+    type: 'TRANSPORT',
+    title: 'Transport arrangement closed',
+    body: 'The seller did not confirm transporter preparation before the deadline. The transport arrangement was closed.',
+    action: 'order',
+  },
+  BUYER_LOADING_DEADLINE_EXPIRED: {
+    type: 'TRANSPORT',
+    title: 'Loading approval deadline expired',
+    body: 'The buyer did not approve the loading report before the deadline. The transport arrangement was closed.',
+    action: 'order',
+  },
   BUYER_DECISION_MADE: {
     type: 'ORDER',
     title: 'Buyer decision recorded',
@@ -154,6 +208,35 @@ function buildCopy(type, metadata = {}) {
 
   let body = copy.body;
 
+  if (type === 'INSPECTION_ACCEPTED' && metadata.sellerConfirmed === false && metadata.deadline) {
+    body = `The inspector agreement is provisional and is waiting for seller confirmation. The seller must respond by ${new Date(metadata.deadline).toISOString()}.`;
+  }
+  if (type === 'INSPECTION_SELLER_CONFIRMATION_WAITING' && metadata.deadline) {
+    body = `The selected inspector is waiting for seller confirmation. The request expires at ${new Date(metadata.deadline).toISOString()}.`;
+  }
+  if (type === 'INSPECTION_AGREEMENT_CLOSED') {
+    const reason = metadata.reason || 'the inspection deadline was reached';
+    body = `The provisional inspection arrangement was closed because ${reason}.`;
+  }
+  if (type === 'SELLER_PREPARATION_DEADLINE_APPROACHING' && metadata.deadline) {
+    body = `The seller must confirm transporter preparation by ${new Date(metadata.deadline).toISOString()}.`;
+  }
+  if (type === 'BUYER_DECISION_DEADLINE_APPROACHING' && metadata.deadline) {
+    body = `Choose BUY or CANCEL by ${new Date(metadata.deadline).toISOString()} to keep this purchase open.`;
+  }
+  if (type === 'BUYER_LOADING_DEADLINE_APPROACHING' && metadata.deadline) {
+    body = `Review the loading report and approve it by ${new Date(metadata.deadline).toISOString()}.`;
+  }
+  if (type === 'BUYER_DECISION_DEADLINE_EXPIRED') {
+    body = 'The buyer did not choose BUY or CANCEL before the deadline, so the purchase was closed.';
+  }
+  if (type === 'SELLER_PREPARATION_DEADLINE_EXPIRED') {
+    body = 'The seller did not confirm transporter preparation before the deadline, so the transport arrangement was closed.';
+  }
+  if (type === 'BUYER_LOADING_DEADLINE_EXPIRED') {
+    body = 'The buyer did not approve the loading report before the deadline, so the transport arrangement was closed.';
+  }
+
   if (type === 'PROVIDER_STANDING_CHANGED') {
     if (metadata.kind === 'WARNING') {
       body = 'Warning: one more cancellation of an accepted agreement will suspend your bidding. Cancellations also lower your rating.';
@@ -225,6 +308,15 @@ async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) 
       // (buyer or seller may be the actor).
       recipients = buyerSeller;
       break;
+    case 'INSPECTION_SELLER_CONFIRMATION_WAITING':
+      recipients = [metadata.inspectorId];
+      break;
+    case 'INSPECTION_SELLER_CONFIRMATION_REMINDER':
+      recipients = [order.sellerId];
+      break;
+    case 'INSPECTION_AGREEMENT_CLOSED':
+      recipients = [...buyerSeller, metadata.inspectorId];
+      break;
     case 'INSPECTION_ACCEPTED':
     case 'INSPECTION_STARTED':
     case 'INSPECTION_COMPLETED':
@@ -240,6 +332,18 @@ async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) 
       // The released provider is no longer on the job, so the id travels in
       // the event metadata.
       recipients = [metadata.providerId];
+      break;
+    case 'BUYER_DECISION_DEADLINE_APPROACHING':
+    case 'BUYER_DECISION_DEADLINE_EXPIRED':
+      recipients = [order.buyerId, order.sellerId];
+      break;
+    case 'SELLER_PREPARATION_DEADLINE_APPROACHING':
+    case 'SELLER_PREPARATION_DEADLINE_EXPIRED':
+      recipients = [order.buyerId, order.sellerId, ...transportUsers];
+      break;
+    case 'BUYER_LOADING_DEADLINE_APPROACHING':
+    case 'BUYER_LOADING_DEADLINE_EXPIRED':
+      recipients = [order.buyerId, order.sellerId, ...transportUsers];
       break;
     case 'BUYER_DECISION_MADE':
       recipients = [...buyerSeller];

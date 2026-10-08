@@ -99,7 +99,7 @@ async function lapseInspectionAgreement(tx, { inspectionRequestId, code, actorId
     action: `INSPECTION_AGREEMENT_${code}`,
     resourceType: 'InspectionRequest',
     resourceId: request.id,
-    metadata: { orderId: request.orderId, actorRole },
+    metadata: { orderId: request.orderId, actorRole, faultParty: code === 'SELLER_CONFIRMATION_EXPIRED' || code === 'SELLER_DECLINED' ? 'SELLER' : 'INSPECTION_PAYER' },
   });
 
   if (request.orderId) {
@@ -109,7 +109,7 @@ async function lapseInspectionAgreement(tx, { inspectionRequestId, code, actorId
       type: 'INSPECTION_AGREEMENT_CLOSED',
       fromStatus: 'ACCEPTED',
       toStatus: 'CANCELLED',
-      metadata: { inspectionRequestId: request.id, code, actorRole },
+      metadata: { inspectionRequestId: request.id, code, actorRole, inspectorId: request.inspectorId, reason: meta.notice, faultParty: code === 'SELLER_CONFIRMATION_EXPIRED' || code === 'SELLER_DECLINED' ? 'SELLER' : 'INSPECTION_PAYER' },
     });
 
     const order = await tx.order.findUnique({

@@ -11,7 +11,13 @@ const logger = require('../utils/logger');
 
 const { promoteNextWaitingBuyer } = require('./orderCancellationService');
 const { lapseInspectionAgreement, computeSellerConfirmationDueAt, computeInspectionPaymentDueAt } = require('./inspectionLapseService');
-const { computeInspectionStartDueAt } = require('../utils/orderTiming');
+const {
+  computeInspectionStartDueAt,
+  computeBuyerDecisionDueAt,
+  computeSellerPreparationDueAt,
+  computeBuyerLoadingDueAt,
+} = require('../utils/orderTiming');
+const { noticeWaitingUnlocked } = require('./waitingListService');
 
 const LOCK_KEY = 82461327;
 
@@ -141,7 +147,7 @@ async function expireInspectionWorkflows(now = new Date()) {
         { status: 'IN_PROGRESS', completionDueAt: { lte: now } },
       ],
     },
-    select: { id: true, orderId: true, status: true, workflowDueAt: true, startDueAt: true, completionDueAt: true }, take: 200,
+    select: { id: true, orderId: true, listingId: true, status: true, workflowDueAt: true, startDueAt: true, completionDueAt: true }, take: 200,
   });
   let expired = 0;
   for (const candidate of candidates) {
@@ -190,7 +196,21 @@ async function expireInspectionWorkflows(now = new Date()) {
         }
         return false;
       }, { maxWait: 10000, timeout: 15000 });
-      if (changed) expired += 1;
+      if (changed) {
+        expired += 1;
+        // If the provisional agreement actually closed, the listing is free again.
+        // Notify waiting buyers only after the transaction commits.
+        const closed = await prisma.inspectionRequest.findUnique({
+          where: { id: candidate.id },
+          select: { status: true, orderId: true, listingId: true },
+        }).catch(() => null);
+        if (closed?.status === 'CANCELLED') {
+          await noticeWaitingUnlocked(prisma, {
+            listingId: closed.listingId,
+            reason: 'INSPECTION_AGREEMENT_CLOSED',
+          });
+        }
+      }
     } catch (error) {
       logger.error({ err: error, inspectionRequestId: candidate.id }, 'Failed to maintain inspection workflow');
     }
@@ -266,6 +286,303 @@ async function activateScheduledAdvertisements(now = new Date()) {
     data: { status: 'PUBLISHED', publishedAt: now },
   });
   return { activated: result.count };
+}
+
+
+
+async function backfillStep5Deadlines(now = new Date()) {
+  let orders = 0;
+  let preparations = 0;
+  let loading = 0;
+
+  const decisionCandidates = await prisma.order.findMany({
+    where: {
+      status: { notIn: ['CANCELLED', 'COMPLETED', 'DISPUTED'] },
+      buyerDecision: null,
+      buyerDecisionDueAt: null,
+      transportJob: { is: { status: 'ACCEPTED', sellerPickupConfirmedAt: { not: null } } },
+    },
+    select: { id: true },
+    take: 500,
+  });
+  for (const item of decisionCandidates) {
+    const result = await prisma.order.updateMany({
+      where: { id: item.id, buyerDecision: null, buyerDecisionDueAt: null, status: { notIn: ['CANCELLED', 'COMPLETED', 'DISPUTED'] } },
+      data: { buyerDecisionDueAt: computeBuyerDecisionDueAt(now) },
+    });
+    orders += result.count;
+  }
+
+  const prepCandidates = await prisma.transportJob.findMany({
+    where: { status: 'ACCEPTED', sellerPickupConfirmedAt: null, sellerPreparationDueAt: null },
+    select: { id: true },
+    take: 500,
+  });
+  for (const item of prepCandidates) {
+    const result = await prisma.transportJob.updateMany({
+      where: { id: item.id, status: 'ACCEPTED', sellerPickupConfirmedAt: null, sellerPreparationDueAt: null },
+      data: { sellerPreparationDueAt: computeSellerPreparationDueAt(now) },
+    });
+    preparations += result.count;
+  }
+
+  const loadingCandidates = await prisma.transportJob.findMany({
+    where: {
+      status: 'ACCEPTED',
+      sellerPickupConfirmedAt: { not: null },
+      buyerLoadingConfirmedAt: null,
+      buyerLoadingDueAt: null,
+      loadingReport: { isNot: null },
+    },
+    select: { id: true },
+    take: 500,
+  });
+  for (const item of loadingCandidates) {
+    const result = await prisma.transportJob.updateMany({
+      where: { id: item.id, status: 'ACCEPTED', buyerLoadingConfirmedAt: null, buyerLoadingDueAt: null },
+      data: { buyerLoadingDueAt: computeBuyerLoadingDueAt(now) },
+    });
+    loading += result.count;
+  }
+
+  return { orders, preparations, loading };
+}
+
+async function createDeadlineReminders(now = new Date()) {
+  const windowStart = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+  const windowEnd = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+  let created = 0;
+
+  const emitOnce = async ({ orderId, type, deadline, faultParty }) => {
+    if (!deadline || deadline < windowStart || deadline > windowEnd) return;
+    const key = deadline.toISOString();
+    const exists = await prisma.orderEvent.findFirst({
+      where: { orderId, type, metadata: { path: ['deadline'], equals: key } },
+      select: { id: true },
+    });
+    if (exists) return;
+    await prisma.$transaction(async (tx) => {
+      await recordOrderEvent(tx, {
+        orderId,
+        actorId: null,
+        type,
+        metadata: { deadline: key, faultParty },
+      });
+    }, { maxWait: 10000, timeout: 15000 });
+    created += 1;
+  };
+
+  const inspections = await prisma.inspectionRequest.findMany({
+    where: {
+      status: 'ACCEPTED',
+      sellerConfirmedAt: null,
+      workflowDueAt: { gt: windowStart, lte: windowEnd },
+    },
+    select: { id: true, orderId: true, inspectorId: true, workflowDueAt: true },
+    take: 500,
+  });
+  for (const item of inspections) {
+    if (!item.orderId) continue;
+    const exists = await prisma.orderEvent.findFirst({
+      where: { orderId: item.orderId, type: 'INSPECTION_SELLER_CONFIRMATION_WAITING', metadata: { path: ['deadline'], equals: item.workflowDueAt.toISOString() } },
+      select: { id: true },
+    });
+    if (!exists) {
+      await prisma.$transaction(async (tx) => {
+        await recordOrderEvent(tx, {
+          orderId: item.orderId,
+          actorId: null,
+          type: 'INSPECTION_SELLER_CONFIRMATION_WAITING',
+          metadata: { inspectionRequestId: item.id, inspectorId: item.inspectorId, deadline: item.workflowDueAt.toISOString() },
+        });
+        await recordOrderEvent(tx, {
+          orderId: item.orderId,
+          actorId: null,
+          type: 'INSPECTION_SELLER_CONFIRMATION_REMINDER',
+          metadata: { inspectionRequestId: item.id, inspectorId: item.inspectorId, deadline: item.workflowDueAt.toISOString() },
+        });
+      }, { maxWait: 10000, timeout: 15000 });
+      created += 2;
+    }
+  }
+
+  const jobs = await prisma.transportJob.findMany({
+    where: {
+      status: 'ACCEPTED',
+      OR: [
+        { sellerPickupConfirmedAt: null, sellerPreparationDueAt: { gt: windowStart, lte: windowEnd } },
+        { sellerPickupConfirmedAt: { not: null }, buyerLoadingConfirmedAt: null, buyerLoadingDueAt: { gt: windowStart, lte: windowEnd } },
+      ],
+    },
+    select: { id: true, orderId: true, sellerPickupConfirmedAt: true, sellerPreparationDueAt: true, buyerLoadingDueAt: true },
+    take: 500,
+  });
+  for (const job of jobs) {
+    if (!job.sellerPickupConfirmedAt) {
+      await emitOnce({
+        orderId: job.orderId,
+        type: 'SELLER_PREPARATION_DEADLINE_APPROACHING',
+        deadline: job.sellerPreparationDueAt,
+        faultParty: 'SELLER',
+      });
+    } else {
+      await emitOnce({
+        orderId: job.orderId,
+        type: 'BUYER_LOADING_DEADLINE_APPROACHING',
+        deadline: job.buyerLoadingDueAt,
+        faultParty: 'BUYER',
+      });
+    }
+  }
+
+  const decisionOrders = await prisma.order.findMany({
+    where: {
+      status: { notIn: ['CANCELLED', 'COMPLETED', 'DISPUTED'] },
+      buyerDecision: null,
+      buyerDecisionDueAt: { gt: windowStart, lte: windowEnd },
+    },
+    select: { id: true, buyerDecisionDueAt: true },
+    take: 500,
+  });
+  for (const order of decisionOrders) {
+    await emitOnce({
+      orderId: order.id,
+      type: 'BUYER_DECISION_DEADLINE_APPROACHING',
+      deadline: order.buyerDecisionDueAt,
+      faultParty: 'BUYER',
+    });
+  }
+
+  return { created };
+}
+
+async function expireStep5Deadlines(now = new Date()) {
+  let buyerDecisions = 0;
+  let sellerPreparations = 0;
+  let loadingApprovals = 0;
+
+  const orders = await prisma.order.findMany({
+    where: {
+      status: { notIn: ['CANCELLED', 'COMPLETED', 'DISPUTED'] },
+      buyerDecision: null,
+      buyerDecisionDueAt: { lte: now },
+    },
+    select: { id: true },
+    take: 200,
+  });
+
+  for (const candidate of orders) {
+    try {
+      const changed = await prisma.$transaction(async (tx) => {
+        const current = await tx.order.findUnique({
+          where: { id: candidate.id },
+          include: { transportJob: true, payments: true, listing: { select: { category: true } } },
+        });
+        if (!current || current.buyerDecision || ['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(current.status)) return false;
+        if (!current.buyerDecisionDueAt || current.buyerDecisionDueAt > now) return false;
+        if (current.payments.some((p) => ['PAID', 'PROCESSING'].includes(p.status))) return false;
+
+        await recordOrderEvent(tx, {
+          orderId: current.id,
+          actorId: null,
+          type: 'BUYER_DECISION_DEADLINE_EXPIRED',
+          metadata: { deadline: current.buyerDecisionDueAt.toISOString(), faultParty: 'BUYER' },
+        });
+        await cancelOrderInTransaction(tx, {
+          order: current,
+          actorId: null,
+          reason: 'Buyer did not choose BUY or CANCEL before the decision deadline',
+          cancelledByRole: 'SYSTEM',
+        });
+        return true;
+      }, { maxWait: 10000, timeout: 15000 });
+      if (changed) buyerDecisions += 1;
+    } catch (error) {
+      logger.error({ err: error, orderId: candidate.id }, 'Failed to expire buyer decision deadline');
+    }
+  }
+
+  const prepJobs = await prisma.transportJob.findMany({
+    where: { status: 'ACCEPTED', sellerPickupConfirmedAt: null, sellerPreparationDueAt: { lte: now } },
+    select: { id: true },
+    take: 200,
+  });
+  for (const candidate of prepJobs) {
+    try {
+      const changed = await prisma.$transaction(async (tx) => {
+        const job = await tx.transportJob.findUnique({ where: { id: candidate.id }, include: { order: true } });
+        if (!job || job.status !== 'ACCEPTED' || job.sellerPickupConfirmedAt || !job.sellerPreparationDueAt || job.sellerPreparationDueAt > now) return false;
+        await tx.transportJob.update({ where: { id: job.id }, data: { status: 'CANCELLED', sellerPreparationDueAt: null, buyerLoadingDueAt: null } });
+        await tx.transportQuote.updateMany({
+          where: { transportJobId: job.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } },
+          data: { status: 'EXPIRED' },
+        });
+        if (job.truckId) await tx.truck.updateMany({ where: { id: job.truckId, availability: 'BUSY' }, data: { availability: 'AVAILABLE' } });
+        await recordOrderEvent(tx, {
+          orderId: job.orderId,
+          actorId: null,
+          type: 'SELLER_PREPARATION_DEADLINE_EXPIRED',
+          fromStatus: 'ACCEPTED',
+          toStatus: 'CANCELLED',
+          metadata: { transportJobId: job.id, deadline: job.sellerPreparationDueAt.toISOString(), faultParty: 'SELLER' },
+        });
+        await recordAuditEvent(tx, {
+          actorId: null,
+          action: 'SELLER_PREPARATION_DEADLINE_EXPIRED',
+          resourceType: 'TransportJob',
+          resourceId: job.id,
+          metadata: { orderId: job.orderId, deadline: job.sellerPreparationDueAt.toISOString(), faultParty: 'SELLER' },
+        });
+        return true;
+      }, { maxWait: 10000, timeout: 15000 });
+      if (changed) sellerPreparations += 1;
+    } catch (error) {
+      logger.error({ err: error, transportJobId: candidate.id }, 'Failed to expire seller preparation deadline');
+    }
+  }
+
+  const loadingJobs = await prisma.transportJob.findMany({
+    where: { status: 'ACCEPTED', sellerPickupConfirmedAt: { not: null }, buyerLoadingConfirmedAt: null, buyerLoadingDueAt: { lte: now } },
+    select: { id: true },
+    take: 200,
+  });
+  for (const candidate of loadingJobs) {
+    try {
+      const changed = await prisma.$transaction(async (tx) => {
+        const job = await tx.transportJob.findUnique({ where: { id: candidate.id } });
+        if (!job || job.status !== 'ACCEPTED' || !job.sellerPickupConfirmedAt || job.buyerLoadingConfirmedAt || !job.buyerLoadingDueAt || job.buyerLoadingDueAt > now) return false;
+        const paymentInFlight = await tx.payment.count({ where: { transportJobId: job.id, type: 'TRANSPORT', status: { in: ['PAID', 'PROCESSING'] } } });
+        if (paymentInFlight) return false;
+        await tx.transportJob.update({ where: { id: job.id }, data: { status: 'CANCELLED', buyerLoadingDueAt: null, sellerPreparationDueAt: null } });
+        await tx.transportQuote.updateMany({
+          where: { transportJobId: job.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } },
+          data: { status: 'EXPIRED' },
+        });
+        if (job.truckId) await tx.truck.updateMany({ where: { id: job.truckId, availability: 'BUSY' }, data: { availability: 'AVAILABLE' } });
+        await recordOrderEvent(tx, {
+          orderId: job.orderId,
+          actorId: null,
+          type: 'BUYER_LOADING_DEADLINE_EXPIRED',
+          fromStatus: 'ACCEPTED',
+          toStatus: 'CANCELLED',
+          metadata: { transportJobId: job.id, deadline: job.buyerLoadingDueAt.toISOString(), faultParty: 'BUYER' },
+        });
+        await recordAuditEvent(tx, {
+          actorId: null,
+          action: 'BUYER_LOADING_DEADLINE_EXPIRED',
+          resourceType: 'TransportJob',
+          resourceId: job.id,
+          metadata: { orderId: job.orderId, deadline: job.buyerLoadingDueAt.toISOString(), faultParty: 'BUYER' },
+        });
+        return true;
+      }, { maxWait: 10000, timeout: 15000 });
+      if (changed) loadingApprovals += 1;
+    } catch (error) {
+      logger.error({ err: error, transportJobId: candidate.id }, 'Failed to expire buyer loading deadline');
+    }
+  }
+
+  return { buyerDecisions, sellerPreparations, loadingApprovals };
 }
 
 async function expireUnpaidOrders(now = new Date()) {
@@ -449,10 +766,10 @@ async function runMaintenanceCycle() {
   return withJobLock(async () => {
     const startedAt = Date.now();
     const now = new Date();
-    const [offers, listings, ads, adsActivated, reminders, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync, providerStandings] = await Promise.all([
-      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), expireUnpaidOrders(now), expireInspectionWorkflows(now), expireTransportWorkflows(now), sendPendingSms(now), releaseDuePayouts(prisma, now), submitRequestedRefunds(), syncProcessingRefunds(), sweepStandings(now),
+    const [offers, listings, ads, adsActivated, reminders, backfilledStep5Deadlines, deadlineReminders, step5Deadlines, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync, providerStandings] = await Promise.all([
+      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), backfillStep5Deadlines(now), createDeadlineReminders(now), expireStep5Deadlines(now), expireUnpaidOrders(now), expireInspectionWorkflows(now), expireTransportWorkflows(now), sendPendingSms(now), releaseDuePayouts(prisma, now), submitRequestedRefunds(), syncProcessingRefunds(), sweepStandings(now),
     ]);
-    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync, providerStandings };
+    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, backfilledStep5Deadlines, deadlineReminders, step5Deadlines, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync, providerStandings };
   });
 }
 
@@ -471,4 +788,4 @@ function startMaintenanceScheduler() {
   return setInterval(tick, intervalMs);
 }
 
-module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, expireInspectionWorkflows, expireTransportWorkflows, expireUnpaidOrders, sendPendingSms, releaseDuePayouts, submitRequestedRefunds, syncProcessingRefunds };
+module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, backfillStep5Deadlines, createDeadlineReminders, expireStep5Deadlines, expireInspectionWorkflows, expireTransportWorkflows, expireUnpaidOrders, sendPendingSms, releaseDuePayouts, submitRequestedRefunds, syncProcessingRefunds };
