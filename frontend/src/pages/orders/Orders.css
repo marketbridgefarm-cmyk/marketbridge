@@ -17,7 +17,7 @@
   --mb-danger: #b91c1c;
   --mb-line: #cbd5e1;
   --mb-card: rgba(248, 251, 255, 0.95);
-  --mb-radius-card: 28px;
+  --mb-radius-card: 22px;
   --mb-radius-field: 16px;
 
   background: linear-gradient(135deg, #eef0ff 0%, #dbe8f8 55%, #e6f6ee 100%);
@@ -232,13 +232,9 @@
   min-width: 0;
 }
 
-/* Card tone: rust for buying, green for selling. Used by the eyebrow and
-   the body headers so they always match. */
-.order-card { --card-tone: var(--mb-accent); }
-.order-card.is-selling { --card-tone: var(--mb-ok); }
-/* Same result without the JSX class (kept as its own rule so older browsers
-   that lack :has() don't drop the one above) */
-.order-card:has(.eyebrow.is-selling) { --card-tone: var(--mb-ok); }
+/* Card tone: green on every card (Buying and Selling). Used by the eyebrow
+   and the body headers so they always match. */
+.order-card { --card-tone: var(--mb-ok); }
 
 /* Title block: eyebrow + title + location on the left, party top right */
 .order-card-head {
@@ -628,7 +624,7 @@
 /* Phones: tighter padding and type so content gets the width */
 @media (max-width: 480px) {
   .order-card,
-  .state-card { padding: 18px; border-radius: 24px; }
+  .state-card { padding: 18px; border-radius: 18px; }
 
   .orders-hero-title { font-size: 26px; }
   .order-title { font-size: 22px; }
