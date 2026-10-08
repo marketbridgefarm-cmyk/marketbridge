@@ -232,6 +232,11 @@
   min-width: 0;
 }
 
+/* Card tone: rust for buying, green for selling. Used by the eyebrow and
+   the body headers so they always match. */
+.order-card { --card-tone: var(--mb-accent); }
+.order-card.is-selling { --card-tone: var(--mb-ok); }
+
 /* Title block: eyebrow + title + location on the left, party top right */
 .order-card-head {
   position: relative;
@@ -261,7 +266,7 @@
   align-items: center;
   gap: 12px;
   margin: 0 0 8px;
-  color: var(--mb-accent);
+  color: var(--card-tone);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.25em;
@@ -377,7 +382,7 @@
 
 .card-block-title h3 {
   margin: 0;
-  color: var(--mb-ink);
+  color: var(--card-tone, var(--mb-ink));
   font-size: 15px;
   font-weight: 700;
 }
