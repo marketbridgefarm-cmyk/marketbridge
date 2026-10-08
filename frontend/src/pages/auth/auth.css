@@ -6,23 +6,23 @@
 
 .auth-section {
   /* ── Local tokens ─────────────────────────────────── */
-  --a-accent:      #1e9e5a;        /* gradient anchor — used only on the
+  --a-accent:      var(--mb-ok);        /* gradient anchor — used only on the
                                       brand mark, eyebrow, and links */
-  --a-accent-2:    #0f7a44;        /* gradient endpoint */
-  --a-accent-ink:  #12734a;        /* readable accent text */
+  --a-accent-2:    var(--mb-ok);        /* gradient endpoint */
+  --a-accent-ink:  var(--mb-ok);        /* readable accent text */
 
-  --a-ink:         #0d1b2a;        /* deep navy — headings */
-  --a-ink-soft:    #2c3a4a;        /* labels */
-  --a-muted:       #64748b;        /* supporting copy */
+  --a-ink:         var(--mb-ink);        /* deep navy — headings */
+  --a-ink-soft:    var(--mb-ink-2);        /* labels */
+  --a-muted:       var(--mb-muted);        /* supporting copy */
 
   --a-card:        #ffffff;
   --a-card-tint-a: #e8f4ec;        /* top-left mint wash */
   --a-card-tint-b: #e7ebf5;        /* bottom-left lavender wash */
   --a-card-tint-c: #e6f5ec;        /* bottom-right mint wash */
 
-  --a-line:        #e5e9ef;        /* input border */
-  --a-line-soft:   #eef1f5;
-  --a-surface:     #fbfcfd;        /* input bg */
+  --a-line:        var(--mb-line);        /* input border */
+  --a-line-soft:   var(--mb-line-soft);
+  --a-surface:     var(--mb-soft);        /* input bg */
 
   --a-radius:      24px;
   --a-radius-sm:   12px;
@@ -371,14 +371,14 @@
 }
 
 .auth-section .alert.error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b42318;
+  background: var(--mb-danger-bg);
+  border: 1px solid var(--mb-danger-border);
+  color: var(--mb-danger);
 }
 
 .auth-section .alert.success {
-  background: #ecfdf3;
-  border: 1px solid #c6eccf;
+  background: var(--mb-ok-bg);
+  border: 1px solid var(--mb-ok-border);
   color: #0e6b3a;
 }
 
@@ -413,7 +413,7 @@
 
 .auth-section .role-option.selected {
   border-color: var(--a-accent);
-  background: #ecfdf3;
+  background: var(--mb-ok-bg);
   color: var(--a-accent-2);
   font-weight: 700;
   box-shadow: 0 0 0 2px rgba(30, 158, 90, .14);
