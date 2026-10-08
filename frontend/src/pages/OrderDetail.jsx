@@ -1507,11 +1507,6 @@ function TransportCard({ order, t }) {
                   <h3 className="od-card-section-title">Review before loading</h3>
                 </div>
                 <p className="muted small">Review what the transporter plans to load, the quantity, timing and condition. Approve it before physical loading begins.</p>
-                {job.buyerLoadingDueAt && (
-                  <p className="muted small">
-                    Approval deadline: <strong>{formatDateTime(job.buyerLoadingDueAt)}</strong>
-                  </p>
-                )}
                 <Button
                   variant="primary"
                   disabled={busy === 'confirm-loading'}
@@ -2087,6 +2082,7 @@ export default function OrderDetail() {
     ['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
     order?.buyerDecision === 'BUY' &&
     marketplacePaid &&
+    Boolean(transportJob.buyerLoadingConfirmedAt) &&
     !transportPayments.some((p) => ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)) &&
     isBuyer;
 
@@ -2124,6 +2120,7 @@ export default function OrderDetail() {
 
   const payTransport = () => {
     if (!isParticipant) return setError('You are not authorized to pay for this transport');
+    if (!transportJob?.buyerLoadingConfirmedAt) return setError('Approve the loading report before paying the transporter');
     if (!hiredTransport) return setError('Transport payment is only required for hired transport');
     if (!transportJob.truckOwnerId) return setError('A transporter must be selected before transport payment');
     const amount = Number(transportJob.agreedAmount);
@@ -2194,7 +2191,7 @@ export default function OrderDetail() {
         processing: transportProcessing,
         note:
           hiredTransport && !['QUOTED', 'ACCEPTED'].includes(transportJob.status) && !transportPaid && !transportPending
-            ? 'Transporter payment becomes available only after the final BUY decision, confirmed seller payment, and buyer approval of the loading report.'
+            ? 'Transporter payment becomes available after the final BUY decision and confirmed seller payment.'
             : null,
         canStart: canStartTransportPayment,
         canResume: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
