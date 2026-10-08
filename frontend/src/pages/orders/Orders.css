@@ -427,19 +427,24 @@
 .status-pill.tone-danger  { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
 .status-pill.tone-gold    { background: #fffbeb; border-color: #fde68a; color: #92400e; }
 
-/* Latest progress pill, right side of the "Order status" header */
+/* Latest progress in the "Order status" header: plain colored text */
 .card-block-title .header-pill {
   flex: 0 1 auto;
   min-width: 0;
   max-width: 68%;
-}
-
-.header-pill-text {
-  min-width: 0;
   overflow: hidden;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 700;
   text-overflow: ellipsis;
+  text-transform: uppercase;
   white-space: nowrap;
 }
+
+.card-block-title .header-pill.tone-success { color: #047857; }
+.card-block-title .header-pill.tone-info    { color: #1d4ed8; }
+.card-block-title .header-pill.tone-danger  { color: #b91c1c; }
+.card-block-title .header-pill.tone-gold    { color: #92400e; }
 
 /* ---- Progress: vertical on narrow cards, horizontal when there is room -- */
 .order-progress {
@@ -506,14 +511,18 @@
 
 /* In Orders list cards the stepper lines up with the indented body instead */
 .orders-page .card-block-body > .order-progress {
-  width: 100%;
-  min-width: 0;
-  margin-inline: 0;
+  width: fit-content;
+  min-width: min(240px, 100%);
+  max-width: 100%;
+  margin-inline: auto;
   margin-top: 0;
 }
 
 @container (min-width: 520px) {
-  .order-progress { width: 100%; }
+  .orders-page .card-block-body > .order-progress {
+    width: 100%;
+    margin-inline: 0;
+  }
 }
 
 /* ---- Amount ------------------------------------------------------------- */
