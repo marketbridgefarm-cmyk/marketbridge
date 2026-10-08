@@ -140,7 +140,13 @@ async function processRefund({ refundId, actorId, note }) {
         where: { id: refund.payment.orderId },
         select: { status: true },
       });
-      if (order && order.status !== 'CANCELLED') {
+      const stalledInspectionRefund = refund.payment.type === 'INSPECTOR' && refund.payment.inspectionRequestId
+        ? await tx.inspectionRequest.findFirst({
+            where: { id: refund.payment.inspectionRequestId, status: 'STALLED' },
+            select: { id: true },
+          })
+        : null;
+      if (order && order.status !== 'CANCELLED' && !stalledInspectionRefund) {
         throw Object.assign(
           new Error(`Order is ${order.status}; refund processing is blocked until the order is cancelled`),
           { status: 409, code: 'REFUND_BLOCKED_ORDER_ACTIVE' }
@@ -256,7 +262,13 @@ async function finalizeRefund({ refundId, actorId, note, providerStatus }) {
         where: { id: fresh.payment.orderId },
         select: { status: true },
       });
-      if (order && order.status !== 'CANCELLED') {
+      const stalledInspectionRefund = fresh.payment.type === 'INSPECTOR' && fresh.payment.inspectionRequestId
+        ? await tx.inspectionRequest.findFirst({
+            where: { id: fresh.payment.inspectionRequestId, status: 'STALLED' },
+            select: { id: true },
+          })
+        : null;
+      if (order && order.status !== 'CANCELLED' && !stalledInspectionRefund) {
         throw Object.assign(
           new Error(`Order is ${order.status}; refund completion is blocked until the order is cancelled`),
           { status: 409, code: 'REFUND_BLOCKED_ORDER_ACTIVE' }
