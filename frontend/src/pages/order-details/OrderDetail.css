@@ -1716,7 +1716,10 @@
 /* ==========================================================================
    Inspection popup
    ========================================================================== */
-
+/* Wider dialog for the transport popup (it can hold up to 3 side-by-side cards). */
+.od-modal--wide {
+  max-width: 1080px;
+}
 .od-modal-backdrop {
   position: fixed;
   inset: 0;
