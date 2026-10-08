@@ -157,14 +157,14 @@ function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, classNam
   );
 }
 
-function Section({ title, meta, strong, children }) {
+function Section({ title, meta, strong, bare, children }) {
   return (
     <div className="od-card-section">
       {(title || meta) && (
         <div className="od-card-section-head">
           <h3 className="od-card-section-title">{title}</h3>
           {meta != null && (
-            <div className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>
+            <div className={`od-card-section-meta${strong ? ' is-strong' : ''}${bare ? ' is-bare' : ''}`}>
               {meta}
             </div>
           )}
@@ -551,7 +551,10 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
   const { isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob } = flags;
   const role = isBuyer ? 'Buying' : isSeller ? 'Selling' : 'Order';
   const showBuyer = isSeller;
+  // The other party is shown top-right (name + avatar); the viewer's own
+  // party stays in the Details grid.
   const other = showBuyer ? order.buyer : order.seller;
+  const otherRole = showBuyer ? 'Buyer' : 'Seller';
   const delivered = ['DELIVERED', 'COMPLETED'].includes(order.status) || transportJob?.status === 'DELIVERED';
 
   const steps = [
@@ -561,23 +564,36 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
     { label: 'Completed', done: order.status === 'COMPLETED' },
   ];
 
+  // Latest status → right side of the "Order status" header (plain coloured text)
+  const closed = ['CANCELLED', 'REJECTED', 'FAILED', 'DISPUTED'].includes(String(order.status || '').toUpperCase());
+  const currentStep = steps.find((s) => !s.done);
+  const latestStatus = closed ? label(order.status) : currentStep ? currentStep.label : 'Completed';
+  const latestTone = closed ? statusTone(order.status) : currentStep ? 'wait' : 'good';
+
   return (
     <Card
       className="od-card-overview"
       eyebrow={role}
       eyebrowClass={isSeller ? 'is-selling' : ''}
       title={title}
-      side={<Avatar name={other?.name} />}
+      side={<PartyBadge role={otherRole} name={other?.name} />}
     >
-      <Section title="Order status" meta={`ORD ${shortId(order.id).toUpperCase()}`}>
+      <Section
+        title="Order status"
+        bare
+        meta={<span className={`od-section-status od-text-${latestTone}`}>{latestStatus}</span>}
+      >
         <OrderProgress steps={steps} />
       </Section>
 
       <Section title="Details">
         <Facts>
           <Fact name="Amount">{money(order.finalPrice)} ETB</Fact>
-          <Fact name="Buyer">{order.buyer?.name || '—'}{isBuyer && <YouTag inline />}</Fact>
-          <Fact name="Seller">{order.seller?.name || '—'}{isSeller && <YouTag inline />}</Fact>
+          {showBuyer ? (
+            <Fact name="Seller">{order.seller?.name || '—'}{isSeller && <YouTag inline />}</Fact>
+          ) : (
+            <Fact name="Buyer">{order.buyer?.name || '—'}{isBuyer && <YouTag inline />}</Fact>
+          )}
           {order.listing?.cropType && <Fact name="Product">{order.listing.cropType}</Fact>}
           {order.listing?.quantity != null && <Fact name="Quantity">{order.listing.quantity} units</Fact>}
           <Fact name="Ordered from">{order.listing?.location || '—'}</Fact>
@@ -585,7 +601,13 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
         </Facts>
       </Section>
 
-      <p className="od-card-created">Created {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}</p>
+      {/* Created date (left) + ORD code (right) */}
+      <div className="od-meta">
+        <span className="od-meta-time">
+          Created {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}
+        </span>
+        <span className="od-meta-code">ORD {shortId(order.id).toUpperCase()}</span>
+      </div>
 
       {canCancel && (
         <Button className="btn btn-outline btn-block" disabled={busy === 'cancel'} onClick={onCancel} busy={busy === 'cancel'} busyText="Cancelling…">
@@ -2348,470 +2370,4 @@ export default function OrderDetail() {
     cancel: () =>
       currentInspection &&
       window.confirm('Cancel this inspection request without cancelling the order? You can open a new request afterward.') &&
-      run(`cancel-inspection-${currentInspection.id}`, () => api.patch(`/inspections/${currentInspection.id}/cancel`), 'Could not cancel inspection request'),
-    reopenBidding: () =>
-      currentInspection &&
-      window.confirm('Reopen inspection bidding? Previous bids will expire and inspectors can submit fresh bids.') &&
-      run(`reopen-inspection-${currentInspection.id}`, () => api.patch(`/inspections/${currentInspection.id}/reopen-bidding`), 'Could not reopen inspection bidding'),
-    decide,
-    isBuyer,
-    isSeller,
-    isParticipant,
-    createPriceReview: (proposedPrice, reasonCode) => run(
-      'price-review-create',
-      () => api.post(`/orders/${order.id}/price-reviews`, { proposedPrice, reasonCode }),
-      'Could not submit price review'
-    ),
-    respondPriceReview: (reviewId, action, proposedPrice, reasonCode) => run(
-      `price-review-${reviewId}-${action.toLowerCase()}`,
-      () => api.patch(`/orders/${order.id}/price-reviews/${reviewId}/respond`, { action, ...(proposedPrice ? { proposedPrice, reasonCode } : {}) }),
-      'Could not respond to price review'
-    ),
-    selectInspectionQuote: (quoteId) => {
-      if (!currentInspection) return;
-      return run(
-        `inspection-quote-${quoteId}-select`,
-        () => api.patch(`/inspections/${currentInspection.id}/quotes/${quoteId}/select`),
-        'Could not select inspection bid'
-      );
-    },
-    acceptInspectionQuote: (quoteId) => {
-      if (!currentInspection) return;
-      return run(
-        `inspection-quote-${quoteId}-accept`,
-        () => api.patch(`/inspections/${currentInspection.id}/quotes/${quoteId}/accept`),
-        'Could not accept inspection quote'
-      );
-    },
-    counterInspectionQuote: async (quoteId, counterKey) => {
-      if (!currentInspection) return;
-      const amount = Number(counterInputs[counterKey] || 0);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        setError('Enter a valid counter amount before sending.');
-        return;
-      }
-      const ok = await run(
-        `inspection-quote-${quoteId}-counter`,
-        () =>
-          api.post(`/inspections/${currentInspection.id}/quotes/${quoteId}/counter`, {
-            counterAmount: amount,
-          }),
-        'Could not send counter-offer'
-      );
-      if (ok) setCounterInputs((prev) => ({ ...prev, [counterKey]: '' }));
-    },
-    rejectInspectionQuote: (quoteId) => {
-      if (!currentInspection) return;
-      return run(
-        `inspection-quote-${quoteId}-reject`,
-        () => api.patch(`/inspections/${currentInspection.id}/quotes/${quoteId}/reject`),
-        'Could not reject inspection quote'
-      );
-    },
-    withdrawInspectionAgreement: (requestId, { reason, note } = {}) => {
-      if (!currentInspection) return;
-      const accepted = leafQuotes(currentInspection.quotes).find(
-        (q) => q.status === 'ACCEPTED'
-      );
-      if (!accepted) return;
-      return run(
-        `withdraw-inspection-${requestId}`,
-        () =>
-          api.patch(`/inspections/${requestId}/quotes/${accepted.id}/withdraw`, {
-            reason,
-            note: note || undefined,
-          }),
-        'Could not release inspection agreement'
-      );
-    },
-    confirmSellerInspection: (requestId) =>
-      run(
-        `seller-confirm-${requestId}`,
-        () => api.post(`/inspections/${requestId}/seller-confirm`),
-        'Could not confirm the inspector'
-      ),
-    declineSellerInspection: (requestId) =>
-      run(
-        `seller-decline-${requestId}`,
-        () => api.post(`/inspections/${requestId}/seller-decline`),
-        'Could not decline the inspection'
-      ),
-    payInspection: (request) => payInspection(request),
-    currentUserId,
-    counterInputs,
-    setCounterInputs,
-    canPayInspection: Boolean(
-      currentInspection &&
-      currentInspection.status === 'ACCEPTED' &&
-      currentInspection.fee != null &&
-      currentInspection.sellerConfirmedAt != null &&
-      (order?.paymentObligations || []).some(
-        (o) => o.type === 'INSPECTOR' &&
-          o.inspectionRequestId === currentInspection.id &&
-          o.payerId === currentUserId &&
-          o.status !== 'PAID' &&
-          o.payment?.status !== 'PAID' &&
-          !['PENDING', 'PROCESSING'].includes(o.payment?.status)
-      )
-    ),
-
-    onBuy: () => decide('BUY'),
-    onCancel: () => decide('CANCEL'),
-    onProposePrice: (proposedPrice, reasonCode) =>
-      run(
-        'price-review-create',
-        () => api.post(`/orders/${order.id}/price-reviews`, { proposedPrice, reasonCode }),
-        'Could not submit price review'
-      ),
-    onRespondReview: (reviewId, action, proposedPrice, reasonCode) =>
-      run(
-        `price-review-${reviewId}-${action.toLowerCase()}`,
-        () => api.patch(`/orders/${order.id}/price-reviews/${reviewId}/respond`, { action, ...(proposedPrice ? { proposedPrice, reasonCode } : {}) }),
-        'Could not respond to price review'
-      ),
-    onScrollToPayment: () => scrollToId('payment-center', 150),
-  };
-
-  const canCancelOrder = Boolean(
-    order &&
-      !['COMPLETED', 'CANCELLED'].includes(order.status) &&
-      !transportInMotion &&
-      (isAdmin ||
-        (isBuyer && order.status === 'PENDING_PAYMENT') ||
-        (isSeller && ['PENDING_PAYMENT', 'CONFIRMED'].includes(order.status)))
-  );
-
-  const cancelOrder = () => {
-    if (!canCancelOrder) return;
-    if (!window.confirm('Cancel this order? This cannot be undone. The listing becomes available again and completed payments are flagged for refund.')) return;
-    const reason = window.prompt('Optional: add a reason for cancelling (shown in the order history).') || undefined;
-    return run('cancel', () => api.patch(`/orders/${order.id}/cancel`, reason ? { reason } : {}), 'Could not cancel order');
-  };
-
-  const confirmReceipt = () => {
-    if (!isBuyer) return setError('Only the buyer can confirm receipt');
-    if (!marketplacePaid) return setError('Marketplace payment must be confirmed before receipt');
-    if (hiredTransport && !transportPaid) return setError('Transport payment must be confirmed before receipt');
-    return run('receipt', () => api.patch(`/orders/${order.id}/confirm-receipt`), 'Could not confirm receipt');
-  };
-
-  const submitOffer = async (event) => {
-    event.preventDefault();
-    const amount = Number(offerAmount);
-    if (!Number.isFinite(amount) || amount <= 0 || !order?.listingId) {
-      return setError('Enter a valid offer amount before submitting.');
-    }
-    setSubmittingOffer(true);
-    const ok = await run('offer', () => api.post('/offers', { listingId: order.listingId, amount }), 'Could not submit your offer');
-    setSubmittingOffer(false);
-    if (ok) {
-      setOfferAmount('');
-      setError('Offer submitted. The seller can select it and begin negotiation.');
-    }
-  };
-
-  const refundAction = (refund) =>
-    run(`refund-${refund.id}`, () => {
-      const base = `/admin/financial/refunds/${refund.id}`;
-      if (refund.status === 'PROCESSING') return api.post(`${base}/verify`);
-      if (refund.status === 'FAILED') return api.post(`${base}/retry`);
-      return api.post(`${base}/process`);
-    }, 'Could not process or verify the refund with Chapa');
-
-  const failRefund = (refund) => {
-    const reason = window.prompt('Why did this refund fail?', '');
-    if (reason === null) return;
-    if (!reason.trim()) return setError('Enter a reason before marking a refund as failed.');
-    return run(`refund-${refund.id}`, () => api.patch(`/admin/financial/refunds/${refund.id}/fail`, { failureReason: reason.trim() }), 'Could not mark the refund as failed');
-  };
-
-  const disputeCounterparties = useMemo(() => {
-    if (!order) return [];
-    return [
-      order.buyer && { id: order.buyer.id, name: order.buyer.name, role: 'Buyer' },
-      order.seller && { id: order.seller.id, name: order.seller.name, role: 'Seller' },
-      ...inspections.filter((r) => r.inspector).map((r) => ({ id: r.inspector.id, name: r.inspector.name, role: 'Inspector' })),
-      transportJob?.truckOwner && { id: transportJob.truckOwner.id, name: transportJob.truckOwner.name, role: 'Truck owner' },
-    ]
-      .filter(Boolean)
-      .filter((p) => p.id !== currentUserId);
-  }, [order, transportJob, inspections, currentUserId]);
-
-  const canRaiseDispute = Boolean(
-    order &&
-      !['COMPLETED', 'CANCELLED', 'DISPUTED'].includes(order.status) &&
-      (isBuyer || isSeller || isInspector || isTransporter) &&
-      disputeCounterparties.length > 0
-  );
-
-  const submitDispute = async (event) => {
-    event.preventDefault();
-    if (!canRaiseDispute) return;
-    if (!disputeAgainstId) return setError('Choose who the dispute is against');
-    if (!disputeDescription.trim()) return setError('Describe what went wrong');
-    setSubmittingDispute(true);
-    setError('');
-    try {
-      await api.post('/disputes', {
-        orderId: order.id,
-        againstId: disputeAgainstId,
-        disputeType,
-        description: disputeDescription.trim(),
-      });
-      setDisputeSubmitted(true);
-      setDisputeDescription('');
-      await reload();
-    } catch (err) {
-      const message = getError(err, 'Could not raise dispute');
-      if (/cannot be disputed/i.test(message) || /already has an open dispute/i.test(message)) {
-        setError(`${message} If the order was cancelled, any payments already made (including an inspection fee) are refunded automatically — check the Payment Center for its status instead of disputing.`);
-        await reload();
-      } else {
-        setError(message);
-      }
-    } finally {
-      setSubmittingDispute(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <main className="section order-detail-page">
-        <div className="container-narrow">
-          <div className="card loading"><p>Loading order…</p></div>
-        </div>
-      </main>
-    );
-  }
-
-  if (!order) {
-    return (
-      <main className="section order-detail-page">
-        <div className="container-narrow">
-          <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
-          <div className="alert error">{error || 'Order not found'}</div>
-        </div>
-      </main>
-    );
-  }
-
-  const orderOpen = !['COMPLETED', 'CANCELLED'].includes(order.status);
-
-  const inspectionProps = {
-    all: allInspections,
-    current: currentInspection,
-    formReleased: inspectionFormReleased,
-    requesting: requestingInspection,
-    workDetails: inspectionWorkDetails,
-    setWorkDetails: setInspectionWorkDetails,
-    isBuyer,
-    isAdmin,
-    isParticipant,
-    isAgricultural,
-    decisionRequired,
-    busy,
-    ...inspectionActions,
-  };
-
-  const transportProps = {
-    job: transportJob,
-    currentUserId,
-    isBuyer,
-    isSeller,
-    isTransporter,
-    isArranger: isTransportArranger,
-    canArrange: Boolean(!transportJob && order.status !== 'CANCELLED' && isParticipant),
-    canChooseQuote: Boolean(transportJob && isTransportArranger && ['REQUESTED', 'QUOTED'].includes(transportJob.status)),
-    canStartPayment: canStartTransportPayment,
-    canResumePayment: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
-    paid: transportPaid,
-    paidAmount: transportPayments.find((p) => p.status === 'PAID')?.amount,
-    pending: transportPending,
-    payment: transportPayment,
-    payMethod,
-    setPayMethod,
-    pay: payTransport,
-    resume: resumePayment,
-    busy,
-    reload,
-    recoveryRequests,
-    counterInputs,
-    setCounterInputs,
-    evidence,
-    setEvidence,
-    notes: evidenceNotes,
-    setNotes: setEvidenceNotes,
-    evidenceBusy,
-    loadingReport,
-    loadingReportEvidence,
-    allOrderPaymentsSettled,
-    marketplacePaid,
-    missingPayments,
-    ...transportActions,
-  };
-
-  const disputeProps = {
-    canRaise: canRaiseDispute,
-    counterparties: disputeCounterparties,
-    againstId: disputeAgainstId,
-    setAgainstId: setDisputeAgainstId,
-    type: disputeType,
-    setType: setDisputeType,
-    description: disputeDescription,
-    setDescription: setDisputeDescription,
-    submitting: submittingDispute,
-    submitted: disputeSubmitted,
-    submit: submitDispute,
-  };
-
-  return (
-    <main className="section order-detail-page">
-      <div className="container-narrow">
-        <div className="row-between page-bar">
-          <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
-          <Button size="sm" disabled={refreshing} busy={refreshing} busyText="Refreshing…" onClick={reload}>Refresh</Button>
-        </div>
-
-        <div className="od-page-grid">
-          <div className="od-span-all">
-            <OverviewCard
-              order={order}
-              title={title}
-              flags={{ isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob }}
-              canCancel={canCancelOrder}
-              busy={busy}
-              onCancel={cancelOrder}
-            />
-          </div>
-
-          {isBuyer && (
-            <div className="od-span-all">
-              <BuyerConfidenceCard order={order} recoveryRequests={recoveryRequests} />
-            </div>
-          )}
-
-          {workflow ? (
-            <ActionCenter workflow={workflow} onScroll={scrollToId} onActionComplete={reload} />
-          ) : (
-            isInspector && (
-              <Card id="next-action" tone="accent" eyebrow="Next step" title="Inspector action">
-                {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
-                {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
-                {assignedInspection.status === 'COMPLETED' && <p>The report is published. The buyer can now complete any required inspection payment and continue.</p>}
-                <Actions><Link className="btn btn-primary" to="/dashboard/inspector">Open inspection dashboard</Link></Actions>
-              </Card>
-            )
-          )}
-
-          {isProduct && isBuyer && !order.agreedOfferId && (
-            <OfferCard
-              amount={offerAmount}
-              setAmount={setOfferAmount}
-              reference={Number(order.listing?.askingPrice ?? order.listing?.price)}
-              submitting={submittingOffer}
-              onSubmit={submitOffer}
-            />
-          )}
-
-          {inspectionApplies && isParticipant && orderOpen && (
-            <InspectionCard order={order} title={title} i={inspectionProps} />
-          )}
-
-          {currentInspection &&
-            ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(currentInspection.status) &&
-            isSeller && (
-              <InspectionCoordinationSeller
-                inspectionRequestId={currentInspection.id}
-              />
-            )}
-
-          <div className="od-span-all">
-            <TransportCard order={order} t={transportProps} />
-          </div>
-
-          {(!isProduct || order.agreedOfferId) && (
-            <div className="od-span-all">
-              <PaymentCenter
-                workflowPayments={workflow?.payments}
-                rawPayments={payments}
-                isBuyer={isBuyer}
-                buyerIdentityMismatch={buyerIdentityMismatch}
-                marketplaceBlockedReason={marketplaceBlockedReason}
-                payMethod={payMethod}
-                setPayMethod={setPayMethod}
-                paymentMethods={PAYMENT_METHODS}
-                busy={busy}
-                marketplace={marketplaceObligation}
-                inspections={inspectionPaymentGroups}
-                transport={transportObligation}
-              />
-            </div>
-          )}
-
-          {order.status === 'DELIVERED' && isBuyer && (
-            <ReceiptCard
-              marketplacePaid={marketplacePaid}
-              transportBlocked={hiredTransport && !transportPaid}
-              busy={busy}
-              onConfirm={confirmReceipt}
-            />
-          )}
-
-          <div className="od-span-all">
-            <PayoutStatusCard
-              payouts={{ seller: payoutBy('SELLER'), inspector: payoutBy('INSPECTOR'), transporter: payoutBy('TRANSPORTER') }}
-              names={{ seller: order.seller?.name || null, inspector: inspectorName, transporter: transportJob?.truckOwner?.name || null }}
-              you={{ seller: isSeller, inspector: isInspector, transporter: isTransporter }}
-            />
-          </div>
-
-          <RefundStatusCard
-            refunds={refunds}
-            payouts={payouts}
-            people={{
-              SELLER: { name: order.seller?.name || null, you: isSeller },
-              INSPECTOR: { name: inspectorName, you: isInspector },
-              TRANSPORTER: { name: transportJob?.truckOwner?.name || null, you: isTransporter },
-            }}
-            isAdmin={isAdmin}
-            busy={busy}
-            onComplete={refundAction}
-            onFail={failRefund}
-          />
-
-          {workflow && (
-            <div className="od-span-all">
-              <Card eyebrow="History" title="Order timeline" subtitle="Everything that has happened on this order">
-                <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
-              </Card>
-            </div>
-          )}
-
-          <DisputeCard order={order} d={disputeProps} />
-
-          {order.status === 'COMPLETED' && (
-            <Card eyebrow="Closed" title="Order completed">
-              <Notice title="✓ This order has been completed.">
-                <p className="muted">Receipt was confirmed by the buyer.</p>
-              </Notice>
-            </Card>
-          )}
-
-          <RatingBox order={order} userId={currentUserId} onRated={reload} />
-
-          {isAdmin && (
-            <Card eyebrow="Admin" title="Administrator view" subtitle="You are viewing this order with administrator access." />
-          )}
-        </div>
-      </div>
-
-      {error && (
-        <div className="order-detail-toast" role="alert" aria-live="assertive">
-          <span className="order-detail-toast-icon" aria-hidden="true">!</span>
-          <span className="order-detail-toast-message">{error}</span>
-          <button type="button" className="order-detail-toast-close" onClick={() => setError('')} aria-label="Dismiss message">×</button>
-        </div>
-      )}
-    </main>
-  );
-}
+      run(`cancel-inspection-${currentInspection.id}`, () => api.patch(`/inspec
