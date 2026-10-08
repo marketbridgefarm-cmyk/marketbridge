@@ -522,10 +522,11 @@
   font-weight: 700;
 }
 
-/* ---- Footer actions ----------------------------------------------------- */
-.order-actions {
+/* ---- Meta row: created date (left) + ORD code (right) ------------------- */
+.order-meta {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 12px;
   margin-top: 22px;
 }
@@ -533,6 +534,27 @@
 .order-time {
   color: var(--mb-muted);
   font-size: 14px;
+}
+
+.order-code {
+  flex: none;
+  color: var(--mb-muted);
+  font-size: 14px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The meta row's children must not stretch to full width */
+.orders-page .order-meta > * {
+  width: auto;
+}
+
+/* ---- Footer actions ----------------------------------------------------- */
+.order-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .btn-view {
@@ -645,7 +667,7 @@
 
 /* Card internals respond to the card's own width (works beside a sidebar) */
 @container (min-width: 460px) {
-  .order-actions { flex-direction: row; align-items: center; justify-content: space-between; }
+  .order-actions { flex-direction: row; align-items: center; justify-content: flex-end; }
   .btn-view { width: auto; flex: none; }
 }
 
