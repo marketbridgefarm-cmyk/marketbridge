@@ -427,6 +427,20 @@
 .status-pill.tone-danger  { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
 .status-pill.tone-gold    { background: #fffbeb; border-color: #fde68a; color: #92400e; }
 
+/* Latest progress pill, right side of the "Order status" header */
+.card-block-title .header-pill {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 68%;
+}
+
+.header-pill-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- Progress: vertical on narrow cards, horizontal when there is room -- */
 .order-progress {
   display: flex;
@@ -495,6 +509,7 @@
   width: 100%;
   min-width: 0;
   margin-inline: 0;
+  margin-top: 0;
 }
 
 @container (min-width: 520px) {
@@ -529,9 +544,11 @@
   justify-content: space-between;
   gap: 12px;
   margin-top: 22px;
+  padding-inline-end: 14px;
 }
 
 .order-time {
+  min-width: 0;
   color: var(--mb-muted);
   font-size: 14px;
 }
