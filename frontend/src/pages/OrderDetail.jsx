@@ -80,7 +80,7 @@ const statusTone = (status) => {
   if (['COMPLETED', 'DELIVERED', 'PAID', 'ACCEPTED', 'CONFIRMED'].includes(value)) return 'good';
   if (['CANCELLED', 'REJECTED', 'FAILED', 'DISPUTED'].includes(value)) return 'bad';
   if (['TRANSPORT_ARRANGED', 'ARRANGED', 'QUOTED'].includes(value)) return 'info';
-  if (['PENDING', 'AWAITING_PAYMENT', 'IN_PROGRESS', 'PROCESSING'].includes(value)) return 'wait';
+  if (['PENDING', 'AWAITING_PAYMENT', 'IN_PROGRESS', 'PROCESSING', 'PENDING_PAYMENT'].includes(value)) return 'wait';
   return 'neutral';
 };
 
@@ -623,17 +623,17 @@ function OrderProgress({ steps }) {
 function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
   const { isBuyer, isSeller, marketplacePaid, transportJob } = flags;
   const role = isBuyer ? 'Buying' : isSeller ? 'Selling' : 'Order';
-  const showBuyer = isSeller;
-  const other = showBuyer ? order.buyer : order.seller;
+  const counterpartyRole = isSeller ? 'Buyer' : 'Seller';
+  const other = isSeller ? order.buyer : order.seller;
   const delivered =
     ['DELIVERED', 'COMPLETED'].includes(order.status) ||
     transportJob?.status === 'DELIVERED';
 
   const steps = [
-    { label: 'Ordered', done: true },
-    { label: 'Paid', done: marketplacePaid },
+    { label: 'Order placed', done: true },
+    { label: 'Payment', done: marketplacePaid },
+    { label: 'Transport', done: Boolean(transportJob) },
     { label: 'Delivered', done: delivered },
-    { label: 'Completed', done: order.status === 'COMPLETED' },
   ];
 
   const tone = statusTone(order.status);
@@ -645,19 +645,27 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
       eyebrow={role}
       eyebrowClass={isSeller ? 'is-selling' : ''}
       title={title}
-      side={<Avatar name={other?.name} />}
+      side={<PartyBadge role={counterpartyRole} name={other?.name} />}
     >
       <Section
         title="Order status"
-        meta={<Pill tone={tone}>{statusText}</Pill>}
+        meta={
+          <span className={`od-section-status od-text-${tone}`}>{statusText}</span>
+        }
         bare
       >
         <OrderProgress steps={steps} />
       </Section>
 
+      <Section title="Amount">
+        <div className="od-price">
+          <span className="od-price-amount">{money(order.finalPrice)}</span>
+          <span className="od-price-currency">ETB</span>
+        </div>
+      </Section>
+
       <Section title="Details">
         <Facts>
-          <Fact name="Amount">{money(order.finalPrice)} ETB</Fact>
           <Fact name="Buyer">
             {order.buyer?.name || '—'}
             {isBuyer && <YouTag inline />}
