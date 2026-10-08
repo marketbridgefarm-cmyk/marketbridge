@@ -13,7 +13,8 @@
   --mb-ink:            #0f172a;
   --mb-ink-2:          #334155;
   --mb-muted:          #64748b;
-  --mb-accent:         #c2410c;
+  --mb-accent:         #c2410c;   /* warm orange — top eyebrow bar */
+  --mb-accent-2:       #0f766e;   /* cool teal — card head divider bar */
   --mb-accent-ink:     #9a3412;
   --mb-accent-tint:    #fff7ed;
   --mb-accent-border:  #fed7aa;
@@ -21,7 +22,7 @@
   --mb-danger:         #b91c1c;
   --mb-line:           #cbd5e1;
   --mb-card:           #ffffff;
-  --mb-radius-card:    28px;
+  --mb-radius-card:    20px;      /* reduced from 28px */
   --mb-radius-field:   16px;
 
   --od-ink:            var(--mb-ink);
@@ -37,6 +38,7 @@
   --od-brand:          var(--mb-accent);
   --od-brand-dark:     var(--mb-accent-ink);
   --od-brand-soft:     var(--mb-accent-tint);
+  --od-accent-2:       var(--mb-accent-2);
 
   --od-good:           var(--mb-ok);
   --od-good-bg:        #ecfdf5;
@@ -172,7 +174,7 @@
    Grid layout:
      row 1:  eyebrow          | head-side (label)
      row 2:  title            | head-side (value / pill)
-     row 3:  ─── divider ───  (full-width)
+     row 3:  ─── divider ───  (full-width, teal accent segment)
      row 4:  subtitle         (full-width, below the divider)
    ------------------------------------------------------------------------ */
 .order-detail-page .od-card-head {
@@ -222,7 +224,10 @@
   min-width: 0;
 }
 
-/* Divider row: 1.5px line + 44px accent segment */
+/* Divider row:
+   — thin gray hairline across the card
+   — short TEAL accent segment (uses --od-accent-2)
+   The eyebrow bar above uses --od-accent (orange), so the two bars differ. */
 .order-detail-page .od-card-head::before {
   content: '';
   grid-column: 1 / -1;
@@ -230,8 +235,8 @@
   height: 3px;
   margin: 12px 0 0;
   background:
-    linear-gradient(var(--od-accent, var(--mb-accent)),
-                    var(--od-accent, var(--mb-accent))) left center / 44px 3px no-repeat,
+    linear-gradient(var(--od-accent-2, var(--mb-accent-2)),
+                    var(--od-accent-2, var(--mb-accent-2))) left center / 44px 3px no-repeat,
     linear-gradient(var(--mb-line), var(--mb-line)) left center / 100% 1.5px no-repeat;
 }
 
@@ -245,7 +250,7 @@
   min-width: 0;
 }
 
-/* Eyebrow text + accent bar */
+/* Eyebrow text + accent bar. Bar is 16×2px and uses --od-accent (orange). */
 .order-detail-page .od-eyebrow {
   display: flex;
   align-items: center;
@@ -265,7 +270,6 @@
 }
 .order-detail-page .od-eyebrow.is-selling { color: var(--mb-ok); }
 
-/* Base title — reduced */
 .order-detail-page .od-card-title {
   margin: 0;
   color: var(--mb-ink);
@@ -337,17 +341,18 @@
   font-weight: 800;
 }
 
-/* ---- 4d. Single warm accent -------------------------------------------- */
-.order-detail-page .card                       { --od-accent: var(--mb-accent); }
-.order-detail-page #make-offer                 { --od-accent: var(--mb-accent); }
-.order-detail-page #inspection-section         { --od-accent: var(--mb-accent); }
-.order-detail-page #transport-section          { --od-accent: var(--mb-accent); }
-.order-detail-page #transport-evidence-section { --od-accent: var(--mb-accent); }
+/* ---- 4d. Single warm accent for the eyebrow ------------------------------------
+   The divider bar uses --od-accent-2 instead, so the two lines differ. */
+.order-detail-page .card                       { --od-accent: var(--mb-accent); --od-accent-2: var(--mb-accent-2); }
+.order-detail-page #make-offer                 { --od-accent: var(--mb-accent); --od-accent-2: var(--mb-accent-2); }
+.order-detail-page #inspection-section         { --od-accent: var(--mb-accent); --od-accent-2: var(--mb-accent-2); }
+.order-detail-page #transport-section          { --od-accent: var(--mb-accent); --od-accent-2: var(--mb-accent-2); }
+.order-detail-page #transport-evidence-section { --od-accent: var(--mb-accent); --od-accent-2: var(--mb-accent-2); }
 .order-detail-page #transport-payment-section,
-.order-detail-page #payment-center             { --od-accent: var(--mb-accent); }
-.order-detail-page #order-payout-status        { --od-accent: var(--mb-accent); }
-.order-detail-page #order-refund-status        { --od-accent: var(--mb-danger); }
-.order-detail-page #raise-dispute              { --od-accent: var(--mb-accent); }
+.order-detail-page #payment-center             { --od-accent: var(--mb-accent); --od-accent-2: var(--mb-accent-2); }
+.order-detail-page #order-payout-status        { --od-accent: var(--mb-accent); --od-accent-2: var(--mb-accent-2); }
+.order-detail-page #order-refund-status        { --od-accent: var(--mb-danger); --od-accent-2: var(--mb-danger); }
+.order-detail-page #raise-dispute              { --od-accent: var(--mb-accent); --od-accent-2: var(--mb-accent-2); }
 
 
 /* ==========================================================================
@@ -381,7 +386,7 @@
 
 .order-detail-page .od-card-section-meta {
   padding: 4px 12px;
-  background: #fff;
+  background: transparent;
   border: 1px solid var(--mb-line);
   border-radius: 999px;
   color: var(--mb-ink-2);
@@ -570,8 +575,6 @@
 
 /* ==========================================================================
    8. BUTTONS & ACTIONS
-   --------------------------------------------------------------------------
-   All buttons: transparent background (inherits card colour), 1px border.
    ========================================================================== */
 .order-detail-page .btn {
   display: inline-flex;
@@ -597,7 +600,6 @@
 .order-detail-page .btn:hover:not(:disabled) { background-color: rgba(241, 245, 249, 0.55) !important; }
 .order-detail-page .btn:disabled             { opacity: 0.55; cursor: not-allowed; }
 
-/* Primary: transparent, thin accent border, accent text */
 .order-detail-page .btn-primary {
   background: transparent !important;
   background-color: transparent !important;
@@ -678,7 +680,7 @@
   width: 100%;
   min-height: 48px;
   padding: 10px 14px;
-  background: #fff;
+  background: transparent;
   border: 1px solid var(--mb-line);
   border-radius: var(--mb-radius-field);
   color: var(--mb-ink);
@@ -757,7 +759,7 @@
   min-width: 0;
   min-height: 48px;
   padding: 10px 14px;
-  background: #fff;
+  background: transparent;
   border: 1px solid var(--mb-line);
   border-radius: var(--mb-radius-field);
   color: var(--mb-ink);
@@ -1485,9 +1487,6 @@
 
 /* ==========================================================================
    20. OVERVIEW CARD FINAL TOUCHES
-   --------------------------------------------------------------------------
-   Overview title is intentionally NOT bigger than the base card title
-   anymore — it inherits the reduced size.
    ========================================================================== */
 .order-detail-page .od-card-overview .od-card-created {
   margin: 20px 0 0;
@@ -1587,7 +1586,7 @@
    ========================================================================== */
 
 @media (max-width: 360px) {
-  .order-detail-page { --od-pad: 18px; --od-gap: 14px; }
+  .order-detail-page { --od-pad: 18px; --od-gap: 14px; --mb-radius-card: 16px; }
   .order-detail-page .od-card-title        { font-size: 20px; }
   .order-detail-page .order-progress-label { font-size: 14px; }
   .order-detail-page .payout-table th,
@@ -1735,7 +1734,7 @@
   display: flex;
   flex-direction: column;
   background: #fff;
-  border-radius: var(--mb-radius-card, 28px);
+  border-radius: var(--mb-radius-card, 20px);
   box-shadow: 0 24px 64px rgba(15, 23, 42, 0.28);
   overflow: hidden;
   animation: od-modal-pop 180ms ease-out;
