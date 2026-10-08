@@ -1,7 +1,17 @@
+/* ==========================================================================
+   AmountPicker — select-only amount input (− [select] +)
+   Same look as the shared .field: 52px tall, 16px corners, 1.5px border,
+   16px text (no iOS zoom). Tokens come from mb-tokens.css.
+   Size hook: a host can shrink it by setting --ap-h / --ap-radius, e.g.
+     .bb-actions .bb-counter-picker { --ap-h: var(--mb-btn-h-sm); }
+   ========================================================================== */
+
 .amount-picker {
+  --ap-h: var(--mb-field-h);
+  --ap-radius: var(--mb-radius-field);
   display: inline-flex;
   align-items: stretch;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   max-width: 100%;
 }
@@ -9,40 +19,56 @@
 .amount-picker-select {
   flex: 1 1 auto;
   min-width: 150px;
-  min-height: 40px;
-  padding: 0 10px;
-  font: inherit;
-  color: inherit;
-  background: var(--surface, #fff);
-  border: 1px solid var(--border, #d6dbe1);
-  border-radius: 10px;
+  min-height: var(--ap-h);
+  padding: 0 14px;
+  background: var(--mb-surface);
+  border: var(--mb-bw) solid var(--mb-line);
+  border-radius: var(--ap-radius);
+  color: var(--mb-ink);
+  font: 500 16px / 1.4 var(--mb-font-body);
+}
+
+.amount-picker-step {
+  flex: 0 0 var(--ap-h);
+  min-height: var(--ap-h);
+  padding: 0;
+  background: var(--mb-surface);
+  border: var(--mb-bw) solid var(--mb-line);
+  border-radius: var(--ap-radius);
+  color: var(--mb-ink-2);
+  font: 700 20px / 1 var(--mb-font-body);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  .amount-picker-step:hover:not(:disabled) {
+    background: var(--mb-soft);
+  }
 }
 
 .amount-picker-select:focus-visible,
 .amount-picker-step:focus-visible {
-  outline: 2px solid var(--primary, #1f7a4d);
-  outline-offset: 1px;
-}
-
-.amount-picker-step {
-  flex: 0 0 40px;
-  min-height: 40px;
-  font-size: 20px;
-  line-height: 1;
-  color: inherit;
-  background: var(--surface, #fff);
-  border: 1px solid var(--border, #d6dbe1);
-  border-radius: 10px;
-  cursor: pointer;
+  outline: var(--mb-focus-ring);
+  outline-offset: var(--mb-focus-offset);
 }
 
 .amount-picker-step:disabled,
 .amount-picker-select:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: not-allowed;
+}
+.amount-picker-select:disabled {
+  background: var(--mb-soft);
 }
 
 @media (max-width: 640px) {
   .amount-picker { display: flex; width: 100%; }
   .amount-picker-select { min-width: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .amount-picker-step { transition: none; }
 }
