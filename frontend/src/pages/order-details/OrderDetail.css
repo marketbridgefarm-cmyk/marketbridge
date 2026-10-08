@@ -255,6 +255,25 @@
   vertical-align: middle;
 }
 
+
+/* Overview is intentionally split into Orders-style cards. */
+.od-overview-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.od-overview-stack > .card {
+  margin-bottom: 0;
+}
+
+@media (max-width: 480px) {
+  .od-overview-stack {
+    gap: 16px;
+  }
+}
+
 /* Sections: no nested floating cards ------------------------------------- */
 
 .od-card-section {
