@@ -33,7 +33,7 @@ import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
 
-import './order-details/OrderDetail.css';
+import '.order-details/OrderDetail.css';
 
 const PAYMENT_METHODS = [
   { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
@@ -260,10 +260,18 @@ function Notice({ title, children }) {
   );
 }
 
-const Button = ({ variant = 'default', size, busy, busyText, children, ...rest }) => (
+const Button = ({
+  variant = 'default',
+  size,
+  busy,
+  busyText,
+  className,
+  children,
+  ...rest
+}) => (
   <button
     type="button"
-    className={`btn${variant !== 'default' ? ` btn-${variant}` : ''}${size ? ` btn-${size}` : ''}`}
+    className={`btn${variant !== 'default' ? ` btn-${variant}` : ''}${size ? ` btn-${size}` : ''}${className ? ` ${className}` : ''}`}
     {...rest}
   >
     {busy ? busyText : children}
@@ -664,7 +672,7 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
         </div>
       </Section>
 
-      <Section title="Details">
+      <Section title="Order Details">
         <Facts>
           <Fact name="Buyer">
             {order.buyer?.name || '—'}
