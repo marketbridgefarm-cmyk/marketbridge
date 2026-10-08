@@ -9,39 +9,38 @@
    ============================================================ */
 
 .detail-page {
-  --ld-accent:      #1e9e5a;
-  --ld-accent-2:    #0f7a44;
-  --ld-accent-ink:  #12734a;
-  --ld-accent-soft: #ecfdf3;
-  --ld-accent-line: #c6eccf;
+  --ld-accent:      var(--mb-ok);
+  --ld-accent-2:    var(--mb-ok);
+  --ld-accent-ink:  var(--mb-ok);
+  --ld-accent-soft: var(--mb-ok-bg);
+  --ld-accent-line: var(--mb-ok-border);
 
-  --ld-ink:         #0d1b2a;
-  --ld-ink-soft:    #2c3a4a;
-  --ld-muted:       #64748b;
+  --ld-ink:         var(--mb-ink);
+  --ld-ink-soft:    var(--mb-ink-2);
+  --ld-muted:       var(--mb-muted);
   --ld-muted-2:     #94a3b8;
 
-  --ld-line:        #e5e9ef;
-  --ld-line-soft:   #eef1f5;
+  --ld-line:        var(--mb-line);
+  --ld-line-soft:   var(--mb-line-soft);
 
-  --ld-gold:        #a86f10;
-  --ld-gold-soft:   #fdf6e7;
-  --ld-gold-line:   #f4e0b6;
+  --ld-gold:        var(--mb-wait);
+  --ld-gold-soft:   var(--mb-wait-bg);
+  --ld-gold-line:   var(--mb-wait-border);
 
-  --ld-danger:      #b42318;
-  --ld-danger-soft: #fef2f2;
-  --ld-danger-line: #fecaca;
+  --ld-danger:      var(--mb-danger);
+  --ld-danger-soft: var(--mb-danger-bg);
+  --ld-danger-line: var(--mb-danger-border);
 
-  --ld-info:        #1e5fa8;
-  --ld-info-soft:   #eff5fd;
-  --ld-info-line:   #cddff5;
+  --ld-info:        var(--mb-info);
+  --ld-info-soft:   var(--mb-info-bg);
+  --ld-info-line:   var(--mb-info-border);
 
-  --ld-radius:      20px;
-  --ld-radius-sm:   12px;
+  --ld-radius:      var(--mb-radius-card);
+  --ld-radius-sm:   var(--mb-radius-field);
 
-  --ld-shadow:      0 1px 2px rgba(15, 30, 45, .04),
-                    0 8px 24px rgba(15, 30, 45, .05);
+  --ld-shadow:      var(--mb-shadow-card);
   --ld-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
-  --ld-ring:        0 0 0 3px rgba(30, 158, 90, .18);
+  --ld-ring:        0 0 0 3px var(--mb-accent-border);
   --ld-ease:        cubic-bezier(.2, .7, .3, 1);
 
   min-height: calc(100vh - 72px);
@@ -875,7 +874,7 @@
 .ld-inspection-scope {
   margin-top: 14px;
   padding: 12px 14px;
-  border: 1px solid #e5e9ef;
+  border: 1px solid var(--mb-line-soft);
   border-radius: 10px;
   background: #f8fafc;
 }
@@ -885,13 +884,13 @@
   font-weight: 700;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: #64748b;
+  color: var(--mb-muted);
 }
 .ld-inspection-scope-title {
   margin: 0 0 10px;
   font-size: 13.5px;
   font-weight: 600;
-  color: #0d1b2a;
+  color: var(--mb-ink);
 }
 .ld-inspection-scope-grid {
   display: grid;
@@ -908,11 +907,11 @@
   font-weight: 700;
   letter-spacing: .08em;
   text-transform: uppercase;
-  color: #64748b;
+  color: var(--mb-muted);
 }
 .ld-inspection-scope-grid > div > strong {
   font-size: 13px;
-  color: #0d1b2a;
+  color: var(--mb-ink);
 }
 .ld-inspection-scope-full {
   grid-column: 1 / -1;
