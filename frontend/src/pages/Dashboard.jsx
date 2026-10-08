@@ -375,7 +375,7 @@ export default function Dashboard() {
     setTransportBusy(jobId);
     try {
       await api.post(`/transport/${jobId}/seller-confirm-pickup`, { message: transportMessages[jobId] || '' });
-      toast('Pickup readiness confirmed. The transporter may now record pickup.');
+      toast('Transporter preparation confirmed. The buyer can now make the final BUY decision and pay the seller.');
       await loadAll();
     } catch (err) {
       toast(err.response?.data?.error || 'Could not confirm transport pickup');
@@ -757,7 +757,7 @@ export default function Dashboard() {
             </section>
 
             <section className="panel" aria-labelledby="seller-transport-confirm-title">
-              <div className="panel-head"><h3 id="seller-transport-confirm-title">Transport pickup confirmations</h3></div>
+              <div className="panel-head"><h3 id="seller-transport-confirm-title">Transporter preparation confirmations</h3></div>
               <p className="muted">Confirm that the goods are ready before the selected transporter can mark them as picked up.</p>
               {orders.filter((o) => o.sellerId === user?.id && o.transportJob && o.transportJob.status === 'ACCEPTED' && !o.transportJob.sellerPickupConfirmedAt).length === 0 ? (
                 <p>No transport pickups are awaiting your confirmation.</p>
@@ -765,13 +765,13 @@ export default function Dashboard() {
                 const job = o.transportJob;
                 return <div key={job.id} className="panel" style={{ marginTop: 12 }}>
                   <strong>{o.listing?.title || o.listing?.cropType || 'Order transport'}</strong>
-                  <p>Transporter: {job.truckOwner?.name || job.truckOwner?.user?.name || 'Selected transporter'} · Status: awaiting seller pickup confirmation</p>
+                  <p>Transporter: {job.truckOwner?.name || job.truckOwner?.user?.name || 'Selected transporter'} · Status: awaiting seller confirmation of transporter preparation</p>
                   <p>Pickup: {job.pickupLocation || 'Not specified'} · Destination: {job.destination || 'Not specified'}</p>
                   <label style={{ display: 'block', margin: '8px 0' }}>Message to transporter / buyer
                     <select value={transportMessages[job.id] || ''} onChange={(e) => setTransportMessages((old) => ({ ...old, [job.id]: e.target.value }))} style={{ display: 'block', width: '100%', marginTop: 4 }}>
                       <option value="">Choose a message or write a custom one below</option>
                       <option value="The goods are ready for pickup. You may proceed after coordinating with the buyer.">The goods are ready for pickup.</option>
-                      <option value="Please contact me before loading the goods.">Please contact me before loading the goods.</option>
+                      <option value="Please contact me before submitting the loading plan.">Please contact me before submitting the loading plan.</option>
                       <option value="The goods are not ready yet; please wait.">The goods are not ready yet; please wait.</option>
                       <option value="Please coordinate the pickup time with the buyer.">Please coordinate the pickup time with the buyer.</option>
                     </select>

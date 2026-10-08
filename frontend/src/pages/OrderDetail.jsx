@@ -782,11 +782,18 @@ function InspectionCard({ order, title, i }) {
   const busyKey = (quoteId, action) => `inspection-quote-${quoteId}-${action}`;
   const isBusy = (quoteId, action) => i.busy === busyKey(quoteId, action);
 
-  const feePaid = (request.payments || []).some(
-    (p) => p.type === 'INSPECTOR' && p.status === 'PAID'
+  const inspectionObligations = (order?.paymentObligations || []).filter(
+    (o) => o.type === 'INSPECTOR' && o.inspectionRequestId === request.id
   );
-  const feePending = (request.payments || []).some(
-    (p) => p.type === 'INSPECTOR' && ['PENDING', 'PROCESSING'].includes(p.status)
+  const myInspectionObligation = inspectionObligations.find(
+    (o) => o.payerId === i.currentUserId
+  ) || null;
+  const feePaid = inspectionObligations.length
+    ? inspectionObligations.every((o) => o.status === 'PAID' || o.payment?.status === 'PAID')
+    : (request.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID');
+  const feePending = Boolean(
+    myInspectionObligation?.payment?.status === 'PENDING' ||
+    myInspectionObligation?.payment?.status === 'PROCESSING'
   );
 
   return (
@@ -957,10 +964,11 @@ function InspectionCard({ order, title, i }) {
       )}
 
       {request.status === 'ACCEPTED' && request.fee != null && (
-        <Section title="Inspector assigned — fee due">
+        <Section title={request.sellerConfirmedAt ? 'Inspector confirmed — fee payment' : 'Inspector provisionally selected'}>
           <p className="muted">
-            The inspector is provisionally assigned. Pay the inspection fee below to
-            let the inspector start.
+            {request.sellerConfirmedAt
+              ? 'The seller confirmed the inspector and agreed fee. The designated payer(s) can now pay the inspection obligation.'
+              : 'The inspector and fee are provisionally agreed. The seller must confirm them before inspection payment can begin.'}
           </p>
           <p>
             Fee: <strong>{money(request.fee)} ETB</strong>
@@ -976,7 +984,9 @@ function InspectionCard({ order, title, i }) {
             <>
               <p className="muted small">
                 Confirm the inspector and agreed fee to unlock payment and let
-                work begin.
+                work begin. If you do not respond
+                {request.workflowDueAt ? ` by ${new Date(request.workflowDueAt).toLocaleString()}` : ' in time'},
+                the provisional purchase is closed automatically.
               </p>
               <Button
                 variant="primary"
@@ -987,6 +997,20 @@ function InspectionCard({ order, title, i }) {
                 onClick={() => i.confirmSellerInspection(request.id)}
               >
                 Confirm inspector &amp; fee
+              </Button>
+              <Button
+                variant="light"
+                size="sm"
+                disabled={Boolean(i.busy)}
+                busy={i.busy === `seller-decline-${request.id}`}
+                busyText="Declining…"
+                onClick={() => {
+                  if (window.confirm('Decline this inspector and fee? The provisional purchase will be closed and the buyer notified.')) {
+                    i.declineSellerInspection(request.id);
+                  }
+                }}
+              >
+                Decline
               </Button>
             </>
           ) : i.canPayInspection ? (
@@ -1002,12 +1026,14 @@ function InspectionCard({ order, title, i }) {
             </Button>
           ) : request.sellerConfirmedAt ? (
             <p className="muted small">
-              Seller confirmed. The designated payer can now pay the inspection fee.
+              Seller confirmed. The designated payer can now pay the inspection fee
+              {request.workflowDueAt ? ` before ${new Date(request.workflowDueAt).toLocaleString()}` : ''}.
             </p>
           ) : (
             <p className="muted small">
               Waiting for the seller to confirm the selected inspector before
-              payment can begin.
+              payment can begin
+              {request.workflowDueAt ? `. If the seller does not respond by ${new Date(request.workflowDueAt).toLocaleString()}, this purchase is closed automatically` : ''}.
             </p>
           )}
 
@@ -1463,17 +1489,36 @@ function TransportCard({ order, t }) {
             transportJobId={job.id}
             jobStatus={job.status}
             sellerConfirmed={Boolean(job.sellerPickupConfirmedAt)}
-            paymentsReady={t.allOrderPaymentsSettled}
+            paymentsReady={t.marketplacePaid}
             missingPayments={t.missingPayments}
             onSubmitted={t.reload}
           />
         )}
 
         {showLoadingSummary && (
-          <TransportLoadingReportSummary
-            loadingReport={t.loadingReport}
-            evidence={t.loadingReportEvidence}
-          />
+          <>
+            <TransportLoadingReportSummary
+              loadingReport={t.loadingReport}
+              evidence={t.loadingReportEvidence}
+            />
+            {t.isBuyer && job.status === 'ACCEPTED' && t.loadingReport && !job.buyerLoadingConfirmedAt && (
+              <div className="od-card-section">
+                <div className="od-card-section-head">
+                  <h3 className="od-card-section-title">Review before loading</h3>
+                </div>
+                <p className="muted small">Review what the transporter plans to load, the quantity, timing and condition. Approve it before physical loading begins.</p>
+                <Button
+                  variant="primary"
+                  disabled={busy === 'confirm-loading'}
+                  busy={busy === 'confirm-loading'}
+                  busyText="Confirming…"
+                  onClick={() => run('confirm-loading', () => api.post(`/transport/${job.id}/confirm-loading`), 'Could not approve the loading report')}
+                >
+                  Approve loading report
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </Card>
 
@@ -1572,8 +1617,7 @@ function TransportCard({ order, t }) {
             strong
           >
             <p className="muted">
-              Transport payment is separate from the seller payment. You can pay as soon as the quote is accepted. The
-              transporter cannot start the trip until every required payment is confirmed.
+              Transport payment is separate from the seller payment. It becomes available only after the buyer makes the final BUY decision and the seller payment is confirmed. The transporter cannot start loading until the required payments and loading approvals are complete.
             </p>
 
             {t.canStartPayment && (
@@ -2036,6 +2080,8 @@ export default function OrderDetail() {
     transportJob.agreedAmount != null &&
     Number(transportJob.agreedAmount) > 0 &&
     ['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
+    order?.buyerDecision === 'BUY' &&
+    marketplacePaid &&
     !transportPayments.some((p) => ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)) &&
     isBuyer;
 
@@ -2080,11 +2126,28 @@ export default function OrderDetail() {
     return run('pay-transport', () => startChapaPayment({ type: 'TRANSPORT', orderId: order.id, amount, method: payMethod }), 'Could not start transport payment');
   };
 
-  const payInspection = (request) =>
-    request?.id && request.fee &&
-    run(`pay-inspection-${request.id}`, () =>
-      startChapaPayment({ type: 'INSPECTOR', inspectionRequestId: request.id, orderId: order.id, amount: Number(request.fee), method: payMethod }),
+  const payInspection = (request) => {
+    if (!request?.id || !request.fee) return;
+    const obligation = (order?.paymentObligations || []).find(
+      (o) => o.type === 'INSPECTOR' &&
+        o.inspectionRequestId === request.id &&
+        o.payerId === currentUserId &&
+        o.status !== 'PAID' &&
+        o.payment?.status !== 'PAID'
+    );
+    const amount = obligation?.amount != null
+      ? Number(obligation.amount)
+      : request.feePayer === 'SPLIT'
+        ? Number(currentUserId === order.buyerId ? request.buyerFeeAmount : request.sellerFeeAmount)
+        : Number(request.fee);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('No payable inspection obligation is assigned to your account.');
+      return;
+    }
+    return run(`pay-inspection-${request.id}`, () =>
+      startChapaPayment({ type: 'INSPECTOR', inspectionRequestId: request.id, orderId: order.id, amount, method: payMethod }),
       'Could not start inspector payment');
+  };
 
   const startInstallments = () => {
     if (!isBuyer) return setError('Only the buyer can make the marketplace payment');
@@ -2119,14 +2182,14 @@ export default function OrderDetail() {
   const transportObligation = transportJob
     ? {
         required: hiredTransport,
-        readyToPay: ['QUOTED', 'ACCEPTED'].includes(transportJob.status) && Boolean(acceptedQuote) && transportJob.agreedAmount != null,
+        readyToPay: ['QUOTED', 'ACCEPTED'].includes(transportJob.status) && Boolean(acceptedQuote) && transportJob.agreedAmount != null && order?.buyerDecision === 'BUY' && marketplacePaid,
         amount: transportJob.agreedAmount,
         paid: transportPaid,
         pending: transportPending,
         processing: transportProcessing,
         note:
           hiredTransport && !['QUOTED', 'ACCEPTED'].includes(transportJob.status) && !transportPaid && !transportPending
-            ? 'Transporter payment becomes available after a provisional transporter agreement is accepted.'
+            ? 'Transporter payment becomes available after the final BUY decision and confirmed seller payment.'
             : null,
         canStart: canStartTransportPayment,
         canResume: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
@@ -2139,19 +2202,29 @@ export default function OrderDetail() {
 
   const inspectionPaymentGroups = inspectionApplies && currentInspection && Number(currentInspection.fee) > 0
     ? [currentInspection].map((request) => {
-        const list = request.payments || [];
-        const open = list.find((p) => p.type === 'INSPECTOR' && active(p)) || null;
+        const obligations = (order?.paymentObligations || []).filter(
+          (o) => o.type === 'INSPECTOR' && o.inspectionRequestId === request.id
+        );
+        const mine = obligations.find((o) => o.payerId === currentUserId) || null;
+        const open = mine?.payment || null;
         const key = `${open?.status === 'PROCESSING' ? 'check' : open ? 'resume' : 'pay'}-inspection-${request.id}`;
+        const allPaid = obligations.length > 0 && obligations.every((o) => o.status === 'PAID' || o.payment?.status === 'PAID');
         return {
           id: request.id,
           label: `${request.inspector?.name || 'Inspector'} — inspection fee`,
-          amount: request.fee,
-          paid: list.some((p) => p.type === 'INSPECTOR' && p.status === 'PAID'),
-          pending: Boolean(open),
+          amount: mine?.amount ?? request.fee,
+          paid: allPaid,
+          pending: Boolean(open && ['PENDING', 'PROCESSING'].includes(open.status)),
           processing: open?.status === 'PROCESSING',
-          note: request.status !== 'COMPLETED' ? `Inspection status: ${request.status}` : null,
+          note: !request.sellerConfirmedAt
+            ? 'Waiting for seller confirmation before inspection payment can begin.'
+            : !mine
+              ? 'No inspection payment obligation is assigned to your account.'
+              : request.feePayer === 'SPLIT'
+                ? `Your share of the inspection fee is ${Number(mine.amount).toLocaleString()} ETB.`
+                : request.status !== 'COMPLETED' ? `Inspection status: ${request.status}` : null,
           busyKey: key,
-          canCheck: open?.status === 'PROCESSING',
+          canCheck: Boolean(open) && open.status === 'PROCESSING',
           canResume: Boolean(open) && open.status !== 'PROCESSING',
           onCheck: () => checkPayment(open?.id, key),
           onResume: () => resumePayment(open?.id, key),
@@ -2357,18 +2430,28 @@ export default function OrderDetail() {
         () => api.post(`/inspections/${requestId}/seller-confirm`),
         'Could not confirm the inspector'
       ),
+    declineSellerInspection: (requestId) =>
+      run(
+        `seller-decline-${requestId}`,
+        () => api.post(`/inspections/${requestId}/seller-decline`),
+        'Could not decline the inspection'
+      ),
     payInspection: (request) => payInspection(request),
     currentUserId,
     counterInputs,
     setCounterInputs,
     canPayInspection: Boolean(
       currentInspection &&
-      isBuyer &&
       currentInspection.status === 'ACCEPTED' &&
       currentInspection.fee != null &&
       currentInspection.sellerConfirmedAt != null &&
-      !(currentInspection.payments || []).some((p) =>
-        ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
+      (order?.paymentObligations || []).some(
+        (o) => o.type === 'INSPECTOR' &&
+          o.inspectionRequestId === currentInspection.id &&
+          o.payerId === currentUserId &&
+          o.status !== 'PAID' &&
+          o.payment?.status !== 'PAID' &&
+          !['PENDING', 'PROCESSING'].includes(o.payment?.status)
       )
     ),
 
@@ -2562,6 +2645,7 @@ export default function OrderDetail() {
     loadingReport,
     loadingReportEvidence,
     allOrderPaymentsSettled,
+    marketplacePaid,
     missingPayments,
     ...transportActions,
   };
