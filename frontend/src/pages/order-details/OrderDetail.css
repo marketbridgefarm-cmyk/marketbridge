@@ -577,7 +577,7 @@
   min-height: 48px;
   padding: 0 18px;
   background: transparent;
-  border: 2px solid var(--mb-line);
+  border: 1.5px solid var(--mb-line);
   border-radius: var(--mb-radius-field);
   color: var(--mb-ink-2);
   font: 700 15px / 1.2 var(--od-font-body);
@@ -588,24 +588,36 @@
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
-.order-detail-page .btn:hover:not(:disabled) { background: rgba(241, 245, 249, 0.8); }
+.order-detail-page .btn:hover:not(:disabled) { background: rgba(241, 245, 249, 0.55); }
 .order-detail-page .btn:disabled             { opacity: 0.55; cursor: not-allowed; }
 
+/* ---- Primary button: outline style -------------------------------------
+   Transparent background, thin accent border, accent text.
+   ------------------------------------------------------------------------ */
 .order-detail-page .btn-primary {
-  background: var(--mb-accent);
-  border-color: var(--mb-accent);
-  color: #fff;
+  background: transparent;
+  border: 1.5px solid var(--mb-accent);
+  color: var(--mb-accent);
 }
 .order-detail-page .btn-primary:hover:not(:disabled) {
-  background: var(--mb-accent-ink);
-  border-color: var(--mb-accent-ink);
+  background: var(--mb-accent-tint);
+  border-color: var(--mb-accent);
+  color: var(--mb-accent-ink);
+}
+.order-detail-page .btn-primary:focus-visible {
+  outline: 3px solid var(--mb-accent-border);
+  outline-offset: 2px;
 }
 
 .order-detail-page .btn-light {
-  background: var(--od-neutral-bg);
-  border-color: transparent;
+  background: transparent;
+  border-color: var(--mb-line);
+  color: var(--mb-ink-2);
 }
-.order-detail-page .btn-light:hover:not(:disabled) { background: #e2e8f0; }
+.order-detail-page .btn-light:hover:not(:disabled) {
+  background: var(--od-neutral-bg);
+  border-color: var(--mb-line);
+}
 
 .order-detail-page .btn-outline {
   border-color: var(--od-bad-line);
@@ -1080,15 +1092,15 @@
   width: 100%;
   min-height: 54px;
   padding: 0 22px;
-  background: #4ade80;
-  border: 0;
+  background: transparent;
+  border: 1.5px solid #4ade80;
   border-radius: var(--mb-radius-field);
-  color: var(--mb-ink);
+  color: #4ade80;
   font: 800 16px / 1.2 var(--od-font-head);
   cursor: pointer;
   transition: background-color 0.15s ease, transform 0.1s ease;
 }
-.order-detail-page .od-next-cta:hover         { background: #86efac; }
+.order-detail-page .od-next-cta:hover         { background: rgba(74, 222, 128, 0.14); }
 .order-detail-page .od-next-cta:active        { transform: translateY(1px); }
 .order-detail-page .od-next-cta:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 .order-detail-page .od-next-cta-arrow         { font-size: 18px; }
@@ -1478,7 +1490,7 @@
 .order-detail-page .od-card-overview .btn-outline {
   margin-top: 18px;
   min-height: 52px;
-  border-width: 2px;
+  border-width: 1.5px;
   font-size: 16px;
 }
 
