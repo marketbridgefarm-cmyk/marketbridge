@@ -139,26 +139,26 @@ function CompetitionGroup({ group, busyKey, onRespond }) {
         )}
       </section>
 
-{/* ── Previous bids ──────────────────────────────────── */}
-{previousQuotes.length > 0 && (
-  <section className="neg-subsection neg-subsection--previous">
-    <div className="neg-subsection-head">
-      <h3 className="neg-subsection-title">Previous bids</h3>
-      <span className="neg-subsection-meta">{previousQuotes.length}</span>
-    </div>
+      {/* ── Previous bids ──────────────────────────────────── */}
+      {previousQuotes.length > 0 && (
+        <section className="neg-subsection neg-subsection--previous">
+          <div className="neg-subsection-head">
+            <h3 className="neg-subsection-title">Previous bids</h3>
+            <span className="neg-subsection-meta">{previousQuotes.length}</span>
+          </div>
 
-    <details className="neg-previous">
-      <summary className="neg-previous-summary">
-        Check here — hired or not selected
-      </summary>
-      <ul className="neg-quote-list neg-quote-list--muted">
-        {previousQuotes.map((quote) => (
-          <PreviousQuoteRow key={quote.id} quote={quote} />
-        ))}
-      </ul>
-    </details>
-  </section>
-)}
+          <details className="neg-previous">
+            <summary className="neg-previous-summary">
+              Check here — hired or not selected
+            </summary>
+            <ul className="neg-quote-list neg-quote-list--muted">
+              {previousQuotes.map((quote) => (
+                <PreviousQuoteRow key={quote.id} quote={quote} />
+              ))}
+            </ul>
+          </details>
+        </section>
+      )}
 
       {/* ── Notice + footer action ─────────────────────────── */}
       <footer className="neg-group-footer">
@@ -267,7 +267,7 @@ function QuoteRow({ quote, group, busyKey, onRespond, hasActiveNegotiation }) {
 
               <button
                 type="button"
-                className="sd-btn sd-btn-outline"
+                className="sd-btn sd-btn-outline sd-btn-danger"
                 disabled={anyBusy}
                 onClick={() => onRespond(quote, 'REJECT')}
               >
@@ -397,7 +397,10 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
               : 'INSPECTION'}
           </span>
           <h3 className="neg-title">{item.title}</h3>
-          <p className="neg-card-subtitle">{item.subtitle}</p>
+          {/* Listing offers already show the type (eyebrow) and role (chip) */}
+          {item.type !== 'LISTING_OFFER' && item.subtitle && (
+            <p className="neg-card-subtitle">{item.subtitle}</p>
+          )}
         </div>
         <div className="neg-card-head-side">
           <span className="neg-side-label">Current</span>
@@ -451,7 +454,7 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
           {!(item.type === 'LISTING_OFFER' && item.viewerRole === 'SELLER') && (
             <button
               type="button"
-              className="sd-btn sd-btn-outline"
+              className="sd-btn sd-btn-outline sd-btn-danger"
               disabled={anyBusy}
               onClick={() => onRespond(item, 'REJECT')}
             >
@@ -496,7 +499,7 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
               {busy('RELEASE') ? 'Releasing…' : 'Release buyer (no response)'}
             </button>
           ) : (
-            <p className="muted small" style={{ margin: 0 }}>
+            <p className="neg-deal-context">
               If the buyer stays silent you can release them from {new Date(item.raw.releaseAvailableAt).toLocaleString()}. The buyer can bid again.
             </p>
           )}
@@ -843,14 +846,14 @@ export default function Negotiations() {
         </div>
 
         {notices.some((n) => !n.readAt) && (
-          <section className="card" style={{ margin: '0 0 16px', padding: 12 }} aria-label="Waiting list updates">
-            <strong>Updates on your bids</strong>
+          <section className="card neg-notices" aria-label="Waiting list updates">
+            <h2 className="neg-notices-title">Updates on your bids</h2>
             {notices.filter((n) => !n.readAt).slice(0, 5).map((n) => (
-              <p key={n.id} className="muted small" style={{ margin: '6px 0 0' }}>
+              <p key={n.id} className="neg-notices-item">
                 <strong>{n.title}.</strong> {n.body}
               </p>
             ))}
-            <button type="button" className="sd-btn sd-btn-outline" style={{ marginTop: 8 }} onClick={markNoticesRead}>
+            <button type="button" className="sd-btn sd-btn-outline" onClick={markNoticesRead}>
               Mark all as read
             </button>
           </section>
