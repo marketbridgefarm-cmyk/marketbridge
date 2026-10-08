@@ -297,9 +297,8 @@ function OrderCard({ order, currentUserId }) {
         <section className="card-block">
           <div className="card-block-title">
             <h3>Order status</h3>
-            <span className={`status-pill header-pill tone-${latestPill.tone}`}>
-              {latestPill.dot && <span className="status-pill-dot" aria-hidden="true" />}
-              <span className="header-pill-text">{latestPill.text}</span>
+            <span className={`header-pill tone-${latestPill.tone}`}>
+              {latestPill.text}
             </span>
           </div>
 
