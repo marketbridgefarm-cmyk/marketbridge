@@ -1,8 +1,15 @@
 /* ==========================================================================
    OrderDetail.css  →  src/pages/order-details/OrderDetail.css
    --------------------------------------------------------------------------
-   Order detail page. Mobile-first, everything scoped under .order-detail-page
-   (except .order-detail-toast, which is portaled outside the page container).
+   Order detail page, restyled to match the MarketBridge card language used
+   by Orders.jsx / Orders.css.
+
+     • Single warm accent (#c2410c)
+     • 28px card radius, tinted surface, one soft shadow
+     • Card title = 2px bottom line + 44px accent segment
+     • Sub-headers = 1.5px bottom line only
+     • Progress rail is vertical on narrow cards, horizontal on wide ones
+       (via container queries on .card)
 
    Responsive card grid
      phones   (default)  → 1 card per row
@@ -15,31 +22,28 @@
     1.  Design tokens
     2.  Base & reset
     3.  Layout: page bar, containers, grids
-    4.  Cards: shell, head, accent system
-    5.  Typography helpers
-    6.  Sections inside cards + body indent
-    7.  Facts, findings, "you" pill
-    8.  Status pills, badges, progress
-    9.  Buttons & actions
-   10.  Forms & fields
-   11.  Notices & alerts
-   12.  Inspection decision state
-   13.  Inspection checklist multi-select
-   14.  Inspection work scope form
-   15.  Transport quotes
-   16.  Payout table
-   17.  Avatars
-   18.  Buyer confidence panel
-   19.  Next-step card + flash highlight
-   20.  Transport loading report
-   21.  Order decision panel
-   22.  Toast
-   23.  Glassmorphism theme
-   24.  Accessibility & motion
-   25.  Responsive breakpoints
-   26.  Print
-   27.  Overview card restyle
-   28.  Inspection & transport popups
+    4.  Cards: shell + head
+    5.  Sections inside cards
+    6.  Facts, findings, "you" pill
+    7.  Status pills, badges, progress
+    8.  Buttons & actions
+    9.  Forms & fields
+   10.  Notices & alerts
+   11.  Inspection work scope form
+   12.  Inspection checklist multi-select
+   13.  Transport quotes
+   14.  Payout table
+   15.  Avatars
+   16.  Buyer confidence panel
+   17.  Next-step card + flash highlight
+   18.  Transport loading report
+   19.  Order decision panel
+   20.  Toast
+   21.  Accessibility & motion
+   22.  Responsive breakpoints (viewport)
+   23.  Container queries (card internals)
+   24.  Inspection & transport popups
+   25.  Print
    ========================================================================== */
 
 
@@ -47,54 +51,67 @@
    1. DESIGN TOKENS
    ========================================================================== */
 .order-detail-page {
-  /* Surfaces */
-  --od-ink:            #0d1b2a;
-  --od-text:           #2c3a4a;
-  --od-muted:          #64748b;
-  --od-line:           #e5e9ef;
-  --od-line-strong:    #d3dae3;
-  --od-border:         #dbe3e8;
+  /* MarketBridge palette (matches Orders.css) */
+  --mb-ink:            #0f172a;
+  --mb-ink-2:          #334155;
+  --mb-muted:          #64748b;
+  --mb-accent:         #c2410c;
+  --mb-accent-ink:     #9a3412;
+  --mb-accent-tint:    #fff7ed;
+  --mb-accent-border:  #fed7aa;
+  --mb-ok:             #047857;
+  --mb-danger:         #b91c1c;
+  --mb-line:           #cbd5e1;
+  --mb-card:           rgba(248, 251, 255, 0.95);
+  --mb-radius-card:    28px;
+  --mb-radius-field:   16px;
+
+  /* Aliases so existing component class rules keep resolving */
+  --od-ink:            var(--mb-ink);
+  --od-text:           var(--mb-ink-2);
+  --od-muted:          var(--mb-muted);
+  --od-line:           var(--mb-line);
+  --od-line-strong:    #b8c4d6;
+  --od-border:         var(--mb-line);
   --od-surface:        #ffffff;
   --od-page:           #f4f6f9;
   --od-soft:           #f8fafc;
 
-  /* Brand */
-  --od-brand:          #0f7a44;
-  --od-brand-dark:     #0b5f35;
-  --od-brand-soft:     #e7f5ed;
+  --od-brand:          var(--mb-accent);
+  --od-brand-dark:     var(--mb-accent-ink);
+  --od-brand-soft:     var(--mb-accent-tint);
 
-  /* Semantic tones */
-  --od-good:           #0f7a44;
-  --od-good-bg:        #e7f5ed;
-  --od-bad:            #b42318;
-  --od-bad-bg:         #fef0ee;
+  --od-good:           var(--mb-ok);
+  --od-good-bg:        #ecfdf5;
+  --od-bad:            var(--mb-danger);
+  --od-bad-bg:         #fef2f2;
   --od-bad-line:       #fecaca;
-  --od-wait:           #9a6700;
-  --od-wait-bg:        #fff6df;
-  --od-info:           #1d5fb4;
-  --od-info-bg:        #e8f0fb;
+  --od-wait:           #92400e;
+  --od-wait-bg:        #fffbeb;
+  --od-info:           #1d4ed8;
+  --od-info-bg:        #eff6ff;
   --od-neutral:        #475569;
-  --od-neutral-bg:     #eef1f5;
+  --od-neutral-bg:     #f1f5f9;
 
-  /* Geometry */
-  --od-radius-lg:      16px;
-  --od-radius:         12px;
-  --od-radius-sm:      8px;
-  --od-indent:         14px;   /* body content offset; titles stay flush */
-  --od-gap:            14px;
-  --od-pad:            18px;
+  --od-radius-lg:      var(--mb-radius-card);
+  --od-radius:         var(--mb-radius-field);
+  --od-radius-sm:      12px;
 
-  /* Type */
+  --od-gap:            16px;
+  --od-pad:            24px;
+
   --od-font-body:      'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --od-font-head:      'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  /* Page shell */
   font-family: var(--od-font-body);
   color: var(--od-text);
-  background: var(--od-page);
+  background: linear-gradient(135deg, #eef0ff 0%, #dbe8f8 55%, #e6f6ee 100%);
+  background-attachment: fixed;
   min-height: 100vh;
-  padding: 14px 0 88px;
+  min-height: 100dvh;
+  padding: 20px 0 96px;
   -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 
@@ -103,17 +120,15 @@
    ========================================================================== */
 .order-detail-page *,
 .order-detail-page *::before,
-.order-detail-page *::after {
-  box-sizing: border-box;
-}
+.order-detail-page *::after { box-sizing: border-box; }
 
-.order-detail-page p                { margin: 0 0 8px; line-height: 1.6; }
-.order-detail-page p:last-child     { margin-bottom: 0; }
-.order-detail-page strong           { color: var(--od-ink); font-weight: 700; }
+.order-detail-page p            { margin: 0 0 8px; line-height: 1.6; }
+.order-detail-page p:last-child { margin-bottom: 0; }
+.order-detail-page strong       { color: var(--mb-ink); font-weight: 700; }
 
-.order-detail-page .muted           { color: var(--od-muted); }
-.order-detail-page .small           { font-size: 12.5px; }
-.order-detail-page .optional        { color: var(--od-muted); font-weight: 400; }
+.order-detail-page .muted    { color: var(--od-muted); }
+.order-detail-page .small    { font-size: 13px; }
+.order-detail-page .optional { color: var(--od-muted); font-weight: 400; }
 
 
 /* ==========================================================================
@@ -123,8 +138,8 @@
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  padding-inline: max(14px, env(safe-area-inset-left))
-                  max(14px, env(safe-area-inset-right));
+  padding-inline: max(16px, env(safe-area-inset-left))
+                  max(16px, env(safe-area-inset-right));
 }
 
 .order-detail-page .row-between {
@@ -134,20 +149,22 @@
   gap: 12px;
 }
 
-.order-detail-page .page-bar          { margin-bottom: 14px; }
+.order-detail-page .page-bar { margin-bottom: 16px; }
 
 .order-detail-page .back-link {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   min-height: 40px;
   padding: 0 4px;
   border: 0;
   background: none;
-  font: 600 14px var(--od-font-body);
+  font: 700 14px var(--od-font-body);
   color: var(--od-muted);
   cursor: pointer;
+  transition: color 0.15s ease;
 }
-.order-detail-page .back-link:hover   { color: var(--od-ink); }
+.order-detail-page .back-link:hover { color: var(--mb-ink); }
 
 .order-detail-page .od-page-grid,
 .order-detail-page .od-card-grid {
@@ -164,253 +181,227 @@
 
 
 /* ==========================================================================
-   4. CARDS: SHELL, HEAD, ACCENT SYSTEM
+   4. CARDS: SHELL + HEAD
    ========================================================================== */
 
 /* ---- 4a. Shell ---------------------------------------------------------- */
 .order-detail-page .card {
+  container-type: inline-size;
   min-width: 0;
-  background: var(--od-surface);
-  border: 1px solid var(--od-line);
-  border-radius: var(--od-radius-lg);
+  background: var(--mb-card);
+  border: none;
+  border-radius: var(--mb-radius-card);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
   padding: var(--od-pad);
   scroll-margin-top: 16px;
+  transition: box-shadow 0.2s ease;
 }
 
 .order-detail-page .card.loading {
   text-align: center;
-  padding: 40px 18px;
+  padding: 48px 24px;
   color: var(--od-muted);
 }
 
-.order-detail-page .od-card-warning { border-color: #f1d9a0; background: #fffdf6; }
-.order-detail-page .od-card-accent  { border-color: #bfe3cd; background: var(--od-brand-soft); }
+/* Tone variants (e.g. dispute card) */
+.order-detail-page .od-card-warning {
+  border-left: 4px solid var(--mb-accent);
+  background: var(--mb-accent-tint);
+}
+.order-detail-page .od-card-accent {
+  background: var(--mb-accent-tint);
+}
 
 /* ---- 4b. Head layout ---------------------------------------------------- */
+/* Card title = eyebrow + title + optional party at right. Under the row:
+   a 2px rule with a 44px accent segment marking the card. */
 .order-detail-page .od-card-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  column-gap: 12px;
-  margin-bottom: 14px;
+  position: relative;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 0 0 10px;
+  margin: 0 0 22px;
+  border-bottom: 2px solid var(--mb-line);
 }
-
-.order-detail-page .od-card-head-main                { display: contents; }
-.order-detail-page .od-card-head .od-eyebrow         { grid-column: 1; grid-row: 1; }
-.order-detail-page .od-card-head .od-card-title      { grid-column: 1; grid-row: 2; min-width: 0; }
-.order-detail-page .od-card-head .od-card-head-side  { grid-column: 2; grid-row: 1 / span 2; }
-
-/* Divider under the title row: hairline + short accent bar, sits ABOVE the description. */
-.order-detail-page .od-card-head::before {
+.order-detail-page .od-card-head::after {
   content: '';
-  grid-column: 1 / -1;
-  grid-row: 3;
-  height: 3px;
-  margin-top: 12px;
-  background:
-    linear-gradient(var(--od-accent, var(--od-brand)), var(--od-accent, var(--od-brand))) left center / 28px 3px no-repeat,
-    linear-gradient(var(--od-line), var(--od-line)) left center / 100% 1px no-repeat;
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 44px;
+  height: 4px;
+  background: var(--od-accent, var(--mb-accent));
 }
-.order-detail-page .od-card-head .od-card-subtitle {
-  grid-column: 1 / -1;
-  grid-row: 4;
-  margin-top: 12px;
+
+.order-detail-page .od-card-head-main {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .order-detail-page .od-eyebrow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-  font: 800 11px / 1.2 var(--od-font-head);
-  letter-spacing: 0.2em;
+  gap: 12px;
+  margin: 0 0 8px;
+  color: var(--od-accent, var(--mb-accent));
+  font: 700 13px / 1.2 var(--od-font-head);
+  letter-spacing: 0.25em;
   text-transform: uppercase;
-  color: var(--od-accent, var(--od-brand));
 }
 .order-detail-page .od-eyebrow::before {
   content: '';
   flex: none;
-  width: 22px;
-  height: 2px;
+  width: 32px;
+  height: 3px;
   border-radius: 2px;
   background: currentColor;
 }
-.order-detail-page .od-eyebrow.is-selling { color: var(--od-info); }
+.order-detail-page .od-eyebrow.is-selling { color: var(--mb-ok); }
 
 .order-detail-page .od-card-title {
   margin: 0;
-  font: 800 clamp(18px, 4.6vw, 22px) / 1.25 var(--od-font-head);
+  color: var(--mb-ink);
+  font: 800 clamp(20px, 4.4vw, 24px) / 1.25 var(--od-font-head);
   letter-spacing: -0.3px;
-  color: var(--od-ink);
   overflow-wrap: anywhere;
 }
 
 .order-detail-page .od-card-subtitle {
-  margin: 12px 0 0 var(--od-indent);
-  font-size: 13.5px;
+  margin: 8px 0 0;
+  color: var(--mb-muted);
+  font-size: 14px;
   line-height: 1.55;
-  color: var(--od-muted);
+  overflow-wrap: anywhere;
 }
 
-/* ---- 4c. Head side (right column) -------------------------------------- */
+/* ---- 4c. Head side (top right) ----------------------------------------- */
 .order-detail-page .od-card-head-side {
-  display: flex;
   flex: none;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+  align-self: flex-start;
+  margin-left: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
   max-width: 48%;
   min-width: 0;
   text-align: right;
 }
 
 .order-detail-page .od-card-side-label {
-  font: 800 11px var(--od-font-head);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--od-accent, var(--od-brand));
+  color: var(--mb-muted);
+  font: 700 13px var(--od-font-head);
+  letter-spacing: 0;
+  text-transform: none;
   white-space: nowrap;
 }
 
 .order-detail-page .od-card-side-value {
   display: block;
-  font: 700 14px var(--od-font-head);
-  color: var(--od-ink);
+  color: var(--mb-ink);
+  font: 800 15px var(--od-font-head);
   overflow-wrap: anywhere;
 }
 
 .order-detail-page .od-card-side-party {
   display: flex;
-  flex-direction: row;              /* text, then avatar at the far right */
+  flex-direction: row;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 .order-detail-page .od-card-side-party > div {
   display: flex;
-  flex: 0 1 auto;
   flex-direction: column;
   align-items: flex-end;
   min-width: 0;
+  max-width: 160px;
+}
+.order-detail-page .od-card-side-party .od-card-side-label {
+  color: var(--mb-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.order-detail-page .od-card-side-party .od-card-side-value {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 800;
 }
 
-/* ---- 4d. Per-card accent colour ----------------------------------------
-   Change a colour here and every part of that card follows.
-   ------------------------------------------------------------------------ */
-.order-detail-page .card                                 { --od-accent: var(--od-brand); }
-.order-detail-page #make-offer                           { --od-accent: #4f46e5; }
-.order-detail-page #inspection-section                   { --od-accent: #b45309; }
-.order-detail-page #transport-section                    { --od-accent: #1d5fb4; }
-.order-detail-page #transport-evidence-section           { --od-accent: #6d3fc0; }
+/* ---- 4d. Single warm accent (matches Orders) --------------------------- */
+.order-detail-page .card                       { --od-accent: var(--mb-accent); }
+.order-detail-page #make-offer                 { --od-accent: var(--mb-accent); }
+.order-detail-page #inspection-section         { --od-accent: var(--mb-accent); }
+.order-detail-page #transport-section          { --od-accent: var(--mb-accent); }
+.order-detail-page #transport-evidence-section { --od-accent: var(--mb-accent); }
 .order-detail-page #transport-payment-section,
-.order-detail-page #payment-center                       { --od-accent: #0f7a44; }
-.order-detail-page #order-payout-status                  { --od-accent: #0e7490; }
-.order-detail-page #order-refund-status                  { --od-accent: #b42318; }
-.order-detail-page #raise-dispute                        { --od-accent: #c2410c; }
-
-/* Refund card header is inline-styled: same accent bar, anchored to its bottom rule. */
-.order-detail-page #order-refund-status > header         { position: relative; }
-.order-detail-page #order-refund-status > header::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: -1px;
-  width: 28px;
-  height: 3px;
-  background: var(--od-accent);
-}
-.order-detail-page #order-refund-status > header span     { color: var(--od-accent) !important; }
-.order-detail-page #order-refund-status > header          { margin-bottom: 14px !important; }
-.order-detail-page #order-refund-status > .refund-table   { width: calc(100% - var(--od-indent)); }
-
-/* ---- 4e. Hard overrides (win over older/global stylesheets) ------------ */
-.order-detail-page .card,
-.order-detail-page .card.od-card-overview,
-.order-detail-page .card.od-card-warning,
-.order-detail-page .card.od-card-accent {
-  box-shadow: none !important;
-}
-.order-detail-page .card.od-card-overview {
-  border-top: 1px solid var(--od-line) !important;
-}
-.order-detail-page .card > .od-card-head {
-  flex-wrap: nowrap !important;
-}
+.order-detail-page #payment-center             { --od-accent: var(--mb-accent); }
+.order-detail-page #order-payout-status        { --od-accent: var(--mb-accent); }
+.order-detail-page #order-refund-status        { --od-accent: var(--mb-danger); }
+.order-detail-page #raise-dispute              { --od-accent: var(--mb-accent); }
 
 
 /* ==========================================================================
-   5. TYPOGRAPHY HELPERS
-   ========================================================================== */
-.order-detail-page .od-card-created {
-  margin-top: 12px;
-  font-size: 12.5px;
-  color: var(--od-muted);
-}
-
-
-/* ==========================================================================
-   6. SECTIONS INSIDE CARDS + BODY INDENT
+   5. SECTIONS INSIDE CARDS
    --------------------------------------------------------------------------
-   Titles and section headers stay flush left; everything else is pushed in.
-   !important is needed because some cards set margin via inline styles.
+   Section header = 1.5px bottom line only.
    ========================================================================== */
 .order-detail-page .od-card-section {
-  padding: 18px 0;
-  border-top: 1px solid var(--od-line);
-}
-.order-detail-page .od-card-head + .od-card-section,
-.order-detail-page .od-card-head + .od-card-section:first-of-type {
+  padding: 0;
   border-top: 0;
-  padding-top: 0;
+  margin-top: 20px;
 }
-.order-detail-page .od-card-section:last-child { padding-bottom: 0; }
+.order-detail-page .od-card-section + .od-card-section {
+  padding-top: 20px;
+  border-top: 1.5px solid var(--mb-line);
+}
 
 .order-detail-page .od-card-section-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1.5px solid var(--mb-line);
 }
 
 .order-detail-page .od-card-section-title {
   margin: 0;
-  font: 800 14px var(--od-font-head);
-  color: var(--od-accent, var(--od-brand));
+  color: var(--mb-ink);
+  font: 700 15px var(--od-font-head);
 }
 
 .order-detail-page .od-card-section-meta {
-  font: 600 12px var(--od-font-body);
-  color: var(--od-muted);
+  padding: 2px 10px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: 999px;
+  color: var(--mb-ink-2);
+  font: 700 13px var(--od-font-body);
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .order-detail-page .od-card-section-meta.is-strong {
-  font: 800 15px var(--od-font-head);
-  color: var(--od-ink);
-}
-
-/* Body indent */
-.order-detail-page .card:not(.payment-center):not(.od-next) >
-  :not(.od-card-head):not(.od-card-section):not(header) {
-  margin-left: var(--od-indent) !important;
-}
-.order-detail-page .od-card-section > :not(.od-card-section-head) {
-  margin-left: var(--od-indent);
-}
-.order-detail-page .od-card-section > .payout-table,
-.order-detail-page .od-card-section > .field,
-.order-detail-page .od-card-section > .alert {
-  width: calc(100% - var(--od-indent));
+  color: var(--mb-ink);
+  font-weight: 800;
 }
 
 
 /* ==========================================================================
-   7. FACTS, FINDINGS, "YOU" PILL
+   6. FACTS, FINDINGS, "YOU" PILL
    ========================================================================== */
 .order-detail-page .od-detail-facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px 16px;
+  gap: 14px 16px;
 }
 .order-detail-page .od-detail-facts > div {
   display: flex;
@@ -419,42 +410,44 @@
   min-width: 0;
 }
 .order-detail-page .od-detail-facts span {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--od-muted);
+  color: var(--mb-muted);
+  font-size: 13px;
+  font-weight: 700;
 }
 .order-detail-page .od-detail-facts strong {
-  font-size: 14px;
+  color: var(--mb-ink);
+  font-size: 15px;
+  font-weight: 800;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
 .order-detail-page .od-finding-flag {
   display: inline-block;
-  padding: 4px 9px;
+  padding: 4px 10px;
   border-radius: var(--od-radius-sm);
   background: var(--od-bad-bg);
   color: var(--od-bad);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.4;
 }
 
 .order-detail-page .od-party-you {
   display: inline-block;
   margin-left: 6px;
-  padding: 1px 7px;
+  padding: 2px 8px;
   border-radius: 999px;
-  background: var(--od-brand-soft);
-  color: var(--od-brand-dark);
-  font: 700 10.5px var(--od-font-head);
+  background: var(--mb-accent-tint);
+  color: var(--mb-accent-ink);
+  font: 800 11px var(--od-font-head);
   letter-spacing: 0.04em;
   vertical-align: middle;
 }
 
 
 /* ==========================================================================
-   8. STATUS PILLS, BADGES, PROGRESS
+   7. STATUS PILLS, BADGES, PROGRESS
    ========================================================================== */
 .order-detail-page .od-status-row {
   display: flex;
@@ -467,172 +460,205 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 14px;
-  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  border-radius: 999px;
-  font: 700 11.5px / 1.3 var(--od-font-body);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  white-space: nowrap;
+  padding: 4px 12px;
   background: var(--od-neutral-bg);
+  border: 1.5px solid #e2e8f0;
+  border-radius: 999px;
   color: var(--od-neutral);
+  font: 700 13px / 1.3 var(--od-font-body);
+  white-space: nowrap;
 }
 .order-detail-page .od-status-pill-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: currentColor;
 }
 
-.order-detail-page .od-tone-good    { background: var(--od-good-bg);    color: var(--od-good); }
-.order-detail-page .od-tone-bad     { background: var(--od-bad-bg);     color: var(--od-bad); }
-.order-detail-page .od-tone-wait    { background: var(--od-wait-bg);    color: var(--od-wait); }
-.order-detail-page .od-tone-info    { background: var(--od-info-bg);    color: var(--od-info); }
-.order-detail-page .od-tone-neutral { background: var(--od-neutral-bg); color: var(--od-neutral); }
+.order-detail-page .od-tone-good    { background: #ecfdf5; border-color: #a7f3d0; color: var(--mb-ok); }
+.order-detail-page .od-tone-bad     { background: #fef2f2; border-color: #fecaca; color: var(--mb-danger); }
+.order-detail-page .od-tone-wait    { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.order-detail-page .od-tone-info    { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.order-detail-page .od-tone-neutral { background: var(--od-neutral-bg); border-color: #e2e8f0; color: var(--od-neutral); }
 
 .order-detail-page .badge {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: 3px 10px;
   background: var(--od-neutral-bg);
+  border: 1.5px solid #e2e8f0;
+  border-radius: 999px;
   color: var(--od-neutral);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
 }
 
-/* Order progress tracker */
+/* Progress tracker: vertical by default, horizontal on wide cards. */
 .order-detail-page .order-progress {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 18px 0 0;
   padding: 0;
   list-style: none;
 }
 .order-detail-page .order-progress-step {
   position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  text-align: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  color: var(--mb-muted);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: left;
 }
+.order-detail-page .order-progress-step:last-child { padding-bottom: 0; }
+
 .order-detail-page .order-progress-step::before {
   content: '';
   position: absolute;
-  top: 6px;
-  right: 50%;
-  width: 100%;
-  height: 2px;
-  background: var(--od-line-strong);
+  left: 8px;
+  top: 18px;
+  bottom: 0;
+  width: 2px;
+  background: var(--mb-line);
 }
-.order-detail-page .order-progress-step:first-child::before      { display: none; }
-.order-detail-page .order-progress-step.is-done::before,
-.order-detail-page .order-progress-step.is-current::before       { background: var(--od-brand); }
+.order-detail-page .order-progress-step:last-child::before { display: none; }
 
 .order-detail-page .order-progress-dot {
-  position: relative;
-  z-index: 1;
-  width: 14px;
-  height: 14px;
+  flex: none;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border: 2px solid var(--mb-line);
   border-radius: 50%;
-  background: var(--od-surface);
-  border: 2px solid var(--od-line-strong);
-}
-.order-detail-page .is-done .order-progress-dot    { background: var(--od-brand); border-color: var(--od-brand); }
-.order-detail-page .is-current .order-progress-dot {
-  border-color: var(--od-brand);
-  box-shadow: 0 0 0 4px var(--od-brand-soft);
+  box-shadow: none;
 }
 
-.order-detail-page .order-progress-label {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--od-muted);
+.order-detail-page .order-progress-step.is-done    { color: var(--mb-ink-2); }
+.order-detail-page .order-progress-step.is-done::before { background: var(--mb-ok); }
+.order-detail-page .order-progress-step.is-done .order-progress-dot {
+  background: var(--mb-ok);
+  border-color: var(--mb-ok);
 }
-.order-detail-page .is-done .order-progress-label,
-.order-detail-page .is-current .order-progress-label { color: var(--od-ink); }
+.order-detail-page .order-progress-step.is-current { color: var(--mb-ink); }
+.order-detail-page .order-progress-step.is-current .order-progress-dot {
+  background: var(--mb-accent);
+  border-color: var(--mb-accent);
+  box-shadow: inset 0 0 0 3px #fff;
+}
+.order-detail-page .order-progress-label {
+  font-size: 14px;
+  font-weight: 700;
+}
 
 
 /* ==========================================================================
-   9. BUTTONS & ACTIONS
+   8. BUTTONS & ACTIONS
    ========================================================================== */
 .order-detail-page .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 44px;
+  gap: 8px;
+  min-height: 48px;
   padding: 0 18px;
-  border: 1px solid var(--od-line-strong);
-  border-radius: var(--od-radius);
-  background: var(--od-surface);
-  color: var(--od-ink);
-  font: 700 14px / 1.2 var(--od-font-body);
+  background: transparent;
+  border: 2px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink-2);
+  font: 700 15px / 1.2 var(--od-font-body);
   text-align: center;
   text-decoration: none;
   cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
-.order-detail-page .btn:hover:not(:disabled) {
-  background: var(--od-soft);
-  border-color: var(--od-muted);
-}
-.order-detail-page .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.order-detail-page .btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.8); }
+.order-detail-page .btn:disabled             { opacity: 0.55; cursor: not-allowed; }
 
-.order-detail-page .btn-primary              { background: var(--od-brand); border-color: var(--od-brand); color: #fff; }
+.order-detail-page .btn-primary {
+  background: var(--mb-accent);
+  border-color: var(--mb-accent);
+  color: #fff;
+}
 .order-detail-page .btn-primary:hover:not(:disabled) {
-  background: var(--od-brand-dark);
-  border-color: var(--od-brand-dark);
+  background: var(--mb-accent-ink);
+  border-color: var(--mb-accent-ink);
 }
 
-.order-detail-page .btn-light   { background: var(--od-neutral-bg); border-color: transparent; }
-.order-detail-page .btn-outline { background: transparent; border-color: var(--od-bad-line); color: var(--od-bad); }
+.order-detail-page .btn-light {
+  background: var(--od-neutral-bg);
+  border-color: transparent;
+}
+.order-detail-page .btn-light:hover:not(:disabled) { background: #e2e8f0; }
+
+.order-detail-page .btn-outline {
+  border-color: var(--od-bad-line);
+  color: var(--mb-danger);
+}
 .order-detail-page .btn-outline:hover:not(:disabled) {
   background: var(--od-bad-bg);
-  border-color: var(--od-bad);
+  border-color: #fca5a5;
 }
 
-.order-detail-page .btn-sm    { min-height: 38px; padding: 0 14px; font-size: 13px; border-radius: var(--od-radius-sm); }
-.order-detail-page .btn-block { display: flex; width: calc(100% - var(--od-indent)); margin-top: 14px; }
+.order-detail-page .btn-sm {
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 14px;
+  border-radius: 12px;
+}
+.order-detail-page .btn-block {
+  display: flex;
+  width: 100%;
+  margin-top: 16px;
+}
 
 .order-detail-page .od-actions {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 14px;
 }
 .order-detail-page .od-actions .btn { width: 100%; }
 
 
 /* ==========================================================================
-   10. FORMS & FIELDS
+   9. FORMS & FIELDS
    ========================================================================== */
 .order-detail-page .form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 .order-detail-page .form label {
+  color: var(--mb-ink);
   font-size: 13px;
   font-weight: 700;
-  color: var(--od-ink);
   margin-top: 4px;
 }
 .order-detail-page .form .btn { margin-top: 8px; }
 
 .order-detail-page .field {
+  box-sizing: border-box;
   width: 100%;
-  min-height: 44px;
-  padding: 10px 12px;
-  border: 1px solid var(--od-line-strong);
-  border-radius: var(--od-radius-sm);
-  background: var(--od-surface);
-  color: var(--od-ink);
-  font: 500 16px / 1.4 var(--od-font-body);   /* 16px stops iOS zoom-on-focus */
+  min-height: 48px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink);
+  font: 500 16px / 1.4 var(--od-font-body);
 }
-.order-detail-page textarea.field         { resize: vertical; min-height: 88px; }
-.order-detail-page .field::placeholder    { color: #94a3b8; }
-.order-detail-page .field:disabled        { background: var(--od-soft); }
+.order-detail-page textarea.field      { resize: vertical; min-height: 92px; }
+.order-detail-page .field::placeholder { color: #94a3b8; }
+.order-detail-page .field:disabled     { background: var(--od-soft); }
+.order-detail-page .field:focus-visible {
+  outline: 3px solid var(--mb-accent-border);
+  outline-offset: 2px;
+}
 
 .order-detail-page .od-field-row {
   display: flex;
@@ -643,73 +669,123 @@
 
 
 /* ==========================================================================
-   11. NOTICES & ALERTS
+   10. NOTICES & ALERTS
    ========================================================================== */
 .order-detail-page .od-notice {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 12px;
-  padding: 14px;
-  border: 1px solid var(--od-line);
-  border-left: 3px solid var(--od-brand);
+  margin-top: 14px;
+  padding: 16px;
+  background: var(--mb-accent-tint);
+  border: 1.5px solid var(--mb-accent-border);
   border-radius: var(--od-radius);
-  background: var(--od-soft);
 }
-.order-detail-page .od-notice > strong { font: 700 14px var(--od-font-head); }
-.order-detail-page .od-notice p        { margin: 0; font-size: 13.5px; }
+.order-detail-page .od-notice > strong { color: var(--mb-ink); font: 800 14px var(--od-font-head); }
+.order-detail-page .od-notice p        { margin: 0; color: var(--mb-ink-2); font-size: 14px; }
 
 .order-detail-page .alert {
-  margin-top: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--od-line);
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
   border-radius: var(--od-radius);
-  background: var(--od-soft);
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.55;
 }
 .order-detail-page .alert.error   { background: var(--od-bad-bg);  border-color: var(--od-bad-line); color: var(--od-bad); }
-.order-detail-page .alert.success { background: var(--od-good-bg); border-color: #bfe3cd;          color: var(--od-good); }
+.order-detail-page .alert.success { background: var(--od-good-bg); border-color: #a7f3d0;          color: var(--mb-ok); }
 
 
 /* ==========================================================================
-   12. INSPECTION DECISION STATE
+   11. INSPECTION WORK SCOPE FORM
    ========================================================================== */
-.order-detail-page .inspection-decision-state {
+.order-detail-page .od-inspection-work-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+.order-detail-page .od-inspection-work-form h3 {
+  margin: 0 0 6px;
+  color: var(--mb-ink);
+  font: 800 17px var(--od-font-head);
+}
+.order-detail-page .od-inspection-work-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--mb-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.order-detail-page .od-inspection-work-form select,
+.order-detail-page .od-inspection-work-form input:not([type="checkbox"]),
+.order-detail-page .od-inspection-work-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink);
+  font: 500 15px / 1.4 var(--od-font-body);
+}
+.order-detail-page .od-inspection-work-form fieldset {
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--od-radius);
+  padding: 14px;
+  min-width: 0;
+}
+.order-detail-page .od-inspection-work-form legend {
+  padding: 0 6px;
+  color: var(--mb-ink);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.order-detail-page .od-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.order-detail-page .od-check-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.order-detail-page .od-check-grid label {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.order-detail-page .od-work-details {
+  margin-top: 14px;
   padding: 14px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
   border-radius: var(--od-radius);
+  overflow-wrap: anywhere;
 }
-.order-detail-page .inspection-decision-state.is-buy    { background: var(--od-good-bg); }
-.order-detail-page .inspection-decision-state.is-cancel { background: var(--od-bad-bg);  }
-
-.order-detail-page .inspection-decision-icon {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  color: #fff;
-  font-weight: 800;
+.order-detail-page .od-work-details h4 {
+  margin: 0 0 10px;
+  color: var(--mb-ink);
+  font: 700 14px var(--od-font-head);
 }
-.order-detail-page .is-buy .inspection-decision-icon    { background: var(--od-good); }
-.order-detail-page .is-cancel .inspection-decision-icon { background: var(--od-bad);  }
-
-.order-detail-page .inspection-decision-state p {
-  margin-top: 2px;
+.order-detail-page .od-work-details p { margin: 8px 0 0; font-size: 14px; }
+.order-detail-page .od-work-detail-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: var(--mb-ink-2);
   font-size: 13px;
-  color: var(--od-text);
 }
 
 
 /* ==========================================================================
-   13. INSPECTION CHECKLIST MULTI-SELECT
-   --------------------------------------------------------------------------
-   Tall enough to show all 7 options without scrolling on desktop; browsers
-   still allow scroll on mobile.
+   12. INSPECTION CHECKLIST MULTI-SELECT
    ========================================================================== */
 .order-detail-page .od-inspection-checks {
   display: flex;
@@ -719,121 +795,49 @@
 .order-detail-page .od-inspection-checks-select {
   width: 100%;
   min-height: 180px;
-  padding: 6px 8px;
-  border: 1px solid #d1d9e1;
-  border-radius: 8px;
-  font: inherit;
+  padding: 8px;
   background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink);
+  font: inherit;
 }
-.order-detail-page .od-inspection-checks-select option          { padding: 4px 6px; }
-.order-detail-page .od-inspection-checks-select option:checked  { background: #dcfce7; color: #0d1b2a; }
+.order-detail-page .od-inspection-checks-select option         { padding: 6px 8px; }
+.order-detail-page .od-inspection-checks-select option:checked { background: var(--mb-accent-tint); color: var(--mb-ink); }
 
 
 /* ==========================================================================
-   14. INSPECTION WORK SCOPE FORM
-   --------------------------------------------------------------------------
-   Visible to requesters and bidders; compact mobile layout.
-   ========================================================================== */
-.order-detail-page .od-inspection-work-form {
-  display: grid;
-  gap: 12px;
-  margin-top: 14px;
-}
-.order-detail-page .od-inspection-work-form h3 {
-  margin: 0;
-  font-size: 17px;
-}
-.order-detail-page .od-inspection-work-form label {
-  display: grid;
-  gap: 6px;
-  font-weight: 650;
-  font-size: 13px;
-}
-.order-detail-page .od-inspection-work-form input:not([type="checkbox"]),
-.order-detail-page .od-inspection-work-form textarea {
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-}
-.order-detail-page .od-inspection-work-form fieldset {
-  border: 1px solid var(--od-border);
-  border-radius: 12px;
-  padding: 12px;
-  min-width: 0;
-}
-.order-detail-page .od-inspection-work-form legend {
-  padding: 0 5px;
-  font-weight: 750;
-  font-size: 13px;
-}
-
-.order-detail-page .od-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-.order-detail-page .od-check-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
-}
-.order-detail-page .od-check-grid label {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  font-weight: 500;
-}
-
-.order-detail-page .od-work-details {
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px solid var(--od-border);
-  border-radius: 12px;
-  background: var(--od-soft);
-  overflow-wrap: anywhere;
-}
-.order-detail-page .od-work-details h4 { margin: 0 0 8px; font-size: 14px; }
-.order-detail-page .od-work-details p  { margin: 7px 0 0; }
-.order-detail-page .od-work-detail-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  font-size: 13px;
-}
-
-
-/* ==========================================================================
-   15. TRANSPORT QUOTES
+   13. TRANSPORT QUOTES
    ========================================================================== */
 .order-detail-page .transporter {
   display: flex;
   flex-direction: column;
-  /* The global .transporter rule sets align-items: center for a row layout;
-     in this column layout that made each card shrink-to-fit and centre its
-     content, so cards had different widths. Stretch them instead. */
   align-items: stretch;
   justify-content: flex-start;
   text-align: left;
   box-sizing: border-box;
   gap: 12px;
-  padding: 14px;
-  margin-bottom: 10px;
-  border: 1px solid var(--od-line);
+  padding: 16px;
+  margin-bottom: 12px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
   border-radius: var(--od-radius);
-  background: var(--od-soft);
 }
-.order-detail-page .transporter:last-child  { margin-bottom: 0; }
-.order-detail-page .transporter > div       { min-width: 0; }
+.order-detail-page .transporter:last-child { margin-bottom: 0; }
+.order-detail-page .transporter > div      { min-width: 0; }
 
 .order-detail-page .transporter > div:last-child {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--od-line-strong);
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1.5px dashed var(--mb-line);
 }
-.order-detail-page .transporter > div:last-child > strong { font: 800 18px var(--od-font-head); }
+.order-detail-page .transporter > div:last-child > strong {
+  color: var(--mb-ink);
+  font: 800 20px var(--od-font-head);
+}
 
 .order-detail-page .transporter .btn,
 .order-detail-page .transporter .field-inline { width: 100%; }
@@ -846,171 +850,170 @@
 
 
 /* ==========================================================================
-   16. PAYOUT TABLE
+   14. PAYOUT TABLE
    ========================================================================== */
 .order-detail-page .payout-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13.5px;
+  font-size: 14px;
 }
 .order-detail-page .payout-table th,
 .order-detail-page .payout-table td {
-  padding: 12px 8px;
-  border-bottom: 1px solid var(--od-line);
+  padding: 14px 8px;
+  border-bottom: 1.5px solid var(--mb-line);
   text-align: left;
   vertical-align: middle;
 }
 .order-detail-page .payout-table thead th {
   padding-top: 0;
-  font: 700 11px var(--od-font-head);
+  color: var(--mb-muted);
+  font: 700 12px var(--od-font-head);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--od-muted);
 }
 .order-detail-page .payout-table tbody tr:last-child th,
-.order-detail-page .payout-table tbody tr:last-child td {
-  border-bottom: 0;
-}
+.order-detail-page .payout-table tbody tr:last-child td { border-bottom: 0; }
 
 .order-detail-page .payout-amount-col,
-.order-detail-page .payout-amount     { text-align: right; white-space: nowrap; }
+.order-detail-page .payout-amount { text-align: right; white-space: nowrap; }
 .order-detail-page .payout-status-col,
-.order-detail-page .payout-status     { text-align: right; }
+.order-detail-page .payout-status { text-align: right; }
 
 .order-detail-page .payout-amount {
-  font: 800 14px var(--od-font-head);
-  color: var(--od-ink);
+  color: var(--mb-ink);
+  font: 800 15px var(--od-font-head);
   font-variant-numeric: tabular-nums;
 }
 .order-detail-page .payout-currency {
   margin-left: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--od-muted);
+  color: var(--mb-muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.order-detail-page .payout-party       { font-weight: 500; }
-.order-detail-page .payout-party-body  { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.order-detail-page .payout-party-line  { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.order-detail-page .payout-party      { font-weight: 500; }
+.order-detail-page .payout-party-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.order-detail-page .payout-party-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .order-detail-page .payout-party-role {
   display: inline-grid;
   place-items: center;
   min-width: 28px;
   padding: 2px 6px;
+  background: var(--mb-ink);
   border-radius: 6px;
-  background: var(--od-ink);
   color: #fff;
   font: 800 11px var(--od-font-head);
   letter-spacing: 0.04em;
 }
-.order-detail-page .payout-party-name  { font-weight: 700; color: var(--od-ink); overflow-wrap: anywhere; }
-.order-detail-page .payout-party-note  { font-size: 12px; color: var(--od-muted); overflow-wrap: anywhere; }
+.order-detail-page .payout-party-name { color: var(--mb-ink); font-weight: 800; overflow-wrap: anywhere; }
+.order-detail-page .payout-party-note { color: var(--mb-muted); font-size: 12.5px; overflow-wrap: anywhere; }
 
 
 /* ==========================================================================
-   17. AVATARS (INITIALS)
-   --------------------------------------------------------------------------
-   Reuse .od-party-avatar anywhere a person appears.
+   15. AVATARS (INITIALS)
    ========================================================================== */
 .order-detail-page .od-person {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   min-width: 0;
 }
-.order-detail-page .od-person strong { overflow-wrap: anywhere; }
+.order-detail-page .od-person strong { color: var(--mb-ink); overflow-wrap: anywhere; }
 
 .order-detail-page .od-party-avatar {
   flex: none;
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
+  background: #f1f5f9;
+  border: 1.5px solid #e2e8f0;
   border-radius: 50%;
-  background: var(--od-ink);
-  color: #fff;
-  font: 800 13px var(--od-font-head);
+  color: var(--mb-ink-2);
+  font: 800 14px var(--od-font-head);
 }
 .order-detail-page .od-party-avatar--sm {
-  width: 26px;
-  height: 26px;
-  font-size: 10.5px;
-  background: var(--od-accent, var(--od-ink));
+  width: 28px;
+  height: 28px;
+  background: var(--mb-accent-tint);
+  border-color: var(--mb-accent-border);
+  color: var(--mb-accent-ink);
+  font-size: 11px;
 }
 .order-detail-page .payout-party-line .od-party-avatar--sm { order: -1; }
 
 
 /* ==========================================================================
-   18. BUYER CONFIDENCE PANEL
+   16. BUYER CONFIDENCE PANEL
    ========================================================================== */
 .order-detail-page .od-buyer-confidence {
   display: flex;
   align-items: flex-start;
   gap: 14px;
-  padding: clamp(16px, 3vw, 24px);
-  border: 1px solid #cce8d7;
-  border-radius: 18px;
-  background: linear-gradient(135deg, rgba(247, 255, 250, .94), rgba(255, 255, 255, .82));
-  box-shadow: 0 8px 24px rgba(15, 85, 54, .06);
+  padding: clamp(18px, 3vw, 24px);
+  background: var(--mb-card);
+  border: 1.5px solid #a7f3d0;
+  border-radius: var(--mb-radius-card);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
 }
-.order-detail-page .od-buyer-confidence.is-review {
-  border-color: #f0d9a6;
-  background: linear-gradient(135deg, rgba(255, 250, 235, .96), rgba(255, 255, 255, .86));
-}
+.order-detail-page .od-buyer-confidence.is-review { border-color: #fde68a; }
 
 .order-detail-page .od-confidence-icon {
   display: grid;
   place-items: center;
-  flex: 0 0 38px;
-  width: 38px;
-  height: 38px;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  background: var(--mb-ok);
   border-radius: 50%;
   color: #fff;
-  background: #147447;
   font-size: 20px;
   font-weight: 800;
 }
-.order-detail-page .is-review .od-confidence-icon { background: #9a6700; }
+.order-detail-page .is-review .od-confidence-icon { background: #b45309; }
 
-.order-detail-page .od-confidence-main       { min-width: 0; flex: 1; }
+.order-detail-page .od-confidence-main { min-width: 0; flex: 1; }
 .order-detail-page .od-confidence-main h2 {
-  margin: 3px 0 7px;
-  color: var(--od-ink, #0d1b2a);
-  font: 800 clamp(17px, 2.2vw, 21px) / 1.3 var(--od-font-head, system-ui);
+  margin: 3px 0 8px;
+  color: var(--mb-ink);
+  font: 800 clamp(18px, 2.2vw, 21px) / 1.3 var(--od-font-head);
 }
 .order-detail-page .od-confidence-main p {
   max-width: 850px;
-  color: var(--od-text, #334155);
+  color: var(--mb-ink-2);
+}
+.order-detail-page .od-confidence-main .od-eyebrow {
+  color: var(--mb-accent);
+  font-size: 12px;
 }
 
 .order-detail-page .od-confidence-promises {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
-  margin-top: 13px;
+  gap: 10px 16px;
+  margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px solid rgba(15, 122, 68, .15);
+  border-top: 1.5px solid rgba(4, 120, 87, 0.15);
 }
 .order-detail-page .od-confidence-promises span {
   display: inline-flex;
   align-items: flex-start;
   gap: 6px;
-  color: #315344;
-  font-size: 12.5px;
-  font-weight: 650;
+  color: var(--mb-ink-2);
+  font-size: 13px;
+  font-weight: 700;
 }
-.order-detail-page .od-confidence-promises b { color: #147447; }
+.order-detail-page .od-confidence-promises b { color: var(--mb-ok); }
 
 
 /* ==========================================================================
-   19. NEXT-STEP CARD + FLASH HIGHLIGHT
+   17. NEXT-STEP CARD + FLASH HIGHLIGHT
    ========================================================================== */
 .order-detail-page .card.od-next {
   --od-accent: #6ee7a8;
-  padding: 20px var(--od-pad) 8px;
-  background: var(--od-ink);
-  border-color: var(--od-ink);
+  padding: 24px var(--od-pad) 10px;
+  background: var(--mb-ink);
   color: #cbd5e1;
 }
 .order-detail-page .od-next--done   { --od-accent: #6ee7a8; }
@@ -1023,28 +1026,29 @@
   justify-content: space-between;
   gap: 12px;
 }
-.order-detail-page .od-next .od-eyebrow { margin-bottom: 0; }
+.order-detail-page .od-next .od-eyebrow { color: var(--od-accent); margin-bottom: 0; }
+.order-detail-page .od-next .od-eyebrow::before { background: currentColor; }
 .order-detail-page .od-next-count {
+  color: #94a3b8;
   font: 700 11px var(--od-font-head);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #94a3b8;
   white-space: nowrap;
 }
 
 .order-detail-page .od-next-title {
-  margin: 14px 0 8px;
+  margin: 16px 0 8px;
+  color: #fff;
   font: 800 clamp(22px, 6vw, 30px) / 1.2 var(--od-font-head);
   letter-spacing: -0.5px;
-  color: #fff;
   overflow-wrap: anywhere;
 }
 .order-detail-page .od-next-text {
   max-width: 60ch;
-  margin: 0 0 18px;
+  margin: 0 0 20px;
+  color: #cbd5e1;
   font-size: 14.5px;
   line-height: 1.6;
-  color: #cbd5e1;
 }
 
 .order-detail-page .od-next-cta {
@@ -1055,26 +1059,25 @@
   width: 100%;
   min-height: 54px;
   padding: 0 22px;
-  border: 0;
-  border-radius: 14px;
   background: #4ade80;
-  color: #0d1b2a;
+  border: 0;
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink);
   font: 800 16px / 1.2 var(--od-font-head);
   cursor: pointer;
-  transition: background-color 0.15s, transform 0.1s;
+  transition: background-color 0.15s ease, transform 0.1s ease;
 }
 .order-detail-page .od-next-cta:hover         { background: #86efac; }
 .order-detail-page .od-next-cta:active        { transform: translateY(1px); }
 .order-detail-page .od-next-cta:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 .order-detail-page .od-next-cta-arrow         { font-size: 18px; }
 
-/* Progress dots */
 .order-detail-page .od-next-track {
   display: flex;
-  margin: 24px 0 0;
+  margin: 26px 0 0;
   padding: 18px 0 0;
   list-style: none;
-  border-top: 1px solid #22344a;
+  border-top: 1.5px solid #22344a;
 }
 .order-detail-page .od-next-step {
   position: relative;
@@ -1088,7 +1091,7 @@
 .order-detail-page .od-next-step::before {
   content: '';
   position: absolute;
-  top: 9px;
+  top: 10px;
   right: 50%;
   width: 100%;
   height: 2px;
@@ -1103,12 +1106,12 @@
   z-index: 1;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  background: var(--mb-ink);
   border: 2px solid #2b3f57;
-  background: var(--od-ink);
-  color: var(--od-ink);
+  border-radius: 50%;
+  color: var(--mb-ink);
   font: 800 11px var(--od-font-head);
 }
 .order-detail-page .is-done .od-next-dot    { background: #4ade80; border-color: #4ade80; }
@@ -1126,22 +1129,21 @@
 
 .order-detail-page .od-next-step-label {
   display: none;
-  font-size: 11.5px;
-  font-weight: 600;
-  text-align: center;
   color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
 }
 .order-detail-page .is-current .od-next-step-label,
 .order-detail-page .is-done .od-next-step-label { color: #e2e8f0; }
 
-/* Full list */
-.order-detail-page .od-next-all         { margin-top: 12px; border-top: 1px solid #22344a; }
+.order-detail-page .od-next-all { margin-top: 14px; border-top: 1.5px solid #22344a; }
 .order-detail-page .od-next-all > summary {
   display: flex;
   align-items: center;
   min-height: 48px;
-  font: 700 13px var(--od-font-head);
   color: #94a3b8;
+  font: 700 13px var(--od-font-head);
   cursor: pointer;
   list-style: none;
 }
@@ -1149,26 +1151,26 @@
 .order-detail-page .od-next-all > summary::after                  { content: '+'; margin-left: auto; font-size: 18px; }
 .order-detail-page .od-next-all[open] > summary::after            { content: '–'; }
 
-.order-detail-page .od-next-list { margin: 0; padding: 0 0 8px; list-style: none; }
+.order-detail-page .od-next-list { margin: 0; padding: 0 0 10px; list-style: none; }
 .order-detail-page .od-next-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 0;
+  padding: 12px 0;
   border-top: 1px solid #1b2b3f;
 }
 .order-detail-page .od-next-item-icon {
   flex: none;
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
+  width: 28px;
+  height: 28px;
   border: 2px solid #2b3f57;
-  font: 800 11px var(--od-font-head);
+  border-radius: 50%;
   color: #94a3b8;
+  font: 800 12px var(--od-font-head);
 }
-.order-detail-page .od-next-item.is-done .od-next-item-icon    { background: #4ade80; border-color: #4ade80; color: var(--od-ink); }
+.order-detail-page .od-next-item.is-done .od-next-item-icon    { background: #4ade80; border-color: #4ade80; color: var(--mb-ink); }
 .order-detail-page .od-next-item.is-current .od-next-item-icon { border-color: #fff; color: #fff; }
 
 .order-detail-page .od-next-item-body {
@@ -1177,288 +1179,269 @@
   flex-direction: column;
   min-width: 0;
 }
-.order-detail-page .od-next-item-body strong           { color: #fff; font-size: 14px; }
+.order-detail-page .od-next-item-body strong { color: #fff; font-size: 14px; }
 .order-detail-page .od-next-item.is-todo .od-next-item-body strong { color: #94a3b8; }
-.order-detail-page .od-next-item-body span             { font-size: 12px; color: #94a3b8; }
+.order-detail-page .od-next-item-body span   { color: #94a3b8; font-size: 12.5px; }
 
 .order-detail-page .od-next-item-go {
-  min-height: 36px;
+  min-height: 40px;
   padding: 0 16px;
-  border: 1px solid #2b3f57;
-  border-radius: 10px;
   background: transparent;
+  border: 1.5px solid #2b3f57;
+  border-radius: 12px;
   color: #e2e8f0;
   font: 700 13px var(--od-font-body);
   cursor: pointer;
 }
 .order-detail-page .od-next-item-go:hover { background: #162a40; }
 
-/* Landing highlight when a button scrolls to a card */
 .order-detail-page .od-flash {
-  outline: 3px solid var(--od-accent, var(--od-brand));
+  outline: 3px solid var(--od-accent, var(--mb-accent));
   outline-offset: 3px;
   animation: od-flash 1.8s ease-out forwards;
 }
 @keyframes od-flash {
-  0%, 55% { outline-color: var(--od-accent, #0f7a44); }
+  0%, 55% { outline-color: var(--od-accent, var(--mb-accent)); }
   100%    { outline-color: transparent; }
 }
 
 
 /* ==========================================================================
-   20. TRANSPORT LOADING REPORT
+   18. TRANSPORT LOADING REPORT
    ========================================================================== */
 .order-detail-page .tlr-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   padding-top: 6px;
 }
-
 .order-detail-page .tlr-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
-
 .order-detail-page .tlr-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  color: var(--mb-ink-2);
   font-size: 13px;
-  color: #334155;
 }
 .order-detail-page .tlr-field > span {
-  font-size: 11px;
+  color: var(--mb-muted);
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: .08em;
   text-transform: uppercase;
-  color: #64748b;
 }
 .order-detail-page .tlr-field select,
 .order-detail-page .tlr-field input[type="text"],
 .order-detail-page .tlr-field input[type="datetime-local"],
 .order-detail-page .tlr-field textarea {
   width: 100%;
-  padding: 8px 10px;
-  border: 1px solid #d1d9e1;
-  border-radius: 8px;
-  font: inherit;
+  min-height: 44px;
+  padding: 8px 12px;
   background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--od-radius-sm);
+  color: var(--mb-ink);
+  font: inherit;
 }
 .order-detail-page .tlr-field--full { grid-column: 1 / -1; }
 
 .order-detail-page .tlr-fieldset {
-  border: 1px solid #e5e9ef;
-  border-radius: 10px;
-  padding: 10px 12px 12px;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--od-radius);
+  padding: 12px 14px 14px;
 }
 .order-detail-page .tlr-fieldset > legend {
-  padding: 0 6px;
-  font-size: 11px;
+  padding: 0 8px;
+  color: var(--mb-muted);
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: .08em;
   text-transform: uppercase;
-  color: #64748b;
 }
-
 .order-detail-page .tlr-check-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 6px;
+  gap: 8px;
 }
 .order-detail-page .tlr-check {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #0d1b2a;
+  gap: 8px;
+  color: var(--mb-ink);
+  font-size: 13.5px;
   cursor: pointer;
 }
-
 .order-detail-page .tlr-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 4px;
+  margin-top: 6px;
 }
-
-.order-detail-page .tlr-summary .tlr-issues             { margin-top: 10px; }
+.order-detail-page .tlr-summary .tlr-issues { margin-top: 12px; }
 .order-detail-page .tlr-summary .tlr-issues-label {
   display: block;
-  font-size: 11px;
+  margin-bottom: 6px;
+  color: var(--mb-muted);
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: .08em;
   text-transform: uppercase;
-  color: #64748b;
-  margin-bottom: 4px;
 }
-.order-detail-page .tlr-summary .tlr-issues-chips       { display: flex; flex-wrap: wrap; gap: 6px; }
+.order-detail-page .tlr-summary .tlr-issues-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .order-detail-page .tlr-summary .tlr-issues-chip {
   display: inline-block;
-  padding: 3px 8px;
+  padding: 4px 10px;
+  background: var(--od-bad-bg);
   border-radius: 999px;
-  background: #fee2e2;
-  color: #991b1b;
-  font-size: 12px;
-  font-weight: 600;
+  color: var(--od-bad);
+  font-size: 12.5px;
+  font-weight: 700;
 }
-.order-detail-page .tlr-summary .tlr-notes              { margin-top: 10px; }
+.order-detail-page .tlr-summary .tlr-notes { margin-top: 12px; }
 
 
 /* ==========================================================================
-   21. ORDER DECISION PANEL
+   19. ORDER DECISION PANEL
    ========================================================================== */
 .order-detail-page .od-decision-block {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px 0 0;
+  gap: 14px;
+  padding-top: 14px;
 }
-
 .order-detail-page .od-decision-block-head {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
+  justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
 }
-
 .order-detail-page .od-decision-eyebrow {
-  font-family: 'DM Sans', system-ui, sans-serif;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .14em;
+  color: var(--mb-muted);
+  font: 700 12px var(--od-font-head);
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #64748b;
 }
-
 .order-detail-page .od-decision-block-price {
-  font-size: 18px;
-  font-weight: 800;
-  color: #0d1b2a;
+  color: var(--mb-ink);
+  font: 800 20px var(--od-font-head);
 }
-
 .order-detail-page .od-decision-block-facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px 14px;
-  padding: 10px 12px;
-  border: 1px solid #e5e9ef;
-  border-radius: 10px;
-  background: #f8fafc;
+  gap: 10px 16px;
+  padding: 14px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--od-radius);
 }
 .order-detail-page .od-decision-block-facts > div {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 .order-detail-page .od-decision-block-facts > div > span {
-  font-size: 10.5px;
+  color: var(--mb-muted);
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: .08em;
   text-transform: uppercase;
-  color: #64748b;
 }
 .order-detail-page .od-decision-block-facts > div > strong {
-  font-size: 13.5px;
-  color: #0d1b2a;
+  color: var(--mb-ink);
+  font-size: 14px;
 }
-
 .order-detail-page .od-decision-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
-
 .order-detail-page .od-decision-form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 .order-detail-page .od-decision-form-grid label {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12.5px;
-  color: #334155;
+  color: var(--mb-ink-2);
+  font-size: 13px;
 }
 .order-detail-page .od-decision-form-grid input,
 .order-detail-page .od-decision-form-grid select {
-  padding: 8px 10px;
-  border: 1px solid #d1d9e1;
-  border-radius: 8px;
-  font: inherit;
-  background: #fff;
-}
-
-.order-detail-page .od-decision-more {
-  margin-top: 4px;
+  min-height: 44px;
   padding: 8px 12px;
-  border: 1px solid #e5e9ef;
-  border-radius: 8px;
-  background: #f8fafc;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--od-radius-sm);
+  color: var(--mb-ink);
+  font: inherit;
+}
+.order-detail-page .od-decision-more {
+  padding: 10px 14px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--od-radius-sm);
 }
 .order-detail-page .od-decision-more > summary {
-  cursor: pointer;
+  color: var(--mb-accent-ink);
   font-size: 13px;
-  font-weight: 600;
-  color: #1e3a8a;
+  font-weight: 700;
+  cursor: pointer;
 }
-.order-detail-page .od-decision-more > * { margin-top: 8px; }
-
+.order-detail-page .od-decision-more > * { margin-top: 10px; }
 .order-detail-page .od-decision-escape {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed #d1d9e1;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1.5px dashed var(--mb-line);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
-
 .order-detail-page .od-decision-cancel-row {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid #e5e9ef;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1.5px solid var(--mb-line);
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
   flex-wrap: wrap;
 }
-
 .order-detail-page .od-decision-state {
   display: flex;
-  gap: 12px;
-  padding: 12px 0 0;
+  gap: 14px;
+  padding-top: 14px;
 }
 .order-detail-page .od-decision-state-icon {
   flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  font-weight: 800;
+  border-radius: 50%;
   color: #fff;
+  font-size: 20px;
+  font-weight: 800;
 }
-.order-detail-page .od-decision-state--buy    .od-decision-state-icon { background: #0f7a44; }
-.order-detail-page .od-decision-state--cancel .od-decision-state-icon { background: #dc2626; }
-
+.order-detail-page .od-decision-state--buy    .od-decision-state-icon { background: var(--mb-ok); }
+.order-detail-page .od-decision-state--cancel .od-decision-state-icon { background: var(--mb-danger); }
 .order-detail-page .od-decision-state-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   align-items: flex-start;
 }
-.order-detail-page .od-decision-state-body > strong { font-size: 14.5px; color: #0d1b2a; }
+.order-detail-page .od-decision-state-body > strong { color: var(--mb-ink); font-size: 15px; }
 .order-detail-page .od-decision-state-body button   { margin-top: 8px; }
 
 
 /* ==========================================================================
-   22. TOAST
-   --------------------------------------------------------------------------
-   Not scoped — the toast is portaled outside the page container.
+   20. TOAST (rendered inside .order-detail-page, inherits tokens)
    ========================================================================== */
 .order-detail-toast {
   position: fixed;
@@ -1471,25 +1454,25 @@
   gap: 10px;
   width: calc(100% - 28px);
   max-width: 480px;
-  padding: 12px 12px 12px 14px;
-  border-radius: var(--od-radius, 12px);
-  background: #0d1b2a;
+  padding: 14px 14px 14px 16px;
+  background: var(--mb-ink, #0f172a);
+  border-radius: var(--mb-radius-field, 16px);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.3);
   color: #fff;
-  font: 500 13.5px / 1.5 'DM Sans', system-ui, sans-serif;
-  box-shadow: 0 12px 32px rgba(13, 27, 42, 0.3);
+  font: 500 14px / 1.5 'DM Sans', system-ui, sans-serif;
   animation: od-toast-in 0.2s ease-out;
 }
 .order-detail-toast-icon {
   flex: none;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
+  background: var(--mb-accent, #c2410c);
   border-radius: 50%;
-  background: #f59e0b;
-  color: #0d1b2a;
+  color: #fff;
   font-weight: 800;
-  font-size: 13px;
+  font-size: 14px;
 }
 .order-detail-toast-message { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .order-detail-toast-close {
@@ -1497,9 +1480,9 @@
   width: 32px;
   height: 32px;
   margin: -6px -2px -6px 0;
+  background: transparent;
   border: 0;
   border-radius: 8px;
-  background: transparent;
   color: #cbd5e1;
   font-size: 20px;
   line-height: 1;
@@ -1514,57 +1497,15 @@
 
 
 /* ==========================================================================
-   23. GLASSMORPHISM THEME
-   --------------------------------------------------------------------------
-   Sits at the end so its !important rules win over earlier overrides.
-   ========================================================================== */
-
-/* Soft gradient backdrop so the glass effect is visible. */
-.order-detail-page {
-  background: linear-gradient(135deg, #eef2ff 0%, #e0f2fe 50%, #ecfdf5 100%);
-  background-attachment: fixed;
-}
-
-/* Translucent cards + blur + soft borders. */
-.order-detail-page .card,
-.order-detail-page .card.od-card-overview {
-  background: rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);   /* Safari */
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08) !important;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.order-detail-page .card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.12) !important;
-}
-
-/* Divider under card titles works with the glassy background. */
-.order-detail-page .od-card-head::before {
-  background:
-    linear-gradient(var(--od-accent, var(--od-brand)), var(--od-accent, var(--od-brand))) left center / 28px 3px no-repeat,
-    linear-gradient(rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.06)) left center / 100% 1px no-repeat;
-}
-
-/* Keep text labels readable against the new background. */
-.order-detail-page .od-card-side-label,
-.order-detail-page .od-card-title {
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
-}
-
-
-/* ==========================================================================
-   24. ACCESSIBILITY & MOTION
+   21. ACCESSIBILITY & MOTION
    ========================================================================== */
 .order-detail-page a:focus-visible,
 .order-detail-page button:focus-visible,
 .order-detail-page .field:focus-visible,
 .order-detail-toast button:focus-visible {
-  outline: 3px solid rgba(15, 122, 68, 0.45);
+  outline: 3px solid var(--mb-accent-border, #fed7aa);
   outline-offset: 2px;
 }
-.order-detail-page .field:focus { border-color: var(--od-brand); }
 
 @media (prefers-reduced-motion: reduce) {
   .order-detail-page *,
@@ -1577,89 +1518,78 @@
 
 
 /* ==========================================================================
-   25. RESPONSIVE BREAKPOINTS
+   22. RESPONSIVE BREAKPOINTS (viewport)
    ========================================================================== */
 
-/* ---- Very small phones (≤ 380px) --------------------------------------- */
+/* Very small phones */
 @media (max-width: 380px) {
-  .order-detail-page { --od-pad: 14px; --od-gap: 12px; }
-  .order-detail-page .order-progress-label { font-size: 10.5px; }
+  .order-detail-page { --od-pad: 18px; --od-gap: 14px; }
+  .order-detail-page .od-card-title        { font-size: 20px; }
+  .order-detail-page .order-progress-label { font-size: 13px; }
   .order-detail-page .payout-table th,
-  .order-detail-page .payout-table td      { padding: 10px 4px; }
-  .order-detail-page .payout-table         { font-size: 12.5px; }
-  .order-detail-page .od-status-pill       { white-space: normal; }
+  .order-detail-page .payout-table td      { padding: 12px 4px; }
+  .order-detail-page .payout-table         { font-size: 13px; }
 }
 
-/* ---- Small phones (≤ 520px): buyer confidence -------------------------- */
+/* Small phones: buyer confidence tighter */
 @media (max-width: 520px) {
-  .order-detail-page .od-buyer-confidence        { gap: 10px; padding: 15px; }
-  .order-detail-page .od-confidence-icon         { flex-basis: 32px; width: 32px; height: 32px; }
-  .order-detail-page .od-confidence-promises     { display: grid; gap: 7px; }
+  .order-detail-page .od-buyer-confidence    { gap: 12px; padding: 16px; }
+  .order-detail-page .od-confidence-icon     { flex-basis: 34px; width: 34px; height: 34px; font-size: 18px; }
+  .order-detail-page .od-confidence-promises { display: grid; gap: 8px; }
 }
 
-/* ---- Phones (< 640px): stack facts grid, single-col work-scope --------- */
-@media (max-width: 639px) {
-  .order-detail-page .od-detail-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+/* Phones: work-scope grids collapse to single column */
 @media (max-width: 560px) {
   .order-detail-page .od-form-grid,
   .order-detail-page .od-check-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* ---- Tablets (≥ 640px) ------------------------------------------------- */
+/* Tablets */
 @media (min-width: 640px) {
   .order-detail-page {
-    --od-pad: 22px;
-    --od-gap: 18px;
-    --od-indent: 18px;
-    padding-top: 22px;
+    --od-pad: 26px;
+    --od-gap: 20px;
+    padding-top: 26px;
   }
-  .order-detail-page .container-narrow { padding-inline: 22px; }
+  .order-detail-page .container-narrow { padding-inline: 24px; }
 
   .order-detail-page .od-page-grid,
   .order-detail-page .od-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
-  /* Actions */
-  .order-detail-page .od-actions                { flex-direction: row; flex-wrap: wrap; }
-  .order-detail-page .od-actions .btn           { width: auto; }
-  .order-detail-page .btn-block                 { width: auto; display: inline-flex; }
+  .order-detail-page .od-actions      { flex-direction: row; flex-wrap: wrap; }
+  .order-detail-page .od-actions .btn { width: auto; }
+  .order-detail-page .btn-block       { width: auto; display: inline-flex; }
 
-  /* Fields */
-  .order-detail-page .od-field-row              { flex-direction: row; align-items: center; }
-  .order-detail-page .od-field-row .field       { flex: 1 1 200px; width: auto; }
-  .order-detail-page .od-field-row .btn         { flex: none; width: auto; }
-  .order-detail-page .field                     { font-size: 14.5px; }
+  .order-detail-page .od-field-row          { flex-direction: row; align-items: center; }
+  .order-detail-page .od-field-row .field   { flex: 1 1 200px; width: auto; }
+  .order-detail-page .od-field-row .btn     { flex: none; width: auto; }
+  .order-detail-page .field                 { font-size: 15px; }
 
-  /* Transporter quote cards: side-by-side */
-  .order-detail-page .transporter               { flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 20px; }
+  .order-detail-page .transporter                   { flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 20px; }
   .order-detail-page .transporter > div:first-child { flex: 1 1 55%; }
   .order-detail-page .transporter > div:last-child {
     flex: 1 1 40%;
     padding: 0 0 0 20px;
     border-top: 0;
-    border-left: 1px dashed var(--od-line-strong);
+    border-left: 1.5px dashed var(--mb-line);
   }
 
-  /* Quote actions */
-  .order-detail-page .od-quote-actions                 { flex-direction: row; flex-wrap: wrap; }
-  .order-detail-page .od-quote-actions .btn            { width: auto; }
-  .order-detail-page .od-quote-actions .field-inline   { flex: 1 1 120px; width: auto; }
+  .order-detail-page .od-quote-actions               { flex-direction: row; flex-wrap: wrap; }
+  .order-detail-page .od-quote-actions .btn          { width: auto; }
+  .order-detail-page .od-quote-actions .field-inline { flex: 1 1 120px; width: auto; }
 
-  /* Payout table breathing room */
   .order-detail-page .payout-table th,
-  .order-detail-page .payout-table td { padding: 14px 12px; }
-  .order-detail-page .payout-table    { font-size: 14px; }
+  .order-detail-page .payout-table td { padding: 16px 12px; }
+  .order-detail-page .payout-table    { font-size: 14.5px; }
 
-  /* Next-step card */
-  .order-detail-page .card.od-next              { padding: 26px 28px 10px; }
-  .order-detail-page .od-next-cta               { width: auto; min-width: 280px; display: inline-flex; }
-  .order-detail-page .od-next-step-label        { display: block; }
-  .order-detail-page .od-next-list              { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
+  .order-detail-page .card.od-next       { padding: 28px 32px 12px; }
+  .order-detail-page .od-next-cta        { width: auto; min-width: 280px; display: inline-flex; }
+  .order-detail-page .od-next-step-label { display: block; }
+  .order-detail-page .od-next-list       { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
 
-  /* Toast repositions to bottom-right */
   .order-detail-toast {
     left: auto;
-    right: 22px;
+    right: 24px;
     transform: none;
     width: auto;
     min-width: 320px;
@@ -1671,400 +1601,160 @@
   }
 }
 
-/* ---- Desktops (≥ 1000px) ----------------------------------------------- */
+/* Desktops */
 @media (min-width: 1000px) {
   .order-detail-page {
-    --od-pad: 24px;
-    --od-gap: 20px;
-    --od-indent: 22px;
-    padding-top: 28px;
+    --od-pad: 28px;
+    --od-gap: 22px;
+    padding-top: 32px;
   }
-  .order-detail-page .container-narrow { padding-inline: 32px; }
+  .order-detail-page .container-narrow { padding-inline: 36px; }
 
   .order-detail-page .od-page-grid,
   .order-detail-page .od-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-  .order-detail-page .od-card-title           { font-size: 22px; }
-  .order-detail-page .order-progress-label    { font-size: 12.5px; }
+  .order-detail-page .od-card-title        { font-size: 24px; }
+  .order-detail-page .order-progress-label { font-size: 14.5px; }
 
-  .order-detail-page .card.od-next            { padding: 30px 36px 12px; }
-  .order-detail-page .od-next-list            { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .order-detail-page .card.od-next { padding: 32px 40px 14px; }
+  .order-detail-page .od-next-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-/* ---- Large desktops (≥ 1400px) ---------------------------------------- */
 @media (min-width: 1400px) {
   .order-detail-page .container-narrow { max-width: 1320px; }
 }
 
-/* ---- Landscape phones ------------------------------------------------- */
 @media (max-height: 480px) and (orientation: landscape) {
   .order-detail-toast { bottom: 8px; }
 }
 
 
 /* ==========================================================================
-   26. PRINT
+   23. CONTAINER QUERIES (card internals react to the card's own width)
    ========================================================================== */
-@media print {
-  .order-detail-page                        { background: #fff; padding: 0; }
-  .order-detail-page .page-bar,
-  .order-detail-page .btn,
-  .order-detail-toast                       { display: none !important; }
-  .order-detail-page .od-page-grid,
-  .order-detail-page .od-card-grid          { display: block; }
-  .order-detail-page .card                  { box-shadow: none; break-inside: avoid; margin-bottom: 12px; }
+
+/* Card is wide enough: progress rail turns horizontal */
+@container (min-width: 520px) {
+  .order-detail-page .order-progress {
+    flex-direction: row;
+    margin: 8px 0 0;
+  }
+  .order-detail-page .order-progress-step {
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 0 10px 0 0;
+  }
+  .order-detail-page .order-progress-step::before {
+    left: 27px;
+    right: 6px;
+    top: 9px;
+    bottom: auto;
+    width: auto;
+    height: 2px;
+  }
+  .order-detail-page .order-progress-dot { width: 20px; height: 20px; }
+}
+
+/* Card is wide enough: action rows go horizontal */
+@container (min-width: 460px) {
+  .order-detail-page .od-actions      { flex-direction: row; flex-wrap: wrap; }
+  .order-detail-page .od-actions .btn { width: auto; }
+}
+
+/* Card is wide enough: give the party info more room */
+@container (min-width: 720px) {
+  .order-detail-page .od-card-side-party > div { max-width: 220px; }
 }
 
 
 /* ==========================================================================
-   27. OVERVIEW CARD RESTYLE
+   24. INSPECTION & TRANSPORT POPUPS
    --------------------------------------------------------------------------
-   Turns the OverviewCard into a soft, mobile-styled summary card that
-   closely mirrors the "Order summary" mockup (Buying / Huro / progress /
-   details grid / cancel button). Uses the existing Card, Section,
-   OrderProgress and Facts components without touching JSX.
-   ========================================================================== */
-
-.order-detail-page .od-card-overview {
-  background: #ffffff;
-  border-radius: 16px;
-  border: 1px solid #eef2f6;
-  box-shadow: 0 4px 16px rgba(13, 27, 42, 0.05) !important;
-  padding: 24px 20px;
-  margin: 0;
-}
-
-.order-detail-page .od-card-overview .od-card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  border-bottom: 1px solid #eef2f6;
-  padding-bottom: 16px;
-  margin-bottom: 0;
-}
-
-.order-detail-page .od-card-overview .od-card-head-main { flex: 1; }
-
-/* Neutralize the default head::before accent bar inside the overview card */
-.order-detail-page .od-card-overview .od-card-head::before {
-  content: none;
-}
-
-/* Eyebrow - "BUYING" / "SELLING" */
-.order-detail-page .od-card-overview .od-eyebrow {
-  color: #0f7a44;
-  font-family: 'Manrope', system-ui, sans-serif;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.order-detail-page .od-card-overview .od-eyebrow::before {
-  content: '';
-  display: inline-block;
-  width: 24px;
-  height: 3px;
-  background: currentColor;
-  border-radius: 2px;
-}
-.order-detail-page .od-card-overview .od-eyebrow.is-selling { color: #1d5fb4; }
-
-.order-detail-page .od-card-overview .od-card-title {
-  font-family: 'Manrope', system-ui, sans-serif;
-  font-size: 24px;
-  font-weight: 800;
-  color: #0d1b2a;
-  margin: 6px 0 0;
-  letter-spacing: -0.4px;
-}
-
-/* Avatar */
-.order-detail-page .od-card-overview .od-party-avatar {
-  width: 48px;
-  height: 48px;
-  font-size: 20px;
-  font-weight: 700;
-  background: #0d1b2a;
-  color: #ffffff;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-/* Section titles - "Order status" / "Details" */
-.order-detail-page .od-card-overview .od-card-section {
-  border-top: 0;
-  border-bottom: 1px solid #eef2f6;
-  padding: 20px 0;
-}
-.order-detail-page .od-card-overview .od-card-section:last-of-type {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.order-detail-page .od-card-overview .od-card-section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 18px;
-}
-
-.order-detail-page .od-card-overview .od-card-section-title {
-  font-family: 'Manrope', system-ui, sans-serif;
-  font-size: 16px;
-  font-weight: 800;
-  color: #0f7a44;
-  margin: 0;
-}
-
-.order-detail-page .od-card-overview .od-card-section-meta {
-  font-family: 'DM Sans', system-ui, sans-serif;
-  font-size: 13px;
-  font-weight: 700;
-  color: #64748b;
-  letter-spacing: 0.02em;
-}
-
-/* ===== Overview progress bar ============================================ */
-.order-detail-page .od-card-overview .order-progress {
-  display: flex;
-  justify-content: space-between;
-  position: relative;
-  padding: 0 4px;
-  margin: 0;
-  list-style: none;
-}
-.order-detail-page .od-card-overview .order-progress::before {
-  content: '';
-  position: absolute;
-  top: 8px;
-  left: 24px;
-  right: 24px;
-  height: 2px;
-  background: #e2e8f0;
-  z-index: 1;
-}
-.order-detail-page .od-card-overview .order-progress-step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: relative;
-  z-index: 2;
-  flex: 1;
-  gap: 10px;
-}
-.order-detail-page .od-card-overview .order-progress-dot {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #e2e8f0;
-  border: 2px solid #e2e8f0;
-  box-shadow: none;
-  box-sizing: border-box;
-  transition: all 0.2s ease;
-}
-.order-detail-page .od-card-overview .order-progress-step.is-done .order-progress-dot {
-  background: #0f7a44;
-  border-color: #0f7a44;
-}
-.order-detail-page .od-card-overview .order-progress-step.is-current .order-progress-dot {
-  background: #ffffff;
-  border-color: #0f7a44;
-  border-width: 3px;
-  box-shadow: 0 0 0 4px rgba(15, 122, 68, 0.12);
-}
-.order-detail-page .od-card-overview .order-progress-label {
-  font-family: 'DM Sans', system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 700;
-  color: #64748b;
-  text-align: center;
-  white-space: nowrap;
-}
-.order-detail-page .od-card-overview .order-progress-step.is-done .order-progress-label,
-.order-detail-page .od-card-overview .order-progress-step.is-current .order-progress-label {
-  color: #0d1b2a;
-}
-
-/* Hide the default connector pseudo (we already draw the full-width rail) */
-.order-detail-page .od-card-overview .order-progress-step::before {
-  content: none;
-}
-
-/* Green connector line between done steps */
-.order-detail-page .od-card-overview .order-progress-step.is-done:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  top: 8px;
-  left: calc(50% + 12px);
-  right: calc(-50% + 12px);
-  height: 2px;
-  background: #0f7a44;
-  z-index: 0;
-}
-
-/* ===== Overview details grid ============================================ */
-.order-detail-page .od-card-overview .od-detail-facts {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px 16px;
-  margin: 0;
-}
-.order-detail-page .od-card-overview .od-detail-facts > div {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.order-detail-page .od-card-overview .od-detail-facts span {
-  font-family: 'DM Sans', system-ui, sans-serif;
-  font-size: 13px;
-  font-weight: 500;
-  color: #64748b;
-}
-.order-detail-page .od-card-overview .od-detail-facts strong {
-  font-family: 'Manrope', system-ui, sans-serif;
-  font-size: 15px;
-  font-weight: 700;
-  color: #0d1b2a;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.order-detail-page .od-card-overview .od-detail-facts strong .od-party-you-inline {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 8px;
-  background: #dcfce7;
-  color: #166534;
-  border-radius: 6px;
-  letter-spacing: 0.04em;
-}
-
-/* Created at */
-.order-detail-page .od-card-overview .od-card-created {
-  font-family: 'DM Sans', system-ui, sans-serif;
-  font-size: 13px;
-  color: #64748b;
-  margin: 0 0 20px;
-  padding-top: 4px;
-}
-
-/* Cancel button */
-.order-detail-page .od-card-overview .btn-outline {
-  width: 100%;
-  border: 1.5px solid #fecaca;
-  background: #ffffff;
-  color: #b42318;
-  font-family: 'Manrope', system-ui, sans-serif;
-  font-size: 15px;
-  font-weight: 700;
-  padding: 14px;
-  border-radius: 12px;
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-.order-detail-page .od-card-overview .btn-outline:hover:not(:disabled) {
-  background: #fef2f2;
-  border-color: #fca5a5;
-}
-.order-detail-page .od-card-overview .btn-outline:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-/* Small screens: keep two-column grid, tighten gaps */
-@media (max-width: 420px) {
-  .order-detail-page .od-card-overview .od-detail-facts { gap: 16px 12px; }
-  .order-detail-page .od-card-overview .od-detail-facts strong { font-size: 14px; }
-  .order-detail-page .od-card-overview .order-progress-label { font-size: 11px; }
-}
-
-
-/* ==========================================================================
-   28. INSPECTION & TRANSPORT POPUPS
+   Rendered inside .order-detail-page, so tokens are inherited.
    ========================================================================== */
 .od-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(13, 27, 42, 0.5);
-  backdrop-filter: blur(2px);
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
   padding: 24px;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   animation: od-modal-fade 160ms ease-out;
 }
 
 .od-modal {
-  background: #fff;
-  border-radius: 16px;
   width: 100%;
   max-width: 880px;
   max-height: min(90vh, 900px);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 24px 64px rgba(13, 27, 42, 0.24);
+  background: var(--mb-card, #f8fbff);
+  border-radius: var(--mb-radius-card, 28px);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.28);
   overflow: hidden;
   animation: od-modal-pop 180ms ease-out;
 }
-
-/* Wider dialog for the transport popup (it can hold up to 3 side-by-side cards). */
-.od-modal--wide {
-  max-width: 1080px;
-}
+.od-modal--wide { max-width: 1080px; }
 
 .od-modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
-  border-bottom: 1px solid #e5e9ef;
-  flex: 0 0 auto;
+  gap: 12px;
+  padding: 16px 22px;
   background: #fff;
+  border-bottom: 1.5px solid var(--mb-line, #cbd5e1);
+  flex: 0 0 auto;
 }
 
 .od-modal-title {
-  font-family: 'Manrope', system-ui, sans-serif;
-  font-size: 16px;
-  font-weight: 800;
-  color: #0d1b2a;
+  color: var(--mb-ink, #0f172a);
+  font: 800 17px 'Manrope', system-ui, sans-serif;
   letter-spacing: -0.2px;
 }
 
 .od-modal-close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
   background: transparent;
-  border: none;
+  border: 0;
+  border-radius: 12px;
+  color: var(--mb-muted, #64748b);
   font-size: 26px;
   line-height: 1;
-  color: #64748b;
   cursor: pointer;
-  padding: 2px 10px;
-  border-radius: 8px;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
-.od-modal-close:hover        { background: #f1f5f9; color: #0d1b2a; }
-.od-modal-close:focus-visible { outline: 2px solid #0f7a44; outline-offset: 2px; }
+.od-modal-close:hover         { background: #f1f5f9; color: var(--mb-ink, #0f172a); }
+.od-modal-close:focus-visible { outline: 3px solid var(--mb-accent-border, #fed7aa); outline-offset: 2px; }
 
+/* Body is the container for the inner card so its container queries work */
 .od-modal-body {
-  padding: 20px 24px 24px;
+  padding: 22px 26px 26px;
   overflow-y: auto;
   flex: 1 1 auto;
+  container-type: inline-size;
   -webkit-overflow-scrolling: touch;
 }
 
-/* Neutralize the Card chrome inside the dialog so we don't nest card-on-card. */
+/* Neutralize the Card chrome inside the dialog */
 .od-modal-body > .card {
-  box-shadow: none;
+  container-type: normal;
+  background: transparent;
   border: none;
+  border-radius: 0;
+  box-shadow: none;
   padding: 0;
   margin: 0;
-  background: transparent;
 }
 .od-modal-body > .card + .card        { margin-top: 24px; }
 .od-modal-body > .card .od-card-head  { padding-left: 0; padding-right: 0; }
@@ -2082,9 +1772,30 @@
   .od-modal-backdrop { padding: 0; }
   .od-modal {
     max-width: 100%;
-    max-height: 100vh;
+    max-height: 100dvh;
     height: 100%;
     border-radius: 0;
   }
-  .od-modal-body { padding: 16px; }
+  .od-modal-body { padding: 18px; }
+}
+
+
+/* ==========================================================================
+   25. PRINT
+   ========================================================================== */
+@media print {
+  .order-detail-page             { background: #fff; padding: 0; }
+  .order-detail-page .page-bar,
+  .order-detail-page .btn,
+  .order-detail-toast,
+  .od-modal-backdrop             { display: none !important; }
+  .order-detail-page .od-page-grid,
+  .order-detail-page .od-card-grid { display: block; }
+  .order-detail-page .card {
+    box-shadow: none;
+    border: 1px solid #ddd;
+    background: #fff;
+    break-inside: avoid;
+    margin-bottom: 12px;
+  }
 }
