@@ -299,107 +299,6 @@ function PayoutStatusCard({ payouts, names, you }) {
       : null;
   const duePassed = dueMs !== null && remainingMs === 0;
 
-  const dueStripStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 14,
-    flexWrap: 'wrap',
-    padding: '14px 0 0',
-    margin: '14px 0 0',
-    border: 'none',
-    borderTop: '1px solid #e5e9ef',
-    borderRadius: 0,
-    background: 'transparent',
-    backgroundColor: 'transparent',
-    backgroundImage: 'none',
-    boxShadow: 'none',
-  };
-
-  const dueLabelStyle = {
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 10.5,
-    fontWeight: 700,
-    letterSpacing: '.14em',
-    textTransform: 'uppercase',
-    color: '#64748b',
-  };
-
-  const dueClockStyle = {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: 6,
-    fontVariantNumeric: 'tabular-nums',
-  };
-
-  const dueDigitsStyle = {
-    fontFamily: "'Manrope', system-ui, sans-serif",
-    fontSize: 22,
-    fontWeight: 800,
-    letterSpacing: '-.6px',
-    color: '#0d1b2a',
-    lineHeight: 1,
-  };
-
-  const dueUnitStyle = {
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 11,
-    fontWeight: 700,
-    letterSpacing: '.12em',
-    textTransform: 'uppercase',
-    color: '#64748b',
-  };
-
-  const noticeWrapStyle = {
-    marginTop: 18,
-    paddingTop: 14,
-    border: 'none',
-    borderTop: '1px solid #e5e9ef',
-    borderRadius: 0,
-    background: 'transparent',
-    backgroundColor: 'transparent',
-    backgroundImage: 'none',
-    boxShadow: 'none',
-  };
-
-  const noticePrefixStyle = {
-    display: 'block',
-    margin: '0 0 8px',
-    fontFamily: "'Manrope', system-ui, sans-serif",
-    fontSize: 11,
-    fontWeight: 800,
-    letterSpacing: '.14em',
-    textTransform: 'uppercase',
-    color: '#0f7a44',
-  };
-
-  const noticeListStyle = {
-    listStyle: 'none',
-    margin: 0,
-    padding: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-  };
-
-  const noticeItemStyle = {
-    position: 'relative',
-    paddingLeft: 24,
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 13,
-    lineHeight: 1.6,
-    color: '#2c3a4a',
-  };
-
-  const noticeNumStyle = {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    fontFamily: "'Manrope', system-ui, sans-serif",
-    fontSize: 12,
-    fontWeight: 800,
-    color: '#0f7a44',
-  };
 
   return (
     <Card
@@ -464,17 +363,15 @@ function PayoutStatusCard({ payouts, names, you }) {
       </Section>
 
       {dueMs !== null && (
-        <div style={dueStripStyle} role="group" aria-label="Due date">
-          <span style={dueLabelStyle}>Due Date</span>
-          <div style={dueClockStyle} role="timer" aria-live="off">
+        <div className="payout-due" role="group" aria-label="Due date">
+          <span className="payout-due-label">Due Date</span>
+          <div className="payout-due-clock" role="timer" aria-live="off">
             {duePassed ? (
-              <span style={{ ...dueDigitsStyle, fontSize: 15, letterSpacing: '-.2px', color: '#0f7a44' }}>
-                Hold cleared
-              </span>
+              <span className="payout-due-digits is-cleared">Hold cleared</span>
             ) : (
               <>
-                <span style={dueDigitsStyle}>{clock}</span>
-                <span style={dueUnitStyle}>left</span>
+                <span className="payout-due-digits">{clock}</span>
+                <span className="payout-due-unit">left</span>
               </>
             )}
           </div>
@@ -482,44 +379,24 @@ function PayoutStatusCard({ payouts, names, you }) {
       )}
 
       {dueMs === null && holdNotStarted && (
-        <div style={dueStripStyle} role="group" aria-label="Due date">
-          <span style={dueLabelStyle}>Due Date</span>
-          <span style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: 13, color: '#64748b' }}>
-            Starts after payment settles
-          </span>
+        <div className="payout-due" role="group" aria-label="Due date">
+          <span className="payout-due-label">Due Date</span>
+          <span className="payout-due-hint">Starts after payment settles</span>
         </div>
       )}
 
       {anyDispute && (
-        <p
-          style={{
-            marginTop: 12,
-            padding: '8px 0 8px 12px',
-            borderLeft: '3px solid #fecaca',
-            fontSize: 12.5,
-            lineHeight: 1.55,
-            color: '#b42318',
-          }}
-        >
+        <p className="payout-dispute">
           One or more payouts are frozen while a dispute is open.
         </p>
       )}
 
-      <div style={noticeWrapStyle}>
-        <span style={noticePrefixStyle}>Notice:</span>
-        <ol style={noticeListStyle}>
-          <li style={noticeItemStyle}>
-            <span style={noticeNumStyle}>1)</span>
-            Each payout is held for 3 days after its payment settles.
-          </li>
-          <li style={noticeItemStyle}>
-            <span style={noticeNumStyle}>2)</span>
-            Buyer payment is separate from each payout below.
-          </li>
-          <li style={noticeItemStyle}>
-            <span style={noticeNumStyle}>3)</span>
-            No manual action is required.
-          </li>
+      <div className="payout-notice">
+        <span className="payout-notice-title">Notice:</span>
+        <ol className="payout-notice-list">
+          <li>Each payout is held for 3 days after its payment settles.</li>
+          <li>Buyer payment is separate from each payout below.</li>
+          <li>No manual action is required.</li>
         </ol>
       </div>
     </Card>
@@ -1060,7 +937,7 @@ function InspectionCard({ order, title, i }) {
           )}
 
           {isRequester && (
-            <div style={{ marginTop: 12 }}>
+            <div className="od-mt-sm">
               <ReleaseAgreementControl
                 acceptedQuote={leafQuotes(request.quotes).find((q) => q.status === 'ACCEPTED')}
                 label="Inspector unavailable — choose another"
@@ -1068,7 +945,7 @@ function InspectionCard({ order, title, i }) {
                 disabled={Boolean(i.busy)}
                 onConfirm={(reason, note) => i.withdrawInspectionAgreement(request.id, { reason, note })}
               />
-              <p className="muted small" style={{ marginTop: 6 }}>
+              <p className="muted small od-mt-xs">
                 Provisional agreement — release it if the inspector drops out
                 before payment.
               </p>
@@ -1223,7 +1100,7 @@ function ReleaseAgreementControl({ acceptedQuote, label, busy, disabled, onConfi
   }
 
   return (
-    <div className="od-release-form" style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+    <div className="od-release-form">
       <label>
         Reason for releasing
         <select value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy}>
@@ -1247,7 +1124,7 @@ function ReleaseAgreementControl({ acceptedQuote, label, busy, disabled, onConfi
         Each release is recorded against your account and visible to MarketBridge admin.
         After 2 releases on this job, further releases need admin review.
       </p>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div className="od-actions-inline">
         <Button
           variant="light"
           size="sm"
@@ -2604,7 +2481,7 @@ export default function OrderDetail() {
 
   if (loading) {
     return (
-      <main className="section order-detail-page">
+      <main className="section mb-page order-detail-page">
         <div className="container-narrow">
           <div className="card loading"><p>Loading order…</p></div>
         </div>
@@ -2614,7 +2491,7 @@ export default function OrderDetail() {
 
   if (!order) {
     return (
-      <main className="section order-detail-page">
+      <main className="section mb-page order-detail-page">
         <div className="container-narrow">
           <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
           <div className="alert error">{error || 'Order not found'}</div>
@@ -2693,7 +2570,7 @@ export default function OrderDetail() {
   };
 
   return (
-    <main className="section order-detail-page">
+    <main className="section mb-page order-detail-page">
       <div className="container-narrow">
         <div className="row-between page-bar">
           <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
