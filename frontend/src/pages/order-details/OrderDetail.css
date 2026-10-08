@@ -1,10 +1,9 @@
 /* ==========================================================================
-   OrderDetail.css  (replaces src/pages/order-details/OrderDetail.css)
-   Built on the Orders.css card language, not on the previous detail styles.
-   Pair with OrderDetail.redesign.jsx.
-   Rules: card title = 2px line + short orange segment; sub-headers = 1.5px
-   line only; card internals respond to the card's own width (cqw / @container).
-   Every class name the JSX and child components already use is kept.
+   OrderDetail.css
+   Card language borrowed from Orders.css: 22px radius, soft glass surface,
+   card head = 2px line + short orange segment, sub-headers = 1.5px line only,
+   internals scale off the card's own width (container queries).
+   Pair with OrderDetail.jsx (uses .od-page-grid / .od-span-all).
    ========================================================================== */
 
 /* ---- 1. Tokens ---------------------------------------------------------- */
@@ -105,53 +104,25 @@
 }
 .order-detail-page .back-link:hover { color: var(--mb-ink); }
 
-/* Hero (same pattern as the Orders page) */
-.order-detail-page .od-hero { margin: 0 0 20px; }
-.order-detail-page .od-hero-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--mb-accent);
-  font: 700 13px var(--od-font-head);
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
-}
-.order-detail-page .od-hero-eyebrow::before {
-  content: '';
-  flex: none;
-  width: 32px;
-  height: 3px;
-  background: var(--mb-accent);
-  border-radius: 2px;
-}
-.order-detail-page .od-hero-title {
-  margin: 8px 0 0;
-  color: var(--mb-ink);
-  font: 800 clamp(26px, 6vw, 30px) / 1.15 var(--od-font-head);
-}
-.order-detail-page .od-hero-text {
-  max-width: 60ch;
-  margin: 10px 0 0;
-  color: var(--mb-muted);
-  font-size: 15px;
-}
-
-/* Main column + side rail */
-.order-detail-page .od-layout {
+/* Card grid used by the page (JSX: .od-page-grid / .od-span-all).
+   Single column on narrow viewports; two columns once there is room.      */
+.order-detail-page .od-page-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--od-gap);
-  margin-top: var(--od-gap);
   align-items: start;
+  margin-top: var(--od-gap);
 }
-.order-detail-page .od-main,
-.order-detail-page .od-rail {
+.order-detail-page .od-span-all {
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   gap: var(--od-gap);
   min-width: 0;
 }
+.order-detail-page .od-span-all > * { min-width: 0; }
 
+/* Nested card grid (used inside TransportCard, InspectionCard, etc.) */
 .order-detail-page .od-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
@@ -323,7 +294,6 @@
 .order-detail-page .od-text-info { color: #1d4ed8; }
 .order-detail-page .od-text-neutral { color: #475569; }
 
-/* Body content sits to the right of the header, scaling with card width */
 .order-detail-page .od-card-section-body { padding-inline-start: var(--od-indent); }
 .order-detail-page .od-card-section-body.is-flush { padding-inline-start: 0; }
 .order-detail-page .od-card-section-body:empty { display: none; }
@@ -359,6 +329,7 @@
   font: 800 12px var(--od-font-head);
   vertical-align: middle;
 }
+.order-detail-page .od-party-you-inline { margin-left: 6px; }
 
 @container (min-width: 520px) { .od-detail-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @container (min-width: 760px) { .od-detail-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
@@ -469,7 +440,7 @@
   font-size: 14px;
 }
 .order-detail-page .od-meta-code { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.order-detail-page .od-card-created { margin: 0; }
+.order-detail-page .od-card-created { margin: 0; color: var(--mb-muted); font-size: 13px; }
 
 /* ---- 10. Buttons -------------------------------------------------------- */
 .order-detail-page .btn {
@@ -494,7 +465,6 @@
 .order-detail-page .btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.8); }
 .order-detail-page .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-/* Primary = the one action that moves the order forward */
 .order-detail-page .btn-primary { background: var(--mb-accent); border-color: var(--mb-accent); color: #fff; }
 .order-detail-page .btn-primary:hover:not(:disabled) { background: var(--mb-accent-ink); border-color: var(--mb-accent-ink); }
 .order-detail-page .btn-light { background: #fff; }
@@ -981,7 +951,7 @@
 @media (min-width: 1040px) {
   .order-detail-page { --od-pad: 28px; --od-gap: 22px; padding-top: 32px; }
   .order-detail-page .container-narrow { padding-inline: 36px; }
-  .order-detail-page .od-layout { grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); }
+  .order-detail-page .od-page-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .order-detail-page .od-card-side-party > div { max-width: 180px; }
 }
 @media (min-width: 1400px) {
@@ -992,6 +962,6 @@
 @media print {
   .order-detail-page { background: #fff; padding: 0; }
   .order-detail-page .page-bar, .order-detail-page .btn, .order-detail-toast, .od-modal-backdrop { display: none !important; }
-  .order-detail-page .od-layout { display: block; }
+  .order-detail-page .od-page-grid { display: block; }
   .order-detail-page .card { margin-bottom: 12px; border: 1px solid #ddd; background: #fff; box-shadow: none; break-inside: avoid; }
 }
