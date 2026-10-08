@@ -35,13 +35,13 @@
 
   cursor: pointer;
   text-align: left;
-  color: #0d1b2a;
+  color: var(--mb-ink);
 
   transition: background .18s cubic-bezier(.2, .7, .3, 1);
 }
 
 .collapsible-card > .collapsible-header:hover {
-  background: #f6f8fa;
+  background: var(--mb-soft);
 }
 
 .collapsible-card > .collapsible-header:focus-visible {
@@ -61,7 +61,7 @@
   font-size: 18px;
   font-weight: 800;
   letter-spacing: -.3px;
-  color: #0d1b2a;
+  color: var(--mb-ink);
   margin: 0;
   line-height: 1.25;
 }
@@ -70,7 +70,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #12734a;
+  color: var(--mb-ok);
   font: 700 11px/1 'DM Sans', sans-serif;
   letter-spacing: .16em;
   text-transform: uppercase;
@@ -86,7 +86,7 @@
 }
 
 .collapsible-header-text .muted {
-  color: #64748b;
+  color: var(--mb-muted);
   font-size: 14px;
   line-height: 1.55;
 }
@@ -101,7 +101,7 @@
 }
 
 .collapsible-header-side .muted {
-  color: #64748b;
+  color: var(--mb-muted);
   font-family: 'DM Sans', sans-serif;
   font-size: 13px;
   font-weight: 500;
@@ -115,8 +115,8 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: #eef1f5;
-  color: #64748b;
+  background: var(--mb-line-soft);
+  color: var(--mb-muted);
   font-size: 12px;
   line-height: 1;
   flex: 0 0 auto;
@@ -127,8 +127,8 @@
 
 .collapsible-card.is-open .collapsible-chevron {
   transform: rotate(180deg);
-  background: #ecfdf3;
-  color: #12734a;
+  background: var(--mb-ok-bg);
+  color: var(--mb-ok);
 }
 
 /* ── Body ─────────────────────────────────────────────────── */

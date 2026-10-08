@@ -20,18 +20,17 @@
   width: 100%;
   min-height: 54px;
   padding: 10px 12px;
-  border: 1px solid rgba(255,255,255,.5);
-  border-radius: 14px;
-  background: rgba(23, 54, 37, .94);
+  border: var(--mb-bw, 1.5px) solid rgba(255,255,255,.18);
+  border-radius: var(--mb-radius-field, 16px);
+  background: var(--mb-ink, #0f172a);
   color: #fff;
-  box-shadow: 0 18px 45px rgba(15, 35, 23, .24), inset 0 1px 0 rgba(255,255,255,.14);
-  backdrop-filter: blur(14px) saturate(130%);
+  box-shadow: var(--mb-shadow-toast, 0 12px 32px rgba(15,23,42,.30));
   animation: mbToastIn .22s ease-out;
 }
 
-.mb-toast--success { background: rgba(18, 105, 56, .96); }
-.mb-toast--error { background: rgba(105, 38, 34, .96); }
-.mb-toast--info { background: rgba(31, 72, 55, .96); }
+.mb-toast--success { background: var(--mb-ok, #047857); }
+.mb-toast--error { background: var(--mb-danger, #b91c1c); }
+.mb-toast--info { background: var(--mb-ink-2, #334155); }
 
 .mb-toast-icon {
   display: grid;

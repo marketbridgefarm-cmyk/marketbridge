@@ -29,21 +29,21 @@
 }
 
 .order-timeline {
-  --ot-accent:      #1e9e5a;
-  --ot-accent-2:    #0f7a44;
-  --ot-accent-soft: #ecfdf3;
-  --ot-accent-line: #c6eccf;
+  --ot-accent:      var(--mb-ok);
+  --ot-accent-2:    var(--mb-ok);
+  --ot-accent-soft: var(--mb-ok-bg);
+  --ot-accent-line: var(--mb-ok-border);
 
-  --ot-ink:         #0d1b2a;
-  --ot-ink-soft:    #2c3a4a;
-  --ot-muted:       #64748b;
+  --ot-ink:         var(--mb-ink);
+  --ot-ink-soft:    var(--mb-ink-2);
+  --ot-muted:       var(--mb-muted);
   --ot-muted-2:     #94a3b8;
 
-  --ot-line:        #e5e9ef;
-  --ot-line-soft:   #eef1f5;
+  --ot-line:        var(--mb-line);
+  --ot-line-soft:   var(--mb-line-soft);
 
-  --ot-info:        #1e5fa8;
-  --ot-info-soft:   #eff5fd;
+  --ot-info:        var(--mb-info);
+  --ot-info-soft:   var(--mb-info-bg);
 
   --ot-dot-bg:      #ffffff;
   --ot-dot-mark:    #ffffff;
@@ -305,7 +305,7 @@
   gap: 6px;
   padding: 8px 12px;
   border-radius: 8px;
-  background: #fbfcfd;
+  background: var(--mb-soft);
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--ot-ink-soft);

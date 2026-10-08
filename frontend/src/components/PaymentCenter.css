@@ -10,24 +10,24 @@
 
 
 .payment-center {
-  --pc-ink: var(--od-ink, #0d1b2a);
-  --pc-text: var(--od-text, #2c3a4a);
-  --pc-muted: var(--od-muted, #64748b);
-  --pc-line: var(--od-line, #e5e9ef);
-  --pc-line-strong: var(--od-line-strong, #d3dae3);
-  --pc-soft: var(--od-soft, #f8fafc);
-  --pc-brand: var(--od-brand, #0f7a44);
-  --pc-brand-dark: var(--od-brand-dark, #0b5f35);
-  --pc-brand-soft: var(--od-brand-soft, #e7f5ed);
-  --pc-bad: var(--od-bad, #b42318);
-  --pc-bad-bg: var(--od-bad-bg, #fef0ee);
-  --pc-bad-line: var(--od-bad-line, #fecaca);
-  --pc-wait: var(--od-wait, #9a6700);
-  --pc-wait-bg: var(--od-wait-bg, #fff6df);
-  --pc-info: var(--od-info, #1d5fb4);
-  --pc-info-bg: var(--od-info-bg, #e8f0fb);
-  --pc-neutral: var(--od-neutral, #475569);
-  --pc-neutral-bg: var(--od-neutral-bg, #eef1f5);
+  --pc-ink: var(--mb-ink);
+  --pc-text: var(--mb-ink-2);
+  --pc-muted: var(--mb-muted);
+  --pc-line: var(--mb-line-soft);
+  --pc-line-strong: var(--mb-line);
+  --pc-soft: var(--mb-soft);
+  --pc-brand: var(--mb-ok);
+  --pc-brand-dark: var(--mb-ok);
+  --pc-brand-soft: var(--mb-ok-bg);
+  --pc-bad: var(--mb-danger);
+  --pc-bad-bg: var(--mb-danger-bg);
+  --pc-bad-line: var(--mb-danger-border);
+  --pc-wait: var(--mb-wait);
+  --pc-wait-bg: var(--mb-wait-bg);
+  --pc-info: var(--mb-info);
+  --pc-info-bg: var(--mb-info-bg);
+  --pc-neutral: var(--mb-neutral);
+  --pc-neutral-bg: var(--mb-neutral-bg);
   --pc-indent: var(--od-indent, 14px);
   --pc-font-body: var(--od-font-body, 'DM Sans', system-ui, sans-serif);
   --pc-font-head: var(--od-font-head, 'Manrope', system-ui, sans-serif);

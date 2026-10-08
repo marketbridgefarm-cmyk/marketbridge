@@ -13,7 +13,7 @@
   position: relative;
   padding: 22px 24px;
   margin-bottom: 16px;
-  border: 1px solid #e5e9ef;
+  border: 1px solid var(--mb-line-soft);
   border-radius: 20px;
   background: #fff;
   box-shadow:
@@ -23,7 +23,7 @@
 .rating-card:last-child { margin-bottom: 0; }
 
 .order-detail-page .rating-card {
-  border-color: var(--od-line, #e5e9ef);
+  border-color: var(--od-line, var(--mb-line-soft));
   box-shadow: var(--od-shadow, 0 1px 2px rgba(15,30,45,.04),
                        0 8px 24px rgba(15,30,45,.05));
 }
@@ -38,7 +38,7 @@
   flex-wrap: wrap;
   padding: 0 0 16px;
   margin: 0 0 18px;
-  border-bottom: 1px solid #e5e9ef;
+  border-bottom: 1px solid var(--mb-line-soft);
 }
 
 .rating-card .card-head-text {
@@ -53,7 +53,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #12734a;
+  color: var(--mb-ok);
   font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .16em;
   text-transform: uppercase;
@@ -74,7 +74,7 @@
   font-weight: 800;
   letter-spacing: -.3px;
   line-height: 1.25;
-  color: #0d1b2a;
+  color: var(--mb-ink);
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -84,7 +84,7 @@
   align-self: flex-start;
   font: 600 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .01em;
-  color: #64748b;
+  color: var(--mb-muted);
 }
 
 /* ── Card body + block ──────────────────────────────────── */
@@ -102,7 +102,7 @@
   flex-wrap: wrap;
   padding: 0 0 10px;
   margin: 0 0 14px;
-  border-bottom: 1px solid #eef1f5;
+  border-bottom: 1px solid var(--mb-line-soft);
 }
 
 .rating-card .card-block-title h3 {
@@ -111,7 +111,7 @@
   font-weight: 800;
   letter-spacing: -.1px;
   line-height: 1.3;
-  color: #0d1b2a;
+  color: var(--mb-ink);
   margin: 0;
 }
 
@@ -130,9 +130,9 @@
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  border: 1px solid #e5e9ef;
+  border: 1px solid var(--mb-line-soft);
   border-radius: 14px;
-  background: #fbfcfd;
+  background: var(--mb-soft);
 }
 
 .rating-form-head {
@@ -148,9 +148,9 @@
   height: 20px;
   padding: 0 8px;
   border-radius: 999px;
-  background: #ecfdf3;
-  border: 1px solid #c6eccf;
-  color: #12734a;
+  background: var(--mb-ok-bg);
+  border: 1px solid var(--mb-ok-border);
+  color: var(--mb-ok);
   font: 700 10px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -161,7 +161,7 @@
   font-size: 14.5px;
   font-weight: 800;
   letter-spacing: -.15px;
-  color: #0d1b2a;
+  color: var(--mb-ink);
   line-height: 1.3;
 }
 
@@ -172,7 +172,7 @@
 }
 
 .rating-form .rating-stars svg[fill="currentColor"] { color: #f5a623; }
-.rating-form .rating-stars svg[fill="none"] { color: #d8dee6; }
+.rating-form .rating-stars svg[fill="none"] { color: var(--mb-line); }
 
 .rating-form .rating-star-btn {
   appearance: none;
@@ -199,10 +199,10 @@
   width: 100%;
   min-height: 72px;
   padding: 11px 13px;
-  border: 1px solid #e5e9ef;
+  border: 1px solid var(--mb-line-soft);
   border-radius: 10px;
   background: #fff;
-  color: #0d1b2a;
+  color: var(--mb-ink);
   font: 400 14.5px/1.5 var(--mb-font-body, 'DM Sans', sans-serif);
   resize: vertical;
   transition: border-color .18s cubic-bezier(.2, .7, .3, 1),
@@ -212,10 +212,10 @@
   box-sizing: border-box;
 }
 .rating-form .rating-comment::placeholder { color: #94a3b8; }
-.rating-form .rating-comment:hover { border-color: #cfd6df; }
+.rating-form .rating-comment:hover { border-color: var(--mb-line); }
 .rating-form .rating-comment:focus {
   outline: none;
-  border-color: #1e9e5a;
+  border-color: var(--mb-ok);
   box-shadow: 0 0 0 3px rgba(30, 158, 90, .16);
 }
 
@@ -227,7 +227,7 @@
   border-radius: 10px;
   border: none;
   color: #fff;
-  background: linear-gradient(150deg, #1e9e5a 0%, #0f7a44 100%);
+  background: linear-gradient(150deg, var(--mb-ok) 0%, var(--mb-ok) 100%);
   font: 700 13px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .01em;
   cursor: pointer;
@@ -261,9 +261,9 @@
 .rating-sayings {
   display: block;
   margin: 0;
-  border: 1px solid #eef1f5;
+  border: 1px solid var(--mb-line-soft);
   border-radius: 14px;
-  background: #fbfcfd;
+  background: var(--mb-soft);
   overflow: hidden;
 }
 
@@ -278,7 +278,7 @@
   font-family: var(--mb-font-body, 'DM Sans', sans-serif);
   font-size: 13px;
   font-weight: 700;
-  color: #0d1b2a;
+  color: var(--mb-ink);
   transition: background .15s cubic-bezier(.2, .7, .3, 1);
 }
 
@@ -287,7 +287,7 @@
 }
 
 .rating-sayings > summary.rating-sayings-summary:hover {
-  background: #f0fdf5;
+  background: var(--mb-ok-bg);
 }
 
 .rating-sayings > summary.rating-sayings-summary:focus-visible {
@@ -305,14 +305,14 @@
   height: 20px;
   padding: 0 8px;
   border-radius: 999px;
-  background: #eff5fd;
-  color: #1e5fa8;
+  background: var(--mb-info-bg);
+  color: var(--mb-info);
   font: 800 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   font-variant-numeric: tabular-nums;
 }
 
 .rating-sayings-chevron {
-  color: #64748b;
+  color: var(--mb-muted);
   font-size: 12px;
   line-height: 1;
   transition: transform .22s cubic-bezier(.2, .7, .3, 1);
@@ -329,7 +329,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 12px 14px 16px;
-  border-top: 1px solid #eef1f5;
+  border-top: 1px solid var(--mb-line-soft);
   background: #fff;
 }
 
@@ -338,7 +338,7 @@
   flex-direction: column;
   gap: 6px;
   padding: 14px 16px;
-  border: 1px solid #eef1f5;
+  border: 1px solid var(--mb-line-soft);
   border-radius: 12px;
   background: #fff;
 }
@@ -349,7 +349,7 @@
   align-items: baseline;
   gap: 4px;
   font-size: 13.5px;
-  color: #0d1b2a;
+  color: var(--mb-ink);
 }
 
 .rating-list-row-head strong {
@@ -359,7 +359,7 @@
 }
 
 .rating-list-row-head .muted {
-  color: #64748b;
+  color: var(--mb-muted);
   font-weight: 500;
 }
 
@@ -368,13 +368,13 @@
   gap: 2px;
 }
 .rating-list-row .rating-stars svg[fill="currentColor"] { color: #f5a623; }
-.rating-list-row .rating-stars svg[fill="none"] { color: #d8dee6; }
+.rating-list-row .rating-stars svg[fill="none"] { color: var(--mb-line); }
 
 .rating-list-row > p.muted {
   margin: 4px 0 0;
   font-size: 13px;
   line-height: 1.5;
-  color: #64748b;
+  color: var(--mb-muted);
 }
 
 /* ── Error alert inside a form ─────────────────────────── */
