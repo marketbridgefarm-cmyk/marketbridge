@@ -161,7 +161,7 @@
 }
 
 .order-detail-page .od-card-warning {
-  border-left: 4px solid var(--mb-accent);
+  border-left: 3px solid var(--mb-accent);
   background: var(--mb-accent-tint);
 }
 .order-detail-page .od-card-accent {
@@ -227,12 +227,12 @@
   content: '';
   grid-column: 1 / -1;
   grid-row: 3;
-  height: 4px;
+  height: 3px;
   margin: 12px 0 0;
   background:
     linear-gradient(var(--od-accent, var(--mb-accent)),
-                    var(--od-accent, var(--mb-accent))) left center / 44px 4px no-repeat,
-    linear-gradient(var(--mb-line), var(--mb-line)) left center / 100% 2px no-repeat;
+                    var(--od-accent, var(--mb-accent))) left center / 44px 3px no-repeat,
+    linear-gradient(var(--mb-line), var(--mb-line)) left center / 100% 1.5px no-repeat;
 }
 
 .order-detail-page .od-card-head::after { content: none; }
@@ -245,21 +245,22 @@
   min-width: 0;
 }
 
+/* Eyebrow text + accent bar. Bar halved to 16×2px. */
 .order-detail-page .od-eyebrow {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   color: var(--od-accent, var(--mb-accent));
-  font: 700 13px / 1.2 var(--od-font-head);
-  letter-spacing: 0.25em;
+  font: 700 12px / 1.2 var(--od-font-head);
+  letter-spacing: 0.22em;
   text-transform: uppercase;
 }
 .order-detail-page .od-eyebrow::before {
   content: '';
   flex: none;
-  width: 32px;
-  height: 3px;
-  border-radius: 2px;
+  width: 16px;
+  height: 2px;
+  border-radius: 1px;
   background: currentColor;
 }
 .order-detail-page .od-eyebrow.is-selling { color: var(--mb-ok); }
@@ -292,8 +293,8 @@
 .order-detail-page .od-card-side-label {
   display: block;
   color: var(--od-accent, var(--mb-accent));
-  font: 700 12px / 1.2 var(--od-font-head);
-  letter-spacing: 0.22em;
+  font: 700 11px / 1.2 var(--od-font-head);
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -358,7 +359,7 @@
 }
 .order-detail-page .od-card-section + .od-card-section {
   padding-top: 24px;
-  border-top: 1.5px solid var(--mb-line);
+  border-top: 1px solid var(--mb-line);
 }
 
 .order-detail-page .od-card-section-head {
@@ -368,7 +369,7 @@
   gap: 12px;
   margin: 0 0 16px;
   padding-bottom: 8px;
-  border-bottom: 1.5px solid var(--mb-line);
+  border-bottom: 1px solid var(--mb-line);
 }
 
 .order-detail-page .od-card-section-title {
@@ -380,7 +381,7 @@
 .order-detail-page .od-card-section-meta {
   padding: 4px 12px;
   background: #fff;
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: 999px;
   color: var(--mb-ink-2);
   font: 700 13px var(--od-font-body);
@@ -469,7 +470,7 @@
   gap: 6px;
   padding: 5px 14px;
   background: var(--od-neutral-bg);
-  border: 1.5px solid #e2e8f0;
+  border: 1px solid #e2e8f0;
   border-radius: 999px;
   color: var(--od-neutral);
   font: 700 13px / 1.3 var(--od-font-body);
@@ -493,7 +494,7 @@
   display: inline-block;
   padding: 3px 10px;
   background: var(--od-neutral-bg);
-  border: 1.5px solid #e2e8f0;
+  border: 1px solid #e2e8f0;
   border-radius: 999px;
   color: var(--od-neutral);
   font-size: 12px;
@@ -568,6 +569,8 @@
 
 /* ==========================================================================
    8. BUTTONS & ACTIONS
+   --------------------------------------------------------------------------
+   All borders reduced to 1px. Primary and light buttons are outline-only.
    ========================================================================== */
 .order-detail-page .btn {
   display: inline-flex;
@@ -577,7 +580,7 @@
   min-height: 48px;
   padding: 0 18px;
   background: transparent;
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: var(--mb-radius-field);
   color: var(--mb-ink-2);
   font: 700 15px / 1.2 var(--od-font-body);
@@ -591,12 +594,10 @@
 .order-detail-page .btn:hover:not(:disabled) { background: rgba(241, 245, 249, 0.55); }
 .order-detail-page .btn:disabled             { opacity: 0.55; cursor: not-allowed; }
 
-/* ---- Primary button: outline style -------------------------------------
-   Transparent background, thin accent border, accent text.
-   ------------------------------------------------------------------------ */
+/* Primary: transparent, thin accent border, accent text */
 .order-detail-page .btn-primary {
   background: transparent;
-  border: 1.5px solid var(--mb-accent);
+  border: 1px solid var(--mb-accent);
   color: var(--mb-accent);
 }
 .order-detail-page .btn-primary:hover:not(:disabled) {
@@ -671,7 +672,7 @@
   min-height: 48px;
   padding: 10px 14px;
   background: #fff;
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: var(--mb-radius-field);
   color: var(--mb-ink);
   font: 500 16px / 1.4 var(--od-font-body);
@@ -702,7 +703,7 @@
   margin-top: 14px;
   padding: 16px;
   background: var(--mb-accent-tint);
-  border: 1.5px solid var(--mb-accent-border);
+  border: 1px solid var(--mb-accent-border);
   border-radius: var(--od-radius);
 }
 .order-detail-page .od-notice > strong { color: var(--mb-ink); font: 800 14px var(--od-font-head); }
@@ -712,7 +713,7 @@
   margin-top: 14px;
   padding: 14px 16px;
   background: #fff;
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: var(--od-radius);
   font-size: 14px;
   line-height: 1.55;
@@ -750,13 +751,13 @@
   min-height: 48px;
   padding: 10px 14px;
   background: #fff;
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: var(--mb-radius-field);
   color: var(--mb-ink);
   font: 500 15px / 1.4 var(--od-font-body);
 }
 .order-detail-page .od-inspection-work-form fieldset {
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: var(--od-radius);
   padding: 14px;
   min-width: 0;
@@ -789,7 +790,7 @@
   margin-top: 14px;
   padding: 14px;
   background: #fff;
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: var(--od-radius);
   overflow-wrap: anywhere;
 }
@@ -821,7 +822,7 @@
   min-height: 180px;
   padding: 8px;
   background: #fff;
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: var(--mb-radius-field);
   color: var(--mb-ink);
   font: inherit;
@@ -844,7 +845,7 @@
   padding: 16px;
   margin-bottom: 12px;
   background: #fff;
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: var(--od-radius);
 }
 .order-detail-page .transporter:last-child { margin-bottom: 0; }
@@ -856,7 +857,7 @@
   align-items: stretch;
   gap: 10px;
   padding-top: 14px;
-  border-top: 1.5px dashed var(--mb-line);
+  border-top: 1px dashed var(--mb-line);
 }
 .order-detail-page .transporter > div:last-child > strong {
   color: var(--mb-ink);
@@ -884,7 +885,7 @@
 .order-detail-page .payout-table th,
 .order-detail-page .payout-table td {
   padding: 14px 8px;
-  border-bottom: 1.5px solid var(--mb-line);
+  border-bottom: 1px solid var(--mb-line);
   text-align: left;
   vertical-align: middle;
 }
@@ -952,7 +953,7 @@
   width: 44px;
   height: 44px;
   background: #f1f5f9;
-  border: 1.5px solid #e2e8f0;
+  border: 1px solid #e2e8f0;
   border-radius: 50%;
   color: var(--mb-ink-2);
   font: 800 14px var(--od-font-head);
@@ -971,7 +972,7 @@
   width: 56px;
   height: 56px;
   background: #f1f5f9;
-  border: 1.5px solid #e2e8f0;
+  border: 1px solid #e2e8f0;
   color: var(--mb-ink);
   font: 800 18px var(--od-font-head);
 }
@@ -986,7 +987,7 @@
   gap: 14px;
   padding: clamp(18px, 3vw, 24px);
   background: var(--mb-card);
-  border: 1.5px solid #a7f3d0;
+  border: 1px solid #a7f3d0;
   border-radius: var(--mb-radius-card);
   box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
 }
@@ -1027,7 +1028,7 @@
   gap: 10px 16px;
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1.5px solid rgba(4, 120, 87, 0.15);
+  border-top: 1px solid rgba(4, 120, 87, 0.15);
 }
 .order-detail-page .od-confidence-promises span {
   display: inline-flex;
@@ -1093,7 +1094,7 @@
   min-height: 54px;
   padding: 0 22px;
   background: transparent;
-  border: 1.5px solid #4ade80;
+  border: 1px solid #4ade80;
   border-radius: var(--mb-radius-field);
   color: #4ade80;
   font: 800 16px / 1.2 var(--od-font-head);
@@ -1110,7 +1111,7 @@
   margin: 26px 0 0;
   padding: 18px 0 0;
   list-style: none;
-  border-top: 1.5px solid #22344a;
+  border-top: 1px solid #22344a;
 }
 .order-detail-page .od-next-step {
   position: relative;
@@ -1170,7 +1171,7 @@
 .order-detail-page .is-current .od-next-step-label,
 .order-detail-page .is-done .od-next-step-label { color: #e2e8f0; }
 
-.order-detail-page .od-next-all { margin-top: 14px; border-top: 1.5px solid #22344a; }
+.order-detail-page .od-next-all { margin-top: 14px; border-top: 1px solid #22344a; }
 .order-detail-page .od-next-all > summary {
   display: flex;
   align-items: center;
@@ -1220,7 +1221,7 @@
   min-height: 40px;
   padding: 0 16px;
   background: transparent;
-  border: 1.5px solid #2b3f57;
+  border: 1px solid #2b3f57;
   border-radius: 12px;
   color: #e2e8f0;
   font: 700 13px var(--od-font-body);
@@ -1275,7 +1276,7 @@
   min-height: 44px;
   padding: 8px 12px;
   background: #fff;
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: var(--od-radius-sm);
   color: var(--mb-ink);
   font: inherit;
@@ -1283,7 +1284,7 @@
 .order-detail-page .tlr-field--full { grid-column: 1 / -1; }
 
 .order-detail-page .tlr-fieldset {
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: var(--od-radius);
   padding: 12px 14px 14px;
 }
@@ -1368,7 +1369,7 @@
   gap: 10px 16px;
   padding: 14px;
   background: #fff;
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: var(--od-radius);
 }
 .order-detail-page .od-decision-block-facts > div {
@@ -1409,7 +1410,7 @@
   min-height: 44px;
   padding: 8px 12px;
   background: #fff;
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: var(--od-radius-sm);
   color: var(--mb-ink);
   font: inherit;
@@ -1417,7 +1418,7 @@
 .order-detail-page .od-decision-more {
   padding: 10px 14px;
   background: #fff;
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-line);
   border-radius: var(--od-radius-sm);
 }
 .order-detail-page .od-decision-more > summary {
@@ -1430,7 +1431,7 @@
 .order-detail-page .od-decision-escape {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1.5px dashed var(--mb-line);
+  border-top: 1px dashed var(--mb-line);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1438,7 +1439,7 @@
 .order-detail-page .od-decision-cancel-row {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1.5px solid var(--mb-line);
+  border-top: 1px solid var(--mb-line);
   display: flex;
   gap: 12px;
   align-items: center;
@@ -1490,7 +1491,7 @@
 .order-detail-page .od-card-overview .btn-outline {
   margin-top: 18px;
   min-height: 52px;
-  border-width: 1.5px;
+  border-width: 1px;
   font-size: 16px;
 }
 
@@ -1626,7 +1627,7 @@
     flex: 1 1 40%;
     padding: 0 0 0 20px;
     border-top: 0;
-    border-left: 1.5px dashed var(--mb-line);
+    border-left: 1px dashed var(--mb-line);
   }
 
   .order-detail-page .od-quote-actions               { flex-direction: row; flex-wrap: wrap; }
@@ -1741,7 +1742,7 @@
   gap: 12px;
   padding: 16px 22px;
   background: #fff;
-  border-bottom: 1.5px solid var(--mb-line, #cbd5e1);
+  border-bottom: 1px solid var(--mb-line, #cbd5e1);
   flex: 0 0 auto;
 }
 
