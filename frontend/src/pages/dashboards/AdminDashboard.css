@@ -4,35 +4,35 @@
 
 .admin-control-center {
   --ac-bg: #f5f7fb;
-  --ac-surface: rgba(255, 255, 255, .96);
-  --ac-surface-soft: #f8fafc;
-  --ac-border: rgba(15, 23, 42, .09);
-  --ac-border-strong: rgba(15, 23, 42, .14);
-  --ac-text: #0d1b2a;
-  --ac-muted: #64748b;
+  --ac-surface: var(--mb-card);
+  --ac-surface-soft: var(--mb-soft);
+  --ac-border: var(--mb-line-soft);
+  --ac-border-strong: var(--mb-line);
+  --ac-text: var(--mb-ink);
+  --ac-muted: var(--mb-muted);
   --ac-muted-2: #94a3b8;
-  --ac-primary: #166534;
-  --ac-primary-2: #15803d;
-  --ac-primary-soft: #ecfdf3;
-  --ac-primary-line: #c6eccf;
-  --ac-warning: #a86f10;
-  --ac-warning-soft: #fdf6e7;
-  --ac-warning-line: #f4e0b6;
-  --ac-danger: #b42318;
-  --ac-danger-soft: #fef2f2;
-  --ac-danger-line: #fecaca;
-  --ac-info: #1e5fa8;
-  --ac-info-soft: #eff5fd;
-  --ac-shadow: 0 1px 2px rgba(15, 30, 45, .04), 0 8px 24px rgba(15, 30, 45, .05);
-  --ac-shadow-hi: 0 2px 4px rgba(15, 30, 45, .04), 0 18px 44px rgba(15, 30, 45, .09);
-  --ac-ring: 0 0 0 3px rgba(30, 158, 90, .18);
+  --ac-primary: var(--mb-ok);
+  --ac-primary-2: var(--mb-ok);
+  --ac-primary-soft: var(--mb-ok-bg);
+  --ac-primary-line: var(--mb-ok-border);
+  --ac-warning: var(--mb-wait);
+  --ac-warning-soft: var(--mb-wait-bg);
+  --ac-warning-line: var(--mb-wait-border);
+  --ac-danger: var(--mb-danger);
+  --ac-danger-soft: var(--mb-danger-bg);
+  --ac-danger-line: var(--mb-danger-border);
+  --ac-info: var(--mb-info);
+  --ac-info-soft: var(--mb-info-bg);
+  --ac-shadow: var(--mb-shadow-card);
+  --ac-shadow-hi: var(--mb-shadow-card);
+  --ac-ring: 0 0 0 3px var(--mb-accent-border);
   --ac-ease: cubic-bezier(.2, .7, .3, 1);
   
   /* New variables from Orders page */
-  --ac-green: #176b3a;
-  --ac-green-light: #2f9159;
-  --ac-green-soft: #eef5ef;
-  --ac-green-line: #dfe7df;
+  --ac-green: var(--mb-ok);
+  --ac-green-light: var(--mb-ok);
+  --ac-green-soft: var(--mb-ok-bg);
+  --ac-green-line: var(--mb-ok-border);
 
   max-width: 1180px;
   margin: 0 auto;
@@ -89,13 +89,13 @@
 .admin-control-center .sd-btn:disabled { opacity: .55; cursor: not-allowed; }
 
 .admin-control-center .sd-btn-primary {
-  background: linear-gradient(150deg, #1e9e5a 0%, #0f7a44 100%);
-  border-color: #0f7a44;
+  background: linear-gradient(150deg, var(--mb-ok) 0%, var(--mb-ok) 100%);
+  border-color: var(--mb-ok);
   color: #fff;
   box-shadow: 0 4px 12px rgba(30, 158, 90, .26);
 }
 .admin-control-center .sd-btn-primary:hover:not(:disabled) {
-  background: linear-gradient(150deg, #0f7a44 0%, #0b6639 100%);
+  background: linear-gradient(150deg, var(--mb-ok) 0%, #0b6639 100%);
   border-color: #0b6639;
   color: #fff;
 }
@@ -108,8 +108,8 @@
   padding: 0 10px;
   border: 1px solid var(--ac-border);
   border-radius: 999px;
-  background: #eef1f5;
-  color: #2c3a4a;
+  background: var(--mb-line-soft);
+  color: var(--mb-ink-2);
   font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .05em;
   text-transform: uppercase;
@@ -118,7 +118,7 @@
 .admin-control-center .sd-badge.sd-good {
   background: var(--ac-primary-soft);
   border-color: var(--ac-primary-line);
-  color: #12734a;
+  color: var(--mb-ok);
 }
 .admin-control-center .sd-badge.sd-warn {
   background: var(--ac-warning-soft);
@@ -180,7 +180,7 @@
 .admin-control-center textarea:focus,
 .admin-control-center input:focus {
   outline: none;
-  border-color: #1e9e5a;
+  border-color: var(--mb-ok);
   box-shadow: var(--ac-ring);
 }
 
@@ -234,7 +234,7 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
-  color: #12734a;
+  color: var(--mb-ok);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: .16em;
@@ -337,10 +337,10 @@
 
 /* Tone variations */
 .ac-metric-card.warn { border-left: 4px solid #f59e0b; }
-.ac-metric-card.warn .ac-metric-card-value { color: #a86f10; }
+.ac-metric-card.warn .ac-metric-card-value { color: var(--mb-wait); }
 
 .ac-metric-card.danger { border-left: 4px solid #ef4444; }
-.ac-metric-card.danger .ac-metric-card-value { color: #b42318; }
+.ac-metric-card.danger .ac-metric-card-value { color: var(--mb-danger); }
 
 .ac-metric-card.primary { border-left: 4px solid #166534; }
 .ac-metric-card.primary .ac-metric-card-value { color: #166534; }
@@ -410,11 +410,11 @@
   transition: background .15s var(--ac-ease), color .15s var(--ac-ease);
   white-space: nowrap;
 }
-.ac-tab:hover { background: #eef1f5; color: var(--ac-text); }
+.ac-tab:hover { background: var(--mb-line-soft); color: var(--ac-text); }
 .ac-tab:focus-visible { outline: none; box-shadow: var(--ac-ring); }
 .ac-tab.active {
   color: #fff;
-  background: linear-gradient(150deg, #1e9e5a 0%, #0f7a44 100%);
+  background: linear-gradient(150deg, var(--mb-ok) 0%, var(--mb-ok) 100%);
   box-shadow: 0 6px 16px rgba(30, 158, 90, .26);
 }
 .ac-tab-count {
@@ -816,12 +816,12 @@
 }
 .admin-control-center .sd-table td {
   padding: 14px;
-  border-bottom: 1px solid #eef1f5;
+  border-bottom: 1px solid var(--mb-line-soft);
   vertical-align: top;
   line-height: 1.5;
 }
 .admin-control-center .sd-table tbody tr:last-child td { border-bottom: 0; }
-.admin-control-center .sd-table tbody tr:hover td { background: #fbfcfd; }
+.admin-control-center .sd-table tbody tr:hover td { background: var(--mb-soft); }
 
 .ac-table-shell .ac-actions { margin: 0; padding: 0; border: 0; }
 .refund-actions { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -829,7 +829,7 @@
 .tg-ledger-photos { margin-top: 8px; }
 .tg-ledger-photos summary {
   cursor: pointer;
-  color: #12734a;
+  color: var(--mb-ok);
   font-size: 12px;
   font-weight: 700;
 }
@@ -838,7 +838,7 @@
 .ac-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11.5px;
-  color: #2c3a4a;
+  color: var(--mb-ink-2);
 }
 
 /* ── Ad images / financial tiles ─────────────────────────── */
@@ -864,7 +864,7 @@
   gap: 8px;
   margin-top: 13px;
 }
-.ac-financial-item { padding: 10px; border-radius: 12px; background: #f8fafc; border: 1px solid #eef1f5; }
+.ac-financial-item { padding: 10px; border-radius: 12px; background: #f8fafc; border: 1px solid var(--mb-line-soft); }
 .ac-financial-item span {
   display: block;
   color: var(--ac-muted-2);
@@ -962,7 +962,7 @@
   transition: border-color .15s var(--ac-ease), background .15s var(--ac-ease);
 }
 .ac-radio-option:hover { border-color: rgba(30, 158, 90, .4); background: var(--ac-primary-soft); }
-.ac-radio-option input { margin-top: 3px; accent-color: #1e9e5a; }
+.ac-radio-option input { margin-top: 3px; accent-color: var(--mb-ok); }
 
 .ac-modal-actions {
   display: flex;

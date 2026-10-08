@@ -161,7 +161,7 @@
 .admin-control-center .ac-bar-track {
   height: 14px;
   border-radius: 999px;
-  background: #eef1f5;
+  background: var(--mb-line-soft);
   overflow: hidden;
 }
 
@@ -199,23 +199,23 @@
    ══════════════════════════════════════════════════════════ */
 
 .admin-control-center.admin-control-center {
-  --ac-text: #0d1b2a;
-  --ac-muted: #64748b;
+  --ac-text: var(--mb-ink);
+  --ac-muted: var(--mb-muted);
   --ac-muted-2: #94a3b8;
-  --ac-border: #e5e9ef;
-  --ac-border-strong: #e5e9ef;
-  --ac-surface: #ffffff;
-  --ac-surface-soft: #fbfcfd;
-  --ac-primary: #12734a;
-  --ac-primary-2: #0f7a44;
-  --ac-primary-soft: #ecfdf3;
-  --ac-primary-line: #c6eccf;
-  --ac-info: #1e5fa8;
-  --ac-info-soft: #eff5fd;
-  --ac-shadow: 0 1px 2px rgba(15, 30, 45, .04), 0 8px 24px rgba(15, 30, 45, .05);
-  --ac-shadow-hi: 0 2px 4px rgba(15, 30, 45, .04), 0 18px 44px rgba(15, 30, 45, .09);
+  --ac-border: var(--mb-line-soft);
+  --ac-border-strong: var(--mb-line);
+  --ac-surface: var(--mb-card);
+  --ac-surface-soft: var(--mb-soft);
+  --ac-primary: var(--mb-ok);
+  --ac-primary-2: var(--mb-ok);
+  --ac-primary-soft: var(--mb-ok-bg);
+  --ac-primary-line: var(--mb-ok-border);
+  --ac-info: var(--mb-info);
+  --ac-info-soft: var(--mb-info-bg);
+  --ac-shadow: var(--mb-shadow-card);
+  --ac-shadow-hi: var(--mb-shadow-card);
 
-  --oc-line-soft: #eef1f5;
+  --oc-line-soft: var(--mb-line-soft);
   --oc-radius: 28px;
   --oc-radius-md: 22px;
   --oc-nav-h: 88px;
@@ -267,7 +267,7 @@
   height: 48px;
   flex: 0 0 48px;
   border-radius: 16px;
-  color: #0f7a44;
+  color: var(--mb-ok);
   background: var(--ac-primary-soft);
   border: 1px solid var(--ac-primary-line);
   box-shadow: none;
@@ -279,7 +279,7 @@
   gap: 8px;
   border: 1.5px solid var(--ac-primary-line);
   background: var(--ac-primary-soft);
-  color: #12734a;
+  color: var(--mb-ok);
   font: 700 12.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .05em;
   backdrop-filter: none;
@@ -326,13 +326,13 @@
 .admin-control-center.admin-control-center .ac-tab:hover { background: var(--oc-line-soft); color: var(--ac-text); }
 .admin-control-center.admin-control-center .ac-tab.active {
   color: #fff;
-  background: #0d1b2a;
+  background: var(--mb-ink);
   box-shadow: 0 4px 12px rgba(13, 27, 42, .24);
 }
 .admin-control-center.admin-control-center .ac-tab-count {
-  background: #fdf6e7;
-  border: 1px solid #f4e0b6;
-  color: #a86f10;
+  background: var(--mb-wait-bg);
+  border: 1px solid var(--mb-wait-border);
+  color: var(--mb-wait);
   font-weight: 800;
 }
 .admin-control-center.admin-control-center .ac-tab.active .ac-tab-count {
@@ -423,24 +423,24 @@
   padding: 0 14px;
   border: 1.5px solid var(--ac-border);
   background: #f4f6f9;
-  color: #2c3a4a;
+  color: var(--mb-ink-2);
   font: 700 12px/1 var(--mb-font-body, 'DM Sans', sans-serif);
   letter-spacing: .05em;
 }
 .admin-control-center.admin-control-center .sd-badge.sd-good {
   background: var(--ac-primary-soft);
   border-color: var(--ac-primary-line);
-  color: #12734a;
+  color: var(--mb-ok);
 }
 .admin-control-center.admin-control-center .sd-badge.sd-warn {
-  background: #fdf6e7;
-  border-color: #f4e0b6;
-  color: #a86f10;
+  background: var(--mb-wait-bg);
+  border-color: var(--mb-wait-border);
+  color: var(--mb-wait);
 }
 .admin-control-center.admin-control-center .sd-badge.sd-red {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b42318;
+  background: var(--mb-danger-bg);
+  border-color: var(--mb-danger-border);
+  color: var(--mb-danger);
 }
 .admin-control-center.admin-control-center .sd-badge.sd-good::before,
 .admin-control-center.admin-control-center .sd-badge.sd-warn::before,
@@ -468,18 +468,18 @@
 .admin-control-center.admin-control-center .sd-btn:hover:not(:disabled) {
   border-color: rgba(30, 158, 90, .35);
   background: var(--ac-primary-soft);
-  color: #0f7a44;
+  color: var(--mb-ok);
 }
 .admin-control-center.admin-control-center .sd-btn-primary {
-  border: 1.5px solid #0d1b2a;
+  border: 1.5px solid var(--mb-ink);
   background: #fff;
-  color: #0d1b2a;
+  color: var(--mb-ink);
   box-shadow: none;
 }
 .admin-control-center.admin-control-center .sd-btn-primary:hover:not(:disabled) {
-  border-color: #0d1b2a;
+  border-color: var(--mb-ink);
   background: var(--ac-primary-soft);
-  color: #0d1b2a;
+  color: var(--mb-ink);
 }
 .admin-control-center.admin-control-center .sd-btn-outline { background: #fff; border-color: var(--ac-border); }
 
@@ -604,9 +604,9 @@
     color: var(--ac-text);
   }
   .admin-control-center.admin-control-center .sd-btn-primary:hover:not(:disabled) {
-    border-color: #0d1b2a;
+    border-color: var(--mb-ink);
     background: #fff;
-    color: #0d1b2a;
+    color: var(--mb-ink);
   }
   .admin-control-center.admin-control-center .ac-tab:hover:not(.active) { background: transparent; color: var(--ac-muted); }
 }

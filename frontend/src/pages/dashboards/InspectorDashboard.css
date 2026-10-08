@@ -15,45 +15,43 @@
 
 .sd-dashboard {
   /* ── Tokens ───────────────────────────────────────────── */
-  --sd-accent:      #1e9e5a;
-  --sd-accent-2:    #0f7a44;
-  --sd-accent-ink:  #12734a;
-  --sd-accent-soft: #ecfdf3;
-  --sd-accent-line: #c6eccf;
+  --sd-accent:      var(--mb-ok);
+  --sd-accent-2:    var(--mb-ok);
+  --sd-accent-ink:  var(--mb-ok);
+  --sd-accent-soft: var(--mb-ok-bg);
+  --sd-accent-line: var(--mb-ok-border);
 
-  --sd-ink:         #0d1b2a;
-  --sd-ink-soft:    #2c3a4a;
-  --sd-muted:       #64748b;
+  --sd-ink:         var(--mb-ink);
+  --sd-ink-soft:    var(--mb-ink-2);
+  --sd-muted:       var(--mb-muted);
   --sd-muted-2:     #94a3b8;
 
-  --sd-card:        #ffffff;
+  --sd-card:        var(--mb-surface);
   --sd-tint-a:      #eefbf3;
   --sd-tint-b:      #eff3fb;
 
-  --sd-line:        #e5e9ef;
-  --sd-line-soft:   #eef1f5;
-  --sd-surface:     #fbfcfd;
+  --sd-line:        var(--mb-line);
+  --sd-line-soft:   var(--mb-line-soft);
+  --sd-surface:     var(--mb-soft);
 
-  --sd-gold:        #a86f10;
-  --sd-gold-soft:   #fdf6e7;
-  --sd-gold-line:   #f4e0b6;
+  --sd-gold:        var(--mb-wait);
+  --sd-gold-soft:   var(--mb-wait-bg);
+  --sd-gold-line:   var(--mb-wait-border);
 
-  --sd-danger:      #b42318;
-  --sd-danger-soft: #fef2f2;
-  --sd-danger-line: #fecaca;
+  --sd-danger:      var(--mb-danger);
+  --sd-danger-soft: var(--mb-danger-bg);
+  --sd-danger-line: var(--mb-danger-border);
 
-  --sd-info:        #1e5fa8;
-  --sd-info-soft:   #eff5fd;
-  --sd-info-line:   #cddff5;
+  --sd-info:        var(--mb-info);
+  --sd-info-soft:   var(--mb-info-bg);
+  --sd-info-line:   var(--mb-info-border);
 
-  --sd-radius:      28px;
-  --sd-radius-sm:   18px;
-  --sd-shadow:      0 1px 2px rgba(15, 30, 45, .04),
-                    0 8px 24px rgba(15, 30, 45, .05);
-  --sd-shadow-hi:   0 2px 4px rgba(15, 30, 45, .04),
-                    0 18px 44px rgba(15, 30, 45, .09);
+  --sd-radius:      var(--mb-radius-card);
+  --sd-radius-sm:   var(--mb-radius-field);
+  --sd-shadow:      var(--mb-shadow-card);
+  --sd-shadow-hi:   var(--mb-shadow-card);
   --sd-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
-  --sd-ring:        0 0 0 3px rgba(30, 158, 90, .18);
+  --sd-ring:        0 0 0 3px var(--mb-accent-border);
   --sd-ease:        cubic-bezier(.2, .7, .3, 1);
 
   min-height: calc(100vh - 72px);
@@ -364,7 +362,7 @@
 
 .sd-dashboard .sd-panel--error {
   border-color: var(--sd-danger-line);
-  background: linear-gradient(180deg, #fff7f6, #fef2f2);
+  background: linear-gradient(180deg, #fff7f6, var(--mb-danger-bg));
 }
 
 .sd-dashboard .sd-toolbar {
@@ -2118,7 +2116,7 @@
 .inspection-coordination--inspector {
   margin-top: 16px;
   padding: 0;
-  border: 1px solid #e5e9ef;
+  border: 1px solid var(--mb-line-soft);
   border-radius: 10px;
   background: #f8fafc;
 }
