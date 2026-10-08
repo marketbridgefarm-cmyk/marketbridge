@@ -824,9 +824,17 @@ model InspectionRequest {
 
   fee Decimal? @db.Decimal(18, 2)
 
+  // Commercial inspection terms become immutable once the seller confirms.
+  // The original fields remain the negotiation snapshot; these fields are the
+  // payment-authoritative snapshot used after confirmation.
   feePayer InspectionFeePayer @default(BUYER)
   buyerFeeAmount Decimal? @db.Decimal(18, 2)
   sellerFeeAmount Decimal? @db.Decimal(18, 2)
+  feeTermsLockedAt DateTime?
+  lockedFee Decimal? @db.Decimal(18, 2)
+  lockedFeePayer InspectionFeePayer?
+  lockedBuyerFeeAmount Decimal? @db.Decimal(18, 2)
+  lockedSellerFeeAmount Decimal? @db.Decimal(18, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1032,8 +1040,7 @@ model Order {
   buyerDecision BuyerDecision?
   buyerDecisionAt DateTime?
 
-  // Deadline for the buyer to make the final BUY/CANCEL decision after the seller
-  // confirms transporter preparation. Cleared as soon as the decision is recorded.
+  // Buyer must choose BUY or CANCEL after the inspection/report and transport preparation.
   buyerDecisionDueAt DateTime?
 
   inspectionRequests InspectionRequest[]
@@ -1160,8 +1167,14 @@ model TransportJob {
   sellerPickupMessage String?
   sellerPickupMessageAt DateTime?
 
+  // Seller must confirm transporter preparation within this window after acceptance.
+  sellerPreparationDueAt DateTime?
+
   // Buyer reviews the transporter's pre-loading report before physical loading begins.
   buyerLoadingConfirmedAt DateTime?
+
+  // Buyer must approve the transporter's loading report before physical loading.
+  buyerLoadingDueAt DateTime?
 
   pickupConfirmedAt   DateTime?
   deliveredConfirmedAt DateTime?
