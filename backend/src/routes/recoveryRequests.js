@@ -217,7 +217,7 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
           if (activePayment) throw Object.assign(new Error('Inspection recovery is blocked because inspection payment has already started'), { statusCode: 409 });
           if (['REQUESTED', 'ACCEPTED', 'STALLED'].includes(current.status)) {
             await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: current.id, inspectorId: current.inspectorId, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
-            await tx.inspectionRequest.update({ where: { id: current.id }, data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' } });
+            await tx.inspectionRequest.update({ where: { id: current.id }, data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, feeTermsLockedAt: null, lockedFee: null, lockedFeePayer: null, lockedBuyerFeeAmount: null, lockedSellerFeeAmount: null, startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' } });
             // Close coordination so the next inspector does not inherit the
             // previous inspector's phone, availability, or site notes.
             await closeCoordination(tx, current.id, 'ADMIN_RECOVERY_APPROVED');
