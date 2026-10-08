@@ -1,9 +1,13 @@
 /* ==========================================================================
    OrderDetail.css
-   Card language borrowed from Orders.css: 22px radius, soft glass surface,
-   card head = 2px line + short orange segment, sub-headers = 1.5px line only,
-   internals scale off the card's own width (container queries).
-   Pair with OrderDetail.jsx (.od-page-grid / .od-span-all / .od-meta row).
+   Card rhythm mirrors Orders.css exactly:
+     head underline → first section: 20px
+     section head rule → content: 16px
+     section → section: 26px
+     progress: left-aligned, 4px indent, 22px step gap, 18px dots
+     amount block: flush left, 30px numeric
+     meta row: 24px above, baseline aligned
+     primary button: 20px gap above
    ========================================================================== */
 
 /* ---- 1. Tokens ---------------------------------------------------------- */
@@ -22,7 +26,6 @@
   --mb-radius-card: 22px;
   --mb-radius-field: 16px;
 
-  /* aliases used by child components */
   --od-ink: var(--mb-ink);
   --od-text: var(--mb-ink-2);
   --od-muted: var(--mb-muted);
@@ -46,7 +49,7 @@
   --od-radius: var(--mb-radius-field);
   --od-radius-sm: 12px;
   --od-gap: 16px;
-  --od-pad: 24px;
+  --od-pad: 22px;
 
   --od-font-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --od-font-head: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -126,7 +129,6 @@
   color: var(--mb-ink);
 }
 
-/* Card grid used by the page (JSX: .od-page-grid / .od-span-all). */
 .order-detail-page .od-page-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -145,7 +147,6 @@
   min-width: 0;
 }
 
-/* Nested card grid (used inside TransportCard, InspectionCard, etc.) */
 .order-detail-page .od-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
@@ -184,7 +185,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px 16px;
-  padding-bottom: 10px;
+  padding-bottom: 8px; /* tightened — orange segment hugs the title */
   border-bottom: 2px solid var(--mb-line);
 }
 .order-detail-page .od-card-head::after {
@@ -205,7 +206,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   color: var(--mb-ok);
   font: 700 13px / 1.2 var(--od-font-head);
   letter-spacing: 0.25em;
@@ -287,7 +288,6 @@
   display: none;
 }
 
-/* Flash highlight when scrolled to */
 .order-detail-page .od-flash {
   outline: 3px solid var(--mb-accent);
   outline-offset: 3px;
@@ -303,9 +303,14 @@
   }
 }
 
-/* ---- 5. Sections (sub-headers: line only) ------------------------------- */
+/* ---- 5. Sections -------------------------------------------------------- */
+/* Gap between the card head underline and the first section head: 20px */
+.order-detail-page .od-card-head + .od-card-section {
+  margin-top: 20px;
+}
+/* Gap between two sections: 26px */
 .order-detail-page .od-card-section + .od-card-section {
-  margin-top: 22px;
+  margin-top: 26px;
 }
 
 .order-detail-page .od-card-section-head {
@@ -313,7 +318,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 0 14px;
+  margin: 0 0 16px; /* content sits 16px below the section head rule */
   padding-bottom: 8px;
   border-bottom: 1.5px solid var(--mb-line);
 }
@@ -345,7 +350,7 @@
   text-overflow: ellipsis;
   text-transform: uppercase;
 }
-/* when the meta is already a .od-status-pill or plain status text, strip chrome */
+/* when meta is already a pill or plain status, strip the wrapper chrome */
 .order-detail-page .od-card-section-meta.is-bare {
   padding: 0;
   background: none;
@@ -353,7 +358,7 @@
   border-radius: 0;
 }
 
-/* Plain status text in a section head — mirrors Orders.css .header-pill */
+/* Plain uppercase status text in a section head */
 .order-detail-page .od-section-status {
   font: 800 13px var(--od-font-head);
   letter-spacing: 0.06em;
@@ -505,27 +510,25 @@
   font-weight: 700;
 }
 
-/* ---- 8. Progress: vertical on narrow cards, horizontal with room -------- */
+/* ---- 8. Progress (vertical on narrow, horizontal on wide) --------------- */
 .order-detail-page .order-progress {
   display: flex;
   flex-direction: column;
-  width: fit-content;
-  min-width: min(240px, 100%);
-  max-width: 100%;
-  margin: 0 auto;
-  padding: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0 0 0 4px; /* small left indent so dots line up nicely */
   list-style: none;
 }
 .order-detail-page .order-progress-step {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-bottom: 16px;
+  gap: 14px;
+  padding-bottom: 22px; /* generous step rhythm */
   color: var(--mb-muted);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
-  line-height: 18px;
+  line-height: 20px;
 }
 .order-detail-page .order-progress-step:last-child {
   padding-bottom: 0;
@@ -533,8 +536,8 @@
 .order-detail-page .order-progress-step::before {
   content: '';
   position: absolute;
-  left: 8px;
-  top: 18px;
+  left: 8px; /* 18px dot / 2 - 1px line width */
+  top: 20px;
   bottom: 0;
   width: 2px;
   background: var(--mb-line);
@@ -572,8 +575,7 @@
 @container (min-width: 520px) {
   .order-progress {
     flex-direction: row;
-    width: 100%;
-    margin: 0;
+    padding: 0;
   }
   .order-progress-step {
     flex: 1 1 0;
@@ -592,7 +594,7 @@
   }
 }
 
-/* ---- 9. Amount + meta row (overview) ------------------------------------ */
+/* ---- 9. Amount + meta row ----------------------------------------------- */
 .order-detail-page .od-price {
   display: flex;
   align-items: baseline;
@@ -609,13 +611,13 @@
   font-weight: 700;
 }
 
-/* Bottom meta row — mirrors Orders.css .order-meta / .order-time / .order-code */
+/* Bottom meta row — Created on the left, ORD code on the right */
 .order-detail-page .od-meta {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 22px;
+  margin-top: 24px;
   color: var(--mb-muted);
   font-size: 13px;
   font-weight: 600;
@@ -631,7 +633,6 @@
   letter-spacing: 0.02em;
 }
 
-/* legacy class — kept so nothing else breaks if it's still referenced */
 .order-detail-page .od-card-created {
   margin: 0;
   color: var(--mb-muted);
@@ -694,7 +695,7 @@
 .order-detail-page .btn-block {
   display: flex;
   width: 100%;
-  margin-top: 16px;
+  margin-top: 20px;
 }
 
 .order-detail-page .od-actions {
@@ -1896,20 +1897,20 @@
 /* ---- 24. Responsive (viewport) ------------------------------------------ */
 @media (max-width: 480px) {
   .order-detail-page {
-    --od-pad: 18px;
-    --mb-radius-card: 18px;
+    --od-pad: 20px; /* was 18px — closer to reference card padding */
+    --mb-radius-card: 20px;
   }
   .order-detail-page .od-eyebrow {
     gap: 10px;
     letter-spacing: 0.2em;
   }
   .order-detail-page .od-price-amount {
-    font-size: 28px;
+    font-size: 30px;
   }
 }
 @media (max-width: 360px) {
   .order-detail-page {
-    --od-pad: 14px;
+    --od-pad: 16px;
   }
   .order-detail-page .od-card-side-party > div {
     max-width: 84px;
