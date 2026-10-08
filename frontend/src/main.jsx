@@ -15,7 +15,7 @@ import './styles.css';
 // Load OrderDetail CSS with the main bundle.
 // This prevents Vite from creating a lazy-loaded CSS chunk
 // that can fail to preload on Vercel.
-import './pages/OrderDetail.css'; 
+import './pages/order-details/OrderDetail.css';
 
 // ============================================================================
 // Global Chunk Load Error Handler
