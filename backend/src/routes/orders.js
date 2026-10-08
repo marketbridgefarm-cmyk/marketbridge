@@ -587,9 +587,14 @@ router.patch(
         if (decision === 'CANCEL') {
           const reason = req.body.reason || 'Buyer declined the transaction after inspection';
 
+          const reviewAt = new Date();
           await tx.order.update({
             where: { id: current.id },
-            data: { buyerDecision: 'CANCEL', buyerDecisionAt: new Date(), buyerDecisionDueAt: null },
+            data: { buyerDecision: 'CANCEL', buyerDecisionAt: reviewAt, buyerDecisionDueAt: null },
+          });
+          await tx.inspectionReport.update({
+            where: { id: currentInspection.report.id },
+            data: { buyerReviewStatus: 'DECLINED', buyerReviewedAt: reviewAt, buyerReviewedById: req.user.id, buyerReviewNotes: reason },
           });
 
           // Notifications are deliberately best-effort so a notification/SMS
@@ -620,6 +625,7 @@ router.patch(
 
         // Conditional update is the final concurrency gate. A double click,
         // browser retry, or two tabs can never record BUY twice.
+        const reviewAt = new Date();
         const claimed = await tx.order.updateMany({
           where: {
             id: current.id,
@@ -628,11 +634,17 @@ router.patch(
           },
           data: {
             buyerDecision: 'BUY',
-            buyerDecisionAt: new Date(),
+            buyerDecisionAt: reviewAt,
             buyerDecisionDueAt: null,
             paymentDueAt: computePaymentDueAt(),
           },
         });
+        if (claimed.count === 1) {
+          await tx.inspectionReport.update({
+            where: { id: currentInspection.report.id },
+            data: { buyerReviewStatus: 'ACCEPTED', buyerReviewedAt: reviewAt, buyerReviewedById: req.user.id, buyerReviewNotes: 'Buyer chose BUY after reviewing the inspection report.' },
+          });
+        }
 
         if (claimed.count !== 1) {
           throw Object.assign(

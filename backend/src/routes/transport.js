@@ -12,6 +12,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { isOrderParticipant, isAdmin } = require('../utils/authorization');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
+const { buildBuyerReportEnvelope } = require('../utils/reportContract');
 const { idempotency } = require('../middleware/idempotency');
 const { matchTrucks } = require('../services/transportMatchingService');
 const { computeSellerPreparationDueAt, computeBuyerDecisionDueAt, computeBuyerLoadingDueAt } = require('../utils/orderTiming');
@@ -1144,8 +1145,18 @@ router.post(
       if (job.order.buyerDecision !== 'BUY') return res.status(409).json({ code: 'BUYER_DECISION_REQUIRED', error: 'The buyer must make the final BUY decision before confirming loading.' });
       const goodsPaid = await prisma.payment.findFirst({ where: { orderId: job.orderId, type: 'MARKETPLACE', status: 'PAID' }, select: { id: true } });
       if (!goodsPaid) return res.status(409).json({ code: 'GOODS_PAYMENT_REQUIRED', error: 'The seller payment must be completed before loading.' });
-      const updated = await prisma.transportJob.updateMany({ where: { id: job.id, status: 'ACCEPTED', buyerLoadingConfirmedAt: null }, data: { buyerLoadingConfirmedAt: new Date(), buyerLoadingDueAt: null } });
-      if (!updated.count) return res.status(409).json({ error: 'Loading confirmation changed; refresh and try again.' });
+      const reviewAt = new Date();
+      const updated = await prisma.$transaction(async (tx) => {
+        const changed = await tx.transportJob.updateMany({ where: { id: job.id, status: 'ACCEPTED', buyerLoadingConfirmedAt: null }, data: { buyerLoadingConfirmedAt: reviewAt, buyerLoadingDueAt: null } });
+        if (!changed.count) return 0;
+        const reviewed = await tx.transportLoadingReport.updateMany({
+          where: { id: report.id, buyerReviewStatus: 'PENDING' },
+          data: { buyerReviewStatus: 'ACCEPTED', buyerReviewedAt: reviewAt, buyerReviewedById: req.user.id, buyerReviewNotes: 'Buyer approved the loading report.' },
+        });
+        if (!reviewed.count) throw Object.assign(new Error('LOADING_REPORT_REVIEW_CHANGED'), { status: 409 });
+        return 1;
+      });
+      if (!updated) return res.status(409).json({ error: 'Loading confirmation changed; refresh and try again.' });
       await recordAuditEvent(prisma, { actorId: req.user.id, action: 'TRANSPORT_LOADING_CONFIRMED_BY_BUYER', resourceType: 'TransportJob', resourceId: job.id, metadata: { orderId: job.orderId, loadingReportId: report.id } }).catch(() => {});
       await recordOrderEvent(prisma, { orderId: job.orderId, actorId: req.user.id, type: 'TRANSPORT_LOADING_CONFIRMED_BY_BUYER', metadata: { transportJobId: job.id, loadingReportId: report.id } }).catch(() => {});
       return res.json({ message: 'Loading report approved. The transporter may now load and pick up the goods.', buyerLoadingConfirmedAt: new Date().toISOString() });
@@ -2593,6 +2604,7 @@ router.post(
       return res.status(201).json({
         message: 'Loading report recorded. The buyer can now review and approve the loading plan before physical loading.',
         loadingReport: report,
+        reportEnvelope: buildBuyerReportEnvelope(report, 'TRANSPORT_LOADING'),
         buyerLoadingDueAt: loadingDeadline?.buyerLoadingDueAt?.toISOString() || null,
       });
     } catch (error) {
@@ -2641,7 +2653,7 @@ router.get(
         orderBy: { capturedAt: 'desc' },
       });
 
-      return res.json({ loadingReport: report, evidence });
+      return res.json({ loadingReport: report, reportEnvelope: buildBuyerReportEnvelope(report, 'TRANSPORT_LOADING'), evidence });
     } catch (error) {
       req.log.error({ err: error }, 'GET TRANSPORT LOADING REPORT ERROR:');
       return res.status(500).json({ error: 'Could not load loading report' });
