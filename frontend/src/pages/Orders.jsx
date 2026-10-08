@@ -278,7 +278,6 @@ function OrderCard({ order, currentUserId }) {
         <section className="card-block">
           <div className="card-block-title">
             <h3>Order status</h3>
-            <span className="card-block-note">ORD {shortId(order.id)}</span>
           </div>
 
           <div className="card-block-body">
@@ -343,10 +342,14 @@ function OrderCard({ order, currentUserId }) {
           </div>
         </section>
 
-        <div className="order-actions">
+        <div className="order-meta">
           <span className="order-time">
             {createdLabel ? `Created ${createdLabel}` : 'Recently updated'}
           </span>
+          <span className="order-code">ORD {shortId(order.id)}</span>
+        </div>
+
+        <div className="order-actions">
           <Link className="btn-view" to={`/orders/${order.id}`}>
             View order
             <svg
