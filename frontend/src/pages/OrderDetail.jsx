@@ -141,9 +141,9 @@ function useNowUntil(targetMs) {
    2. UI primitives
    ======================================================================== */
 
-function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, className, children }) {
+function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, className, live, children }) {
   return (
-    <section className={`card${tone ? ` od-card-${tone}` : ''}${className ? ` ${className}` : ''}`} id={id}>
+    <section className={`card${tone ? ` od-card-${tone}` : ''}${className ? ` ${className}` : ''}`} id={id} aria-live={live}>
       <header className="od-card-head">
         <div className="od-card-head-main">
           {eyebrow && <span className={`od-eyebrow${eyebrowClass ? ` ${eyebrowClass}` : ''}`}>{eyebrow}</span>}
@@ -1829,19 +1829,25 @@ function BuyerConfidenceCard({ order, recoveryRequests }) {
   }
 
   return (
-    <section className={`card od-buyer-confidence ${tone}`} aria-live="polite">
-      <div className="od-confidence-icon" aria-hidden="true">{hasOpenDispute || recoveryPending ? 'i' : '✓'}</div>
-      <div className="od-confidence-main">
-        <span className="od-eyebrow">MARKETBRIDGE ORDER PROTECTION</span>
-        <h2>{status}</h2>
-        <p>{detail}</p>
-        <div className="od-confidence-promises">
-          <span><b aria-hidden="true">✓</b> Service issues reviewed separately</span>
-          <span><b aria-hidden="true">✓</b> No automatic replacement charge</span>
-          <span><b aria-hidden="true">✓</b> Payment and refund status stays visible</span>
-        </div>
-      </div>
-    </section>
+    <Card
+      className={`od-card-protection ${tone}`}
+      live="polite"
+      eyebrow="MarketBridge Order Protection"
+      title={status}
+      side={<span className="od-protect-icon" aria-hidden="true">{hasOpenDispute || recoveryPending ? 'i' : '✓'}</span>}
+    >
+      <Section title="What this means">
+        <p className="od-protect-text">{detail}</p>
+      </Section>
+
+      <Section title="Your protection">
+        <ul className="od-protect-list">
+          <li>Service issues reviewed separately</li>
+          <li>No automatic replacement charge</li>
+          <li>Payment and refund status stays visible</li>
+        </ul>
+      </Section>
+    </Card>
   );
 }
 
