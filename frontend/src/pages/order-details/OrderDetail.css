@@ -7,7 +7,7 @@
      progress: left-aligned, 4px indent, 22px step gap, 18px dots
      amount block: flush left, 30px numeric
      meta row: 24px above, indented, baseline aligned, uniform style
-     cancel button: red outline, indented to match Details
+     cancel button: standard neutral outline, indented
    ========================================================================== */
 
 /* ---- 1. Tokens ---------------------------------------------------------- */
@@ -165,7 +165,7 @@
   border-radius: var(--mb-radius-card);
   box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
   scroll-margin-top: 16px;
-  --od-indent: clamp(0px, 5cqw, 28px);
+  --od-indent: clamp(16px, 8cqw, 44px);
 }
 .order-detail-page .card.loading {
   padding: 48px 24px;
@@ -397,8 +397,7 @@
   padding: 0;
 }
 
-/* Facts inside a section sit indented from the card edge so they read
-   as content of the section, not a competing head. */
+/* Facts inside a section are indented to match the wider content alignment */
 .order-detail-page .od-card-section > .od-detail-facts {
   padding-inline-start: var(--od-indent);
 }
@@ -615,8 +614,7 @@
 }
 
 /* Bottom meta row — Created on the left, ORD code on the right.
-   Indented to align with the Details facts, and both labels share
-   the same muted style so they read as one line. */
+   Indented to align with the facts. Both labels share one style. */
 .order-detail-page .od-meta {
   display: flex;
   align-items: baseline;
@@ -713,21 +711,22 @@
   width: 100%;
 }
 
-/* Cancel order — outlined danger button, indented to match the Details block.
-   Higher specificity than a bare `.btn` so it wins over global styles. */
+/* Cancel order — standard neutral outline style, indented to match the
+   details block. Wins over the generic .btn rule via scoped specificity. */
 .order-detail-page .od-card-overview .btn.btn-outline.btn-block {
-  width: calc(100% - var(--od-indent));
-  margin: 20px 0 0 var(--od-indent);
+  width: 100%;
+  min-height: 52px;
+  margin: 20px 0 0;
   padding: 0 20px;
-  border: 2px solid #f0a9a9;
+  border: 1.5px solid var(--mb-line);
   border-radius: var(--mb-radius-field);
   background: #fff;
-  color: var(--mb-danger);
+  color: var(--mb-ink-2);
   font: 700 15px / 1.2 var(--od-font-body);
 }
 .order-detail-page .od-card-overview .btn.btn-outline.btn-block:hover:not(:disabled) {
-  background: #fef2f2;
-  border-color: #e88a8a;
+  background: #f8fafc;
+  border-color: #94a3b8;
 }
 .order-detail-page .od-card-overview .btn.btn-outline.btn-block:disabled {
   opacity: 0.55;
