@@ -355,6 +355,16 @@
 
 .card-block + .card-block { margin-top: 22px; }
 
+/* Push body content (pills, stepper, amount, created date) to the right of
+   the headers. The indent scales with the card width. */
+.orders-page .card-block-body {
+  padding-inline-start: clamp(16px, 13cqw, 48px);
+}
+
+.orders-page .order-time {
+  padding-inline-start: clamp(16px, 13cqw, 48px);
+}
+
 .card-block-title {
   display: flex;
   align-items: center;
@@ -469,7 +479,6 @@
 
 /* Vertical stepper: center the block in the card; dots and labels stay
    left-aligned inside it. The horizontal layout still fills the row. */
-.orders-page .card-block-body > .order-progress,
 .order-progress {
   width: fit-content;
   min-width: min(240px, 100%);
@@ -477,8 +486,14 @@
   margin-inline: auto;
 }
 
+/* In Orders list cards the stepper lines up with the indented body instead */
+.orders-page .card-block-body > .order-progress {
+  width: 100%;
+  min-width: 0;
+  margin-inline: 0;
+}
+
 @container (min-width: 520px) {
-  .orders-page .card-block-body > .order-progress,
   .order-progress { width: 100%; }
 }
 
