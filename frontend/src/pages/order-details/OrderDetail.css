@@ -1,13 +1,18 @@
 /* ==========================================================================
    OrderDetail.css
-   Card rhythm mirrors Orders.css exactly:
+   Card system mirrors Orders.css exactly:
+     card padding 24px (18px ≤480, 14px ≤360), radius 22px (18px ≤480)
+     card title = 2px line + 44px accent segment; sub-headers = 1.5px line
      head underline → first section: 20px
-     section head rule → content: 16px
-     section → section: 26px
-     progress: left-aligned, 4px indent, 22px step gap, 18px dots
-     amount block: flush left, 30px numeric
-     meta row: 24px above, indented, baseline aligned, uniform style
-     cancel button: standard neutral outline, indented
+     section head rule → content: 14px
+     section → section: 22px
+     progress: 14px labels, 12px gap, 16px step spacing, 18px dots
+     amount: 30px numeric (28px ≤480)
+     meta row: 22px above, 14px type, indented start, 14px end padding
+     buttons: 2px neutral outline, 48px tall, 16px type
+     container indent: clamp(16px, 13cqw, 48px)
+   NOTE: every @container rule is prefixed with .order-detail-page so it
+   out-ranks the base rule it overrides.
    ========================================================================== */
 
 /* ---- 1. Tokens ---------------------------------------------------------- */
@@ -48,8 +53,8 @@
   --od-neutral-bg: #f1f5f9;
   --od-radius: var(--mb-radius-field);
   --od-radius-sm: 12px;
-  --od-gap: 16px;
-  --od-pad: 22px;
+  --od-gap: 20px;
+  --od-pad: 24px;
 
   --od-font-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --od-font-head: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -165,7 +170,8 @@
   border-radius: var(--mb-radius-card);
   box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
   scroll-margin-top: 16px;
-  --od-indent: clamp(16px, 8cqw, 44px);
+  --card-tone: var(--mb-ok);
+  --od-indent: clamp(16px, 13cqw, 48px);
 }
 .order-detail-page .card.loading {
   padding: 48px 24px;
@@ -179,9 +185,11 @@
   background: var(--mb-accent-tint);
 }
 
+/* Title block: 2px line + 44px accent segment */
 .order-detail-page .od-card-head {
   position: relative;
   display: flex;
+  flex-wrap: nowrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px 16px;
@@ -206,8 +214,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 0 0 6px;
-  color: var(--mb-ok);
+  margin: 0 0 8px;
+  color: var(--card-tone, var(--mb-ok));
   font: 700 13px / 1.2 var(--od-font-head);
   letter-spacing: 0.25em;
   text-transform: uppercase;
@@ -227,7 +235,7 @@
 .order-detail-page .od-card-title {
   margin: 0;
   color: var(--mb-ink);
-  font: 800 clamp(20px, 5vw, 24px) / 1.25 var(--od-font-head);
+  font: 800 24px / 1.25 var(--od-font-head);
   overflow-wrap: anywhere;
 }
 .order-detail-page .od-card-subtitle {
@@ -240,6 +248,8 @@
 
 .order-detail-page .od-card-head-side {
   flex: none;
+  align-self: flex-start;
+  margin-left: auto;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -273,6 +283,7 @@
   align-items: flex-end;
   min-width: 0;
   max-width: 120px;
+  text-align: right;
 }
 .order-detail-page .od-card-side-party .od-card-side-value {
   max-width: 100%;
@@ -303,12 +314,12 @@
   }
 }
 
-/* ---- 5. Sections -------------------------------------------------------- */
+/* ---- 5. Sections (sub-headers: 1.5px line only) ------------------------- */
 .order-detail-page .od-card-head + .od-card-section {
   margin-top: 20px;
 }
 .order-detail-page .od-card-section + .od-card-section {
-  margin-top: 26px;
+  margin-top: 22px;
 }
 
 .order-detail-page .od-card-section-head {
@@ -316,13 +327,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 0 16px;
+  margin: 0 0 14px;
   padding-bottom: 8px;
   border-bottom: 1.5px solid var(--mb-line);
 }
 .order-detail-page .od-card-section-title {
   margin: 0;
-  color: var(--mb-ok);
+  color: var(--card-tone, var(--mb-ok));
   font: 700 15px var(--od-font-body);
 }
 .order-detail-page .od-card-section-meta {
@@ -353,20 +364,24 @@
   background: none;
   border: 0;
   border-radius: 0;
+  max-width: 68%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+/* Latest status in the "Order status" header: plain coloured text */
 .order-detail-page .od-section-status {
-  font: 800 13px var(--od-font-head);
-  letter-spacing: 0.06em;
+  font: 700 14px var(--od-font-body);
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .order-detail-page .od-text-good {
-  color: var(--mb-ok);
+  color: #047857;
 }
 .order-detail-page .od-text-bad {
-  color: var(--mb-danger);
+  color: #b91c1c;
 }
 .order-detail-page .od-text-wait {
   color: #92400e;
@@ -388,6 +403,12 @@
   display: none;
 }
 
+/* Overview card = the Orders list card. Its section content (progress,
+   amount, details) is pushed in from the headers by the card-width indent. */
+.order-detail-page .od-card-overview .od-card-section > :not(.od-card-section-head) {
+  margin-inline-start: var(--od-indent);
+}
+
 /* ---- 6. Facts, findings, "You" ------------------------------------------ */
 .order-detail-page .od-detail-facts {
   display: grid;
@@ -397,9 +418,13 @@
   padding: 0;
 }
 
-/* Facts inside a section are indented to match the wider content alignment */
+/* Facts inside a section are indented to match the headers' content line */
 .order-detail-page .od-card-section > .od-detail-facts {
   padding-inline-start: var(--od-indent);
+}
+/* …except in the overview card, where the section indent already applies */
+.order-detail-page .od-card-overview .od-card-section > .od-detail-facts {
+  padding-inline-start: 0;
 }
 
 .order-detail-page .od-detail-facts > div {
@@ -445,12 +470,12 @@
 }
 
 @container (min-width: 520px) {
-  .od-detail-facts {
+  .order-detail-page .od-detail-facts {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 @container (min-width: 760px) {
-  .od-detail-facts {
+  .order-detail-page .od-detail-facts {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
@@ -512,25 +537,25 @@
   font-weight: 700;
 }
 
-/* ---- 8. Progress (vertical on narrow, horizontal on wide) --------------- */
+/* ---- 8. Progress (vertical on narrow cards, horizontal when wide) ------- */
 .order-detail-page .order-progress {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(min(240px, 100%), max-content);
+  justify-content: center;
   margin: 0;
-  padding: 0 0 0 4px;
+  padding: 0;
   list-style: none;
 }
 .order-detail-page .order-progress-step {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding-bottom: 22px;
+  gap: 12px;
+  padding-bottom: 16px;
   color: var(--mb-muted);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  line-height: 20px;
+  line-height: 18px;
 }
 .order-detail-page .order-progress-step:last-child {
   padding-bottom: 0;
@@ -539,7 +564,7 @@
   content: '';
   position: absolute;
   left: 8px;
-  top: 20px;
+  top: 18px;
   bottom: 0;
   width: 2px;
   background: var(--mb-line);
@@ -575,18 +600,19 @@
 }
 
 @container (min-width: 520px) {
-  .order-progress {
+  .order-detail-page .order-progress {
+    display: flex;
     flex-direction: row;
-    padding: 0;
+    justify-content: flex-start;
   }
-  .order-progress-step {
+  .order-detail-page .order-progress-step {
     flex: 1 1 0;
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
     padding: 0 8px 0 0;
   }
-  .order-progress-step::before {
+  .order-detail-page .order-progress-step::before {
     left: 26px;
     right: 4px;
     top: 8px;
@@ -613,36 +639,38 @@
   font-weight: 700;
 }
 
-/* Bottom meta row — Created on the left, ORD code on the right.
-   Indented to align with the facts. Both labels share one style. */
+/* Created date (left) + ORD code (right), same style as Orders list cards */
 .order-detail-page .od-meta {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 24px;
-  padding-inline: var(--od-indent);
-  color: var(--mb-muted);
-  font-size: 13px;
-  font-weight: 600;
+  margin-top: 22px;
+  padding-inline-start: var(--od-indent);
+  padding-inline-end: 14px;
 }
-.order-detail-page .od-meta-time,
-.order-detail-page .od-meta-code {
+.order-detail-page .od-meta-time {
+  min-width: 0;
   color: var(--mb-muted);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 400;
+}
+.order-detail-page .od-meta-code {
+  flex: none;
+  color: var(--mb-muted);
+  font-size: 14px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  letter-spacing: 0.02em;
 }
 
 .order-detail-page .od-card-created {
   margin: 0;
   color: var(--mb-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
-/* ---- 10. Buttons -------------------------------------------------------- */
+/* ---- 10. Buttons (match Orders .btn-view) ------------------------------- */
 .order-detail-page .btn {
   display: inline-flex;
   align-items: center;
@@ -654,18 +682,43 @@
   border: 2px solid var(--mb-line);
   border-radius: var(--mb-radius-field);
   color: var(--mb-ink-2);
-  font: 700 15px / 1.2 var(--od-font-body);
+  font: 700 16px / 1.2 var(--od-font-body);
   text-align: center;
   text-decoration: none;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.15s ease;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
-.order-detail-page .btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.8);
-}
 .order-detail-page .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Full-width button. Also works on its own, in case the .btn class is
+   not applied (see note in the hand-off message). Placed before the
+   variants so .btn-primary etc. can override colour. */
+.order-detail-page .btn-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 20px;
+  padding: 0 18px;
+  background: transparent;
+  border: 2px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink-2);
+  font: 700 16px / 1.2 var(--od-font-body);
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.order-detail-page .btn-block:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -675,10 +728,6 @@
   border-color: var(--mb-accent);
   color: #fff;
 }
-.order-detail-page .btn-primary:hover:not(:disabled) {
-  background: var(--mb-accent-ink);
-  border-color: var(--mb-accent-ink);
-}
 .order-detail-page .btn-light {
   background: #fff;
 }
@@ -686,65 +735,65 @@
   border-color: #fecaca;
   color: var(--mb-danger);
 }
-.order-detail-page .btn-outline:hover:not(:disabled) {
-  background: #fef2f2;
-}
 .order-detail-page .btn-sm {
   min-height: 40px;
   padding: 0 14px;
   font-size: 14px;
   border-radius: 12px;
 }
-.order-detail-page .btn-block {
-  display: flex;
-  width: 100%;
-  margin-top: 20px;
+
+@media (hover: hover) {
+  .order-detail-page .btn:hover:not(:disabled),
+  .order-detail-page .btn-block:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.8);
+  }
+  .order-detail-page .btn-primary:hover:not(:disabled) {
+    background: var(--mb-accent-ink);
+    border-color: var(--mb-accent-ink);
+  }
+  .order-detail-page .btn-outline:hover:not(:disabled) {
+    background: #fef2f2;
+  }
 }
 
 .order-detail-page .od-actions {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 .order-detail-page .od-actions .btn {
   width: 100%;
 }
 
-/* Cancel order — standard neutral outline style, indented to match the
-   details block. Wins over the generic .btn rule via scoped specificity. */
-.order-detail-page .od-card-overview .btn.btn-outline.btn-block {
-  width: 100%;
-  min-height: 52px;
-  margin: 20px 0 0;
-  padding: 0 20px;
-  border: 1.5px solid var(--mb-line);
-  border-radius: var(--mb-radius-field);
-  background: #fff;
+/* Cancel order — neutral outline like Orders "View order", 12px below the
+   meta row. Out-ranks .btn-outline's red whether or not .btn is present. */
+.order-detail-page .od-card-overview .btn-block {
+  margin-top: 12px;
+  background: transparent;
+  border: 2px solid var(--mb-line);
   color: var(--mb-ink-2);
-  font: 700 15px / 1.2 var(--od-font-body);
 }
-.order-detail-page .od-card-overview .btn.btn-outline.btn-block:hover:not(:disabled) {
-  background: #f8fafc;
-  border-color: #94a3b8;
-}
-.order-detail-page .od-card-overview .btn.btn-outline.btn-block:disabled {
-  opacity: 0.55;
+@media (hover: hover) {
+  .order-detail-page .od-card-overview .btn-block:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.8);
+  }
 }
 
 @container (min-width: 460px) {
-  .od-actions {
+  .order-detail-page .od-actions {
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
   }
-  .od-actions .btn {
+  .order-detail-page .od-actions .btn {
     width: auto;
+    flex: none;
   }
-  .btn-block {
-    width: auto;
-    display: inline-flex;
+  .order-detail-page .od-card-overview .btn-block {
+    width: fit-content;
+    margin-left: auto;
   }
 }
 
@@ -796,15 +845,15 @@
   margin-top: 12px;
 }
 @container (min-width: 460px) {
-  .od-field-row {
+  .order-detail-page .od-field-row {
     flex-direction: row;
     align-items: center;
   }
-  .od-field-row .field {
+  .order-detail-page .od-field-row .field {
     flex: 1 1 200px;
     width: auto;
   }
-  .od-field-row .btn {
+  .order-detail-page .od-field-row .btn {
     flex: none;
   }
 }
@@ -891,8 +940,8 @@
   font-weight: 500;
 }
 @container (min-width: 560px) {
-  .od-form-grid,
-  .od-check-grid {
+  .order-detail-page .od-form-grid,
+  .order-detail-page .od-check-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -982,29 +1031,29 @@
 }
 
 @container (min-width: 560px) {
-  .transporter {
+  .order-detail-page .transporter {
     flex-direction: row;
     align-items: flex-start;
     justify-content: space-between;
     gap: 20px;
   }
-  .transporter > div:first-child {
+  .order-detail-page .transporter > div:first-child {
     flex: 1 1 55%;
   }
-  .transporter > div:last-child {
+  .order-detail-page .transporter > div:last-child {
     flex: 1 1 40%;
     padding: 0 0 0 20px;
     border-top: 0;
     border-left: 1.5px dashed var(--mb-line);
   }
-  .od-quote-actions {
+  .order-detail-page .od-quote-actions {
     flex-direction: row;
     flex-wrap: wrap;
   }
-  .od-quote-actions .btn {
+  .order-detail-page .od-quote-actions .btn {
     width: auto;
   }
-  .od-quote-actions .field-inline {
+  .order-detail-page .od-quote-actions .field-inline {
     flex: 1 1 120px;
     width: auto;
   }
@@ -1189,8 +1238,9 @@
 }
 .order-detail-page .od-party-avatar {
   flex: none;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 44px;
   height: 44px;
   background: #f1f5f9;
@@ -1492,15 +1542,15 @@
 }
 
 @container (min-width: 520px) {
-  .od-next-cta {
+  .order-detail-page .od-next-cta {
     width: auto;
     min-width: 280px;
     display: inline-flex;
   }
-  .od-next-step-label {
+  .order-detail-page .od-next-step-label {
     display: block;
   }
-  .od-next-list {
+  .order-detail-page .od-next-list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     column-gap: 28px;
@@ -1918,23 +1968,32 @@
   }
 }
 
-/* ---- 24. Responsive (viewport) ------------------------------------------ */
+/* ---- 24. Responsive (viewport) — same breakpoints as Orders.css --------- */
 @media (max-width: 480px) {
   .order-detail-page {
-    --od-pad: 20px;
-    --mb-radius-card: 20px;
+    --od-pad: 18px;
+    --mb-radius-card: 18px;
+  }
+  .order-detail-page .od-card-title {
+    font-size: 22px;
   }
   .order-detail-page .od-eyebrow {
     gap: 10px;
     letter-spacing: 0.2em;
   }
+  .order-detail-page .od-eyebrow::before {
+    width: 13px;
+  }
   .order-detail-page .od-price-amount {
-    font-size: 30px;
+    font-size: 28px;
   }
 }
 @media (max-width: 360px) {
   .order-detail-page {
-    --od-pad: 16px;
+    --od-pad: 14px;
+  }
+  .order-detail-page .od-card-title {
+    font-size: 20px;
   }
   .order-detail-page .od-card-side-party > div {
     max-width: 84px;
@@ -1963,8 +2022,6 @@
 }
 @media (min-width: 640px) {
   .order-detail-page {
-    --od-pad: 26px;
-    --od-gap: 20px;
     padding-top: 26px;
   }
   .order-detail-page .container-narrow {
@@ -1996,8 +2053,6 @@
 }
 @media (min-width: 1040px) {
   .order-detail-page {
-    --od-pad: 28px;
-    --od-gap: 22px;
     padding-top: 32px;
   }
   .order-detail-page .container-narrow {
@@ -2006,13 +2061,17 @@
   .order-detail-page .od-page-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .order-detail-page .od-card-side-party > div {
-    max-width: 180px;
-  }
 }
 @media (min-width: 1400px) {
   .order-detail-page .container-narrow {
     max-width: 1320px;
+  }
+}
+
+/* Wide cards: allow longer party names beside the title (as Orders.css) */
+@container (min-width: 760px) {
+  .order-detail-page .od-card-side-party > div {
+    max-width: 220px;
   }
 }
 
@@ -2024,6 +2083,7 @@
   }
   .order-detail-page .page-bar,
   .order-detail-page .btn,
+  .order-detail-page .btn-block,
   .order-detail-toast,
   .od-modal-backdrop {
     display: none !important;
