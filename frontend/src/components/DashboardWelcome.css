@@ -4,8 +4,8 @@
    ============================================================ */
 
 .dash-welcome {
-  --dw-accent:      #1e9e5a;
-  --dw-accent-2:    #0f7a44;
+  --dw-accent:      var(--mb-ok);
+  --dw-accent-2:    var(--mb-ok);
 
   position: relative;
   overflow: hidden;
@@ -135,7 +135,7 @@
 .dash-badge.dash-badge-verified {
   background: rgba(255, 255, 255, .95);
   border-color: transparent;
-  color: #0f7a44;
+  color: var(--mb-ok);
 }
 
 .dash-badge.dash-badge-pending {
@@ -147,7 +147,7 @@
 .dash-badge.dash-badge-rating {
   background: rgba(255, 255, 255, .95);
   border-color: transparent;
-  color: #a86f10;
+  color: var(--mb-wait);
 }
 
 /* ── Children (column 3) — RecentActivity and similar ──── */
