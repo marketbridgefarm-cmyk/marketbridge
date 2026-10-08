@@ -131,6 +131,12 @@ enum InspectionFeePayer {
   SPLIT
 }
 
+enum BuyerReportReviewStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
 enum InspectionQuoteStatus {
   PENDING
   SELECTED
@@ -939,6 +945,14 @@ model InspectionReport {
 
   gpsLocation String?
 
+  // Standard report envelope shared with TransportLoadingReport.
+  reportVersion Int @default(1)
+  submittedAt DateTime @default(now())
+  buyerReviewStatus BuyerReportReviewStatus @default(PENDING)
+  buyerReviewedAt DateTime?
+  buyerReviewedById String?
+  buyerReviewNotes String?
+
   inspectedAt DateTime @default(now())
 
   evidence InspectionEvidence[]
@@ -1234,6 +1248,14 @@ model TransportLoadingReport {
   loadingFinishedAt DateTime?
   gpsLocation String?
   notes String?
+
+  // Standard report envelope shared with InspectionReport.
+  reportVersion Int @default(1)
+  submittedAt DateTime @default(now())
+  buyerReviewStatus BuyerReportReviewStatus @default(PENDING)
+  buyerReviewedAt DateTime?
+  buyerReviewedById String?
+  buyerReviewNotes String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
