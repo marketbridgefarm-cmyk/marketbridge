@@ -136,11 +136,14 @@ export default function OrderDecisionPanel({
             ? 'Price review in progress'
             : 'Price & purchase decision'}
         </h3>
-        {currentPrice > 0 && (
-          <div className="od-card-section-meta">
-            {money(currentPrice)} ETB total
-          </div>
-        )}
+        <div className="od-card-section-meta">
+          {currentPrice > 0 && <>{money(currentPrice)} ETB total</>}
+          {!buyerDecision && order?.buyerDecisionDueAt && (
+            <div className="muted small" style={{ marginTop: 4 }}>
+              Decision deadline: <strong>{formatDateTime(order.buyerDecisionDueAt)}</strong>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ─────────────────────── Buyer: decision already recorded ────── */}
