@@ -145,10 +145,7 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
     'CANCELLED'
   );
 
-  await tx.order.update({
-    where: { id: order.id },
-    data: { buyerDecisionDueAt: null },
-  });
+  await tx.order.updateMany({ where: { id: order.id }, data: { buyerDecisionDueAt: null } });
 
   await tx.paymentObligation.updateMany({
     where: { orderId: order.id, status: 'OPEN' },
@@ -185,7 +182,7 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
   if (order.transportJob && !['DELIVERED', 'CANCELLED'].includes(order.transportJob.status)) {
     await tx.transportJob.update({
       where: { id: order.transportJob.id },
-      data: { status: 'CANCELLED', workflowDueAt: null, sellerPreparationDueAt: null, buyerLoadingDueAt: null },
+      data: { status: 'CANCELLED', workflowDueAt: null },
     });
     await tx.transportQuote.updateMany({
       where: {

@@ -104,14 +104,14 @@ function buildPaymentSnapshot(order) {
         beneficiaryId: r.inspectorId || null,
         inspectionStatus: r.status,
         obligationId: obligations.length === 1 ? obligations[0].id : null,
-        termsLockedAt: r.feeTermsLockedAt || null,
-        lockedFee: r.lockedFee != null ? Number(r.lockedFee) : null,
-        lockedFeePayer: r.lockedFeePayer || null,
         obligations: obligations.map((o) => ({ id: o.id, payerId: o.payerId, amount: o.amount, status: o.status, paymentId: o.payment?.id || null })),
       };
     });
 
-  const job = order.transportJob || null;
+  // A cancelled transport is no longer an active fulfillment stage. Treat
+  // it as absent so the buyer/seller can arrange a replacement transporter,
+  // including after the seller has already been paid.
+  const job = order.transportJob?.status === 'CANCELLED' ? null : (order.transportJob || null);
   const transportRequired = Boolean(job) && job.method === 'HIRE_TRANSPORTER';
   const transportObligation = job
     ? findObligation('TRANSPORT', null, job.id)
@@ -164,8 +164,6 @@ function buildPaymentSnapshot(order) {
     : null;
 
   return {
-    authority: 'SERVER_WORKFLOW',
-    workflowVersion: 2,
     marketplace,
     inspections,
     transport,
@@ -207,7 +205,7 @@ function buildPaymentSnapshot(order) {
 // ----------------------------------------------------------------------------
 
 function buildTimeline(order, payments) {
-  const job = order.transportJob || null;
+  const job = order.transportJob?.status === 'CANCELLED' ? null : (order.transportJob || null);
   const category = order.listing?.category;
   const inspection = (order.inspectionRequests || order.listing?.inspectionRequests || [])
     .filter((r) => r.status !== 'CANCELLED')
@@ -505,7 +503,7 @@ function buildActions(order, payments, viewer) {
     }];
   }
   const { isBuyer, isSeller, isTruckOwner, isInspector, isAdmin } = viewer;
-  const job = order.transportJob || null;
+  const job = order.transportJob?.status === 'CANCELLED' ? null : (order.transportJob || null);
   const terminal = TERMINAL_ORDER_STATUSES.includes(order.status);
   const reportCompleted = Boolean(payments.allInspectionsCompleted);
   const actions = [];
@@ -603,13 +601,26 @@ function buildActions(order, payments, viewer) {
     });
   }
 
+  if (job && job.status === 'ACCEPTED' && !job.sellerPickupConfirmedAt && !terminal) {
+    push({
+      code: 'CONFIRM_TRANSPORT_PREPARATION',
+      label: 'Confirm transporter preparation',
+      actorRole: 'SELLER',
+      viewerCanPerform: isSeller,
+      ready: isSeller,
+      deadlineAt: job.workflowDueAt || null,
+      reason: isSeller ? null : 'Waiting for the seller to confirm transporter preparation',
+      route: { method: 'POST', path: `/transport/${job.id}/seller-confirm-pickup` },
+    });
+  }
+
   // 3. Buyer purchase decision for both marketplaces. This is a real
   // server-side mutation: the buyer must review the completed inspection
   // report and explicitly choose BUY or CANCEL before goods payment.
   if ((order.listing?.category === 'AGRICULTURAL' || Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist)) && !order.buyerDecision && !terminal) {
     const jobReady = Boolean(job && job.status === 'ACCEPTED' && job.sellerPickupConfirmedAt);
-    const decisionDeadlineValid = !order.buyerDecisionDueAt || new Date(order.buyerDecisionDueAt) > new Date();
-    const decisionReady = payments.inspectionRequestsExist && payments.allInspectionsCompleted && jobReady && decisionDeadlineValid;
+    const decisionWindowOpen = !order.buyerDecisionDueAt || new Date(order.buyerDecisionDueAt) > new Date();
+    const decisionReady = payments.inspectionRequestsExist && payments.allInspectionsCompleted && jobReady && decisionWindowOpen;
     const decisionReason = !payments.inspectionRequestsExist
       ? 'Complete the inspection before proceeding'
       : !payments.allInspectionsCompleted
@@ -620,7 +631,9 @@ function buildActions(order, payments, viewer) {
             ? 'Wait for the transporter quote to be agreed'
             : !job.sellerPickupConfirmedAt
               ? 'Wait for the seller to confirm transporter preparation'
-              : null;
+              : !decisionWindowOpen
+                ? 'The buyer decision window has expired'
+                : null;
 
     push({
       code: 'BUYER_DECISION_BUY',
@@ -642,9 +655,9 @@ function buildActions(order, payments, viewer) {
       label: 'Cancel after inspection',
       actorRole: 'BUYER',
       viewerCanPerform: isBuyer,
-      ready: payments.inspectionRequestsExist && payments.allInspectionsCompleted && decisionDeadlineValid,
+      ready: payments.inspectionRequestsExist && payments.allInspectionsCompleted && decisionWindowOpen,
       deadlineAt: order.buyerDecisionDueAt || null,
-      reason: !payments.inspectionRequestsExist ? 'Complete the inspection before cancelling' : !payments.allInspectionsCompleted ? 'Review the published inspection report first' : !decisionDeadlineValid ? 'The BUY/CANCEL decision deadline has expired' : null,
+      reason: !payments.inspectionRequestsExist ? 'Complete the inspection before cancelling' : !payments.allInspectionsCompleted ? 'Review the published inspection report first' : null,
       route: {
         method: 'PATCH',
         path: `/orders/${order.id}/buyer-decision`,
@@ -769,22 +782,7 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 5. Pay the hired transporter. ACCEPTED means commercially agreed, not
-  // payment-backed. Loading must be reported and approved before transport
-  // payment becomes an executable workflow action.
-  if (job && job.status === 'ACCEPTED' && !job.sellerPickupConfirmedAt && isSeller) {
-    push({
-      code: 'CONFIRM_TRANSPORT_PREPARATION',
-      label: 'Confirm transporter preparation',
-      actorRole: 'SELLER',
-      viewerCanPerform: true,
-      ready: !job.sellerPreparationDueAt || new Date(job.sellerPreparationDueAt) > new Date(),
-      deadlineAt: job.sellerPreparationDueAt || job.workflowDueAt || null,
-      reason: job.sellerPreparationDueAt && new Date(job.sellerPreparationDueAt) <= new Date() ? 'The seller preparation deadline has expired' : null,
-      route: { method: 'POST', path: `/transport/${job.id}/seller-confirm-pickup` },
-    });
-  }
-
+  // 5. Pay the hired transporter.
   if (job && payments.transport?.required && !payments.transport.paid) {
     const ready = job.status === 'ACCEPTED' && job.agreedAmount != null && payments.marketplace.paid && order.buyerDecision === 'BUY' && Boolean(job.buyerLoadingConfirmedAt);
     push({
@@ -793,7 +791,15 @@ function buildActions(order, payments, viewer) {
       actorRole: 'BUYER',
       viewerCanPerform: isBuyer,
       ready,
-      reason: ready ? null : !payments.marketplace.paid ? 'Pay the seller before paying the transporter' : order.buyerDecision !== 'BUY' ? 'Final BUY decision is required before transport payment' : !job.buyerLoadingConfirmedAt ? 'Buyer must approve the loading report before transport payment' : 'Transport must be agreed with an agreed amount before it can be paid',
+      reason: ready
+        ? null
+        : !payments.marketplace.paid
+          ? 'Pay the seller before paying the transporter'
+          : order.buyerDecision !== 'BUY'
+            ? 'Final BUY decision is required before transport payment'
+            : !job.buyerLoadingConfirmedAt
+              ? 'Approve the loading report before paying the transporter'
+              : 'Transport must be accepted with an agreed amount before it can be paid',
       route: {
         method: 'POST',
         path: '/payments',
@@ -811,6 +817,7 @@ function buildActions(order, payments, viewer) {
       actorRole: 'BUYER',
       viewerCanPerform: isBuyer,
       ready: isBuyer && canConfirmLoading,
+      deadlineAt: reportExists && !job.buyerLoadingConfirmedAt ? job.workflowDueAt || null : null,
       reason: !reportExists ? 'Waiting for the transporter to submit the loading report' : job.buyerLoadingConfirmedAt ? 'Loading report already approved' : null,
       route: { method: 'POST', path: `/transport/${job.id}/confirm-loading` },
     });
@@ -940,6 +947,7 @@ function computeOrderWorkflow(order, viewerUserId, viewerRoles = []) {
     orderStatus: order.status,
     buyerDecision: order.buyerDecision || null,
     buyerDecisionAt: order.buyerDecisionAt || null,
+      buyerDecisionDueAt: order.buyerDecisionDueAt || null,
     currentStage,
     nextActor: nextReadyAction?.actorRole || null,
     viewerRole: isAdmin
