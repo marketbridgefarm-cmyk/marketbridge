@@ -1032,6 +1032,9 @@ model Order {
   buyerDecision BuyerDecision?
   buyerDecisionAt DateTime?
 
+  // Buyer must choose BUY or CANCEL after the inspection/report and transport preparation.
+  buyerDecisionDueAt DateTime?
+
   inspectionRequests InspectionRequest[]
 
   arrangingParty ArrangingParty?
@@ -1156,8 +1159,14 @@ model TransportJob {
   sellerPickupMessage String?
   sellerPickupMessageAt DateTime?
 
+  // Seller must confirm transporter preparation within this window after acceptance.
+  sellerPreparationDueAt DateTime?
+
   // Buyer reviews the transporter's pre-loading report before physical loading begins.
   buyerLoadingConfirmedAt DateTime?
+
+  // Buyer must approve the transporter's loading report before physical loading.
+  buyerLoadingDueAt DateTime?
 
   pickupConfirmedAt   DateTime?
   deliveredConfirmedAt DateTime?
