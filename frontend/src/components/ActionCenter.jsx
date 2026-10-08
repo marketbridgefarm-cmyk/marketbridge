@@ -27,7 +27,8 @@ const ACTION_LABELS = {
   REVIEW_INSPECTION_QUOTES: 'Review inspection quotes',
   REVIEW_TRANSPORT_QUOTES: 'Review transport quotes',
   PAY_TRANSPORT: 'Pay transport',
-  START_PICKUP: 'Start pickup',
+  CONFIRM_LOADING: 'Approve loading report',
+  START_PICKUP: 'Start loading / pickup',
   MARK_IN_TRANSIT: 'Mark in transit',
   MARK_DELIVERED: 'Mark delivered',
   CONFIRM_RECEIPT: 'Confirm receipt',
@@ -47,7 +48,8 @@ const ACTION_HELP = {
   REVIEW_INSPECTION_QUOTES: 'Compare inspector bids and pick one to negotiate with.',
   REVIEW_TRANSPORT_QUOTES: 'Compare transport bids, select one and agree on the price.',
   PAY_TRANSPORT: 'The trip can only start once the transport fee is confirmed.',
-  START_PICKUP: 'Begin the pickup and upload your pickup evidence.',
+  CONFIRM_LOADING: 'Review the transporter’s pre-loading report before the goods are physically loaded.',
+  START_PICKUP: 'Begin loading and record pickup evidence.',
   MARK_IN_TRANSIT: 'Upload pickup evidence, then mark the trip as in transit.',
   MARK_DELIVERED: 'Upload delivery evidence, then mark the trip as delivered.',
   CONFIRM_RECEIPT: 'Confirm only after you have physically received the goods. This completes the order.',
@@ -59,7 +61,7 @@ const ACTION_HELP = {
 
 const scrollTarget = (code) => {
   if (code === 'PAY_MARKETPLACE' || code === 'PAY_INSPECTION' || code === 'PAY_TRANSPORT') return 'payment-center';
-  if (code === 'ARRANGE_TRANSPORT' || code === 'REVIEW_TRANSPORT_QUOTES' || code === 'START_PICKUP' || code === 'MARK_IN_TRANSIT' || code === 'MARK_DELIVERED') return 'transport-section';
+  if (code === 'ARRANGE_TRANSPORT' || code === 'REVIEW_TRANSPORT_QUOTES' || code === 'CONFIRM_LOADING' || code === 'START_PICKUP' || code === 'MARK_IN_TRANSIT' || code === 'MARK_DELIVERED') return 'transport-section';
   if (code === 'REQUEST_INSPECTION' || code === 'REVIEW_INSPECTION_QUOTES' || code === 'START_INSPECTION' || code === 'SUBMIT_INSPECTION_REPORT') return 'inspection-section';
   if (code === 'CONFIRM_RECEIPT') return 'confirm-receipt';
   if (code === 'RAISE_DISPUTE') return 'raise-dispute';
@@ -88,18 +90,11 @@ function buildBuyerSteps({ order, flags: f }) {
     });
     steps.push({
       key: 'decide', label: 'Decision', done: f.decisionGateMet,
-      target: 'inspection-section', title: 'Review the report and choose Buy',
-      text: 'Read the findings. Choosing Buy unlocks payment; you can also cancel the purchase here.',
+      target: 'inspection-section', title: 'Review the report and arrange transport',
+      text: 'Read the findings. You can cancel after inspection, or proceed to transport arrangement. Final BUY and seller payment happen after the seller confirms transporter preparation.',
       cta: 'Review report',
     });
   }
-
-  steps.push({
-    key: 'pay', label: 'Pay seller', done: f.marketplacePaid,
-    target: 'payment-center', title: 'Pay the seller',
-    text: 'Pay the order amount. The seller, any inspector and a hired transporter are each paid separately.',
-    cta: 'Go to seller payment',
-  });
 
   const transportArranged =
     Boolean(f.transportJob) && (!f.hiredTransport || Boolean(f.acceptedQuote) || f.transportPaid);
@@ -108,16 +103,23 @@ function buildBuyerSteps({ order, flags: f }) {
     target: 'transport-section',
     title: f.transportJob ? 'Choose a transporter' : 'Arrange transport',
     text: f.transportJob
-      ? 'Select a bid, agree on the price and accept the quote.'
-      : 'Set up how the goods will travel: your own truck or a hired transporter.',
+      ? 'Select a bid, agree on the price, and wait for the seller to confirm transporter preparation.'
+      : 'Set up how the goods will travel: the transporter is arranged before the final BUY and seller payment.',
     cta: f.transportJob ? 'See transport bids' : 'Arrange transport',
+  });
+
+  steps.push({
+    key: 'pay', label: 'Final BUY & pay seller', done: f.marketplacePaid,
+    target: 'payment-center', title: 'Final BUY and pay the seller',
+    text: 'After the seller confirms transporter preparation, make the final BUY decision and pay the seller.',
+    cta: 'Go to seller payment',
   });
 
   if (f.hiredTransport) {
     steps.push({
       key: 'pay-transport', label: 'Pay transport', done: f.transportPaid,
       target: 'payment-center', title: 'Pay the transporter',
-      text: 'The trip can only start once the transport fee is confirmed.',
+      text: 'Pay the transporter after the seller has been paid and before loading begins.',
       cta: 'Go to transport payment',
     });
   }

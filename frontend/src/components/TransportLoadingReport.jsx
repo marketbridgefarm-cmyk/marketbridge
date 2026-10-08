@@ -108,7 +108,7 @@ export function TransportLoadingReportSummary({ loadingReport, evidence }) {
   return (
     <div className="od-card-section tlr-summary">
       <div className="od-card-section-head">
-        <h3 className="od-card-section-title">Loading report</h3>
+        <h3 className="od-card-section-title">Pre-loading report</h3>
         <div className="od-card-section-meta">
           {loadingReport.submittedBy?.name
             ? `Submitted by ${loadingReport.submittedBy.name}`
@@ -118,17 +118,17 @@ export function TransportLoadingReportSummary({ loadingReport, evidence }) {
 
       <div className="od-detail-facts">
         <div>
-          <span>What loaded</span>
+          <span>What will be loaded</span>
           <strong>{whatLabel}</strong>
         </div>
         <div>
-          <span>Quantity loaded</span>
+          <span>Quantity to be loaded</span>
           <strong>
             {fmtMoney(loadingReport.quantityLoaded)} {loadingReport.quantityUnit || ''}
           </strong>
         </div>
         <div>
-          <span>Quality at loading</span>
+          <span>Expected condition at loading</span>
           <strong>{qualityLabel}</strong>
         </div>
         {loadingReport.gpsLocation && (
@@ -251,17 +251,17 @@ export default function TransportLoadingReport({
 
     if (form.whatLoaded === 'REFUSED_TO_LOAD') {
       const ok = window.confirm(
-        'You are reporting REFUSED TO LOAD. This will be recorded as a loading report where nothing was loaded. Continue?'
+        'You are reporting REFUSED TO LOAD. This will be recorded in the pre-loading report as a refusal. Continue?'
       );
       if (!ok) return;
     }
 
     if (!form.quantityLoaded || Number(form.quantityLoaded) <= 0) {
-      setError('Enter the quantity loaded.');
+      setError('Enter the quantity to be loaded.');
       return;
     }
     if (!photos.length && !videos.length) {
-      setError('At least one photo or video of the loaded goods is required.');
+      setError('At least one photo or video of the goods/pre-loading situation is required.');
       return;
     }
 
@@ -332,14 +332,13 @@ export default function TransportLoadingReport({
     return (
       <div className="od-card-section tlr-root">
         <div className="od-card-section-head">
-          <h3 className="od-card-section-title">Loading report submitted</h3>
+          <h3 className="od-card-section-title">Pre-loading report submitted</h3>
           <div className="od-card-section-meta">
             {fmtDateTime(existing.createdAt)}
           </div>
         </div>
         <p className="muted small">
-          The truck has left the pickup site. The report is immutable; corrections
-          must go through the dispute workflow.
+          The buyer can review this report before physical loading begins. The report is immutable; corrections must go through the dispute workflow.
         </p>
         <TransportLoadingReportSummary
           loadingReport={existing}
@@ -362,26 +361,19 @@ export default function TransportLoadingReport({
           <h3 className="od-card-section-title">Loading report</h3>
         </div>
         <p className="muted small">
-          Waiting for the seller to confirm that the goods are ready for pickup.
-          The loading report cannot be submitted until then.
+          Waiting for the seller to confirm that the selected transporter is prepared. The pre-loading report cannot be submitted until then.
         </p>
       </div>
     );
   }
 
   if (!paymentsReady) {
-    const missing = Array.isArray(missingPayments) && missingPayments.length
-      ? ` (outstanding: ${missingPayments.join(', ')})`
-      : '';
     return (
       <div className="od-card-section tlr-root">
         <div className="od-card-section-head">
-          <h3 className="od-card-section-title">Loading report</h3>
+          <h3 className="od-card-section-title">Pre-loading report</h3>
         </div>
-        <p className="muted small">
-          Every payment on this order must be settled before loading begins —
-          goods, all inspection fees, and transport{missing}.
-        </p>
+        <p className="muted small">The seller payment must be completed before the transporter can submit the pre-loading report.</p>
       </div>
     );
   }
@@ -398,9 +390,7 @@ export default function TransportLoadingReport({
       </div>
 
       <p className="muted small">
-        Record what actually loaded, when, and in what condition. This becomes
-        the transporter's evidentiary record for the pickup. Once submitted it
-        is immutable.
+        Record what is planned to be loaded, how much, when, and the expected condition. The buyer will review this report before physical loading begins. Once submitted it is immutable.
       </p>
 
       {error && <div className="alert error">{error}</div>}
@@ -408,7 +398,7 @@ export default function TransportLoadingReport({
       <form className="tlr-form" onSubmit={submit}>
         {/* ── What loaded ───────────────────────────────────────── */}
         <label className="tlr-field">
-          <span>What loaded</span>
+          <span>What will be loaded</span>
           <select
             value={form.whatLoaded}
             onChange={(e) => set('whatLoaded')(e.target.value)}
@@ -422,14 +412,14 @@ export default function TransportLoadingReport({
         {/* ── Quantity + unit ───────────────────────────────────── */}
         <div className="tlr-row">
           <label className="tlr-field">
-            <span>Quantity loaded</span>
+            <span>Quantity to be loaded</span>
             <AmountPicker
               reference={1}
               min={0.01}
-              placeholder="Select the loaded quantity"
+              placeholder="Select the planned loading quantity"
               value={form.quantityLoaded}
               onChange={set('quantityLoaded')}
-              ariaLabel="Quantity loaded"
+              ariaLabel="Quantity to be loaded"
             />
           </label>
           <label className="tlr-field">
@@ -447,7 +437,7 @@ export default function TransportLoadingReport({
 
         {/* ── Quality ───────────────────────────────────────────── */}
         <label className="tlr-field">
-          <span>Quality at loading</span>
+          <span>Expected condition at loading</span>
           <select
             value={form.qualityAtLoading}
             onChange={(e) => set('qualityAtLoading')(e.target.value)}
@@ -460,7 +450,7 @@ export default function TransportLoadingReport({
 
         {/* ── Visible issues ────────────────────────────────────── */}
         <fieldset className="tlr-fieldset">
-          <legend>Visible issues at loading</legend>
+          <legend>Visible issues / loading risks</legend>
           <div className="tlr-check-grid">
             {ISSUE_OPTIONS.map(([code, text]) => (
               <label key={code} className="tlr-check">
@@ -536,7 +526,7 @@ export default function TransportLoadingReport({
 
         {/* ── Media ─────────────────────────────────────────────── */}
         <div className="tlr-field tlr-field--full">
-          <span>Photos / videos of the loaded goods</span>
+          <span>Photos / videos of goods and loading situation</span>
           <EvidenceUploader
             uploadUrl={`/transport/${transportJobId}/evidence/media`}
             disabled={submitting}
@@ -559,7 +549,7 @@ export default function TransportLoadingReport({
             className="btn btn-primary"
             disabled={submitting}
           >
-            {submitting ? 'Submitting…' : 'Submit loading report & mark picked up'}
+            {submitting ? 'Submitting…' : 'Submit pre-loading report'}
           </button>
         </div>
       </form>
