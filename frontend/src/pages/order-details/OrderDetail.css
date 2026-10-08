@@ -6,7 +6,7 @@
 
      • Single warm accent (#c2410c)
      • 28px card radius, white surface, one soft shadow
-     • Card title = 2px bottom line + 44px accent segment
+     • Card head: eyebrow + title above the divider; description below it
      • Sub-headers = 1.5px bottom line only
      • Vertical progress rail with green / orange bullseye / gray states
      • Details facts flow in 2 / 3 / 4 columns based on the card's width,
@@ -177,39 +177,77 @@
   background: var(--mb-accent-tint);
 }
 
-/* ---- 4b. Head layout ---------------------------------------------------- */
+/* ---- 4b. Head layout ----------------------------------------------------
+   Grid layout:
+     row 1:  eyebrow          | head-side
+     row 2:  title            | head-side
+     row 3:  ─── divider ───  (full-width, with the accent segment)
+     row 4:  subtitle         (full-width, BELOW the divider)
+   The inner `.od-card-head-main` uses `display: contents` so its children
+   become direct grid items of `.od-card-head`.
+   ------------------------------------------------------------------------ */
 .order-detail-page .od-card-head {
   position: relative;
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px 16px;
-  padding: 0 0 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 16px;
+  row-gap: 0;
+  padding: 0;
   margin: 0 0 22px;
-  border-bottom: 2px solid var(--mb-line);
-}
-.order-detail-page .od-card-head::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: -2px;
-  width: 44px;
-  height: 4px;
-  background: var(--od-accent, var(--mb-accent));
+  border-bottom: 0;
 }
 
-.order-detail-page .od-card-head-main {
-  display: block;
-  flex: 1 1 0;
+.order-detail-page .od-card-head-main { display: contents; }
+
+/* Eyebrow */
+.order-detail-page .od-card-head .od-eyebrow {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0 0 8px;
+}
+
+/* Title */
+.order-detail-page .od-card-head .od-card-title {
+  grid-column: 1;
+  grid-row: 2;
   min-width: 0;
+}
+
+/* Right-hand side (status, party, due date...) */
+.order-detail-page .od-card-head .od-card-head-side {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: start;
+}
+
+/* Divider row: 2px line + 44px accent segment, drawn as one pseudo */
+.order-detail-page .od-card-head::before {
+  content: '';
+  grid-column: 1 / -1;
+  grid-row: 3;
+  height: 4px;
+  margin: 12px 0 0;
+  background:
+    linear-gradient(var(--od-accent, var(--mb-accent)),
+                    var(--od-accent, var(--mb-accent))) left center / 44px 4px no-repeat,
+    linear-gradient(var(--mb-line), var(--mb-line)) left center / 100% 2px no-repeat;
+}
+
+/* Suppress the old absolutely-positioned accent bar */
+.order-detail-page .od-card-head::after { content: none; }
+
+/* Subtitle lives BELOW the divider */
+.order-detail-page .od-card-head .od-card-subtitle {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  margin: 12px 0 0;
 }
 
 .order-detail-page .od-eyebrow {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 0 0 8px;
   color: var(--od-accent, var(--mb-accent));
   font: 700 13px / 1.2 var(--od-font-head);
   letter-spacing: 0.25em;
@@ -225,16 +263,16 @@
 }
 .order-detail-page .od-eyebrow.is-selling { color: var(--mb-ok); }
 
+/* Title: bolder, larger, tighter — it now anchors the head on its own */
 .order-detail-page .od-card-title {
   margin: 0;
   color: var(--mb-ink);
-  font: 800 clamp(22px, 4.6vw, 26px) / 1.25 var(--od-font-head);
-  letter-spacing: -0.3px;
+  font: 800 clamp(24px, 5.2vw, 30px) / 1.15 var(--od-font-head);
+  letter-spacing: -0.5px;
   overflow-wrap: anywhere;
 }
 
 .order-detail-page .od-card-subtitle {
-  margin: 8px 0 0;
   color: var(--mb-muted);
   font-size: 14px;
   line-height: 1.55;
@@ -243,9 +281,6 @@
 
 /* ---- 4c. Head side (top right) ----------------------------------------- */
 .order-detail-page .od-card-head-side {
-  flex: none;
-  align-self: flex-start;
-  margin-left: auto;
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -1433,8 +1468,8 @@
    20. OVERVIEW CARD FINAL TOUCHES
    ========================================================================== */
 .order-detail-page .od-card-overview .od-card-title {
-  font-size: clamp(24px, 6vw, 30px);
-  line-height: 1.15;
+  font-size: clamp(26px, 6.4vw, 32px);
+  line-height: 1.1;
 }
 
 .order-detail-page .od-card-overview .od-card-created {
@@ -1622,7 +1657,7 @@
   .order-detail-page .od-page-grid,
   .order-detail-page .od-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-  .order-detail-page .od-card-title        { font-size: 26px; }
+  .order-detail-page .od-card-title        { font-size: 28px; }
   .order-detail-page .order-progress-label { font-size: 15.5px; }
 
   .order-detail-page .card.od-next { padding: 32px 40px 14px; }
