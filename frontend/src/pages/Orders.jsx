@@ -1,554 +1,718 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+/* ==========================================================================
+   Orders — MarketBridge card style
+   Replaces src/pages/orders/Orders.css (pair with the updated Orders.jsx).
+   Rules: card title = 2px line + short accent segment; sub-headers = 1.5px
+   line only. Card internals respond to the card's own width.
+   ========================================================================== */
 
-import api from '../api/client';
-import { useAuth } from '../context/AuthContext.jsx';
-import './orders/Orders.css';
+.orders-page {
+  --mb-ink: #0f172a;
+  --mb-ink-2: #334155;
+  --mb-muted: #64748b;
+  --mb-accent: #c2410c;
+  --mb-accent-ink: #9a3412;
+  --mb-accent-tint: #fff7ed;
+  --mb-accent-border: #fed7aa;
+  --mb-ok: #047857;
+  --mb-danger: #b91c1c;
+  --mb-line: #cbd5e1;
+  --mb-card: rgba(248, 251, 255, 0.95);
+  --mb-radius-card: 22px;
+  --mb-radius-field: 16px;
 
-const shortId = (id) => (id || '').slice(0, 8).toUpperCase() || '—';
-
-const money = (value) =>
-  Number(value || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  });
-
-const getError = (error, fallback) =>
-  error?.response?.data?.error ||
-  error?.response?.data?.message ||
-  error?.message ||
-  fallback;
-
-function initialsOf(name) {
-  if (!name) return '??';
-  const parts = String(name).trim().split(/\s+/).slice(0, 2);
-  return parts.map((p) => p[0]).join('').toUpperCase();
+  background: linear-gradient(135deg, #eef0ff 0%, #dbe8f8 55%, #e6f6ee 100%);
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
-function locationOf(order) {
-  const listing = order?.listing || {};
-  const seller = order?.seller || {};
-  const buyer = order?.buyer || {};
+/* ---- Page hero ---------------------------------------------------------- */
+.orders-hero { margin: 0 0 20px; }
 
-  const fromListing = readLocation(listing);
-  if (fromListing) return fromListing;
-
-  const fromSeller = readLocation(seller);
-  if (fromSeller) return fromSeller;
-
-  const fromBuyer = readLocation(buyer);
-  if (fromBuyer) return fromBuyer;
-
-  return null;
+.orders-hero-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--mb-accent);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
 }
 
-function readLocation(source) {
-  if (!source) return null;
+.orders-hero-eyebrow::before {
+  content: "";
+  flex: none;
+  width: 32px;
+  height: 3px;
+  background: var(--mb-accent);
+  border-radius: 2px;
+}
 
-  const loc = source.location;
+.orders-hero-title {
+  margin: 8px 0 0;
+  color: var(--mb-ink);
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.15;
+}
 
-  if (typeof loc === 'string' && loc.trim()) return loc.trim();
+.orders-hero-text {
+  max-width: 60ch;
+  margin: 10px 0 0;
+  color: var(--mb-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
 
-  if (loc && typeof loc === 'object') {
-    const joined = [loc.city || loc.town, loc.region || loc.state, loc.country]
-      .filter(Boolean)
-      .join(', ');
-    if (joined) return joined;
+/* ---- Stats strip -------------------------------------------------------- */
+.stats-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+.orders-page .stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+}
+
+.orders-page .stat.tone-accent  { --stat-tone: #c2410c; }
+.orders-page .stat.tone-info    { --stat-tone: #1d4ed8; }
+.orders-page .stat.tone-gold    { --stat-tone: #b45309; }
+.orders-page .stat.tone-success { --stat-tone: #047857; }
+
+.stat-label {
+  color: var(--mb-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.stat-graphic {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+}
+
+.stat-graphic svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.stat-track { stroke: #e2e8f0; }
+.stat-ring  { stroke: var(--stat-tone); }
+
+.stat-count {
+  position: relative;
+  color: var(--stat-tone);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Toolbar: tabs + search --------------------------------------------- */
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+.orders-page .sd-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.orders-page .sd-tabs::-webkit-scrollbar { display: none; }
+
+.orders-page .sd-tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.search {
+  position: relative;
+  display: block;
+  flex: 1 1 240px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  margin-top: -10px;
+  color: var(--mb-muted);
+  pointer-events: none;
+}
+
+.search-icon svg { display: block; width: 100%; height: 100%; }
+
+.search input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px 0 46px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink);
+  font-size: 16px;
+}
+
+.search input:focus-visible {
+  outline: 3px solid var(--mb-accent-border);
+  outline-offset: 2px;
+}
+
+@media (min-width: 720px) {
+  .stats-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .toolbar { flex-direction: row; align-items: center; justify-content: space-between; }
+  .search { flex: 0 1 320px; }
+}
+
+/* ---- Order cards -------------------------------------------------------- */
+.order-list { display: flex; flex-direction: column; }
+
+.order-card {
+  container-type: inline-size;
+  position: relative;
+  margin: 0 0 20px;
+  padding: 24px;
+  background: var(--mb-card);
+  border-radius: var(--mb-radius-card);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+}
+
+/* Always fill the card width, even if another rule shrink-wraps children */
+.orders-page .order-list { align-items: stretch; }
+
+.orders-page .order-card {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+}
+
+.orders-page .card-body,
+.orders-page .card-block { display: block; }
+
+.orders-page .order-card > *,
+.orders-page .card-body > *,
+.orders-page .card-block > *,
+.orders-page .card-block-body > * {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+
+/* Card tone: green on every card (Buying and Selling). Used by the eyebrow
+   and the body headers so they always match. */
+.order-card { --card-tone: var(--mb-ok); }
+
+/* Title block: eyebrow + title + location on the left, party top right */
+.order-card-head {
+  position: relative;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--mb-line);
+}
+
+.order-card-head::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 44px;
+  height: 4px;
+  background: var(--mb-accent);
+}
+
+.order-card-head-text { flex: 1 1 0; min-width: 0; }
+
+.order-card .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 8px;
+  color: var(--card-tone);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+}
+
+.order-card .eyebrow::before {
+  content: "";
+  flex: none;
+  width: 16px;
+  height: 3px;
+  background: currentColor;
+  border-radius: 2px;
+}
+
+.order-card .eyebrow.is-selling { color: var(--mb-ok); }
+
+.order-title {
+  margin: 0;
+  color: var(--mb-ink);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.order-date {
+  margin: 6px 0 0;
+  color: var(--mb-muted);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.order-card-head-party {
+  flex: none;
+  align-self: flex-start;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.order-party-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  max-width: 120px;
+  text-align: right;
+}
+
+.order-party-role {
+  color: var(--mb-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.order-party-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--mb-ink);
+  font-size: 15px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-avatar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: var(--mb-ink-2);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.order-avatar.tone-success { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.order-avatar.tone-info    { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.order-avatar.tone-danger  { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.order-avatar.tone-gold    { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+
+/* ---- Blocks and sub-headers (line only) --------------------------------- */
+.card-body { margin-top: 20px; }
+
+.card-block + .card-block { margin-top: 22px; }
+
+/* Push body content (pills, stepper, amount, created date) to the right of
+   the headers. The indent scales with the card width. */
+.orders-page .card-block-body {
+  padding-inline-start: clamp(16px, 13cqw, 48px);
+}
+
+.orders-page .order-time {
+  padding-inline-start: clamp(16px, 13cqw, 48px);
+}
+
+.card-block-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1.5px solid var(--mb-line);
+}
+
+.card-block-title h3 {
+  margin: 0;
+  color: var(--card-tone, var(--mb-ink));
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.card-block-note {
+  padding: 2px 10px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: 999px;
+  color: var(--mb-ink-2);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ---- Status pills ------------------------------------------------------- */
+.badges { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #f1f5f9;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 999px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.status-pill-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-pill.tone-success { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.status-pill.tone-info    { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.status-pill.tone-danger  { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.status-pill.tone-gold    { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+
+/* Latest progress pill, right side of the "Order status" header */
+.card-block-title .header-pill {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 68%;
+}
+
+.header-pill-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Progress: vertical on narrow cards, horizontal when there is room -- */
+.order-progress {
+  display: flex;
+  flex-direction: column;
+  margin: 18px 0 0;
+}
+
+.progress-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  color: var(--mb-muted);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.progress-step:last-child { padding-bottom: 0; }
+
+.progress-step::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 18px;
+  bottom: 0;
+  width: 2px;
+  background: var(--mb-line);
+}
+
+.progress-step:last-child::before { display: none; }
+
+.progress-dot {
+  flex: none;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border: 2px solid var(--mb-line);
+  border-radius: 50%;
+}
+
+.progress-step.done { color: var(--mb-ink-2); }
+.progress-step.done::before { background: var(--mb-ok); }
+.progress-step.done .progress-dot { background: var(--mb-ok); border-color: var(--mb-ok); }
+
+.progress-step.current { color: var(--mb-ink); }
+.progress-step.current .progress-dot {
+  background: var(--mb-accent);
+  border-color: var(--mb-accent);
+  box-shadow: inset 0 0 0 3px #fff;
+}
+
+/* Vertical stepper: center the block in the card; dots and labels stay
+   left-aligned inside it. The horizontal layout still fills the row. */
+.order-progress {
+  width: fit-content;
+  min-width: min(240px, 100%);
+  max-width: 100%;
+  margin-inline: auto;
+}
+
+/* In Orders list cards the stepper lines up with the indented body instead */
+.orders-page .card-block-body > .order-progress {
+  width: 100%;
+  min-width: 0;
+  margin-inline: 0;
+  margin-top: 0;
+}
+
+@container (min-width: 520px) {
+  .order-progress { width: 100%; }
+}
+
+/* ---- Amount ------------------------------------------------------------- */
+.order-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.price-amount {
+  color: var(--mb-ink);
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.price-currency {
+  color: var(--mb-muted);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* ---- Meta row: created date (left) + ORD code (right) ------------------- */
+.order-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 22px;
+  padding-inline-end: 14px;
+}
+
+.order-time {
+  min-width: 0;
+  color: var(--mb-muted);
+  font-size: 14px;
+}
+
+.order-code {
+  flex: none;
+  color: var(--mb-muted);
+  font-size: 14px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The meta row's children must not stretch to full width */
+.orders-page .order-meta > * {
+  width: auto;
+}
+
+/* ---- Footer actions ----------------------------------------------------- */
+.order-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.btn-view {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 18px;
+  background: transparent;
+  border: 2px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink-2);
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-view:focus-visible {
+  outline: 3px solid var(--mb-accent-border);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .btn-view:hover { background: rgba(255, 255, 255, 0.8); }
+}
+
+/* ---- Loading and empty/error states ------------------------------------- */
+.loading {
+  margin: 24px 0;
+  color: var(--mb-muted);
+  font-size: 15px;
+}
+
+.state-card {
+  padding: 24px;
+  background: var(--mb-card);
+  border-radius: var(--mb-radius-card);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+}
+
+.state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 0 14px;
+  background: var(--mb-accent-tint);
+  border: 1.5px solid var(--mb-accent-border);
+  border-radius: 50%;
+  color: var(--mb-accent-ink);
+}
+
+.state-card h3 {
+  position: relative;
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--mb-line);
+  color: var(--mb-ink);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.state-card h3::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 44px;
+  height: 4px;
+  background: var(--mb-accent);
+}
+
+.state-card p {
+  margin: 0;
+  color: var(--mb-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* ---- Responsiveness ----------------------------------------------------- */
+
+/* Phones: tighter padding and type so content gets the width */
+@media (max-width: 480px) {
+  .order-card,
+  .state-card { padding: 18px; border-radius: 18px; }
+
+  .orders-hero-title { font-size: 26px; }
+  .order-title { font-size: 22px; }
+  .order-card .eyebrow,
+  .orders-hero-eyebrow { gap: 10px; letter-spacing: 0.2em; }
+  .order-card .eyebrow::before { width: 13px; }
+  .orders-hero-eyebrow::before { width: 26px; }
+  .price-amount { font-size: 28px; }
+}
+
+@media (max-width: 360px) {
+  .order-card,
+  .state-card { padding: 14px; }
+
+  .order-title { font-size: 20px; }
+  .order-party-info { max-width: 84px; }
+}
+
+/* Card internals respond to the card's own width (works beside a sidebar) */
+@container (min-width: 460px) {
+  .order-actions { flex-direction: row; align-items: center; justify-content: flex-end; }
+  .btn-view { width: auto; flex: none; }
+}
+
+@container (min-width: 520px) {
+  .order-progress { flex-direction: row; }
+
+  .progress-step {
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 0 8px 0 0;
   }
 
-  const parts = [
-    source.city || source.town,
-    source.woreda || source.district || source.zone,
-    source.region || source.state,
-  ].filter(Boolean);
-
-  if (parts.length) return parts.join(', ');
-
-  return source.address || null;
-}
-
-function statusTone(status) {
-  const s = String(status || '').toUpperCase();
-  if (['COMPLETED', 'DELIVERED', 'CONFIRMED', 'PAID'].includes(s)) return 'success';
-  if (['IN_TRANSIT', 'TRANSPORT_ARRANGED', 'TRANSPORT_PAID'].includes(s)) return 'info';
-  if (['CANCELLED', 'DISPUTED', 'FROZEN'].includes(s)) return 'danger';
-  if (
-    [
-      'PENDING_PAYMENT',
-      'PENDING',
-      'AWAITING_INSPECTION',
-      'INSPECTION_PENDING',
-      'FAILED',
-      'RECONCILIATION_REQUIRED',
-    ].includes(s)
-  ) {
-    return 'gold';
+  .progress-step::before {
+    left: 26px;
+    right: 4px;
+    top: 8px;
+    bottom: auto;
+    width: auto;
+    height: 2px;
   }
-  return 'muted';
 }
 
-const TABS = [
-  { id: 'all', label: 'All orders' },
-  { id: 'buying', label: 'Buying' },
-  { id: 'selling', label: 'Selling' },
-];
-
-function summarizePayments(payments, type) {
-  const rows = (payments || []).filter((payment) => payment.type === type);
-  if (rows.length === 0) return null;
-  if (rows.some((payment) => payment.status === 'PAID')) return 'PAID';
-  if (rows.some((payment) => payment.status === 'PENDING')) return 'PENDING';
-  if (rows.some((payment) => payment.status === 'RECONCILIATION_REQUIRED')) return 'RECONCILIATION_REQUIRED';
-  if (rows.some((payment) => payment.status === 'FAILED')) return 'FAILED';
-  return rows[0].status;
+@container (min-width: 760px) {
+  .order-party-info { max-width: 220px; }
 }
 
-function progressFor(order) {
-  const steps = ['Order placed', 'Payment', 'Transport', 'Delivered'];
-  const status = String(order.status || '').toUpperCase();
-
-  const paid = order.paymentSummary === 'PAID';
-  const hasTransport = Boolean(order.transportJob);
-  const transportOk = hasTransport && order.transportJob.status !== 'FAILED';
-  const delivered = ['DELIVERED', 'COMPLETED'].includes(status);
-  const isTerminal = ['CANCELLED', 'DISPUTED'].includes(status);
-
-  let idx = 0;
-  if (paid) idx = 1;
-  if (transportOk) idx = 2;
-  if (delivered) idx = 3;
-  if (isTerminal) idx = 0;
-
-  return steps.map((label, i) => {
-    let cls = '';
-    if (i < idx) cls = 'done';
-    else if (i === idx) cls = delivered || isTerminal ? 'done' : 'current';
-    return { label, cls };
-  });
-}
-
-// Colors and layout live in Orders.css (.stat, .stat.tone-*). Only the ring
-// geometry is dynamic, so it stays inline.
-function StatCard({ label, value, total, tone = 'accent' }) {
-  const pct = total > 0 ? Math.min(1, Math.max(0, value / total)) : 0;
-
-  const R = 16;
-  const C = 2 * Math.PI * R;
-  const offset = C * (1 - pct);
-
-  return (
-    <div className={`stat tone-${tone}`} role="group" aria-label={`${label}: ${value}`}>
-      <span className="stat-label">{label}</span>
-
-      <div className="stat-graphic">
-        <svg viewBox="0 0 40 40" aria-hidden="true">
-          <circle className="stat-track" cx="20" cy="20" r={R} fill="none" strokeWidth="4" />
-          <circle
-            className="stat-ring"
-            cx="20"
-            cy="20"
-            r={R}
-            fill="none"
-            strokeWidth="4"
-            strokeLinecap="round"
-            strokeDasharray={C}
-            strokeDashoffset={offset}
-            transform="rotate(-90 20 20)"
-          />
-        </svg>
-
-        <span className="stat-count">{value}</span>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// BUYER-SAFE COORDINATION INDICATOR
-// Derives a status string from the newest non-cancelled inspection request.
-// Never exposes contact data. Renders nothing when no inspection request is
-// present in the payload.
-// ============================================================================
-function coordinationChipFor(order) {
-  const requests = Array.isArray(order?.inspectionRequests)
-    ? order.inspectionRequests.filter((r) => r && r.status !== 'CANCELLED')
-    : [];
-  if (requests.length === 0) return null;
-
-  const sorted = [...requests].sort(
-    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-  );
-  const current = sorted[0];
-
-  const status = String(current.status || '').toUpperCase();
-  if (!['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(status)) return null;
-
-  const summary = current.coordinationStatus;
-  if (!summary) return null;
-
-  if (summary.supersededAt) {
-    return { tone: 'muted', text: 'Handoff released' };
-  }
-  if (summary.sellerSubmitted && summary.inspectorSubmitted) {
-    return { tone: 'success', text: 'Site handoff complete' };
-  }
-  return { tone: 'gold', text: 'Coordination in progress' };
-}
-
-function OrderCard({ order, currentUserId }) {
-  const isBuyer = currentUserId === order.buyerId;
-  const counterparty = isBuyer ? order.seller : order.buyer;
-  const title = order.listing?.title || order.listing?.cropType || 'Order';
-
-  const transportJob = order.transportJob || null;
-  const marketplaceStatus = summarizePayments(order.payments, 'MARKETPLACE');
-  const transportStatus =
-    transportJob?.method === 'HIRE_TRANSPORTER'
-      ? summarizePayments(order.payments, 'TRANSPORT')
-      : null;
-
-  const openDispute = (order.disputes || []).some(
-    (dispute) => dispute.status === 'OPEN' || dispute.status === 'UNDER_REVIEW'
-  );
-
-  const tone = statusTone(order.status);
-  const avatarTone = openDispute ? 'danger' : tone;
-
-  const steps = progressFor({
-    status: order.status,
-    transportJob,
-    paymentSummary: marketplaceStatus,
-  });
-
-  const locationLabel = locationOf(order);
-  const createdLabel = order.createdAt
-    ? new Date(order.createdAt).toLocaleDateString()
-    : null;
-
-  const coordinationChip = coordinationChipFor(order);
-
-  return (
-    <article className={`order-card ${isBuyer ? 'is-buying' : 'is-selling'}`}>
-      <div className="order-card-head">
-        <div className="order-card-head-text">
-          <span className={`eyebrow ${isBuyer ? '' : 'is-selling'}`}>
-            {isBuyer ? 'Buying' : 'Selling'}
-          </span>
-          <h2 className="order-title" title={title}>{title}</h2>
-
-          {locationLabel && (
-            <p className="order-date" title={locationLabel}>
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-                style={{ verticalAlign: '-1px', marginRight: 4 }}
-              >
-                <path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z" />
-                <circle cx="12" cy="10" r="2.6" />
-              </svg>
-              {locationLabel}
-            </p>
-          )}
-        </div>
-
-        <div className="order-card-head-party">
-          <div className="order-party-info">
-            <span className="order-party-role">
-              {isBuyer ? 'Seller' : 'Buyer'}
-            </span>
-            <span className="order-party-name">
-              {counterparty?.name || 'Unknown party'}
-            </span>
-          </div>
-
-          <div className={`order-avatar tone-${avatarTone}`} aria-hidden="true">
-            {initialsOf(counterparty?.name)}
-          </div>
-        </div>
-      </div>
-
-      <div className="card-body">
-        <section className="card-block">
-          <div className="card-block-title">
-            <h3>Order status</h3>
-          </div>
-
-          <div className="card-block-body">
-            <div className="badges">
-              <span className={`status-pill tone-${tone}`}>
-                <span className="status-pill-dot" aria-hidden="true" />
-                {String(order.status || '').replace(/_/g, ' ')}
-              </span>
-
-              {openDispute && (
-                <span className="status-pill tone-danger">
-                  <span className="status-pill-dot" aria-hidden="true" />
-                  Disputed
-                </span>
-              )}
-
-              {marketplaceStatus && (
-                <span className={`status-pill tone-${statusTone(marketplaceStatus)}`}>
-                  Payment: {marketplaceStatus}
-                </span>
-              )}
-
-              {transportJob && (
-                <span className={`status-pill tone-${statusTone(transportJob.status)}`}>
-                  Transport: {transportJob.status}
-                  {transportStatus ? ` · ${transportStatus}` : ''}
-                </span>
-              )}
-
-              {coordinationChip && (
-                <span className={`status-pill tone-${coordinationChip.tone}`}>
-                  <span className="status-pill-dot" aria-hidden="true" />
-                  {coordinationChip.text}
-                </span>
-              )}
-            </div>
-
-            <div className="order-progress" role="list" aria-label="Order progress">
-              {steps.map((step) => (
-                <div
-                  key={step.label}
-                  role="listitem"
-                  className={['progress-step', step.cls].filter(Boolean).join(' ')}
-                >
-                  <span className="progress-dot" aria-hidden="true" />
-                  <span className="progress-label">{step.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="card-block">
-          <div className="card-block-title">
-            <h3>Amount</h3>
-          </div>
-          <div className="card-block-body">
-            <div className="order-price">
-              <span className="price-amount">{money(order.finalPrice)}</span>
-              <span className="price-currency">ETB</span>
-            </div>
-          </div>
-        </section>
-
-        <div className="order-meta">
-          <span className="order-time">
-            {createdLabel ? `Created ${createdLabel}` : 'Recently updated'}
-          </span>
-          <span className="order-code">ORD {shortId(order.id)}</span>
-        </div>
-
-        <div className="order-actions">
-          <Link className="btn-view" to={`/orders/${order.id}`}>
-            View order
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M5 12h14" />
-              <path d="M13 6l6 6-6 6" />
-            </svg>
-          </Link>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-export default function Orders() {
-  const { user } = useAuth();
-  const currentUserId = user?.id || user?.userId || user?._id || null;
-  const authReady = Boolean(currentUserId);
-
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [tab, setTab] = useState('all');
-  const [query, setQuery] = useState('');
-
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      setLoading(true);
-      setError('');
-
-      try {
-        const response = await api.get('/orders');
-        if (alive) setOrders(response.data?.orders || []);
-      } catch (err) {
-        if (alive) setError(getError(err, 'Could not load orders'));
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const stats = useMemo(() => {
-    const total = orders.length;
-    const buying = orders.filter((o) => o.buyerId === currentUserId).length;
-    const selling = orders.filter((o) => o.sellerId === currentUserId).length;
-    const completed = orders.filter((o) =>
-      ['DELIVERED', 'COMPLETED'].includes(String(o.status || '').toUpperCase())
-    ).length;
-    return { total, buying, selling, completed };
-  }, [orders, currentUserId]);
-
-  const filtered = useMemo(() => {
-    let rows = orders;
-
-    if (tab === 'buying') {
-      rows = rows.filter((order) => order.buyerId === currentUserId);
-    } else if (tab === 'selling') {
-      rows = rows.filter((order) => order.sellerId === currentUserId);
-    }
-
-    const q = query.trim().toLowerCase();
-    if (q) {
-      rows = rows.filter((order) => {
-        const title = (order.listing?.title || order.listing?.cropType || '').toLowerCase();
-        const buyer = (order.buyer?.name || '').toLowerCase();
-        const seller = (order.seller?.name || '').toLowerCase();
-        const id = String(order.id || '').toLowerCase();
-        const loc = (locationOf(order) || '').toLowerCase();
-        return (
-          title.includes(q) ||
-          buyer.includes(q) ||
-          seller.includes(q) ||
-          id.includes(q) ||
-          loc.includes(q)
-        );
-      });
-    }
-
-    return rows;
-  }, [orders, tab, query, currentUserId]);
-
-  return (
-    <main className="section orders-page">
-      <div className="container-narrow">
-        <div className="orders-hero">
-          <span className="orders-hero-eyebrow">ORDERS</span>
-          <h1 className="orders-hero-title">Your orders</h1>
-          <p className="orders-hero-text">
-            Every accepted offer or purchase becomes an order. Open one to continue with payment,
-            transport, inspection and delivery.
-          </p>
-        </div>
-
-        {!loading && !error && orders.length > 0 && authReady && (
-          <div className="stats-strip">
-            <StatCard label="Total"     value={stats.total}     total={stats.total} tone="accent"  />
-            <StatCard label="Buying"    value={stats.buying}    total={stats.total} tone="info"    />
-            <StatCard label="Selling"   value={stats.selling}   total={stats.total} tone="gold"    />
-            <StatCard label="Completed" value={stats.completed} total={stats.total} tone="success" />
-          </div>
-        )}
-
-        {!loading && !error && orders.length > 0 && authReady && (
-          <div className="toolbar">
-            <div className="sd-tabs">
-              {TABS.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className={`sd-tab ${tab === t.id ? 'sd-active' : ''}`}
-                  onClick={() => setTab(t.id)}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            <label className="search">
-              <span className="search-icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="M21 21l-4.3-4.3" />
-                </svg>
-              </span>
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search orders…"
-                aria-label="Search orders"
-              />
-            </label>
-          </div>
-        )}
-
-        {loading || !authReady ? (
-          <p className="loading">Loading orders…</p>
-        ) : error ? (
-          <div className="state-card">
-            <div className="state-icon" aria-hidden="true">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 9v4" />
-                <path d="M12 17h.01" />
-                <circle cx="12" cy="12" r="10" />
-              </svg>
-            </div>
-            <h3>Nothing to show</h3>
-            <p>{error}</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="state-card">
-            <div className="state-icon" aria-hidden="true">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 7l9-4 9 4-9 4-9-4z" />
-                <path d="M3 7v10l9 4 9-4V7" />
-                <path d="M12 11v10" />
-              </svg>
-            </div>
-            <h3>{orders.length === 0 ? 'No orders here yet' : 'No orders in this view'}</h3>
-            <p>
-              {orders.length === 0
-                ? 'Once an offer is accepted or a purchase is completed, it will appear on this page ready for payment, transport, inspection and delivery.'
-                : 'Try a different tab or clear the search to see more results.'}
-            </p>
-          </div>
-        ) : (
-          <div className="order-list">
-            {filtered.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                currentUserId={currentUserId}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </main>
-  );
+@media (prefers-reduced-motion: reduce) {
+  .btn-view { transition: none; }
 }
