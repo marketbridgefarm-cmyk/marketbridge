@@ -236,6 +236,9 @@
    the body headers so they always match. */
 .order-card { --card-tone: var(--mb-accent); }
 .order-card.is-selling { --card-tone: var(--mb-ok); }
+/* Same result without the JSX class (kept as its own rule so older browsers
+   that lack :has() don't drop the one above) */
+.order-card:has(.eyebrow.is-selling) { --card-tone: var(--mb-ok); }
 
 /* Title block: eyebrow + title + location on the left, party top right */
 .order-card-head {
@@ -276,7 +279,7 @@
 .order-card .eyebrow::before {
   content: "";
   flex: none;
-  width: 32px;
+  width: 16px;
   height: 3px;
   background: currentColor;
   border-radius: 2px;
@@ -631,7 +634,7 @@
   .order-title { font-size: 22px; }
   .order-card .eyebrow,
   .orders-hero-eyebrow { gap: 10px; letter-spacing: 0.2em; }
-  .order-card .eyebrow::before,
+  .order-card .eyebrow::before { width: 13px; }
   .orders-hero-eyebrow::before { width: 26px; }
   .price-amount { font-size: 28px; }
 }
