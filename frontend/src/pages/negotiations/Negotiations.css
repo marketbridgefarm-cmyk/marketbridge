@@ -23,7 +23,10 @@
   --mb-radius-field: 16px;
 
   background: linear-gradient(135deg, #eef0ff 0%, #dbe8f8 55%, #e6f6ee 100%);
-  min-height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* ---- Page-level section headers ---------------------------------------- */
@@ -51,6 +54,7 @@
 /* ---- Cards (competition group + bilateral deal) ------------------------ */
 .neg-group,
 .neg-card {
+  container-type: inline-size;
   position: relative;
   margin: 0 0 20px;
   padding: 24px;
@@ -442,20 +446,144 @@
 
 .neg-deal-list { display: flex; flex-direction: column; }
 
-/* ---- Wider screens ------------------------------------------------------ */
-@media (min-width: 640px) {
+/* ---- Responsiveness fixes ---------------------------------------------- */
+
+/* Remove any inherited divider above action rows and footers */
+.neg-page .neg-actions,
+.neg-page .neg-group-footer,
+.neg-page .neg-card-footer {
+  border-top: 0;
+  padding-top: 0;
+}
+
+/* Amounts stay aligned and never wrap mid-number */
+.neg-quote-amount,
+.neg-side-value { font-variant-numeric: tabular-nums; }
+
+/* Long dropdown labels truncate instead of widening the card */
+.neg-reason-picker { max-width: 100%; text-overflow: ellipsis; }
+
+/* Filter tabs scroll sideways instead of wrapping or overflowing */
+.neg-page .sd-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.neg-page .sd-tabs::-webkit-scrollbar { display: none; }
+
+.neg-page .sd-tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+/* Updates card (give it className="card neg-notices" in the JSX) */
+.neg-notices {
+  margin: 0 0 20px;
+  padding: 20px;
+  background: var(--mb-card);
+  border: 0;
+  border-radius: var(--mb-radius-card);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+}
+
+.neg-notices-title {
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1.5px solid var(--mb-line);
+  color: var(--mb-ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.neg-notices-item {
+  margin: 0 0 10px;
+  color: var(--mb-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.neg-notices-item strong { color: var(--mb-ink); }
+
+.neg-notices .sd-btn {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 6px;
+  background: transparent;
+  border: 2px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink-2);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Phones: tighter padding and type so content gets the width */
+@media (max-width: 480px) {
+  .neg-group,
+  .neg-card,
+  .neg-notices { padding: 18px; border-radius: 24px; }
+
+  .neg-group-title,
+  .neg-title { font-size: 22px; }
+
+  .neg-eyebrow { gap: 10px; letter-spacing: 0.2em; }
+  .neg-eyebrow::before { width: 26px; }
+  .neg-section-title { font-size: 18px; }
+}
+
+/* Very narrow phones */
+@media (max-width: 360px) {
+  .neg-group,
+  .neg-card,
+  .neg-notices { padding: 14px; }
+
+  .neg-group-title,
+  .neg-title { font-size: 20px; }
+}
+
+/* Card internals respond to the card's own width (works beside a sidebar) */
+@container (min-width: 460px) {
   .neg-actions,
   .neg-quote-actions { flex-direction: row; flex-wrap: wrap; }
 
   .neg-group .sd-btn,
-  .neg-card .sd-btn { width: auto; flex: 1 1 180px; }
+  .neg-card .sd-btn { width: auto; flex: 1 1 160px; }
 
   .neg-reason-picker { flex: 1 1 100%; width: auto; }
-  .neg-counter-picker { flex: 1 1 180px; }
+  .neg-counter-picker { flex: 1 1 160px; }
+
+  .neg-group-footer { flex-direction: row; align-items: center; justify-content: space-between; }
+  .neg-group-footer .neg-notice { flex: 1 1 auto; }
+  .neg-group-footer .btn { width: auto; flex: none; }
+}
+
+@container (min-width: 760px) {
   .neg-quote-row { flex-direction: row; align-items: center; justify-content: space-between; }
   .neg-quote-main { flex: 1 1 auto; min-width: 0; }
-  .neg-quote-actions { flex: 0 1 320px; }
+  .neg-quote-actions { flex: 0 1 360px; }
 }
+
+/* Touch devices: no sticky hover state, no double-tap zoom on buttons */
+@media (hover: none) {
+  .neg-group .sd-btn:hover,
+  .neg-card .sd-btn:hover,
+  .neg-group .btn:hover,
+  .neg-card .btn:hover { background: transparent; }
+}
+
+.neg-group .sd-btn,
+.neg-card .sd-btn,
+.neg-group .btn,
+.neg-card .btn,
+.neg-notices .sd-btn { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
 @media (prefers-reduced-motion: reduce) {
   .neg-group .sd-btn,
