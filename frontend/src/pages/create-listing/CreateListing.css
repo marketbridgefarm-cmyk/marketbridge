@@ -1,17 +1,17 @@
 /* MarketBridge Create Listing — page-scoped styling only. */
 .listing-modal-overlay {
-  --cl-ink: #18251d;
-  --cl-muted: #6b776f;
-  --cl-border: #dce5df;
-  --cl-border-strong: #c9d7ce;
-  --cl-card: #ffffff;
-  --cl-soft: #f7faf8;
-  --cl-green: #176b43;
-  --cl-green-dark: #0f5736;
-  --cl-green-soft: #eaf6ee;
-  --cl-gold: #9a690f;
-  --cl-gold-soft: #fff6e2;
-  --cl-danger: #b42318;
+  --cl-ink: var(--mb-ink);
+  --cl-muted: var(--mb-muted);
+  --cl-border: var(--mb-line-soft);
+  --cl-border-strong: var(--mb-line);
+  --cl-card: var(--mb-surface);
+  --cl-soft: var(--mb-soft);
+  --cl-green: var(--mb-ok);
+  --cl-green-dark: var(--mb-ok);
+  --cl-green-soft: var(--mb-ok-bg);
+  --cl-gold: var(--mb-wait);
+  --cl-gold-soft: var(--mb-wait-bg);
+  --cl-danger: var(--mb-danger);
   color: var(--cl-ink);
 }
 
