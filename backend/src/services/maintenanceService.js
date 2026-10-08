@@ -555,6 +555,10 @@ async function expireStep5Deadlines(now = new Date()) {
         const paymentInFlight = await tx.payment.count({ where: { transportJobId: job.id, type: 'TRANSPORT', status: { in: ['PAID', 'PROCESSING'] } } });
         if (paymentInFlight) return false;
         await tx.transportJob.update({ where: { id: job.id }, data: { status: 'CANCELLED', buyerLoadingDueAt: null, sellerPreparationDueAt: null } });
+        await tx.transportLoadingReport.updateMany({
+          where: { transportJobId: job.id, buyerReviewStatus: 'PENDING' },
+          data: { buyerReviewStatus: 'DECLINED', buyerReviewedAt: now, buyerReviewNotes: 'Buyer loading-approval deadline expired; transport was cancelled.' },
+        });
         await tx.transportQuote.updateMany({
           where: { transportJobId: job.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } },
           data: { status: 'EXPIRED' },
