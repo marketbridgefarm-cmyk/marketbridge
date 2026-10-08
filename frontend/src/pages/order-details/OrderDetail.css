@@ -345,13 +345,22 @@
   text-overflow: ellipsis;
   text-transform: uppercase;
 }
-/* when the meta is already a .od-status-pill, strip the wrapper chrome */
+/* when the meta is already a .od-status-pill or plain status text, strip chrome */
 .order-detail-page .od-card-section-meta.is-bare {
   padding: 0;
   background: none;
   border: 0;
   border-radius: 0;
 }
+
+/* Plain status text in a section head — mirrors Orders.css .header-pill */
+.order-detail-page .od-section-status {
+  font: 800 13px var(--od-font-head);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .order-detail-page .od-text-good {
   color: var(--mb-ok);
 }
