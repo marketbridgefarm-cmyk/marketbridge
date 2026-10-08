@@ -3,15 +3,6 @@
    --------------------------------------------------------------------------
    Order detail page, restyled to match the MarketBridge card language used
    by Orders.jsx / Orders.css and the reference order-summary mockup.
-
-     • Single warm accent (#c2410c)
-     • 28px card radius, white surface, one soft shadow
-     • Card head: eyebrow + title above the divider; description below it
-     • Head-side stacks: small uppercase label on top, value/pill below
-     • Sub-headers = 1.5px bottom line only
-     • Vertical progress rail with green / orange bullseye / gray states
-     • Details facts flow in 2 / 3 / 4 columns based on the card's width,
-       with no wrapper box, so the card stays compact
    ========================================================================== */
 
 
@@ -33,7 +24,6 @@
   --mb-radius-card:    28px;
   --mb-radius-field:   16px;
 
-  /* Aliases so existing component class rules keep resolving */
   --od-ink:            var(--mb-ink);
   --od-text:           var(--mb-ink-2);
   --od-muted:          var(--mb-muted);
@@ -182,21 +172,20 @@
    Grid layout:
      row 1:  eyebrow          | head-side (label)
      row 2:  title            | head-side (value / pill)
-     row 3:  ─── divider ───  (full-width, with the accent segment)
-     row 4:  subtitle         (full-width, BELOW the divider)
-   The inner `.od-card-head-main` uses `display: contents` so its children
-   become direct grid items of `.od-card-head`.
+     row 3:  ─── divider ───  (full-width)
+     row 4:  subtitle         (full-width, below the divider)
    ------------------------------------------------------------------------ */
 .order-detail-page .od-card-head {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
   align-items: start;
   column-gap: 16px;
   row-gap: 0;
   padding: 0;
   margin: 0 0 22px;
   border-bottom: 0;
+  min-width: 0;
 }
 
 .order-detail-page .od-card-head-main { display: contents; }
@@ -206,13 +195,22 @@
   grid-column: 1;
   grid-row: 1;
   margin: 0 0 8px;
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
-/* Title */
+/* Title — wrapped and clipped-proof */
 .order-detail-page .od-card-head .od-card-title {
   grid-column: 1;
   grid-row: 2;
   min-width: 0;
+  max-width: 100%;
+  white-space: normal !important;
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  hyphens: none;
 }
 
 /* Right-hand side (status, party, due date...) */
@@ -220,9 +218,11 @@
   grid-column: 2;
   grid-row: 1 / 3;
   align-self: start;
+  justify-self: end;
+  min-width: 0;
 }
 
-/* Divider row: 2px line + 44px accent segment, drawn as one pseudo */
+/* Divider row: 2px line + 44px accent segment */
 .order-detail-page .od-card-head::before {
   content: '';
   grid-column: 1 / -1;
@@ -235,7 +235,6 @@
     linear-gradient(var(--mb-line), var(--mb-line)) left center / 100% 2px no-repeat;
 }
 
-/* Suppress the old absolutely-positioned accent bar */
 .order-detail-page .od-card-head::after { content: none; }
 
 /* Subtitle lives BELOW the divider */
@@ -243,6 +242,7 @@
   grid-column: 1 / -1;
   grid-row: 4;
   margin: 12px 0 0;
+  min-width: 0;
 }
 
 .order-detail-page .od-eyebrow {
@@ -264,13 +264,11 @@
 }
 .order-detail-page .od-eyebrow.is-selling { color: var(--mb-ok); }
 
-/* Title: bolder, larger, tighter — it now anchors the head on its own */
 .order-detail-page .od-card-title {
   margin: 0;
   color: var(--mb-ink);
   font: 800 clamp(24px, 5.2vw, 30px) / 1.15 var(--od-font-head);
   letter-spacing: -0.5px;
-  overflow-wrap: anywhere;
 }
 
 .order-detail-page .od-card-subtitle {
@@ -280,21 +278,17 @@
   overflow-wrap: anywhere;
 }
 
-/* ---- 4c. Head side (top right) -----------------------------------------
-   Stacks: small uppercase label on top, value/pill below.
-   Matches the Payment Center header.
-   ------------------------------------------------------------------------ */
+/* ---- 4c. Head side (top right) ----------------------------------------- */
 .order-detail-page .od-card-head-side {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
-  max-width: 48%;
+  max-width: 42%;
   min-width: 0;
   text-align: right;
 }
 
-/* Small uppercase label (matches the eyebrow's look) */
 .order-detail-page .od-card-side-label {
   display: block;
   color: var(--od-accent, var(--mb-accent));
@@ -304,7 +298,6 @@
   white-space: nowrap;
 }
 
-/* Value (used under the label) */
 .order-detail-page .od-card-side-value {
   display: block;
   color: var(--mb-ink);
@@ -313,7 +306,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Party variant: keep the two-column internal layout (info + avatar) */
 .order-detail-page .od-card-side-party {
   display: flex;
   flex-direction: row;
@@ -358,8 +350,6 @@
 
 /* ==========================================================================
    5. SECTIONS INSIDE CARDS
-   --------------------------------------------------------------------------
-   Section header = 1.5px bottom line only.
    ========================================================================== */
 .order-detail-page .od-card-section {
   padding: 0;
@@ -405,11 +395,7 @@
 
 /* ==========================================================================
    6. FACTS, FINDINGS, "YOU" PILL
-   --------------------------------------------------------------------------
-   No wrapper box. Facts flow in 2 / 3 / 4 columns based on the card's own
-   width (see container queries in §24), so the card stays compact.
    ========================================================================== */
-
 .order-detail-page .od-detail-facts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -514,7 +500,6 @@
   font-weight: 700;
 }
 
-/* Progress tracker (vertical rail + bullseye current state) */
 .order-detail-page .order-progress {
   display: flex;
   flex-direction: column;
@@ -970,7 +955,6 @@
 }
 .order-detail-page .payout-party-line .od-party-avatar--sm { order: -1; }
 
-/* OverviewCard hero avatar */
 .order-detail-page .od-card-overview .od-party-avatar {
   width: 56px;
   height: 56px;
@@ -1596,6 +1580,7 @@
   .order-detail-page .od-buyer-confidence    { gap: 12px; padding: 16px; }
   .order-detail-page .od-confidence-icon     { flex-basis: 34px; width: 34px; height: 34px; font-size: 18px; }
   .order-detail-page .od-confidence-promises { display: grid; gap: 8px; }
+  .order-detail-page .od-card-head-side      { max-width: 46%; }
 }
 
 @media (max-width: 560px) {
@@ -1687,31 +1672,20 @@
 
 
 /* ==========================================================================
-   24. CONTAINER QUERIES (card internals react to the card's own width)
-   --------------------------------------------------------------------------
-   Facts go 2 → 3 → 4 columns as the card gets wider. Because `.card` has
-   `container-type: inline-size`, these fire based on the card's own width,
-   not the viewport — so a wide full-width card gets 4 columns even on a
-   laptop, while a narrow grid-column card stays at 2.
+   24. CONTAINER QUERIES
    ========================================================================== */
-
-/* Medium-wide card: 3 columns */
 @container (min-width: 520px) {
   .order-detail-page .od-detail-facts {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 20px 22px;
   }
 }
-
-/* Wide card: 4 columns */
 @container (min-width: 760px) {
   .order-detail-page .od-detail-facts {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 22px 24px;
   }
 }
-
-/* Wide card: give the party info more room */
 @container (min-width: 720px) {
   .order-detail-page .od-card-side-party > div { max-width: 220px; }
 }
@@ -1791,7 +1765,6 @@
   -webkit-overflow-scrolling: touch;
 }
 
-/* Neutralize the Card chrome inside the dialog */
 .od-modal-body > .card {
   container-type: normal;
   background: transparent;
