@@ -294,6 +294,9 @@ export default function ActionCenter({
 
       <h2 className="od-next-title" id="od-next-title">{title}</h2>
       {text && <p className="od-next-text">{text}</p>}
+      {next?.deadlineAt && (
+        <p className="od-next-text" role="status">Deadline: {new Date(next.deadlineAt).toLocaleString()}</p>
+      )}
 
       {error && <div className="od-next-error" role="alert">{error}</div>}
 
