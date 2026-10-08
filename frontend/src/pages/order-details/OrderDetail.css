@@ -222,7 +222,7 @@
   min-width: 0;
 }
 
-/* Divider row: 2px line + 44px accent segment */
+/* Divider row: 1.5px line + 44px accent segment */
 .order-detail-page .od-card-head::before {
   content: '';
   grid-column: 1 / -1;
@@ -245,7 +245,7 @@
   min-width: 0;
 }
 
-/* Eyebrow text + accent bar. Bar halved to 16×2px. */
+/* Eyebrow text + accent bar */
 .order-detail-page .od-eyebrow {
   display: flex;
   align-items: center;
@@ -265,11 +265,12 @@
 }
 .order-detail-page .od-eyebrow.is-selling { color: var(--mb-ok); }
 
+/* Base title — reduced */
 .order-detail-page .od-card-title {
   margin: 0;
   color: var(--mb-ink);
-  font: 800 clamp(24px, 5.2vw, 30px) / 1.15 var(--od-font-head);
-  letter-spacing: -0.5px;
+  font: 800 clamp(20px, 4.4vw, 24px) / 1.15 var(--od-font-head);
+  letter-spacing: -0.4px;
 }
 
 .order-detail-page .od-card-subtitle {
@@ -469,7 +470,7 @@
   align-items: center;
   gap: 6px;
   padding: 5px 14px;
-  background: var(--od-neutral-bg);
+  background: transparent;
   border: 1px solid #e2e8f0;
   border-radius: 999px;
   color: var(--od-neutral);
@@ -488,12 +489,12 @@
 .order-detail-page .od-tone-bad     { background: #fef2f2; border-color: #fecaca; color: var(--mb-danger); }
 .order-detail-page .od-tone-wait    { background: #fffbeb; border-color: #fde68a; color: #92400e; }
 .order-detail-page .od-tone-info    { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
-.order-detail-page .od-tone-neutral { background: var(--od-neutral-bg); border-color: #e2e8f0; color: var(--od-neutral); }
+.order-detail-page .od-tone-neutral { background: transparent; border-color: #e2e8f0; color: var(--od-neutral); }
 
 .order-detail-page .badge {
   display: inline-block;
   padding: 3px 10px;
-  background: var(--od-neutral-bg);
+  background: transparent;
   border: 1px solid #e2e8f0;
   border-radius: 999px;
   color: var(--od-neutral);
@@ -570,7 +571,7 @@
 /* ==========================================================================
    8. BUTTONS & ACTIONS
    --------------------------------------------------------------------------
-   All borders reduced to 1px. Primary and light buttons are outline-only.
+   All buttons: transparent background (inherits card colour), 1px border.
    ========================================================================== */
 .order-detail-page .btn {
   display: inline-flex;
@@ -579,7 +580,8 @@
   gap: 8px;
   min-height: 48px;
   padding: 0 18px;
-  background: transparent;
+  background: transparent !important;
+  background-color: transparent !important;
   border: 1px solid var(--mb-line);
   border-radius: var(--mb-radius-field);
   color: var(--mb-ink-2);
@@ -590,18 +592,20 @@
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  box-shadow: none;
 }
-.order-detail-page .btn:hover:not(:disabled) { background: rgba(241, 245, 249, 0.55); }
+.order-detail-page .btn:hover:not(:disabled) { background-color: rgba(241, 245, 249, 0.55) !important; }
 .order-detail-page .btn:disabled             { opacity: 0.55; cursor: not-allowed; }
 
 /* Primary: transparent, thin accent border, accent text */
 .order-detail-page .btn-primary {
-  background: transparent;
+  background: transparent !important;
+  background-color: transparent !important;
   border: 1px solid var(--mb-accent);
   color: var(--mb-accent);
 }
 .order-detail-page .btn-primary:hover:not(:disabled) {
-  background: var(--mb-accent-tint);
+  background-color: var(--mb-accent-tint) !important;
   border-color: var(--mb-accent);
   color: var(--mb-accent-ink);
 }
@@ -611,21 +615,24 @@
 }
 
 .order-detail-page .btn-light {
-  background: transparent;
+  background: transparent !important;
+  background-color: transparent !important;
   border-color: var(--mb-line);
   color: var(--mb-ink-2);
 }
 .order-detail-page .btn-light:hover:not(:disabled) {
-  background: var(--od-neutral-bg);
+  background-color: var(--od-neutral-bg) !important;
   border-color: var(--mb-line);
 }
 
 .order-detail-page .btn-outline {
+  background: transparent !important;
+  background-color: transparent !important;
   border-color: var(--od-bad-line);
   color: var(--mb-danger);
 }
 .order-detail-page .btn-outline:hover:not(:disabled) {
-  background: var(--od-bad-bg);
+  background-color: var(--od-bad-bg) !important;
   border-color: #fca5a5;
 }
 
@@ -712,7 +719,7 @@
 .order-detail-page .alert {
   margin-top: 14px;
   padding: 14px 16px;
-  background: #fff;
+  background: transparent;
   border: 1px solid var(--mb-line);
   border-radius: var(--od-radius);
   font-size: 14px;
@@ -789,7 +796,7 @@
 .order-detail-page .od-work-details {
   margin-top: 14px;
   padding: 14px;
-  background: #fff;
+  background: transparent;
   border: 1px solid var(--mb-line);
   border-radius: var(--od-radius);
   overflow-wrap: anywhere;
@@ -821,7 +828,7 @@
   width: 100%;
   min-height: 180px;
   padding: 8px;
-  background: #fff;
+  background: transparent;
   border: 1px solid var(--mb-line);
   border-radius: var(--mb-radius-field);
   color: var(--mb-ink);
@@ -844,7 +851,7 @@
   gap: 12px;
   padding: 16px;
   margin-bottom: 12px;
-  background: #fff;
+  background: transparent;
   border: 1px solid var(--mb-line);
   border-radius: var(--od-radius);
 }
@@ -952,7 +959,7 @@
   place-items: center;
   width: 44px;
   height: 44px;
-  background: #f1f5f9;
+  background: transparent;
   border: 1px solid #e2e8f0;
   border-radius: 50%;
   color: var(--mb-ink-2);
@@ -971,7 +978,7 @@
 .order-detail-page .od-card-overview .od-party-avatar {
   width: 56px;
   height: 56px;
-  background: #f1f5f9;
+  background: transparent;
   border: 1px solid #e2e8f0;
   color: var(--mb-ink);
   font: 800 18px var(--od-font-head);
@@ -1093,7 +1100,8 @@
   width: 100%;
   min-height: 54px;
   padding: 0 22px;
-  background: transparent;
+  background: transparent !important;
+  background-color: transparent !important;
   border: 1px solid #4ade80;
   border-radius: var(--mb-radius-field);
   color: #4ade80;
@@ -1101,7 +1109,7 @@
   cursor: pointer;
   transition: background-color 0.15s ease, transform 0.1s ease;
 }
-.order-detail-page .od-next-cta:hover         { background: rgba(74, 222, 128, 0.14); }
+.order-detail-page .od-next-cta:hover         { background-color: rgba(74, 222, 128, 0.14) !important; }
 .order-detail-page .od-next-cta:active        { transform: translateY(1px); }
 .order-detail-page .od-next-cta:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 .order-detail-page .od-next-cta-arrow         { font-size: 18px; }
@@ -1220,14 +1228,15 @@
 .order-detail-page .od-next-item-go {
   min-height: 40px;
   padding: 0 16px;
-  background: transparent;
+  background: transparent !important;
+  background-color: transparent !important;
   border: 1px solid #2b3f57;
   border-radius: 12px;
   color: #e2e8f0;
   font: 700 13px var(--od-font-body);
   cursor: pointer;
 }
-.order-detail-page .od-next-item-go:hover { background: #162a40; }
+.order-detail-page .od-next-item-go:hover { background-color: #162a40 !important; }
 
 .order-detail-page .od-flash {
   outline: 3px solid var(--od-accent, var(--mb-accent));
@@ -1275,7 +1284,7 @@
   width: 100%;
   min-height: 44px;
   padding: 8px 12px;
-  background: #fff;
+  background: transparent;
   border: 1px solid var(--mb-line);
   border-radius: var(--od-radius-sm);
   color: var(--mb-ink);
@@ -1368,7 +1377,7 @@
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px 16px;
   padding: 14px;
-  background: #fff;
+  background: transparent;
   border: 1px solid var(--mb-line);
   border-radius: var(--od-radius);
 }
@@ -1409,7 +1418,7 @@
 .order-detail-page .od-decision-form-grid select {
   min-height: 44px;
   padding: 8px 12px;
-  background: #fff;
+  background: transparent;
   border: 1px solid var(--mb-line);
   border-radius: var(--od-radius-sm);
   color: var(--mb-ink);
@@ -1417,7 +1426,7 @@
 }
 .order-detail-page .od-decision-more {
   padding: 10px 14px;
-  background: #fff;
+  background: transparent;
   border: 1px solid var(--mb-line);
   border-radius: var(--od-radius-sm);
 }
@@ -1476,12 +1485,10 @@
 
 /* ==========================================================================
    20. OVERVIEW CARD FINAL TOUCHES
+   --------------------------------------------------------------------------
+   Overview title is intentionally NOT bigger than the base card title
+   anymore — it inherits the reduced size.
    ========================================================================== */
-.order-detail-page .od-card-overview .od-card-title {
-  font-size: clamp(26px, 6.4vw, 32px);
-  line-height: 1.1;
-}
-
 .order-detail-page .od-card-overview .od-card-created {
   margin: 20px 0 0;
   color: var(--mb-muted);
@@ -1581,7 +1588,7 @@
 
 @media (max-width: 360px) {
   .order-detail-page { --od-pad: 18px; --od-gap: 14px; }
-  .order-detail-page .od-card-title        { font-size: 22px; }
+  .order-detail-page .od-card-title        { font-size: 20px; }
   .order-detail-page .order-progress-label { font-size: 14px; }
   .order-detail-page .payout-table th,
   .order-detail-page .payout-table td      { padding: 12px 4px; }
@@ -1668,7 +1675,7 @@
   .order-detail-page .od-page-grid,
   .order-detail-page .od-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-  .order-detail-page .od-card-title        { font-size: 28px; }
+  .order-detail-page .od-card-title        { font-size: 24px; }
   .order-detail-page .order-progress-label { font-size: 15.5px; }
 
   .order-detail-page .card.od-next { padding: 32px 40px 14px; }
