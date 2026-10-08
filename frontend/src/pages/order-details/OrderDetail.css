@@ -7,6 +7,7 @@
      • Single warm accent (#c2410c)
      • 28px card radius, white surface, one soft shadow
      • Card head: eyebrow + title above the divider; description below it
+     • Head-side stacks: small uppercase label on top, value/pill below
      • Sub-headers = 1.5px bottom line only
      • Vertical progress rail with green / orange bullseye / gray states
      • Details facts flow in 2 / 3 / 4 columns based on the card's width,
@@ -179,8 +180,8 @@
 
 /* ---- 4b. Head layout ----------------------------------------------------
    Grid layout:
-     row 1:  eyebrow          | head-side
-     row 2:  title            | head-side
+     row 1:  eyebrow          | head-side (label)
+     row 2:  title            | head-side (value / pill)
      row 3:  ─── divider ───  (full-width, with the accent segment)
      row 4:  subtitle         (full-width, BELOW the divider)
    The inner `.od-card-head-main` uses `display: contents` so its children
@@ -279,48 +280,59 @@
   overflow-wrap: anywhere;
 }
 
-/* ---- 4c. Head side (top right) ----------------------------------------- */
+/* ---- 4c. Head side (top right) -----------------------------------------
+   Stacks: small uppercase label on top, value/pill below.
+   Matches the Payment Center header.
+   ------------------------------------------------------------------------ */
 .order-detail-page .od-card-head-side {
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
   max-width: 48%;
   min-width: 0;
   text-align: right;
 }
 
+/* Small uppercase label (matches the eyebrow's look) */
 .order-detail-page .od-card-side-label {
-  color: var(--mb-muted);
-  font: 700 13px var(--od-font-head);
+  display: block;
+  color: var(--od-accent, var(--mb-accent));
+  font: 700 12px / 1.2 var(--od-font-head);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
+/* Value (used under the label) */
 .order-detail-page .od-card-side-value {
   display: block;
   color: var(--mb-ink);
   font: 800 15px var(--od-font-head);
+  letter-spacing: -0.1px;
   overflow-wrap: anywhere;
 }
 
+/* Party variant: keep the two-column internal layout (info + avatar) */
 .order-detail-page .od-card-side-party {
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 10px;
   min-width: 0;
+  max-width: 100%;
 }
 .order-detail-page .od-card-side-party > div {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   min-width: 0;
-  max-width: 160px;
+  max-width: 180px;
 }
 .order-detail-page .od-card-side-party .od-card-side-label {
   color: var(--mb-muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.18em;
 }
 .order-detail-page .od-card-side-party .od-card-side-value {
   max-width: 100%;
@@ -469,12 +481,13 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
+  padding: 5px 14px;
   background: var(--od-neutral-bg);
   border: 1.5px solid #e2e8f0;
   border-radius: 999px;
   color: var(--od-neutral);
   font: 700 13px / 1.3 var(--od-font-body);
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 .order-detail-page .od-status-pill-dot {
