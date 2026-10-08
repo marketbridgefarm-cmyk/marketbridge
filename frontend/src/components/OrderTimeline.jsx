@@ -1,391 +1,154 @@
-/* ============================================================
-   MarketBridge — OrderTimeline  (components/OrderTimeline.css)
-   Centered rail with alternating content:
-       step 1 (odd)   →  content to the RIGHT of the rail
-       step 2 (even)  →  content to the LEFT of the rail
-       step 3 (odd)   →  content to the RIGHT of the rail
-       …  alternating to the last step
+import React from 'react';
+import './OrderTimeline.css';
 
-   The rail is drawn as a background-image on the row itself
-   (2px wide, positioned at 50% of the row). This guarantees
-   exactly ONE line, and the dots (which have opaque fills)
-   naturally occlude it where they sit.
+// ============================================================================
+// ORDER TIMELINE — centered rail, stages alternate left / right
+// ============================================================================
+// Data comes from the `timeline` array returned by GET /orders/:id/workflow.
+// Steps that don't apply to an order are absent from the array.
+// Dots are inline SVG (checkmark / pulsing circle / empty ring) so state is
+// not conveyed by color alone (WCAG 1.4.1). SVGs use currentColor.
+// ============================================================================
 
-   The Activity history row uses a single-column layout: its
-   dot sits on the rail at the top, and the details button
-   sits centered below.
-   ============================================================ */
+const formatDate = (value) => {
+  if (!value) return null;
+  try {
+    return new Date(value).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return null;
+  }
+};
 
-/* ── Defensive reset ──────────────────────────────────────── */
-.order-timeline::before,
-.order-timeline::after,
-.order-timeline-step::before {
-  content: none !important;
-  display: none !important;
-  background: none !important;
-  border: 0 !important;
-  width: 0 !important;
-  height: 0 !important;
-}
-
-.order-timeline {
-  --ot-accent:      var(--mb-ok);
-  --ot-accent-2:    var(--mb-ok);
-  --ot-accent-soft: var(--mb-ok-bg);
-  --ot-accent-line: var(--mb-ok-border);
-
-  --ot-ink:         var(--mb-ink);
-  --ot-ink-soft:    var(--mb-ink-2);
-  --ot-muted:       var(--mb-muted);
-  --ot-muted-2:     #94a3b8;
-
-  --ot-line:        var(--mb-line);
-  --ot-line-soft:   var(--mb-line-soft);
-
-  --ot-info:        var(--mb-info);
-  --ot-info-soft:   var(--mb-info-bg);
-
-  --ot-dot-bg:      #ffffff;
-  --ot-dot-mark:    #ffffff;
-
-  --ot-ease:        cubic-bezier(.2, .7, .3, 1);
-
-  --ot-dot-size:    26px;
-  --ot-col-gap:     18px;
-  --ot-row-gap:     22px;
-
-  position: relative;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-
-  display: flex;
-  flex-direction: column;
-}
-
-/* ── Each step — 3-column grid, centered rail ─────────── */
-
-.order-timeline-step {
-  --ot-rail: var(--ot-line);
-
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--ot-dot-size) minmax(0, 1fr);
-  column-gap: var(--ot-col-gap);
-  align-items: start;
-  padding: 0 0 var(--ot-row-gap);
-
-  background-image: linear-gradient(
-    to bottom,
-    var(--ot-rail) 0,
-    var(--ot-rail) 100%
+function DotComplete() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+      <circle cx="13" cy="13" r="13" fill="currentColor" />
+      <path
+        d="M7.5 13.5l4 4 7-8"
+        stroke="var(--ot-dot-mark, #fff)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
-  background-size: 2px 100%;
-  background-position: 50% 0;
-  background-repeat: no-repeat;
 }
 
-.order-timeline-step.is-complete { --ot-rail: var(--ot-accent); }
-.order-timeline-step.is-current  { --ot-rail: var(--ot-accent); }
-.order-timeline-step.is-recorded { --ot-rail: var(--ot-info); }
-
-.order-timeline-step:last-child {
-  padding-bottom: 0;
-  background-size: 2px calc(var(--ot-dot-size) / 2);
+function DotCurrent() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+      <circle cx="13" cy="13" r="12" stroke="currentColor" strokeWidth="2" fill="var(--ot-dot-bg, #fff)" />
+      <circle cx="13" cy="13" r="5" fill="currentColor" />
+    </svg>
+  );
 }
 
-/* ── Dot column ────────────────────────────────────────── */
-
-.order-timeline-dot {
-  grid-column: 2;
-  grid-row: 1;
-  justify-self: center;
-  align-self: start;
-
-  position: relative;
-  z-index: 1;
-
-  width: var(--ot-dot-size);
-  height: var(--ot-dot-size);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 0;
-  flex: 0 0 auto;
+function DotPending() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+      <circle cx="13" cy="13" r="12" stroke="currentColor" strokeWidth="2" fill="var(--ot-dot-bg, #fff)" />
+    </svg>
+  );
 }
 
-.order-timeline-dot svg {
-  display: block;
-  width: var(--ot-dot-size);
-  height: var(--ot-dot-size);
+function DotRecorded() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+      <circle cx="13" cy="13" r="12" stroke="currentColor" strokeWidth="2" fill="var(--ot-dot-bg, #fff)" />
+      <circle cx="13" cy="13" r="4" fill="currentColor" />
+    </svg>
+  );
 }
 
-.order-timeline-step.is-complete .order-timeline-dot { color: var(--ot-accent); }
-.order-timeline-step.is-current  .order-timeline-dot { color: var(--ot-accent); }
-.order-timeline-step.is-pending  .order-timeline-dot { color: var(--ot-line); }
-.order-timeline-step.is-recorded .order-timeline-dot {
-  color: var(--ot-info);
-  --ot-dot-bg: var(--ot-info-soft);
-}
+// Even index → left of the line, odd → right.
+const sideClass = (index) => (index % 2 === 0 ? 'is-left' : 'is-right');
 
-.order-timeline-step.is-current .order-timeline-dot svg {
-  animation: order-timeline-pulse 2s ease-in-out infinite;
-  transform-origin: center;
-}
-@keyframes order-timeline-pulse {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.08); }
-}
+export default function OrderTimeline({ steps, events = [] }) {
+  const milestoneSteps = Array.isArray(steps) ? steps.filter((step) => step && typeof step === 'object') : [];
+  const durableEvents = Array.isArray(events) ? events.filter((event) => event && typeof event === 'object') : [];
 
-/* ── Content column — alternates left / right ──────────── */
+  if (milestoneSteps.length === 0 && durableEvents.length === 0) return null;
 
-.order-timeline-content {
-  grid-row: 1;
-  min-width: 0;
-  padding-top: 2px;
-}
+  const lastCompletedIndex = milestoneSteps.reduce(
+    (acc, step, index) => (step.completed ? index : acc),
+    -1
+  );
 
-.order-timeline-step:nth-child(odd) .order-timeline-content {
-  grid-column: 3;
-  text-align: left;
-}
+  return (
+    <ol className="order-timeline" aria-label="Order milestone progress">
+      {milestoneSteps.map((step, index) => {
+        const explicitState = String(step.state || '').toUpperCase();
+        const isComplete = explicitState === 'COMPLETED' || Boolean(step.completed);
+        const isCurrent =
+          explicitState === 'CURRENT' ||
+          (!step.completed && index === lastCompletedIndex + 1);
+        const stateClass = isComplete ? 'is-complete' : isCurrent ? 'is-current' : 'is-pending';
 
-.order-timeline-step:nth-child(even) .order-timeline-content {
-  grid-column: 1;
-  text-align: right;
-}
+        const at = formatDate(step.at);
+        const label = isComplete
+          ? 'Completed milestone'
+          : isCurrent
+            ? 'Current milestone'
+            : 'Upcoming milestone';
 
-.order-timeline-content--wide { width: 100%; }
+        return (
+          <li
+            key={step.code || `milestone-${index}`}
+            className={`order-timeline-step ${stateClass} ${sideClass(index)}`}
+          >
+            <span className="order-timeline-dot" role="img" aria-label={label}>
+              {step.completed ? <DotComplete /> : isCurrent ? <DotCurrent /> : <DotPending />}
+            </span>
 
-/* ── Activity history row — centered full width ────────── */
-/* The dot sits at the top center (on the rail). The
-   details button sits below, centered horizontally. */
+            <div className="order-timeline-content">
+              <div className="order-timeline-label">{step.label}</div>
+              {at && <div className="order-timeline-date">{at}</div>}
+              {step.detail && <div className="order-timeline-detail">{step.detail}</div>}
+            </div>
+          </li>
+        );
+      })}
 
-.order-timeline-step.is-recorded {
-  grid-template-columns: 1fr;
-  justify-items: center;
-  text-align: center;
-  padding-top: 6px;
-}
+      {durableEvents.length > 0 && (
+        <li
+          className={`order-timeline-step is-recorded ${sideClass(milestoneSteps.length)}`}
+        >
+          <span className="order-timeline-dot" aria-hidden="true">
+            <DotRecorded />
+          </span>
 
-.order-timeline-step.is-recorded .order-timeline-dot {
-  grid-column: 1;
-  grid-row: 1;
-  justify-self: center;
-  align-self: start;
-  margin-bottom: 14px;
-}
+          <div className="order-timeline-content">
+            <details className="order-timeline-events">
+              <summary className="order-timeline-events-summary">
+                <span className="order-timeline-events-label">Activity history</span>
+                <span className="order-timeline-events-count">{durableEvents.length}</span>
+                <span className="order-timeline-events-chevron" aria-hidden="true">▾</span>
+              </summary>
 
-.order-timeline-step.is-recorded .order-timeline-content,
-.order-timeline-step.is-recorded .order-timeline-content--wide {
-  grid-column: 1;
-  grid-row: 2;
-  width: 100%;
-  text-align: center;
-  padding-top: 0;
-}
-
-/* ── Labels, dates, details ────────────────────────────── */
-
-.order-timeline-label {
-  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: -.15px;
-  line-height: 1.3;
-  color: var(--ot-ink);
-  margin: 0 0 3px;
-  overflow-wrap: anywhere;
-}
-
-.order-timeline-step.is-pending .order-timeline-label {
-  color: var(--ot-muted);
-  font-weight: 700;
-}
-
-.order-timeline-date {
-  font: 600 12px/1.4 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--ot-muted);
-  letter-spacing: .01em;
-  margin-bottom: 2px;
-  font-variant-numeric: tabular-nums;
-}
-
-.order-timeline-detail {
-  font: 400 13px/1.5 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--ot-muted);
-  margin-top: 2px;
-  overflow-wrap: anywhere;
-}
-
-/* ── Activity history details ─────────────────────────── */
-
-.order-timeline-events {
-  margin: 0 auto;
-  max-width: 480px;
-  text-align: left;
-}
-
-.order-timeline-events-summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border: 1px solid var(--ot-line);
-  border-radius: 10px;
-  background: #fff;
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-  font-family: var(--mb-font-body, 'DM Sans', sans-serif);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ot-ink);
-  transition: border-color .15s var(--ot-ease),
-              background .15s var(--ot-ease);
-}
-.order-timeline-events-summary::-webkit-details-marker { display: none; }
-.order-timeline-events-summary:hover {
-  border-color: rgba(30, 158, 90, .35);
-  background: var(--ot-accent-soft);
-}
-.order-timeline-events-summary:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(30, 158, 90, .18);
-}
-
-.order-timeline-events-label { flex: 1 1 auto; }
-
-.order-timeline-events-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  height: 20px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--ot-info-soft);
-  color: var(--ot-info);
-  font: 800 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.order-timeline-events-chevron {
-  color: var(--ot-muted);
-  font-size: 12px;
-  line-height: 1;
-  transition: transform .22s var(--ot-ease);
-}
-.order-timeline-events[open] .order-timeline-events-chevron {
-  transform: rotate(180deg);
-}
-
-.order-timeline-events-list {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 280px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-.order-timeline-events-list::-webkit-scrollbar { width: 6px; }
-.order-timeline-events-list::-webkit-scrollbar-thumb {
-  background: var(--ot-line);
-  border-radius: 3px;
-}
-
-.order-timeline-event {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--mb-soft);
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--ot-ink-soft);
-}
-
-.order-timeline-event-type {
-  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', sans-serif);
-  font-weight: 800;
-  font-size: 11.5px;
-  letter-spacing: .02em;
-  color: var(--ot-ink);
-  text-transform: uppercase;
-}
-
-.order-timeline-event-actor { color: var(--ot-muted); }
-
-.order-timeline-event-actor::before {
-  content: '—';
-  margin-right: 6px;
-  color: var(--ot-muted-2);
-}
-
-.order-timeline-event-time {
-  margin-left: auto;
-  font: 600 11.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--ot-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* ── Responsive ────────────────────────────────────────── */
-
-@media (max-width: 640px) {
-  .order-timeline {
-    --ot-dot-size: 22px;
-    --ot-col-gap:  12px;
-    --ot-row-gap:  18px;
-  }
-
-  .order-timeline-label  { font-size: 13px; }
-  .order-timeline-date   { font-size: 11.5px; }
-  .order-timeline-detail { font-size: 12px; line-height: 1.45; }
-
-  .order-timeline-step.is-recorded .order-timeline-dot {
-    margin-bottom: 12px;
-  }
-
-  .order-timeline-events-summary {
-    font-size: 12px;
-    padding: 8px 12px;
-  }
-
-  .order-timeline-event {
-    font-size: 11.5px;
-    padding: 6px 10px;
-  }
-  .order-timeline-event-time {
-    margin-left: 0;
-    flex-basis: 100%;
-  }
-}
-
-@media (max-width: 420px) {
-  .order-timeline {
-    --ot-col-gap: 8px;
-    --ot-row-gap: 16px;
-  }
-
-  .order-timeline-label  { font-size: 12.5px; }
-  .order-timeline-detail { font-size: 11.5px; }
-}
-
-/* ── Reduced motion ────────────────────────────────────── */
-
-@media (prefers-reduced-motion: reduce) {
-  .order-timeline-step.is-current .order-timeline-dot svg {
-    animation: none;
-  }
-  .order-timeline-events-summary,
-  .order-timeline-events-chevron {
-    transition: none;
-  }
+              <ul className="order-timeline-events-list">
+                {durableEvents.map((event) => (
+                  <li key={event.id || `${event.type || 'event'}-${event.at || ''}`} className="order-timeline-event">
+                    <span className="order-timeline-event-type">
+                      {String(event.type || '').replace(/_/g, ' ')}
+                    </span>
+                    {event.actor?.name && (
+                      <span className="order-timeline-event-actor">{event.actor.name}</span>
+                    )}
+                    {formatDate(event.at) && (
+                      <span className="order-timeline-event-time">{formatDate(event.at)}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </div>
+        </li>
+      )}
+    </ol>
+  );
 }
