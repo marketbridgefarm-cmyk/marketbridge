@@ -38,6 +38,8 @@
    24.  Accessibility & motion
    25.  Responsive breakpoints
    26.  Print
+   27.  Overview card restyle
+   28.  Inspection & transport popups
    ========================================================================== */
 
 
@@ -1713,13 +1715,279 @@
   .order-detail-page .card                  { box-shadow: none; break-inside: avoid; margin-bottom: 12px; }
 }
 
+
 /* ==========================================================================
-   Inspection popup
+   27. OVERVIEW CARD RESTYLE
+   --------------------------------------------------------------------------
+   Turns the OverviewCard into a soft, mobile-styled summary card that
+   closely mirrors the "Order summary" mockup (Buying / Huro / progress /
+   details grid / cancel button). Uses the existing Card, Section,
+   OrderProgress and Facts components without touching JSX.
    ========================================================================== */
-/* Wider dialog for the transport popup (it can hold up to 3 side-by-side cards). */
-.od-modal--wide {
-  max-width: 1080px;
+
+.order-detail-page .od-card-overview {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #eef2f6;
+  box-shadow: 0 4px 16px rgba(13, 27, 42, 0.05) !important;
+  padding: 24px 20px;
+  margin: 0;
 }
+
+.order-detail-page .od-card-overview .od-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  border-bottom: 1px solid #eef2f6;
+  padding-bottom: 16px;
+  margin-bottom: 0;
+}
+
+.order-detail-page .od-card-overview .od-card-head-main { flex: 1; }
+
+/* Neutralize the default head::before accent bar inside the overview card */
+.order-detail-page .od-card-overview .od-card-head::before {
+  content: none;
+}
+
+/* Eyebrow - "BUYING" / "SELLING" */
+.order-detail-page .od-card-overview .od-eyebrow {
+  color: #0f7a44;
+  font-family: 'Manrope', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.order-detail-page .od-card-overview .od-eyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 24px;
+  height: 3px;
+  background: currentColor;
+  border-radius: 2px;
+}
+.order-detail-page .od-card-overview .od-eyebrow.is-selling { color: #1d5fb4; }
+
+.order-detail-page .od-card-overview .od-card-title {
+  font-family: 'Manrope', system-ui, sans-serif;
+  font-size: 24px;
+  font-weight: 800;
+  color: #0d1b2a;
+  margin: 6px 0 0;
+  letter-spacing: -0.4px;
+}
+
+/* Avatar */
+.order-detail-page .od-card-overview .od-party-avatar {
+  width: 48px;
+  height: 48px;
+  font-size: 20px;
+  font-weight: 700;
+  background: #0d1b2a;
+  color: #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Section titles - "Order status" / "Details" */
+.order-detail-page .od-card-overview .od-card-section {
+  border-top: 0;
+  border-bottom: 1px solid #eef2f6;
+  padding: 20px 0;
+}
+.order-detail-page .od-card-overview .od-card-section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.order-detail-page .od-card-overview .od-card-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.order-detail-page .od-card-overview .od-card-section-title {
+  font-family: 'Manrope', system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f7a44;
+  margin: 0;
+}
+
+.order-detail-page .od-card-overview .od-card-section-meta {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
+/* ===== Overview progress bar ============================================ */
+.order-detail-page .od-card-overview .order-progress {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  padding: 0 4px;
+  margin: 0;
+  list-style: none;
+}
+.order-detail-page .od-card-overview .order-progress::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 24px;
+  right: 24px;
+  height: 2px;
+  background: #e2e8f0;
+  z-index: 1;
+}
+.order-detail-page .od-card-overview .order-progress-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  gap: 10px;
+}
+.order-detail-page .od-card-overview .order-progress-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  border: 2px solid #e2e8f0;
+  box-shadow: none;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+.order-detail-page .od-card-overview .order-progress-step.is-done .order-progress-dot {
+  background: #0f7a44;
+  border-color: #0f7a44;
+}
+.order-detail-page .od-card-overview .order-progress-step.is-current .order-progress-dot {
+  background: #ffffff;
+  border-color: #0f7a44;
+  border-width: 3px;
+  box-shadow: 0 0 0 4px rgba(15, 122, 68, 0.12);
+}
+.order-detail-page .od-card-overview .order-progress-label {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  text-align: center;
+  white-space: nowrap;
+}
+.order-detail-page .od-card-overview .order-progress-step.is-done .order-progress-label,
+.order-detail-page .od-card-overview .order-progress-step.is-current .order-progress-label {
+  color: #0d1b2a;
+}
+
+/* Hide the default connector pseudo (we already draw the full-width rail) */
+.order-detail-page .od-card-overview .order-progress-step::before {
+  content: none;
+}
+
+/* Green connector line between done steps */
+.order-detail-page .od-card-overview .order-progress-step.is-done:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: calc(50% + 12px);
+  right: calc(-50% + 12px);
+  height: 2px;
+  background: #0f7a44;
+  z-index: 0;
+}
+
+/* ===== Overview details grid ============================================ */
+.order-detail-page .od-card-overview .od-detail-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 16px;
+  margin: 0;
+}
+.order-detail-page .od-card-overview .od-detail-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.order-detail-page .od-card-overview .od-detail-facts span {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+}
+.order-detail-page .od-card-overview .od-detail-facts strong {
+  font-family: 'Manrope', system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0d1b2a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.order-detail-page .od-card-overview .od-detail-facts strong .od-party-you-inline {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  background: #dcfce7;
+  color: #166534;
+  border-radius: 6px;
+  letter-spacing: 0.04em;
+}
+
+/* Created at */
+.order-detail-page .od-card-overview .od-card-created {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 20px;
+  padding-top: 4px;
+}
+
+/* Cancel button */
+.order-detail-page .od-card-overview .btn-outline {
+  width: 100%;
+  border: 1.5px solid #fecaca;
+  background: #ffffff;
+  color: #b42318;
+  font-family: 'Manrope', system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 14px;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.order-detail-page .od-card-overview .btn-outline:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+.order-detail-page .od-card-overview .btn-outline:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Small screens: keep two-column grid, tighten gaps */
+@media (max-width: 420px) {
+  .order-detail-page .od-card-overview .od-detail-facts { gap: 16px 12px; }
+  .order-detail-page .od-card-overview .od-detail-facts strong { font-size: 14px; }
+  .order-detail-page .od-card-overview .order-progress-label { font-size: 11px; }
+}
+
+
+/* ==========================================================================
+   28. INSPECTION & TRANSPORT POPUPS
+   ========================================================================== */
 .od-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1744,6 +2012,11 @@
   box-shadow: 0 24px 64px rgba(13, 27, 42, 0.24);
   overflow: hidden;
   animation: od-modal-pop 180ms ease-out;
+}
+
+/* Wider dialog for the transport popup (it can hold up to 3 side-by-side cards). */
+.od-modal--wide {
+  max-width: 1080px;
 }
 
 .od-modal-head {
@@ -1775,16 +2048,8 @@
   border-radius: 8px;
   transition: background 120ms ease, color 120ms ease;
 }
-
-.od-modal-close:hover {
-  background: #f1f5f9;
-  color: #0d1b2a;
-}
-
-.od-modal-close:focus-visible {
-  outline: 2px solid #0f7a44;
-  outline-offset: 2px;
-}
+.od-modal-close:hover        { background: #f1f5f9; color: #0d1b2a; }
+.od-modal-close:focus-visible { outline: 2px solid #0f7a44; outline-offset: 2px; }
 
 .od-modal-body {
   padding: 20px 24px 24px;
@@ -1801,38 +2066,25 @@
   margin: 0;
   background: transparent;
 }
-
-.od-modal-body > .card + .card {
-  margin-top: 24px;
-}
-
-.od-modal-body > .card .od-card-head {
-  padding-left: 0;
-  padding-right: 0;
-}
+.od-modal-body > .card + .card        { margin-top: 24px; }
+.od-modal-body > .card .od-card-head  { padding-left: 0; padding-right: 0; }
 
 @keyframes od-modal-fade {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-
 @keyframes od-modal-pop {
   from { opacity: 0; transform: translateY(8px) scale(0.99); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @media (max-width: 640px) {
-  .od-modal-backdrop {
-    padding: 0;
-  }
+  .od-modal-backdrop { padding: 0; }
   .od-modal {
     max-width: 100%;
     max-height: 100vh;
     height: 100%;
     border-radius: 0;
   }
-  .od-modal-body {
-    padding: 16px;
-  }
+  .od-modal-body { padding: 16px; }
 }
-
