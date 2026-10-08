@@ -1712,3 +1712,124 @@
   .order-detail-page .od-card-grid          { display: block; }
   .order-detail-page .card                  { box-shadow: none; break-inside: avoid; margin-bottom: 12px; }
 }
+
+/* ==========================================================================
+   Inspection popup
+   ========================================================================== */
+
+.od-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 27, 42, 0.5);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+  animation: od-modal-fade 160ms ease-out;
+}
+
+.od-modal {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 880px;
+  max-height: min(90vh, 900px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 64px rgba(13, 27, 42, 0.24);
+  overflow: hidden;
+  animation: od-modal-pop 180ms ease-out;
+}
+
+.od-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #e5e9ef;
+  flex: 0 0 auto;
+  background: #fff;
+}
+
+.od-modal-title {
+  font-family: 'Manrope', system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0d1b2a;
+  letter-spacing: -0.2px;
+}
+
+.od-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 26px;
+  line-height: 1;
+  color: #64748b;
+  cursor: pointer;
+  padding: 2px 10px;
+  border-radius: 8px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.od-modal-close:hover {
+  background: #f1f5f9;
+  color: #0d1b2a;
+}
+
+.od-modal-close:focus-visible {
+  outline: 2px solid #0f7a44;
+  outline-offset: 2px;
+}
+
+.od-modal-body {
+  padding: 20px 24px 24px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Neutralize the Card chrome inside the dialog so we don't nest card-on-card. */
+.od-modal-body > .card {
+  box-shadow: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+}
+
+.od-modal-body > .card + .card {
+  margin-top: 24px;
+}
+
+.od-modal-body > .card .od-card-head {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+@keyframes od-modal-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes od-modal-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 640px) {
+  .od-modal-backdrop {
+    padding: 0;
+  }
+  .od-modal {
+    max-width: 100%;
+    max-height: 100vh;
+    height: 100%;
+    border-radius: 0;
+  }
+  .od-modal-body {
+    padding: 16px;
+  }
+}
+
