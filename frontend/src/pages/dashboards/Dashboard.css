@@ -9,41 +9,39 @@
 
 .dashboard-page {
   /* ── Tokens ───────────────────────────────────────────── */
-  --d-accent:      #1e9e5a;
-  --d-accent-2:    #0f7a44;
-  --d-accent-ink:  #12734a;
-  --d-accent-soft: #ecfdf3;
-  --d-accent-line: #c6eccf;
+  --d-accent:      var(--mb-ok);
+  --d-accent-2:    var(--mb-ok);
+  --d-accent-ink:  var(--mb-ok);
+  --d-accent-soft: var(--mb-ok-bg);
+  --d-accent-line: var(--mb-ok-border);
 
-  --d-ink:         #0d1b2a;
-  --d-ink-soft:    #2c3a4a;
-  --d-muted:       #64748b;
+  --d-ink:         var(--mb-ink);
+  --d-ink-soft:    var(--mb-ink-2);
+  --d-muted:       var(--mb-muted);
   --d-muted-2:     #94a3b8;
 
-  --d-line:        #e5e9ef;
-  --d-line-soft:   #eef1f5;
-  --d-surface:     #fbfcfd;
+  --d-line:        var(--mb-line);
+  --d-line-soft:   var(--mb-line-soft);
+  --d-surface:     var(--mb-soft);
 
-  --d-gold:        #a86f10;
-  --d-gold-soft:   #fdf6e7;
-  --d-gold-line:   #f4e0b6;
+  --d-gold:        var(--mb-wait);
+  --d-gold-soft:   var(--mb-wait-bg);
+  --d-gold-line:   var(--mb-wait-border);
 
-  --d-danger:      #b42318;
-  --d-danger-soft: #fef2f2;
-  --d-danger-line: #fecaca;
+  --d-danger:      var(--mb-danger);
+  --d-danger-soft: var(--mb-danger-bg);
+  --d-danger-line: var(--mb-danger-border);
 
-  --d-info:        #1e5fa8;
-  --d-info-soft:   #eff5fd;
-  --d-info-line:   #cddff5;
+  --d-info:        var(--mb-info);
+  --d-info-soft:   var(--mb-info-bg);
+  --d-info-line:   var(--mb-info-border);
 
-  --d-radius:      20px;
-  --d-radius-sm:   14px;
-  --d-shadow:      0 1px 2px rgba(15, 30, 45, .04),
-                   0 8px 24px rgba(15, 30, 45, .05);
-  --d-shadow-hi:   0 2px 4px rgba(15, 30, 45, .04),
-                   0 18px 44px rgba(15, 30, 45, .09);
+  --d-radius:      var(--mb-radius-card);
+  --d-radius-sm:   var(--mb-radius-field);
+  --d-shadow:      var(--mb-shadow-card);
+  --d-shadow-hi:   var(--mb-shadow-card);
   --d-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
-  --d-ring:        0 0 0 3px rgba(30, 158, 90, .18);
+  --d-ring:        0 0 0 3px var(--mb-accent-border);
   --d-ease:        cubic-bezier(.2, .7, .3, 1);
 
   min-height: calc(100vh - 72px);
