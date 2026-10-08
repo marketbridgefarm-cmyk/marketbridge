@@ -37,6 +37,7 @@ const TRANSPORT_IN_MOTION_STATUSES = ['PICKUP', 'IN_TRANSIT', 'DELIVERED'];
 const userSelect = { id: true, name: true, phone: true, location: true, rating: true, verificationStatus: true };
 
 const transportInclude = {
+  loadingReport: { include: { submittedBy: { select: { id: true, name: true } } } },
   truckOwner: { select: { id: true, name: true, phone: true, rating: true, verificationStatus: true } },
   truck: { select: { id: true, registration: true, truckType: true, capacity: true, operatingArea: true, availability: true, verificationStatus: true, rating: true } },
   quotes: {
@@ -136,7 +137,7 @@ const orderDetailInclude = {
   priceReviews: { include: { proposedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' } },
   buyer: { select: userSelect },
   seller: { select: userSelect },
-  transportJob: { include: transportInclude },
+  transportJob: { include: { ...transportInclude, loadingReport: true } },
   payments: {
     include: {
       ledgerEntries: true,
@@ -558,6 +559,26 @@ router.patch(
             inspectionRequestId: currentInspection.id,
             inspectionStatus: currentInspection.status,
           });
+        }
+
+        // CANCEL remains available immediately after inspection. BUY is deliberately
+        // held until the seller confirms the selected transporter is ready.
+        if (decision === 'BUY') {
+          const transportJob = current.transportJob;
+          if (!transportJob || transportJob.status !== 'ACCEPTED') {
+            throw Object.assign(new Error(
+              'Select and agree a transporter before making the final BUY decision.'
+            ), { status: 409, code: 'TRANSPORT_SELECTION_REQUIRED_FOR_BUY' });
+          }
+          const confirmed = await tx.transportJob.findUnique({
+            where: { id: transportJob.id },
+            select: { status: true, sellerPickupConfirmedAt: true },
+          });
+          if (!confirmed?.sellerPickupConfirmedAt) {
+            throw Object.assign(new Error(
+              'The seller must confirm that the selected transporter is prepared before the final BUY decision and seller payment can proceed.'
+            ), { status: 409, code: 'SELLER_TRANSPORT_PREPARATION_CONFIRMATION_REQUIRED' });
+          }
         }
 
         if (decision === 'CANCEL') {

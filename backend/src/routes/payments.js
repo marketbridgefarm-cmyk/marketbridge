@@ -617,10 +617,18 @@ router.post(
             });
           }
 
-          // Transport payment is independent from marketplace payment.
-          // Both must be PAID before PICKUP (before the truck collects the
-          // goods), but neither payment has to be completed before
-          // creating the other payment intent.
+          // The revised agricultural flow requires the seller to be paid
+          // before transport money can be committed for the loading stage.
+          const goodsPayment = await prisma.payment.findFirst({
+            where: { orderId: order.id, type: 'MARKETPLACE', status: 'PAID' },
+            select: { id: true },
+          });
+          if (!goodsPayment) {
+            return res.status(409).json({
+              code: 'GOODS_PAYMENT_REQUIRED',
+              error: 'The seller must be paid before the hired transporter can be paid.',
+            });
+          }
 
           transportJobId =
             order.transportJob.id;
@@ -785,15 +793,28 @@ router.post(
         let inspectionPaymentAllowed = isAdmin(req);
         let inspectionPayerId = null;
         let inspectionExpectedAmount = null;
-        if (req.body.orderId) {
+        // The inspection's own order binding is authoritative. A client must
+        // not be able to dodge the seller-confirmation gate by omitting or
+        // changing orderId in the request body.
+        if (request.orderId && req.body.orderId && req.body.orderId !== request.orderId) {
+          return res.status(400).json({ error: 'orderId does not match the inspection request' });
+        }
+        const gateOrderId = request.orderId || req.body.orderId || null;
+        if (gateOrderId) {
           const inspectionOrder = await prisma.order.findUnique({
-            where: { id: req.body.orderId },
+            where: { id: gateOrderId },
             select: { id: true, buyerId: true, sellerId: true, listingId: true, status: true },
           });
           if (inspectionOrder?.status === 'DISPUTED') {
             return res.status(409).json({ code: 'ORDER_DISPUTED', error: 'This order is under dispute. Inspection payment is paused until the dispute is resolved.' });
           }
+          if (inspectionOrder && ['CANCELLED', 'COMPLETED'].includes(inspectionOrder.status)) {
+            return res.status(409).json({ code: 'ORDER_CLOSED', error: `This order is ${inspectionOrder.status.toLowerCase()}, so inspection payment is no longer possible.` });
+          }
           if (inspectionOrder && inspectionOrder.listingId === request.listingId) {
+            if (request.status !== 'ACCEPTED') {
+              return res.status(409).json({ code: 'INSPECTION_NOT_READY_FOR_PAYMENT', error: 'Inspection payment is only possible for an accepted, seller-confirmed inspection.' });
+            }
             if (!request.sellerConfirmedAt) {
               return res.status(409).json({ code: 'SELLER_CONFIRMATION_REQUIRED', error: 'The seller must confirm the selected inspector and agreed inspection fee before inspection payment can begin.' });
             }
@@ -803,9 +824,12 @@ router.post(
             });
             const mine = obligations.find((o) => o.payerId === req.user.id);
             if (mine) {
+              if (mine.status === 'CANCELLED') {
+                return res.status(409).json({ code: 'OBLIGATION_CANCELLED', error: 'This inspection payment obligation has been cancelled.' });
+              }
               inspectionPayerId = mine.payerId;
               inspectionExpectedAmount = Number(mine.amount);
-              inspectionPaymentAllowed = mine.status !== 'PAID';
+              inspectionPaymentAllowed = mine.status === 'OPEN';
             } else {
               const expectedPayer = request.feePayer === 'SELLER' || request.mode === 'SELLER_REQUESTED'
                 ? inspectionOrder.sellerId
@@ -818,7 +842,7 @@ router.post(
             }
           }
         }
-        if (!inspectionPaymentAllowed && request.requestedById === req.user.id && !req.body.orderId) {
+        if (!inspectionPaymentAllowed && request.requestedById === req.user.id && !request.orderId && !req.body.orderId) {
           inspectionPaymentAllowed = true;
           inspectionPayerId = req.user.id;
           inspectionExpectedAmount = Number(request.fee);
@@ -1101,6 +1125,30 @@ router.post(
           error:
             `Payment is ${payment.status}`,
         });
+      }
+
+      // Inspection payment checkout has a second server-side gate here,
+      // because a PENDING payment intent may have been created by an older
+      // client/version before seller confirmation became mandatory. Never
+      // allow such an intent to reach Chapa until the seller has confirmed
+      // the selected inspector and agreed fee.
+      if (payment.type === 'INSPECTOR' && payment.inspectionRequestId) {
+        const inspection = await prisma.inspectionRequest.findUnique({
+          where: { id: payment.inspectionRequestId },
+          select: { id: true, orderId: true, sellerConfirmedAt: true, status: true },
+        });
+        if (inspection?.orderId && !inspection.sellerConfirmedAt) {
+          return res.status(409).json({
+            code: 'SELLER_CONFIRMATION_REQUIRED',
+            error: 'The seller must confirm the selected inspector and agreed inspection fee before inspection payment can begin.',
+          });
+        }
+        if (inspection?.orderId && inspection.status !== 'ACCEPTED') {
+          return res.status(409).json({
+            code: 'INSPECTION_NOT_READY_FOR_PAYMENT',
+            error: 'The inspection is not in an accepted state for payment.',
+          });
+        }
       }
 
       // The full-price parent of an installment plan is never sent to the

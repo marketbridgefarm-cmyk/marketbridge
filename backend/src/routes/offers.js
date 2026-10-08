@@ -628,7 +628,10 @@ async function acceptOfferAndCreateOrder(
         status: 'PENDING_PAYMENT',
         agreedOfferId: updatedOffer.id,
         agreedAt: new Date(),
-        paymentDueAt: offer.listing.category === 'AGRICULTURAL' ? computeInspectionWorkflowDueAt() : computePaymentDueAt(),
+        // Agricultural orders are provisional until the inspection report is reviewed and
+        // the buyer explicitly chooses BUY. Do not start the goods-payment clock here.
+        // The buyer-decision endpoint starts paymentDueAt at the correct lifecycle point.
+        paymentDueAt: offer.listing.category === 'AGRICULTURAL' ? null : computePaymentDueAt(),
       },
     });
 

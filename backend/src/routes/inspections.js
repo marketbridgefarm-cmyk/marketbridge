@@ -10,6 +10,11 @@ const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
 const {
+  computeSellerConfirmationDueAt,
+  computeInspectionPaymentDueAt,
+  lapseInspectionAgreement,
+} = require('../services/inspectionLapseService');
+const {
   computeInspectionWorkflowDueAt,
   computeInspectionStartDueAt,
   computeInspectionCompletionDueAt,
@@ -141,7 +146,9 @@ function sanitizeWorkDetails(input) {
 
 function quoteTurn(quote) {
   if (quote.status === 'PENDING') return 'REQUESTER';
-  if (quote.status === 'SELECTED') return null;
+  // Selecting a provider bid is not acceptance. The requester owns the
+  // next decision: accept the provider's original offer or counter it.
+  if (quote.status === 'SELECTED') return 'REQUESTER';
   if (quote.status === 'COUNTERED') {
     return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
   }
@@ -379,7 +386,7 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
       if (!fresh) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
       if (!['REQUESTED', 'ACCEPTED', 'STALLED'].includes(fresh.status)) throw Object.assign(new Error(`Inspection bidding cannot be reopened while the request is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
       await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
-      const updated = await tx.inspectionRequest.update({ where: { id: fresh.id }, data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' } });
+      const updated = await tx.inspectionRequest.update({ where: { id: fresh.id }, data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, workflowDueAt: computeInspectionWorkflowDueAt(), startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' } });
       await closeCoordination(tx, fresh.id, 'ADMIN_REOPENED_BIDDING');
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_BIDDING_REOPENED', resourceType: 'InspectionRequest', resourceId: fresh.id, metadata: { orderId: fresh.orderId } });
       return updated;
@@ -805,6 +812,8 @@ router.patch(
             buyerFeeAmount: request.feePayer === 'SELLER' ? null : request.feePayer === 'SPLIT' ? Math.round(finalAmount * 50) / 100 : finalAmount,
             sellerFeeAmount: request.feePayer === 'BUYER' ? null : request.feePayer === 'SPLIT' ? Math.round((finalAmount - Math.round(finalAmount * 50) / 100) * 100) / 100 : finalAmount,
             status: 'ACCEPTED',
+            // Provisional agreement: the seller has a bounded window to confirm.
+            workflowDueAt: computeSellerConfirmationDueAt(),
             startDueAt: null,
             completionDueAt: null,
             startedAt: null,
@@ -1130,6 +1139,7 @@ router.patch(
               buyerFeeAmount: null,
               sellerFeeAmount: null,
               sellerConfirmedAt: null,
+              workflowDueAt: computeInspectionWorkflowDueAt(),
               startDueAt: null,
               completionDueAt: null,
               startedAt: null,
@@ -1368,25 +1378,122 @@ router.get('/seller-pending', authenticate, requireRole('SELLER'), async (req, r
 
 router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (req, res) => {
   try {
-    const request = await prisma.inspectionRequest.findUnique({
-      where: { id: req.params.id }, include: { listing: true },
+    const result = await prisma.$transaction(async (tx) => {
+      const request = await tx.inspectionRequest.findUnique({
+        where: { id: req.params.id },
+        include: { order: { select: { id: true, sellerId: true, status: true } } },
+      });
+      if (!request) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
+      if (request.orderId) {
+        await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection cannot be confirmed until that is resolved');
+      }
+      if (request.order && ['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(request.order.status)) {
+        throw Object.assign(new Error(`This order is ${request.order.status.toLowerCase()}, so the inspection can no longer be confirmed`), { statusCode: 409 });
+      }
+      if (request.workflowDueAt && request.workflowDueAt <= new Date()) {
+        throw Object.assign(new Error('The confirmation window has expired. The provisional agreement is being closed.'), { statusCode: 409 });
+      }
+
+      // The order is the authoritative ownership boundary. listing.sellerId
+      // is retained for historical data but must not decide who can confirm
+      // an order-owned inspection.
+      if (!request.order || request.order.sellerId !== req.user.id) {
+        throw Object.assign(new Error('Only the order seller can confirm this inspection'), { statusCode: 403 });
+      }
+      if (request.status !== 'ACCEPTED' || !request.inspectorId) {
+        throw Object.assign(new Error('Only a provisionally agreed inspection can be confirmed'), { statusCode: 409 });
+      }
+      if (request.sellerConfirmedAt) {
+        throw Object.assign(new Error('This inspection has already been confirmed'), { statusCode: 409 });
+      }
+      if (request.fee == null || Number(request.fee) <= 0) {
+        throw Object.assign(new Error('An agreed inspection fee is required before seller confirmation'), { statusCode: 409 });
+      }
+
+      const now = new Date();
+      const message = typeof req.body?.message === 'string'
+        ? req.body.message.trim().slice(0, 500)
+        : null;
+
+      const updated = await tx.inspectionRequest.updateMany({
+        where: {
+          id: request.id,
+          status: 'ACCEPTED',
+          inspectorId: request.inspectorId,
+          sellerConfirmedAt: null,
+        },
+        data: {
+          sellerConfirmedAt: now,
+          // Payment window replaces the confirmation window. The inspector's
+          // start clock only begins once the fee is fully paid (maintenance).
+          workflowDueAt: computeInspectionPaymentDueAt(),
+          startDueAt: null,
+          sellerMessage: message || null,
+          sellerMessageAt: message ? now : null,
+        },
+      });
+      if (!updated.count) throw Object.assign(new Error('Inspection was already confirmed or its status changed'), { statusCode: 409 });
+
+      // Create/reopen the exact payer obligation(s) only after confirmation.
+      await syncOrderPaymentObligations(tx, request.orderId);
+
+      await recordAuditEvent(tx, {
+        actorId: req.user.id,
+        action: 'INSPECTION_SELLER_CONFIRMED',
+        resourceType: 'InspectionRequest',
+        resourceId: request.id,
+        metadata: { inspectorId: request.inspectorId, message },
+      });
+      await recordOrderEvent(tx, {
+        orderId: request.orderId,
+        actorId: req.user.id,
+        type: 'INSPECTION_ACCEPTED',
+        metadata: { inspectionRequestId: request.id, sellerConfirmed: true, message },
+      });
+
+      return { sellerConfirmedAt: now.toISOString() };
     });
-    if (!request) return res.status(404).json({ error: 'Inspection request not found' });
-    if (request.listing.sellerId !== req.user.id) return res.status(403).json({ error: 'Only the listing seller can confirm this inspection' });
-    if (request.status !== 'ACCEPTED' || !request.inspectorId) return res.status(409).json({ error: 'Only a provisionally agreed inspection can be confirmed' });
-    const updated = await prisma.inspectionRequest.updateMany({
-      where: { id: request.id, status: 'ACCEPTED', inspectorId: request.inspectorId, sellerConfirmedAt: null },
-      data: { sellerConfirmedAt: new Date(), startDueAt: computeInspectionStartDueAt(), sellerMessage: typeof req.body?.message === 'string' ? req.body.message.trim().slice(0, 500) : null, sellerMessageAt: req.body?.message ? new Date() : null },
+
+    return res.json({
+      message: 'Inspection confirmed. The designated payer(s) may now pay the agreed inspection fee.',
+      ...result,
     });
-    if (!updated.count) return res.status(409).json({ error: 'Inspection was already confirmed or its status changed' });
-    await prisma.$transaction(async (tx) => {
-      await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_SELLER_CONFIRMED', resourceType: 'InspectionRequest', resourceId: request.id, metadata: { inspectorId: request.inspectorId, message: req.body?.message || null } });
-      if (request.orderId) await recordOrderEvent(tx, { orderId: request.orderId, actorId: req.user.id, type: 'INSPECTION_ACCEPTED', metadata: { inspectionRequestId: request.id, sellerConfirmed: true, message: req.body?.message || null } });
-    });
-    return res.json({ message: 'Inspection confirmed. The inspector may now start work.', sellerConfirmedAt: new Date().toISOString() });
   } catch (error) {
     req.log.error({ err: error }, 'SELLER INSPECTION CONFIRM ERROR');
     return res.status(error.statusCode || 500).json({ error: error.message || 'Could not confirm inspection' });
+  }
+});
+
+router.post('/:id/seller-decline', authenticate, requireRole('SELLER'), async (req, res) => {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const request = await tx.inspectionRequest.findUnique({
+        where: { id: req.params.id },
+        include: { order: { select: { id: true, sellerId: true } } },
+      });
+      if (!request) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
+      if (!request.order || request.order.sellerId !== req.user.id) {
+        throw Object.assign(new Error('Only the order seller can decline this inspection'), { statusCode: 403 });
+      }
+      if (request.orderId) {
+        await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection cannot be declined until that is resolved');
+      }
+      if (request.status !== 'ACCEPTED' || request.sellerConfirmedAt) {
+        throw Object.assign(new Error('Only an unconfirmed provisional inspection can be declined'), { statusCode: 409 });
+      }
+      const outcome = await lapseInspectionAgreement(tx, {
+        inspectionRequestId: request.id,
+        code: 'SELLER_DECLINED',
+        actorId: req.user.id,
+        actorRole: 'SELLER',
+      });
+      if (!outcome.lapsed) throw Object.assign(new Error('The inspection could not be declined in its current state'), { statusCode: 409 });
+      return outcome;
+    }, { maxWait: 10000, timeout: 15000 });
+    return res.json({ message: 'Inspection declined. The provisional purchase has been closed and the buyer notified.', ...result });
+  } catch (error) {
+    req.log.error({ err: error }, 'SELLER INSPECTION DECLINE ERROR');
+    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not decline inspection' });
   }
 });
 
@@ -1394,9 +1501,11 @@ router.post('/:id/seller-message', authenticate, requireRole('SELLER'), async (r
   try {
     const message = String(req.body?.message || '').trim();
     if (!message || message.length > 500) return res.status(400).json({ error: 'Message must contain 1–500 characters' });
-    const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { listing: true } });
+    const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { listing: true, order: { select: { sellerId: true } } } });
     if (!request) return res.status(404).json({ error: 'Inspection request not found' });
-    if (request.listing.sellerId !== req.user.id) return res.status(403).json({ error: 'Only the listing seller can send inspection instructions' });
+    // Order ownership is authoritative; listing.sellerId is only a legacy fallback for orderless requests.
+    const authoritativeSellerId = request.order ? request.order.sellerId : request.listing.sellerId;
+    if (authoritativeSellerId !== req.user.id) return res.status(403).json({ error: 'Only the order seller can send inspection instructions' });
 
     if (!['ACCEPTED', 'IN_PROGRESS', 'STALLED'].includes(request.status)) {
       return res.status(409).json({
@@ -1917,13 +2026,6 @@ router.post(
 
         if (completed.count !== 1) {
           throw new Error('INSPECTION_STATUS_CHANGED');
-        }
-
-        if (request.orderId) {
-          await tx.order.updateMany({
-            where: { id: request.orderId, status: 'PENDING_PAYMENT', buyerDecision: null },
-            data: { paymentDueAt: computePaymentDueAt() },
-          });
         }
 
         const relatedOrders = await tx.order.findMany({
