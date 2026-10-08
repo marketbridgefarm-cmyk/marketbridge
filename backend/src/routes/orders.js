@@ -74,11 +74,6 @@ const orderListInclude = {
       id: true,
       status: true,
       method: true,
-      sellerPickupConfirmedAt: true,
-      sellerPreparationDueAt: true,
-      buyerLoadingDueAt: true,
-      buyerLoadingConfirmedAt: true,
-      truckOwner: { select: { id: true, name: true } },
     },
   },
   payments: {
@@ -500,7 +495,6 @@ router.patch(
             listingId: true,
             status: true,
             buyerDecision: true,
-            buyerDecisionDueAt: true,
             finalPrice: true,
             quantity: true,
             listing: { select: { id: true, category: true } },
@@ -529,12 +523,6 @@ router.patch(
             { status: 400 }
           );
         }
-        if (current.buyerDecisionDueAt && current.buyerDecisionDueAt <= new Date()) {
-          throw Object.assign(
-            new Error('The BUY/CANCEL decision deadline has expired. The purchase will be closed by the workflow timeout.'),
-            { status: 409, code: 'BUYER_DECISION_DEADLINE_EXPIRED' }
-          );
-        }
         if (current.status === 'DISPUTED') {
           throw Object.assign(
             new Error('This order is under dispute. Buyer decisions are paused until the dispute is resolved.'),
@@ -543,6 +531,9 @@ router.patch(
         }
         if (['CANCELLED', 'COMPLETED'].includes(current.status)) {
           throw Object.assign(new Error(`Order is already ${current.status.toLowerCase()}`), { status: 409 });
+        }
+        if (!current.buyerDecision && current.buyerDecisionDueAt && current.buyerDecisionDueAt <= new Date()) {
+          throw Object.assign(new Error('The buyer decision window has expired. The order will be closed by the workflow maintenance cycle.'), { status: 409, code: 'BUYER_DECISION_WINDOW_EXPIRED' });
         }
         if (decision === 'BUY') {
           const pendingReview = await tx.priceReview.findFirst({ where: { orderId: current.id, status: 'PENDING' }, select: { id: true } });
@@ -623,7 +614,7 @@ router.patch(
 
           return tx.order.findUnique({
             where: { id: current.id },
-            select: { id: true, buyerDecision: true, buyerDecisionAt: true, buyerDecisionDueAt: true, paymentDueAt: true, status: true },
+            select: { id: true, buyerDecision: true, buyerDecisionAt: true, paymentDueAt: true, status: true },
           });
         }
 
@@ -652,7 +643,7 @@ router.patch(
 
         return tx.order.findUnique({
           where: { id: current.id },
-          select: { id: true, buyerDecision: true, buyerDecisionAt: true, buyerDecisionDueAt: true, paymentDueAt: true, status: true },
+          select: { id: true, buyerDecision: true, buyerDecisionAt: true, paymentDueAt: true, status: true },
         });
       }, { maxWait: 10000, timeout: 15000 });
 
