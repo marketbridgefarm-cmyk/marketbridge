@@ -127,79 +127,28 @@ function progressFor(order) {
   });
 }
 
-const STAT_TONES = {
-  accent:  { ring: '#1e9e5a', ink: '#0f7a44' },
-  info:    { ring: '#1e5fa8', ink: '#1e5fa8' },
-  gold:    { ring: '#a86f10', ink: '#a86f10' },
-  success: { ring: '#0f7a44', ink: '#0f7a44' },
-};
-
+// Colors and layout live in Orders.css (.stat, .stat.tone-*). Only the ring
+// geometry is dynamic, so it stays inline.
 function StatCard({ label, value, total, tone = 'accent' }) {
   const pct = total > 0 ? Math.min(1, Math.max(0, value / total)) : 0;
 
   const R = 16;
   const C = 2 * Math.PI * R;
   const offset = C * (1 - pct);
-  const colors = STAT_TONES[tone] || STAT_TONES.accent;
 
   return (
-    <div
-      className={`stat tone-${tone}`}
-      aria-label={`${label}: ${value}`}
-      style={{
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        padding: '14px 16px',
-        border: '1px solid #e5e9ef',
-        borderRadius: 14,
-        background: '#fff',
-        boxShadow: '0 1px 2px rgba(15, 30, 45, .05)',
-      }}
-    >
-      <span
-        className="stat-label"
-        style={{
-          fontFamily: "'DM Sans', system-ui, sans-serif",
-          fontSize: 10.5,
-          fontWeight: 700,
-          lineHeight: 1,
-          letterSpacing: '.12em',
-          textTransform: 'uppercase',
-          color: '#64748b',
-        }}
-      >
-        {label}
-      </span>
+    <div className={`stat tone-${tone}`} role="group" aria-label={`${label}: ${value}`}>
+      <span className="stat-label">{label}</span>
 
-      <div
-        className="stat-graphic"
-        style={{
-          position: 'relative',
-          width: 44,
-          height: 44,
-          flex: '0 0 auto',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <svg
-          viewBox="0 0 40 40"
-          width="44"
-          height="44"
-          aria-hidden="true"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}
-        >
-          <circle cx="20" cy="20" r={R} fill="none" stroke="#e5e9ef" strokeWidth="4" />
+      <div className="stat-graphic">
+        <svg viewBox="0 0 40 40" aria-hidden="true">
+          <circle className="stat-track" cx="20" cy="20" r={R} fill="none" strokeWidth="4" />
           <circle
+            className="stat-ring"
             cx="20"
             cy="20"
             r={R}
             fill="none"
-            stroke={colors.ring}
             strokeWidth="4"
             strokeLinecap="round"
             strokeDasharray={C}
@@ -208,22 +157,7 @@ function StatCard({ label, value, total, tone = 'accent' }) {
           />
         </svg>
 
-        <span
-          className="stat-count"
-          style={{
-            position: 'relative',
-            zIndex: 1,
-            fontFamily: "'Manrope', system-ui, sans-serif",
-            fontSize: 15,
-            fontWeight: 800,
-            letterSpacing: '-.4px',
-            lineHeight: 1,
-            fontVariantNumeric: 'tabular-nums',
-            color: colors.ink,
-          }}
-        >
-          {value}
-        </span>
+        <span className="stat-count">{value}</span>
       </div>
     </div>
   );
