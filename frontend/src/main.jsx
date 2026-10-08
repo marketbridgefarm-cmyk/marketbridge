@@ -9,8 +9,10 @@ import { I18nProvider } from './context/I18nContext.jsx';
 import { ToastProvider } from './context/ToastContext.jsx';
 
 import './components/Toast.css';
-import './mb-tokens.css';
 import './styles.css';
+// mb-tokens.css MUST load after styles.css: styles.css re-declares the :root --mb-*
+// tokens with the old green palette, and the later import wins.
+import './mb-tokens.css';
 
 // Load OrderDetail CSS with the main bundle.
 // This prevents Vite from creating a lazy-loaded CSS chunk
