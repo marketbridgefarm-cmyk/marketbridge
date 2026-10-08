@@ -1507,6 +1507,11 @@ function TransportCard({ order, t }) {
                   <h3 className="od-card-section-title">Review before loading</h3>
                 </div>
                 <p className="muted small">Review what the transporter plans to load, the quantity, timing and condition. Approve it before physical loading begins.</p>
+                {job.buyerLoadingDueAt && (
+                  <p className="muted small">
+                    Approval deadline: <strong>{formatDateTime(job.buyerLoadingDueAt)}</strong>
+                  </p>
+                )}
                 <Button
                   variant="primary"
                   disabled={busy === 'confirm-loading'}

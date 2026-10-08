@@ -766,6 +766,9 @@ export default function Dashboard() {
                 return <div key={job.id} className="panel" style={{ marginTop: 12 }}>
                   <strong>{o.listing?.title || o.listing?.cropType || 'Order transport'}</strong>
                   <p>Transporter: {job.truckOwner?.name || job.truckOwner?.user?.name || 'Selected transporter'} · Status: awaiting seller confirmation of transporter preparation</p>
+                  {job.sellerPreparationDueAt && (
+                    <p className="muted small">Confirmation deadline: <strong>{new Date(job.sellerPreparationDueAt).toLocaleString()}</strong></p>
+                  )}
                   <p>Pickup: {job.pickupLocation || 'Not specified'} · Destination: {job.destination || 'Not specified'}</p>
                   <label style={{ display: 'block', margin: '8px 0' }}>Message to transporter / buyer
                     <select value={transportMessages[job.id] || ''} onChange={(e) => setTransportMessages((old) => ({ ...old, [job.id]: e.target.value }))} style={{ display: 'block', width: '100%', marginTop: 4 }}>
