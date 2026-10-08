@@ -606,7 +606,7 @@ function InspectionCard({ order, title, i }) {
   if (!request) {
     const needsApproval = i.all.length > 0 && !i.formReleased;
     return (
-      <Card id="inspection-section" eyebrow="Inspection" title={needsApproval ? 'Inspection request awaiting admin approval' : 'Request an inspection'}>
+      <Card eyebrow="Inspection" title={needsApproval ? 'Inspection request awaiting admin approval' : 'Request an inspection'}>
         <Section title="How it works">
           <p className="muted">
             Get an independent quality check before the purchase is committed. Registered inspectors compete by sending a
@@ -798,7 +798,6 @@ function InspectionCard({ order, title, i }) {
 
   return (
     <Card
-      id="inspection-section"
       eyebrow="Inspection"
       title={reportReady ? 'Quality report' : 'Inspection status'}
       subtitle={reportReady ? 'Review the findings before the purchase is committed.' : null}
@@ -1103,6 +1102,107 @@ function InspectionCard({ order, title, i }) {
         )
       )}
     </Card>
+  );
+}
+
+/* ------------------------------------------------------------------------
+   Compact on-page card that opens the inspection popup.
+   ------------------------------------------------------------------------ */
+
+function InspectionSummaryCard({ i, onOpen }) {
+  const request = i.current;
+  const reportReady = request?.status === 'COMPLETED' && Boolean(request.report);
+  const statusText = request ? label(request.status) : 'Not started';
+  const tone = request ? statusTone(request.status) : 'neutral';
+
+  const blurb = !request
+    ? 'Get an independent quality check before the purchase is committed. Inspectors bid for the job; you negotiate and pay only the accepted fee.'
+    : reportReady
+      ? 'The inspection report is ready. Open it to review findings before you commit to the purchase.'
+      : 'The inspection is running. Open it to see bids, negotiate the fee, and coordinate the visit.';
+
+  return (
+    <Card
+      id="inspection-section"
+      eyebrow="Inspection"
+      title={reportReady ? 'Quality report ready' : request ? 'Inspection in progress' : 'Request an inspection'}
+      side={
+        <SideLabel name="Status">
+          <Pill tone={tone}>{statusText}</Pill>
+        </SideLabel>
+      }
+    >
+      <Section title="Inspection">
+        <p className="muted">{blurb}</p>
+        <Actions>
+          <Button variant="primary" onClick={onOpen}>
+            {reportReady ? 'View inspection report' : request ? 'Open inspection' : 'Start inspection'}
+          </Button>
+        </Actions>
+      </Section>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------------
+   Popup dialog hosting the full inspection experience.
+   ------------------------------------------------------------------------ */
+
+function InspectionModal({ open, onClose, order, title, i, currentInspection, isSeller }) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="od-modal-backdrop"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="od-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Inspection"
+      >
+        <div className="od-modal-head">
+          <span className="od-modal-title">Inspection</span>
+          <button
+            type="button"
+            className="od-modal-close"
+            onClick={onClose}
+            aria-label="Close inspection"
+          >
+            ×
+          </button>
+        </div>
+        <div className="od-modal-body">
+          <InspectionCard order={order} title={title} i={i} />
+
+          {currentInspection &&
+            ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(currentInspection.status) &&
+            isSeller && (
+              <InspectionCoordinationSeller
+                inspectionRequestId={currentInspection.id}
+              />
+            )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1867,6 +1967,11 @@ export default function OrderDetail() {
   const [submittingDispute, setSubmittingDispute] = useState(false);
   const [disputeSubmitted, setDisputeSubmitted] = useState(false);
 
+  // Inspection popup visibility.
+  const [inspectionModalOpen, setInspectionModalOpen] = useState(false);
+  const openInspectionModal = useCallback(() => setInspectionModalOpen(true), []);
+  const closeInspectionModal = useCallback(() => setInspectionModalOpen(false), []);
+
   useEffect(() => {
     if (!error) return undefined;
     const timer = window.setTimeout(() => setError(''), 3000);
@@ -2332,7 +2437,10 @@ export default function OrderDetail() {
       () => api.patch(`/orders/${order.id}/buyer-decision`, { decision }),
       `Could not record ${decision === 'BUY' ? 'BUY' : 'cancellation'} decision`
     );
-    if (ok) scrollToId(decision === 'BUY' ? 'payment-center' : 'inspection-section', 120);
+    if (ok) {
+      setInspectionModalOpen(false);
+      if (decision === 'BUY') scrollToId('payment-center', 120);
+    }
     return ok;
   };
 
@@ -2719,16 +2827,8 @@ export default function OrderDetail() {
           )}
 
           {inspectionApplies && isParticipant && orderOpen && (
-            <InspectionCard order={order} title={title} i={inspectionProps} />
+            <InspectionSummaryCard i={inspectionProps} onOpen={openInspectionModal} />
           )}
-
-          {currentInspection &&
-            ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(currentInspection.status) &&
-            isSeller && (
-              <InspectionCoordinationSeller
-                inspectionRequestId={currentInspection.id}
-              />
-            )}
 
           <div className="od-span-all">
             <TransportCard order={order} t={transportProps} />
@@ -2809,6 +2909,16 @@ export default function OrderDetail() {
           )}
         </div>
       </div>
+
+      <InspectionModal
+        open={inspectionModalOpen}
+        onClose={closeInspectionModal}
+        order={order}
+        title={title}
+        i={inspectionProps}
+        currentInspection={currentInspection}
+        isSeller={isSeller}
+      />
 
       {error && (
         <div className="order-detail-toast" role="alert" aria-live="assertive">
