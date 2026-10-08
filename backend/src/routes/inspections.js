@@ -6,7 +6,7 @@ const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
-const { noticeWaitingUnlocked } = require('../services/waitingListService');
+const { requestRefund, processRefund } = require('../services/paymentRefundService');
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
@@ -333,6 +333,197 @@ router.post(
     }
   }
 );
+
+// ============================================================================
+// RECOVER STALLED INSPECTION WITH SAFE REFUND + REASSIGNMENT
+// ============================================================================
+// A split inspection fee can leave an inspection STALLED without cancelling
+// the order. This endpoint creates full refunds for every paid inspection
+// payment, submits them to Chapa, and reopens bidding only after every refund
+// is confirmed. The order remains active throughout this recovery path.
+router.post('/:id/stalled/recover', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
+  try {
+    const request = await prisma.inspectionRequest.findUnique({
+      where: { id: req.params.id },
+      include: {
+        order: {
+          select: {
+            id: true,
+            buyerId: true,
+            sellerId: true,
+            status: true,
+            listingId: true,
+            payments: { select: { id: true, type: true, status: true } },
+          },
+        },
+        payments: {
+          where: { type: 'INSPECTOR', status: { in: ['PAID', 'REFUND_PENDING', 'PROCESSING'] } },
+          select: { id: true, status: true, amount: true, currency: true },
+        },
+      },
+    });
+    if (!request) return res.status(404).json({ error: 'Inspection request not found' });
+    if (request.status !== 'STALLED') return res.status(409).json({ error: `Only a STALLED inspection can use stalled recovery. Current status: ${request.status}` });
+    if (!request.order) return res.status(409).json({ error: 'The stalled inspection is not attached to an order' });
+    if (['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(request.order.status)) {
+      return res.status(409).json({ error: `Order is ${request.order.status.toLowerCase()}; stalled inspection recovery is unavailable.` });
+    }
+
+    // Never let this recovery path race with a goods/transport payment.
+    const progressedOrderPayment = request.order.payments.some(
+      (p) => ['MARKETPLACE', 'TRANSPORT'].includes(p.type) && ['PAID', 'PROCESSING', 'REFUND_PENDING'].includes(p.status)
+    );
+    if (progressedOrderPayment) {
+      return res.status(409).json({ error: 'Stalled inspection recovery is blocked after goods or transport payment has started. Resolve the order through the dispute/refund workflow instead.' });
+    }
+
+    const refundIds = await prisma.$transaction(async (tx) => {
+      const fresh = await tx.inspectionRequest.findUnique({
+        where: { id: request.id },
+        select: { id: true, status: true, orderId: true },
+      });
+      if (!fresh || fresh.status !== 'STALLED') throw Object.assign(new Error('Inspection changed before recovery started'), { statusCode: 409 });
+
+      const payments = await tx.payment.findMany({
+        where: { inspectionRequestId: fresh.id, type: 'INSPECTOR', status: { in: ['PAID', 'REFUND_PENDING'] } },
+        select: { id: true, amount: true, status: true },
+      });
+      const ids = [];
+      for (const payment of payments) {
+        const refund = await requestRefund(tx, {
+          paymentId: payment.id,
+          amount: payment.amount,
+          reason: 'Recovery of stalled inspection fee before inspector reassignment',
+          requestedById: req.user.id,
+        });
+        ids.push(refund.id);
+      }
+
+      await recordAuditEvent(tx, {
+        actorId: req.user.id,
+        action: 'STALLED_INSPECTION_REFUND_REQUESTED',
+        resourceType: 'InspectionRequest',
+        resourceId: fresh.id,
+        metadata: { orderId: fresh.orderId, refundIds: ids },
+      });
+      if (fresh.orderId) {
+        await recordOrderEvent(tx, {
+          orderId: fresh.orderId,
+          actorId: req.user.id,
+          type: 'INSPECTION_STALLED_REFUND_REQUESTED',
+          metadata: { inspectionRequestId: fresh.id, refundIds: ids },
+        });
+      }
+      return ids;
+    }, { maxWait: 10000, timeout: 15000 });
+
+    // Provider calls intentionally happen after the database transaction.
+    const submissions = [];
+    for (const refundId of refundIds) {
+      try {
+        submissions.push(await processRefund({
+          refundId,
+          actorId: req.user.id,
+          note: 'Admin recovery of a stalled inspection fee',
+        }));
+      } catch (error) {
+        submissions.push({ id: refundId, status: 'ERROR', error: error.message });
+      }
+    }
+
+    const freshRefunds = await prisma.paymentRefund.findMany({
+      where: { id: { in: refundIds } },
+      select: { id: true, status: true, amount: true, currency: true, providerRefundId: true, failureReason: true },
+    });
+    const outstandingCheckout = await prisma.payment.findFirst({
+      where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: 'PROCESSING' },
+      select: { id: true, amount: true },
+    });
+    if (outstandingCheckout) {
+      return res.status(202).json({
+        message: 'A payer is still completing the inspection checkout. The inspection remains STALLED and will not be reopened until that payment settles and is safely refunded.',
+        inspectionRequestId: request.id,
+        refunds: freshRefunds,
+        submissions,
+        pendingCheckoutPaymentId: outstandingCheckout.id,
+        readyToReopen: false,
+      });
+    }
+    const allCompleted = freshRefunds.every((r) => r.status === 'COMPLETED');
+    if (!allCompleted) {
+      return res.status(202).json({
+        message: 'Refund recovery has started. Inspector reassignment will remain blocked until every stalled inspection payment is confirmed refunded by Chapa.',
+        inspectionRequestId: request.id,
+        refunds: freshRefunds,
+        submissions,
+        readyToReopen: false,
+      });
+    }
+
+    const reopened = await prisma.$transaction(async (tx) => {
+      const fresh = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
+      if (!fresh || fresh.status !== 'STALLED') throw Object.assign(new Error('Inspection is no longer available for reopening'), { statusCode: 409 });
+      const stillUnrefunded = await tx.payment.count({
+        where: { inspectionRequestId: fresh.id, type: 'INSPECTOR', status: { in: ['PAID', 'PROCESSING', 'REFUND_PENDING'] } },
+      });
+      if (stillUnrefunded) throw Object.assign(new Error('Inspection payments are not fully refunded yet'), { statusCode: 409 });
+
+      await tx.inspectionQuote.updateMany({
+        where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } },
+        data: { status: 'EXPIRED' },
+      });
+      await tx.paymentObligation.updateMany({
+        where: { inspectionRequestId: fresh.id, type: 'INSPECTOR', status: { in: ['OPEN', 'PAID'] } },
+        data: { status: 'CANCELLED' },
+      });
+      const updated = await tx.inspectionRequest.update({
+        where: { id: fresh.id },
+        data: {
+          inspectorId: null,
+          fee: null,
+          buyerFeeAmount: null,
+          sellerFeeAmount: null,
+          sellerConfirmedAt: null,
+          workflowDueAt: computeInspectionWorkflowDueAt(),
+          startDueAt: null,
+          completionDueAt: null,
+          startedAt: null,
+          completedAt: null,
+          status: 'REQUESTED',
+        },
+      });
+      await closeCoordination(tx, fresh.id, 'STALLED_REFUNDED_REOPENED');
+      await recordAuditEvent(tx, {
+        actorId: req.user.id,
+        action: 'STALLED_INSPECTION_REOPENED',
+        resourceType: 'InspectionRequest',
+        resourceId: fresh.id,
+        metadata: { orderId: fresh.orderId, refundIds },
+      });
+      if (fresh.orderId) {
+        await recordOrderEvent(tx, {
+          orderId: fresh.orderId,
+          actorId: req.user.id,
+          type: 'INSPECTION_REOPENED',
+          fromStatus: 'STALLED',
+          toStatus: 'REQUESTED',
+          metadata: { inspectionRequestId: fresh.id, reason: 'All stalled inspection payments refunded' },
+        });
+      }
+      return updated;
+    }, { maxWait: 10000, timeout: 15000 });
+
+    return res.json({
+      message: 'All stalled inspection payments were refunded and the inspection bidding was safely reopened for reassignment.',
+      request: reopened,
+      refunds: freshRefunds,
+      readyToReopen: true,
+    });
+  } catch (error) {
+    req.log.error({ err: error }, 'STALLED INSPECTION RECOVERY ERROR');
+    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not recover stalled inspection' });
+  }
+});
 
 // ============================================================================
 // CANCEL INSPECTION REQUEST
@@ -800,7 +991,6 @@ router.patch(
           throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
         }
 
-        const sellerConfirmationDueAt = computeSellerConfirmationDueAt();
         const claim = await tx.inspectionRequest.updateMany({
           where: {
             id: request.id,
@@ -815,7 +1005,7 @@ router.patch(
             sellerFeeAmount: request.feePayer === 'BUYER' ? null : request.feePayer === 'SPLIT' ? Math.round((finalAmount - Math.round(finalAmount * 50) / 100) * 100) / 100 : finalAmount,
             status: 'ACCEPTED',
             // Provisional agreement: the seller has a bounded window to confirm.
-            workflowDueAt: sellerConfirmationDueAt,
+            workflowDueAt: computeSellerConfirmationDueAt(),
             startDueAt: null,
             completionDueAt: null,
             startedAt: null,
@@ -859,8 +1049,6 @@ router.patch(
               inspectionRequestId: request.id,
               inspectorId: acceptedQuote.inspectorId,
               amount: String(finalAmount),
-              sellerConfirmed: false,
-              deadline: sellerConfirmationDueAt.toISOString(),
             },
           });
         }
@@ -1494,13 +1682,6 @@ router.post('/:id/seller-decline', authenticate, requireRole('SELLER'), async (r
       if (!outcome.lapsed) throw Object.assign(new Error('The inspection could not be declined in its current state'), { statusCode: 409 });
       return outcome;
     }, { maxWait: 10000, timeout: 15000 });
-    const listingId = await prisma.inspectionRequest.findUnique({
-      where: { id: req.params.id },
-      select: { listingId: true, status: true },
-    }).catch(() => null);
-    if (listingId?.status === 'CANCELLED') {
-      await noticeWaitingUnlocked(prisma, { listingId: listingId.listingId, reason: 'INSPECTION_SELLER_DECLINED' });
-    }
     return res.json({ message: 'Inspection declined. The provisional purchase has been closed and the buyer notified.', ...result });
   } catch (error) {
     req.log.error({ err: error }, 'SELLER INSPECTION DECLINE ERROR');
