@@ -1,0 +1,451 @@
+/* ==========================================================================
+   mb-cards.css — ONE card system for every MarketBridge page.
+   Source of truth: pages/orders/Orders.css (the reference look).
+
+   What "Orders style" means here:
+     • Card      frosted surface, 22px radius, soft shadow, no border
+     • Title     2px rule + 44px accent segment (eyebrow above, optional sub-line)
+     • Sub-head  1.5px rule only, tone-coloured 15px/700 title
+     • Tile      white inner item, 1.5px line, 16px radius, no shadow
+     • Pill      1.5px border, 999px radius, 13px/700, tone colours
+     • Controls  48px buttons (accent = primary), 52px fields, accent focus ring
+
+   Load order (main.jsx): mb-tokens.css → styles.css → … → mb-cards.css (last).
+   Every rule is prefixed with #root so it out-ranks the older per-page card
+   rules (.sd-dashboard .sd-card, .dashboard-page .panel, .ac-panel, …) without
+   !important. Tokens come from mb-tokens.css — change a token, every card moves.
+   Cards that already follow the Orders look (.order-card, .neg-card, .bid-card,
+   .od-card-*, .ld-card-*) are intentionally NOT touched here.
+   ========================================================================== */
+
+/* ---- 1. Tier 1 — the card surface --------------------------------------- */
+#root :is(
+  .card, .form-card, .dashboard-card, .workflow-card, .sticky-card,
+  .panel, .sd-card, .sd-panel, .ac-panel, .state-card
+) {
+  --card-tone: var(--mb-ok);
+  position: relative;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: var(--mb-card-pad);
+  background: var(--mb-card);
+  border: 0;
+  border-radius: var(--mb-radius-card);
+  box-shadow: var(--mb-shadow-card);
+}
+
+/* Static cards don't lift on hover (Orders cards don't either) */
+#root :is(.sd-card, .card, .panel):hover {
+  transform: none;
+  border-color: transparent;
+  box-shadow: var(--mb-shadow-card);
+}
+
+/* A card inside a card becomes a flat tile, never a second floating card */
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel)
+  :is(.card, .form-card, .dashboard-card, .panel, .sd-panel, .workflow-card) {
+  padding: 16px;
+  background: var(--mb-surface);
+  border: var(--mb-bw) solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  box-shadow: none;
+}
+
+/* Error / warning variants keep their meaning in the new palette */
+#root :is(.sd-panel--error, .card.error, .card--error) {
+  background: var(--mb-danger-bg);
+  box-shadow: 0 0 0 var(--mb-bw) var(--mb-danger-border), var(--mb-shadow-card);
+}
+#root :is(.card.warning, .card--warning) {
+  background: var(--mb-wait-bg);
+  box-shadow: 0 0 0 var(--mb-bw) var(--mb-wait-border), var(--mb-shadow-card);
+}
+
+/* ---- 2. Tier 2 — tiles (items inside a card or grid) -------------------- */
+#root :is(
+  .ac-card, .ac-user-card, .ac-metric-card, .sd-stat, .sd-job-card,
+  .mini-panel, .service-access-card, .evidence, .loading-card
+) {
+  box-sizing: border-box;
+  min-width: 0;
+  background: var(--mb-surface);
+  border: var(--mb-bw) solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  box-shadow: none;
+}
+#root :is(.sd-stat, .ac-card, .ac-user-card, .sd-job-card, .service-access-card):hover {
+  transform: none;
+  box-shadow: none;
+}
+@media (hover: hover) {
+  #root :is(.service-access-card, .ac-user-card):hover {
+    border-color: var(--mb-accent-border);
+  }
+}
+/* sd-stat used a 3px green left bar + gradient; the tile look replaces both */
+#root .sd-stat {
+  border-left-width: var(--mb-bw);
+  background-image: none;
+}
+
+/* ---- 3. Title block: eyebrow + title (+ sub-line) over a 2px rule ------- */
+#root :is(.card, .form-card, .dashboard-card, .panel, .workflow-card)
+  > :is(h1, h2):first-child,
+#root :is(.sd-card-head, .ac-panel-header, .ac-toolbar) {
+  position: relative;
+  padding-bottom: 8px;
+  margin: 0 0 20px;
+  border-bottom: var(--mb-bw-strong) solid var(--mb-line);
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .workflow-card)
+  > :is(h1, h2):first-child {
+  color: var(--mb-ink);
+  font: 800 var(--mb-fs-xl) / 1.25 var(--mb-font-head);
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+/* The accent segment that sits on the rule */
+#root :is(.card, .form-card, .dashboard-card, .panel, .workflow-card)
+  > :is(h1, h2):first-child::after,
+#root :is(.sd-card-head, .ac-panel-header, .ac-toolbar)::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: calc(var(--mb-bw-strong) * -1);
+  width: 44px;
+  height: 4px;
+  background: var(--mb-accent);
+}
+/* Head layouts that were border-only before */
+#root .sd-card-head { grid-template-columns: minmax(0, 1fr) auto; }
+#root :is(.ac-panel-header, .ac-toolbar) { gap: 12px 16px; }
+
+#root :is(.ac-panel-header, .ac-toolbar) h2,
+#root .sd-card-title {
+  margin: 0;
+  color: var(--mb-ink);
+  font: 800 var(--mb-fs-xl) / 1.25 var(--mb-font-head);
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+#root :is(.ac-panel-header, .ac-toolbar) p,
+#root :is(.sd-card-sub, .sd-card-head p) {
+  max-width: 60ch;
+  margin: 6px 0 0;
+  color: var(--mb-muted);
+  font-size: var(--mb-fs-md);
+  line-height: 1.5;
+}
+
+/* Eyebrow: tone-coloured, 16px dash, wide tracking */
+#root :is(.ac-section-label, .sd-eyebrow) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 8px;
+  color: var(--card-tone, var(--mb-ok));
+  font: 700 var(--mb-fs-sm) / 1.2 var(--mb-font-head);
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+}
+#root :is(.ac-section-label, .sd-eyebrow)::before {
+  content: '';
+  flex: none;
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+/* ---- 4. Sub-headers: 1.5px rule only ------------------------------------ */
+#root :is(.panel-head, .sd-card-block-title, .card-block-title) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: var(--mb-bw) solid var(--mb-line);
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .ac-panel)
+  > :is(h3, h4),
+#root :is(.panel-head, .sd-card-block-title) :is(h3, h4) {
+  margin: 0 0 14px;
+  color: var(--card-tone, var(--mb-ok));
+  font: 700 var(--mb-fs-title-sm) / 1.3 var(--mb-font-body);
+  letter-spacing: 0;
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .ac-panel)
+  > :is(h3, h4):not(:first-child) {
+  padding-bottom: 8px;
+  border-bottom: var(--mb-bw) solid var(--mb-line);
+}
+#root :is(.panel-head, .sd-card-block-title) :is(h3, h4) { margin: 0; }
+#root :is(.panel-head-note, .sd-card-block-note, .card-block-note) {
+  padding: 2px 10px;
+  background: var(--mb-surface);
+  border: var(--mb-bw) solid var(--mb-line);
+  border-radius: var(--mb-radius-pill);
+  color: var(--mb-ink-2);
+  font: 700 var(--mb-fs-sm) / 1.3 var(--mb-font-body);
+  white-space: nowrap;
+}
+
+/* ---- 5. Party block in the head (name + avatar, top right) -------------- */
+#root .sd-card-head-party {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+#root .sd-party-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  max-width: 120px;
+  text-align: right;
+}
+#root .sd-party-role {
+  color: var(--mb-muted);
+  font: 700 var(--mb-fs-sm) / 1.2 var(--mb-font-body);
+}
+#root .sd-party-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--mb-ink);
+  font: 800 var(--mb-fs-title-sm) / 1.3 var(--mb-font-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 6. Pills / badges -------------------------------------------------- */
+#root :is(.badge, .tag, .sd-badge) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--mb-neutral-bg);
+  border: var(--mb-bw) solid var(--mb-line-soft);
+  border-radius: var(--mb-radius-pill);
+  color: var(--mb-neutral);
+  font: 700 var(--mb-fs-sm) / 1.3 var(--mb-font-body);
+  letter-spacing: 0;
+  text-transform: none;
+}
+#root :is(.badge-success, .tag--good, .sd-badge.sd-good, .sd-badge.sd-ok, .sd-badge.sd-green) {
+  background: var(--mb-ok-bg);
+  border-color: var(--mb-ok-border);
+  color: var(--mb-ok);
+}
+#root :is(.badge-danger, .tag--bad, .sd-badge.sd-red, .sd-badge.sd-danger) {
+  background: var(--mb-danger-bg);
+  border-color: var(--mb-danger-border);
+  color: var(--mb-danger);
+}
+#root :is(.badge-pending, .badge-warning, .tag--negotiable, .sd-badge.sd-warn) {
+  background: var(--mb-wait-bg);
+  border-color: var(--mb-wait-border);
+  color: var(--mb-wait);
+}
+#root :is(.badge-info, .sd-badge.sd-blue) {
+  background: var(--mb-info-bg);
+  border-color: var(--mb-info-border);
+  color: var(--mb-info);
+}
+
+/* ---- 7. Buttons inside cards ------------------------------------------- */
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
+  :is(.btn, .btn-view) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--mb-btn-h);
+  padding: 0 18px;
+  background: transparent;
+  border: var(--mb-bw-strong) solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  box-shadow: none;
+  color: var(--mb-ink-2);
+  font: 700 var(--mb-fs-base) / 1.2 var(--mb-font-body);
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+  touch-action: manipulation;
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
+  .btn-primary {
+  background: var(--mb-accent);
+  border-color: var(--mb-accent);
+  color: #fff;
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
+  .btn-light {
+  background: var(--mb-surface);
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
+  :is(.btn-danger, .btn-reject) {
+  background: transparent;
+  border-color: var(--mb-danger-border);
+  color: var(--mb-danger);
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
+  .btn-sm {
+  min-height: var(--mb-btn-h-sm);
+  padding: 0 14px;
+  font-size: var(--mb-fs-md);
+  border-radius: var(--mb-radius-sm);
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
+  .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+@media (hover: hover) {
+  #root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
+    :is(.btn, .btn-view):hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.8);
+  }
+  #root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
+    .btn-primary:hover:not(:disabled) {
+    background: var(--mb-accent-ink);
+    border-color: var(--mb-accent-ink);
+  }
+  #root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
+    :is(.btn-danger, .btn-reject):hover:not(:disabled) {
+    background: var(--mb-danger-bg);
+  }
+}
+
+/* ---- 8. Fields inside cards -------------------------------------------- */
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card)
+  :is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='hidden']), select, textarea) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--mb-field-h);
+  padding: 10px 14px;
+  background: var(--mb-surface);
+  border: var(--mb-bw) solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  box-shadow: none;
+  color: var(--mb-ink);
+  font: 500 var(--mb-fs-base) / 1.4 var(--mb-font-body);
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card) textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card)
+  :is(input, select, textarea):focus-visible {
+  outline: var(--mb-focus-ring);
+  outline-offset: var(--mb-focus-offset);
+  border-color: var(--mb-line);
+  box-shadow: none;
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card)
+  :is(input, select, textarea)::placeholder {
+  color: #94a3b8;
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card)
+  :is(input, select, textarea):disabled {
+  background: var(--mb-soft);
+}
+#root :is(.form-card, .card form, .panel form) label {
+  color: var(--mb-ink);
+  font-size: var(--mb-fs-sm);
+  font-weight: 700;
+}
+/* Table cells and toolbars keep compact controls */
+#root :is(.card, .panel, .sd-card, .sd-panel, .ac-panel) table
+  :is(input:not([type='checkbox']):not([type='radio']), select, textarea) {
+  min-height: var(--mb-btn-h-sm);
+  padding: 6px 10px;
+  border-radius: var(--mb-radius-sm);
+  font-size: var(--mb-fs-md);
+}
+
+/* ---- 9. Notices + alerts ------------------------------------------------ */
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel) :is(.alert, .notice) {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--mb-surface);
+  border: var(--mb-bw) solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  box-shadow: none;
+  color: var(--mb-ink-2);
+  font-size: var(--mb-fs-md);
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel) .alert.error {
+  background: var(--mb-danger-bg);
+  border-color: var(--mb-danger-border);
+  color: var(--mb-danger);
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel) .alert.success {
+  background: var(--mb-ok-bg);
+  border-color: var(--mb-ok-border);
+  color: var(--mb-ok);
+}
+#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel) .alert.warning {
+  background: var(--mb-wait-bg);
+  border-color: var(--mb-wait-border);
+  color: var(--mb-wait);
+}
+/* A card that IS a notice (e.g. "No negotiations here yet.") */
+#root .card.notice {
+  margin-top: 0;
+  padding: var(--mb-card-pad);
+  background: var(--mb-card);
+  border: 0;
+  border-radius: var(--mb-radius-card);
+  box-shadow: var(--mb-shadow-card);
+}
+
+/* ---- 10. Empty / loading states ---------------------------------------- */
+#root .state-card h3 {
+  position: relative;
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: var(--mb-bw-strong) solid var(--mb-line);
+  color: var(--mb-ink);
+  font: 800 var(--mb-fs-lg) / 1.3 var(--mb-font-head);
+}
+#root .state-card h3::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: calc(var(--mb-bw-strong) * -1);
+  width: 44px;
+  height: 4px;
+  background: var(--mb-accent);
+}
+#root .loading-card { padding: 24px; color: var(--mb-muted); }
+
+/* ---- 11. Phones: same breakpoints as Orders.css ------------------------- */
+@media (max-width: 480px) {
+  #root :is(.card, .form-card, .dashboard-card, .panel, .workflow-card)
+    > :is(h1, h2):first-child,
+  #root :is(.ac-panel-header, .ac-toolbar) h2,
+  #root .sd-card-title { font-size: 22px; }
+  #root :is(.ac-section-label, .sd-eyebrow) { gap: 10px; letter-spacing: 0.2em; }
+  #root :is(.ac-section-label, .sd-eyebrow)::before { width: 13px; }
+}
+@media (max-width: 360px) {
+  #root :is(.card, .form-card, .dashboard-card, .panel, .workflow-card)
+    > :is(h1, h2):first-child,
+  #root :is(.ac-panel-header, .ac-toolbar) h2,
+  #root .sd-card-title { font-size: 20px; }
+  #root .sd-party-info { max-width: 84px; }
+}
+/* Stack the head's side content under the title instead of squeezing it */
+@media (max-width: 560px) {
+  #root :is(.ac-panel-header, .ac-toolbar) { flex-direction: column; align-items: stretch; }
+}
+
+/* ---- 12. Motion --------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  #root :is(.card, .panel, .sd-card, .btn, .btn-view, .service-access-card) {
+    transition: none;
+  }
+}

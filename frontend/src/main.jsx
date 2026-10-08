@@ -17,6 +17,10 @@ import './styles.css';
 // that can fail to preload on Vercel.
 import './pages/order-details/OrderDetail.css';
 
+// One card system for every page, derived from Orders.css. Keep this LAST so
+// it is the final word on cards (it also out-ranks page rules via #root).
+import './mb-cards.css';
+
 // ============================================================================
 // Global Chunk Load Error Handler
 // ----------------------------------------------------------------------------
