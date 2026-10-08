@@ -6,6 +6,7 @@ const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
+const { noticeWaitingUnlocked } = require('../services/waitingListService');
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
@@ -799,6 +800,7 @@ router.patch(
           throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
         }
 
+        const sellerConfirmationDueAt = computeSellerConfirmationDueAt();
         const claim = await tx.inspectionRequest.updateMany({
           where: {
             id: request.id,
@@ -813,7 +815,7 @@ router.patch(
             sellerFeeAmount: request.feePayer === 'BUYER' ? null : request.feePayer === 'SPLIT' ? Math.round((finalAmount - Math.round(finalAmount * 50) / 100) * 100) / 100 : finalAmount,
             status: 'ACCEPTED',
             // Provisional agreement: the seller has a bounded window to confirm.
-            workflowDueAt: computeSellerConfirmationDueAt(),
+            workflowDueAt: sellerConfirmationDueAt,
             startDueAt: null,
             completionDueAt: null,
             startedAt: null,
@@ -857,6 +859,8 @@ router.patch(
               inspectionRequestId: request.id,
               inspectorId: acceptedQuote.inspectorId,
               amount: String(finalAmount),
+              sellerConfirmed: false,
+              deadline: sellerConfirmationDueAt.toISOString(),
             },
           });
         }
@@ -1490,6 +1494,13 @@ router.post('/:id/seller-decline', authenticate, requireRole('SELLER'), async (r
       if (!outcome.lapsed) throw Object.assign(new Error('The inspection could not be declined in its current state'), { statusCode: 409 });
       return outcome;
     }, { maxWait: 10000, timeout: 15000 });
+    const listingId = await prisma.inspectionRequest.findUnique({
+      where: { id: req.params.id },
+      select: { listingId: true, status: true },
+    }).catch(() => null);
+    if (listingId?.status === 'CANCELLED') {
+      await noticeWaitingUnlocked(prisma, { listingId: listingId.listingId, reason: 'INSPECTION_SELLER_DECLINED' });
+    }
     return res.json({ message: 'Inspection declined. The provisional purchase has been closed and the buyer notified.', ...result });
   } catch (error) {
     req.log.error({ err: error }, 'SELLER INSPECTION DECLINE ERROR');

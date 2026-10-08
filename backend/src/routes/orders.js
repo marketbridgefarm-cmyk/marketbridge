@@ -74,6 +74,11 @@ const orderListInclude = {
       id: true,
       status: true,
       method: true,
+      sellerPickupConfirmedAt: true,
+      sellerPreparationDueAt: true,
+      buyerLoadingDueAt: true,
+      buyerLoadingConfirmedAt: true,
+      truckOwner: { select: { id: true, name: true } },
     },
   },
   payments: {
@@ -495,6 +500,7 @@ router.patch(
             listingId: true,
             status: true,
             buyerDecision: true,
+            buyerDecisionDueAt: true,
             finalPrice: true,
             quantity: true,
             listing: { select: { id: true, category: true } },
@@ -521,6 +527,12 @@ router.patch(
           throw Object.assign(
             new Error('Buyer decision is only available for Agricultural and Products Marketplace orders'),
             { status: 400 }
+          );
+        }
+        if (current.buyerDecisionDueAt && current.buyerDecisionDueAt <= new Date()) {
+          throw Object.assign(
+            new Error('The BUY/CANCEL decision deadline has expired. The purchase will be closed by the workflow timeout.'),
+            { status: 409, code: 'BUYER_DECISION_DEADLINE_EXPIRED' }
           );
         }
         if (current.status === 'DISPUTED') {
@@ -586,7 +598,7 @@ router.patch(
 
           await tx.order.update({
             where: { id: current.id },
-            data: { buyerDecision: 'CANCEL', buyerDecisionAt: new Date() },
+            data: { buyerDecision: 'CANCEL', buyerDecisionAt: new Date(), buyerDecisionDueAt: null },
           });
 
           // Notifications are deliberately best-effort so a notification/SMS
@@ -611,7 +623,7 @@ router.patch(
 
           return tx.order.findUnique({
             where: { id: current.id },
-            select: { id: true, buyerDecision: true, buyerDecisionAt: true, paymentDueAt: true, status: true },
+            select: { id: true, buyerDecision: true, buyerDecisionAt: true, buyerDecisionDueAt: true, paymentDueAt: true, status: true },
           });
         }
 
@@ -626,6 +638,7 @@ router.patch(
           data: {
             buyerDecision: 'BUY',
             buyerDecisionAt: new Date(),
+            buyerDecisionDueAt: null,
             paymentDueAt: computePaymentDueAt(),
           },
         });
@@ -639,7 +652,7 @@ router.patch(
 
         return tx.order.findUnique({
           where: { id: current.id },
-          select: { id: true, buyerDecision: true, buyerDecisionAt: true, paymentDueAt: true, status: true },
+          select: { id: true, buyerDecision: true, buyerDecisionAt: true, buyerDecisionDueAt: true, paymentDueAt: true, status: true },
         });
       }, { maxWait: 10000, timeout: 15000 });
 
