@@ -176,6 +176,7 @@ async function createPayment(data) {
               truckOwnerId: true,
               truckId: true,
               agreedAmount: true,
+              buyerLoadingConfirmedAt: true,
             },
           });
 
@@ -190,6 +191,20 @@ async function createPayment(data) {
             throw Object.assign(
               new Error('The transport quote is no longer the accepted commercial quote'),
               { status: 409 }
+            );
+          }
+
+          if (job.status !== 'ACCEPTED') {
+            throw Object.assign(
+              new Error('The transport arrangement is no longer ready for payment'),
+              { status: 409, code: 'TRANSPORT_NOT_READY_FOR_PAYMENT' }
+            );
+          }
+
+          if (!job.buyerLoadingConfirmedAt) {
+            throw Object.assign(
+              new Error('The buyer must approve the loading report before transport payment can begin'),
+              { status: 409, code: 'BUYER_LOADING_CONFIRMATION_REQUIRED' }
             );
           }
 

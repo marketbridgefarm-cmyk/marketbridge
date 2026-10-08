@@ -108,7 +108,10 @@ function buildPaymentSnapshot(order) {
       };
     });
 
-  const job = order.transportJob || null;
+  // A cancelled transport is no longer an active fulfillment stage. Treat
+  // it as absent so the buyer/seller can arrange a replacement transporter,
+  // including after the seller has already been paid.
+  const job = order.transportJob?.status === 'CANCELLED' ? null : (order.transportJob || null);
   const transportRequired = Boolean(job) && job.method === 'HIRE_TRANSPORTER';
   const transportObligation = job
     ? findObligation('TRANSPORT', null, job.id)
@@ -202,7 +205,7 @@ function buildPaymentSnapshot(order) {
 // ----------------------------------------------------------------------------
 
 function buildTimeline(order, payments) {
-  const job = order.transportJob || null;
+  const job = order.transportJob?.status === 'CANCELLED' ? null : (order.transportJob || null);
   const category = order.listing?.category;
   const inspection = (order.inspectionRequests || order.listing?.inspectionRequests || [])
     .filter((r) => r.status !== 'CANCELLED')
@@ -500,7 +503,7 @@ function buildActions(order, payments, viewer) {
     }];
   }
   const { isBuyer, isSeller, isTruckOwner, isInspector, isAdmin } = viewer;
-  const job = order.transportJob || null;
+  const job = order.transportJob?.status === 'CANCELLED' ? null : (order.transportJob || null);
   const terminal = TERMINAL_ORDER_STATUSES.includes(order.status);
   const reportCompleted = Boolean(payments.allInspectionsCompleted);
   const actions = [];
