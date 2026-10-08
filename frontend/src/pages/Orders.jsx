@@ -228,7 +228,7 @@ function OrderCard({ order, currentUserId }) {
   const coordinationChip = coordinationChipFor(order);
 
   return (
-    <article className="order-card">
+    <article className={`order-card ${isBuyer ? 'is-buying' : 'is-selling'}`}>
       <div className="order-card-head">
         <div className="order-card-head-text">
           <span className={`eyebrow ${isBuyer ? '' : 'is-selling'}`}>
