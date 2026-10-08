@@ -1067,6 +1067,9 @@
 }
 
 @media (max-width: 480px) {
+  /* Match the Orders card exactly: compact card, but keep the title/party
+     header on one row even on narrow phones. The reference Orders card
+     never drops the seller block below the product title. */
   .order-detail-page .card {
     padding: 18px;
     border-radius: 18px;
@@ -1091,14 +1094,25 @@
 
   .od-card-head {
     gap: 10px;
+    flex-wrap: nowrap;
+  }
+
+  .od-card-head-main {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .od-card-head-side {
-    max-width: 42%;
+    flex: 0 1 45%;
+    max-width: 45%;
+  }
+
+  .od-card-side-party {
+    gap: 8px;
   }
 
   .od-card-side-party > div {
-    max-width: 100px;
+    max-width: 86px;
   }
 
   .od-card-side-value {
@@ -1146,32 +1160,34 @@
 }
 
 @media (max-width: 360px) {
+  /* The Orders reference remains a single-row header at the S9/360px
+     viewport. Do not stack the seller/avatar under the title. */
   .order-detail-page .card {
-    padding: 14px;
+    padding: 18px;
   }
 
   .od-card-title {
-    font-size: 20px;
+    font-size: 22px;
   }
 
   .od-card-head {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .od-card-head-side {
-    width: 100%;
-    max-width: none;
-    margin-left: 0;
+    width: auto;
+    max-width: 45%;
+    margin-left: auto;
   }
 
   .od-card-side-party {
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 
   .od-card-side-party > div {
-    align-items: flex-start;
-    max-width: 160px;
-    text-align: left;
+    align-items: flex-end;
+    max-width: 82px;
+    text-align: right;
   }
 
   .od-detail-facts {
@@ -1184,5 +1200,54 @@
   .od-flash {
     transition: none;
     animation: none;
+  }
+}
+
+
+/* -------------------------------------------------------------------------
+   Orders-card parity pass
+   -------------------------------------------------------------------------
+   Keep OrderDetail's workflow-specific class names, but make its overview
+   card use the same visual measurements as Orders.css.
+*/
+.order-detail-page .od-card-overview {
+  --card-tone: var(--od-ok);
+}
+
+.order-detail-page .od-card-overview .od-card-section-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.order-detail-page .od-card-overview .od-card-section-head {
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom-width: 1.5px;
+}
+
+.order-detail-page .od-card-overview .od-card-section + .od-card-section {
+  margin-top: 22px;
+}
+
+.order-detail-page .od-card-overview .od-price-amount {
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.order-detail-page .od-card-overview .od-meta {
+  margin-top: 22px;
+}
+
+.order-detail-page .od-card-overview .btn-block {
+  min-height: 48px;
+  margin-top: 12px;
+  border-width: 2px;
+  border-radius: var(--od-radius-field);
+  font-size: 16px;
+}
+
+@media (max-width: 480px) {
+  .order-detail-page .od-card-overview .od-price-amount {
+    font-size: 28px;
   }
 }
