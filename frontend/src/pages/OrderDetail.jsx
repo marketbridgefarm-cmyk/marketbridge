@@ -7,7 +7,7 @@ import React, {
 } from 'react';
 import AmountPicker from '../components/AmountPicker.jsx';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
- 
+
 import api from '../api/client';
 import {
   startChapaPayment,
@@ -647,32 +647,37 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
   const tone = statusTone(order.status);
   const statusText = label(order.status);
 
+  /*
+   * Deliberately split the overview into separate cards.
+   * Each card now follows the Orders page card language instead of putting
+   * Order status, Amount, and Order Details into one very tall card.
+   */
   return (
-    <Card
-      className="od-card-overview"
-      eyebrow={role}
-      eyebrowClass={isSeller ? 'is-selling' : ''}
-      title={title}
-      side={<PartyBadge role={counterpartyRole} name={other?.name} />}
-    >
-      <Section
-        title="Order status"
-        meta={
-          <span className={`od-section-status od-text-${tone}`}>{statusText}</span>
-        }
-        bare
+    <div className="od-overview-stack">
+      <Card
+        className="od-card-overview od-card-status"
+        eyebrow={role}
+        eyebrowClass={isSeller ? 'is-selling' : ''}
+        title={title}
+        side={<PartyBadge role={counterpartyRole} name={other?.name} />}
       >
-        <OrderProgress steps={steps} />
-      </Section>
+        <Section
+          title="Order status"
+          meta={<span className={`od-section-status od-text-${tone}`}>{statusText}</span>}
+          bare
+        >
+          <OrderProgress steps={steps} />
+        </Section>
+      </Card>
 
-      <Section title="Amount">
+      <Card className="od-card-overview od-card-amount" title="Amount">
         <div className="od-price">
           <span className="od-price-amount">{money(order.finalPrice)}</span>
           <span className="od-price-currency">ETB</span>
         </div>
-      </Section>
+      </Card>
 
-      <Section title="Order Details">
+      <Card className="od-card-overview od-card-details" title="Order Details">
         <Facts>
           <Fact name="Buyer">
             {order.buyer?.name || '—'}
@@ -689,28 +694,28 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
           <Fact name="Ordered from">{order.listing?.location || '—'}</Fact>
           {order.buyer?.location && <Fact name="Deliver to">{order.buyer.location}</Fact>}
         </Facts>
-      </Section>
 
-      <div className="od-meta">
-        <span className="od-meta-time">
-          Created {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}
-        </span>
-        <span className="od-meta-code">ORD {shortId(order.id).toUpperCase()}</span>
-      </div>
+        <div className="od-meta">
+          <span className="od-meta-time">
+            Created {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}
+          </span>
+          <span className="od-meta-code">ORD {shortId(order.id).toUpperCase()}</span>
+        </div>
 
-      {canCancel && (
-        <Button
-          variant="outline"
-          className="btn-block"
-          disabled={busy === 'cancel'}
-          onClick={onCancel}
-          busy={busy === 'cancel'}
-          busyText="Cancelling…"
-        >
-          Cancel order
-        </Button>
-      )}
-    </Card>
+        {canCancel && (
+          <Button
+            variant="outline"
+            className="btn-block"
+            disabled={busy === 'cancel'}
+            onClick={onCancel}
+            busy={busy === 'cancel'}
+            busyText="Cancelling…"
+          >
+            Cancel order
+          </Button>
+        )}
+      </Card>
+    </div>
   );
 }
 
