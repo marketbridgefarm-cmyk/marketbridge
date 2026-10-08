@@ -5,6 +5,9 @@ const DEFAULT_INSPECTION_WORKFLOW_TIMEOUT_HOURS = 48;
 const DEFAULT_TRANSPORT_WORKFLOW_TIMEOUT_HOURS = 48;
 const DEFAULT_INSPECTION_START_TIMEOUT_HOURS = 24;
 const DEFAULT_INSPECTION_COMPLETION_TIMEOUT_HOURS = 24;
+const DEFAULT_BUYER_DECISION_TIMEOUT_HOURS = 24;
+const DEFAULT_SELLER_PREPARATION_TIMEOUT_HOURS = 24;
+const DEFAULT_BUYER_LOADING_TIMEOUT_HOURS = 24;
 
 function paymentTimeoutHours() {
   const configured = Number(process.env.ORDER_PAYMENT_TIMEOUT_HOURS);
@@ -44,6 +47,31 @@ function computeInspectionCompletionDueAt(from = new Date()) {
   return new Date(from.getTime() + inspectionCompletionTimeoutHours() * 60 * 60 * 1000);
 }
 
+
+function buyerDecisionTimeoutHours() {
+  return workflowTimeoutHours('BUYER_DECISION_TIMEOUT_HOURS', DEFAULT_BUYER_DECISION_TIMEOUT_HOURS);
+}
+
+function sellerPreparationTimeoutHours() {
+  return workflowTimeoutHours('SELLER_PREPARATION_TIMEOUT_HOURS', DEFAULT_SELLER_PREPARATION_TIMEOUT_HOURS);
+}
+
+function buyerLoadingTimeoutHours() {
+  return workflowTimeoutHours('BUYER_LOADING_TIMEOUT_HOURS', DEFAULT_BUYER_LOADING_TIMEOUT_HOURS);
+}
+
+function computeBuyerDecisionDueAt(from = new Date()) {
+  return new Date(from.getTime() + buyerDecisionTimeoutHours() * 60 * 60 * 1000);
+}
+
+function computeSellerPreparationDueAt(from = new Date()) {
+  return new Date(from.getTime() + sellerPreparationTimeoutHours() * 60 * 60 * 1000);
+}
+
+function computeBuyerLoadingDueAt(from = new Date()) {
+  return new Date(from.getTime() + buyerLoadingTimeoutHours() * 60 * 60 * 1000);
+}
+
 function transportWorkflowTimeoutHours() {
   return workflowTimeoutHours('TRANSPORT_WORKFLOW_TIMEOUT_HOURS', DEFAULT_TRANSPORT_WORKFLOW_TIMEOUT_HOURS);
 }
@@ -63,4 +91,10 @@ module.exports = {
   computeInspectionCompletionDueAt,
   transportWorkflowTimeoutHours,
   computeTransportWorkflowDueAt,
+  buyerDecisionTimeoutHours,
+  sellerPreparationTimeoutHours,
+  buyerLoadingTimeoutHours,
+  computeBuyerDecisionDueAt,
+  computeSellerPreparationDueAt,
+  computeBuyerLoadingDueAt,
 };
