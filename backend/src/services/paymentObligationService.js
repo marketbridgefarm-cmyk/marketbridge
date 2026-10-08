@@ -18,6 +18,26 @@ async function syncOrderPaymentObligations(tx, orderId) {
   });
   if (!order) return [];
 
+  // Inspection payment obligations do not exist commercially until the
+  // seller has confirmed the provisional inspector agreement. Cancel any
+  // legacy/open obligations left by an older sync so they cannot be used as
+  // a payment bypass. Once sellerConfirmedAt is set, the same stable keys
+  // are recreated/reopened below.
+  const unconfirmedInspections = (order.inspectionRequests || []).filter(
+    (r) => !r.sellerConfirmedAt
+  );
+  if (unconfirmedInspections.length) {
+    await tx.paymentObligation.updateMany({
+      where: {
+        orderId: order.id,
+        type: 'INSPECTOR',
+        inspectionRequestId: { in: unconfirmedInspections.map((r) => r.id) },
+        status: 'OPEN',
+      },
+      data: { status: 'CANCELLED' },
+    });
+  }
+
   const desired = [{
     obligationKey: `ORDER:${order.id}:MARKETPLACE`,
     type: 'MARKETPLACE',
@@ -29,6 +49,9 @@ async function syncOrderPaymentObligations(tx, orderId) {
   }];
 
   for (const r of order.inspectionRequests || []) {
+    // The inspection fee is not a live payment obligation until the seller
+    // confirms the selected inspector and agreed fee.
+    if (!r.sellerConfirmedAt) continue;
     if (r.fee == null || Number(r.fee) <= 0 || !r.inspectorId) continue;
     const totalFee = Number(r.fee);
     const payerMode = r.feePayer || (r.mode === 'SELLER_REQUESTED' ? 'SELLER' : 'BUYER');
@@ -79,9 +102,12 @@ async function syncOrderPaymentObligations(tx, orderId) {
           (item.type !== 'TRANSPORT' || p.transportJobId === item.transportJobId)
         );
 
+    // A previously cancelled obligation may be safely reopened when the
+    // seller has now confirmed the inspection. Stable obligation keys prevent
+    // duplicate commercial obligations.
     const status = matchingPayment?.status === 'PAID' || obligation?.payment?.status === 'PAID'
       ? 'PAID'
-      : (obligation?.status === 'CANCELLED' ? 'CANCELLED' : 'OPEN');
+      : 'OPEN';
 
     const data = {
       type: item.type,
@@ -115,6 +141,21 @@ async function syncOrderPaymentObligations(tx, orderId) {
 
     result.push(obligation);
   }
+
+  // Retire inspection obligations that are no longer wanted. This happens when
+  // the fee payer mode changes after a first sync (e.g. BUYER -> SPLIT changes
+  // the obligation keys) or when an inspection request is cancelled: without
+  // this the stale full-amount obligation stays OPEN next to the new ones and
+  // the payer could be charged twice. PAID obligations are never touched.
+  await tx.paymentObligation.updateMany({
+    where: {
+      orderId: order.id,
+      type: 'INSPECTOR',
+      status: 'OPEN',
+      obligationKey: { notIn: desired.map((d) => d.obligationKey) },
+    },
+    data: { status: 'CANCELLED' },
+  });
   return result;
 }
 

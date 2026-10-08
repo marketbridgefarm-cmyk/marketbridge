@@ -10,6 +10,8 @@ const { processRefund, verifyAndFinalizeRefund } = require('./paymentRefundServi
 const logger = require('../utils/logger');
 
 const { promoteNextWaitingBuyer } = require('./orderCancellationService');
+const { lapseInspectionAgreement, computeSellerConfirmationDueAt, computeInspectionPaymentDueAt } = require('./inspectionLapseService');
+const { computeInspectionStartDueAt } = require('../utils/orderTiming');
 
 const LOCK_KEY = 82461327;
 
@@ -81,11 +83,60 @@ async function expireOffers(now = new Date()) {
   return { expired };
 }
 
+/**
+ * Keeps the ACCEPTED-phase clocks honest:
+ *  - backfills a deadline on provisional agreements that have none;
+ *  - starts the inspector's start window only once the fee is fully paid
+ *    (the inspector cannot start earlier, so it must not run earlier).
+ */
+async function startPaidInspectionClocks(now = new Date()) {
+  const rows = await prisma.inspectionRequest.findMany({
+    where: { status: 'ACCEPTED', startDueAt: null, orderId: { not: null } },
+    select: { id: true, orderId: true, sellerConfirmedAt: true, workflowDueAt: true },
+    take: 200,
+  });
+  let started = 0;
+  for (const row of rows) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (!row.sellerConfirmedAt) {
+          if (!row.workflowDueAt) {
+            await tx.inspectionRequest.updateMany({ where: { id: row.id, status: 'ACCEPTED', sellerConfirmedAt: null, workflowDueAt: null }, data: { workflowDueAt: computeSellerConfirmationDueAt() } });
+          }
+          return;
+        }
+        const obligations = await tx.paymentObligation.findMany({
+          where: { orderId: row.orderId, inspectionRequestId: row.id, type: 'INSPECTOR', status: { not: 'CANCELLED' } },
+          select: { status: true },
+        });
+        if (!obligations.length) return;
+        if (obligations.every((o) => o.status === 'PAID')) {
+          const updated = await tx.inspectionRequest.updateMany({
+            where: { id: row.id, status: 'ACCEPTED', startDueAt: null },
+            data: { startDueAt: computeInspectionStartDueAt(), workflowDueAt: null },
+          });
+          if (updated.count === 1) {
+            await recordOrderEvent(tx, { orderId: row.orderId, actorId: null, type: 'INSPECTION_PAYMENT_COMPLETE', metadata: { inspectionRequestId: row.id } });
+            started += 1;
+          }
+        } else if (!row.workflowDueAt) {
+          await tx.inspectionRequest.updateMany({ where: { id: row.id, status: 'ACCEPTED', startDueAt: null, workflowDueAt: null }, data: { workflowDueAt: computeInspectionPaymentDueAt() } });
+        }
+      }, { maxWait: 10000, timeout: 15000 });
+    } catch (error) {
+      logger.error({ err: error, inspectionRequestId: row.id }, 'Failed to update inspection clocks');
+    }
+  }
+  return { started };
+}
+
 async function expireInspectionWorkflows(now = new Date()) {
+  await startPaidInspectionClocks(now);
   const candidates = await prisma.inspectionRequest.findMany({
     where: {
       OR: [
         { status: 'REQUESTED', workflowDueAt: { lte: now } },
+        { status: 'ACCEPTED', startDueAt: null, workflowDueAt: { lte: now } },
         { status: 'ACCEPTED', startDueAt: { lte: now } },
         { status: 'IN_PROGRESS', completionDueAt: { lte: now } },
       ],
@@ -105,6 +156,23 @@ async function expireInspectionWorkflows(now = new Date()) {
           if (request.orderId) await recordOrderEvent(tx, { orderId: request.orderId, actorId: null, type: 'INSPECTION_WORKFLOW_EXPIRED', fromStatus: 'REQUESTED', toStatus: 'CANCELLED', metadata: { inspectionRequestId: request.id, workflowDueAt: request.workflowDueAt.toISOString() } });
           await recordAuditEvent(tx, { actorId: null, action: 'INSPECTION_WORKFLOW_EXPIRED', resourceType: 'InspectionRequest', resourceId: request.id, metadata: { orderId: request.orderId, workflowDueAt: request.workflowDueAt.toISOString() } });
           return true;
+        }
+
+        // Provisional agreement lapsed: seller never confirmed, or the fee was not fully paid in time.
+        if (request.status === 'ACCEPTED' && !request.startDueAt && request.workflowDueAt && request.workflowDueAt <= now) {
+          const inFlight = await tx.payment.count({ where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: 'PROCESSING' } });
+          if (inFlight) return false; // a payer is mid-checkout; retry next cycle
+          const code = request.sellerConfirmedAt ? 'INSPECTION_PAYMENT_EXPIRED' : 'SELLER_CONFIRMATION_EXPIRED';
+          const outcome = await lapseInspectionAgreement(tx, { inspectionRequestId: request.id, code });
+          if (outcome.lapsed) return true;
+          if (outcome.skipped === 'PAYMENT_IN_FLIGHT') {
+            // Part of the fee was paid (e.g. split fee). Do not cancel money silently: stall for the existing refund/reassign handling.
+            await tx.inspectionRequest.update({ where: { id: request.id }, data: { status: 'STALLED', workflowDueAt: null } });
+            if (request.orderId) await recordOrderEvent(tx, { orderId: request.orderId, actorId: null, type: 'INSPECTION_STALLED', fromStatus: 'ACCEPTED', toStatus: 'STALLED', metadata: { inspectionRequestId: request.id, reason: 'Inspection fee only partly paid before the payment window closed' } });
+            await recordAuditEvent(tx, { actorId: null, action: 'INSPECTION_STALLED', resourceType: 'InspectionRequest', resourceId: request.id, metadata: { orderId: request.orderId, phase: 'PAYMENT' } });
+            return true;
+          }
+          return false;
         }
 
         if (request.status === 'ACCEPTED' && request.startDueAt && request.startDueAt <= now) {
@@ -213,10 +281,20 @@ async function expireUnpaidOrders(now = new Date()) {
       await prisma.$transaction(async (tx) => {
         const current = await tx.order.findUnique({
           where: { id: candidate.id },
-          include: { transportJob: true, payments: true },
+          include: { transportJob: true, payments: true, listing: { select: { category: true } } },
         });
 
         if (!current || current.status !== 'PENDING_PAYMENT' || !current.paymentDueAt || current.paymentDueAt > now) {
+          return;
+        }
+
+        // Agricultural orders are provisional until the buyer explicitly
+        // chooses BUY after the inspection report. Never expire them from
+        // the generic goods-payment timer before that decision. Legacy rows
+        // may still carry an old inspection-workflow deadline, so clear it.
+        if (current.listing?.category === 'AGRICULTURAL' && current.buyerDecision !== 'BUY') {
+          await tx.order.update({ where: { id: current.id }, data: { paymentDueAt: null } });
+          logger.info({ orderId: current.id }, 'Cleared premature agricultural payment deadline before BUY decision');
           return;
         }
 

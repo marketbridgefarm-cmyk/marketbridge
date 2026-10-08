@@ -171,6 +171,8 @@ function buildPaymentSnapshot(order) {
       inspectorId: r.inspectorId,
       requestedById: r.requestedById,
       fee: r.fee,
+      sellerConfirmedAt: r.sellerConfirmedAt || null,
+      workflowDueAt: r.workflowDueAt || null,
     })),
     coordination,
     allInspectionsPaid,
@@ -282,27 +284,37 @@ function buildTimeline(order, payments) {
       detail: reportCompleted ? 'The inspection report is available for review.' : inspectionInProgress ? 'The inspector is completing the report.' : 'Waiting for the inspection to be completed.',
     });
 
-    if (buyerDecisionRequired) {
-      steps.push({
-        code: 'BUYER_DECISION',
-        label: 'Buyer BUY / Cancel decision',
-        completed: buyerDecisionMade,
-        state: state(buyerDecisionMade, reportCompleted && !buyerDecisionMade),
-        at: order.buyerDecisionAt || null,
-        detail: order.buyerDecision === 'BUY'
-          ? 'BUY recorded; seller payment is unlocked.'
-          : order.buyerDecision === 'CANCEL'
-            ? 'Buyer cancelled after reviewing the inspection.'
-            : 'Buyer must review the report before choosing BUY or Cancel.',
-      });
-    }
+  }
+
+  if (buyerDecisionRequired && job) {
+    const sellerPrepared = Boolean(job.sellerPickupConfirmedAt);
+    steps.push({
+      code: 'TRANSPORT_PREPARATION_CONFIRMATION',
+      label: 'Seller confirms transporter preparation',
+      completed: sellerPrepared,
+      state: state(sellerPrepared, transportAccepted && !sellerPrepared),
+      at: job.sellerPickupConfirmedAt || null,
+      detail: sellerPrepared ? 'The seller confirmed that the selected transporter is prepared.' : 'Waiting for the seller to confirm transporter preparation.',
+    });
+    steps.push({
+      code: 'BUYER_DECISION',
+      label: 'Final BUY / Cancel decision',
+      completed: buyerDecisionMade,
+      state: state(buyerDecisionMade, sellerPrepared && !buyerDecisionMade),
+      at: order.buyerDecisionAt || null,
+      detail: order.buyerDecision === 'BUY'
+        ? 'Final BUY recorded; seller payment is unlocked.'
+        : order.buyerDecision === 'CANCEL'
+          ? 'Buyer cancelled the transaction.'
+          : sellerPrepared ? 'Review the agreed transporter preparation, then choose BUY or Cancel.' : 'Seller confirmation is required before the final BUY decision.',
+    });
   }
 
   steps.push({
     code: 'GOODS_PAYMENT',
     label: 'Goods payment',
     completed: goodsPaid,
-    state: state(goodsPaid, buyerApproved && (!inspectionRequired || reportCompleted) && !goodsPaid),
+    state: state(goodsPaid, order.buyerDecision === 'BUY' && !goodsPaid),
     at: null,
     detail: goodsPaid ? 'Commercial payment for the negotiated goods is recorded.' : 'Goods payment is the commercial commitment that unlocks fulfillment.',
   });
@@ -311,9 +323,9 @@ function buildTimeline(order, payments) {
     code: 'TRANSPORT_ARRANGEMENT',
     label: 'Transport arranged',
     completed: transportExists,
-    state: state(transportExists, goodsPaid && !transportExists),
+    state: state(transportExists, reportCompleted && !transportExists),
     at: job?.createdAt || null,
-    detail: transportExists ? 'A transport job has been created.' : 'Transport can be arranged after the goods payment gate.',
+    detail: transportExists ? 'A transport job has been created.' : 'Transport can be arranged after the inspection report and inspection payment are complete.',
   });
 
   if (job) {
@@ -402,7 +414,7 @@ function computeStage(order, payments) {
 
   const job = order.transportJob || null;
   const agricultural = order.listing?.category === 'AGRICULTURAL';
-  const inspectionRequired = Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist);
+  const inspectionRequired = agricultural || Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist);
 
   // Agricultural and product orders use the same inspection gate. The
   // completed report must be available before the goods payment becomes a
@@ -415,7 +427,13 @@ function computeStage(order, payments) {
 
     if (!payments.allInspectionsCompleted) {
       const current = (payments.inspectionRequests || [])[0];
-      if (current?.status === 'ACCEPTED' && payments.inspections.some((i) => !i.paid)) {
+      // ACCEPTED is only a provisional inspector agreement. The seller must
+      // explicitly confirm the selected inspector and fee before any
+      // inspection payment becomes payable.
+      if (current?.status === 'ACCEPTED' && !current.sellerConfirmedAt) {
+        return 'INSPECTION_SELLER_CONFIRMATION';
+      }
+      if (current?.status === 'ACCEPTED' && current.sellerConfirmedAt && payments.inspections.some((i) => !i.paid)) {
         return 'INSPECTION_PAYMENT';
       }
       return 'INSPECTION';
@@ -424,11 +442,11 @@ function computeStage(order, payments) {
     // Both Agricultural and Product orders require an explicit BUY/CANCEL
     // decision after the inspection report is reviewed. BUY unlocks goods
     // payment; CANCEL closes the provisional purchase.
-    if (inspectionRequired && !order.buyerDecision) return 'BUYER_DECISION';
-
-    if (!payments.marketplace.paid && !job) {
-      return 'GOODS_PAYMENT';
-    }
+    if (!job) return 'ARRANGING_TRANSPORT';
+    if (job.status === 'REQUESTED' || job.status === 'QUOTED') return 'ARRANGING_TRANSPORT';
+    if (!job.sellerPickupConfirmedAt) return 'TRANSPORT_PREPARATION_CONFIRMATION';
+    if (!order.buyerDecision) return 'BUYER_DECISION';
+    if (!payments.marketplace.paid) return 'GOODS_PAYMENT';
   }
 
   if (!payments.marketplace.paid && !job) return 'PENDING_PAYMENT';
@@ -484,6 +502,7 @@ function buildActions(order, payments, viewer) {
   const { isBuyer, isSeller, isTruckOwner, isInspector, isAdmin } = viewer;
   const job = order.transportJob || null;
   const terminal = TERMINAL_ORDER_STATUSES.includes(order.status);
+  const reportCompleted = Boolean(payments.allInspectionsCompleted);
   const actions = [];
 
   const push = (action) => actions.push({ reason: null, ...action, enabled: action.ready && action.viewerCanPerform });
@@ -514,6 +533,29 @@ function buildActions(order, payments, viewer) {
         reason: pendingQuotes.length ? null : 'Waiting for an inspector quote',
         pendingQuoteCount: pendingQuotes.length,
         route: { method: 'GET', path: `/inspections/${request.id}/quotes` },
+      });
+    }
+
+    if (request.status === 'ACCEPTED' && request.inspectorId && !request.sellerConfirmedAt) {
+      push({
+        code: 'CONFIRM_INSPECTION',
+        label: 'Confirm inspector and fee',
+        actorRole: 'SELLER',
+        inspectionRequestId: request.id,
+        viewerCanPerform: isSeller,
+        ready: isSeller,
+        reason: isSeller ? null : 'Waiting for the seller to confirm the selected inspector and agreed fee',
+        route: { method: 'POST', path: `/inspections/${request.id}/seller-confirm` },
+      });
+      push({
+        code: 'DECLINE_INSPECTION',
+        label: 'Decline inspector and fee',
+        actorRole: 'SELLER',
+        inspectionRequestId: request.id,
+        viewerCanPerform: isSeller,
+        ready: isSeller,
+        reason: isSeller ? null : 'Only the seller can decline the provisional inspection',
+        route: { method: 'POST', path: `/inspections/${request.id}/seller-decline` },
       });
     }
 
@@ -559,17 +601,24 @@ function buildActions(order, payments, viewer) {
   // 3. Buyer purchase decision for both marketplaces. This is a real
   // server-side mutation: the buyer must review the completed inspection
   // report and explicitly choose BUY or CANCEL before goods payment.
-  if (Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist) && !order.buyerDecision && !terminal) {
-    const decisionReady = payments.inspectionRequestsExist && payments.allInspectionsCompleted;
+  if ((order.listing?.category === 'AGRICULTURAL' || Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist)) && !order.buyerDecision && !terminal) {
+    const jobReady = Boolean(job && job.status === 'ACCEPTED' && job.sellerPickupConfirmedAt);
+    const decisionReady = payments.inspectionRequestsExist && payments.allInspectionsCompleted && jobReady;
     const decisionReason = !payments.inspectionRequestsExist
-      ? 'Complete the inspection before choosing BUY or CANCEL'
+      ? 'Complete the inspection before proceeding'
       : !payments.allInspectionsCompleted
-        ? 'Review the published inspection report before choosing BUY or CANCEL'
-        : null;
+        ? 'Review the published inspection report before proceeding'
+        : !job
+          ? 'Select and agree a transporter first'
+          : job.status !== 'ACCEPTED'
+            ? 'Wait for the transporter quote to be agreed'
+            : !job.sellerPickupConfirmedAt
+              ? 'Wait for the seller to confirm transporter preparation'
+              : null;
 
     push({
       code: 'BUYER_DECISION_BUY',
-      label: 'BUY — continue purchase',
+      label: 'BUY — final purchase commitment',
       actorRole: 'BUYER',
       viewerCanPerform: isBuyer,
       ready: decisionReady,
@@ -586,8 +635,8 @@ function buildActions(order, payments, viewer) {
       label: 'Cancel after inspection',
       actorRole: 'BUYER',
       viewerCanPerform: isBuyer,
-      ready: decisionReady,
-      reason: decisionReason,
+      ready: payments.inspectionRequestsExist && payments.allInspectionsCompleted,
+      reason: !payments.inspectionRequestsExist ? 'Complete the inspection before cancelling' : !payments.allInspectionsCompleted ? 'Review the published inspection report first' : null,
       route: {
         method: 'PATCH',
         path: `/orders/${order.id}/buyer-decision`,
@@ -600,7 +649,7 @@ function buildActions(order, payments, viewer) {
   // decision after a completed inspection report. The same rule is enforced
   // server-side in /payments.
   if (!payments.marketplace.paid) {
-    const decisionRequired = Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist);
+    const decisionRequired = (order.listing?.category === 'AGRICULTURAL' || Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist));
     const inspectionRequired = decisionRequired;
     const ready = !terminal && (!decisionRequired || order.buyerDecision === 'BUY') &&
       (!inspectionRequired || payments.allInspectionsCompleted);
@@ -625,39 +674,68 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 4. Pay each fee-bearing inspection.
-  for (const obligation of payments.inspections) {
-    if (obligation.paid) continue;
-    const viewerIsRequester = obligation.requestedById === viewer.userId;
-    const inspectionRequest = (order.inspectionRequests || []).find((r) => r.id === obligation.inspectionRequestId);
-    const inspectionPayerId = obligation.payerId;
-    push({
-      code: 'PAY_INSPECTION',
-      label: 'Pay inspection fee',
-      actorRole: obligation.payerId === order.sellerId ? 'SELLER' : 'BUYER',
-      inspectionRequestId: obligation.inspectionRequestId,
-      viewerCanPerform: viewer.userId === inspectionPayerId || (viewerIsRequester && !order.id),
-      ready: !terminal && Boolean(inspectionRequest?.sellerConfirmedAt),
-      reason: terminal ? 'Order is no longer active' : !inspectionRequest?.sellerConfirmedAt ? 'Seller must confirm the selected inspector before inspection payment can begin' : null,
-      route: {
-        method: 'POST',
-        path: '/payments',
-        body: { type: 'INSPECTOR', inspectionRequestId: obligation.inspectionRequestId, amount: obligation.amount },
-      },
-    });
+  // 4. Pay each fee-bearing inspection. For SPLIT fees, each payer gets a
+  // separate action tied to that payer's durable obligation. Before seller
+  // confirmation there is intentionally no live obligation, so payment is
+  // represented as locked rather than payable.
+  for (const inspection of payments.inspections) {
+    const inspectionRequest = (order.inspectionRequests || []).find((r) => r.id === inspection.inspectionRequestId);
+    const obligations = inspection.obligations || [];
+
+    if (!obligations.length) {
+      push({
+        code: 'PAY_INSPECTION',
+        label: 'Pay inspection fee',
+        actorRole: inspection.feePayer === 'SELLER' ? 'SELLER' : 'BUYER',
+        inspectionRequestId: inspection.inspectionRequestId,
+        viewerCanPerform: false,
+        ready: false,
+        reason: !inspectionRequest?.sellerConfirmedAt
+          ? 'Seller must confirm the selected inspector before inspection payment can begin'
+          : 'Inspection payment obligation has not been created yet',
+        route: null,
+      });
+      continue;
+    }
+
+    for (const obligation of obligations) {
+      if (obligation.status === 'PAID' || obligation.paymentId && inspection.paid) continue;
+      const inspectionPayerId = obligation.payerId;
+      const viewerCanPay = viewer.userId === inspectionPayerId;
+      push({
+        code: 'PAY_INSPECTION',
+        label: 'Pay inspection fee',
+        actorRole: inspectionPayerId === order.sellerId ? 'SELLER' : 'BUYER',
+        inspectionRequestId: inspection.inspectionRequestId,
+        obligationId: obligation.id,
+        viewerCanPerform: viewerCanPay,
+        ready: !terminal && Boolean(inspectionRequest?.sellerConfirmedAt) && viewerCanPay,
+        reason: terminal
+          ? 'Order is no longer active'
+          : !inspectionRequest?.sellerConfirmedAt
+            ? 'Seller must confirm the selected inspector before inspection payment can begin'
+            : !viewerCanPay
+              ? 'Only the designated payer can pay this inspection obligation'
+              : null,
+        route: {
+          method: 'POST',
+          path: '/payments',
+          body: { type: 'INSPECTOR', inspectionRequestId: inspection.inspectionRequestId, amount: Number(obligation.amount) },
+        },
+      });
+    }
   }
 
   // 3. Arrange transport if nothing has been set up yet.
   if (!job) {
-    const buyerDecisionReady = !Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist) || order.buyerDecision === 'BUY';
-    const ready = !terminal && buyerDecisionReady && payments.marketplace.paid && ['CONFIRMED', 'PENDING_PAYMENT'].includes(order.status);
+    const ready = !terminal && reportCompleted && ['CONFIRMED', 'PENDING_PAYMENT', 'TRANSPORT_ARRANGED'].includes(order.status);
     push({
       code: 'ARRANGE_TRANSPORT',
       label: 'Arrange transport',
       actorRole: 'BUYER_OR_SELLER',
       viewerCanPerform: isBuyer || isSeller,
       ready,
-      reason: ready ? null : (!buyerDecisionReady ? 'Choose BUY before arranging transport' : !payments.marketplace.paid ? 'Pay the seller for the agreed produce before arranging transport' : `Transport cannot be arranged while order is ${order.status}`),
+      reason: ready ? null : (!reportCompleted ? 'Complete the inspection report before arranging transport' : `Transport cannot be arranged while order is ${order.status}`),
       route: { method: 'POST', path: '/transport', body: { orderId: order.id } },
     });
   }
@@ -685,14 +763,14 @@ function buildActions(order, payments, viewer) {
 
   // 5. Pay the hired transporter.
   if (job && payments.transport?.required && !payments.transport.paid) {
-    const ready = job.status === 'ACCEPTED' && job.agreedAmount != null;
+    const ready = job.status === 'ACCEPTED' && job.agreedAmount != null && payments.marketplace.paid && order.buyerDecision === 'BUY';
     push({
       code: 'PAY_TRANSPORT',
       label: 'Pay transport',
       actorRole: 'BUYER',
       viewerCanPerform: isBuyer,
       ready,
-      reason: ready ? null : 'Transport must be accepted with an agreed amount before it can be paid',
+      reason: ready ? null : !payments.marketplace.paid ? 'Pay the seller before paying the transporter' : order.buyerDecision !== 'BUY' ? 'Final BUY decision is required before transport payment' : 'Transport must be accepted with an agreed amount before it can be paid',
       route: {
         method: 'POST',
         path: '/payments',
@@ -701,10 +779,24 @@ function buildActions(order, payments, viewer) {
     });
   }
 
+  if (job && job.status === 'ACCEPTED' && payments.marketplace.paid && order.buyerDecision === 'BUY') {
+    const reportExists = Boolean(job.loadingReport);
+    const canConfirmLoading = reportExists && !job.buyerLoadingConfirmedAt;
+    push({
+      code: 'CONFIRM_LOADING',
+      label: 'Approve loading report',
+      actorRole: 'BUYER',
+      viewerCanPerform: isBuyer,
+      ready: isBuyer && canConfirmLoading,
+      reason: !reportExists ? 'Waiting for the transporter to submit the loading report' : job.buyerLoadingConfirmedAt ? 'Loading report already approved' : null,
+      route: { method: 'POST', path: `/transport/${job.id}/confirm-loading` },
+    });
+  }
+
   // 6-8. Movement actions, owned by the assigned transporter.
   if (job) {
     const movementReady = {
-      START_PICKUP: job.status === 'ACCEPTED' && payments.allPaid,
+      START_PICKUP: job.status === 'ACCEPTED' && payments.allPaid && Boolean(job.buyerLoadingConfirmedAt),
       MARK_IN_TRANSIT: job.status === 'PICKUP',
       MARK_DELIVERED: job.status === 'IN_TRANSIT',
     };
