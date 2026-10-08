@@ -209,6 +209,29 @@
   box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
 }
 
+/* Always fill the card width, even if another rule shrink-wraps children */
+.orders-page .order-list { align-items: stretch; }
+
+.orders-page .order-card {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+}
+
+.orders-page .card-body,
+.orders-page .card-block { display: block; }
+
+.orders-page .order-card > *,
+.orders-page .card-body > *,
+.orders-page .card-block > *,
+.orders-page .card-block-body > * {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+
 /* Title block: eyebrow + title + location on the left, party top right */
 .order-card-head {
   position: relative;
