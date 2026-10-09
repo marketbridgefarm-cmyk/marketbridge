@@ -644,38 +644,33 @@ function InspectionRequestForm({ workDetails, setWorkDetails, requesting, reques
       </label>
 
       <div className="od-form-grid">
-        <label>Quantity to inspect
-          <select
-            value={workDetails.quantityToInspect || ''}
-            onChange={(e) => setWorkDetails({ ...workDetails, quantityToInspect: e.target.value })}
-          >
-            <option value="">Select a quantity range…</option>
-            <optgroup label="Small lots">
-              <option value="Up to 10 kg">Up to 10 kg</option>
-              <option value="10–50 kg">10–50 kg</option>
-              <option value="50–100 kg">50–100 kg</option>
-            </optgroup>
-            <optgroup label="Medium lots">
-              <option value="100–500 kg">100–500 kg</option>
-              <option value="0.5–1 ton (5–10 quintals)">0.5–1 ton (5–10 quintals)</option>
-              <option value="1–5 tons (10–50 quintals)">1–5 tons (10–50 quintals)</option>
-            </optgroup>
-            <optgroup label="Bulk lots">
-              <option value="5–20 tons">5–20 tons</option>
-              <option value="20–100 tons">20–100 tons</option>
-              <option value="More than 100 tons">More than 100 tons</option>
-            </optgroup>
-            <optgroup label="By crate / bag">
-              <option value="Up to 20 crates">Up to 20 crates</option>
-              <option value="20–100 crates">20–100 crates</option>
-              <option value="More than 100 crates">More than 100 crates</option>
-              <option value="Up to 50 bags">Up to 50 bags</option>
-              <option value="More than 50 bags">More than 50 bags</option>
-            </optgroup>
-            <optgroup label="Other">
-              <option value="To be agreed with the inspector">To be agreed with the inspector</option>
-            </optgroup>
-          </select>
+        {/* ── UPDATED: Strict numeric input + unit dropdown ──────────────── */}
+        <label>
+          Quantity to inspect
+          <div className="od-quantity-row">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              className="field"
+              placeholder="e.g. 500"
+              value={workDetails.quantityValue || ''}
+              onChange={(e) => setWorkDetails({ ...workDetails, quantityValue: e.target.value })}
+              required
+            />
+            <select
+              className="field"
+              value={workDetails.quantityUnit || 'kg'}
+              onChange={(e) => setWorkDetails({ ...workDetails, quantityUnit: e.target.value })}
+            >
+              <option value="kg">kg</option>
+              <option value="tons">tons</option>
+              <option value="quintals">quintals</option>
+              <option value="units">units</option>
+              <option value="crates">crates</option>
+              <option value="bags">bags</option>
+            </select>
+          </div>
         </label>
 
         <label>Number of lots / batches
@@ -849,7 +844,7 @@ function InspectionCard({ order, title, i }) {
           {request.fee != null && <Fact name="Inspection fee">{money(request.fee)} ETB</Fact>}
           {!inspectorName && <Fact name="Status">{label(request.status)}</Fact>}
         </Facts>
-        {request.workDetails && <div className="od-work-details"><h4>Agreed inspection scope</h4>{request.workDetails.workDescription && <p>{request.workDetails.workDescription}</p>}<div className="od-work-detail-items">{request.workDetails.quantityToInspect && <span><b>Quantity:</b> {request.workDetails.quantityToInspect}</span>}{request.workDetails.lotCount && <span><b>Lots:</b> {request.workDetails.lotCount}</span>}{request.workDetails.requiredBy && <span><b>Deadline:</b> {formatDateTime(request.workDetails.requiredBy)}</span>}</div>{request.workDetails.checks?.length > 0 && <p><b>Checks:</b> {request.workDetails.checks.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>}{request.workDetails.reportRequirements && <p><b>Report:</b> {request.workDetails.reportRequirements}</p>}</div>}
+        {request.workDetails && <div className="od-work-details"><h4>Agreed inspection scope</h4>{request.workDetails.workDescription && <p>{request.workDetails.workDescription}</p>}<div className="od-work-detail-items">{request.workDetails.quantityValue && <span><b>Quantity:</b> {request.workDetails.quantityValue} {request.workDetails.quantityUnit || ''}</span>}{request.workDetails.lotCount && <span><b>Lots:</b> {request.workDetails.lotCount}</span>}{request.workDetails.requiredBy && <span><b>Deadline:</b> {formatDateTime(request.workDetails.requiredBy)}</span>}</div>{request.workDetails.checks?.length > 0 && <p><b>Checks:</b> {request.workDetails.checks.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>}{request.workDetails.reportRequirements && <p><b>Report:</b> {request.workDetails.reportRequirements}</p>}</div>}
       </Section>
 
       {/* ── Inspection Coordination Button (Seller only) ─────────────────── */}
@@ -1887,7 +1882,15 @@ export default function OrderDetail() {
   const [offerAmount, setOfferAmount] = useState('');
   const [submittingOffer, setSubmittingOffer] = useState(false);
   const [requestingInspection, setRequestingInspection] = useState(false);
-  const [inspectionWorkDetails, setInspectionWorkDetails] = useState({ workCategory: 'GENERAL_QUALITY', quantityToInspect: '', lotCount: '', checks: ['QUALITY_GRADE', 'VISIBLE_DEFECTS', 'PHOTOGRAPHS'], reportFormat: 'CHECKLIST_PHOTOS', requiredBy: '' });
+  const [inspectionWorkDetails, setInspectionWorkDetails] = useState({ 
+    workCategory: 'GENERAL_QUALITY', 
+    quantityValue: '', 
+    quantityUnit: 'kg', 
+    lotCount: '', 
+    checks: ['QUALITY_GRADE', 'VISIBLE_DEFECTS', 'PHOTOGRAPHS'], 
+    reportFormat: 'CHECKLIST_PHOTOS', 
+    requiredBy: '' 
+  });
 
   const [loadingReport, setLoadingReport] = useState(null);
   const [loadingReportEvidence, setLoadingReportEvidence] = useState(null);
