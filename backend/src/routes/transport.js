@@ -2304,24 +2304,44 @@ router.patch(
           throw quoteError('This transporter cannot be released after transport payment has started or completed', 409);
         }
 
-        if (freshQuote.transportJob.status !== 'QUOTED') {
-          throw quoteError(`This transport agreement cannot be released while the job is ${freshQuote.transportJob.status}`, 409);
-        }
-
-        if (isSilentRelease) {
-          const freshAvailableAt = transportReleaseAvailableAt(freshQuote);
-          if (freshAvailableAt && freshAvailableAt.getTime() > Date.now()) {
-            throw quoteError('This negotiation changed. Refresh and try again.', 409);
-          }
-        }
-
+        // STEP 2 FIX: the job-status guard is now decided per release type.
+        // A provisionally ACCEPTED quote always has a job in ACCEPTED (not
+        // QUOTED), so the old unconditional `status !== 'QUOTED'` check made
+        // the accepted-release path unreachable. Mirrors inspections.js.
         if (isAcceptedRelease) {
+          // Re-read the job inside the lock and verify the exact provisional
+          // agreement we are about to release is still the live one, held by
+          // the same truck owner.
+          const freshJob = await tx.transportJob.findUnique({
+            where: { id: freshQuote.transportJobId },
+            select: { id: true, status: true, truckOwnerId: true },
+          });
+          if (
+            !freshJob ||
+            freshJob.status !== 'ACCEPTED' ||
+            freshJob.truckOwnerId !== freshQuote.truckOwnerId
+          ) {
+            throw quoteError('This provisional transporter agreement is no longer active', 409);
+          }
           if (!isProviderRelease) {
             try {
               assertAcceptedReleaseWindowElapsed(freshQuote);
             } catch (e) {
               throw quoteError(e.message, 409);
             }
+          }
+        } else {
+          // Silent release: no accepted transporter yet, the job must still
+          // be QUOTED and the waiting window applies.
+          if (freshQuote.transportJob.status !== 'QUOTED') {
+            throw quoteError(
+              `This transport agreement cannot be released while the job is ${freshQuote.transportJob.status}`,
+              409
+            );
+          }
+          const freshAvailableAt = transportReleaseAvailableAt(freshQuote);
+          if (freshAvailableAt && freshAvailableAt.getTime() > Date.now()) {
+            throw quoteError('This negotiation changed. Refresh and try again.', 409);
           }
         }
 
