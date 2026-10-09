@@ -1,9 +1,14 @@
 /* ==========================================================================
-   Transport Coordination — Transporter View
+   Transport & Inspection Coordination Styles
    Matches the OrderDetail.css card system and design tokens.
    ========================================================================== */
 
 /* ---- 1. Card Shell & Loading --------------------------------------------- */
+.inspection-coordination {
+  /* Inherits from .order-detail-page .card for padding, background, radius */
+  --card-tone: var(--mb-ok); /* Matches the Transport card tone */
+}
+
 .inspection-coordination--inspector {
   /* Inherits core .card styling (padding, background, radius) */
   --card-tone: var(--mb-ok); /* Green accent for transport */
@@ -61,6 +66,7 @@
 }
 
 /* Adjusting for h4 within the header as used in this component */
+.ic-header h2,
 .ic-header h4 {
   margin: 0;
   color: var(--mb-ink);
@@ -94,11 +100,12 @@
   color: #047857;
 }
 
-/* ---- 3. Read-Only Seller Info (Inspector Side) -------------------------- */
+/* ---- 3. Read-Only Seller Info (Inspector Side / Transporter View) -------- */
 .ic-inspector-side {
   margin-top: 22px;
   padding-top: 22px;
   border-top: 1.5px solid var(--mb-line);
+  padding-left: clamp(16px, 13cqw, 48px); /* Indents the entire section to the right */
 }
 
 .ic-inspector-side h4 {
@@ -110,8 +117,8 @@
 
 .ic-inspector-details {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr)); /* Two equal columns */
+  gap: 14px 20px;
 }
 
 .ic-inspector-details > div {
@@ -119,6 +126,11 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+}
+
+/* Span full width for longer notes */
+.ic-inspector-details .ic-full {
+  grid-column: 1 / -1;
 }
 
 .ic-inspector-details span {
@@ -276,7 +288,8 @@
   margin-bottom: 14px;
 }
 
-.ic-availability h4 {
+.ic-availability h4,
+.ic-availability h3 {
   margin: 0 0 6px;
   color: var(--mb-ink);
   font-size: 15px;
@@ -384,6 +397,7 @@
 
 /* Small phones */
 @media (max-width: 480px) {
+  .ic-header h2,
   .ic-header h4 {
     font-size: 18px;
   }
@@ -394,6 +408,10 @@
   .ic-eyebrow::before {
     width: 13px;
   }
+  /* Stack back to 1 column on very small screens */
+  .ic-inspector-details {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Tablets & Desktops */
@@ -403,10 +421,6 @@
   }
   
   .ic-check-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .ic-inspector-details {
     grid-template-columns: repeat(2, 1fr);
   }
   
@@ -439,20 +453,12 @@
 
 /* Wide Cards (Container Queries) */
 @container (min-width: 520px) {
-  .ic-inspector-details {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  
   .ic-check-grid {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
 @container (min-width: 760px) {
-  .ic-inspector-details {
-    grid-template-columns: repeat(4, 1fr);
-  }
-  
   .ic-check-grid {
     grid-template-columns: repeat(4, 1fr);
   }
