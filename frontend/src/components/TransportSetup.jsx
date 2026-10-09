@@ -5,8 +5,11 @@ import api from '../api/client';
 // TRANSPORT SETUP
 // ============================================================================
 // Initial "create the transport job" form — who arranges it, own truck vs.
-// hire, pickup/destination/load details, and (for hired transport) the
-// matcher UI.
+// hire, pickup/destination, structured load details, and special requirements.
+//
+// SECURITY: All load details and special requirements are structured enums
+// and numbers. No free text is allowed in fields visible to bidders,
+// preventing them from leaking contact info.
 //
 // Visual note: this renders INSIDE the Transport card on OrderDetail. It no
 // longer draws its own outer .card — the enclosing card already provides
@@ -14,12 +17,37 @@ import api from '../api/client';
 // inputs reuse the classes the surrounding page already styles.
 // ============================================================================
 
+const CARGO_TYPES = [
+  ['PRODUCE', 'Produce / Grains / Vegetables'],
+  ['LIVESTOCK', 'Livestock'],
+  ['GENERAL', 'General Goods'],
+  ['OTHER', 'Other (specify below)'],
+];
+
+const CARGO_UNITS = [
+  ['tons', 'tons'],
+  ['kg', 'kg'],
+  ['quintals', 'quintals'],
+  ['units', 'units'],
+];
+
+const SPECIAL_OPTIONS = [
+  ['TARPAULIN', 'Tarpaulin / cover'],
+  ['STRAPS_ROPES', 'Straps / ropes'],
+  ['REFRIGERATION', 'Refrigeration needed'],
+  ['LIVE_ANIMAL_RAMP', 'Livestock ramp'],
+  ['LIFTING_GEAR', 'Crane / lifting gear'],
+  ['ACCESS_RESTRICTED', 'Restricted access / small gate'],
+];
+
 const emptyForm = {
   pickupLocation: '',
   destination: '',
-  load: '',
+  cargoType: 'PRODUCE',
+  cargoQuantityValue: '',
+  cargoQuantityUnit: 'tons',
   requiredCapacity: '',
-  specialRequirements: '',
+  specialRequirements: [],
 };
 
 /* ── Small inline style tokens ────────────────────────────── */
@@ -128,20 +156,6 @@ const choiceHint = {
   color: '#64748b',
 };
 
-const truckRow = (isChosen) => ({
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 12,
-  flexWrap: 'wrap',
-  padding: '14px 0',
-  borderBottom: '1px solid #eef1f5',
-  background: 'transparent',
-  border: 'none',
-  borderTop: '1px solid #eef1f5',
-  borderBottomWidth: 1,
-});
-
 const truckInfo = {
   minWidth: 0,
   flex: '1 1 auto',
@@ -218,6 +232,15 @@ export default function TransportSetup({
 
   const party = arrangingParty || (canBuyer ? 'BUYER' : canSeller ? 'SELLER' : '');
 
+  const toggleSpecial = (value) => {
+    setForm((prev) => {
+      const current = prev.specialRequirements || [];
+      const has = current.includes(value);
+      const next = has ? current.filter((v) => v !== value) : [...current, value];
+      return { ...prev, specialRequirements: next };
+    });
+  };
+
   const findMatches = async () => {
     try {
       const response = await api.get('/transport/match', {
@@ -255,7 +278,9 @@ export default function TransportSetup({
         truckId: method === 'OWN_TRUCK' ? truck : undefined,
         pickupLocation: form.pickupLocation,
         destination: form.destination,
-        load: form.load,
+        cargoType: form.cargoType,
+        cargoQuantityValue: form.cargoQuantityValue ? Number(form.cargoQuantityValue) : undefined,
+        cargoQuantityUnit: form.cargoQuantityUnit,
         requiredCapacity: form.requiredCapacity ? Number(form.requiredCapacity) : undefined,
         specialRequirements: form.specialRequirements,
       });
@@ -379,6 +404,7 @@ export default function TransportSetup({
               required
               value={form.pickupLocation}
               onChange={(e) => setForm({ ...form, pickupLocation: e.target.value })}
+              placeholder="e.g. Bahirdar, Lot B warehouse"
             />
           </div>
           <div className="field">
@@ -388,34 +414,76 @@ export default function TransportSetup({
               required
               value={form.destination}
               onChange={(e) => setForm({ ...form, destination: e.target.value })}
+              placeholder="e.g. Addis Ababa, Merkato"
             />
           </div>
+
+          {/* ── Cargo type ─────────────────────────────────── */}
           <div className="field">
-            <label htmlFor="ts-load">Load</label>
-            <input
-              id="ts-load"
-              required
-              value={form.load}
-              onChange={(e) => setForm({ ...form, load: e.target.value })}
-            />
+            <label htmlFor="ts-cargo-type">Cargo type</label>
+            <select
+              id="ts-cargo-type"
+              value={form.cargoType}
+              onChange={(e) => setForm({ ...form, cargoType: e.target.value })}
+            >
+              {CARGO_TYPES.map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
           </div>
+
+          {/* ── Cargo quantity (Number + Unit) ─────────────── */}
           <div className="field">
-            <label htmlFor="ts-capacity">Required capacity (tons)</label>
+            <label>Cargo quantity</label>
+            <div className="od-quantity-row">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g. 500"
+                value={form.cargoQuantityValue}
+                onChange={(e) => setForm({ ...form, cargoQuantityValue: e.target.value })}
+                required
+              />
+              <select
+                value={form.cargoQuantityUnit}
+                onChange={(e) => setForm({ ...form, cargoQuantityUnit: e.target.value })}
+              >
+                {CARGO_UNITS.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="ts-capacity">Required vehicle capacity (tons)</label>
             <input
               id="ts-capacity"
               type="number"
+              min="0"
+              step="0.1"
               value={form.requiredCapacity}
               onChange={(e) => setForm({ ...form, requiredCapacity: e.target.value })}
+              placeholder="e.g. 10"
             />
           </div>
+
+          {/* ── Special requirements (Checkboxes) ──────────── */}
           <div className="field field-span">
-            <label htmlFor="ts-requirements">Special requirements</label>
-            <input
-              id="ts-requirements"
-              value={form.specialRequirements}
-              onChange={(e) => setForm({ ...form, specialRequirements: e.target.value })}
-              placeholder="Access, loading, route…"
-            />
+            <label>Special requirements (select all that apply)</label>
+            <div className="od-check-grid">
+              {SPECIAL_OPTIONS.map(([value, label]) => (
+                <label key={value} className="od-check-option">
+                  <input
+                    type="checkbox"
+                    checked={form.specialRequirements.includes(value)}
+                    onChange={() => toggleSpecial(value)}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
           </div>
         </div>
       </div>
