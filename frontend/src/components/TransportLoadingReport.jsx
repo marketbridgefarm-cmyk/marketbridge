@@ -14,8 +14,10 @@ import './TransportLoadingReport.css';
 //
 // Every field is a dropdown, checkbox list, or AmountPicker. There is no
 // free-text numeric input anywhere, so a phone number cannot be smuggled into
-// a price or quantity field. Notes are the only free text and are passed
-// through the same noContactInfo guard the rest of the platform uses.
+// a price or quantity field. GPS is captured via the browser's geolocation
+// API (with a strict lat,lng fallback). Notes are the only free text and are
+// pre-checked on the client AND passed through the server's noContactInfo
+// guard before saving.
 // ============================================================================
 
 const WHAT_LOADED_OPTIONS = [
@@ -59,6 +61,19 @@ const EMPTY_FORM = {
   gpsLocation: '',
   notes: '',
 };
+
+// ── Strict GPS pattern: "lat, lng" only. No letters, no phone numbers. ────
+const GPS_PATTERN = /^-?\d{1,3}(\.\d{1,8})?\s*,\s*-?\d{1,3}(\.\d{1,8})?$/;
+
+// ── Client-side contact detection (fail fast; server still re-checks) ─────
+const PHONE_LIKE = /(?:\+?\d[\d\s\-().]{7,})/;
+const EMAIL_LIKE = /[\w.-]+@[\w.-]+\.\w+/;
+const URL_LIKE = /(?:https?:\/\/|www\.)\S+/i;
+
+function containsContactInfo(text) {
+  if (!text) return false;
+  return PHONE_LIKE.test(text) || EMAIL_LIKE.test(text) || URL_LIKE.test(text);
+}
 
 // <input type="datetime-local"> wants "YYYY-MM-DDTHH:MM" (local, no seconds).
 function toLocalInput(dateLike) {
@@ -223,6 +238,10 @@ export default function TransportLoadingReport({
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // GPS capture state
+  const [gpsBusy, setGpsBusy] = useState(false);
+  const [gpsError, setGpsError] = useState('');
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError('');
@@ -261,6 +280,27 @@ export default function TransportLoadingReport({
     });
   }
 
+  function captureGps() {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setGpsError('Geolocation is not available in this browser.');
+      return;
+    }
+    setGpsBusy(true);
+    setGpsError('');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        set('gpsLocation')(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+        setGpsBusy(false);
+      },
+      (err) => {
+        setGpsError(err?.message || 'Could not read your location.');
+        setGpsBusy(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  }
+
   async function submit(e) {
     e.preventDefault();
     setError('');
@@ -279,6 +319,23 @@ export default function TransportLoadingReport({
     if (!photos.length && !videos.length) {
       setError(
         'At least one photo or video of the goods/pre-loading situation is required.'
+      );
+      return;
+    }
+
+    // GPS — if provided, must match the strict lat,lng pattern.
+    const gpsTrimmed = form.gpsLocation?.trim();
+    if (gpsTrimmed && !GPS_PATTERN.test(gpsTrimmed)) {
+      setError(
+        'GPS must be in the form "latitude, longitude" (e.g. 8.980600, 38.757800). Only numbers, a decimal point, a comma, and an optional minus sign are allowed.'
+      );
+      return;
+    }
+
+    // Notes — block obvious contact info before submitting.
+    if (form.notes && containsContactInfo(form.notes)) {
+      setError(
+        'Notes cannot contain phone numbers, email addresses, or links. Please remove them and try again.'
       );
       return;
     }
@@ -315,7 +372,7 @@ export default function TransportLoadingReport({
         arrivedAt: arrivedAt || undefined,
         loadingStartedAt: loadingStartedAt || undefined,
         loadingFinishedAt: loadingFinishedAt || undefined,
-        gpsLocation: form.gpsLocation?.trim() || undefined,
+        gpsLocation: gpsTrimmed || undefined,
         notes: form.notes?.trim() || undefined,
         photos,
         videos,
@@ -529,17 +586,40 @@ export default function TransportLoadingReport({
           </label>
         </div>
 
-        {/* ── GPS ───────────────────────────────────────────────── */}
-        <label className="tlr-field">
+        {/* ── GPS — capture button + strict pattern ─────────────── */}
+        <div className="tlr-field">
           <span className="tlr-label">GPS at pickup site (optional)</span>
-          <input
-            className="tlr-input"
-            type="text"
-            value={form.gpsLocation}
-            onChange={(e) => set('gpsLocation')(e.target.value)}
-            placeholder="e.g. 8.9806, 38.7578"
-          />
-        </label>
+          <div className="tlr-gps-row">
+            <input
+              className="tlr-input"
+              type="text"
+              inputMode="decimal"
+              value={form.gpsLocation}
+              onChange={(e) => set('gpsLocation')(e.target.value)}
+              placeholder="e.g. 8.980600, 38.757800"
+              aria-describedby="tlr-gps-hint"
+            />
+            <button
+              type="button"
+              className="tlr-btn tlr-btn--secondary"
+              onClick={captureGps}
+              disabled={gpsBusy || submitting}
+            >
+              {gpsBusy
+                ? 'Reading…'
+                : form.gpsLocation
+                  ? 'Refresh location'
+                  : 'Use my location'}
+            </button>
+          </div>
+          <small id="tlr-gps-hint" className="tlr-hint">
+            Only latitude and longitude are accepted. Phone numbers and other
+            text will be rejected.
+          </small>
+          {gpsError && (
+            <small className="tlr-hint tlr-hint--error">{gpsError}</small>
+          )}
+        </div>
 
         {/* ── Notes ─────────────────────────────────────────────── */}
         <label className="tlr-field tlr-full">
@@ -554,7 +634,7 @@ export default function TransportLoadingReport({
           />
           <small className="tlr-hint">
             Do not include phone numbers, email addresses, or links. Those are
-            rejected by the platform.
+            rejected by the platform before saving.
           </small>
         </label>
 
