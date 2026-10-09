@@ -18,6 +18,8 @@ const logger = require('./utils/logger');
 const { collectHttpMetrics, metricsHandler } = require('./utils/metrics');
 const { shutdownRateLimitStores } = require('./middleware/rateLimit');
 
+app.use('/api/notices', require('./routes/notices'));
+
 const {
   apiLimiter,
   authLimiter,
