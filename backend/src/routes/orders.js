@@ -11,7 +11,11 @@ const { idempotency } = require('../middleware/idempotency');
 const { computePaymentDueAt } = require('../utils/orderTiming');
 const { cancelOrderInTransaction } = require('../services/orderCancellationService');
 const { transitionOrderStatus } = require('../services/orderStateMachine');
-const { noticeWaitingUnlocked } = require('../services/waitingListService');
+const {
+  noticeWaitingUnlocked,
+  notifyInspectionBiddersServiceCancelled,
+  notifyTransportBiddersServiceCancelled,
+} = require('../services/waitingListService');
 const { getInspectionPriceSuggestion, marketSnapshotData } = require('../services/marketPriceService');
 
 const router = express.Router();
@@ -52,11 +56,6 @@ const transportInclude = {
 
 // ============================================================================
 // LIGHTWEIGHT include for the Orders list page (GET /)
-// ----------------------------------------------------------------------------
-// The Orders/Dashboard list only needs enough to render an order card:
-// listing thumbnail, buyer/seller names, transport status, payment summary,
-// and counts. Fetching the full order graph here was causing 9.8 second
-// response times because each order triggered dozens of joined queries.
 // ============================================================================
 const orderListInclude = {
   listing: {
@@ -64,7 +63,7 @@ const orderListInclude = {
       id: true,
       cropType: true,
       title: true,
-      photos: true, // NOTE: photos is a String[] — cannot use { take: 1 } here.
+      photos: true,
     },
   },
   buyer: { select: userSelect },
@@ -86,10 +85,6 @@ const orderListInclude = {
 
 // ============================================================================
 // HEAVY include for the Order Detail page (GET /:id)
-// ----------------------------------------------------------------------------
-// Only used for a single order at a time — the full graph is needed to
-// render the detail page's inspection panel, transport panel, payment
-// center, timeline, dispute card and messages.
 // ============================================================================
 const orderDetailInclude = {
   listing: {
@@ -114,7 +109,6 @@ const orderDetailInclude = {
       },
     },
   },
-  // Canonical inspection workflow belongs to the order, not merely the listing.
   inspectionRequests: {
     where: { status: { not: 'CANCELLED' } },
     orderBy: { createdAt: 'desc' },
@@ -153,19 +147,25 @@ const orderDetailInclude = {
   },
   events: {
     orderBy: { createdAt: 'asc' },
-    take: 50, // Reduced from 200 to keep the payload small.
+    take: 50,
     include: { actor: { select: { id: true, name: true } } },
   },
   disputes: true,
   ratings: true,
-  messages: { orderBy: { createdAt: 'asc' }, take: 50 }, // Bound the message list.
+  messages: { orderBy: { createdAt: 'asc' }, take: 50 },
+  // Recovery requests — the read model uses this to suppress a duplicate
+  // recovery action while one is already awaiting admin review.
+  recoveryRequests: {
+    where: { status: 'PENDING' },
+    orderBy: { requestedAt: 'desc' },
+    take: 1,
+    select: { id: true, type: true },
+  },
 };
 
 // ============================================================================
 // POST /api/orders/buy-now — intentionally disabled
 // ============================================================================
-// Both marketplaces require competition -> seller selection -> bilateral
-// negotiation -> provisional agreement before an order/payment can exist.
 router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req, res) => {
   return res.status(410).json({
     code: 'NEGOTIATION_REQUIRED',
@@ -181,7 +181,6 @@ router.get('/', authenticate, async (req, res) => {
     const adminView = req.user.roles?.includes('ADMIN');
     const where = adminView ? {} : { OR: [{ buyerId: req.user.id }, { sellerId: req.user.id }] };
 
-    // Pagination to prevent fetching thousands of orders at once.
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const skip = (page - 1) * limit;
@@ -228,9 +227,6 @@ router.get('/:id', authenticate, async (req, res) => {
 
     if (!allowed) return res.status(403).json({ error: 'Not authorized to view this order' });
 
-    // Payout rows. Amount, currency and reference are visible to every
-    // participant already allowed to view this order; the raw payeeId is
-    // deliberately not returned (only payeeRole) to avoid cross-role lookups.
     const payouts = await prisma.payout.findMany({
       where: { orderId: order.id },
       select: {
@@ -259,10 +255,6 @@ router.get('/:id', authenticate, async (req, res) => {
       payoutReference: payout.payoutReference,
     }));
 
-    // Refunds for every payment that supports this order (goods, hired
-    // transport, inspection). Amounts/status are visible to every participant;
-    // the free-text reason only to the buyer and admins, and the provider
-    // failure text only to admins.
     const viewerIsAdmin = Boolean(req.user.roles?.includes('ADMIN'));
     const viewerIsBuyer = order.buyerId === req.user.id;
     const payoutPaymentIds = payouts.map((payout) => payout.paymentId).filter(Boolean);
@@ -326,9 +318,6 @@ router.get('/:id', authenticate, async (req, res) => {
 // ============================================================================
 // GET /api/orders/:id/workflow
 // ============================================================================
-// Server-authoritative summary of where this order stands: current stage,
-// whose turn it is, outstanding payment obligations, a progress timeline,
-// and the exact set of actions available right now.
 router.get('/:id/workflow', authenticate, async (req, res) => {
   try {
     const order = await prisma.order.findUnique({
@@ -360,8 +349,7 @@ router.get('/:id/workflow', authenticate, async (req, res) => {
 });
 
 // ============================================================================
-// Inspection-driven price review. Every proposal is immutable; a counter creates
-// a child proposal. Only mutual acceptance changes Order.finalPrice.
+// PRICE REVIEW
 // ============================================================================
 const PRICE_REVIEW_REASONS = new Set([
   'MARKET_PRICE_RISE', 'MARKET_PRICE_FALL', 'QUALITY_OR_QUANTITY_CHANGE',
@@ -449,7 +437,7 @@ router.patch('/:id/price-reviews/:reviewId/respond', authenticate, idempotency('
       const now = new Date();
       const claimed = await tx.priceReview.updateMany({ where: { id: review.id, status: 'PENDING' }, data: { status: 'ACCEPTED' } });
       if (claimed.count !== 1) throw Object.assign(new Error('This proposal was already answered. Refresh and try again.'), { status: 409 });
-      await tx.order.update({ where: { id: order.id }, data: { finalPrice: review.proposedPrice, buyerDecision: 'BUY', buyerDecisionAt: now, paymentDueAt: computePaymentDueAt() } });
+      await tx.order.update({ where: { id: order.id }, data: { finalPrice: review.proposedPrice, buyerDecision: 'BUY', buyerDecisionAt: now, buyerReviewedReportAt: now, paymentDueAt: computePaymentDueAt() } });
       return { action: 'ACCEPT', priceReview: { ...review, status: 'ACCEPTED' }, agreedPrice: review.proposedPrice };
     }, { maxWait: 10000, timeout: 15000 });
     await recordOrderEvent(prisma, { orderId: req.params.id, actorId: req.user.id, type: `PRICE_REVIEW_${result.action}`, metadata: { priceReviewId: result.priceReview.id, proposedPrice: result.agreedPrice ?? result.priceReview.proposedPrice } }).catch(err => req.log.error({err}, 'PRICE REVIEW RESPONSE EVENT FAILED'));
@@ -463,9 +451,41 @@ router.patch('/:id/price-reviews/:reviewId/respond', authenticate, idempotency('
 // ============================================================================
 // PATCH /api/orders/:id/buyer-decision
 // ============================================================================
-// After the inspection report is available, the buyer must explicitly decide
-// whether to BUY or CANCEL for both Agricultural and Products Marketplace.
-// ============================================================================
+
+// Captures the still-PENDING waiting bidders across inspection and transport
+// scopes before an order is cancelled. cancelOrderInTransaction moves every
+// PENDING quote to REJECTED inside its own transaction, so this snapshot must
+// be taken before that runs and used to notify the bidders after commit.
+async function capturePendingBidders(orderId) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      listingId: true,
+      inspectionRequests: {
+        where: { status: { not: 'CANCELLED' } },
+        select: {
+          id: true,
+          quotes: {
+            where: { status: 'PENDING', childQuotes: { none: {} } },
+            select: { id: true, inspectorId: true },
+          },
+        },
+      },
+      transportJob: {
+        select: {
+          id: true,
+          status: true,
+          quotes: {
+            where: { status: 'PENDING', childQuotes: { none: {} } },
+            select: { id: true, truckOwnerId: true },
+          },
+        },
+      },
+    },
+  }).catch(() => null);
+  return order;
+}
+
 router.patch(
   '/:id/buyer-decision',
   authenticate,
@@ -480,11 +500,11 @@ router.patch(
     try {
       const decision = req.body.decision;
 
-      // IMPORTANT: this endpoint must not hold a 5-second interactive Prisma
-      // transaction open while loading the full order graph. The decision
-      // transaction below reads only the fields needed for the gate and
-      // performs the conditional write; the heavy order graph is loaded only
-      // after the decision has been committed.
+      // Snapshot the still-PENDING waiting bidders before a CANCEL runs.
+      const preCancel = decision === 'CANCEL'
+        ? await capturePendingBidders(req.params.id)
+        : null;
+
       const updated = await prisma.$transaction(async (tx) => {
         const current = await tx.order.findUnique({
           where: { id: req.params.id },
@@ -564,8 +584,6 @@ router.patch(
           });
         }
 
-        // CANCEL remains available immediately after inspection. BUY is deliberately
-        // held until the seller confirms the selected transporter is ready.
         if (decision === 'BUY') {
           const transportJob = current.transportJob;
           if (!transportJob || transportJob.status !== 'ACCEPTED') {
@@ -585,6 +603,13 @@ router.patch(
         }
 
         if (decision === 'CANCEL') {
+          // CANCEL closes this order but NOT the listing's negotiation: the
+          // cancel transaction withdraws the buyer's agreed offer and calls
+          // promoteNextWaitingBuyer, so the next PENDING offer is
+          // automatically selected. This is how the model expresses
+          // "return to selection" at the order level — an Order cannot be
+          // reassigned to a different buyer, so a new order is created from
+          // the next promoted offer instead.
           const reason = req.body.reason || 'Buyer declined the transaction after inspection';
 
           await tx.order.update({
@@ -592,8 +617,6 @@ router.patch(
             data: { buyerDecision: 'CANCEL', buyerDecisionAt: new Date(), buyerDecisionDueAt: null },
           });
 
-          // Notifications are deliberately best-effort so a notification/SMS
-          // problem can never roll back a valid buyer decision.
           try {
             await recordOrderEvent(tx, {
               orderId: current.id,
@@ -618,8 +641,7 @@ router.patch(
           });
         }
 
-        // Conditional update is the final concurrency gate. A double click,
-        // browser retry, or two tabs can never record BUY twice.
+        const now = new Date();
         const claimed = await tx.order.updateMany({
           where: {
             id: current.id,
@@ -628,7 +650,8 @@ router.patch(
           },
           data: {
             buyerDecision: 'BUY',
-            buyerDecisionAt: new Date(),
+            buyerDecisionAt: now,
+            buyerReviewedReportAt: now,
             buyerDecisionDueAt: null,
             paymentDueAt: computePaymentDueAt(),
           },
@@ -661,9 +684,39 @@ router.patch(
       }
 
       if (decision === 'CANCEL' && updated?.status === 'CANCELLED') {
-        // Order cancelled after inspection: the seller may select another waiting bid.
-        const cancelled = await prisma.order.findUnique({ where: { id: updated.id }, select: { listingId: true } }).catch(() => null);
-        if (cancelled?.listingId) await noticeWaitingUnlocked(prisma, { listingId: cancelled.listingId, reason: 'ORDER_CANCELLED' });
+        // Order cancelled after inspection: the seller may select another
+        // waiting bidder. Offers waiting list is listing-scoped; inspection
+        // and transport waiting bidders were captured before the cancel
+        // transaction ran and are notified here.
+        const cancelled = await prisma.order.findUnique({
+          where: { id: updated.id },
+          select: { listingId: true },
+        }).catch(() => null);
+        if (cancelled?.listingId) {
+          await noticeWaitingUnlocked(prisma, {
+            listingId: cancelled.listingId,
+            reason: 'ORDER_CANCELLED',
+          });
+        }
+
+        if (preCancel) {
+          for (const r of preCancel.inspectionRequests || []) {
+            if (r.quotes?.length) {
+              await notifyInspectionBiddersServiceCancelled(prisma, {
+                inspectionRequestId: r.id,
+                bids: r.quotes,
+                reason: 'ORDER_CANCELLED',
+              });
+            }
+          }
+          if (preCancel.transportJob?.id && preCancel.transportJob.quotes?.length) {
+            await notifyTransportBiddersServiceCancelled(prisma, {
+              transportJobId: preCancel.transportJob.id,
+              bids: preCancel.transportJob.quotes,
+              reason: 'ORDER_CANCELLED',
+            });
+          }
+        }
       }
 
       return res.json({
@@ -770,13 +823,6 @@ router.patch('/:id/confirm-receipt', authenticate, idempotency('orders.confirm-r
 // ============================================================================
 // PATCH /api/orders/:id/cancel
 // ============================================================================
-//   - Buyer: only while PENDING_PAYMENT (backing out before paying).
-//   - Seller: while PENDING_PAYMENT or CONFIRMED (killing a stalled order
-//     before transport is really underway).
-//   - Admin: any order not already COMPLETED/CANCELLED, as an override —
-//     including DISPUTED orders, as part of dispute resolution.
-// In every case, goods already PICKUP/IN_TRANSIT/DELIVERED block a plain
-// cancel; use a dispute instead.
 router.patch(
   '/:id/cancel',
   authenticate,
@@ -829,12 +875,8 @@ router.patch(
       const reason = req.body?.reason || null;
       const cancelledByRole = userIsAdmin ? 'ADMIN' : userIsBuyer ? 'BUYER' : 'SELLER';
 
-      // cancelOrderInTransaction does a full unwind (status transition,
-      // payment-obligation closure, listing release, transport cascade,
-      // payout cancellation, and a refund request per already-PAID payment)
-      // — enough sequential round trips that Prisma's default 5s interactive
-      // transaction timeout can be exceeded on a real/hosted Postgres even
-      // when the database itself is healthy.
+      const preCancel = await capturePendingBidders(order.id);
+
       const updated = await prisma.$transaction(async (tx) => {
         const current = await tx.order.findUnique({
           where: { id: order.id },
@@ -851,7 +893,34 @@ router.patch(
         return tx.order.findUnique({ where: { id: current.id }, include: orderDetailInclude });
       }, { maxWait: 10000, timeout: 15000 });
 
-      if (updated?.listingId) await noticeWaitingUnlocked(prisma, { listingId: updated.listingId, reason: 'ORDER_CANCELLED' });
+      if (updated?.listingId) {
+        await noticeWaitingUnlocked(prisma, {
+          listingId: updated.listingId,
+          reason: 'ORDER_CANCELLED',
+        });
+      }
+
+      // Inspection and transport waiting lists: captured before the cancel
+      // transaction ran, notified after, since the cancel transaction moves
+      // every PENDING quote to REJECTED inside itself.
+      if (preCancel) {
+        for (const r of preCancel.inspectionRequests || []) {
+          if (r.quotes?.length) {
+            await notifyInspectionBiddersServiceCancelled(prisma, {
+              inspectionRequestId: r.id,
+              bids: r.quotes,
+              reason: 'ORDER_CANCELLED',
+            });
+          }
+        }
+        if (preCancel.transportJob?.id && preCancel.transportJob.quotes?.length) {
+          await notifyTransportBiddersServiceCancelled(prisma, {
+            transportJobId: preCancel.transportJob.id,
+            bids: preCancel.transportJob.quotes,
+            reason: 'ORDER_CANCELLED',
+          });
+        }
+      }
 
       return res.json({ message: 'Order cancelled.', order: updated });
     } catch (error) {
