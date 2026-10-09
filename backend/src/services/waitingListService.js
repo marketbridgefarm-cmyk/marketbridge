@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Waiting list = PENDING (leaf) bids on a listing, an inspection request, or
- * a transport job.
+ * Waiting list = PENDING (leaf) bids on a listing, an inspection request,
+ * or a transport job.
  *
  * Rules (unified across all three flows):
  *  - While one bidder is in exclusive negotiation, or a provisional deal is
@@ -23,11 +23,11 @@
  * roll back or abort a negotiation/payment.
  *
  * Caller list (authoritative — keep in sync with the routes):
- *   - inspections.js: select, withdraw (silent + accepted), report, cancel
- *   - transport.js:   select, withdraw (silent + accepted), DELIVERED, reopen-bidding
- *   - recovery-requests.js: admin approve
- *   - orders.js:      cancel (fans out to all three scopes)
- *   - paymentService.js: MARKETPLACE PAID (releases offers)
+ *   - inspections.js:        select, withdraw (silent + accepted), report, seller-decline
+ *   - transport.js:          select, withdraw (silent + accepted), DELIVERED, reopen-bidding
+ *   - recovery-requests.js:  admin approve
+ *   - orders.js:             cancel, buyer-decision CANCEL (fans out to all three scopes)
+ *   - paymentService.js:     MARKETPLACE PAID (releases offers)
  */
 
 const { recordAuditEvent } = require('../utils/audit');
@@ -138,7 +138,7 @@ async function createTransportNotices(db, rows) {
 }
 
 // ============================================================================
-// OFFERS — LOCK / UNLOCK / RELEASE  (existing signatures preserved)
+// OFFERS — LOCK / UNLOCK / RELEASE
 // ============================================================================
 
 async function noticeWaitingLocked(db, { listingId, selectedOfferId, selectedBuyerId }) {
@@ -408,9 +408,6 @@ async function releaseWaitingTransporters(db, { transportJobId, actorId = null, 
 }
 
 // ============================================================================
-// EXPORTS
-// ============================================================================
-// ============================================================================
 // SERVICE CANCELLED (order-level) — direct notification, no status change
 // ============================================================================
 // When an entire order is cancelled, cancelOrderInTransaction has already
@@ -454,6 +451,11 @@ async function notifyTransportBiddersServiceCancelled(db, { transportJobId, bids
     console.error('TRANSPORT WAITING CANCELLED NOTICE FAILED', error);
   }
 }
+
+// ============================================================================
+// EXPORTS
+// ============================================================================
+
 module.exports = {
   // Offers (existing signatures preserved — no call-site breakage)
   noticeWaitingLocked,
@@ -471,7 +473,8 @@ module.exports = {
   noticeTransportWaitingUnlocked,
   releaseWaitingTransporters,
 
-  // Order-cancel helpers
+  // Order-cancel helpers (notify an explicit PENDING bidder list captured
+  // before the cancel transaction ran)
   notifyInspectionBiddersServiceCancelled,
   notifyTransportBiddersServiceCancelled,
 };
