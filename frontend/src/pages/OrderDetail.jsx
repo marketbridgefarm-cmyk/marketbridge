@@ -99,18 +99,11 @@ const leafQuotes = (quotes) => {
   return list.filter((q) => !parents.has(q.id));
 };
 
-// Mirrors the backend's transportReleaseAfterHours() in routes/transport.js.
-// The env var name matches so ops can pin the same value on both sides.
-// Defaults to 72h, identical to the backend default.
 const TRANSPORT_RELEASE_AFTER_HOURS = (() => {
   const configured = Number(import.meta?.env?.VITE_TRANSPORT_RELEASE_AFTER_HOURS);
   return Number.isFinite(configured) && configured >= 0 ? configured : 72;
 })();
 
-// For a SELECTED quote, or a COUNTERED quote where the requester made the
-// last move, returns the earliest time at which the requester may silently
-// release the truck owner. Returns null for any quote the release window
-// does not apply to (PENDING, ACCEPTED, provider-turn COUNTERED).
 function transportReleaseAvailableAt(quote) {
   if (!quote) return null;
   const providerTurn =
@@ -140,6 +133,26 @@ function useNowUntil(targetMs) {
 /* ========================================================================
    2. UI primitives
    ======================================================================== */
+
+// ── Modal shell ───────────────────────────────────────────────────────────
+function Modal({ isOpen, onClose, title, children }) {
+  if (!isOpen) return null;
+  return (
+    <div className="od-modal-backdrop" onClick={onClose}>
+      <div className="od-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="od-modal-head">
+          <span className="od-modal-title">{title}</span>
+          <button type="button" className="od-modal-close" onClick={onClose} aria-label="Close modal">
+            ×
+          </button>
+        </div>
+        <div className="od-modal-body">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, className, children }) {
   return (
@@ -597,8 +610,158 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
 }
 
 /* ========================================================================
-   5. Inspection (with full quote negotiation)
+   5. Inspection — request form (popup) + status card
    ======================================================================== */
+
+// ── Inspection request form (opened in a modal) ───────────────────────────
+function InspectionRequestForm({ workDetails, setWorkDetails, requesting, request, isBuyer, onCancel }) {
+  return (
+    <div className="od-inspection-work-form">
+      <h3>Describe the inspection work</h3>
+      <p className="muted">
+        Inspectors will see these requirements before submitting a bid. Be specific so their fees
+        cover the same work.
+      </p>
+
+      <label>Inspection category
+        <select
+          value={workDetails.workCategory || 'GENERAL_QUALITY'}
+          onChange={(e) => setWorkDetails({ ...workDetails, workCategory: e.target.value })}
+        >
+          <option value="GENERAL_QUALITY">General quality and condition</option>
+          <option value="AGRICULTURAL_PRODUCE">Agricultural produce quality</option>
+          <option value="QUANTITY_VERIFICATION">Quantity and weight verification</option>
+          <option value="DAMAGE_ASSESSMENT">Damage and packaging assessment</option>
+          <option value="FUNCTIONAL_TESTING">Functionality / performance testing</option>
+          <option value="CONFORMITY_CHECK">Specification / conformity check</option>
+          <option value="SAFETY_COMPLIANCE">Safety-related checks</option>
+        </select>
+      </label>
+
+      <div className="od-form-grid">
+        <label>
+          Quantity to inspect
+          <div className="od-quantity-row">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              className="field"
+              placeholder="e.g. 500"
+              value={workDetails.quantityValue || ''}
+              onChange={(e) => setWorkDetails({ ...workDetails, quantityValue: e.target.value })}
+              required
+            />
+            <select
+              className="field"
+              value={workDetails.quantityUnit || 'kg'}
+              onChange={(e) => setWorkDetails({ ...workDetails, quantityUnit: e.target.value })}
+            >
+              <option value="kg">kg</option>
+              <option value="tons">tons</option>
+              <option value="quintals">quintals</option>
+              <option value="units">units</option>
+              <option value="crates">crates</option>
+              <option value="bags">bags</option>
+            </select>
+          </div>
+        </label>
+
+        <label>Number of lots / batches
+          <select
+            value={
+              workDetails.lotCount === undefined || workDetails.lotCount === null
+                ? ''
+                : String(workDetails.lotCount)
+            }
+            onChange={(e) => {
+              const raw = e.target.value;
+              setWorkDetails({
+                ...workDetails,
+                lotCount: raw === '' ? '' : Number(raw),
+              });
+            }}
+          >
+            <option value="">Select number of lots…</option>
+            <option value="1">1 lot</option>
+            <option value="2">2 lots</option>
+            <option value="3">3 lots</option>
+            <option value="4">4 lots</option>
+            <option value="5">5 lots</option>
+            <option value="6">6 lots</option>
+            <option value="7">7 lots</option>
+            <option value="8">8 lots</option>
+            <option value="9">9 lots</option>
+            <option value="10">10 lots</option>
+            <option value="15">More than 10 lots (approx. 15)</option>
+            <option value="20">More than 20 lots (approx. 20)</option>
+          </select>
+        </label>
+
+        <label>Inspection deadline
+          <input
+            type="datetime-local"
+            value={workDetails.requiredBy}
+            onChange={(e) => setWorkDetails({ ...workDetails, requiredBy: e.target.value })}
+          />
+        </label>
+      </div>
+
+      <label className="od-inspection-checks">
+        Checks required (hold Ctrl / Cmd to select multiple)
+        <select
+          multiple
+          size={7}
+          className="od-inspection-checks-select"
+          value={Array.isArray(workDetails.checks) ? workDetails.checks : []}
+          onChange={(e) => {
+            const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+            setWorkDetails({ ...workDetails, checks: selected });
+          }}
+        >
+          <option value="QUALITY_GRADE">Quality / grading</option>
+          <option value="SIZE_WEIGHT">Size / weight</option>
+          <option value="MOISTURE">Moisture (if applicable)</option>
+          <option value="VISIBLE_DEFECTS">Visible defects / damage</option>
+          <option value="PACKAGING">Packaging condition</option>
+          <option value="SAMPLING">Sampling / testing</option>
+          <option value="PHOTOGRAPHS">Photos / evidence</option>
+        </select>
+      </label>
+
+      <p className="muted small">
+        {Array.isArray(workDetails.checks) && workDetails.checks.length > 0
+          ? `Selected: ${workDetails.checks.map((c) => c.replaceAll('_', ' ').toLowerCase()).join(', ')}`
+          : 'No checks selected yet.'}
+      </p>
+
+      <label>Report format
+        <select
+          value={workDetails.reportFormat || 'CHECKLIST_PHOTOS'}
+          onChange={(e) => setWorkDetails({ ...workDetails, reportFormat: e.target.value })}
+        >
+          <option value="CHECKLIST_PHOTOS">Checklist, findings and photos</option>
+          <option value="MEASUREMENTS">Measurements and test results</option>
+          <option value="PASS_FAIL">Pass / fail against agreed criteria</option>
+          <option value="FULL_REPORT">Full structured inspection report</option>
+        </select>
+      </label>
+
+      <div className="od-actions">
+        <Button
+          variant="primary"
+          disabled={requesting}
+          busy={requesting}
+          busyText="Requesting…"
+          onClick={() => request(isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}
+        >
+          Open inspection competition
+        </Button>
+        <Button variant="light" onClick={onCancel}>Cancel</Button>
+      </div>
+    </div>
+  );
+}
 
 function InspectionCard({ order, title, i }) {
   const request = i.current;
@@ -619,144 +782,12 @@ function InspectionCard({ order, title, i }) {
             <p>Ask MarketBridge admin to release a fresh inspection form before opening another competition.</p>
           </Notice>
         ) : (
-          <div className="od-inspection-work-form">
-            <h3>Describe the inspection work</h3>
-            <p className="muted">Inspectors will see these requirements before submitting a bid. Be specific so their fees cover the same work.</p>
-
-            <label>Inspection category
-              <select
-                value={i.workDetails.workCategory || 'GENERAL_QUALITY'}
-                onChange={(e) => i.setWorkDetails({ ...i.workDetails, workCategory: e.target.value })}
-              >
-                <option value="GENERAL_QUALITY">General quality and condition</option>
-                <option value="AGRICULTURAL_PRODUCE">Agricultural produce quality</option>
-                <option value="QUANTITY_VERIFICATION">Quantity and weight verification</option>
-                <option value="DAMAGE_ASSESSMENT">Damage and packaging assessment</option>
-                <option value="FUNCTIONAL_TESTING">Functionality / performance testing</option>
-                <option value="CONFORMITY_CHECK">Specification / conformity check</option>
-                <option value="SAFETY_COMPLIANCE">Safety-related checks</option>
-              </select>
-            </label>
-
-            <div className="od-form-grid">
-              <label>Quantity to inspect
-                <select
-                  value={i.workDetails.quantityToInspect || ''}
-                  onChange={(e) => i.setWorkDetails({ ...i.workDetails, quantityToInspect: e.target.value })}
-                >
-                  <option value="">Select a quantity range…</option>
-                  <optgroup label="Small lots">
-                    <option value="Up to 10 kg">Up to 10 kg</option>
-                    <option value="10–50 kg">10–50 kg</option>
-                    <option value="50–100 kg">50–100 kg</option>
-                  </optgroup>
-                  <optgroup label="Medium lots">
-                    <option value="100–500 kg">100–500 kg</option>
-                    <option value="0.5–1 ton (5–10 quintals)">0.5–1 ton (5–10 quintals)</option>
-                    <option value="1–5 tons (10–50 quintals)">1–5 tons (10–50 quintals)</option>
-                  </optgroup>
-                  <optgroup label="Bulk lots">
-                    <option value="5–20 tons">5–20 tons</option>
-                    <option value="20–100 tons">20–100 tons</option>
-                    <option value="More than 100 tons">More than 100 tons</option>
-                  </optgroup>
-                  <optgroup label="By crate / bag">
-                    <option value="Up to 20 crates">Up to 20 crates</option>
-                    <option value="20–100 crates">20–100 crates</option>
-                    <option value="More than 100 crates">More than 100 crates</option>
-                    <option value="Up to 50 bags">Up to 50 bags</option>
-                    <option value="More than 50 bags">More than 50 bags</option>
-                  </optgroup>
-                  <optgroup label="Other">
-                    <option value="To be agreed with the inspector">To be agreed with the inspector</option>
-                  </optgroup>
-                </select>
-              </label>
-
-              <label>Number of lots / batches
-                <select
-                  value={
-                    i.workDetails.lotCount === undefined || i.workDetails.lotCount === null
-                      ? ''
-                      : String(i.workDetails.lotCount)
-                  }
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    i.setWorkDetails({
-                      ...i.workDetails,
-                      lotCount: raw === '' ? '' : Number(raw),
-                    });
-                  }}
-                >
-                  <option value="">Select number of lots…</option>
-                  <option value="1">1 lot</option>
-                  <option value="2">2 lots</option>
-                  <option value="3">3 lots</option>
-                  <option value="4">4 lots</option>
-                  <option value="5">5 lots</option>
-                  <option value="6">6 lots</option>
-                  <option value="7">7 lots</option>
-                  <option value="8">8 lots</option>
-                  <option value="9">9 lots</option>
-                  <option value="10">10 lots</option>
-                  <option value="15">More than 10 lots (approx. 15)</option>
-                  <option value="20">More than 20 lots (approx. 20)</option>
-                </select>
-              </label>
-
-              <label>Inspection deadline
-                <input
-                  type="datetime-local"
-                  value={i.workDetails.requiredBy}
-                  onChange={(e) => i.setWorkDetails({ ...i.workDetails, requiredBy: e.target.value })}
-                />
-              </label>
-            </div>
-
-            <label className="od-inspection-checks">
-              Checks required (hold Ctrl / Cmd to select multiple)
-              <select
-                multiple
-                size={7}
-                className="od-inspection-checks-select"
-                value={Array.isArray(i.workDetails.checks) ? i.workDetails.checks : []}
-                onChange={(e) => {
-                  const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
-                  i.setWorkDetails({ ...i.workDetails, checks: selected });
-                }}
-              >
-                <option value="QUALITY_GRADE">Quality / grading</option>
-                <option value="SIZE_WEIGHT">Size / weight</option>
-                <option value="MOISTURE">Moisture (if applicable)</option>
-                <option value="VISIBLE_DEFECTS">Visible defects / damage</option>
-                <option value="PACKAGING">Packaging condition</option>
-                <option value="SAMPLING">Sampling / testing</option>
-                <option value="PHOTOGRAPHS">Photos / evidence</option>
-              </select>
-            </label>
-
-            <p className="muted small">
-              {Array.isArray(i.workDetails.checks) && i.workDetails.checks.length > 0
-                ? `Selected: ${i.workDetails.checks.map((c) => c.replaceAll('_', ' ').toLowerCase()).join(', ')}`
-                : 'No checks selected yet.'}
-            </p>
-
-            <label>Report format
-              <select
-                value={i.workDetails.reportFormat || 'CHECKLIST_PHOTOS'}
-                onChange={(e) => i.setWorkDetails({ ...i.workDetails, reportFormat: e.target.value })}
-              >
-                <option value="CHECKLIST_PHOTOS">Checklist, findings and photos</option>
-                <option value="MEASUREMENTS">Measurements and test results</option>
-                <option value="PASS_FAIL">Pass / fail against agreed criteria</option>
-                <option value="FULL_REPORT">Full structured inspection report</option>
-              </select>
-            </label>
-
-            <Button variant="primary" disabled={i.requesting} busy={i.requesting} busyText="Requesting…" onClick={() => i.request(i.isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}>
-              Open inspection competition
+          <Section title="Start inspection">
+            <p className="muted">Open the form to describe the inspection scope and start the competition.</p>
+            <Button variant="primary" size="sm" onClick={() => i.onOpenModal('inspection-request-form')}>
+              Open inspection form
             </Button>
-          </div>
+          </Section>
         )}
       </Card>
     );
@@ -816,8 +847,35 @@ function InspectionCard({ order, title, i }) {
           {request.fee != null && <Fact name="Inspection fee">{money(request.fee)} ETB</Fact>}
           {!inspectorName && <Fact name="Status">{label(request.status)}</Fact>}
         </Facts>
-        {request.workDetails && <div className="od-work-details"><h4>Agreed inspection scope</h4>{request.workDetails.workDescription && <p>{request.workDetails.workDescription}</p>}<div className="od-work-detail-items">{request.workDetails.quantityToInspect && <span><b>Quantity:</b> {request.workDetails.quantityToInspect}</span>}{request.workDetails.lotCount && <span><b>Lots:</b> {request.workDetails.lotCount}</span>}{request.workDetails.requiredBy && <span><b>Deadline:</b> {formatDateTime(request.workDetails.requiredBy)}</span>}</div>{request.workDetails.checks?.length > 0 && <p><b>Checks:</b> {request.workDetails.checks.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>}{request.workDetails.reportRequirements && <p><b>Report:</b> {request.workDetails.reportRequirements}</p>}</div>}
+        {request.workDetails && (
+          <div className="od-work-details">
+            <h4>Agreed inspection scope</h4>
+            {request.workDetails.workDescription && <p>{request.workDetails.workDescription}</p>}
+            <div className="od-work-detail-items">
+              {request.workDetails.quantityValue && (
+                <span><b>Quantity:</b> {request.workDetails.quantityValue} {request.workDetails.quantityUnit || ''}</span>
+              )}
+              {request.workDetails.lotCount && <span><b>Lots:</b> {request.workDetails.lotCount}</span>}
+              {request.workDetails.requiredBy && <span><b>Deadline:</b> {formatDateTime(request.workDetails.requiredBy)}</span>}
+            </div>
+            {request.workDetails.checks?.length > 0 && (
+              <p><b>Checks:</b> {request.workDetails.checks.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>
+            )}
+            {request.workDetails.reportRequirements && (
+              <p><b>Report:</b> {request.workDetails.reportRequirements}</p>
+            )}
+          </div>
+        )}
       </Section>
+
+      {i.isSeller && ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(request.status) && (
+        <Section title="Inspection coordination">
+          <p className="muted">Share site access and coordination details with the inspector.</p>
+          <Button variant="light" size="sm" onClick={() => i.onOpenModal('inspection-coordination')}>
+            Open inspection coordination
+          </Button>
+        </Section>
+      )}
 
       {request.status === 'REQUESTED' && (
         <Section
@@ -1150,10 +1208,6 @@ function DeliveryEvidenceForm({ t }) {
   );
 }
 
-// Release limits for a provisional (ACCEPTED) transporter / inspector
-// agreement. Mirrors backend services/releaseLimitsService.js: a reason from
-// a list is required and release opens RELEASE_AFTER_ACCEPT_HOURS after
-// acceptance. The per-job cap (2, then admin review) is enforced server-side.
 const RELEASE_AFTER_ACCEPT_HOURS = (() => {
   const configured = Number(import.meta?.env?.VITE_RELEASE_AFTER_ACCEPT_HOURS);
   return Number.isFinite(configured) && configured >= 0 ? configured : 24;
@@ -1252,19 +1306,12 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
   const working = t.busy === key;
   const amount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
 
-  // Silent-release gate. Mirrors the backend's transportReleaseAvailableAt:
-  // a SELECTED (or COUNTERED-by-requester) quote can only be released after
-  // the waiting window elapses. Until then, the release button is replaced
-  // by an explanation of the earliest release time.
   const releaseAt = transportReleaseAvailableAt(quote);
   const releaseLocked = releaseAt !== null && releaseAt.getTime() > Date.now();
 
   const isArrangerTurn =
     quote.status === 'SELECTED' ||
     (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
-  // The truck owner only acts after the arranging party counters; on a freshly
-  // selected bid the arranging party is the one to accept/counter (the backend
-  // rejects a provider response on SELECTED with a 409).
   const isTransporterTurn =
     quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
 
@@ -1296,9 +1343,6 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
       <div>
         <strong>{money(amount)} ETB</strong>
 
-        {/* Select for negotiation. Blocked when another transporter bid is
-            already in a live negotiation thread — the requester must release
-            or reject that thread first. Mirrors the inspection flow. */}
         {t.canChooseQuote && quote.status === 'PENDING' && (
           <>
             {hasActiveNegotiation ? (
@@ -1381,8 +1425,6 @@ function TransportCard({ order, t }) {
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
 
-  // Mirrors the backend: selecting is blocked while another bid is in
-  // negotiation or provisionally accepted (it must be released first).
   const hasActiveNegotiation = quotes.some((q) =>
     ['SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)
   );
@@ -1393,18 +1435,23 @@ function TransportCard({ order, t }) {
         id="transport-section"
         eyebrow="Logistics"
         title="Transport"
-        subtitle="The buyer or seller arranges transport. MarketBridge does not assign a transporter automatically."
+        subtitle="Either you or the counterparty may arrange transport. Once one of you does, the other cannot create a competing arrangement."
       >
         {t.canArrange ? (
-          <TransportSetup
-            orderId={order.id}
-            pickupDefault={order.listing?.location}
-            destinationDefault={order.buyer?.location}
-            canBuyer={t.isBuyer}
-            canSeller={t.isSeller}
-            buyerOnlyCompetition={['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category)}
-            onCreated={t.reload}
-          />
+          <Section title="Arrange transport">
+            <p className="muted">
+              Open the transport request to define the trip scope and choose
+              between hiring a registered transporter or using the owner's own
+              truck.
+            </p>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => t.onOpenModal('transport-setup-form')}
+            >
+              Open transport request
+            </Button>
+          </Section>
         ) : (
           <p className="muted">No transport arrangement recorded yet.</p>
         )}
@@ -1474,14 +1521,18 @@ function TransportCard({ order, t }) {
         )}
 
         {['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status) && (
-          <>
+          <Section title="Coordination">
             {t.isSeller && (
-              <TransportCoordinationSeller transportJobId={job.id} />
+              <Button variant="light" size="sm" onClick={() => t.onOpenModal('seller-transport-coordination')}>
+                Open pickup handoff
+              </Button>
             )}
             {t.isTransporter && (
-              <TransportCoordinationTransporter transportJobId={job.id} />
+              <Button variant="light" size="sm" onClick={() => t.onOpenModal('transporter-transport-coordination')}>
+                Open pickup handoff
+              </Button>
             )}
-          </>
+          </Section>
         )}
 
         {t.isTransporter && job.status === 'ACCEPTED' && (
@@ -1841,6 +1892,8 @@ export default function OrderDetail() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
 
+  const [activeModal, setActiveModal] = useState(null);
+
   const [payMethod, setPayMethod] = useState('TELEBIRR');
 
   const [counterInputs, setCounterInputs] = useState({});
@@ -1851,7 +1904,15 @@ export default function OrderDetail() {
   const [offerAmount, setOfferAmount] = useState('');
   const [submittingOffer, setSubmittingOffer] = useState(false);
   const [requestingInspection, setRequestingInspection] = useState(false);
-  const [inspectionWorkDetails, setInspectionWorkDetails] = useState({ workCategory: 'GENERAL_QUALITY', quantityToInspect: '', lotCount: '', checks: ['QUALITY_GRADE', 'VISIBLE_DEFECTS', 'PHOTOGRAPHS'], reportFormat: 'CHECKLIST_PHOTOS', requiredBy: '' });
+  const [inspectionWorkDetails, setInspectionWorkDetails] = useState({
+    workCategory: 'GENERAL_QUALITY',
+    quantityValue: '',
+    quantityUnit: 'kg',
+    lotCount: '',
+    checks: ['QUALITY_GRADE', 'VISIBLE_DEFECTS', 'PHOTOGRAPHS'],
+    reportFormat: 'CHECKLIST_PHOTOS',
+    requiredBy: '',
+  });
 
   const [loadingReport, setLoadingReport] = useState(null);
   const [loadingReportEvidence, setLoadingReportEvidence] = useState(null);
@@ -2333,14 +2394,21 @@ export default function OrderDetail() {
 
   const inspectionActions = {
     request: async (mode) => {
-      if (!order?.listing) return;
+      if (!order?.listing) return false;
       setRequestingInspection(true);
       setError('');
       try {
-        await api.post('/inspections', { orderId: order.id, listingId: order.listing.id, mode, workDetails: inspectionWorkDetails });
+        await api.post('/inspections', {
+          orderId: order.id,
+          listingId: order.listing.id,
+          mode,
+          workDetails: inspectionWorkDetails,
+        });
         await reload();
+        return true;
       } catch (err) {
         setError(getError(err, 'Could not request inspection'));
+        return false;
       } finally {
         setRequestingInspection(false);
       }
@@ -2610,6 +2678,7 @@ export default function OrderDetail() {
     isAgricultural,
     decisionRequired,
     busy,
+    onOpenModal: setActiveModal,
     ...inspectionActions,
   };
 
@@ -2647,6 +2716,7 @@ export default function OrderDetail() {
     allOrderPaymentsSettled,
     marketplacePaid,
     missingPayments,
+    onOpenModal: setActiveModal,
     ...transportActions,
   };
 
@@ -2716,14 +2786,6 @@ export default function OrderDetail() {
           {inspectionApplies && isParticipant && orderOpen && (
             <InspectionCard order={order} title={title} i={inspectionProps} />
           )}
-
-          {currentInspection &&
-            ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(currentInspection.status) &&
-            isSeller && (
-              <InspectionCoordinationSeller
-                inspectionRequestId={currentInspection.id}
-              />
-            )}
 
           <div className="od-span-all">
             <TransportCard order={order} t={transportProps} />
@@ -2804,6 +2866,75 @@ export default function OrderDetail() {
           )}
         </div>
       </div>
+
+      {/* ── MODALS ─────────────────────────────────────────────────── */}
+
+      {/* Inspection request form */}
+      <Modal
+        isOpen={activeModal === 'inspection-request-form'}
+        onClose={() => setActiveModal(null)}
+        title="Request an Inspection"
+      >
+        <InspectionRequestForm
+          workDetails={inspectionWorkDetails}
+          setWorkDetails={setInspectionWorkDetails}
+          requesting={requestingInspection}
+          isBuyer={isBuyer}
+          onCancel={() => setActiveModal(null)}
+          request={async (mode) => {
+            const ok = await inspectionProps.request(mode);
+            if (ok) setActiveModal(null);
+          }}
+        />
+      </Modal>
+
+      {/* Transport setup form */}
+      <Modal
+        isOpen={activeModal === 'transport-setup-form'}
+        onClose={() => setActiveModal(null)}
+        title="Arrange Transport"
+      >
+        <TransportSetup
+          orderId={order.id}
+          pickupDefault={order.listing?.location}
+          destinationDefault={order.buyer?.location}
+          canBuyer={isBuyer}
+          canSeller={isSeller}
+          onCreated={() => {
+            reload();
+            setActiveModal(null);
+          }}
+        />
+      </Modal>
+
+      {/* Inspection coordination (seller) */}
+      <Modal
+        isOpen={activeModal === 'inspection-coordination'}
+        onClose={() => setActiveModal(null)}
+        title="Inspection Coordination"
+      >
+        {currentInspection?.id && (
+          <InspectionCoordinationSeller inspectionRequestId={currentInspection.id} />
+        )}
+      </Modal>
+
+      {/* Transport coordination (seller) */}
+      <Modal
+        isOpen={activeModal === 'seller-transport-coordination'}
+        onClose={() => setActiveModal(null)}
+        title="Pickup Handoff (Seller)"
+      >
+        {transportJob?.id && <TransportCoordinationSeller transportJobId={transportJob.id} />}
+      </Modal>
+
+      {/* Transport coordination (transporter) */}
+      <Modal
+        isOpen={activeModal === 'transporter-transport-coordination'}
+        onClose={() => setActiveModal(null)}
+        title="Pickup Handoff (Transporter)"
+      >
+        {transportJob?.id && <TransportCoordinationTransporter transportJobId={transportJob.id} />}
+      </Modal>
 
       {error && (
         <div className="order-detail-toast" role="alert" aria-live="assertive">
