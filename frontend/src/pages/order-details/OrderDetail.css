@@ -2084,3 +2084,31 @@
     break-inside: avoid;
   }
 }
+/* ---- Request forms (inspection + transport popups) ---------------------- */
+.order-detail-page .od-quantity-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: 8px;
+}
+.order-detail-page .od-tf {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.order-detail-page .od-tf > label {
+  color: var(--mb-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.order-detail-page .od-tf-span {
+  grid-column: 1 / -1;
+}
+.order-detail-page .od-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.order-detail-page .mb-transport-setup select.field,
+.order-detail-page .mb-transport-setup input.field {
+  width: 100%;
+}
