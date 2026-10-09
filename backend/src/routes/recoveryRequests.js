@@ -14,7 +14,9 @@ const {
 
 const router = express.Router();
 
-const TYPES = new Set(['INSPECTION', 'TRANSPORT']);
+// Recovery types: OFFER (product/agricultural listings with no agreed deal),
+// INSPECTION (dead inspection competition), TRANSPORT (dead transport job).
+const TYPES = new Set(['INSPECTION', 'TRANSPORT', 'OFFER']);
 const TARGETS = new Set(['BUYER', 'SELLER']);
 
 function normalizeTargets(value) {
@@ -38,6 +40,8 @@ async function getRecoveryEligibility(orderId) {
     where: { id: orderId },
     select: {
       status: true,
+      listingId: true,
+      agreedOfferId: true,
       disputes: { where: { status: 'RESOLVED' }, orderBy: { updatedAt: 'desc' }, take: 1, select: { updatedAt: true } },
       inspectionRequests: {
         orderBy: { updatedAt: 'desc' },
@@ -64,18 +68,13 @@ async function getRecoveryEligibility(orderId) {
     },
   });
 
-  if (!order) return { INSPECTION: false, TRANSPORT: false };
+  if (!order) return { INSPECTION: false, TRANSPORT: false, OFFER: false };
 
   const latestApproved = (type) => order.recoveryRequests.find((r) => r.type === type)?.formReleasedAt || null;
-  // Dispute resolution updates the Dispute row; it does not currently create
-  // an OrderEvent, so eligibility must read the authoritative dispute record.
   const disputeResolvedAt = order.disputes[0]?.updatedAt || null;
   const inspection = order.inspectionRequests[0] || null;
   const transport = order.transportJob;
 
-  // A provider withdrawal is a recovery trigger only when it affects the
-  // assigned provider, or when every bid in the competition has become unusable.
-  // A random losing bidder withdrawing must not reset a live competition.
   const latestInspectionWithdrawal = inspection?.quotes
     .filter((q) => q.status === 'WITHDRAWN' && (!inspection.inspectorId || q.inspectorId === inspection.inspectorId))
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0] || null;
@@ -105,15 +104,19 @@ async function getRecoveryEligibility(orderId) {
     triggerAt && !hasUnresolvedServicePayment && (!releasedAt || new Date(triggerAt) > new Date(releasedAt))
   );
 
-  // NOTE: Eligibility deliberately does NOT consider InspectionCoordination.
-  // A legitimate recovery trigger is a dead competition, a withdrawn
-  // assigned provider, or a resolved dispute — never "coordination is
-  // incomplete". Coordination is closed as a side-effect of admin approval
-  // (see the inspection branch of PATCH /admin/:id/approve), not evaluated
-  // here.
+  // OFFER recovery is only meaningful when the product listing has no agreed
+  // offer yet (no order was created from bidding). If `agreedOfferId` is set,
+  // the offer competition already succeeded and OFFER recovery is not needed.
+  const offerEligible = Boolean(
+    !order.agreedOfferId &&
+    !['COMPLETED', 'CANCELLED'].includes(order.status) &&
+    (!latestApproved('OFFER') || new Date(disputeResolvedAt || 0) > new Date(latestApproved('OFFER')))
+  );
+
   return {
     INSPECTION: eligible(inspectionTriggerAt, latestApproved('INSPECTION'), Boolean(inspection?.payments?.length)),
     TRANSPORT: eligible(transportTriggerAt, latestApproved('TRANSPORT'), Boolean(transport?.payments?.length)),
+    OFFER: offerEligible,
   };
 }
 
@@ -214,20 +217,67 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
       if (['CANCELLED', 'COMPLETED'].includes(request.order.status)) throw Object.assign(new Error('This order is closed and cannot be recovered'), { statusCode: 409 });
 
       const now = new Date();
-      if (request.type === 'INSPECTION') {
+
+      if (request.type === 'OFFER') {
+        // Reset the listing's offer competition: cancel any provisional order,
+        // expire every live leaf offer, and reopen the listing. A pending
+        // provisional order blocks OFFER recovery because cancelling it is a
+        // separate decision the buyer/seller must make.
+        const provisionalOrder = await tx.order.findFirst({
+          where: {
+            listingId: request.order.listingId,
+            status: { notIn: ['CANCELLED', 'COMPLETED', 'DISPUTED'] },
+          },
+          select: { id: true, status: true },
+        });
+        if (provisionalOrder) {
+          throw Object.assign(
+            new Error('Offer recovery is blocked: this listing still has an active provisional order. Cancel or release that order first.'),
+            { statusCode: 409 }
+          );
+        }
+
+        await tx.offer.updateMany({
+          where: { listingId: request.order.listingId, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
+          data: { status: 'EXPIRED' },
+        });
+
+        await tx.listing.update({
+          where: { id: request.order.listingId },
+          data: { status: 'ACTIVE' },
+        });
+      } else if (request.type === 'INSPECTION') {
         const current = await tx.inspectionRequest.findFirst({ where: { orderId: request.orderId }, orderBy: { createdAt: 'desc' } });
         if (current) {
           const activePayment = await tx.payment.findFirst({ where: { inspectionRequestId: current.id, type: 'INSPECTOR', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true } });
           if (activePayment) throw Object.assign(new Error('Inspection recovery is blocked because inspection payment has already started'), { statusCode: 409 });
           if (['REQUESTED', 'ACCEPTED', 'STALLED'].includes(current.status)) {
             await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: current.id, inspectorId: current.inspectorId, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
-            await tx.inspectionRequest.update({ where: { id: current.id }, data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, feeTermsLockedAt: null, lockedFee: null, lockedFeePayer: null, lockedBuyerFeeAmount: null, lockedSellerFeeAmount: null, startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' } });
-            // Close coordination so the next inspector does not inherit the
-            // previous inspector's phone, availability, or site notes.
+            await tx.inspectionRequest.update({
+              where: { id: current.id },
+              data: {
+                inspectorId: null,
+                fee: null,
+                buyerFeeAmount: null,
+                sellerFeeAmount: null,
+                sellerConfirmedAt: null,
+                inspectorOnSiteConfirmedAt: null,
+                feeTermsLockedAt: null,
+                lockedFee: null,
+                lockedFeePayer: null,
+                lockedBuyerFeeAmount: null,
+                lockedSellerFeeAmount: null,
+                startDueAt: null,
+                completionDueAt: null,
+                startedAt: null,
+                status: 'REQUESTED',
+                acceptedReleaseCount: 0,
+              },
+            });
             await closeCoordination(tx, current.id, 'ADMIN_RECOVERY_APPROVED');
           } else if (current.status === 'CANCELLED') {
             const requestedById = request.targetParties?.includes('BUYER') ? request.order.buyerId : request.targetParties?.includes('SELLER') ? request.order.sellerId : request.requestedById;
-            const recreated = await tx.inspectionRequest.create({
+            await tx.inspectionRequest.create({
               data: {
                 orderId: request.orderId,
                 listingId: current.listingId,
@@ -238,12 +288,7 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
                 status: 'REQUESTED',
               },
             });
-            // The recreated request carries a fresh id; close any coordination
-            // row left on the old cancelled request so the historical record
-            // is marked closed and cannot resurface. The new request opens a
-            // fresh coordination row only when its own quote is accepted.
             await closeCoordination(tx, current.id, 'ADMIN_RECOVERY_RECREATED');
-            // `recreated` intentionally has no coordination row at this point.
           }
         }
       } else {
@@ -251,19 +296,32 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
         if (job) {
           const activePayment = await tx.payment.findFirst({ where: { transportJobId: job.id, type: 'TRANSPORT', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true } });
           if (activePayment) throw Object.assign(new Error('Transport recovery is blocked because transport payment has already started'), { statusCode: 409 });
-          // job.truckOwnerId is null when the previous transporter already
-          // withdrew (the job was released at that point). Prisma rejects a
-          // null in a non-nullable `truckOwnerId` filter, so only scope the
-          // expiry to the previous transporter when one is still assigned.
-          // With no assigned transporter there is no arrangement to expire.
           if (job.truckOwnerId) {
             await tx.transportQuote.updateMany({ where: { transportJobId: job.id, truckOwnerId: job.truckOwnerId, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
           }
-          await tx.transportJob.update({ where: { id: job.id }, data: { truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED' } });
+          await tx.transportJob.update({
+            where: { id: job.id },
+            data: {
+              truckOwnerId: null,
+              truckId: null,
+              agreedAmount: null,
+              status: 'REQUESTED',
+              acceptedReleaseCount: 0,
+            },
+          });
         }
       }
 
-      const updated = await tx.recoveryRequest.update({ where: { id: request.id }, data: { status: 'APPROVED', approvedById: req.user.id, approvedAt: now, formReleasedAt: now, adminNote: typeof req.body?.adminNote === 'string' ? req.body.adminNote.trim().slice(0, 1000) : null } });
+      const updated = await tx.recoveryRequest.update({
+        where: { id: request.id },
+        data: {
+          status: 'APPROVED',
+          approvedById: req.user.id,
+          approvedAt: now,
+          formReleasedAt: now,
+          adminNote: typeof req.body?.adminNote === 'string' ? req.body.adminNote.trim().slice(0, 1000) : null,
+        },
+      });
       await recordOrderEvent(tx, {
         orderId: request.orderId,
         actorId: req.user.id,
@@ -273,6 +331,35 @@ router.patch('/admin/:id/approve', requireRole('ADMIN'), requireMfa(), async (re
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'WORKFLOW_RECOVERY_APPROVED', resourceType: 'RecoveryRequest', resourceId: request.id, metadata: { orderId: request.orderId, type: request.type, targetParties: request.targetParties } });
       return updated;
     }, { maxWait: 10000, timeout: 15000 });
+
+    // Best-effort unlock notices for the affected service, after the main
+    // transaction has committed. These can never roll back the approval.
+    if (result.type === 'INSPECTION') {
+      const inspection = await prisma.inspectionRequest.findFirst({
+        where: { orderId: result.orderId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+      if (inspection) {
+        await noticeInspectionWaitingUnlocked(prisma, {
+          inspectionRequestId: inspection.id,
+          reason: 'ADMIN_RECOVERY_APPROVED',
+        });
+      }
+    } else if (result.type === 'TRANSPORT') {
+      const job = await prisma.transportJob.findUnique({
+        where: { orderId: result.orderId },
+        select: { id: true },
+      });
+      if (job) {
+        await noticeTransportWaitingUnlocked(prisma, {
+          transportJobId: job.id,
+          reason: 'ADMIN_RECOVERY_APPROVED',
+        });
+      }
+    }
+    // OFFER recovery has no waiting-list notice table; the listing simply
+    // reopens and any buyers can bid again — nothing to notify.
 
     return res.json({ message: 'Recovery approved. A fresh requesting form has been released.', recoveryRequest: result, formReleased: true });
   } catch (error) {
@@ -285,8 +372,17 @@ router.patch('/admin/:id/reject', requireRole('ADMIN'), requireMfa(), async (req
   try {
     const updated = await prisma.$transaction(async (tx) => {
       const request = await tx.recoveryRequest.findUnique({ where: { id: req.params.id } });
-      if (!request || request.status !== 'PENDING') return null;
-      const result = await tx.recoveryRequest.update({ where: { id: request.id }, data: { status: 'REJECTED', rejectedAt: new Date(), adminNote: typeof req.body?.adminNote === 'string' ? req.body.adminNote.trim().slice(0, 1000) : null } });
+      if (!request) throw Object.assign(new Error('Recovery request not found'), { statusCode: 404 });
+      if (request.status !== 'PENDING') throw Object.assign(new Error('This recovery request has already been decided'), { statusCode: 409 });
+
+      const result = await tx.recoveryRequest.update({
+        where: { id: request.id },
+        data: {
+          status: 'REJECTED',
+          rejectedAt: new Date(),
+          adminNote: typeof req.body?.adminNote === 'string' ? req.body.adminNote.trim().slice(0, 1000) : null,
+        },
+      });
       await recordOrderEvent(tx, { orderId: request.orderId, actorId: req.user.id, type: 'WORKFLOW_RECOVERY_REJECTED', metadata: { recoveryRequestId: request.id, recoveryType: request.type, adminNote: req.body?.adminNote || null } });
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'WORKFLOW_RECOVERY_REJECTED', resourceType: 'RecoveryRequest', resourceId: req.params.id, metadata: { orderId: request.orderId, adminNote: req.body?.adminNote || null } });
       return result;
@@ -295,7 +391,7 @@ router.patch('/admin/:id/reject', requireRole('ADMIN'), requireMfa(), async (req
     return res.json({ message: 'Recovery request rejected' });
   } catch (error) {
     req.log.error({ err: error }, 'RECOVERY REQUEST REJECT ERROR');
-    return res.status(500).json({ error: 'Could not reject recovery request' });
+    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not reject recovery request' });
   }
 });
 
