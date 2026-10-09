@@ -32,7 +32,7 @@ import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
 import { InspectionRequestSummary, TransportRequestSummary } from '../components/RequestScopeSummary.jsx';
-import { DEADLINE_WINDOWS, QUANTITY_VALUES, deadlineFromWindow } from '../components/requestOptions.js';
+import { DEADLINE_WINDOWS, QUANTITY_VALUES, deadlineFromWindow } from '../components/RequestOptions.js';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
 
 const PAYMENT_METHODS = [
