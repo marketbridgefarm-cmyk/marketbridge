@@ -1,9 +1,4 @@
 const express = require('express');
-const {
-  WEIGHT_OPTIONS, PACKAGE_COUNTS, CAPACITY_TONS,
-  BID_MESSAGES, SELLER_TRANSPORT_MESSAGES,
-  presetMessage, accessNotesOnly, withinDeadlineRange,
-} = require('../utils/requestOptions');
 const { body, param, validationResult } = require('express-validator');
 
 
@@ -445,60 +440,6 @@ router.get('/match', authenticate, async (req, res) => {
 });
 
 // ============================================================================
-// TRANSPORT WORK DETAILS — allow-listed, size-capped
-// ----------------------------------------------------------------------------
-// Trip requirements every bidding transporter reads before quoting. Only
-// structured values are accepted (no free text), so contact info can't leak
-// through this field. Stored as JSON on TransportJob.workDetails.
-// ============================================================================
-const TRANSPORT_WEIGHT_UNITS = new Set(['kg', 'tons', 'quintals']);
-const TRANSPORT_VEHICLE_TYPES = new Set([
-  'Pickup', 'Small truck', 'Medium truck', 'Large truck', 'Refrigerated truck', 'Flatbed',
-]);
-const TRANSPORT_HANDLING = new Set([
-  'FRAGILE', 'KEEP_COOL', 'KEEP_DRY', 'THIS_SIDE_UP', 'VENTILATED', 'COVERED',
-]);
-
-function sanitizeTransportWorkDetails(input) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
-  const out = {};
-
-  if (typeof input.weight === 'string') {
-    const m = input.weight.trim().match(/^(\d+(?:\.\d+)?)\s+([a-z]+)$/i);
-    if (m) {
-      const n = Number(m[1]);
-      const unit = m[2].toLowerCase();
-      const normalized = `${n} ${unit}`;
-      if (Number.isFinite(n) && TRANSPORT_WEIGHT_UNITS.has(unit) && WEIGHT_OPTIONS.includes(normalized)) {
-        out.weight = normalized;
-      }
-    }
-  }
-
-  if (input.packageCount != null && input.packageCount !== '') {
-    const n = Number(input.packageCount);
-    if (PACKAGE_COUNTS.includes(n)) out.packageCount = n;
-  }
-
-  if (typeof input.vehicleType === 'string' && TRANSPORT_VEHICLE_TYPES.has(input.vehicleType)) {
-    out.vehicleType = input.vehicleType;
-  }
-
-  if (typeof input.deliveryDeadline === 'string') {
-    const d = new Date(input.deliveryDeadline);
-    if (!Number.isNaN(d.getTime()) && withinDeadlineRange(input.deliveryDeadline)) out.deliveryDeadline = d.toISOString();
-  }
-
-  if (Array.isArray(input.handling)) {
-    out.handling = [
-      ...new Set(input.handling.filter((v) => typeof v === 'string' && TRANSPORT_HANDLING.has(v))),
-    ].slice(0, TRANSPORT_HANDLING.size);
-  }
-
-  return Object.keys(out).length ? out : null;
-}
-
-// ============================================================================
 // CREATE TRANSPORT JOB
 // ============================================================================
 
@@ -509,13 +450,12 @@ router.post(
     body('orderId').isUUID().withMessage('orderId is required'),
     body('arrangingParty').isIn(['SELLER', 'BUYER', 'JOINT']),
     body('method').isIn(['OWN_TRUCK', 'HIRE_TRANSPORTER']),
-    body('pickupLocation').isString().trim().notEmpty().isLength({ max: 120 }).custom(noContactInfo),
-    body('destination').isString().trim().notEmpty().isLength({ max: 120 }).custom(noContactInfo),
-    body('load').isString().trim().notEmpty().isLength({ max: 120 }).custom(noContactInfo),
-    body('requiredCapacity').optional({ nullable: true }).isFloat({ min: 0 }).custom((v) => v === '' || CAPACITY_TONS.includes(Number(v))).withMessage('Choose a capacity from the list'),
-    body('specialRequirements').optional({ nullable: true }).isString().trim().custom(accessNotesOnly),
+    body('pickupLocation').isString().trim().notEmpty(),
+    body('destination').isString().trim().notEmpty(),
+    body('load').isString().trim().notEmpty(),
+    body('requiredCapacity').optional().isFloat({ min: 0 }),
+    body('specialRequirements').optional().isString().trim().custom(noContactInfo),
     body('truckId').optional().isUUID(),
-    body('workDetails').optional({ nullable: true }).isObject(),
   ],
   validate,
   async (req, res) => {
@@ -524,7 +464,6 @@ router.post(
         orderId, arrangingParty, method, pickupLocation, destination,
         load, requiredCapacity, specialRequirements, truckId,
       } = req.body;
-      const safeWorkDetails = sanitizeTransportWorkDetails(req.body.workDetails);
 
       const order = await prisma.order.findUnique({
         where: { id: orderId },
@@ -645,7 +584,7 @@ router.post(
                   where: { id: freshOrder.transportJob.id },
                   data: {
                     arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
-                    requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null, workDetails: safeWorkDetails,
+                    requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
                     truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED',
                     pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
                   },
@@ -657,7 +596,7 @@ router.post(
                 arrangingParty: resolvedArrangingParty,
                 method, pickupLocation, destination, load,
                 requiredCapacity: requiredCapacity || null,
-                specialRequirements: specialRequirements || null, workDetails: safeWorkDetails,
+                specialRequirements: specialRequirements || null,
                 truckOwnerId: null, truckId: null,
                 status: 'REQUESTED',
               },
@@ -732,7 +671,7 @@ router.post(
                 where: { id: freshOrder.transportJob.id },
                 data: {
                   arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
-                  requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null, workDetails: safeWorkDetails,
+                  requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
                   truckOwnerId: truck.ownerId, truckId: truck.id, agreedAmount: null, status: 'ACCEPTED',
                   sellerPreparationDueAt: computeSellerPreparationDueAt(), buyerLoadingDueAt: null,
                   pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
@@ -745,7 +684,7 @@ router.post(
               arrangingParty: resolvedArrangingParty,
               method, pickupLocation, destination, load,
               requiredCapacity: requiredCapacity || null,
-              specialRequirements: specialRequirements || null, workDetails: safeWorkDetails,
+              specialRequirements: specialRequirements || null,
               truckOwnerId: truck.ownerId,
               truckId: truck.id,
               status: 'ACCEPTED',
@@ -1158,7 +1097,7 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
   }
 });
 
-router.post('/:id/seller-confirm-pickup', authenticate, requireRole('SELLER'), [param('id').isUUID(), body('message').optional().isString().trim().custom(presetMessage(SELLER_TRANSPORT_MESSAGES))], validate, async (req, res) => {
+router.post('/:id/seller-confirm-pickup', authenticate, requireRole('SELLER'), [param('id').isUUID(), body('message').optional().isString().trim().isLength({ max: 500 })], validate, async (req, res) => {
   try {
     const job = await prisma.transportJob.findUnique({ where: { id: req.params.id }, include: { order: { select: { id: true, sellerId: true } } } });
     if (!job) return res.status(404).json({ error: 'Transport job not found' });
@@ -1457,7 +1396,7 @@ router.post(
   [
     param('id').isUUID(),
     body('amount').custom(validAmount(AMOUNT_LIMITS.transport)),
-    body('message').optional().isString().trim().custom(presetMessage(BID_MESSAGES)),
+    body('message').optional().isString().trim().custom(noContactInfo),
     body('truckId').optional().isUUID(),
   ],
   validate,
@@ -2062,7 +2001,7 @@ router.post(
     param('id').isUUID(),
     param('quoteId').isUUID(),
     body('counterAmount').custom(validAmount(AMOUNT_LIMITS.transport)),
-    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }).custom(presetMessage(BID_MESSAGES)),
+    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }).custom(noContactInfo),
   ],
   validate,
   async (req, res) => {
