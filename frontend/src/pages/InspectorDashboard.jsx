@@ -12,6 +12,7 @@ import ProviderReleaseDialog from '../components/ProviderReleaseDialog.jsx';
 import ProviderStandingBanner from '../components/ProviderStandingBanner.jsx';
 import InspectionCoordinationInspector from '../components/InspectionCoordinationInspector.jsx';
 import { InspectionRequestSummary } from '../components/RequestScopeSummary.jsx';
+import { BID_MESSAGES } from '../components/requestOptions.js';
 
 const EMPTY_REPORT = {
   quantity: '',
@@ -809,9 +810,8 @@ export default function InspectorDashboard() {
 
                                   <div>
                                     <label htmlFor={`quote-msg-${r.id}`}>Message (optional)</label>
-                                    <textarea
+                                    <select
                                       id={`quote-msg-${r.id}`}
-                                      placeholder="Optional message to the requester"
                                       value={quoteMessageInputs[r.id] || ''}
                                       onChange={(e) =>
                                         setQuoteMessageInputs((q) => ({
@@ -819,7 +819,12 @@ export default function InspectorDashboard() {
                                           [r.id]: e.target.value,
                                         }))
                                       }
-                                    />
+                                    >
+                                      <option value="">No message</option>
+                                      {BID_MESSAGES.map((m) => (
+                                        <option key={m} value={m}>{m}</option>
+                                      ))}
+                                    </select>
                                   </div>
                                 </div>
                               </div>

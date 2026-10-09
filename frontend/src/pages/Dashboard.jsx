@@ -741,7 +741,7 @@ export default function Dashboard() {
                   {r.sellerMessage && <p>Latest seller message: {r.sellerMessage}</p>}
                   <label style={{ display: 'block', margin: '8px 0' }}>Message to buyer / inspector
                     <select value={inspectionMessages[r.id] || ''} onChange={(e) => setInspectionMessages((old) => ({ ...old, [r.id]: e.target.value }))} style={{ display: 'block', width: '100%', marginTop: 4 }}>
-                      <option value="">Choose a message or write a custom one below</option>
+                      <option value="">Choose a message</option>
                       <option value="I confirm the selected inspector and agreed fee.">I confirm the selected inspector and agreed fee.</option>
                       <option value="The produce is ready for inspection.">The produce is ready for inspection.</option>
                       <option value="Please coordinate the inspection time with the buyer.">Please coordinate the inspection time with the buyer.</option>
@@ -749,7 +749,6 @@ export default function Dashboard() {
                       <option value="The produce is not ready yet; please wait.">The produce is not ready yet; please wait.</option>
                     </select>
                   </label>
-                  <textarea aria-label="Custom inspection message" placeholder="Or enter a custom message" value={inspectionMessages[r.id] || ''} onChange={(e) => setInspectionMessages((old) => ({ ...old, [r.id]: e.target.value }))} rows={2} style={{ display: 'block', width: '100%', marginBottom: 8 }} />
                   <div className="action-grid">
                     <button type="button" className="btn btn-outline" disabled={inspectionBusy === r.id} onClick={() => sendSellerInspectionMessage(r.id)}>Send instructions only</button>
                     {!r.sellerConfirmedAt && r.status === 'ACCEPTED' && <button type="button" className="btn btn-primary" disabled={inspectionBusy === r.id} onClick={() => confirmSellerInspection(r.id)}>Confirm inspection</button>}
@@ -775,14 +774,13 @@ export default function Dashboard() {
                   {(job.workDetails || job.specialRequirements) && <TransportRequestSummary job={job} compact title="Transport requirements" />}
                   <label style={{ display: 'block', margin: '8px 0' }}>Message to transporter / buyer
                     <select value={transportMessages[job.id] || ''} onChange={(e) => setTransportMessages((old) => ({ ...old, [job.id]: e.target.value }))} style={{ display: 'block', width: '100%', marginTop: 4 }}>
-                      <option value="">Choose a message or write a custom one below</option>
+                      <option value="">Choose a message</option>
                       <option value="The goods are ready for pickup. You may proceed after coordinating with the buyer.">The goods are ready for pickup.</option>
                       <option value="Please contact me before submitting the loading plan.">Please contact me before submitting the loading plan.</option>
                       <option value="The goods are not ready yet; please wait.">The goods are not ready yet; please wait.</option>
                       <option value="Please coordinate the pickup time with the buyer.">Please coordinate the pickup time with the buyer.</option>
                     </select>
                   </label>
-                  <textarea aria-label="Custom transport pickup message" placeholder="Optional custom message" value={transportMessages[job.id] || ''} onChange={(e) => setTransportMessages((old) => ({ ...old, [job.id]: e.target.value }))} rows={2} style={{ display: 'block', width: '100%', marginBottom: 8 }} />
                   <button type="button" className="btn btn-primary" disabled={transportBusy === job.id} onClick={() => confirmSellerTransportPickup(job.id)}>Confirm goods ready for pickup</button>
                 </div>;
               })}
