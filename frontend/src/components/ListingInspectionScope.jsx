@@ -1,4 +1,5 @@
 import React from 'react';
+import './ListingInspectionScope.css';
 
 // ============================================================================
 // LISTING INSPECTION SCOPE
@@ -7,6 +8,10 @@ import React from 'react';
 // Feeds from the listing payload the detail page already loads — no extra
 // network request. Never shows contact info; that lives only in
 // InspectionCoordination, which is gated to the seller + inspector.
+//
+// SECURITY: All fields here are structured (enums, numbers, dates). No free
+// text is allowed, preventing bidders from leaking contact info via the
+// quantity field or other inputs.
 // ============================================================================
 
 const CATEGORY_LABELS = {
@@ -42,7 +47,8 @@ export default function ListingInspectionScope({ inspection }) {
 
   const {
     workCategory,
-    quantityToInspect,
+    quantityValue,
+    quantityUnit,
     lotCount,
     checks,
     reportFormat,
@@ -53,7 +59,7 @@ export default function ListingInspectionScope({ inspection }) {
 
   const hasAnyField =
     workCategory ||
-    quantityToInspect ||
+    quantityValue ||
     lotCount ||
     hasChecks ||
     reportFormat ||
@@ -64,9 +70,7 @@ export default function ListingInspectionScope({ inspection }) {
   return (
     <div className="ld-inspection-scope">
       <p className="ld-inspection-scope-eyebrow">INSPECTION SCOPE</p>
-      <p className="ld-inspection-scope-title">
-        What the inspection covers
-      </p>
+      <p className="ld-inspection-scope-title">What the inspection covers</p>
 
       <div className="ld-inspection-scope-grid">
         {workCategory && (
@@ -75,12 +79,15 @@ export default function ListingInspectionScope({ inspection }) {
             <strong>{CATEGORY_LABELS[workCategory] || workCategory}</strong>
           </div>
         )}
-        {quantityToInspect && (
+        
+        {/* Render exact figure instead of a range */}
+        {quantityValue && (
           <div>
             <span>Quantity</span>
-            <strong>{quantityToInspect}</strong>
+            <strong>{quantityValue} {quantityUnit || 'kg'}</strong>
           </div>
         )}
+
         {lotCount != null && lotCount !== '' && (
           <div>
             <span>Lots</span>
