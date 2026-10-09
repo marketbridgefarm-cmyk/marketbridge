@@ -40,6 +40,12 @@ const {
 } = require('../services/inspectionCoordinationService');
 
 const {
+  noticeInspectionWaitingLocked,
+  noticeInspectionWaitingUnlocked,
+  releaseWaitingInspectors,
+} = require('../services/waitingListService');
+
+const {
   parseReleaseReason,
   assertAcceptedReleaseWindowElapsed,
   releaseAllowance,
@@ -349,6 +355,8 @@ router.post(
 // ============================================================================
 // CANCEL INSPECTION REQUEST
 // ============================================================================
+// Cancelling expires every live quote on the request (including waiting ones),
+// so there is no waiting list left to notify; no waiting-list notice is sent.
 
 router.patch('/:id/cancel', authenticate, async (req, res) => {
   try {
@@ -767,6 +775,14 @@ router.patch(
 
         return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
       }, { maxWait: 10000, timeout: 15000 });
+
+      // Best-effort notices, fired after commit so they can never roll back the selection.
+      await noticeInspectionWaitingLocked(prisma, {
+        inspectionRequestId: request.id,
+        selectedQuoteId: selected.id,
+        selectedInspectorId: selected.inspectorId,
+      });
+
       return res.json({ message: 'Inspector bid selected for price negotiation', quote: selected });
     } catch (error) {
       req.log.error({ err: error }, 'SELECT INSPECTION QUOTE ERROR:');
@@ -1233,6 +1249,12 @@ router.patch(
       if (result && result.blocked) {
         return res.status(409).json({ error: LIMIT_MESSAGE, code: 'RELEASE_LIMIT_REACHED' });
       }
+
+      // Best-effort notices to the waiting inspectors, only after a real release.
+      await noticeInspectionWaitingUnlocked(prisma, {
+        inspectionRequestId: request.id,
+        reason: isAcceptedRelease ? 'PROVISIONAL_RELEASED' : 'SILENT_RELEASED',
+      });
 
       return res.json({
         ...(standingOutcome ? { standing: standingOutcome } : {}),
@@ -2095,6 +2117,13 @@ router.post(
       }, {
         maxWait: 10000,
         timeout: 15000,
+      });
+
+      // Terminal event: release any inspector quotes still waiting on this request.
+      await releaseWaitingInspectors(prisma, {
+        inspectionRequestId: request.id,
+        actorId: req.user.id,
+        reason: 'INSPECTION_COMPLETED',
       });
 
       return res.status(201).json({ report, reportEnvelope: buildBuyerReportEnvelope(report, 'INSPECTION') });
