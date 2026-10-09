@@ -1,0 +1,170 @@
+/* ==========================================================================
+   LISTING INSPECTION SCOPE
+   --------------------------------------------------------------------------
+   Same design language as TransportLoadingReport:
+     · white floating card on soft grey page, 24px radius
+     · deep green header with a short "eyebrow" dash
+     · muted label + bold value pairs
+     · compact orange chips for enumerated lists
+   ========================================================================== */
+
+.ld-inspection-scope {
+  /* tokens (local, so the component is portable) */
+  --ld-bg:          #ffffff;
+  --ld-sunken:      #f9fafb;
+  --ld-text:        #111827;
+  --ld-text-2:      #6b7280;
+  --ld-green:       #0f6b3e;
+  --ld-orange:      #d97706;
+  --ld-orange-soft: #fef3e7;
+  --ld-orange-line: rgba(217, 119, 6, 0.22);
+  --ld-border:      #e5e7eb;
+  --ld-border-soft: #f3f4f6;
+
+  --ld-radius-card:  24px;
+  --ld-radius-pill:  999px;
+
+  --ld-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.03),
+    0 2px 8px  rgba(0, 0, 0, 0.02);
+
+  box-sizing: border-box;
+  width: 100%;
+  padding: 24px;
+  background: var(--ld-bg);
+  border: 1px solid rgba(0, 0, 0, 0.02);
+  border-radius: var(--ld-radius-card);
+  box-shadow: var(--ld-shadow);
+  color: var(--ld-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ld-inspection-scope * { box-sizing: border-box; }
+
+/* ---------- Header ---------- */
+
+.ld-inspection-scope-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ld-green);
+}
+
+.ld-inspection-scope-eyebrow::before {
+  content: '';
+  display: inline-block;
+  flex-shrink: 0;
+  width: 24px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--ld-green);
+}
+
+.ld-inspection-scope-title {
+  margin: 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--ld-border-soft);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ld-green);
+}
+
+/* ---------- Facts grid ---------- */
+
+.ld-inspection-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 24px;
+}
+
+.ld-inspection-scope-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ld-inspection-scope-grid > div > span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ld-text-2);
+}
+
+.ld-inspection-scope-grid > div > strong {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ld-text);
+  word-break: break-word;
+}
+
+/* Full-width row for the checks list */
+.ld-inspection-scope-full {
+  grid-column: 1 / -1;
+}
+
+/* ---------- Checks chips ---------- */
+
+.ld-inspection-scope-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.ld-inspection-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: var(--ld-radius-pill);
+  background: var(--ld-orange-soft);
+  color: var(--ld-orange);
+  border: 1px solid var(--ld-orange-line);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 560px) {
+  .ld-inspection-scope {
+    padding: 20px;
+    border-radius: 20px;
+  }
+
+  .ld-inspection-scope-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ld-inspection-scope-chip {
+    white-space: normal;
+  }
+}
+
+/* ---------- Accessibility ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .ld-inspection-scope * { transition: none !important; }
+}
+
+@media (forced-colors: active) {
+  .ld-inspection-scope-chip {
+    border-color: CanvasText;
+  }
+}
