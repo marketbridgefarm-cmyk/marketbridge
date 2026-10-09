@@ -14,8 +14,7 @@ import api from '../api/client';
 //   3. first ready workflow action       (everyone else)
 //   4. fallback text
 //
-// Styles live in OrderDetail.css, section 18 (.od-next-*), on the same card
-// shell as the order overview card.
+// Styles live in OrderDetail.css, section 19 (.od-next-*).
 // ============================================================================
 
 const ACTION_LABELS = {
@@ -282,81 +281,49 @@ export default function ActionCenter({
   const showCount = buyerGuide && mode === 'active';
   const others = terminal || buyerGuide ? [] : readyActions.slice(1);
 
-  const sideLabel = showCount ? 'Progress' : 'Stage';
-  const sideValue = showCount ? `Step ${stepNumber} of ${steps.length}` : stageLabel;
-
-  /* Latest order status, shown at the right of the "Order status" header */
-  const stageNow = stages[stageCurrent];
-  let statusText = stageNow ? stageNow.label : 'Completed';
-  let statusToneName = stageNow ? 'wait' : 'good';
-  if (status === 'CANCELLED') { statusText = 'Cancelled'; statusToneName = 'bad'; }
-  else if (status === 'DISPUTED') { statusText = 'Disputed'; statusToneName = 'bad'; }
-
-  const doneSteps = steps.filter((s) => s.done).length;
-  const hasBody = Boolean(text || next?.deadlineAt || error || primary);
-
   return (
     <section className={`card od-next od-next--${mode} next-action-card`} id="next-action" aria-labelledby="od-next-title">
-      <header className="od-card-head">
-        <div className="od-card-head-main">
-          <span className="od-eyebrow">{buyerGuide ? 'Your next step' : 'Next step'}</span>
-          <h2 className="od-card-title" id="od-next-title">{title}</h2>
-        </div>
-        {sideValue && (
-          <div className="od-card-head-side">
-            <span className="od-card-side-label">{sideLabel}</span>
-            <span className="od-card-side-value">{sideValue}</span>
-          </div>
+      <div className="od-next-top">
+        <span className="od-eyebrow">{buyerGuide ? 'Your next step' : 'Next step'}</span>
+        {showCount ? (
+          <span className="od-next-count">Step {stepNumber} of {steps.length}</span>
+        ) : (
+          stageLabel && <span className="od-next-count">{stageLabel}</span>
         )}
-      </header>
+      </div>
 
-      {hasBody && (
-        <div className="od-card-section">
-          <div className="od-card-section-head">
-            <h3 className="od-card-section-title">{mode === 'active' ? 'What to do' : 'Summary'}</h3>
-          </div>
-          {text && <p className="od-next-text">{text}</p>}
-          {next?.deadlineAt && (
-            <p className="od-next-text" role="status">Deadline: {new Date(next.deadlineAt).toLocaleString()}</p>
-          )}
-          {error && <div className="od-next-error" role="alert">{error}</div>}
-          {primary && (
-            <button type="button" className="od-next-cta" disabled={Boolean(working)} onClick={primary.onClick}>
-              {primary.label}
-              <span aria-hidden="true" className="od-next-cta-arrow">↓</span>
-            </button>
-          )}
-        </div>
+      <h2 className="od-next-title" id="od-next-title">{title}</h2>
+      {text && <p className="od-next-text">{text}</p>}
+      {next?.deadlineAt && (
+        <p className="od-next-text" role="status">Deadline: {new Date(next.deadlineAt).toLocaleString()}</p>
+      )}
+
+      {error && <div className="od-next-error" role="alert">{error}</div>}
+
+      {primary && (
+        <button type="button" className="od-next-cta" disabled={Boolean(working)} onClick={primary.onClick}>
+          {primary.label}
+          <span aria-hidden="true" className="od-next-cta-arrow">↓</span>
+        </button>
       )}
 
       {/* Order progress (all roles) */}
-      <div className="od-card-section">
-        <div className="od-card-section-head">
-          <h3 className="od-card-section-title">Order status</h3>
-          <div className="od-card-section-meta is-bare">
-            <span className={`od-section-status od-text-${statusToneName}`}>{statusText}</span>
-          </div>
-        </div>
-        <ol className="order-progress" aria-label="Order progress">
-          {stages.map((s, i) => {
-            const state = s.done ? 'done' : i === stageCurrent ? 'current' : 'todo';
-            return (
-              <li key={s.label} className={`order-progress-step is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
-                <span className="order-progress-dot" aria-hidden="true" />
-                <span className="order-progress-label">{s.label}</span>
-              </li>
-            );
-          })}
-        </ol>
-      </div>
+      <ol className="od-next-track od-next-track--stages" aria-label="Order progress">
+        {stages.map((s, i) => {
+          const state = s.done ? 'done' : i === stageCurrent ? 'current' : 'todo';
+          return (
+            <li key={s.label} className={`od-next-step is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
+              <span className="od-next-dot" aria-hidden="true">{state === 'done' ? '✓' : ''}</span>
+              <span className="od-next-step-label">{s.label}</span>
+            </li>
+          );
+        })}
+      </ol>
 
       {/* Detailed purchase steps (buyers) */}
       {steps.length > 0 && (
-        <details className="od-card-section od-next-all">
-          <summary className="od-card-section-head">
-            <span className="od-card-section-title">All steps</span>
-            <span className="od-card-section-meta is-bare">{doneSteps} of {steps.length} done</span>
-          </summary>
+        <details className="od-next-all">
+          <summary>All steps</summary>
           <ol className="od-next-list">
             {steps.map((step, i) => {
               const state = step.done ? 'done' : i === currentIndex ? 'current' : 'todo';
@@ -381,11 +348,8 @@ export default function ActionCenter({
 
       {/* Other ready actions from the workflow (not for buyers / closed orders) */}
       {others.length > 0 && (
-        <details className="od-card-section od-next-all">
-          <summary className="od-card-section-head">
-            <span className="od-card-section-title">Other available actions</span>
-            <span className="od-card-section-meta is-bare">{others.length}</span>
-          </summary>
+        <details className="od-next-all">
+          <summary>Other available actions ({others.length})</summary>
           <div className="od-next-others">
             {others.map((action) => (
               <button
