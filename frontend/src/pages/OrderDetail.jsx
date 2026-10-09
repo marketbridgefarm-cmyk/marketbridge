@@ -2746,13 +2746,7 @@ export default function OrderDetail() {
             <InspectionCard order={order} title={title} i={inspectionProps} />
           )}
 
-          {currentInspection &&
-            ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(currentInspection.status) &&
-            isSeller && (
-              <InspectionCoordinationSeller
-                inspectionRequestId={currentInspection.id}
-              />
-            )}
+          {/* ── THE INLINE COORDINATION COMPONENT HAS BEEN REMOVED FROM HERE ── */}
 
           <div className="od-span-all">
             <TransportCard order={order} t={transportProps} />
@@ -2834,7 +2828,7 @@ export default function OrderDetail() {
         </div>
       </div>
 
-      {/* ── NEW: Modals at the very end of the page ───────────────────────── */}
+      {/* ── MODALS AT THE END OF THE PAGE ───────────────────────── */}
       <Modal
         isOpen={activeModal === 'seller-coordination'}
         onClose={() => setActiveModal(null)}
