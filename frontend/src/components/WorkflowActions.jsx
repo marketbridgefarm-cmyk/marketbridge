@@ -8,26 +8,67 @@ import api from '../api/client';
 // The backend is authoritative about readiness and authorization. This
 // component executes actions that are safe to execute directly and routes to
 // the existing specialist UI when a form/evidence workflow is required.
+//
+// Action codes come from services/orderWorkflowService.js `buildActions`.
+// Keep ACTION_UI in sync — any code emitted by the read model that is not
+// listed here is silently hidden from the Action Center.
 // ============================================================================
 
 const ACTION_UI = {
+  // ── Buyer decisions ──────────────────────────────────────────────────
   BUYER_DECISION_BUY: { kind: 'execute', label: 'BUY — continue purchase' },
   BUYER_DECISION_CANCEL: { kind: 'confirm-execute', label: 'Cancel after inspection' },
+
+  // ── Payments ─────────────────────────────────────────────────────────
   PAY_MARKETPLACE: { kind: 'scroll', target: 'payment-center', label: 'Pay for goods' },
   PAY_INSPECTION: { kind: 'scroll', target: 'payment-center', label: 'Pay inspection fee' },
   PAY_TRANSPORT: { kind: 'scroll', target: 'payment-center', label: 'Pay transport' },
+
+  // ── Transport arrangement ────────────────────────────────────────────
   ARRANGE_TRANSPORT: { kind: 'scroll', target: 'transport-section', label: 'Arrange transport' },
-  REVIEW_TRANSPORT_QUOTES: { kind: 'scroll', target: 'transport-section', label: 'Review transport quotes' },
-  REVIEW_INSPECTION_QUOTES: { kind: 'scroll', target: 'inspection-section', label: 'Review inspection quotes' },
+
+  // ── Negotiation — selection and turn-based response ──────────────────
+  SELECT_INSPECTION_QUOTE: { kind: 'scroll', target: 'inspection-section', label: 'Select an inspector' },
+  SELECT_TRANSPORT_QUOTE: { kind: 'scroll', target: 'transport-section', label: 'Select a transporter' },
+  RESPOND_INSPECTION_NEGOTIATION: { kind: 'scroll', target: 'inspection-section', label: 'Respond to inspector quote' },
+  RESPOND_TRANSPORT_NEGOTIATION: { kind: 'scroll', target: 'transport-section', label: 'Respond to transport quote' },
+
+  // ── Release (requester-side) ─────────────────────────────────────────
+  RELEASE_INSPECTION_AGREEMENT: { kind: 'scroll', target: 'inspection-section', label: 'Release inspector agreement' },
+  RELEASE_TRANSPORT_AGREEMENT: { kind: 'scroll', target: 'transport-section', label: 'Release transporter agreement' },
+  RELEASE_SILENT_INSPECTOR: { kind: 'scroll', target: 'inspection-section', label: 'Release silent inspector' },
+  RELEASE_SILENT_TRUCK_OWNER: { kind: 'scroll', target: 'transport-section', label: 'Release silent truck owner' },
+
+  // ── Provider cancels own provisional agreement ───────────────────────
+  PROVIDER_CANCEL_INSPECTION: { kind: 'scroll', target: 'inspection-section', label: 'Cancel provisional agreement' },
+  PROVIDER_CANCEL_TRANSPORT: { kind: 'scroll', target: 'transport-section', label: 'Cancel provisional agreement' },
+
+  // ── Seller confirmations ─────────────────────────────────────────────
+  CONFIRM_INSPECTION: { kind: 'execute', label: 'Confirm inspector and fee' },
+  DECLINE_INSPECTION: { kind: 'confirm-execute', label: 'Decline inspector and fee' },
+  CONFIRM_INSPECTOR_ARRIVAL: { kind: 'execute', label: 'Confirm inspector on site' },
+  CONFIRM_TRANSPORT_PREPARATION: { kind: 'execute', label: 'Confirm transporter preparation' },
+  CONFIRM_TRUCK_ARRIVAL: { kind: 'execute', label: 'Confirm truck on site' },
+
+  // ── Inspection work (inspector) ──────────────────────────────────────
   START_INSPECTION: { kind: 'execute', label: 'Start inspection' },
   SUBMIT_INSPECTION_REPORT: { kind: 'link', to: '/dashboard/inspector', label: 'Complete inspection report' },
+
+  // ── Transport work (transporter) ─────────────────────────────────────
   CONFIRM_LOADING: { kind: 'execute', label: 'Approve loading report' },
   START_PICKUP: { kind: 'execute', label: 'Start loading / pickup' },
   MARK_IN_TRANSIT: { kind: 'execute', label: 'Mark in transit' },
   MARK_DELIVERED: { kind: 'execute', label: 'Mark delivered' },
+
+  // ── Order lifecycle ──────────────────────────────────────────────────
   CONFIRM_RECEIPT: { kind: 'scroll', target: 'confirm-receipt', label: 'Confirm receipt' },
   RAISE_DISPUTE: { kind: 'scroll', target: 'raise-dispute', label: 'Raise a dispute' },
   CANCEL_ORDER: { kind: 'execute', label: 'Cancel order' },
+
+  // ── Recovery ─────────────────────────────────────────────────────────
+  REQUEST_INSPECTION_RECOVERY: { kind: 'execute', label: 'Request fresh inspection form' },
+  REQUEST_TRANSPORT_RECOVERY: { kind: 'execute', label: 'Request fresh transport form' },
+  REQUEST_OFFER_RECOVERY: { kind: 'execute', label: 'Request fresh offer competition' },
 };
 
 const ACTOR_LABEL = {
@@ -36,6 +77,9 @@ const ACTOR_LABEL = {
   BUYER_OR_SELLER: 'the buyer or seller',
   TRUCK_OWNER: 'the transporter',
   INSPECTOR: 'the inspector',
+  SELLER_OR_TRUCK_OWNER: 'the seller or transporter',
+  REQUESTER: 'the requester',
+  PROVIDER: 'the provider',
   ADMIN: 'an administrator',
 };
 
@@ -111,11 +155,7 @@ export default function WorkflowActions({
       navigate(ui.to);
     }
     // Every remaining ACTION_UI entry with kind 'link' sets `to`. There is
-    // intentionally no other fallback here any more — ARRANGE_TRANSPORT
-    // used to fall through to a dedicated /orders/:id/transport route; that
-    // route no longer exists now that transport setup is inline on the
-    // order page, so ARRANGE_TRANSPORT is a 'scroll' action instead (see
-    // ACTION_UI above).
+    // intentionally no other fallback here.
   }
 
   return (
@@ -124,7 +164,7 @@ export default function WorkflowActions({
       <div className="next-action-buttons">
         {visible.map((action, index) => {
           const ui = ACTION_UI[action.code];
-          const key = `${action.code}-${action.inspectionRequestId || index}`;
+          const key = `${action.code}-${action.inspectionRequestId || action.transportJobId || action.quoteId || index}`;
           const primary = emphasizeFirst && index === 0 && action.enabled;
           const btnClass = `btn ${primary ? 'btn-primary' : 'btn-outline'} btn-sm`;
           const isBusy = busyCode === action.code;
@@ -159,7 +199,7 @@ export default function WorkflowActions({
                 className={btnClass}
                 disabled={isBusy}
                 onClick={() => {
-                  if (window.confirm('Cancel this agricultural transaction after reviewing the inspection report? This cannot be undone.')) {
+                  if (window.confirm(`Cancel this agricultural transaction after reviewing the inspection report? This cannot be undone.`)) {
                     execute(action);
                   }
                 }}
