@@ -13,6 +13,7 @@
      container indent: clamp(16px, 13cqw, 48px)
    NOTE: every @container rule is prefixed with .order-detail-page so it
    out-ranks the base rule it overrides.
+   Coordination form styles live in components/ProviderCoordination.css.
    ========================================================================== */
 
 /* ---- 1. Tokens ---------------------------------------------------------- */
@@ -239,10 +240,10 @@
   overflow-wrap: anywhere;
 }
 
-/* Subtitle moved below the horizontal line and indented */
+/* Subtitle under horizontal line, indented */
 .order-detail-page .od-card-subtitle {
-  margin: 20px 0 14px; /* Matches spacing under card head */
-  padding-inline-start: var(--od-indent); /* Indents the text to the right */
+  margin: 20px 0 14px;
+  padding-inline-start: var(--od-indent);
   color: var(--mb-muted);
   font-size: 14px;
   line-height: 1.5;
@@ -262,7 +263,7 @@
   text-align: right;
 }
 
-/* New wrap for Order ID + Party in the header side */
+/* Order ID + Party in header side */
 .order-detail-page .od-card-side-wrap {
   display: flex;
   flex-direction: column;
@@ -682,9 +683,6 @@
   cursor: not-allowed;
 }
 
-/* Full-width button. Also works on its own, in case the .btn class is
-   not applied (see note in the hand-off message). Placed before the
-   variants so .btn-primary etc. can override colour. */
 .order-detail-page .btn-block {
   display: flex;
   align-items: center;
@@ -719,7 +717,7 @@
   background: #fff;
 }
 .order-detail-page .btn-outline {
-  border-color: var(--mb-danger); /* Changed to red */
+  border-color: var(--mb-danger);
   color: var(--mb-danger);
 }
 .order-detail-page .btn-sm {
@@ -739,7 +737,7 @@
     border-color: var(--mb-accent-ink);
   }
   .order-detail-page .btn-outline:hover:not(:disabled) {
-    background: #fef2f2; /* Light red background on hover */
+    background: #fef2f2;
     border-color: var(--mb-danger);
   }
 }
@@ -754,8 +752,7 @@
   width: 100%;
 }
 
-/* Cancel order — neutral outline like Orders "View order", 12px below the
-   meta row. Out-ranks .btn-outline's red whether or not .btn is present. */
+/* Cancel order — neutral outline like Orders "View order" */
 .order-detail-page .od-card-overview .btn-block {
   margin-top: 12px;
   background: transparent;
@@ -1845,7 +1842,7 @@
   }
 }
 
-/* ---- 22. Inspection / transport popups ---------------------------------- */
+/* ---- 22. Modal shell (popup wrapper) ------------------------------------ */
 .od-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -2087,16 +2084,3 @@
     break-inside: avoid;
   }
 }
-
-
-/* Ensure forms inside modals don't have extra top margin */
-.od-modal-body .od-inspection-work-form {
-  margin-top: 0;
-  padding-inline-start: 0;
-}
-
-/* Adjust TransportSetup inside modal if it has a wrapper with margin */
-.od-modal-body .transport-setup-wrapper {
-  margin-top: 0;
-}
-
