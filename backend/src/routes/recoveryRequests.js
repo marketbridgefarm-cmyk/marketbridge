@@ -7,6 +7,10 @@ const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { closeCoordination } = require('../services/inspectionCoordinationService');
+const {
+  noticeInspectionWaitingUnlocked,
+  noticeTransportWaitingUnlocked,
+} = require('../services/waitingListService');
 
 const router = express.Router();
 
