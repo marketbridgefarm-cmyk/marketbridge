@@ -1980,3 +1980,37 @@
     padding-bottom: calc(var(--sd-nav-h) + env(safe-area-inset-bottom, 0px) + 32px);
   }
 }
+/* Region multi-select inside the truck registration modal */
+.sd-region-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.sd-region-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.sd-region-option:hover {
+  background: #f1f5f9;
+}
+
+.sd-region-option input[type="checkbox"] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #047857;
+  cursor: pointer;
+}
