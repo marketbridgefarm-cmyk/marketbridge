@@ -9,6 +9,7 @@ const { syncOrderPaymentObligations } = require('../services/paymentObligationSe
 const { noticeWaitingUnlocked } = require('../services/waitingListService');
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
+const { buildBuyerReportEnvelope } = require('../utils/reportContract');
 const { lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
 const {
   computeSellerConfirmationDueAt,
@@ -26,6 +27,11 @@ const {
   validAmount,
   noContactInfo,
 } = require('../utils/contactGuard');
+const {
+  QUANTITY_VALUES, QUANTITY_UNITS, WEIGHT_OPTIONS, PACKAGE_COUNTS, CAPACITY_TONS,
+  BID_MESSAGES, SELLER_INSPECTION_MESSAGES, SELLER_TRANSPORT_MESSAGES,
+  presetMessage, accessNotesOnly, withinDeadlineRange,
+} = require('../utils/requestOptions');
 const {
   assertCoordinationStage,
   viewerRoleFor,
@@ -111,9 +117,15 @@ function sanitizeWorkDetails(input) {
     out.workCategory = input.workCategory;
   }
 
-  if (typeof input.quantityToInspect === 'string') {
-    const v = input.quantityToInspect.trim();
-    if (v) out.quantityToInspect = v.slice(0, 120);
+  // The request form sends a numeric quantityValue + unit; compose the display
+  // string from those (structured, so no contact info can ride in it). The
+  // legacy free-text quantityToInspect is only used when no number is sent.
+  const qv = Number(input.quantityValue);
+  if (input.quantityValue != null && input.quantityValue !== '' && QUANTITY_VALUES.includes(qv)) {
+    const unit = QUANTITY_UNITS.includes(input.quantityUnit) ? input.quantityUnit : 'kg';
+    out.quantityValue = qv;
+    out.quantityUnit = unit;
+    out.quantityToInspect = `${qv} ${unit}`;
   }
 
   if (input.lotCount != null && input.lotCount !== '') {
@@ -135,7 +147,7 @@ function sanitizeWorkDetails(input) {
 
   if (typeof input.requiredBy === 'string') {
     const d = new Date(input.requiredBy);
-    if (!Number.isNaN(d.getTime())) out.requiredBy = d.toISOString();
+    if (!Number.isNaN(d.getTime()) && withinDeadlineRange(input.requiredBy)) out.requiredBy = d.toISOString();
   }
 
   return Object.keys(out).length ? out : null;
@@ -386,13 +398,18 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
       const fresh = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
       if (!fresh) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
       if (!['REQUESTED', 'ACCEPTED', 'STALLED'].includes(fresh.status)) throw Object.assign(new Error(`Inspection bidding cannot be reopened while the request is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
-      await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
+      // A fresh request form is released only when nobody is waiting or pending: unselected
+      // inspectors stay on the waiting list until the selected inspector submits the report.
+      const liveBidders = await tx.inspectionQuote.count({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } } });
+      if (liveBidders > 0) {
+        throw Object.assign(new Error(`A fresh inspection form cannot be released while ${liveBidders} inspector bid(s) are still waiting or pending. They stay on the waiting list until the selected inspector submits the report or they release themselves.`), { statusCode: 409 });
+      }
       const updated = await tx.inspectionRequest.update({ where: { id: fresh.id }, data: { inspectorId: null, fee: null, buyerFeeAmount: null, sellerFeeAmount: null, sellerConfirmedAt: null, feeTermsLockedAt: null, lockedFee: null, lockedFeePayer: null, lockedBuyerFeeAmount: null, lockedSellerFeeAmount: null, workflowDueAt: computeInspectionWorkflowDueAt(), startDueAt: null, completionDueAt: null, startedAt: null, status: 'REQUESTED' } });
       await closeCoordination(tx, fresh.id, 'ADMIN_REOPENED_BIDDING');
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_BIDDING_REOPENED', resourceType: 'InspectionRequest', resourceId: fresh.id, metadata: { orderId: fresh.orderId } });
       return updated;
     }, { maxWait: 10000, timeout: 15000 });
-    return res.json({ message: 'Inspection bidding reopened. Previous bids were expired.', request: reopened });
+    return res.json({ message: 'Fresh inspection form released.', request: reopened });
   } catch (error) {
     req.log.error({ err: error }, 'REOPEN INSPECTION BIDDING ERROR:');
     return res.status(error.statusCode || 500).json({ error: error.message || 'Could not reopen inspection bidding' });
@@ -510,7 +527,7 @@ router.post(
       .trim()
       .isLength({ max: 1000 })
       .withMessage('Quote message is too long')
-      .custom(noContactInfo),
+      .custom(presetMessage(BID_MESSAGES)),
   ],
   async (req, res) => {
     try {
@@ -899,7 +916,7 @@ router.post(
     param('id').notEmpty(),
     param('quoteId').notEmpty(),
     body('counterAmount').custom(validAmount(AMOUNT_LIMITS.inspection)),
-    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }).custom(noContactInfo),
+    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }).custom(presetMessage(BID_MESSAGES)),
   ],
   async (req, res) => {
     try {
@@ -1423,6 +1440,9 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
       const message = typeof req.body?.message === 'string'
         ? req.body.message.trim().slice(0, 500)
         : null;
+      if (message && !SELLER_INSPECTION_MESSAGES.includes(message)) {
+        throw Object.assign(new Error('Choose one of the provided messages'), { statusCode: 400 });
+      }
 
       const updated = await tx.inspectionRequest.updateMany({
         where: {
@@ -1521,7 +1541,7 @@ router.post('/:id/seller-decline', authenticate, requireRole('SELLER'), async (r
 router.post('/:id/seller-message', authenticate, requireRole('SELLER'), async (req, res) => {
   try {
     const message = String(req.body?.message || '').trim();
-    if (!message || message.length > 500) return res.status(400).json({ error: 'Message must contain 1–500 characters' });
+    if (!message || !SELLER_INSPECTION_MESSAGES.includes(message)) return res.status(400).json({ error: 'Choose one of the provided messages' });
     const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { listing: true, order: { select: { sellerId: true } } } });
     if (!request) return res.status(404).json({ error: 'Inspection request not found' });
     // Order ownership is authoritative; listing.sellerId is only a legacy fallback for orderless requests.
@@ -2077,7 +2097,7 @@ router.post(
         timeout: 15000,
       });
 
-      return res.status(201).json({ report });
+      return res.status(201).json({ report, reportEnvelope: buildBuyerReportEnvelope(report, 'INSPECTION') });
     } catch (error) {
       if (error.message === 'INSPECTION_STATUS_CHANGED') {
         return res.status(409).json({ error: 'Inspection status changed before the report could be completed' });

@@ -1,4 +1,9 @@
 const express = require('express');
+const {
+  WEIGHT_OPTIONS, PACKAGE_COUNTS, CAPACITY_TONS,
+  BID_MESSAGES, SELLER_TRANSPORT_MESSAGES,
+  presetMessage, accessNotesOnly, withinDeadlineRange,
+} = require('../utils/requestOptions');
 const { body, param, validationResult } = require('express-validator');
 
 
@@ -12,6 +17,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { isOrderParticipant, isAdmin } = require('../utils/authorization');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
+const { buildBuyerReportEnvelope } = require('../utils/reportContract');
 const { idempotency } = require('../middleware/idempotency');
 const { matchTrucks } = require('../services/transportMatchingService');
 const { computeSellerPreparationDueAt, computeBuyerDecisionDueAt, computeBuyerLoadingDueAt } = require('../utils/orderTiming');
@@ -439,6 +445,60 @@ router.get('/match', authenticate, async (req, res) => {
 });
 
 // ============================================================================
+// TRANSPORT WORK DETAILS — allow-listed, size-capped
+// ----------------------------------------------------------------------------
+// Trip requirements every bidding transporter reads before quoting. Only
+// structured values are accepted (no free text), so contact info can't leak
+// through this field. Stored as JSON on TransportJob.workDetails.
+// ============================================================================
+const TRANSPORT_WEIGHT_UNITS = new Set(['kg', 'tons', 'quintals']);
+const TRANSPORT_VEHICLE_TYPES = new Set([
+  'Pickup', 'Small truck', 'Medium truck', 'Large truck', 'Refrigerated truck', 'Flatbed',
+]);
+const TRANSPORT_HANDLING = new Set([
+  'FRAGILE', 'KEEP_COOL', 'KEEP_DRY', 'THIS_SIDE_UP', 'VENTILATED', 'COVERED',
+]);
+
+function sanitizeTransportWorkDetails(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const out = {};
+
+  if (typeof input.weight === 'string') {
+    const m = input.weight.trim().match(/^(\d+(?:\.\d+)?)\s+([a-z]+)$/i);
+    if (m) {
+      const n = Number(m[1]);
+      const unit = m[2].toLowerCase();
+      const normalized = `${n} ${unit}`;
+      if (Number.isFinite(n) && TRANSPORT_WEIGHT_UNITS.has(unit) && WEIGHT_OPTIONS.includes(normalized)) {
+        out.weight = normalized;
+      }
+    }
+  }
+
+  if (input.packageCount != null && input.packageCount !== '') {
+    const n = Number(input.packageCount);
+    if (PACKAGE_COUNTS.includes(n)) out.packageCount = n;
+  }
+
+  if (typeof input.vehicleType === 'string' && TRANSPORT_VEHICLE_TYPES.has(input.vehicleType)) {
+    out.vehicleType = input.vehicleType;
+  }
+
+  if (typeof input.deliveryDeadline === 'string') {
+    const d = new Date(input.deliveryDeadline);
+    if (!Number.isNaN(d.getTime()) && withinDeadlineRange(input.deliveryDeadline)) out.deliveryDeadline = d.toISOString();
+  }
+
+  if (Array.isArray(input.handling)) {
+    out.handling = [
+      ...new Set(input.handling.filter((v) => typeof v === 'string' && TRANSPORT_HANDLING.has(v))),
+    ].slice(0, TRANSPORT_HANDLING.size);
+  }
+
+  return Object.keys(out).length ? out : null;
+}
+
+// ============================================================================
 // CREATE TRANSPORT JOB
 // ============================================================================
 
@@ -449,12 +509,13 @@ router.post(
     body('orderId').isUUID().withMessage('orderId is required'),
     body('arrangingParty').isIn(['SELLER', 'BUYER', 'JOINT']),
     body('method').isIn(['OWN_TRUCK', 'HIRE_TRANSPORTER']),
-    body('pickupLocation').isString().trim().notEmpty(),
-    body('destination').isString().trim().notEmpty(),
-    body('load').isString().trim().notEmpty(),
-    body('requiredCapacity').optional().isFloat({ min: 0 }),
-    body('specialRequirements').optional().isString().trim().custom(noContactInfo),
+    body('pickupLocation').isString().trim().notEmpty().isLength({ max: 120 }).custom(noContactInfo),
+    body('destination').isString().trim().notEmpty().isLength({ max: 120 }).custom(noContactInfo),
+    body('load').isString().trim().notEmpty().isLength({ max: 120 }).custom(noContactInfo),
+    body('requiredCapacity').optional({ nullable: true }).isFloat({ min: 0 }).custom((v) => v === '' || CAPACITY_TONS.includes(Number(v))).withMessage('Choose a capacity from the list'),
+    body('specialRequirements').optional({ nullable: true }).isString().trim().custom(accessNotesOnly),
     body('truckId').optional().isUUID(),
+    body('workDetails').optional({ nullable: true }).isObject(),
   ],
   validate,
   async (req, res) => {
@@ -463,6 +524,7 @@ router.post(
         orderId, arrangingParty, method, pickupLocation, destination,
         load, requiredCapacity, specialRequirements, truckId,
       } = req.body;
+      const safeWorkDetails = sanitizeTransportWorkDetails(req.body.workDetails);
 
       const order = await prisma.order.findUnique({
         where: { id: orderId },
@@ -583,7 +645,7 @@ router.post(
                   where: { id: freshOrder.transportJob.id },
                   data: {
                     arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
-                    requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
+                    requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null, workDetails: safeWorkDetails,
                     truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED',
                     pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
                   },
@@ -595,7 +657,7 @@ router.post(
                 arrangingParty: resolvedArrangingParty,
                 method, pickupLocation, destination, load,
                 requiredCapacity: requiredCapacity || null,
-                specialRequirements: specialRequirements || null,
+                specialRequirements: specialRequirements || null, workDetails: safeWorkDetails,
                 truckOwnerId: null, truckId: null,
                 status: 'REQUESTED',
               },
@@ -670,7 +732,7 @@ router.post(
                 where: { id: freshOrder.transportJob.id },
                 data: {
                   arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
-                  requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
+                  requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null, workDetails: safeWorkDetails,
                   truckOwnerId: truck.ownerId, truckId: truck.id, agreedAmount: null, status: 'ACCEPTED',
                   sellerPreparationDueAt: computeSellerPreparationDueAt(), buyerLoadingDueAt: null,
                   pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
@@ -683,7 +745,7 @@ router.post(
               arrangingParty: resolvedArrangingParty,
               method, pickupLocation, destination, load,
               requiredCapacity: requiredCapacity || null,
-              specialRequirements: specialRequirements || null,
+              specialRequirements: specialRequirements || null, workDetails: safeWorkDetails,
               truckOwnerId: truck.ownerId,
               truckId: truck.id,
               status: 'ACCEPTED',
@@ -1082,21 +1144,26 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
       const fresh = await tx.transportJob.findUnique({ where: { id: job.id } });
       if (!fresh) throw Object.assign(new Error('Transport job not found'), { statusCode: 404 });
       if (!['REQUESTED', 'QUOTED'].includes(fresh.status)) throw Object.assign(new Error(`Transport bidding cannot be reopened while the job is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
-      await tx.transportQuote.updateMany({ where: { transportJobId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } }, data: { status: 'EXPIRED' } });
+      // A fresh request form is released only when nobody is waiting or pending: unselected
+      // transporters stay pending until the selected transporter has delivered.
+      const liveBidders = await tx.transportQuote.count({ where: { transportJobId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } } });
+      if (liveBidders > 0) {
+        throw Object.assign(new Error(`A fresh transport form cannot be released while ${liveBidders} transporter bid(s) are still waiting or pending. They stay pending until the selected transporter delivers or they release themselves.`), { statusCode: 409 });
+      }
       const updated = await tx.transportJob.update({ where: { id: fresh.id }, data: { truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED' } });
       await closeCoordination(tx, fresh.id, 'ADMIN_REOPENED_BIDDING');
       await recordOrderEvent(tx, { orderId: fresh.orderId, actorId: req.user.id, type: 'TRANSPORT_COORDINATION_CLOSED', metadata: { transportJobId: fresh.id, reason: 'ADMIN_REOPENED_BIDDING' } });
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'TRANSPORT_BIDDING_REOPENED', resourceType: 'TransportJob', resourceId: fresh.id, metadata: { orderId: fresh.orderId } });
       return updated;
     }, { maxWait: 10000, timeout: 15000 });
-    return res.json({ message: 'Transport bidding reopened. Previous bids were expired.', transportJob: reopened });
+    return res.json({ message: 'Fresh transport form released.', transportJob: reopened });
   } catch (error) {
     req.log.error({ err: error }, 'REOPEN TRANSPORT BIDDING ERROR:');
     return res.status(error.statusCode || 500).json({ error: error.message || 'Could not reopen transport bidding' });
   }
 });
 
-router.post('/:id/seller-confirm-pickup', authenticate, requireRole('SELLER'), [param('id').isUUID(), body('message').optional().isString().trim().isLength({ max: 500 })], validate, async (req, res) => {
+router.post('/:id/seller-confirm-pickup', authenticate, requireRole('SELLER'), [param('id').isUUID(), body('message').optional().isString().trim().custom(presetMessage(SELLER_TRANSPORT_MESSAGES))], validate, async (req, res) => {
   try {
     const job = await prisma.transportJob.findUnique({ where: { id: req.params.id }, include: { order: { select: { id: true, sellerId: true } } } });
     if (!job) return res.status(404).json({ error: 'Transport job not found' });
@@ -1144,8 +1211,18 @@ router.post(
       if (job.order.buyerDecision !== 'BUY') return res.status(409).json({ code: 'BUYER_DECISION_REQUIRED', error: 'The buyer must make the final BUY decision before confirming loading.' });
       const goodsPaid = await prisma.payment.findFirst({ where: { orderId: job.orderId, type: 'MARKETPLACE', status: 'PAID' }, select: { id: true } });
       if (!goodsPaid) return res.status(409).json({ code: 'GOODS_PAYMENT_REQUIRED', error: 'The seller payment must be completed before loading.' });
-      const updated = await prisma.transportJob.updateMany({ where: { id: job.id, status: 'ACCEPTED', buyerLoadingConfirmedAt: null }, data: { buyerLoadingConfirmedAt: new Date(), buyerLoadingDueAt: null } });
-      if (!updated.count) return res.status(409).json({ error: 'Loading confirmation changed; refresh and try again.' });
+      const reviewAt = new Date();
+      const updated = await prisma.$transaction(async (tx) => {
+        const changed = await tx.transportJob.updateMany({ where: { id: job.id, status: 'ACCEPTED', buyerLoadingConfirmedAt: null }, data: { buyerLoadingConfirmedAt: reviewAt, buyerLoadingDueAt: null } });
+        if (!changed.count) return 0;
+        const reviewed = await tx.transportLoadingReport.updateMany({
+          where: { id: report.id, buyerReviewStatus: 'PENDING' },
+          data: { buyerReviewStatus: 'ACCEPTED', buyerReviewedAt: reviewAt, buyerReviewedById: req.user.id, buyerReviewNotes: 'Buyer approved the loading report.' },
+        });
+        if (!reviewed.count) throw Object.assign(new Error('LOADING_REPORT_REVIEW_CHANGED'), { status: 409 });
+        return 1;
+      });
+      if (!updated) return res.status(409).json({ error: 'Loading confirmation changed; refresh and try again.' });
       await recordAuditEvent(prisma, { actorId: req.user.id, action: 'TRANSPORT_LOADING_CONFIRMED_BY_BUYER', resourceType: 'TransportJob', resourceId: job.id, metadata: { orderId: job.orderId, loadingReportId: report.id } }).catch(() => {});
       await recordOrderEvent(prisma, { orderId: job.orderId, actorId: req.user.id, type: 'TRANSPORT_LOADING_CONFIRMED_BY_BUYER', metadata: { transportJobId: job.id, loadingReportId: report.id } }).catch(() => {});
       return res.json({ message: 'Loading report approved. The transporter may now load and pick up the goods.', buyerLoadingConfirmedAt: new Date().toISOString() });
@@ -1385,7 +1462,7 @@ router.post(
   [
     param('id').isUUID(),
     body('amount').custom(validAmount(AMOUNT_LIMITS.transport)),
-    body('message').optional().isString().trim().custom(noContactInfo),
+    body('message').optional().isString().trim().custom(presetMessage(BID_MESSAGES)),
     body('truckId').optional().isUUID(),
   ],
   validate,
@@ -1990,7 +2067,7 @@ router.post(
     param('id').isUUID(),
     param('quoteId').isUUID(),
     body('counterAmount').custom(validAmount(AMOUNT_LIMITS.transport)),
-    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }).custom(noContactInfo),
+    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }).custom(presetMessage(BID_MESSAGES)),
   ],
   validate,
   async (req, res) => {
@@ -2593,6 +2670,7 @@ router.post(
       return res.status(201).json({
         message: 'Loading report recorded. The buyer can now review and approve the loading plan before physical loading.',
         loadingReport: report,
+        reportEnvelope: buildBuyerReportEnvelope(report, 'TRANSPORT_LOADING'),
         buyerLoadingDueAt: loadingDeadline?.buyerLoadingDueAt?.toISOString() || null,
       });
     } catch (error) {
@@ -2641,7 +2719,7 @@ router.get(
         orderBy: { capturedAt: 'desc' },
       });
 
-      return res.json({ loadingReport: report, evidence });
+      return res.json({ loadingReport: report, reportEnvelope: buildBuyerReportEnvelope(report, 'TRANSPORT_LOADING'), evidence });
     } catch (error) {
       req.log.error({ err: error }, 'GET TRANSPORT LOADING REPORT ERROR:');
       return res.status(500).json({ error: 'Could not load loading report' });
