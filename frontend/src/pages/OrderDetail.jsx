@@ -34,7 +34,7 @@ import TransportSetup from '../components/TransportSetup.jsx';
 import { InspectionRequestSummary, TransportRequestSummary } from '../components/RequestScopeSummary.jsx';
 import { DEADLINE_WINDOWS, QUANTITY_VALUES, deadlineFromWindow } from '../components/RequestOptions.js';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
-
+ 
 const PAYMENT_METHODS = [
   { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
   { value: 'QR', label: 'QR Code' },
