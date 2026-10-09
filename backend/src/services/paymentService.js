@@ -16,6 +16,7 @@ const { transitionOrderStatus } = require('./orderStateMachine');
 const { assertTransition: assertPaymentTransition } = require('./paymentStateMachine');
 const { commitListingQuantity } = require('./inventoryService');
 const payoutService = require('./payoutService');
+const { releaseWaitingBidders } = require('./waitingListService');
 
 // ============================================================================
 // CONSTANTS
@@ -177,6 +178,8 @@ async function createPayment(data) {
               truckId: true,
               agreedAmount: true,
               buyerLoadingConfirmedAt: true,
+              sellerPickupConfirmedAt: true,
+              truckArrivedAt: true,
             },
           });
 
@@ -201,10 +204,20 @@ async function createPayment(data) {
             );
           }
 
-          if (!job.buyerLoadingConfirmedAt) {
+          // Physical-arrival gates: the seller must have confirmed goods
+          // preparation and the truck must be on site. Loading and its buyer
+          // approval come AFTER payment, not before.
+          if (!job.sellerPickupConfirmedAt) {
             throw Object.assign(
-              new Error('The buyer must approve the loading report before transport payment can begin'),
-              { status: 409, code: 'BUYER_LOADING_CONFIRMATION_REQUIRED' }
+              new Error('The seller must confirm loading preparation before transport payment can begin'),
+              { status: 409, code: 'SELLER_LOADING_PREPARATION_REQUIRED' }
+            );
+          }
+
+          if (!job.truckArrivedAt) {
+            throw Object.assign(
+              new Error('The truck must be physically on site before transport payment can begin'),
+              { status: 409, code: 'TRUCK_ARRIVAL_REQUIRED' }
             );
           }
 
@@ -217,6 +230,46 @@ async function createPayment(data) {
             throw Object.assign(
               new Error('Transport payment amount or assignment does not match the accepted quote'),
               { status: 409 }
+            );
+          }
+        }
+
+        // --------------------------------------------------------------------
+        // INSPECTION PAYMENT INVARIANT
+        // --------------------------------------------------------------------
+        // The seller must have confirmed the selected inspector and agreed
+        // fee, AND confirmed the inspector physically arrived on site. The
+        // reader-side gate lives in the workflow model; this is the
+        // authoritative check.
+        if (data.type === 'INSPECTOR' && data.inspectionRequestId) {
+          const inspection = await tx.inspectionRequest.findUnique({
+            where: { id: data.inspectionRequestId },
+            select: {
+              id: true,
+              sellerConfirmedAt: true,
+              inspectorOnSiteConfirmedAt: true,
+              inspectorId: true,
+            },
+          });
+
+          if (!inspection) {
+            throw Object.assign(
+              new Error('Inspection request not found'),
+              { status: 404 }
+            );
+          }
+
+          if (!inspection.sellerConfirmedAt) {
+            throw Object.assign(
+              new Error('The seller must confirm the selected inspector and agreed fee before inspection payment can begin'),
+              { status: 409, code: 'INSPECTION_SELLER_CONFIRMATION_REQUIRED' }
+            );
+          }
+
+          if (!inspection.inspectorOnSiteConfirmedAt) {
+            throw Object.assign(
+              new Error('The seller must confirm the inspector is on site and ready to start before inspection payment can begin'),
+              { status: 409, code: 'INSPECTOR_ARRIVAL_CONFIRMATION_REQUIRED' }
             );
           }
         }
@@ -360,26 +413,9 @@ async function createPayment(data) {
     // ------------------------------------------------------------------------
     // IDEMPOTENCY RACE
     // ------------------------------------------------------------------------
-    //
-    // Two mobile/browser requests can arrive with the same idempotency key.
-    //
-    // Request A:
-    //   creates the payment successfully.
-    //
-    // Request B:
-    //   attempts the same unique key and receives P2002.
-    //
-    // The transaction for B is rolled back first.
-    // ONLY THEN do we query the normal Prisma client.
-    // ------------------------------------------------------------------------
 
     const target = error?.meta?.target;
 
-    // A partial unique index protects against two simultaneous transport
-    // payment attempts for the same job. After the losing transaction rolls
-    // back, inspect the committed payment and return it only if it belongs to
-    // the same negotiated quote. Never silently switch the payment to another
-    // transporter.
     const isTransportActivePaymentConflict =
       error?.code === 'P2002' &&
       data.type === 'TRANSPORT' &&
@@ -794,7 +830,7 @@ async function writeLedger(
 }
 
 // ============================================================================
-// SETTLE PAYMENT
+// SETTLE PAYMENT CORE
 // ============================================================================
 
 async function settlePaymentCore({
@@ -808,10 +844,6 @@ async function settlePaymentCore({
 }) {
   return prisma.$transaction(
     async (tx) => {
-      // ----------------------------------------------------------------------
-      // LOAD PAYMENT
-      // ----------------------------------------------------------------------
-
       const payment =
         await tx.payment.findUnique({
           where: {
@@ -839,9 +871,6 @@ async function settlePaymentCore({
       // ----------------------------------------------------------------------
       // PROVIDER AMOUNT VALIDATION
       // ----------------------------------------------------------------------
-      // A successful provider verification without an amount is not evidence
-      // that the correct amount was paid. Never substitute our local amount:
-      // that turns a missing provider field into a false match.
       if (status === 'PAID' && payload.amount == null) {
         await createReconciliationIssue(tx, {
           paymentId: payment.id,
@@ -1085,27 +1114,6 @@ async function settlePaymentCore({
 
       // ----------------------------------------------------------------------
       // IDEMPOTENT PROVIDER EVENT
-      //
-      // IMPORTANT FIX:
-      //
-      // The old implementation did:
-      //
-      //   try {
-      //     await tx.paymentEvent.create(...)
-      //   } catch (P2002) {
-      //     return payment
-      //   }
-      //
-      // That is unsafe because PostgreSQL aborts the transaction immediately
-      // after the P2002. Returning from the callback does NOT repair the
-      // transaction. Prisma then attempts to finish the transaction and later
-      // queries can produce:
-      //
-      //   current transaction is aborted
-      //
-      // We therefore use createMany(..., skipDuplicates: true).
-      //
-      // PostgreSQL handles the duplicate without aborting the transaction.
       // ----------------------------------------------------------------------
 
       if (eventId) {
@@ -1122,7 +1130,6 @@ async function settlePaymentCore({
           });
 
         if (existingEvent) {
-          // Same provider event already processed for this payment.
           if (
             existingEvent.paymentId ===
             payment.id
@@ -1130,7 +1137,6 @@ async function settlePaymentCore({
             return payment;
           }
 
-          // The same provider event must never settle another payment.
           throw Object.assign(
             new Error(
               'Payment provider event is already associated with another payment'
@@ -1165,9 +1171,6 @@ async function settlePaymentCore({
             skipDuplicates: true,
           });
 
-        // A concurrent request may have inserted the event between the
-        // findFirst() and createMany(). skipDuplicates prevents PostgreSQL
-        // from aborting the transaction.
         if (eventInsert.count === 0) {
           const concurrentEvent =
             await tx.paymentEvent.findFirst({
@@ -1208,7 +1211,6 @@ async function settlePaymentCore({
       // PAYMENT STATE GUARDS
       // ----------------------------------------------------------------------
 
-      // Never reopen a refunded payment.
       if (
         payment.status === 'REFUNDED' &&
         status !== 'REFUNDED'
@@ -1216,7 +1218,6 @@ async function settlePaymentCore({
         return payment;
       }
 
-      // Never move PAID backwards.
       if (
         payment.status === 'PAID' &&
         [
@@ -1227,8 +1228,6 @@ async function settlePaymentCore({
         return payment;
       }
 
-      // A reconciliation-required payment may only be resolved by an
-      // authoritative settlement result.
       if (
         payment.status ===
           'RECONCILIATION_REQUIRED' &&
@@ -1277,9 +1276,6 @@ async function settlePaymentCore({
       if (updated.obligationId) {
         const currentObligationId = updated.obligationId;
         if (status === 'FAILED') {
-          // FAILED is a retryable payment attempt, not a consumed business
-          // obligation. Release the one-to-one FK so a fresh attempt can
-          // satisfy the same OPEN obligation.
           await tx.paymentObligation.update({
             where: { id: currentObligationId },
             data: { status: 'OPEN' },
@@ -1405,10 +1401,6 @@ async function settlePaymentCore({
       // ----------------------------------------------------------------------
 
       if (status === 'PAID' && payment.orderId && payment.order?.status === 'DISPUTED') {
-        // The provider has actually received the money, but an open dispute
-        // freezes the order. Keep the payment PAID for financial truth and
-        // write the ledger now, while deliberately withholding inventory
-        // commitment/payout creation until dispute resolution.
         await writeLedger(tx, payment, 'PAID');
         await createReconciliationIssue(tx, {
           paymentId: payment.id,
@@ -1454,11 +1446,6 @@ async function settlePaymentCore({
             currentOrder?.status ===
             'PENDING_PAYMENT'
           ) {
-            // The order was only provisional until payment. Commit the
-            // agricultural quantity now, inside the same transaction as the
-            // PAID state transition. If inventory is unexpectedly unavailable
-            // the whole settlement rolls back rather than creating a paid
-            // order with no goods behind it.
             if (payment.order?.listingId) {
               const listing = await tx.listing.findUnique({
                 where: { id: payment.order.listingId },
@@ -1580,9 +1567,6 @@ async function settlePaymentCore({
         // --------------------------------------------------------------------
         // HIRED TRANSPORT COMMITMENT
         // --------------------------------------------------------------------
-        // A quote acceptance is only provisional. The transport payment is
-        // the commitment point: atomically claim the truck, commit the job,
-        // and close the competing quotes only after PAID is confirmed.
         if (
           payment.type === 'TRANSPORT' &&
           payment.transportJob &&
@@ -1591,8 +1575,6 @@ async function settlePaymentCore({
           payment.transportJob.truckOwnerId &&
           payment.transportQuote
         ) {
-          // The quote is the immutable payment target. Never derive the
-          // commercial counterparty from mutable job fields alone.
           const job = await tx.transportJob.findUnique({
             where: { id: payment.transportJob.id },
             select: { id: true, status: true, truckId: true, truckOwnerId: true, agreedAmount: true, orderId: true },
@@ -1616,10 +1598,6 @@ async function settlePaymentCore({
             );
           }
 
-          // New negotiations stay QUOTED until payment. ACCEPTED is retained
-          // here only for compatibility with older orders that were created
-          // before provisional transport acceptance was introduced. In the
-          // new flow, only an AVAILABLE truck is claimed at payment time.
           if (job.status !== 'ACCEPTED') {
             const truckClaim = await tx.truck.updateMany({
               where: { id: job.truckId, availability: 'AVAILABLE' },
@@ -1639,9 +1617,6 @@ async function settlePaymentCore({
             if (truck.availability === 'AVAILABLE') {
               await tx.truck.update({ where: { id: truck.id }, data: { availability: 'BUSY' } });
             } else if (truck.availability === 'BUSY') {
-              // Legacy ACCEPTED jobs already claimed their truck before this
-              // provisional-payment model existed. Make sure BUSY really
-              // belongs to this job before allowing the old payment to settle.
               const conflictingJob = await tx.transportJob.findFirst({
                 where: {
                   id: { not: job.id },
@@ -1680,8 +1655,6 @@ async function settlePaymentCore({
         // --------------------------------------------------------------------
         // INSPECTION COMMITMENT
         // --------------------------------------------------------------------
-        // Inspection selection/acceptance is provisional. Payment makes the
-        // inspector assignment commercial and closes the remaining quotes.
         if (
           payment.type === 'INSPECTOR' &&
           payment.inspectionRequest &&
@@ -1710,13 +1683,8 @@ async function settlePaymentCore({
         }
 
         // --------------------------------------------------------------------
-        // HIRED TRANSPORT
+        // HIRED TRANSPORT PAYOUT HOLD
         // --------------------------------------------------------------------
-        //
-        // Own-truck jobs never reach here with a truckOwnerId (see
-        // writeLedger above), so no TRANSPORTER_EARNING is written and no
-        // payout hold is created for them — there is no external payee to
-        // hold money for.
 
         if (
           payment.type === 'TRANSPORT' &&
@@ -1733,13 +1701,8 @@ async function settlePaymentCore({
         }
 
         // --------------------------------------------------------------------
-        // INSPECTION
+        // INSPECTION PAYOUT HOLD
         // --------------------------------------------------------------------
-        //
-        // inspectionRequest.orderId can be null for a pre-order inspection;
-        // createPayoutHold treats that as "no order to tie this to yet"
-        // rather than failing, matching how InspectionRequest.orderId is
-        // itself optional.
 
         if (
           payment.type === 'INSPECTOR' &&
@@ -1868,8 +1831,6 @@ async function settlePaymentCore({
       return updated;
     },
     {
-      // Payment settlement intentionally contains several dependent writes.
-      // Give it enough time to complete on the production PostgreSQL service.
       maxWait: 10000,
       timeout: 20000,
     }
@@ -1877,26 +1838,9 @@ async function settlePaymentCore({
 }
 
 // ============================================================================
-// EXPORTS
+// REPLAY DISPUTED PAID PAYMENT
 // ============================================================================
 
-// ============================================================================
-// SETTLE PAYMENT (public entry point)
-// ============================================================================
-//
-// Every provider path (callback, webhook, verify, admin confirm) calls this.
-// It runs the normal settlement, then - for an installment of a large goods
-// payment - settles the parent goods payment once every installment is PAID.
-// See installmentService.js.
-
-
-/**
- * Replays business effects for a payment that was verified PAID while its
- * order was DISPUTED. The financial payment remains authoritative; this only
- * performs the effects that were intentionally withheld by settlePaymentCore.
- * Must be called inside the caller's Prisma transaction after the order is
- * restored from DISPUTED.
- */
 async function replayDisputedPaidPayment(tx, paymentId) {
   const payment = await tx.payment.findUnique({
     where: { id: paymentId },
@@ -2003,15 +1947,15 @@ async function replayDisputedPaidPayment(tx, paymentId) {
   return payment;
 }
 
+// ============================================================================
+// SETTLE PAYMENT (public entry point)
+// ============================================================================
+
 async function settlePayment(args) {
   let result;
   try {
     result = await settlePaymentCore(args);
   } catch (error) {
-    // Chapa may already have captured money while our final business commit
-    // discovers an inventory shortage. Never roll the provider payment back
-    // into a locally PENDING/PROCESSING state and pretend nothing happened.
-    // Persist a durable reconciliation record in a NEW transaction.
     if (error?.code === 'INSUFFICIENT_INVENTORY' && args?.status === 'PAID' && args?.paymentId) {
       try {
         result = await prisma.$transaction(async (tx) => {
@@ -2065,6 +2009,11 @@ async function settlePayment(args) {
     }
   }
 
+  // Track whichever payment effectively settled. For an installment child
+  // that completes the plan, the parent MARKETPLACE payment is what really
+  // settled; downstream release logic must key off the parent, not the child.
+  let settledForRelease = result;
+
   if (
     result &&
     result.type === 'MARKETPLACE_INSTALLMENT' &&
@@ -2072,12 +2021,17 @@ async function settlePayment(args) {
     result.parentPaymentId
   ) {
     try {
-      await require('./installmentService').finalizeInstallmentPlan(
+      const parentResult = await require('./installmentService').finalizeInstallmentPlan(
         result.parentPaymentId
       );
+      if (
+        parentResult &&
+        parentResult.type === 'MARKETPLACE' &&
+        parentResult.status === 'PAID'
+      ) {
+        settledForRelease = parentResult;
+      }
     } catch (error) {
-      // The installment itself is safely PAID. The parent is settled again by
-      // the next verify/callback/webhook or when the buyer opens the order.
       logger.error(
         {
           err: error,
@@ -2085,6 +2039,42 @@ async function settlePayment(args) {
           parentPaymentId: result.parentPaymentId,
         },
         'settlePayment: could not settle the goods payment after the last installment; will retry'
+      );
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // WAITING LIST RELEASE — OFFERS TERMINAL EVENT
+  // --------------------------------------------------------------------------
+  // A MARKETPLACE payment settled PAID is the terminal event for the offers
+  // flow: goods are committed. Any still-PENDING offers on the listing are
+  // permanently released (WITHDRAWN) and their bidders notified. Runs outside
+  // the settlement transaction so a notice failure can never roll back the
+  // payment. Idempotent — repeated settle calls find nothing left to release.
+  if (
+    settledForRelease &&
+    settledForRelease.type === 'MARKETPLACE' &&
+    settledForRelease.status === 'PAID' &&
+    settledForRelease.orderId
+  ) {
+    try {
+      const order = await prisma.order.findUnique({
+        where: { id: settledForRelease.orderId },
+        select: { listingId: true, status: true },
+      });
+      // Skip if the order was received under a dispute or cancellation — the
+      // payment is PAID for financial truth, but the listing is not committed.
+      if (order && !['DISPUTED', 'CANCELLED'].includes(order.status)) {
+        await releaseWaitingBidders(prisma, {
+          listingId: order.listingId,
+          actorId: null,
+          reason: 'MARKETPLACE_PAID',
+        });
+      }
+    } catch (error) {
+      logger.error(
+        { err: error, paymentId: settledForRelease.id, orderId: settledForRelease.orderId },
+        'settlePayment: could not release waiting bidders after MARKETPLACE PAID; will retry on next maintenance sweep'
       );
     }
   }
