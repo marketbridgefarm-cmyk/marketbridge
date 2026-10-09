@@ -21,39 +21,8 @@ const EMPTY_TRUCK_FORM = {
   registration: '',
   truckType: '',
   capacity: '',
-  operatingArea: [],
+  operatingArea: '',
 };
-
-// ── Structured truck types (no free text — prevents contact leaks) ────────
-const TRUCK_TYPES = [
-  ['FLATBED', 'Flatbed'],
-  ['BOX_TRUCK', 'Box truck'],
-  ['REFRIGERATED', 'Refrigerated truck'],
-  ['TANKER', 'Tanker'],
-  ['LIVESTOCK', 'Livestock carrier'],
-  ['DUMP_TRUCK', 'Dump truck'],
-  ['PICKUP', 'Pickup / light truck'],
-  ['OTHER', 'Other'],
-];
-
-// ── Ethiopian regions for operating area (multi-select, no free text) ─────
-const OPERATING_REGIONS = [
-  ['ADDIS_ABABA', 'Addis Ababa'],
-  ['OROMIA', 'Oromia'],
-  ['AMHARA', 'Amhara'],
-  ['TIGRAY', 'Tigray'],
-  ['SIDAMA', 'Sidama'],
-  ['AFAR', 'Afar'],
-  ['SOMALI', 'Somali'],
-  ['BENISHANGUL_GUMUZ', 'Benishangul-Gumuz'],
-  ['GAMBELLA', 'Gambella'],
-  ['HARARI', 'Harari'],
-  ['SOUTH_WEST_ETHIOPIA', "South West Ethiopia"],
-  ['SOUTH_ETHIOPIA', 'South Ethiopia'],
-  ['CENTRAL_ETHIOPIA', 'Central Ethiopia'],
-  ['DIRE_DAWA', 'Dire Dawa'],
-  ['NATIONWIDE', 'Nationwide'],
-];
 
 const TERMINAL_STATUSES = ['DELIVERED', 'CANCELLED'];
 
@@ -74,11 +43,14 @@ function fmtMoney(value) {
   return Number.isFinite(n) ? n.toLocaleString() : null;
 }
 
+// "ORD 25464DE7" style short reference, matching the Orders cards.
 function shortOrder(id) {
   if (!id) return null;
   return `ORD ${String(id).replace(/-/g, '').slice(0, 8).toUpperCase()}`;
 }
 
+// The agreed price of a job: explicit field first, then the accepted quote
+// (a counter-offer, when present, is the price that was actually accepted).
 function jobAmount(job) {
   const accepted = (job.quotes || []).find((q) => q.status === 'ACCEPTED');
   const raw =
@@ -91,6 +63,7 @@ function jobAmount(job) {
   return raw == null ? null : fmtMoney(raw);
 }
 
+// Short label + initials for the "Arranged by" cluster in a card head.
 function arrangerShort(arrangingParty) {
   switch (arrangingParty) {
     case 'SELLER':
@@ -104,6 +77,7 @@ function arrangerShort(arrangingParty) {
   }
 }
 
+// Tone (success | info | gold | danger | muted) for a transport job status.
 function jobTone(status) {
   switch (status) {
     case 'DELIVERED':
@@ -136,6 +110,11 @@ function verificationTone(status) {
   return 'gold';
 }
 
+/*
+ * Four-step trip timeline:
+ *   Accepted → Pickup → In transit → Delivered
+ * The "current" step is the next thing that still has to happen.
+ */
 function jobProgress(status) {
   const labels = ['Accepted', 'Pickup', 'In transit', 'Delivered'];
   const s = String(status || '').toUpperCase();
@@ -203,6 +182,7 @@ function RouteStrip({ pickup, destination, compact = false }) {
   );
 }
 
+// Big number + small unit, as on the Orders "Amount" block.
 function AmountRow({ value, unit = 'ETB' }) {
   return (
     <div className="sd-amount">
@@ -211,6 +191,18 @@ function AmountRow({ value, unit = 'ETB' }) {
     </div>
   );
 }
+
+// Renders the structured workDetails of a transport job as a compact string.
+// Split out so the JSX isn't one 400-character line, and so the same output
+// is produced in one place.
+const HANDLING_LABELS = {
+  FRAGILE: 'Fragile',
+  KEEP_COOL: 'Keep cool',
+  KEEP_DRY: 'Keep dry',
+  THIS_SIDE_UP: 'This side up',
+  VENTILATED: 'Ventilated',
+  COVERED: 'Covered load',
+};
 
 function workDetailsSummary(workDetails) {
   if (!workDetails) return null;
@@ -221,19 +213,9 @@ function workDetailsSummary(workDetails) {
     workDetails.loadingHelp && `Loading: ${workDetails.loadingHelp}`,
     workDetails.unloadingHelp && `Unloading: ${workDetails.unloadingHelp}`,
     workDetails.deliveryDeadline && `Deadline: ${new Date(workDetails.deliveryDeadline).toLocaleString()}`,
-    ...(workDetails.handling || []),
+    ...(workDetails.handling || []).map((h) => HANDLING_LABELS[h] || h),
   ].filter(Boolean);
   return parts.length ? parts.join(' · ') : 'No additional structured requirements';
-}
-
-// Convert the stored multi-select region codes back to a human label.
-function formatOperatingArea(value) {
-  if (Array.isArray(value)) {
-    return value
-      .map((code) => OPERATING_REGIONS.find(([c]) => c === code)?.[1] || code)
-      .join(', ');
-  }
-  return value || '';
 }
 
 export default function TruckOwnerDashboard() {
@@ -252,10 +234,16 @@ export default function TruckOwnerDashboard() {
 
   const [truckForm, setTruckForm] = useState(EMPTY_TRUCK_FORM);
   const [showTruckModal, setShowTruckModal] = useState(false);
-  const [amountModal, setAmountModal] = useState(null);
+  // Select-only price entry for quotes / counters (no free typing, so no
+  // phone numbers can be slipped into a price box).
+  const [amountModal, setAmountModal] = useState(null); // { kind, job?, jobId?, quoteId?, reference }
   const [amountDraft, setAmountDraft] = useState('');
 
-  const [evidenceModal, setEvidenceModal] = useState(null);
+  // Evidence capture, required by the backend before PICKUP -> IN_TRANSIT
+  // (needs PICKUP evidence) and IN_TRANSIT -> DELIVERED (needs DELIVERY evidence).
+  // Payment completeness (seller, transport, inspection) is enforced by the
+  // backend before ACCEPTED -> PICKUP, i.e. before the truck collects the goods.
+  const [evidenceModal, setEvidenceModal] = useState(null); // { jobId, type, nextStatus }
   const [evidenceKeys, setEvidenceKeys] = useState({ photoKeys: [], videoKeys: [] });
   const [evidenceNotes, setEvidenceNotes] = useState('');
   const [evidenceGps, setEvidenceGps] = useState('');
@@ -264,6 +252,7 @@ export default function TruckOwnerDashboard() {
 
   function toast(message) {
     setToastMsg(message);
+
     window.setTimeout(() => {
       setToastMsg('');
     }, 3000);
@@ -353,44 +342,11 @@ export default function TruckOwnerDashboard() {
     [trucks]
   );
 
-  // ── Toggle a region code on/off in the multi-select ─────────────────
-  function toggleOperatingRegion(code) {
-    setTruckForm((prev) => {
-      const current = Array.isArray(prev.operatingArea) ? prev.operatingArea : [];
-      const has = current.includes(code);
-      let next;
-
-      // "Nationwide" is exclusive — selecting it clears the rest.
-      if (code === 'NATIONWIDE') {
-        next = has ? [] : ['NATIONWIDE'];
-      } else {
-        const withoutNationwide = current.filter((c) => c !== 'NATIONWIDE');
-        next = has
-          ? withoutNationwide.filter((c) => c !== code)
-          : [...withoutNationwide, code];
-      }
-
-      return { ...prev, operatingArea: next };
-    });
-  }
-
   async function registerTruck(event) {
     event.preventDefault();
 
-    if (!truckForm.registration.trim()) {
-      toast('Enter a valid registration plate.');
-      return;
-    }
-    if (!truckForm.truckType) {
-      toast('Select a truck type.');
-      return;
-    }
     if (!truckForm.capacity || Number(truckForm.capacity) <= 0) {
       toast('Enter a valid truck capacity.');
-      return;
-    }
-    if (!Array.isArray(truckForm.operatingArea) || truckForm.operatingArea.length === 0) {
-      toast('Select at least one operating region.');
       return;
     }
 
@@ -398,10 +354,10 @@ export default function TruckOwnerDashboard() {
 
     try {
       await api.post('/transport/trucks', {
-        registration: truckForm.registration.trim().toUpperCase(),
-        truckType: truckForm.truckType,
+        registration: truckForm.registration.trim(),
+        truckType: truckForm.truckType.trim(),
         capacity: Number(truckForm.capacity),
-        operatingArea: truckForm.operatingArea,
+        operatingArea: truckForm.operatingArea.trim(),
       });
 
       setTruckForm(EMPTY_TRUCK_FORM);
@@ -490,6 +446,8 @@ export default function TruckOwnerDashboard() {
     }
   }
 
+  // A quote's negotiation thread is only "live" at its leaf: the row that
+  // no later counter-quote points back to as a parent.
   function leafTransportQuote(quotes) {
     const list = Array.isArray(quotes) ? quotes : [];
     const parentIds = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
@@ -505,6 +463,14 @@ export default function TruckOwnerDashboard() {
     return Boolean(quote?.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
   }
 
+  // Transport quote URLs now match the inspection shape:
+  //   /transport/:jobId/quotes/:quoteId/<action>
+  // Every caller already has the job in scope; jobId is threaded explicitly.
+
+  // Release a provisionally accepted deal (before transport payment) or a
+  // silent negotiator (SELECTED / COUNTERED-by-requester) once the backend's
+  // release window has elapsed. This is a WITHDRAW, not a REJECT: the backend
+  // only allows REJECT on quotes that are still being negotiated.
   function releaseTransportAgreement(jobId, quoteId) {
     setReleaseTarget({ jobId, quoteId });
   }
@@ -576,6 +542,9 @@ export default function TruckOwnerDashboard() {
     }
   }
 
+  // Withdraw a waiting bid that the requester has not yet selected for
+  // negotiation. Mirrors the inspection flow: only a PENDING bid can be
+  // withdrawn, so a live negotiation is never abandoned by accident.
   async function withdrawWaitingBid(jobId, quoteId) {
     setActionLoading(`quote-${quoteId}`);
     try {
@@ -694,6 +663,10 @@ export default function TruckOwnerDashboard() {
     const busy = actionLoading?.startsWith(`status-${job.id}`);
 
     if (job.status === 'REQUESTED' || job.status === 'QUOTED') {
+      // The backend keeps the job in QUOTED after a deal is accepted: the
+      // agreement is provisional until transport payment settles. Without
+      // this branch the truck owner whose quote was accepted was told the
+      // requester was still "selecting a transporter".
       const agreedQuote = (job.quotes || []).find((quote) => quote.status === 'ACCEPTED');
       if (agreedQuote) {
         const orderPayments = job.order?.payments || [];
@@ -735,7 +708,7 @@ export default function TruckOwnerDashboard() {
       return (
         <p className="sd-job-waiting">
           <span className="sd-job-waiting-dot" aria-hidden="true" />
-          You&apos;ve been selected — finalising the deal terms
+          You've been selected — finalising the deal terms
         </p>
       );
     }
@@ -752,6 +725,9 @@ export default function TruckOwnerDashboard() {
         job.method !== 'HIRE_TRANSPORTER' ||
         orderPayments.some((p) => p.type === 'TRANSPORT' && p.status === 'PAID') ||
         (job.payments || []).some((p) => p.type === 'TRANSPORT' && p.status === 'PAID');
+      // FIX: /transport/mine attaches inspectionRequests to the ORDER, not to
+      // order.listing. The previous path (job.order.listing.inspectionRequests)
+      // was always undefined, so this check silently passed.
       const inspectionRequests = job.order?.inspectionRequests || [];
       const inspectionPaid = inspectionRequests
         .filter((r) => r.status !== 'CANCELLED' && r.fee != null && Number(r.fee) > 0)
@@ -965,20 +941,18 @@ export default function TruckOwnerDashboard() {
                   actionLoading === `availability-${truck.id}`;
                 const tone = truckTone(truck.availability);
                 const registeredLabel = fmtDate(truck.createdAt);
-                const areaLabel = formatOperatingArea(truck.operatingArea);
 
                 return (
                   <article className="sd-card sd-truck-card" key={truck.id}>
+                    {/* Card head — eyebrow + title left, plate + avatar right */}
                     <div className="sd-card-head">
                       <div className="sd-card-head-text">
                         <span className={`sd-eyebrow tone-${tone}`}>Truck</span>
                         <h3 className="sd-card-title" title={truck.truckType || 'Truck'}>
-                          {TRUCK_TYPES.find(([c]) => c === truck.truckType)?.[1]
-                            || truck.truckType
-                            || 'Truck'}
+                          {truck.truckType || 'Truck'}
                         </h3>
-                        {areaLabel && (
-                          <p className="sd-card-sub">{areaLabel}</p>
+                        {truck.operatingArea && (
+                          <p className="sd-card-sub">{truck.operatingArea}</p>
                         )}
                       </div>
 
@@ -988,12 +962,13 @@ export default function TruckOwnerDashboard() {
                           <span className="sd-party-name">{truck.registration}</span>
                         </div>
                         <div className={`sd-avatar tone-${tone}`} aria-hidden="true">
-                          {initialsOf(truck.registration)}
+                          {initialsOf(truck.truckType || truck.registration)}
                         </div>
                       </div>
                     </div>
 
                     <div className="sd-card-body">
+                      {/* Block 1 — Availability */}
                       <section className="sd-card-block">
                         <div className="sd-card-block-title">
                           <h4>Availability</h4>
@@ -1014,6 +989,7 @@ export default function TruckOwnerDashboard() {
                         </div>
                       </section>
 
+                      {/* Block 2 — Fleet details */}
                       <section className="sd-card-block">
                         <div className="sd-card-block-title">
                           <h4>Fleet details</h4>
@@ -1026,7 +1002,7 @@ export default function TruckOwnerDashboard() {
                             </div>
                             <div className="sd-fact">
                               <span>Routes</span>
-                              <strong>{areaLabel || 'Any'}</strong>
+                              <strong>{truck.operatingArea || 'Any'}</strong>
                             </div>
                           </div>
                         </div>
@@ -1036,6 +1012,7 @@ export default function TruckOwnerDashboard() {
                         <p className="sd-card-foot">Registered {registeredLabel}</p>
                       )}
 
+                      {/* Footer */}
                       <div className="sd-card-actions">
                         <button
                           type="button"
@@ -1109,6 +1086,8 @@ export default function TruckOwnerDashboard() {
 
                 const myLeaf = leafTransportQuote(job.quotes);
                 const leafExpired = isQuoteExpired(myLeaf);
+                // A quote the requester already accepted is settled (payment
+                // pending); show that instead of offering to quote again.
                 const hasAgreement = Boolean(myLeaf) && myLeaf.status === 'ACCEPTED';
                 const hasActiveThread =
                   myLeaf && !leafExpired && ['SELECTED', 'COUNTERED'].includes(myLeaf.status);
@@ -1119,6 +1098,8 @@ export default function TruckOwnerDashboard() {
                   myLeaf.status === 'COUNTERED' &&
                   myLeaf.counteredBy === 'REQUESTER';
                 const respondBusy = myLeaf && actionLoading === `quote-${myLeaf.id}`;
+                // One bid per job: once a truck owner has quoted (including
+                // after withdrawing), they cannot bid on that job again.
                 const canQuote = !myLeaf && !hasAgreement;
 
                 const quoteAmount = hasActiveThread
@@ -1136,6 +1117,7 @@ export default function TruckOwnerDashboard() {
 
                 return (
                   <article className="sd-card sd-job-card" key={job.id}>
+                    {/* Card head */}
                     <div className="sd-card-head">
                       <div className="sd-card-head-text">
                         <span className="sd-eyebrow tone-info">Open request</span>
@@ -1157,6 +1139,7 @@ export default function TruckOwnerDashboard() {
                     </div>
 
                     <div className="sd-card-body">
+                      {/* Block 1 — Route */}
                       <section className="sd-card-block">
                         <div className="sd-card-block-title">
                           <h4>Route</h4>
@@ -1169,6 +1152,7 @@ export default function TruckOwnerDashboard() {
                         </div>
                       </section>
 
+                      {/* Block 2 — Load details */}
                       <section className="sd-card-block">
                         <div className="sd-card-block-title">
                           <h4>Load details</h4>
@@ -1206,6 +1190,7 @@ export default function TruckOwnerDashboard() {
                         </div>
                       </section>
 
+                      {/* Block 3 — Your quote (only while a thread is live) */}
                       {hasActiveThread && (
                         <section className="sd-card-block">
                           <div className="sd-card-block-title">
@@ -1258,6 +1243,7 @@ export default function TruckOwnerDashboard() {
 
                       {createdLabel && <p className="sd-card-foot">Created {createdLabel}</p>}
 
+                      {/* Footer */}
                       {showFooter && (
                         <div className="sd-card-actions">
                           {canQuote && (
@@ -1346,6 +1332,8 @@ export default function TruckOwnerDashboard() {
               </div>
             </div>
 
+            {/* ── Active trips (cards) ─────────────────────────── */}
+
             {activeJobs.length > 0 && (
               <section className="sd-jobs-section">
                 <div className="sd-jobs-section-head">
@@ -1367,6 +1355,7 @@ export default function TruckOwnerDashboard() {
 
                     return (
                       <article className="sd-card sd-job-card" key={job.id}>
+                        {/* Card head */}
                         <div className="sd-card-head">
                           <div className="sd-card-head-text">
                             <span className={`sd-eyebrow tone-${tone}`}>Active trip</span>
@@ -1388,6 +1377,7 @@ export default function TruckOwnerDashboard() {
                         </div>
 
                         <div className="sd-card-body">
+                          {/* Block 1 — Trip status */}
                           <section className="sd-card-block">
                             <div className="sd-card-block-title">
                               <h4>Trip status</h4>
@@ -1416,6 +1406,7 @@ export default function TruckOwnerDashboard() {
                             </div>
                           </section>
 
+                          {/* Block 2 — Route */}
                           <section className="sd-card-block">
                             <div className="sd-card-block-title">
                               <h4>Route</h4>
@@ -1429,6 +1420,7 @@ export default function TruckOwnerDashboard() {
                             </div>
                           </section>
 
+                          {/* Block 3 — Details */}
                           <section className="sd-card-block">
                             <div className="sd-card-block-title">
                               <h4>Trip details</h4>
@@ -1446,9 +1438,22 @@ export default function TruckOwnerDashboard() {
                                   </div>
                                 )}
                               </div>
+                              {job.workDetails && workDetailsSummary(job.workDetails) && (
+                                <div className="sd-job-requirements">
+                                  <span className="sd-job-requirements-label">Work details</span>
+                                  <p>{workDetailsSummary(job.workDetails)}</p>
+                                </div>
+                              )}
+                              {job.specialRequirements && (
+                                <div className="sd-job-requirements">
+                                  <span className="sd-job-requirements-label">Requirements</span>
+                                  <p>{job.specialRequirements}</p>
+                                </div>
+                              )}
                             </div>
                           </section>
 
+                          {/* Block 4 — Amount */}
                           {amount && (
                             <section className="sd-card-block">
                               <div className="sd-card-block-title">
@@ -1462,6 +1467,7 @@ export default function TruckOwnerDashboard() {
 
                           {createdLabel && <p className="sd-card-foot">Created {createdLabel}</p>}
 
+                          {/* Footer */}
                           <div className="sd-card-actions">
                             {renderJobActionButtons(job)}
                             <Link
@@ -1479,6 +1485,8 @@ export default function TruckOwnerDashboard() {
                 </div>
               </section>
             )}
+
+            {/* ── Completed trips (table) ──────────────────────── */}
 
             {completedJobs.length > 0 && (
               <section className="sd-jobs-section">
@@ -1535,6 +1543,8 @@ export default function TruckOwnerDashboard() {
               </section>
             )}
 
+            {/* ── Empty state ──────────────────────────────────── */}
+
             {myJobs.length === 0 && (
               <div className="sd-empty-state">
                 <div className="sd-empty-icon" aria-hidden="true">📋</div>
@@ -1554,6 +1564,10 @@ export default function TruckOwnerDashboard() {
           </div>
         )}
       </section>
+
+      {/* =========================================================
+          TOAST
+      ========================================================= */}
 
       {toastMsg && (
         <div className="sd-toast" role="status" aria-live="polite">
@@ -1593,8 +1607,6 @@ export default function TruckOwnerDashboard() {
 
             <p className="muted small">
               Register a truck so buyers and sellers can request it for transport jobs.
-              Truck type and operating regions are chosen from the list — this keeps
-              every deal on MarketBridge.
             </p>
 
             <form onSubmit={registerTruck}>
@@ -1604,31 +1616,25 @@ export default function TruckOwnerDashboard() {
                   <input
                     id="registration"
                     required
-                    maxLength={20}
                     value={truckForm.registration}
                     onChange={(e) =>
-                      setTruckForm({ ...truckForm, registration: e.target.value.toUpperCase() })
+                      setTruckForm({ ...truckForm, registration: e.target.value })
                     }
-                    placeholder="e.g. ET-3-A12345"
+                    placeholder="e.g. ET-12345"
                   />
                 </div>
 
-                {/* ── Truck type: dropdown only ──────────────────── */}
                 <div>
                   <label htmlFor="truckType">Truck type</label>
-                  <select
+                  <input
                     id="truckType"
                     required
                     value={truckForm.truckType}
                     onChange={(e) =>
                       setTruckForm({ ...truckForm, truckType: e.target.value })
                     }
-                  >
-                    <option value="">Select a truck type…</option>
-                    {TRUCK_TYPES.map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
+                    placeholder="e.g. Flatbed, Isuzu, FSR"
+                  />
                 </div>
 
                 <div>
@@ -1646,33 +1652,18 @@ export default function TruckOwnerDashboard() {
                     placeholder="e.g. 18"
                   />
                 </div>
-              </div>
 
-              {/* ── Operating regions: multi-select checkboxes ───── */}
-              <div style={{ marginTop: 14 }}>
-                <label style={{ display: 'block', marginBottom: 8 }}>
-                  Operating regions (select all that apply)
-                </label>
-                <div className="sd-region-grid">
-                  {OPERATING_REGIONS.map(([value, label]) => {
-                    const checked = truckForm.operatingArea.includes(value);
-                    return (
-                      <label key={value} className="sd-region-option">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleOperatingRegion(value)}
-                        />
-                        <span>{label}</span>
-                      </label>
-                    );
-                  })}
+                <div>
+                  <label htmlFor="operatingArea">Operating area / routes</label>
+                  <input
+                    id="operatingArea"
+                    value={truckForm.operatingArea}
+                    onChange={(e) =>
+                      setTruckForm({ ...truckForm, operatingArea: e.target.value })
+                    }
+                    placeholder="e.g. Addis Ababa – Jimma"
+                  />
                 </div>
-                {truckForm.operatingArea.length === 0 && (
-                  <p className="muted small" style={{ marginTop: 6 }}>
-                    Select at least one region where you can pick up loads.
-                  </p>
-                )}
               </div>
 
               <div className="sd-modal-actions sd-report-actions">

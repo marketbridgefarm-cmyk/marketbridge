@@ -11,6 +11,7 @@ import './dashboards/InspectorDashboard.css';
 import ProviderReleaseDialog from '../components/ProviderReleaseDialog.jsx';
 import ProviderStandingBanner from '../components/ProviderStandingBanner.jsx';
 import InspectionCoordinationInspector from '../components/InspectionCoordinationInspector.jsx';
+import { InspectionRequestSummary } from '../components/RequestScopeSummary.jsx';
 
 const EMPTY_REPORT = {
   quantity: '',
@@ -724,6 +725,7 @@ export default function InspectorDashboard() {
                                   <strong>{place}</strong>
                                 </div>
                               </div>
+                              <InspectionRequestSummary inspection={r} title="Scope to inspect" />
                             </div>
                           </section>
 
@@ -1014,6 +1016,7 @@ export default function InspectorDashboard() {
                                       <strong>{place}</strong>
                                     </div>
                                   </div>
+                                  <InspectionRequestSummary inspection={r} title="Scope to inspect" />
                                 </div>
                               </section>
 

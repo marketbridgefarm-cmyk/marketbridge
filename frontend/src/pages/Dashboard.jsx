@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import RecentActivity from '../components/RecentActivity.jsx';
 import MessageThread from '../components/MessageThread.jsx';
+import { InspectionRequestSummary, TransportRequestSummary } from '../components/RequestScopeSummary.jsx';
 import './dashboards/Dashboard.css';
 
 // ============================================================================
@@ -735,6 +736,7 @@ export default function Dashboard() {
                 <div key={r.id} className="panel" style={{ marginTop: 12 }}>
                   <strong>{r.listing?.title || r.listing?.cropType || 'Produce inspection'}</strong>
                   <p>Inspector: {r.inspector?.name || 'Selected inspector'} · Agreed fee: {money(r.fee)}</p>
+                  <InspectionRequestSummary inspection={r} title="Inspection scope" />
                   <p>Status: {r.sellerConfirmedAt ? 'Seller confirmed' : 'Waiting for your confirmation'}{r.status === 'IN_PROGRESS' ? ' · Inspection in progress' : ''}</p>
                   {r.sellerMessage && <p>Latest seller message: {r.sellerMessage}</p>}
                   <label style={{ display: 'block', margin: '8px 0' }}>Message to buyer / inspector
@@ -770,6 +772,7 @@ export default function Dashboard() {
                     <p className="muted small">Confirmation deadline: <strong>{new Date(job.sellerPreparationDueAt).toLocaleString()}</strong></p>
                   )}
                   <p>Pickup: {job.pickupLocation || 'Not specified'} · Destination: {job.destination || 'Not specified'}</p>
+                  {(job.workDetails || job.specialRequirements) && <TransportRequestSummary job={job} compact title="Transport requirements" />}
                   <label style={{ display: 'block', margin: '8px 0' }}>Message to transporter / buyer
                     <select value={transportMessages[job.id] || ''} onChange={(e) => setTransportMessages((old) => ({ ...old, [job.id]: e.target.value }))} style={{ display: 'block', width: '100%', marginTop: 4 }}>
                       <option value="">Choose a message or write a custom one below</option>

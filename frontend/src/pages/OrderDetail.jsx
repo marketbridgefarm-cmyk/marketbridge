@@ -31,6 +31,7 @@ import ActionCenter from '../components/ActionCenter.jsx';
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
 import TransportSetup from '../components/TransportSetup.jsx';
+import { InspectionRequestSummary, TransportRequestSummary } from '../components/RequestScopeSummary.jsx';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
 
 const PAYMENT_METHODS = [
@@ -847,25 +848,7 @@ function InspectionCard({ order, title, i }) {
           {request.fee != null && <Fact name="Inspection fee">{money(request.fee)} ETB</Fact>}
           {!inspectorName && <Fact name="Status">{label(request.status)}</Fact>}
         </Facts>
-        {request.workDetails && (
-          <div className="od-work-details">
-            <h4>Agreed inspection scope</h4>
-            {request.workDetails.workDescription && <p>{request.workDetails.workDescription}</p>}
-            <div className="od-work-detail-items">
-              {request.workDetails.quantityValue && (
-                <span><b>Quantity:</b> {request.workDetails.quantityValue} {request.workDetails.quantityUnit || ''}</span>
-              )}
-              {request.workDetails.lotCount && <span><b>Lots:</b> {request.workDetails.lotCount}</span>}
-              {request.workDetails.requiredBy && <span><b>Deadline:</b> {formatDateTime(request.workDetails.requiredBy)}</span>}
-            </div>
-            {request.workDetails.checks?.length > 0 && (
-              <p><b>Checks:</b> {request.workDetails.checks.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>
-            )}
-            {request.workDetails.reportRequirements && (
-              <p><b>Report:</b> {request.workDetails.reportRequirements}</p>
-            )}
-          </div>
-        )}
+        <InspectionRequestSummary inspection={request} title="Agreed inspection scope" />
       </Section>
 
       {i.isSeller && ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(request.status) && (
@@ -1437,7 +1420,11 @@ function TransportCard({ order, t }) {
         title="Transport"
         subtitle="Either you or the counterparty may arrange transport. Once one of you does, the other cannot create a competing arrangement."
       >
-        {t.canArrange ? (
+        {t.canArrange && t.blockedReason ? (
+          <Section title="Arrange transport">
+            <p className="muted">{t.blockedReason}</p>
+          </Section>
+        ) : t.canArrange ? (
           <Section title="Arrange transport">
             <p className="muted">
               Open the transport request to define the trip scope and choose
@@ -1453,7 +1440,9 @@ function TransportCard({ order, t }) {
             </Button>
           </Section>
         ) : (
-          <p className="muted">No transport arrangement recorded yet.</p>
+          <p className="muted">
+            {t.buyerOnly ? 'The buyer requests transport for this order once the inspection is complete.' : 'No transport arrangement recorded yet.'}
+          </p>
         )}
       </Card>
     );
@@ -1493,7 +1482,9 @@ function TransportCard({ order, t }) {
               <Fact name="Required capacity">{job.requiredCapacity}</Fact>
             )}
           </Facts>
-          {job.workDetails && <div className="od-work-details"><h4>Transport work requirements</h4><div className="od-work-detail-items">{job.workDetails.weight && <span><b>Weight:</b> {job.workDetails.weight}</span>}{job.workDetails.packageCount && <span><b>Packages:</b> {job.workDetails.packageCount}</span>}{job.workDetails.vehicleType && <span><b>Vehicle:</b> {job.workDetails.vehicleType}</span>}{job.workDetails.deliveryDeadline && <span><b>Deadline:</b> {formatDateTime(job.workDetails.deliveryDeadline)}</span>}</div>{job.workDetails.handling?.length > 0 && <p><b>Handling:</b> {job.workDetails.handling.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>}</div>}
+          {(job.workDetails || job.specialRequirements) && (
+            <TransportRequestSummary job={job} compact title="Transport work requirements" />
+          )}
         </Section>
 
         {job.truckOwner && (
@@ -1984,10 +1975,22 @@ export default function OrderDetail() {
   useEffect(() => { load(); }, [load]);
   const reload = useCallback(() => load({ silent: true }), [load]);
 
+  // Section targets that need a request form open the popup (after scrolling to the card).
+  const goToSection = (id, delay = 0) => {
+    const needsInspectionForm =
+      id === 'inspection-section' && !currentInspection && (inspections.length === 0 || inspectionFormReleased);
+    const needsTransportForm =
+      id === 'transport-section' && !transportJob && order && order.status !== 'CANCELLED' && !transportBlockedReason && (isPhysicalGoods ? isBuyer : isBuyer || isSeller);
+    scrollToId(id, delay);
+    if (needsInspectionForm) setActiveModal('inspection-request-form');
+    else if (needsTransportForm) setActiveModal('transport-setup-form');
+  };
+
   useEffect(() => {
     if (loading) return;
     const id = location.hash?.replace('#', '');
-    if (id) scrollToId(id);
+    if (id) goToSection(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, location.hash]);
 
   const run = async (key, fn, fallback) => {
@@ -2046,6 +2049,22 @@ export default function OrderDetail() {
         (transportJob.arrangingParty === 'SELLER' && isSeller) ||
         (transportJob.arrangingParty === 'JOINT' && isParticipant))
   );
+  // Same rules the server enforces: for physical goods, transport opens only after the
+  // inspection report is published and its fee paid, and the buyer runs the transporter competition.
+  const isPhysicalGoods = isAgricultural || isProduct;
+  const inspectionReportDone = Boolean(currentInspection && currentInspection.status === 'COMPLETED' && currentInspection.report);
+  const paidInspections = inspections.filter((r) => r.fee != null && Number(r.fee) > 0);
+  const inspectionFeesPaid =
+    !paidInspections.every((r) => Array.isArray(r.payments)) ||
+    paidInspections.every((r) => r.payments.some((p) => p.type === 'INSPECTOR' && p.status === 'PAID'));
+  const transportBlockedReason = !isPhysicalGoods
+    ? null
+    : !inspectionReportDone
+      ? 'Transport opens after the inspection report is published.'
+      : !inspectionFeesPaid
+        ? 'Transport opens after the inspection fee is paid.'
+        : null;
+
   const transportInMotion = Boolean(transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status));
   const acceptedQuote = Array.isArray(transportJob?.quotes) ? transportJob.quotes.find((q) => q.status === 'ACCEPTED') : null;
 
@@ -2689,7 +2708,9 @@ export default function OrderDetail() {
     isSeller,
     isTransporter,
     isArranger: isTransportArranger,
-    canArrange: Boolean(!transportJob && order.status !== 'CANCELLED' && isParticipant),
+    canArrange: Boolean(!transportJob && order.status !== 'CANCELLED' && (isPhysicalGoods ? isBuyer : isParticipant)),
+    blockedReason: transportBlockedReason,
+    buyerOnly: isPhysicalGoods,
     canChooseQuote: Boolean(transportJob && isTransportArranger && ['REQUESTED', 'QUOTED'].includes(transportJob.status)),
     canStartPayment: canStartTransportPayment,
     canResumePayment: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
@@ -2761,7 +2782,7 @@ export default function OrderDetail() {
           )}
 
           {workflow ? (
-            <ActionCenter workflow={workflow} onScroll={scrollToId} onActionComplete={reload} />
+            <ActionCenter workflow={workflow} onScroll={goToSection} onActionComplete={reload} />
           ) : (
             isInspector && (
               <Card id="next-action" tone="accent" eyebrow="Next step" title="Inspector action">
@@ -2900,6 +2921,7 @@ export default function OrderDetail() {
           destinationDefault={order.buyer?.location}
           canBuyer={isBuyer}
           canSeller={isSeller}
+          buyerOnlyCompetition={isPhysicalGoods}
           onCreated={() => {
             reload();
             setActiveModal(null);
