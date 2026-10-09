@@ -15,7 +15,14 @@
 // the frontend stops having to reconstruct these rules itself.
 //
 // Consumed by GET /orders/:id/workflow.
+//
+// IMPORTANT: The caller (routes/orders.js GET /:id/workflow) must include
+// `recoveryRequests` (status: PENDING) in the orderDetailInclude projection
+// so the recovery actions can be suppressed when one is already awaiting
+// admin review.
 // ============================================================================
+
+const chapaConfig = require('../config/chapa');
 
 // Once an order reaches one of these, the transaction lifecycle is over.
 const TERMINAL_ORDER_STATUSES = ['COMPLETED', 'CANCELLED', 'DISPUTED'];
@@ -24,7 +31,65 @@ const TERMINAL_ORDER_STATUSES = ['COMPLETED', 'CANCELLED', 'DISPUTED'];
 const NON_CANCELLABLE_STATUSES = ['COMPLETED', 'CANCELLED'];
 const TRANSPORT_IN_MOTION_STATUSES = ['PICKUP', 'IN_TRANSIT', 'DELIVERED'];
 
-const chapaConfig = require('../config/chapa');
+// ============================================================================
+// RELEASE WINDOWS (mirror the backend services that enforce them)
+// ============================================================================
+
+const RELEASE_AFTER_ACCEPT_HOURS = (() => {
+  const configured = Number(process.env.RELEASE_AFTER_ACCEPT_HOURS);
+  return Number.isFinite(configured) && configured >= 0 ? configured : 24;
+})();
+
+const SILENT_RELEASE_AFTER_HOURS = Object.freeze({
+  INSPECTION: (() => {
+    const configured = Number(process.env.INSPECTION_RELEASE_AFTER_HOURS);
+    return Number.isFinite(configured) && configured >= 0 ? configured : 72;
+  })(),
+  TRANSPORT: (() => {
+    const configured = Number(process.env.TRANSPORT_RELEASE_AFTER_HOURS);
+    return Number.isFinite(configured) && configured >= 0 ? configured : 72;
+  })(),
+});
+
+// ============================================================================
+// NEGOTIATION HELPERS
+// ============================================================================
+
+// Immutable counter chains leave exactly one leaf per negotiation thread.
+// Parent rows are history; the read model only reasons about leaves.
+function leafQuotes(quotes) {
+  return (quotes || []).filter((q) => (q._count?.childQuotes ?? 0) === 0);
+}
+
+// Whose turn is it on this quote? SELECTED means the requester has not yet
+// accepted or countered the original bid. COUNTERED means the party named in
+// `counteredBy` just acted, so the *other* party responds next.
+function quoteTurn(quote) {
+  if (!quote) return null;
+  if (quote.status === 'SELECTED') return 'REQUESTER';
+  if (quote.status === 'COUNTERED') {
+    return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
+  }
+  return null;
+}
+
+function acceptedReleaseAvailableAt(quote) {
+  if (!quote) return null;
+  const since = new Date(quote.updatedAt || quote.createdAt).getTime();
+  if (!Number.isFinite(since)) return null;
+  return new Date(since + RELEASE_AFTER_ACCEPT_HOURS * 60 * 60 * 1000);
+}
+
+function silentReleaseAvailableAt(quote, hours) {
+  if (!quote) return null;
+  const since = new Date(quote.updatedAt || quote.createdAt).getTime();
+  if (!Number.isFinite(since)) return null;
+  return new Date(since + hours * 60 * 60 * 1000);
+}
+
+function isPast(date) {
+  return Boolean(date) && date.getTime() <= Date.now();
+}
 
 function isPaid(payments, type) {
   return (payments || []).some((p) => p.type === type && p.status === 'PAID');
@@ -64,6 +129,10 @@ function buildPaymentSnapshot(order) {
     // Largest single amount the payment provider accepts. The UI shows this
     // before the buyer tries to pay an amount above it.
     maxOnlineAmount: chapaConfig.getMaxTransactionAmount(),
+    // Explicit record that the buyer reviewed the inspection report. Set at
+    // the same moment as BUY; kept as a separate field so the buyer's
+    // review is a first-class auditable event distinct from BUY/CANCEL.
+    buyerReviewedReportAt: order.buyerReviewedReportAt || null,
   };
 
   const inspectionRequests = (order.listing?.inspectionRequests || order.inspectionRequests || [])
@@ -107,6 +176,8 @@ function buildPaymentSnapshot(order) {
         termsLockedAt: r.feeTermsLockedAt || null,
         lockedFee: r.lockedFee != null ? Number(r.lockedFee) : null,
         lockedFeePayer: r.lockedFeePayer || null,
+        sellerConfirmedAt: r.sellerConfirmedAt || null,
+        inspectorOnSiteConfirmedAt: r.inspectorOnSiteConfirmedAt || null,
         obligations: obligations.map((o) => ({ id: o.id, payerId: o.payerId, amount: o.amount, status: o.status, paymentId: o.payment?.id || null })),
       };
     });
@@ -131,6 +202,9 @@ function buildPaymentSnapshot(order) {
         beneficiaryRole: 'TRUCK_OWNER',
         beneficiaryId: transportObligation?.beneficiaryId || job.truckOwnerId || null,
         obligationId: transportObligation?.id || null,
+        sellerPickupConfirmedAt: job.sellerPickupConfirmedAt || null,
+        truckArrivedAt: job.truckArrivedAt || null,
+        acceptedReleaseCount: job.acceptedReleaseCount || 0,
       }
     : null;
 
@@ -144,16 +218,9 @@ function buildPaymentSnapshot(order) {
   // BUYER-SAFE COORDINATION SUMMARY
   // ---------------------------------------------------------------------------
   // Seller <-> inspector site coordination is NOT buyer-visible. This object
-  // only tells the buyer *whether* the operational handoff has started, so
-  // the UI can show "Coordination in progress" without exposing any contact
-  // data. It deliberately mirrors the shape added to GET /orders/:id so the
-  // two endpoints agree.
-  //
+  // only tells the buyer *whether* the operational handoff has started.
   // Never add sellerPhone, inspectorPhone, emails, sites, meeting points,
-  // or availability slots here — the coordination row itself must never be
-  // forwarded on this route. The participant-gated
-  // GET /inspections/:id/coordination is the only place those fields are
-  // returned.
+  // or availability slots here.
   const coordination = currentInspectionRequest
     ? {
         opened: ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(currentInspectionRequest.status),
@@ -177,7 +244,9 @@ function buildPaymentSnapshot(order) {
       requestedById: r.requestedById,
       fee: r.fee,
       sellerConfirmedAt: r.sellerConfirmedAt || null,
+      inspectorOnSiteConfirmedAt: r.inspectorOnSiteConfirmedAt || null,
       workflowDueAt: r.workflowDueAt || null,
+      acceptedReleaseCount: r.acceptedReleaseCount || 0,
     })),
     coordination,
     allInspectionsPaid,
@@ -200,15 +269,9 @@ function buildPaymentSnapshot(order) {
 // ----------------------------------------------------------------------------
 // TIMELINE
 // ----------------------------------------------------------------------------
-// Recommendation #5: Offer accepted -> Order created -> Inspection completed
-// -> Transport accepted -> Payment -> Pickup -> In Transit -> Delivery ->
-// Receipt -> Completed. Steps that don't apply to this order (no inspection,
-// no transport job yet) are omitted rather than shown as permanently pending.
-// ----------------------------------------------------------------------------
 
 function buildTimeline(order, payments) {
   const job = order.transportJob || null;
-  const category = order.listing?.category;
   const inspection = (order.inspectionRequests || order.listing?.inspectionRequests || [])
     .filter((r) => r.status !== 'CANCELLED')
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -218,7 +281,6 @@ function buildTimeline(order, payments) {
   const inspectionPaid = payments.allInspectionsPaid;
   const buyerDecisionRequired = inspectionRequired;
   const buyerDecisionMade = !buyerDecisionRequired || Boolean(order.buyerDecision);
-  const buyerApproved = !buyerDecisionRequired || order.buyerDecision === 'BUY';
   const goodsPaid = payments.marketplace.paid;
   const transportExists = Boolean(job);
   const transportAccepted = transportExists && !['REQUESTED', 'QUOTED', 'CANCELLED'].includes(job.status);
@@ -228,12 +290,8 @@ function buildTimeline(order, payments) {
   const delivered = transportExists && job.status === 'DELIVERED';
   const completed = order.status === 'COMPLETED';
 
-  // Explicit state prevents the frontend from guessing the current step from
-  // array position. This matters when a later business gate is already
-  // satisfied, or when a stage has been created but is waiting on another
-  // party (e.g. an inspection quote or transport provider).
-  const state = (completed, current = false) =>
-    completed ? 'COMPLETED' : current ? 'CURRENT' : 'PENDING';
+  const state = (done, current = false) =>
+    done ? 'COMPLETED' : current ? 'CURRENT' : 'PENDING';
 
   const steps = [];
 
@@ -288,7 +346,6 @@ function buildTimeline(order, payments) {
       at: currentInspection?.report?.inspectedAt || null,
       detail: reportCompleted ? 'The inspection report is available for review.' : inspectionInProgress ? 'The inspector is completing the report.' : 'Waiting for the inspection to be completed.',
     });
-
   }
 
   if (buyerDecisionRequired && job) {
@@ -409,7 +466,6 @@ function buildTimeline(order, payments) {
 // ----------------------------------------------------------------------------
 
 function computeStage(order, payments) {
-  // Defensive guard for legacy/direct product orders.
   if (order.listing?.category === 'PRODUCT' && !order.agreedOfferId) {
     return 'NEGOTIATION_REQUIRED';
   }
@@ -421,32 +477,24 @@ function computeStage(order, payments) {
   const agricultural = order.listing?.category === 'AGRICULTURAL';
   const inspectionRequired = agricultural || Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist);
 
-  // Agricultural and product orders use the same inspection gate. The
-  // completed report must be available before the goods payment becomes a
-  // commercial commitment. Agricultural orders additionally require the
-  // explicit BUY decision after the report is reviewed.
   if (inspectionRequired) {
-    // No active inspection request: inspection must be requested before the
-    // buyer can make the commercial decision or pay for the produce.
     if (!payments.inspectionRequestsExist) return 'INSPECTION_REQUEST';
 
     if (!payments.allInspectionsCompleted) {
       const current = (payments.inspectionRequests || [])[0];
-      // ACCEPTED is only a provisional inspector agreement. The seller must
-      // explicitly confirm the selected inspector and fee before any
-      // inspection payment becomes payable.
+
       if (current?.status === 'ACCEPTED' && !current.sellerConfirmedAt) {
         return 'INSPECTION_SELLER_CONFIRMATION';
       }
-      if (current?.status === 'ACCEPTED' && current.sellerConfirmedAt && payments.inspections.some((i) => !i.paid)) {
+      if (current?.status === 'ACCEPTED' && current.sellerConfirmedAt && !current.inspectorOnSiteConfirmedAt) {
+        return 'INSPECTOR_ARRIVAL_CONFIRMATION';
+      }
+      if (current?.status === 'ACCEPTED' && current.sellerConfirmedAt && current.inspectorOnSiteConfirmedAt && payments.inspections.some((i) => !i.paid)) {
         return 'INSPECTION_PAYMENT';
       }
       return 'INSPECTION';
     }
 
-    // Both Agricultural and Product orders require an explicit BUY/CANCEL
-    // decision after the inspection report is reviewed. BUY unlocks goods
-    // payment; CANCEL closes the provisional purchase.
     if (!job) return 'ARRANGING_TRANSPORT';
     if (job.status === 'REQUESTED' || job.status === 'QUOTED') return 'ARRANGING_TRANSPORT';
     if (!job.sellerPickupConfirmedAt) return 'TRANSPORT_PREPARATION_CONFIRMATION';
@@ -512,9 +560,9 @@ function buildActions(order, payments, viewer) {
 
   const push = (action) => actions.push({ reason: null, ...action, enabled: action.ready && action.viewerCanPerform });
 
-  // 1. Inspection workflow for agricultural and physical product orders. Inspection actions are executable
-  // from the order Action Center so an assigned inspector is never stranded
-  // on a generic dashboard link.
+  // ---------------------------------------------------------------------------
+  // 1. INSPECTION WORKFLOW
+  // ---------------------------------------------------------------------------
   const inspectionRequests = (order.listing?.inspectionRequests || order.inspectionRequests || [])
     .filter((r) => r.status !== 'CANCELLED')
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -522,25 +570,115 @@ function buildActions(order, payments, viewer) {
 
   for (const request of currentInspectionRequest ? [currentInspectionRequest] : []) {
     const assignedToViewer = request.inspectorId === viewer.userId;
-    const requesterCanManage = request.requestedById === viewer.userId || isBuyer || isSeller || isAdmin;
+    const viewerIsRequester = request.requestedById === viewer.userId || isAdmin;
+    const viewerIsAssignedInspector = request.inspectorId === viewer.userId;
 
-    if (request.status === 'REQUESTED' && requesterCanManage) {
-      const pendingQuotes = (request.quotes || []).filter((q) =>
-        ['PENDING', 'COUNTERED'].includes(q.status)
-      );
+    const leafList = leafQuotes(request.quotes);
+    const pendingLeaves = leafList.filter((q) => q.status === 'PENDING');
+    const liveLeaf = leafList.find((q) => ['SELECTED', 'COUNTERED'].includes(q.status));
+    const acceptedLeaf = leafList.find((q) => q.status === 'ACCEPTED');
+
+    // Selection: pending leaves exist, no live negotiation.
+    if (request.status === 'REQUESTED' && !liveLeaf && pendingLeaves.length > 0) {
       push({
-        code: 'REVIEW_INSPECTION_QUOTES',
-        label: 'Review inspection quotes',
+        code: 'SELECT_INSPECTION_QUOTE',
+        label: `Select from ${pendingLeaves.length} inspector quote${pendingLeaves.length === 1 ? '' : 's'}`,
         actorRole: 'BUYER_OR_SELLER',
         inspectionRequestId: request.id,
-        viewerCanPerform: true,
-        ready: pendingQuotes.length > 0,
-        reason: pendingQuotes.length ? null : 'Waiting for an inspector quote',
-        pendingQuoteCount: pendingQuotes.length,
+        pendingQuoteCount: pendingLeaves.length,
+        viewerCanPerform: viewerIsRequester,
+        ready: viewerIsRequester,
+        reason: viewerIsRequester ? null : 'Only the inspection requester can select a quote',
         route: { method: 'GET', path: `/inspections/${request.id}/quotes` },
       });
     }
 
+    // Live negotiation: exactly one turn-aware action.
+    if (liveLeaf) {
+      const turn = quoteTurn(liveLeaf);
+      const viewerMatchesTurn =
+        (turn === 'REQUESTER' && viewerIsRequester) ||
+        (turn === 'PROVIDER' && viewerIsAssignedInspector);
+      const turnAmount = liveLeaf.counterAmount ?? liveLeaf.amount;
+      push({
+        code: 'RESPOND_INSPECTION_NEGOTIATION',
+        label: turn === 'PROVIDER'
+          ? 'Respond to requester counter'
+          : 'Respond to inspector bid',
+        actorRole: turn,
+        inspectionRequestId: request.id,
+        quoteId: liveLeaf.id,
+        turn,
+        amount: turnAmount,
+        viewerCanPerform: viewerMatchesTurn,
+        ready: viewerMatchesTurn,
+        reason: viewerMatchesTurn
+          ? null
+          : `Waiting on ${turn === 'REQUESTER' ? 'the requester' : 'the inspector'} to respond`,
+        route: { method: 'GET', path: `/inspections/${request.id}/quotes` },
+      });
+    }
+
+    // Provisional agreement: release by requester (window-gated).
+    if (acceptedLeaf && viewerIsRequester) {
+      const releaseAt = acceptedReleaseAvailableAt(acceptedLeaf);
+      const canRelease = isPast(releaseAt);
+      push({
+        code: 'RELEASE_INSPECTION_AGREEMENT',
+        label: 'Release inspector agreement',
+        actorRole: 'BUYER_OR_SELLER',
+        inspectionRequestId: request.id,
+        quoteId: acceptedLeaf.id,
+        releaseAvailableAt: releaseAt ? releaseAt.toISOString() : null,
+        viewerCanPerform: true,
+        ready: canRelease,
+        reason: canRelease
+          ? null
+          : `Available from ${releaseAt.toISOString()} (${RELEASE_AFTER_ACCEPT_HOURS}h after acceptance)`,
+        route: { method: 'GET', path: `/inspections/${request.id}/quotes` },
+      });
+    }
+
+    // Silent inspector release (waiting window).
+    if (
+      viewerIsRequester &&
+      liveLeaf &&
+      (liveLeaf.status === 'SELECTED' ||
+        (liveLeaf.status === 'COUNTERED' && liveLeaf.counteredBy === 'REQUESTER'))
+    ) {
+      const releaseAt = silentReleaseAvailableAt(liveLeaf, SILENT_RELEASE_AFTER_HOURS.INSPECTION);
+      const canRelease = isPast(releaseAt);
+      push({
+        code: 'RELEASE_SILENT_INSPECTOR',
+        label: 'Release silent inspector',
+        actorRole: 'BUYER_OR_SELLER',
+        inspectionRequestId: request.id,
+        quoteId: liveLeaf.id,
+        releaseAvailableAt: releaseAt ? releaseAt.toISOString() : null,
+        viewerCanPerform: true,
+        ready: canRelease,
+        reason: canRelease
+          ? null
+          : `Available from ${releaseAt.toISOString()} (${SILENT_RELEASE_AFTER_HOURS.INSPECTION}h of silence)`,
+        route: { method: 'GET', path: `/inspections/${request.id}/quotes` },
+      });
+    }
+
+    // Provider cancels own provisional agreement.
+    if (acceptedLeaf && acceptedLeaf.inspectorId === viewer.userId) {
+      push({
+        code: 'PROVIDER_CANCEL_INSPECTION',
+        label: 'Cancel provisional agreement',
+        actorRole: 'INSPECTOR',
+        inspectionRequestId: request.id,
+        quoteId: acceptedLeaf.id,
+        viewerCanPerform: true,
+        ready: true,
+        route: { method: 'GET', path: `/inspections/${request.id}/quotes` },
+      });
+    }
+
+    // Seller confirmations
     if (request.status === 'ACCEPTED' && request.inspectorId && !request.sellerConfirmedAt) {
       push({
         code: 'CONFIRM_INSPECTION',
@@ -564,14 +702,34 @@ function buildActions(order, payments, viewer) {
       });
     }
 
+    if (request.status === 'ACCEPTED' && request.sellerConfirmedAt && !request.inspectorOnSiteConfirmedAt) {
+      push({
+        code: 'CONFIRM_INSPECTOR_ARRIVAL',
+        label: 'Confirm inspector on site',
+        actorRole: 'SELLER',
+        inspectionRequestId: request.id,
+        viewerCanPerform: isSeller,
+        ready: isSeller,
+        reason: isSeller ? null : 'Waiting for the seller to confirm the inspector has arrived on site',
+        route: { method: 'POST', path: `/inspections/${request.id}/inspector-arrived` },
+      });
+    }
+
+    // Inspector work
     if (request.status === 'ACCEPTED' && assignedToViewer) {
+      const canStart = Boolean(request.sellerConfirmedAt && request.inspectorOnSiteConfirmedAt);
       push({
         code: 'START_INSPECTION',
         label: 'Start inspection',
         actorRole: 'INSPECTOR',
         inspectionRequestId: request.id,
         viewerCanPerform: isInspector,
-        ready: true,
+        ready: canStart,
+        reason: !request.sellerConfirmedAt
+          ? 'Seller must confirm the selected inspector and fee first'
+          : !request.inspectorOnSiteConfirmedAt
+            ? 'Seller must confirm inspector arrival on site first'
+            : null,
         route: { method: 'POST', path: `/inspections/${request.id}/start` },
       });
     }
@@ -589,9 +747,7 @@ function buildActions(order, payments, viewer) {
     }
   }
 
-  // 2. If no inspection exists yet, keep the buyer in the inspection-request
-  // stage. The detailed inspection form lives in OrderDetail, so this action
-  // is a navigation hint rather than a payment mutation.
+  // Request inspection if none exists yet.
   if (['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category) && !payments.inspectionRequestsExist && !terminal) {
     push({
       code: 'REQUEST_INSPECTION',
@@ -603,9 +759,9 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 3. Buyer purchase decision for both marketplaces. This is a real
-  // server-side mutation: the buyer must review the completed inspection
-  // report and explicitly choose BUY or CANCEL before goods payment.
+  // ---------------------------------------------------------------------------
+  // 2. BUYER DECISION (BUY / CANCEL after inspection)
+  // ---------------------------------------------------------------------------
   if ((order.listing?.category === 'AGRICULTURAL' || Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist)) && !order.buyerDecision && !terminal) {
     const jobReady = Boolean(job && job.status === 'ACCEPTED' && job.sellerPickupConfirmedAt);
     const decisionDeadlineValid = !order.buyerDecisionDueAt || new Date(order.buyerDecisionDueAt) > new Date();
@@ -653,9 +809,9 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 3. Pay for the goods. Both marketplaces require the explicit BUY
-  // decision after a completed inspection report. The same rule is enforced
-  // server-side in /payments.
+  // ---------------------------------------------------------------------------
+  // 3. PAY MARKETPLACE
+  // ---------------------------------------------------------------------------
   if (!payments.marketplace.paid) {
     const decisionRequired = (order.listing?.category === 'AGRICULTURAL' || Boolean(order.listing?.inspectionRequired || payments.inspectionRequestsExist));
     const inspectionRequired = decisionRequired;
@@ -682,13 +838,13 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 4. Pay each fee-bearing inspection. For SPLIT fees, each payer gets a
-  // separate action tied to that payer's durable obligation. Before seller
-  // confirmation there is intentionally no live obligation, so payment is
-  // represented as locked rather than payable.
+  // ---------------------------------------------------------------------------
+  // 4. PAY INSPECTION
+  // ---------------------------------------------------------------------------
   for (const inspection of payments.inspections) {
     const inspectionRequest = (order.inspectionRequests || []).find((r) => r.id === inspection.inspectionRequestId);
     const obligations = inspection.obligations || [];
+    const arrivalConfirmed = Boolean(inspection.inspectorOnSiteConfirmedAt);
 
     if (!obligations.length) {
       push({
@@ -698,16 +854,18 @@ function buildActions(order, payments, viewer) {
         inspectionRequestId: inspection.inspectionRequestId,
         viewerCanPerform: false,
         ready: false,
-        reason: !inspectionRequest?.sellerConfirmedAt
+        reason: !inspection.sellerConfirmedAt
           ? 'Seller must confirm the selected inspector before inspection payment can begin'
-          : 'Inspection payment obligation has not been created yet',
+          : !arrivalConfirmed
+            ? 'Seller must confirm inspector arrival on site before inspection payment can begin'
+            : 'Inspection payment obligation has not been created yet',
         route: null,
       });
       continue;
     }
 
     for (const obligation of obligations) {
-      if (obligation.status === 'PAID' || obligation.paymentId && inspection.paid) continue;
+      if (obligation.status === 'PAID' || (obligation.paymentId && inspection.paid)) continue;
       const inspectionPayerId = obligation.payerId;
       const viewerCanPay = viewer.userId === inspectionPayerId;
       push({
@@ -717,14 +875,16 @@ function buildActions(order, payments, viewer) {
         inspectionRequestId: inspection.inspectionRequestId,
         obligationId: obligation.id,
         viewerCanPerform: viewerCanPay,
-        ready: !terminal && Boolean(inspectionRequest?.sellerConfirmedAt) && viewerCanPay,
+        ready: !terminal && Boolean(inspection.sellerConfirmedAt) && arrivalConfirmed && viewerCanPay,
         reason: terminal
           ? 'Order is no longer active'
-          : !inspectionRequest?.sellerConfirmedAt
+          : !inspection.sellerConfirmedAt
             ? 'Seller must confirm the selected inspector before inspection payment can begin'
-            : !viewerCanPay
-              ? 'Only the designated payer can pay this inspection obligation'
-              : null,
+            : !arrivalConfirmed
+              ? 'Seller must confirm inspector arrival on site before inspection payment can begin'
+              : !viewerCanPay
+                ? 'Only the designated payer can pay this inspection obligation'
+                : null,
         route: {
           method: 'POST',
           path: '/payments',
@@ -734,7 +894,9 @@ function buildActions(order, payments, viewer) {
     }
   }
 
-  // 3. Arrange transport if nothing has been set up yet.
+  // ---------------------------------------------------------------------------
+  // 5. ARRANGE TRANSPORT
+  // ---------------------------------------------------------------------------
   if (!job) {
     const ready = !terminal && reportCompleted && ['CONFIRMED', 'PENDING_PAYMENT', 'TRANSPORT_ARRANGED'].includes(order.status);
     push({
@@ -748,30 +910,127 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 4. Transport quotes awaiting a response from whoever arranged transport.
-  if (job && job.method === 'HIRE_TRANSPORTER' && ['REQUESTED', 'QUOTED'].includes(job.status)) {
-    const pendingQuotes = (job.quotes || []).filter((q) =>
-      ['PENDING', 'COUNTERED'].includes(q.status) && q.counteredBy !== 'REQUESTER'
-    );
-    const arrangerCanAct =
+  // ---------------------------------------------------------------------------
+  // 6. TRANSPORT NEGOTIATION
+  // ---------------------------------------------------------------------------
+  if (job && job.method === 'HIRE_TRANSPORTER') {
+    const arrangerIsViewer =
       (job.arrangingParty === 'SELLER' && isSeller) ||
       (job.arrangingParty === 'BUYER' && isBuyer) ||
-      (job.arrangingParty === 'JOINT' && (isBuyer || isSeller));
-    push({
-      code: 'REVIEW_TRANSPORT_QUOTES',
-      label: 'Review transport quotes',
-      actorRole: job.arrangingParty,
-      viewerCanPerform: arrangerCanAct,
-      ready: pendingQuotes.length > 0,
-      reason: pendingQuotes.length > 0 ? null : 'No transport quotes awaiting a response',
-      pendingQuoteCount: pendingQuotes.length,
-      route: { method: 'GET', path: `/transport/${job.id}/quotes` },
-    });
+      (job.arrangingParty === 'JOINT' && (isBuyer || isSeller)) ||
+      isAdmin;
+
+    const jobLeafQuotes = leafQuotes(job.quotes);
+    const jobPendingLeaves = jobLeafQuotes.filter((q) => q.status === 'PENDING');
+    const jobLiveLeaf = jobLeafQuotes.find((q) => ['SELECTED', 'COUNTERED'].includes(q.status));
+    const jobAcceptedLeaf = jobLeafQuotes.find((q) => q.status === 'ACCEPTED');
+
+    const isJobOpen = ['REQUESTED', 'QUOTED'].includes(job.status);
+
+    // Selection
+    if (isJobOpen && !jobLiveLeaf && !jobAcceptedLeaf && jobPendingLeaves.length > 0) {
+      push({
+        code: 'SELECT_TRANSPORT_QUOTE',
+        label: `Select from ${jobPendingLeaves.length} transport bid${jobPendingLeaves.length === 1 ? '' : 's'}`,
+        actorRole: job.arrangingParty,
+        transportJobId: job.id,
+        pendingQuoteCount: jobPendingLeaves.length,
+        viewerCanPerform: arrangerIsViewer,
+        ready: arrangerIsViewer,
+        reason: arrangerIsViewer ? null : 'Only the arranging party can select a transport bid',
+        route: { method: 'GET', path: `/transport/${job.id}/quotes` },
+      });
+    }
+
+    // Live negotiation
+    if (jobLiveLeaf) {
+      const turn = quoteTurn(jobLiveLeaf);
+      const viewerMatchesTurn =
+        (turn === 'REQUESTER' && arrangerIsViewer) ||
+        (turn === 'PROVIDER' && jobLiveLeaf.truckOwnerId === viewer.userId);
+      const turnAmount = jobLiveLeaf.counterAmount ?? jobLiveLeaf.amount;
+      push({
+        code: 'RESPOND_TRANSPORT_NEGOTIATION',
+        label: turn === 'PROVIDER'
+          ? 'Respond to arranger counter'
+          : 'Respond to transporter bid',
+        actorRole: turn,
+        transportJobId: job.id,
+        quoteId: jobLiveLeaf.id,
+        turn,
+        amount: turnAmount,
+        viewerCanPerform: viewerMatchesTurn,
+        ready: viewerMatchesTurn,
+        reason: viewerMatchesTurn
+          ? null
+          : `Waiting on ${turn === 'REQUESTER' ? 'the arranging party' : 'the transporter'} to respond`,
+        route: { method: 'GET', path: `/transport/${job.id}/quotes` },
+      });
+    }
+
+    // Provisional release by arranger
+    if (jobAcceptedLeaf && arrangerIsViewer) {
+      const releaseAt = acceptedReleaseAvailableAt(jobAcceptedLeaf);
+      const canRelease = isPast(releaseAt);
+      push({
+        code: 'RELEASE_TRANSPORT_AGREEMENT',
+        label: 'Release transporter agreement',
+        actorRole: job.arrangingParty,
+        transportJobId: job.id,
+        quoteId: jobAcceptedLeaf.id,
+        releaseAvailableAt: releaseAt ? releaseAt.toISOString() : null,
+        viewerCanPerform: true,
+        ready: canRelease,
+        reason: canRelease
+          ? null
+          : `Available from ${releaseAt.toISOString()} (${RELEASE_AFTER_ACCEPT_HOURS}h after acceptance)`,
+        route: { method: 'GET', path: `/transport/${job.id}/quotes` },
+      });
+    }
+
+    // Silent truck owner release
+    if (
+      arrangerIsViewer &&
+      jobLiveLeaf &&
+      (jobLiveLeaf.status === 'SELECTED' ||
+        (jobLiveLeaf.status === 'COUNTERED' && jobLiveLeaf.counteredBy === 'REQUESTER'))
+    ) {
+      const releaseAt = silentReleaseAvailableAt(jobLiveLeaf, SILENT_RELEASE_AFTER_HOURS.TRANSPORT);
+      const canRelease = isPast(releaseAt);
+      push({
+        code: 'RELEASE_SILENT_TRUCK_OWNER',
+        label: 'Release silent truck owner',
+        actorRole: job.arrangingParty,
+        transportJobId: job.id,
+        quoteId: jobLiveLeaf.id,
+        releaseAvailableAt: releaseAt ? releaseAt.toISOString() : null,
+        viewerCanPerform: true,
+        ready: canRelease,
+        reason: canRelease
+          ? null
+          : `Available from ${releaseAt.toISOString()} (${SILENT_RELEASE_AFTER_HOURS.TRANSPORT}h of silence)`,
+        route: { method: 'GET', path: `/transport/${job.id}/quotes` },
+      });
+    }
+
+    // Provider cancels own provisional agreement
+    if (jobAcceptedLeaf && jobAcceptedLeaf.truckOwnerId === viewer.userId) {
+      push({
+        code: 'PROVIDER_CANCEL_TRANSPORT',
+        label: 'Cancel provisional agreement',
+        actorRole: 'TRUCK_OWNER',
+        transportJobId: job.id,
+        quoteId: jobAcceptedLeaf.id,
+        viewerCanPerform: true,
+        ready: true,
+        route: { method: 'GET', path: `/transport/${job.id}/quotes` },
+      });
+    }
   }
 
-  // 5. Pay the hired transporter. ACCEPTED means commercially agreed, not
-  // payment-backed. Loading must be reported and approved before transport
-  // payment becomes an executable workflow action.
+  // ---------------------------------------------------------------------------
+  // 7. TRANSPORT PREPARATION + ARRIVAL
+  // ---------------------------------------------------------------------------
   if (job && job.status === 'ACCEPTED' && !job.sellerPickupConfirmedAt && isSeller) {
     push({
       code: 'CONFIRM_TRANSPORT_PREPARATION',
@@ -785,15 +1044,40 @@ function buildActions(order, payments, viewer) {
     });
   }
 
+  if (job && job.status === 'ACCEPTED' && job.sellerPickupConfirmedAt && !job.truckArrivedAt) {
+    push({
+      code: 'CONFIRM_TRUCK_ARRIVAL',
+      label: 'Confirm truck on site',
+      actorRole: 'SELLER_OR_TRUCK_OWNER',
+      viewerCanPerform: isSeller || isTruckOwner,
+      ready: isSeller || isTruckOwner,
+      reason: (isSeller || isTruckOwner) ? null : 'Waiting for the seller or transporter to confirm the truck has arrived',
+      route: { method: 'POST', path: `/transport/${job.id}/truck-arrived` },
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 8. PAY TRANSPORT
+  // ---------------------------------------------------------------------------
   if (job && payments.transport?.required && !payments.transport.paid) {
-    const ready = job.status === 'ACCEPTED' && job.agreedAmount != null && payments.marketplace.paid && order.buyerDecision === 'BUY' && Boolean(job.buyerLoadingConfirmedAt);
+    const ready = job.status === 'ACCEPTED'
+      && job.agreedAmount != null
+      && payments.marketplace.paid
+      && order.buyerDecision === 'BUY'
+      && Boolean(job.sellerPickupConfirmedAt)
+      && Boolean(job.truckArrivedAt);
     push({
       code: 'PAY_TRANSPORT',
       label: 'Pay transport',
       actorRole: 'BUYER',
       viewerCanPerform: isBuyer,
       ready,
-      reason: ready ? null : !payments.marketplace.paid ? 'Pay the seller before paying the transporter' : order.buyerDecision !== 'BUY' ? 'Final BUY decision is required before transport payment' : !job.buyerLoadingConfirmedAt ? 'Buyer must approve the loading report before transport payment' : 'Transport must be agreed with an agreed amount before it can be paid',
+      reason: ready ? null
+        : !payments.marketplace.paid ? 'Pay the seller before paying the transporter'
+        : order.buyerDecision !== 'BUY' ? 'Final BUY decision is required before transport payment'
+        : !job.sellerPickupConfirmedAt ? 'Seller must confirm loading preparation first'
+        : !job.truckArrivedAt ? 'Truck must be on site before transport payment'
+        : 'Transport must be agreed with an agreed amount before it can be paid',
       route: {
         method: 'POST',
         path: '/payments',
@@ -802,7 +1086,16 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  if (job && job.status === 'ACCEPTED' && payments.marketplace.paid && order.buyerDecision === 'BUY') {
+  // ---------------------------------------------------------------------------
+  // 9. CONFIRM LOADING (buyer approves transporter's loading plan)
+  // ---------------------------------------------------------------------------
+  if (
+    job &&
+    job.status === 'ACCEPTED' &&
+    payments.marketplace.paid &&
+    order.buyerDecision === 'BUY' &&
+    payments.transport?.paid
+  ) {
     const reportExists = Boolean(job.loadingReport);
     const canConfirmLoading = reportExists && !job.buyerLoadingConfirmedAt;
     push({
@@ -816,10 +1109,12 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 6-8. Movement actions, owned by the assigned transporter.
+  // ---------------------------------------------------------------------------
+  // 10. MOVEMENT (transporter-owned)
+  // ---------------------------------------------------------------------------
   if (job) {
     const movementReady = {
-      START_PICKUP: job.status === 'ACCEPTED' && payments.allPaid && Boolean(job.buyerLoadingConfirmedAt),
+      START_PICKUP: job.status === 'ACCEPTED' && payments.allPaid && Boolean(job.buyerLoadingConfirmedAt) && Boolean(job.truckArrivedAt),
       MARK_IN_TRANSIT: job.status === 'PICKUP',
       MARK_DELIVERED: job.status === 'IN_TRANSIT',
     };
@@ -827,11 +1122,11 @@ function buildActions(order, payments, viewer) {
     if (job.status === 'ACCEPTED' || movementReady.START_PICKUP) {
       push({
         code: 'START_PICKUP',
-        label: 'Start pickup',
+        label: 'Start loading / pickup',
         actorRole: 'TRUCK_OWNER',
         viewerCanPerform: isTruckOwner,
         ready: movementReady.START_PICKUP,
-        reason: movementReady.START_PICKUP ? null : 'All required payments must be completed before pickup',
+        reason: movementReady.START_PICKUP ? null : 'All required payments and loading approval must be complete before pickup',
         route: { method: 'PATCH', path: `/transport/${job.id}/status`, body: { status: 'PICKUP' } },
       });
     }
@@ -861,11 +1156,11 @@ function buildActions(order, payments, viewer) {
     }
   }
 
-  // 9. Buyer confirms receipt.
+  // ---------------------------------------------------------------------------
+  // 11. CONFIRM RECEIPT
+  // ---------------------------------------------------------------------------
   if (!terminal) {
-    const ready = Boolean(
-      job && job.status === 'DELIVERED' && payments.allPaid
-    );
+    const ready = Boolean(job && job.status === 'DELIVERED' && payments.allPaid);
     push({
       code: 'CONFIRM_RECEIPT',
       label: 'Confirm receipt',
@@ -877,10 +1172,9 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 10. Raise a dispute — available to every participant on an active order,
-  // including the assigned inspector. The dispute endpoint uses the same
-  // participant model, so the inspector cannot be stranded outside the
-  // dispute workflow.
+  // ---------------------------------------------------------------------------
+  // 12. RAISE DISPUTE
+  // ---------------------------------------------------------------------------
   if (!terminal) {
     push({
       code: 'RAISE_DISPUTE',
@@ -892,7 +1186,9 @@ function buildActions(order, payments, viewer) {
     });
   }
 
-  // 11. Cancel the order.
+  // ---------------------------------------------------------------------------
+  // 13. CANCEL ORDER
+  // ---------------------------------------------------------------------------
   {
     const viewerEligibility = cancelEligibility(order, isBuyer, isSeller, isAdmin);
     const anyoneEligible =
@@ -910,6 +1206,110 @@ function buildActions(order, payments, viewer) {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // 14. RECOVERY (only when a service competition is genuinely dead)
+  // ---------------------------------------------------------------------------
+  if (!terminal) {
+    const pendingRecoveryTypes = new Set(
+      (order.recoveryRequests || []).map((r) => r.type)
+    );
+
+    // Inspection recovery
+    if (currentInspectionRequest && !pendingRecoveryTypes.has('INSPECTION')) {
+      const recLeafQuotes = leafQuotes(currentInspectionRequest.quotes);
+      const hasLiveBid = recLeafQuotes.some((q) =>
+        ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)
+      );
+      const requestDead =
+        ['CANCELLED', 'STALLED'].includes(currentInspectionRequest.status) ||
+        (!hasLiveBid && currentInspectionRequest.status === 'REQUESTED');
+      const hasActiveInspectorPayment = (currentInspectionRequest.payments || []).some(
+        (p) => p.type === 'INSPECTOR' && ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
+      );
+      if (requestDead && !hasActiveInspectorPayment && (isBuyer || isSeller)) {
+        push({
+          code: 'REQUEST_INSPECTION_RECOVERY',
+          label: 'Request fresh inspection form',
+          actorRole: 'BUYER_OR_SELLER',
+          inspectionRequestId: currentInspectionRequest.id,
+          viewerCanPerform: isBuyer || isSeller,
+          ready: true,
+          route: {
+            method: 'POST',
+            path: '/recovery-requests',
+            body: {
+              orderId: order.id,
+              type: 'INSPECTION',
+              targetParties: isBuyer ? ['BUYER'] : ['SELLER'],
+              reason: 'Inspection competition has no live bid',
+            },
+          },
+        });
+      }
+    }
+
+    // Transport recovery
+    if (job && !pendingRecoveryTypes.has('TRANSPORT')) {
+      const tLeafQuotes = leafQuotes(job.quotes);
+      const tHasLiveBid = tLeafQuotes.some((q) =>
+        ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)
+      );
+      const jobDead =
+        job.status === 'CANCELLED' ||
+        (['REQUESTED', 'QUOTED'].includes(job.status) && !tHasLiveBid);
+      const hasActiveTransportPayment = (order.payments || []).some(
+        (p) => p.type === 'TRANSPORT' && p.transportJobId === job.id && ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)
+      );
+      if (jobDead && !hasActiveTransportPayment && (isBuyer || isSeller)) {
+        push({
+          code: 'REQUEST_TRANSPORT_RECOVERY',
+          label: 'Request fresh transport form',
+          actorRole: 'BUYER_OR_SELLER',
+          transportJobId: job.id,
+          viewerCanPerform: isBuyer || isSeller,
+          ready: true,
+          route: {
+            method: 'POST',
+            path: '/recovery-requests',
+            body: {
+              orderId: order.id,
+              type: 'TRANSPORT',
+              targetParties: isBuyer ? ['BUYER'] : ['SELLER'],
+              reason: 'Transport competition has no live bid',
+            },
+          },
+        });
+      }
+    }
+
+    // Offer recovery — PRODUCT listings with no agreed offer yet.
+    if (
+      order.listing?.category === 'PRODUCT' &&
+      !order.agreedOfferId &&
+      !pendingRecoveryTypes.has('OFFER') &&
+      (isBuyer || isSeller)
+    ) {
+      push({
+        code: 'REQUEST_OFFER_RECOVERY',
+        label: 'Request fresh offer competition',
+        actorRole: 'BUYER_OR_SELLER',
+        viewerCanPerform: isBuyer || isSeller,
+        ready: true,
+        reason: 'This product has no agreed offer. A fresh competition releases the seller to invite new bids.',
+        route: {
+          method: 'POST',
+          path: '/recovery-requests',
+          body: {
+            orderId: order.id,
+            type: 'OFFER',
+            targetParties: isBuyer ? ['BUYER'] : ['SELLER'],
+            reason: 'Offer competition has no live bid',
+          },
+        },
+      });
+    }
+  }
+
   return actions;
 }
 
@@ -922,7 +1322,8 @@ function computeOrderWorkflow(order, viewerUserId, viewerRoles = []) {
   const isSeller = order.sellerId === viewerUserId;
   const isTruckOwner = order.transportJob?.truckOwnerId === viewerUserId;
   const isInspector = Boolean(
-    order.listing?.inspectionRequests?.some((request) => request.inspectorId === viewerUserId)
+    order.listing?.inspectionRequests?.some((request) => request.inspectorId === viewerUserId) ||
+    order.inspectionRequests?.some((request) => request.inspectorId === viewerUserId)
   );
   const isAdmin = (viewerRoles || []).includes('ADMIN');
 
@@ -940,6 +1341,7 @@ function computeOrderWorkflow(order, viewerUserId, viewerRoles = []) {
     orderStatus: order.status,
     buyerDecision: order.buyerDecision || null,
     buyerDecisionAt: order.buyerDecisionAt || null,
+    buyerReviewedReportAt: order.buyerReviewedReportAt || null,
     currentStage,
     nextActor: nextReadyAction?.actorRole || null,
     viewerRole: isAdmin
@@ -962,6 +1364,9 @@ function computeOrderWorkflow(order, viewerUserId, viewerRoles = []) {
           arrangingParty: order.transportJob.arrangingParty,
           truckOwnerId: order.transportJob.truckOwnerId,
           agreedAmount: order.transportJob.agreedAmount,
+          sellerPickupConfirmedAt: order.transportJob.sellerPickupConfirmedAt || null,
+          truckArrivedAt: order.transportJob.truckArrivedAt || null,
+          acceptedReleaseCount: order.transportJob.acceptedReleaseCount || 0,
         }
       : null,
     timeline,
