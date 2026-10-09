@@ -12,7 +12,7 @@ import ProviderReleaseDialog from '../components/ProviderReleaseDialog.jsx';
 import ProviderStandingBanner from '../components/ProviderStandingBanner.jsx';
 import InspectionCoordinationInspector from '../components/InspectionCoordinationInspector.jsx';
 import { InspectionRequestSummary } from '../components/RequestScopeSummary.jsx';
-import { BID_MESSAGES } from '../components/requestOptions.js';
+import { BID_MESSAGES } from '../components/RequestOptions.js';
 
 const EMPTY_REPORT = {
   quantity: '',
