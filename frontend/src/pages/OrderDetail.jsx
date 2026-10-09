@@ -48,11 +48,8 @@ const DISPUTE_TYPES = [
 ];
 
 const pad2 = (n) => String(n).padStart(2, '0');
-
 const shortId = (id) => id?.slice(0, 8) || '—';
-
 const label = (value) => String(value || '').replace(/_/g, ' ');
-
 const money = (value, fraction = 2) =>
   Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: fraction });
 
@@ -99,18 +96,11 @@ const leafQuotes = (quotes) => {
   return list.filter((q) => !parents.has(q.id));
 };
 
-// Mirrors the backend's transportReleaseAfterHours() in routes/transport.js.
-// The env var name matches so ops can pin the same value on both sides.
-// Defaults to 72h, identical to the backend default.
 const TRANSPORT_RELEASE_AFTER_HOURS = (() => {
   const configured = Number(import.meta?.env?.VITE_TRANSPORT_RELEASE_AFTER_HOURS);
   return Number.isFinite(configured) && configured >= 0 ? configured : 72;
 })();
 
-// For a SELECTED quote, or a COUNTERED quote where the requester made the
-// last move, returns the earliest time at which the requester may silently
-// release the truck owner. Returns null for any quote the release window
-// does not apply to (PENDING, ACCEPTED, provider-turn COUNTERED).
 function transportReleaseAvailableAt(quote) {
   if (!quote) return null;
   const providerTurn =
@@ -141,6 +131,26 @@ function useNowUntil(targetMs) {
    2. UI primitives
    ======================================================================== */
 
+// ── NEW: Reusable Modal Component ──────────────────────────────────────────
+function Modal({ isOpen, onClose, title, children }) {
+  if (!isOpen) return null;
+  return (
+    <div className="od-modal-backdrop" onClick={onClose}>
+      <div className="od-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="od-modal-head">
+          <span className="od-modal-title">{title}</span>
+          <button type="button" className="od-modal-close" onClick={onClose} aria-label="Close modal">
+            ×
+          </button>
+        </div>
+        <div className="od-modal-body">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, className, children }) {
   return (
     <section className={`card${tone ? ` od-card-${tone}` : ''}${className ? ` ${className}` : ''}`} id={id}>
@@ -151,10 +161,7 @@ function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, classNam
         </div>
         {side && <div className="od-card-head-side">{side}</div>}
       </header>
-      
-      {/* Moved subtitle outside the header to appear under the horizontal line */}
       {subtitle && <p className="od-card-subtitle">{subtitle}</p>}
-      
       {children}
     </section>
   );
@@ -833,6 +840,18 @@ function InspectionCard({ order, title, i }) {
         {request.workDetails && <div className="od-work-details"><h4>Agreed inspection scope</h4>{request.workDetails.workDescription && <p>{request.workDetails.workDescription}</p>}<div className="od-work-detail-items">{request.workDetails.quantityToInspect && <span><b>Quantity:</b> {request.workDetails.quantityToInspect}</span>}{request.workDetails.lotCount && <span><b>Lots:</b> {request.workDetails.lotCount}</span>}{request.workDetails.requiredBy && <span><b>Deadline:</b> {formatDateTime(request.workDetails.requiredBy)}</span>}</div>{request.workDetails.checks?.length > 0 && <p><b>Checks:</b> {request.workDetails.checks.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>}{request.workDetails.reportRequirements && <p><b>Report:</b> {request.workDetails.reportRequirements}</p>}</div>}
       </Section>
 
+      {/* ── NEW: Inspection Coordination Button ──────────────────────────── */}
+      {i.isSeller && ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(request.status) && (
+        <Section title="Inspection coordination">
+          <p className="muted">
+            Share site access and coordination details with the inspector.
+          </p>
+          <Button variant="light" size="sm" onClick={() => i.onOpenModal('inspection-coordination')}>
+            Open inspection coordination
+          </Button>
+        </Section>
+      )}
+
       {request.status === 'REQUESTED' && (
         <Section
           title="Inspector bids"
@@ -1164,10 +1183,6 @@ function DeliveryEvidenceForm({ t }) {
   );
 }
 
-// Release limits for a provisional (ACCEPTED) transporter / inspector
-// agreement. Mirrors backend services/releaseLimitsService.js: a reason from
-// a list is required and release opens RELEASE_AFTER_ACCEPT_HOURS after
-// acceptance. The per-job cap (2, then admin review) is enforced server-side.
 const RELEASE_AFTER_ACCEPT_HOURS = (() => {
   const configured = Number(import.meta?.env?.VITE_RELEASE_AFTER_ACCEPT_HOURS);
   return Number.isFinite(configured) && configured >= 0 ? configured : 24;
@@ -1266,19 +1281,12 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
   const working = t.busy === key;
   const amount = quote.status === 'COUNTERED' ? quote.counterAmount ?? quote.amount : quote.amount;
 
-  // Silent-release gate. Mirrors the backend's transportReleaseAvailableAt:
-  // a SELECTED (or COUNTERED-by-requester) quote can only be released after
-  // the waiting window elapses. Until then, the release button is replaced
-  // by an explanation of the earliest release time.
   const releaseAt = transportReleaseAvailableAt(quote);
   const releaseLocked = releaseAt !== null && releaseAt.getTime() > Date.now();
 
   const isArrangerTurn =
     quote.status === 'SELECTED' ||
     (quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER');
-  // The truck owner only acts after the arranging party counters; on a freshly
-  // selected bid the arranging party is the one to accept/counter (the backend
-  // rejects a provider response on SELECTED with a 409).
   const isTransporterTurn =
     quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
 
@@ -1310,9 +1318,6 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
       <div>
         <strong>{money(amount)} ETB</strong>
 
-        {/* Select for negotiation. Blocked when another transporter bid is
-            already in a live negotiation thread — the requester must release
-            or reject that thread first. Mirrors the inspection flow. */}
         {t.canChooseQuote && quote.status === 'PENDING' && (
           <>
             {hasActiveNegotiation ? (
@@ -1395,8 +1400,6 @@ function TransportCard({ order, t }) {
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
 
-  // Mirrors the backend: selecting is blocked while another bid is in
-  // negotiation or provisionally accepted (it must be released first).
   const hasActiveNegotiation = quotes.some((q) =>
     ['SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)
   );
@@ -1487,15 +1490,20 @@ function TransportCard({ order, t }) {
           </Section>
         )}
 
+        {/* ── NEW: Transport Coordination Buttons ────────────────────────── */}
         {['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status) && (
-          <>
+          <Section title="Coordination">
             {t.isSeller && (
-              <TransportCoordinationSeller transportJobId={job.id} />
+              <Button variant="light" size="sm" onClick={() => t.onOpenModal('seller-coordination')}>
+                Open pickup handoff
+              </Button>
             )}
             {t.isTransporter && (
-              <TransportCoordinationTransporter transportJobId={job.id} />
+              <Button variant="light" size="sm" onClick={() => t.onOpenModal('transporter-coordination')}>
+                Open pickup handoff
+              </Button>
             )}
-          </>
+          </Section>
         )}
 
         {t.isTransporter && job.status === 'ACCEPTED' && (
@@ -1854,6 +1862,9 @@ export default function OrderDetail() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  
+  // ── NEW: Modal state ──────────────────────────────────────────────────
+  const [activeModal, setActiveModal] = useState(null);
 
   const [payMethod, setPayMethod] = useState('TELEBIRR');
 
@@ -2624,6 +2635,8 @@ export default function OrderDetail() {
     isAgricultural,
     decisionRequired,
     busy,
+    // ── NEW: Pass modal trigger to InspectionCard ──
+    onOpenModal: setActiveModal,
     ...inspectionActions,
   };
 
@@ -2661,6 +2674,8 @@ export default function OrderDetail() {
     allOrderPaymentsSettled,
     marketplacePaid,
     missingPayments,
+    // ── NEW: Pass modal trigger to TransportCard ──
+    onOpenModal: setActiveModal,
     ...transportActions,
   };
 
@@ -2818,6 +2833,31 @@ export default function OrderDetail() {
           )}
         </div>
       </div>
+
+      {/* ── NEW: Modals at the very end of the page ───────────────────────── */}
+      <Modal
+        isOpen={activeModal === 'seller-coordination'}
+        onClose={() => setActiveModal(null)}
+        title="Pickup Handoff (Seller)"
+      >
+        {transportJob?.id && <TransportCoordinationSeller transportJobId={transportJob.id} />}
+      </Modal>
+
+      <Modal
+        isOpen={activeModal === 'transporter-coordination'}
+        onClose={() => setActiveModal(null)}
+        title="Pickup Handoff (Transporter)"
+      >
+        {transportJob?.id && <TransportCoordinationTransporter transportJobId={transportJob.id} />}
+      </Modal>
+
+      <Modal
+        isOpen={activeModal === 'inspection-coordination'}
+        onClose={() => setActiveModal(null)}
+        title="Inspection Coordination"
+      >
+        {currentInspection?.id && <InspectionCoordinationSeller inspectionRequestId={currentInspection.id} />}
+      </Modal>
 
       {error && (
         <div className="order-detail-toast" role="alert" aria-live="assertive">
