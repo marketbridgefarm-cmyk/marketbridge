@@ -52,27 +52,6 @@ const emptyForm = {
 
 /* ── Small inline style tokens ────────────────────────────── */
 
-const eyebrow = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 8,
-  color: '#12734a',
-  fontFamily: "'DM Sans', system-ui, sans-serif",
-  fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: '.16em',
-  textTransform: 'uppercase',
-  margin: '0 0 6px',
-};
-
-const eyebrowLine = {
-  display: 'inline-block',
-  width: 18,
-  height: 2,
-  borderRadius: 2,
-  background: 'currentColor',
-};
-
 const lead = {
   margin: '0 0 14px',
   fontFamily: "'DM Sans', system-ui, sans-serif",
@@ -298,8 +277,8 @@ export default function TransportSetup({
     <form className="mb-transport-setup" onSubmit={submit}>
       <p style={lead}>
         {buyerOnlyCompetition
-          ? 'The buyer controls the transporter competition. Registered truck owners submit sealed quotes, then the buyer selects and negotiates one.'
-          : 'Choose who controls the transport arrangement. The buyer remains responsible for paying a hired transporter.'}
+          ? 'Choose who arranges the transporter for these goods. Either you or the counterparty may initiate — once one of you does, the other cannot create a competing arrangement. Registered truck owners submit sealed quotes and the arranging party selects and negotiates one.'
+          : 'Choose who controls the transport arrangement. Either you or the counterparty may initiate — once one of you does, the other cannot create a competing arrangement. The buyer remains responsible for paying a hired transporter.'}
       </p>
 
       {/* ── Who arranges ─────────────────────────────────── */}
@@ -319,7 +298,7 @@ export default function TransportSetup({
               <span style={choiceHint}>Buyer controls the request and quote selection.</span>
             </button>
           )}
-          {canSeller && !buyerOnlyCompetition && (
+          {canSeller && (
             <button
               type="button"
               style={party === 'SELLER' ? choiceSelected : choiceBase}
@@ -329,7 +308,7 @@ export default function TransportSetup({
               <span style={choiceHint}>Seller controls the request and quote selection.</span>
             </button>
           )}
-          {canBuyer && canSeller && !buyerOnlyCompetition && (
+          {canBuyer && canSeller && (
             <button
               type="button"
               style={party === 'JOINT' ? choiceSelected : choiceBase}
@@ -352,21 +331,19 @@ export default function TransportSetup({
         </div>
 
         <div style={choiceGrid}>
-          {!buyerOnlyCompetition && (
-            <button
-              type="button"
-              disabled={party === 'JOINT'}
-              style={party === 'JOINT' ? choiceDisabled : (method === 'OWN_TRUCK' ? choiceSelected : choiceBase)}
-              onClick={() => setMethod('OWN_TRUCK')}
-            >
-              <span style={method === 'OWN_TRUCK' && party !== 'JOINT' ? choiceLabelSelected : choiceLabel}>
-                🚚 Use my own truck
-              </span>
-              <span style={choiceHint}>
-                Record your own legally permitted vehicle. No transport-hiring commission.
-              </span>
-            </button>
-          )}
+          <button
+            type="button"
+            disabled={party === 'JOINT'}
+            style={party === 'JOINT' ? choiceDisabled : (method === 'OWN_TRUCK' ? choiceSelected : choiceBase)}
+            onClick={() => setMethod('OWN_TRUCK')}
+          >
+            <span style={method === 'OWN_TRUCK' && party !== 'JOINT' ? choiceLabelSelected : choiceLabel}>
+              🚚 Use my own truck
+            </span>
+            <span style={choiceHint}>
+              Record your own legally permitted vehicle. No transport-hiring commission.
+            </span>
+          </button>
 
           <button
             type="button"
@@ -418,7 +395,6 @@ export default function TransportSetup({
             />
           </div>
 
-          {/* ── Cargo type ─────────────────────────────────── */}
           <div className="field">
             <label htmlFor="ts-cargo-type">Cargo type</label>
             <select
@@ -432,7 +408,6 @@ export default function TransportSetup({
             </select>
           </div>
 
-          {/* ── Cargo quantity (Number + Unit) ─────────────── */}
           <div className="field">
             <label>Cargo quantity</label>
             <div className="od-quantity-row">
@@ -469,7 +444,6 @@ export default function TransportSetup({
             />
           </div>
 
-          {/* ── Special requirements (Checkboxes) ──────────── */}
           <div className="field field-span">
             <label>Special requirements (select all that apply)</label>
             <div className="od-check-grid">
