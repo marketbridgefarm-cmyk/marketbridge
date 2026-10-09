@@ -8,10 +8,9 @@ import api from '../api/client';
 // hire, pickup/destination/load details, and (for hired transport) the
 // matcher UI.
 //
-// Visual note: this renders INSIDE the Transport card on OrderDetail. It no
-// longer draws its own outer .card — the enclosing card already provides
-// the frame. Sections are flat blocks separated by hairlines; buttons and
-// inputs reuse the classes the surrounding page already styles.
+// Either the buyer or the seller may initiate transport. Once one of them
+// creates a job, the other cannot create a competing one — that is enforced
+// server-side by the single-transport-job-per-order rule.
 // ============================================================================
 
 const emptyForm = {
@@ -23,27 +22,6 @@ const emptyForm = {
 };
 
 /* ── Small inline style tokens ────────────────────────────── */
-
-const eyebrow = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 8,
-  color: '#12734a',
-  fontFamily: "'DM Sans', system-ui, sans-serif",
-  fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: '.16em',
-  textTransform: 'uppercase',
-  margin: '0 0 6px',
-};
-
-const eyebrowLine = {
-  display: 'inline-block',
-  width: 18,
-  height: 2,
-  borderRadius: 2,
-  background: 'currentColor',
-};
 
 const lead = {
   margin: '0 0 14px',
@@ -128,20 +106,6 @@ const choiceHint = {
   color: '#64748b',
 };
 
-const truckRow = (isChosen) => ({
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 12,
-  flexWrap: 'wrap',
-  padding: '14px 0',
-  borderBottom: '1px solid #eef1f5',
-  background: 'transparent',
-  border: 'none',
-  borderTop: '1px solid #eef1f5',
-  borderBottomWidth: 1,
-});
-
 const truckInfo = {
   minWidth: 0,
   flex: '1 1 auto',
@@ -208,8 +172,6 @@ export default function TransportSetup({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    // A non-truck-owner will get a 403 here; that's expected and just means
-    // no own-truck option is offered.
     api
       .get('/transport/trucks/mine')
       .then((r) => setOwnTrucks(Array.isArray(r.data?.trucks) ? r.data.trucks : []))
@@ -273,8 +235,8 @@ export default function TransportSetup({
     <form className="mb-transport-setup" onSubmit={submit}>
       <p style={lead}>
         {buyerOnlyCompetition
-          ? 'The buyer controls the transporter competition. Registered truck owners submit sealed quotes, then the buyer selects and negotiates one.'
-          : 'Choose who controls the transport arrangement. The buyer remains responsible for paying a hired transporter.'}
+          ? 'Either you or the counterparty may initiate transport. Once one of you does, the other cannot create a competing arrangement. Registered truck owners submit sealed quotes, and the arranging party selects and negotiates one.'
+          : 'Either you or the counterparty may initiate transport. Once one of you does, the other cannot create a competing arrangement. The buyer remains responsible for paying a hired transporter.'}
       </p>
 
       {/* ── Who arranges ─────────────────────────────────── */}
@@ -283,41 +245,61 @@ export default function TransportSetup({
           <h3 style={sectionTitle}>Who arranges transport</h3>
         </div>
 
-        <div style={choiceGrid}>
-          {canBuyer && (
-            <button
-              type="button"
-              style={party === 'BUYER' ? choiceSelected : choiceBase}
-              onClick={() => setArrangingParty('BUYER')}
-            >
-              <span style={party === 'BUYER' ? choiceLabelSelected : choiceLabel}>Buyer arranges</span>
-              <span style={choiceHint}>Buyer controls the request and quote selection.</span>
-            </button>
-          )}
-          {canSeller && !buyerOnlyCompetition && (
-            <button
-              type="button"
-              style={party === 'SELLER' ? choiceSelected : choiceBase}
-              onClick={() => setArrangingParty('SELLER')}
-            >
-              <span style={party === 'SELLER' ? choiceLabelSelected : choiceLabel}>Seller arranges</span>
-              <span style={choiceHint}>Seller controls the request and quote selection.</span>
-            </button>
-          )}
-          {canBuyer && canSeller && !buyerOnlyCompetition && (
-            <button
-              type="button"
-              style={party === 'JOINT' ? choiceSelected : choiceBase}
-              onClick={() => {
-                setArrangingParty('JOINT');
-                if (method === 'OWN_TRUCK') setMethod('HIRE_TRANSPORTER');
-              }}
-            >
-              <span style={party === 'JOINT' ? choiceLabelSelected : choiceLabel}>Joint arrangement</span>
-              <span style={choiceHint}>Buyer and seller agree together; hired transporter only.</span>
-            </button>
-          )}
-        </div>
+        {!canBuyer && !canSeller ? (
+          <p style={truckMeta}>
+            Only the listing buyer or seller can arrange transport for this order.
+          </p>
+        ) : (
+          <div style={choiceGrid}>
+            {canBuyer && (
+              <button
+                type="button"
+                style={party === 'BUYER' ? choiceSelected : choiceBase}
+                onClick={() => setArrangingParty('BUYER')}
+              >
+                <span style={party === 'BUYER' ? choiceLabelSelected : choiceLabel}>
+                  Buyer arranges
+                </span>
+                <span style={choiceHint}>
+                  Buyer controls the request and quote selection.
+                </span>
+              </button>
+            )}
+
+            {canSeller && (
+              <button
+                type="button"
+                style={party === 'SELLER' ? choiceSelected : choiceBase}
+                onClick={() => setArrangingParty('SELLER')}
+              >
+                <span style={party === 'SELLER' ? choiceLabelSelected : choiceLabel}>
+                  Seller arranges
+                </span>
+                <span style={choiceHint}>
+                  Seller controls the request and quote selection.
+                </span>
+              </button>
+            )}
+
+            {canBuyer && canSeller && (
+              <button
+                type="button"
+                style={party === 'JOINT' ? choiceSelected : choiceBase}
+                onClick={() => {
+                  setArrangingParty('JOINT');
+                  if (method === 'OWN_TRUCK') setMethod('HIRE_TRANSPORTER');
+                }}
+              >
+                <span style={party === 'JOINT' ? choiceLabelSelected : choiceLabel}>
+                  Joint arrangement
+                </span>
+                <span style={choiceHint}>
+                  Buyer and seller agree together; hired transporter only.
+                </span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Method ───────────────────────────────────────── */}
