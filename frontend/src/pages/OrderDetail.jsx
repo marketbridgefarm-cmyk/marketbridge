@@ -621,7 +621,7 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
    5. Inspection (with full quote negotiation)
    ======================================================================== */
 
-// ── NEW: Extracted Inspection Request Form ────────────────────────────────
+// ── Extracted Inspection Request Form ─────────────────────────────────────
 function InspectionRequestForm({ workDetails, setWorkDetails, requesting, request, isBuyer }) {
   return (
     <div className="od-inspection-work-form">
@@ -1426,7 +1426,9 @@ function TransportCard({ order, t }) {
       >
         {t.canArrange ? (
           <Section title="Arrange transport">
-            <p className="muted">Set up a transport competition for this order.</p>
+            <p className="muted">
+              Choose how the goods will be transported. You can hire a registered transporter or use the owner's own truck.
+            </p>
             <Button variant="primary" size="sm" onClick={() => t.onOpenModal('buyer-transport-form')}>
               Open transport setup
             </Button>
