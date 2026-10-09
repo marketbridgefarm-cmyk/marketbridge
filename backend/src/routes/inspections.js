@@ -9,7 +9,6 @@ const { syncOrderPaymentObligations } = require('../services/paymentObligationSe
 const { noticeWaitingUnlocked } = require('../services/waitingListService');
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
-const { buildBuyerReportEnvelope } = require('../utils/reportContract');
 const { lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
 const {
   computeSellerConfirmationDueAt,
@@ -2078,7 +2077,7 @@ router.post(
         timeout: 15000,
       });
 
-      return res.status(201).json({ report, reportEnvelope: buildBuyerReportEnvelope(report, 'INSPECTION') });
+      return res.status(201).json({ report });
     } catch (error) {
       if (error.message === 'INSPECTION_STATUS_CHANGED') {
         return res.status(409).json({ error: 'Inspection status changed before the report could be completed' });
