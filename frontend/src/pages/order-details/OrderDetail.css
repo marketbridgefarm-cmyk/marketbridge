@@ -2087,3 +2087,15 @@
     break-inside: avoid;
   }
 }
+
+
+/* Ensure forms inside modals don't have extra top margin */
+.od-modal-body .od-inspection-work-form {
+  margin-top: 0;
+  padding-inline-start: 0;
+}
+
+/* Adjust TransportSetup inside modal if it has a wrapper with margin */
+.od-modal-body .transport-setup-wrapper {
+  margin-top: 0;
+}
