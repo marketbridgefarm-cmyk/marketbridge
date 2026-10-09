@@ -1,70 +1,64 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/client';
+import {
+  ACCESS_NOTES, CAPACITY_TONS, DEADLINE_WINDOWS, PACKAGE_COUNTS, WEIGHT_OPTIONS, deadlineFromWindow,
+} from './requestOptions.js';
 
 // ============================================================================
 // TRANSPORT SETUP
 // ============================================================================
-// Initial "create the transport job" form, rendered inside the Arrange
-// Transport modal. Includes who-arranges, method, trip details, trip scope,
-// and (for hired transport) the matcher UI.
+// Initial "create the transport job" form — who arranges it, own truck vs.
+// hire, pickup/destination/load details, and (for hired transport) the
+// matcher UI.
 //
-// SECURITY: Load details and scope are structured enums, numbers and dates.
-// No free text is allowed in fields visible to bidders.
+// Visual note: this renders INSIDE the Transport card on OrderDetail. It no
+// longer draws its own outer .card — the enclosing card already provides
+// the frame. Sections are flat blocks separated by hairlines; buttons and
+// inputs reuse the classes the surrounding page already styles.
 // ============================================================================
 
-const CARGO_TYPES = [
-  ['PRODUCE', 'Produce / grains / vegetables'],
-  ['LIVESTOCK', 'Livestock'],
-  ['GENERAL', 'General goods'],
-  ['OTHER', 'Other'],
-];
-
-const WEIGHT_UNITS = [
-  ['kg', 'kg'],
-  ['quintals', 'quintals'],
-  ['tons', 'tons'],
-];
-
-const VEHICLE_TYPES = [
-  ['FLATBED', 'Flatbed'],
-  ['BOX_TRUCK', 'Box truck'],
-  ['REFRIGERATED', 'Refrigerated'],
-  ['TANKER', 'Tanker'],
-  ['LIVESTOCK', 'Livestock carrier'],
-  ['DUMP_TRUCK', 'Dump truck'],
-  ['PICKUP', 'Pickup'],
-  ['OTHER', 'Other'],
-];
-
-const HANDLING_OPTIONS = [
-  ['STRAPS_ROPES', 'Straps / ropes'],
-  ['TARPAULIN', 'Tarpaulin / cover'],
-  ['SACK_TRUCK', 'Sack truck / trolley'],
-  ['FORKLIFT', 'Forklift'],
-  ['CRANE', 'Crane / lifting gear'],
-  ['REFRIGERATION', 'Refrigeration running'],
-  ['LIVE_ANIMAL_RAMP', 'Livestock ramp'],
-  ['SPARE_TYRE', 'Spare tyre / tools'],
-  ['OTHER', 'Other'],
-];
-
 const emptyForm = {
-  pickupLocation: '',
-  destination: '',
-  cargoType: 'PRODUCE',
-  cargoQuantityValue: '',
-  cargoQuantityUnit: 'tons',
   requiredCapacity: '',
-  // ── Scope ─────────────────────────────────────────────────────────
-  scopeWeightValue: '',
-  scopeWeightUnit: 'tons',
-  scopePackageCount: '',
-  scopeVehicleType: '',
-  scopeDeliveryDeadline: '',
-  scopeHandling: [],
+  weight: '',
+  packageCount: '',
+  vehicleType: '',
+  deliveryWindow: '',
+  accessNotes: [],
+  handling: [],
 };
 
+const VEHICLE_TYPES = ['Pickup', 'Small truck', 'Medium truck', 'Large truck', 'Refrigerated truck', 'Flatbed'];
+const HANDLING_OPTIONS = [
+  ['FRAGILE', 'Fragile'],
+  ['KEEP_COOL', 'Keep cool'],
+  ['KEEP_DRY', 'Keep dry'],
+  ['THIS_SIDE_UP', 'This side up'],
+  ['VENTILATED', 'Ventilated'],
+  ['COVERED', 'Covered load'],
+];
+
 /* ── Small inline style tokens ────────────────────────────── */
+
+const eyebrow = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  color: '#12734a',
+  fontFamily: "'DM Sans', system-ui, sans-serif",
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: '.16em',
+  textTransform: 'uppercase',
+  margin: '0 0 6px',
+};
+
+const eyebrowLine = {
+  display: 'inline-block',
+  width: 18,
+  height: 2,
+  borderRadius: 2,
+  background: 'currentColor',
+};
 
 const lead = {
   margin: '0 0 14px',
@@ -149,6 +143,20 @@ const choiceHint = {
   color: '#64748b',
 };
 
+const truckRow = (isChosen) => ({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  flexWrap: 'wrap',
+  padding: '14px 0',
+  borderBottom: '1px solid #eef1f5',
+  background: 'transparent',
+  border: 'none',
+  borderTop: '1px solid #eef1f5',
+  borderBottomWidth: 1,
+});
+
 const truckInfo = {
   minWidth: 0,
   flex: '1 1 auto',
@@ -196,17 +204,18 @@ export default function TransportSetup({
   orderId,
   pickupDefault,
   destinationDefault,
+  loadDefault,
   canBuyer,
   canSeller,
   buyerOnlyCompetition = false,
   onCreated,
 }) {
   const [method, setMethod] = useState(buyerOnlyCompetition ? 'HIRE_TRANSPORTER' : 'OWN_TRUCK');
-  const [form, setForm] = useState({
-    ...emptyForm,
-    pickupLocation: pickupDefault || '',
-    destination: destinationDefault || '',
-  });
+  const [form, setForm] = useState({ ...emptyForm });
+  // Route and load are fixed by the order — not typed.
+  const pickupLocation = pickupDefault || '';
+  const destination = destinationDefault || '';
+  const load = loadDefault || '';
   const [matches, setMatches] = useState([]);
   const [truck, setTruck] = useState('');
   const [ownTrucks, setOwnTrucks] = useState([]);
@@ -215,6 +224,8 @@ export default function TransportSetup({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    // A non-truck-owner will get a 403 here; that's expected and just means
+    // no own-truck option is offered.
     api
       .get('/transport/trucks/mine')
       .then((r) => setOwnTrucks(Array.isArray(r.data?.trucks) ? r.data.trucks : []))
@@ -223,19 +234,10 @@ export default function TransportSetup({
 
   const party = arrangingParty || (canBuyer ? 'BUYER' : canSeller ? 'SELLER' : '');
 
-  const toggleHandling = (value) => {
-    setForm((prev) => {
-      const current = prev.scopeHandling || [];
-      const has = current.includes(value);
-      const next = has ? current.filter((v) => v !== value) : [...current, value];
-      return { ...prev, scopeHandling: next };
-    });
-  };
-
   const findMatches = async () => {
     try {
       const response = await api.get('/transport/match', {
-        params: { minCapacity: form.requiredCapacity, area: form.pickupLocation },
+        params: { minCapacity: form.requiredCapacity, area: pickupLocation },
       });
       setMatches(Array.isArray(response.data?.trucks) ? response.data.trucks : []);
     } catch (err) {
@@ -260,6 +262,22 @@ export default function TransportSetup({
       return;
     }
 
+    if (!pickupLocation || !destination || !load) {
+      setError('This order is missing a pickup location, destination or load. Update the listing or your profile location first.');
+      return;
+    }
+    if (method === 'HIRE_TRANSPORTER' && !form.weight) {
+      setError('Select the total weight.');
+      return;
+    }
+
+    const workDetails = {};
+    if (form.weight) workDetails.weight = form.weight;
+    if (form.packageCount) workDetails.packageCount = Number(form.packageCount);
+    if (form.vehicleType) workDetails.vehicleType = form.vehicleType;
+    if (form.deliveryWindow) workDetails.deliveryDeadline = deadlineFromWindow(form.deliveryWindow);
+    if (form.handling.length) workDetails.handling = form.handling;
+
     setSubmitting(true);
     try {
       await api.post('/transport', {
@@ -267,22 +285,12 @@ export default function TransportSetup({
         arrangingParty: party,
         method,
         truckId: method === 'OWN_TRUCK' ? truck : undefined,
-        pickupLocation: form.pickupLocation,
-        destination: form.destination,
-        cargoType: form.cargoType,
-        cargoQuantityValue: form.cargoQuantityValue ? Number(form.cargoQuantityValue) : undefined,
-        cargoQuantityUnit: form.cargoQuantityUnit,
+        pickupLocation,
+        destination,
+        load,
         requiredCapacity: form.requiredCapacity ? Number(form.requiredCapacity) : undefined,
-        // Scope fields — all structured, no free text.
-        workDetails: {
-          weight: form.scopeWeightValue
-            ? `${form.scopeWeightValue} ${form.scopeWeightUnit}`
-            : undefined,
-          packageCount: form.scopePackageCount || undefined,
-          vehicleType: form.scopeVehicleType || undefined,
-          deliveryDeadline: form.scopeDeliveryDeadline || undefined,
-          handling: form.scopeHandling,
-        },
+        specialRequirements: form.accessNotes.length ? form.accessNotes.join('; ') : undefined,
+        workDetails: Object.keys(workDetails).length ? workDetails : undefined,
       });
       await onCreated?.();
     } catch (err) {
@@ -390,169 +398,139 @@ export default function TransportSetup({
 
       {error && <div className="alert error" style={{ marginTop: 0 }}>{error}</div>}
 
-      {/* ── Trip details ─────────────────────────────────── */}
+      {/* ── Trip details (closed fields only) ────────────── */}
       <div className="od-card-section">
         <div style={sectionHead}>
           <h3 style={sectionTitle}>Trip details</h3>
         </div>
 
-        <div className="form-grid">
-          <div className="field">
-            <label htmlFor="ts-pickup">Pickup farm / location</label>
-            <input
-              id="ts-pickup"
-              required
-              value={form.pickupLocation}
-              onChange={(e) => setForm({ ...form, pickupLocation: e.target.value })}
-              placeholder="e.g. Bahirdar, Lot B warehouse"
-            />
+        <div className="od-form-grid">
+          <div className="od-tf od-tf-span">
+            <label>Route (from the order)</label>
+            <p style={{ ...truckMeta, color: '#0d1b2a', fontWeight: 700, margin: 0 }}>
+              {pickupLocation || 'Not set'} → {destination || 'Not set'}
+            </p>
           </div>
-          <div className="field">
-            <label htmlFor="ts-destination">Destination</label>
-            <input
-              id="ts-destination"
-              required
-              value={form.destination}
-              onChange={(e) => setForm({ ...form, destination: e.target.value })}
-              placeholder="e.g. Addis Ababa, Merkato"
-            />
+          <div className="od-tf od-tf-span">
+            <label>Load (from the listing)</label>
+            <p style={{ ...truckMeta, color: '#0d1b2a', fontWeight: 700, margin: 0 }}>{load || 'Not set'}</p>
           </div>
-
-          <div className="field">
-            <label htmlFor="ts-cargo-type">Cargo type</label>
+          <div className="od-tf">
+            <label htmlFor="ts-capacity">Minimum truck capacity</label>
             <select
-              id="ts-cargo-type"
-              value={form.cargoType}
-              onChange={(e) => setForm({ ...form, cargoType: e.target.value })}
-            >
-              {CARGO_TYPES.map(([value, text]) => (
-                <option key={value} value={value}>{text}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="field">
-            <label>Cargo quantity</label>
-            <div className="od-quantity-row">
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="e.g. 500"
-                value={form.cargoQuantityValue}
-                onChange={(e) => setForm({ ...form, cargoQuantityValue: e.target.value })}
-                required
-              />
-              <select
-                value={form.cargoQuantityUnit}
-                onChange={(e) => setForm({ ...form, cargoQuantityUnit: e.target.value })}
-              >
-                {WEIGHT_UNITS.map(([value, text]) => (
-                  <option key={value} value={value}>{text}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="field">
-            <label htmlFor="ts-capacity">Required vehicle capacity (tons)</label>
-            <input
               id="ts-capacity"
-              type="number"
-              min="0"
-              step="0.1"
+              className="field"
               value={form.requiredCapacity}
               onChange={(e) => setForm({ ...form, requiredCapacity: e.target.value })}
-              placeholder="e.g. 10"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* ── Scope (structured, no free text) ─────────────── */}
-      <div className="od-card-section">
-        <div style={sectionHead}>
-          <h3 style={sectionTitle}>Trip scope</h3>
-        </div>
-
-        <p style={lead}>
-          Structured requirements the transporter must plan for. All fields
-          are chosen from lists — no free text — so bids stay on-platform.
-        </p>
-
-        <div className="form-grid">
-          <div className="field">
-            <label>Expected weight</label>
-            <div className="od-quantity-row">
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="e.g. 5"
-                value={form.scopeWeightValue}
-                onChange={(e) => setForm({ ...form, scopeWeightValue: e.target.value })}
-              />
-              <select
-                value={form.scopeWeightUnit}
-                onChange={(e) => setForm({ ...form, scopeWeightUnit: e.target.value })}
-              >
-                {WEIGHT_UNITS.map(([value, text]) => (
-                  <option key={value} value={value}>{text}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="field">
-            <label htmlFor="ts-package-count">Packages / crates / bags</label>
-            <input
-              id="ts-package-count"
-              type="number"
-              min="0"
-              step="1"
-              value={form.scopePackageCount}
-              onChange={(e) => setForm({ ...form, scopePackageCount: e.target.value })}
-              placeholder="e.g. 50"
-            />
-          </div>
-
-          <div className="field">
-            <label htmlFor="ts-vehicle-type">Preferred vehicle type</label>
-            <select
-              id="ts-vehicle-type"
-              value={form.scopeVehicleType}
-              onChange={(e) => setForm({ ...form, scopeVehicleType: e.target.value })}
             >
-              <option value="">No preference</option>
-              {VEHICLE_TYPES.map(([value, text]) => (
-                <option key={value} value={value}>{text}</option>
+              <option value="">Any capacity</option>
+              {CAPACITY_TONS.map((t) => (
+                <option key={t} value={t}>{t} t or more</option>
               ))}
             </select>
           </div>
-
-          <div className="field">
-            <label htmlFor="ts-delivery-deadline">Delivery deadline</label>
-            <input
-              id="ts-delivery-deadline"
-              type="datetime-local"
-              value={form.scopeDeliveryDeadline}
-              onChange={(e) => setForm({ ...form, scopeDeliveryDeadline: e.target.value })}
-            />
-          </div>
-
-          <div className="field field-span">
-            <label>Handling / equipment required</label>
-            <div className="od-check-grid">
-              {HANDLING_OPTIONS.map(([value, text]) => (
-                <label key={value} className="od-check-option">
-                  <input
-                    type="checkbox"
-                    checked={form.scopeHandling.includes(value)}
-                    onChange={() => toggleHandling(value)}
-                  />
-                  <span>{text}</span>
-                </label>
+          <div className="od-tf">
+            <label htmlFor="ts-weight">Total weight{method === 'HIRE_TRANSPORTER' ? '' : ' (optional)'}</label>
+            <select
+              id="ts-weight"
+              className="field"
+              value={form.weight}
+              onChange={(e) => setForm({ ...form, weight: e.target.value })}
+            >
+              <option value="">Select weight…</option>
+              {WEIGHT_OPTIONS.map((w) => (
+                <option key={w} value={w}>{w}</option>
               ))}
+            </select>
+          </div>
+          <div className="od-tf">
+            <label htmlFor="ts-packages">Number of packages</label>
+            <select
+              id="ts-packages"
+              className="field"
+              value={form.packageCount}
+              onChange={(e) => setForm({ ...form, packageCount: e.target.value })}
+            >
+              <option value="">Select…</option>
+              {PACKAGE_COUNTS.map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
+          <div className="od-tf">
+            <label htmlFor="ts-vehicle">Vehicle type</label>
+            <select
+              id="ts-vehicle"
+              className="field"
+              value={form.vehicleType}
+              onChange={(e) => setForm({ ...form, vehicleType: e.target.value })}
+            >
+              <option value="">Any suitable vehicle</option>
+              {VEHICLE_TYPES.map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </div>
+          <div className="od-tf od-tf-span">
+            <label htmlFor="ts-deadline">Delivery deadline</label>
+            <select
+              id="ts-deadline"
+              className="field"
+              value={form.deliveryWindow}
+              onChange={(e) => setForm({ ...form, deliveryWindow: e.target.value })}
+            >
+              <option value="">No deadline</option>
+              {DEADLINE_WINDOWS.map((w) => (
+                <option key={w.key} value={w.key}>{w.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="od-tf od-tf-span">
+            <label>Handling needs</label>
+            <div className="od-chip-row">
+              {HANDLING_OPTIONS.map(([value, text]) => {
+                const on = form.handling.includes(value);
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={on}
+                    className={on ? 'btn btn-primary btn-sm' : 'btn btn-light btn-sm'}
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        handling: on ? form.handling.filter((h) => h !== value) : [...form.handling, value],
+                      })
+                    }
+                  >
+                    {text}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="od-tf od-tf-span">
+            <label>Access and loading</label>
+            <div className="od-chip-row">
+              {ACCESS_NOTES.map((note) => {
+                const on = form.accessNotes.includes(note);
+                return (
+                  <button
+                    key={note}
+                    type="button"
+                    aria-pressed={on}
+                    className={on ? 'btn btn-primary btn-sm' : 'btn btn-light btn-sm'}
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        accessNotes: on ? form.accessNotes.filter((n) => n !== note) : [...form.accessNotes, note],
+                      })
+                    }
+                  >
+                    {note}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
