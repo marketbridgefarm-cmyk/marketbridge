@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../api/client';
-
+import './ProvidersCoordination.css';
 // ============================================================================
 // INSPECTION COORDINATION — INSPECTOR VIEW
 // ============================================================================
