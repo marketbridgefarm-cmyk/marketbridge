@@ -6,19 +6,19 @@ const EVENT_COPY = {
   WORKFLOW_RECOVERY_REQUESTED: {
     type: 'ORDER',
     title: 'Service recovery requested',
-    body: 'A request to recover the inspection or transport workflow was submitted for review. Your goods order remains separate from this service recovery.',
+    body: 'A request to recover the offer, inspection or transport workflow was submitted for review. Your goods order remains separate from this service recovery.',
     action: 'order',
   },
   WORKFLOW_RECOVERY_APPROVED: {
     type: 'ORDER',
     title: 'Fresh service bidding is available',
-    body: 'MarketBridge approved the affected service recovery and released a fresh form. Only that service competition was reset; other order workflows remain unchanged.',
+    body: 'MarketBridge approved the affected recovery and released a fresh form. Only that competition was reset; other order workflows remain unchanged.',
     action: 'order',
   },
   WORKFLOW_RECOVERY_REJECTED: {
     type: 'ORDER',
     title: 'Service recovery request reviewed',
-    body: 'MarketBridge reviewed the service recovery request. Open the order to see the decision and admin note.',
+    body: 'MarketBridge reviewed the recovery request. Open the order to see the decision and admin note.',
     action: 'order',
   },
   PICKUP_WINDOW_REMINDER: { type: 'ORDER', title: 'Pickup window approaching', body: 'The agricultural pickup window begins within 24 hours. Confirm transport and pickup readiness.', action: 'order' },
@@ -158,6 +158,15 @@ const EVENT_COPY = {
 
 const ACTIONABLE_EVENTS = new Set(Object.keys(EVENT_COPY));
 
+// Which flow an event belongs to. Recovery events carry it as
+// metadata.service (preferred) or metadata.type. Anything other than the
+// three known values is treated as "unknown" and the generic copy is used.
+function normalizeService(metadata = {}) {
+  const raw = String(metadata.service || metadata.type || '').toUpperCase();
+  if (raw === 'OFFER' || raw === 'INSPECTION' || raw === 'TRANSPORT') return raw;
+  return null;
+}
+
 function uniqueIds(values) {
   return [...new Set(values.filter((value) => typeof value === 'string' && value))];
 }
@@ -171,6 +180,7 @@ function buildCopy(type, metadata = {}) {
   };
 
   let body = copy.body;
+  let title = copy.title;
 
   if (type === 'PROVIDER_STANDING_CHANGED') {
     if (metadata.kind === 'WARNING') {
@@ -182,14 +192,48 @@ function buildCopy(type, metadata = {}) {
     }
   }
 
+  // The provider is the party that bid: the buyer on an offer, the
+  // inspector on an inspection, the transporter on a transport job.
   if (type === 'PROVIDER_AGREEMENT_RELEASED' && metadata.service) {
-    const who = metadata.service === 'TRANSPORT' ? 'transporter' : 'inspector';
-    body = `The ${who} cancelled the provisional agreement before payment. Choose another ${who} from the available bids.`;
+    const service = normalizeService(metadata);
+    const who =
+      service === 'TRANSPORT' ? 'transporter'
+      : service === 'OFFER' ? 'buyer'
+      : 'inspector';
+    body = service === 'OFFER'
+      ? 'The buyer cancelled the provisional agreement before payment. Choose another buyer from the available bids.'
+      : `The ${who} cancelled the provisional agreement before payment. Choose another ${who} from the available bids.`;
   }
 
   if (type === 'REQUESTER_AGREEMENT_RELEASED' && metadata.service) {
-    const what = metadata.service === 'TRANSPORT' ? 'transport' : 'inspection';
-    body = `The requester released the provisional ${what} agreement. You are no longer assigned to this job.`;
+    const service = normalizeService(metadata);
+    const what =
+      service === 'TRANSPORT' ? 'transport'
+      : service === 'OFFER' ? 'offer'
+      : 'inspection';
+    body = service === 'OFFER'
+      ? 'The seller released the provisional offer agreement. You are no longer the selected buyer.'
+      : `The requester released the provisional ${what} agreement. You are no longer assigned to this job.`;
+  }
+
+  if (type === 'WORKFLOW_RECOVERY_REQUESTED' || type === 'WORKFLOW_RECOVERY_APPROVED' || type === 'WORKFLOW_RECOVERY_REJECTED') {
+    const service = normalizeService(metadata);
+    if (service) {
+      const label =
+        service === 'OFFER' ? 'offer negotiation'
+        : service === 'TRANSPORT' ? 'transport'
+        : 'inspection';
+      if (type === 'WORKFLOW_RECOVERY_REQUESTED') {
+        title = `${label.charAt(0).toUpperCase()}${label.slice(1)} recovery requested`;
+        body = `A request to recover the ${label} workflow was submitted for review. Your goods order remains separate from this recovery.`;
+      } else if (type === 'WORKFLOW_RECOVERY_APPROVED') {
+        title = `Fresh ${label} bidding is available`;
+        body = `MarketBridge approved the ${label} recovery and released a fresh form. Only the ${label} competition was reset; other order workflows remain unchanged.`;
+      } else {
+        title = `${label.charAt(0).toUpperCase()}${label.slice(1)} recovery request reviewed`;
+        body = `MarketBridge reviewed the ${label} recovery request. Open the order to see the decision and admin note.`;
+      }
+    }
   }
 
   if (type === 'TRANSPORT_STATUS_CHANGED' && metadata.toStatus) {
@@ -204,7 +248,7 @@ function buildCopy(type, metadata = {}) {
     body = 'Transport has been marked delivered. The buyer should review the delivery and confirm receipt when satisfied.';
   }
 
-  return { ...copy, body };
+  return { ...copy, title, body };
 }
 
 async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) {
@@ -252,6 +296,8 @@ async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) 
       recipients = [metadata.providerId];
       break;
     case 'PROVIDER_AGREEMENT_RELEASED':
+      // The provider is the actor, so the actor filter below leaves the
+      // requester side (including the seller for an offer release).
       recipients = [...buyerSeller];
       break;
     case 'REQUESTER_AGREEMENT_RELEASED':
@@ -293,6 +339,8 @@ async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) 
       }
       break;
     default:
+      // Includes WORKFLOW_RECOVERY_REQUESTED / APPROVED / REJECTED: both
+      // commercial parties, for offer, inspection and transport recovery alike.
       recipients = buyerSeller;
       break;
   }
