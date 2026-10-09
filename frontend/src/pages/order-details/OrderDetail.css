@@ -238,8 +238,11 @@
   font: 800 24px / 1.25 var(--od-font-head);
   overflow-wrap: anywhere;
 }
+
+/* Subtitle moved below the horizontal line and indented */
 .order-detail-page .od-card-subtitle {
-  margin: 6px 0 0;
+  margin: 20px 0 14px; /* Matches spacing under card head */
+  padding-inline-start: var(--od-indent); /* Indents the text to the right */
   color: var(--mb-muted);
   font-size: 14px;
   line-height: 1.5;
@@ -716,7 +719,7 @@
   background: #fff;
 }
 .order-detail-page .btn-outline {
-  border-color: #fecaca;
+  border-color: var(--mb-danger); /* Changed to red */
   color: var(--mb-danger);
 }
 .order-detail-page .btn-sm {
@@ -736,7 +739,8 @@
     border-color: var(--mb-accent-ink);
   }
   .order-detail-page .btn-outline:hover:not(:disabled) {
-    background: #fef2f2;
+    background: #fef2f2; /* Light red background on hover */
+    border-color: var(--mb-danger);
   }
 }
 
