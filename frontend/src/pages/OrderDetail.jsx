@@ -131,7 +131,6 @@ function useNowUntil(targetMs) {
    2. UI primitives
    ======================================================================== */
 
-// ── Reusable Modal Component ──────────────────────────────────────────────
 function Modal({ isOpen, onClose, title, children }) {
   if (!isOpen) return null;
   return (
@@ -618,10 +617,9 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
 }
 
 /* ========================================================================
-   5. Inspection (with full quote negotiation)
+   5. Inspection
    ======================================================================== */
 
-// ── Extracted Inspection Request Form ─────────────────────────────────────
 function InspectionRequestForm({ workDetails, setWorkDetails, requesting, request, isBuyer }) {
   return (
     <div className="od-inspection-work-form">
@@ -644,7 +642,6 @@ function InspectionRequestForm({ workDetails, setWorkDetails, requesting, reques
       </label>
 
       <div className="od-form-grid">
-        {/* ── UPDATED: Strict numeric input + unit dropdown ──────────────── */}
         <label>
           Quantity to inspect
           <div className="od-quantity-row">
@@ -844,10 +841,8 @@ function InspectionCard({ order, title, i }) {
           {request.fee != null && <Fact name="Inspection fee">{money(request.fee)} ETB</Fact>}
           {!inspectorName && <Fact name="Status">{label(request.status)}</Fact>}
         </Facts>
-        {request.workDetails && <div className="od-work-details"><h4>Agreed inspection scope</h4>{request.workDetails.workDescription && <p>{request.workDetails.workDescription}</p>}<div className="od-work-detail-items">{request.workDetails.quantityValue && <span><b>Quantity:</b> {request.workDetails.quantityValue} {request.workDetails.quantityUnit || ''}</span>}{request.workDetails.lotCount && <span><b>Lots:</b> {request.workDetails.lotCount}</span>}{request.workDetails.requiredBy && <span><b>Deadline:</b> {formatDateTime(request.workDetails.requiredBy)}</span>}</div>{request.workDetails.checks?.length > 0 && <p><b>Checks:</b> {request.workDetails.checks.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>}{request.workDetails.reportRequirements && <p><b>Report:</b> {request.workDetails.reportRequirements}</p>}</div>}
       </Section>
 
-      {/* ── Inspection Coordination Button (Seller only) ─────────────────── */}
       {i.isSeller && ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(request.status) && (
         <Section title="Inspection coordination">
           <p className="muted">
@@ -1417,19 +1412,26 @@ function TransportCard({ order, t }) {
         id="transport-section"
         eyebrow="Logistics"
         title="Transport"
-        subtitle="The buyer or seller arranges transport. MarketBridge does not assign a transporter automatically."
+        subtitle="Either you or the counterparty may arrange transport. Once one of you does, the other cannot create a competing arrangement."
       >
         {t.canArrange ? (
           <Section title="Arrange transport">
             <p className="muted">
-              Choose how the goods will be transported. You can hire a registered transporter or use the owner's own truck.
+              Open the transport setup to choose between hiring a registered
+              transporter or using the owner's own truck.
             </p>
-            <Button variant="primary" size="sm" onClick={() => t.onOpenModal('buyer-transport-form')}>
-              Open transport setup
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => t.onOpenModal('buyer-transport-form')}
+            >
+              Arrange transport
             </Button>
           </Section>
         ) : (
-          <p className="muted">No transport arrangement recorded yet.</p>
+          <p className="muted">
+            The counterparty is arranging transport.
+          </p>
         )}
       </Card>
     );
@@ -1469,7 +1471,6 @@ function TransportCard({ order, t }) {
               <Fact name="Required capacity">{job.requiredCapacity}</Fact>
             )}
           </Facts>
-          {job.workDetails && <div className="od-work-details"><h4>Transport work requirements</h4><div className="od-work-detail-items">{job.workDetails.weight && <span><b>Weight:</b> {job.workDetails.weight}</span>}{job.workDetails.packageCount && <span><b>Packages:</b> {job.workDetails.packageCount}</span>}{job.workDetails.vehicleType && <span><b>Vehicle:</b> {job.workDetails.vehicleType}</span>}{job.workDetails.deliveryDeadline && <span><b>Deadline:</b> {formatDateTime(job.workDetails.deliveryDeadline)}</span>}</div>{job.workDetails.handling?.length > 0 && <p><b>Handling:</b> {job.workDetails.handling.map((v) => v.replaceAll('_', ' ').toLowerCase()).join(', ')}</p>}</div>}
         </Section>
 
         {job.truckOwner && (
@@ -1496,7 +1497,6 @@ function TransportCard({ order, t }) {
           </Section>
         )}
 
-        {/* ── Transport Coordination Buttons ─────────────────────────────── */}
         {['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status) && (
           <Section title="Coordination">
             {t.isSeller && (
@@ -1868,12 +1868,10 @@ export default function OrderDetail() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
-  
-  // ── Modal state ───────────────────────────────────────────────────────
+
   const [activeModal, setActiveModal] = useState(null);
 
   const [payMethod, setPayMethod] = useState('TELEBIRR');
-
   const [counterInputs, setCounterInputs] = useState({});
   const [evidence, setEvidence] = useState({ photoKeys: [], videoKeys: [] });
   const [evidenceNotes, setEvidenceNotes] = useState('');
@@ -1882,14 +1880,14 @@ export default function OrderDetail() {
   const [offerAmount, setOfferAmount] = useState('');
   const [submittingOffer, setSubmittingOffer] = useState(false);
   const [requestingInspection, setRequestingInspection] = useState(false);
-  const [inspectionWorkDetails, setInspectionWorkDetails] = useState({ 
-    workCategory: 'GENERAL_QUALITY', 
-    quantityValue: '', 
-    quantityUnit: 'kg', 
-    lotCount: '', 
-    checks: ['QUALITY_GRADE', 'VISIBLE_DEFECTS', 'PHOTOGRAPHS'], 
-    reportFormat: 'CHECKLIST_PHOTOS', 
-    requiredBy: '' 
+  const [inspectionWorkDetails, setInspectionWorkDetails] = useState({
+    workCategory: 'GENERAL_QUALITY',
+    quantityValue: '',
+    quantityUnit: 'kg',
+    lotCount: '',
+    checks: ['QUALITY_GRADE', 'VISIBLE_DEFECTS', 'PHOTOGRAPHS'],
+    reportFormat: 'CHECKLIST_PHOTOS',
+    requiredBy: ''
   });
 
   const [loadingReport, setLoadingReport] = useState(null);
@@ -2662,6 +2660,8 @@ export default function OrderDetail() {
     isSeller,
     isTransporter,
     isArranger: isTransportArranger,
+    // Either party may initiate. Once a job exists, the other cannot create
+    // a competing one — enforced server-side by the single-job rule.
     canArrange: Boolean(!transportJob && order.status !== 'CANCELLED' && isParticipant),
     canChooseQuote: Boolean(transportJob && isTransportArranger && ['REQUESTED', 'QUOTED'].includes(transportJob.status)),
     canStartPayment: canStartTransportPayment,
@@ -2840,9 +2840,6 @@ export default function OrderDetail() {
         </div>
       </div>
 
-      {/* ── MODALS AT THE END OF THE PAGE ───────────────────────── */}
-
-      {/* Buyer: Inspection Request Form */}
       <Modal
         isOpen={activeModal === 'buyer-inspection-form'}
         onClose={() => setActiveModal(null)}
@@ -2860,7 +2857,11 @@ export default function OrderDetail() {
         />
       </Modal>
 
-      {/* Buyer: Transport Setup Form */}
+      {/* ── THE KEY FIX ───────────────────────────────────────────────
+          Transport setup modal. The `buyerOnlyCompetition` prop is
+          intentionally NOT passed — the original TransportSetup shows
+          both the buyer and seller option cards, which is what we want.
+      ─────────────────────────────────────────────────────────────── */}
       <Modal
         isOpen={activeModal === 'buyer-transport-form'}
         onClose={() => setActiveModal(null)}
@@ -2872,7 +2873,6 @@ export default function OrderDetail() {
           destinationDefault={order.buyer?.location}
           canBuyer={isBuyer}
           canSeller={isSeller}
-          buyerOnlyCompetition={['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category)}
           onCreated={() => {
             reload();
             setActiveModal(null);
@@ -2880,7 +2880,6 @@ export default function OrderDetail() {
         />
       </Modal>
 
-      {/* Coordination Modals (Seller & Transporter) */}
       <Modal
         isOpen={activeModal === 'seller-coordination'}
         onClose={() => setActiveModal(null)}
@@ -2892,7 +2891,7 @@ export default function OrderDetail() {
       <Modal
         isOpen={activeModal === 'transporter-coordination'}
         onClose={() => setActiveModal(null)}
-        title="Pickup Handoff (Transporter)"
+        title="Transporter Coordination"
       >
         {transportJob?.id && <TransportCoordinationTransporter transportJobId={transportJob.id} />}
       </Modal>
