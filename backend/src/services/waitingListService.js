@@ -410,7 +410,50 @@ async function releaseWaitingTransporters(db, { transportJobId, actorId = null, 
 // ============================================================================
 // EXPORTS
 // ============================================================================
+// ============================================================================
+// SERVICE CANCELLED (order-level) — direct notification, no status change
+// ============================================================================
+// When an entire order is cancelled, cancelOrderInTransaction has already
+// moved every PENDING inspection/transport quote to REJECTED inside the
+// transaction. By the time we run post-commit, there is nothing left to
+// query by status. These helpers notify an explicit list of bidders that
+// the service was cancelled, without touching quote status (already final).
 
+async function notifyInspectionBiddersServiceCancelled(db, { inspectionRequestId, bids, reason }) {
+  if (!bids?.length) return;
+  try {
+    const label = await inspectionLabel(db, inspectionRequestId);
+    await createInspectionNotices(db, bids.map((q) => ({
+      userId: q.inspectorId,
+      inspectionRequestId,
+      quoteId: q.id,
+      type: 'WAITING_CANCELLED',
+      title: 'The inspection was cancelled',
+      body: `The inspection on ${label} was cancelled. Your quote is no longer active.`,
+      metadata: { reason: reason || null },
+    })));
+  } catch (error) {
+    console.error('INSPECTION WAITING CANCELLED NOTICE FAILED', error);
+  }
+}
+
+async function notifyTransportBiddersServiceCancelled(db, { transportJobId, bids, reason }) {
+  if (!bids?.length) return;
+  try {
+    const label = await transportLabel(db, transportJobId);
+    await createTransportNotices(db, bids.map((q) => ({
+      userId: q.truckOwnerId,
+      transportJobId,
+      quoteId: q.id,
+      type: 'WAITING_CANCELLED',
+      title: 'The transport was cancelled',
+      body: `The transport on ${label} was cancelled. Your bid is no longer active.`,
+      metadata: { reason: reason || null },
+    })));
+  } catch (error) {
+    console.error('TRANSPORT WAITING CANCELLED NOTICE FAILED', error);
+  }
+}
 module.exports = {
   // Offers (existing signatures preserved — no call-site breakage)
   noticeWaitingLocked,
@@ -427,4 +470,8 @@ module.exports = {
   noticeTransportWaitingLocked,
   noticeTransportWaitingUnlocked,
   releaseWaitingTransporters,
+
+  // Order-cancel helpers
+  notifyInspectionBiddersServiceCancelled,
+  notifyTransportBiddersServiceCancelled,
 };
