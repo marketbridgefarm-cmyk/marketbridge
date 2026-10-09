@@ -1,0 +1,395 @@
+/* ==========================================================================
+   Transport Coordination — Seller View
+   Matches the OrderDetail.css card system and design tokens.
+   ========================================================================== */
+
+/* ---- 1. Card Shell (Uses existing .card styles) ------------------------- */
+.inspection-coordination {
+  /* Inherits from .order-detail-page .card for padding, background, radius */
+  --card-tone: var(--mb-ok); /* Matches the Transport card tone */
+}
+
+/* ---- 2. Header ---------------------------------------------------------- */
+.ic-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--mb-line);
+  position: relative;
+}
+
+.ic-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 44px;
+  height: 4px;
+  background: var(--mb-accent);
+}
+
+.ic-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 8px;
+  color: var(--mb-ok);
+  font-family: var(--od-font-head, 'Manrope', sans-serif);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+}
+
+.ic-eyebrow::before {
+  content: '';
+  flex: none;
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.ic-header h2 {
+  margin: 0;
+  color: var(--mb-ink);
+  font-family: var(--od-font-head, 'Manrope', sans-serif);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.ic-sub {
+  margin: 6px 0 0;
+  color: var(--mb-muted);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 65ch;
+}
+
+.ic-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ic-status--sent {
+  background: #ecfdf5;
+  border: 1.5px solid #a7f3d0;
+  color: #047857;
+}
+
+/* ---- 3. Form Structure -------------------------------------------------- */
+.ic-form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.ic-form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ic-form legend {
+  width: 100%;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1.5px solid var(--mb-line);
+  color: var(--mb-ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ic-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.ic-full {
+  grid-column: 1 / -1;
+}
+
+.ic-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--mb-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ic-grid input,
+.ic-grid select,
+.ic-grid textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field, 16px);
+  color: var(--mb-ink);
+  font-family: var(--od-font-body, 'DM Sans', sans-serif);
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.ic-grid textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.ic-grid input::placeholder,
+.ic-grid textarea::placeholder {
+  color: #94a3b8;
+}
+
+/* ---- 4. Slot Lists (Photos & Availability) ------------------------------ */
+.ic-slot-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ic-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1.5px solid var(--mb-line);
+  border-radius: 12px;
+  color: var(--mb-ink);
+  font-size: 14px;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.ic-slot-remove {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--mb-danger);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+@media (hover: hover) {
+  .ic-slot-remove:hover:not(:disabled) {
+    background: #fef2f2;
+  }
+}
+
+.ic-slot-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- 5. Actions --------------------------------------------------------- */
+.ic-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.ic-actions .btn {
+  width: 100%;
+}
+
+/* ---- 6. Availability Section -------------------------------------------- */
+.ic-availability {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1.5px solid var(--mb-line);
+}
+
+.ic-availability header {
+  margin-bottom: 14px;
+}
+
+.ic-availability h3 {
+  margin: 0 0 6px;
+  color: var(--mb-ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ic-slot-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 14px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field, 16px);
+}
+
+.ic-slot-form input {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: 12px;
+  color: var(--mb-ink);
+  font-family: inherit;
+  font-size: 15px;
+}
+
+.ic-slot-dash {
+  display: none; /* Hidden on mobile, shown on desktop */
+  color: var(--mb-muted);
+  font-weight: 700;
+}
+
+.ic-slot-form .btn {
+  width: 100%;
+  min-height: 44px;
+}
+
+/* ---- 7. Driver's Handoff (Inspector Side) ------------------------------- */
+.ic-inspector-side {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1.5px solid var(--mb-line);
+}
+
+.ic-inspector-side h3 {
+  margin: 0 0 14px;
+  color: var(--mb-ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ic-inspector-details {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.ic-inspector-details > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ic-inspector-details span {
+  color: var(--mb-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ic-inspector-details strong {
+  color: var(--mb-ink);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.ic-inspector-details .ic-slot-list {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ---- 8. Footnote -------------------------------------------------------- */
+.ic-footnote {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1.5px solid var(--mb-line);
+  color: var(--mb-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ---- 9. Responsive & Container Queries ---------------------------------- */
+
+/* Small phones */
+@media (max-width: 480px) {
+  .ic-header h2 {
+    font-size: 22px;
+  }
+  .ic-eyebrow {
+    gap: 10px;
+    letter-spacing: 0.2em;
+  }
+  .ic-eyebrow::before {
+    width: 13px;
+  }
+}
+
+/* Tablets & Desktops */
+@media (min-width: 560px) {
+  .ic-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .ic-inspector-details {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .ic-actions .btn {
+    width: auto;
+    min-width: 220px;
+  }
+  
+  .ic-slot-form {
+    flex-direction: row;
+    align-items: center;
+  }
+  
+  .ic-slot-form input {
+    flex: 1 1 120px;
+    width: auto;
+  }
+  
+  .ic-slot-dash {
+    display: block;
+    flex: none;
+  }
+  
+  .ic-slot-form .btn {
+    flex: none;
+    width: auto;
+    min-width: 100px;
+  }
+}
+
+/* Wide Cards (Container Queries) */
+@container (min-width: 520px) {
+  .ic-inspector-details {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@container (min-width: 760px) {
+  .ic-inspector-details {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
