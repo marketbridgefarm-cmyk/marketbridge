@@ -472,6 +472,8 @@ model User {
 
   notifications Notification[]
   offerNotifications OfferNotification[] @relation("UserOfferNotifications")
+  inspectionNotifications InspectionNotification[] @relation("UserInspectionNotifications")
+  transportNotifications  TransportNotification[]  @relation("UserTransportNotifications")
 
   refreshSessions RefreshSession[]
 
@@ -2238,6 +2240,54 @@ model OfferNotification {
 
   @@index([userId, readAt, createdAt])
   @@index([listingId])
+}
+
+// ============================================================================
+// INSPECTION WAITING-LIST NOTICES
+// Sent to waiting inspectors when: the requester opens an exclusive
+// negotiation, the request is unlocked again, or the inspection completes
+// (remaining quotes released). Follows OfferNotification's pattern: the scope
+// ID is a plain string (no FK), so cascade deletes never touch historical
+// notices.
+// ============================================================================
+model InspectionNotification {
+  id                  String   @id @default(uuid())
+  user                User     @relation("UserInspectionNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  userId              String
+  inspectionRequestId String
+  quoteId             String?
+  type                String   // BID_SELECTED, WAITING_LOCKED, WAITING_UNLOCKED, WAITING_RELEASED
+  title               String
+  body                String
+  metadata            Json?
+  readAt              DateTime?
+  createdAt           DateTime @default(now())
+
+  @@index([userId, readAt, createdAt])
+  @@index([inspectionRequestId])
+}
+
+// ============================================================================
+// TRANSPORT WAITING-LIST NOTICES
+// Sent to waiting transporters when: the arranger opens an exclusive
+// negotiation, the job is unlocked again, or the transport delivers
+// (remaining quotes released). Same no-FK scope-ID pattern as above.
+// ============================================================================
+model TransportNotification {
+  id             String   @id @default(uuid())
+  user           User     @relation("UserTransportNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  transportJobId String
+  quoteId        String?
+  type           String   // BID_SELECTED, WAITING_LOCKED, WAITING_UNLOCKED, WAITING_RELEASED
+  title          String
+  body           String
+  metadata       Json?
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, readAt, createdAt])
+  @@index([transportJobId])
 }
 
 // ============================================================================
