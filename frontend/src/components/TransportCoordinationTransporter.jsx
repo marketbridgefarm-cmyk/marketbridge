@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../api/client';
-import './TransportCoordinationTransporter.css'; // <--- Add this line
+import './ProvidersCoordination.css'; // <--- Add this line
 
 // ============================================================================
 // TRANSPORT COORDINATION — TRANSPORTER VIEW
