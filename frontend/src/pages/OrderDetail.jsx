@@ -141,30 +141,33 @@ function useNowUntil(targetMs) {
    2. UI primitives
    ======================================================================== */
 
-function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, className, live, children }) {
+function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, className, children }) {
   return (
-    <section className={`card${tone ? ` od-card-${tone}` : ''}${className ? ` ${className}` : ''}`} id={id} aria-live={live}>
+    <section className={`card${tone ? ` od-card-${tone}` : ''}${className ? ` ${className}` : ''}`} id={id}>
       <header className="od-card-head">
         <div className="od-card-head-main">
           {eyebrow && <span className={`od-eyebrow${eyebrowClass ? ` ${eyebrowClass}` : ''}`}>{eyebrow}</span>}
           <h2 className="od-card-title">{title}</h2>
-          {subtitle && <p className="od-card-subtitle">{subtitle}</p>}
         </div>
         {side && <div className="od-card-head-side">{side}</div>}
       </header>
+      
+      {/* Moved subtitle outside the header to appear under the horizontal line */}
+      {subtitle && <p className="od-card-subtitle">{subtitle}</p>}
+      
       {children}
     </section>
   );
 }
 
-function Section({ title, meta, strong, bare, children }) {
+function Section({ title, meta, strong, children }) {
   return (
     <div className="od-card-section">
       {(title || meta) && (
         <div className="od-card-section-head">
           <h3 className="od-card-section-title">{title}</h3>
           {meta != null && (
-            <div className={`od-card-section-meta${strong ? ' is-strong' : ''}${bare ? ' is-bare' : ''}`}>
+            <div className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>
               {meta}
             </div>
           )}
@@ -299,6 +302,107 @@ function PayoutStatusCard({ payouts, names, you }) {
       : null;
   const duePassed = dueMs !== null && remainingMs === 0;
 
+  const dueStripStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+    flexWrap: 'wrap',
+    padding: '14px 0 0',
+    margin: '14px 0 0',
+    border: 'none',
+    borderTop: '1px solid #e5e9ef',
+    borderRadius: 0,
+    background: 'transparent',
+    backgroundColor: 'transparent',
+    backgroundImage: 'none',
+    boxShadow: 'none',
+  };
+
+  const dueLabelStyle = {
+    fontFamily: "'DM Sans', system-ui, sans-serif",
+    fontSize: 10.5,
+    fontWeight: 700,
+    letterSpacing: '.14em',
+    textTransform: 'uppercase',
+    color: '#64748b',
+  };
+
+  const dueClockStyle = {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: 6,
+    fontVariantNumeric: 'tabular-nums',
+  };
+
+  const dueDigitsStyle = {
+    fontFamily: "'Manrope', system-ui, sans-serif",
+    fontSize: 22,
+    fontWeight: 800,
+    letterSpacing: '-.6px',
+    color: '#0d1b2a',
+    lineHeight: 1,
+  };
+
+  const dueUnitStyle = {
+    fontFamily: "'DM Sans', system-ui, sans-serif",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: '.12em',
+    textTransform: 'uppercase',
+    color: '#64748b',
+  };
+
+  const noticeWrapStyle = {
+    marginTop: 18,
+    paddingTop: 14,
+    border: 'none',
+    borderTop: '1px solid #e5e9ef',
+    borderRadius: 0,
+    background: 'transparent',
+    backgroundColor: 'transparent',
+    backgroundImage: 'none',
+    boxShadow: 'none',
+  };
+
+  const noticePrefixStyle = {
+    display: 'block',
+    margin: '0 0 8px',
+    fontFamily: "'Manrope', system-ui, sans-serif",
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: '.14em',
+    textTransform: 'uppercase',
+    color: '#0f7a44',
+  };
+
+  const noticeListStyle = {
+    listStyle: 'none',
+    margin: 0,
+    padding: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+  };
+
+  const noticeItemStyle = {
+    position: 'relative',
+    paddingLeft: 24,
+    fontFamily: "'DM Sans', system-ui, sans-serif",
+    fontSize: 13,
+    lineHeight: 1.6,
+    color: '#2c3a4a',
+  };
+
+  const noticeNumStyle = {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    fontFamily: "'Manrope', system-ui, sans-serif",
+    fontSize: 12,
+    fontWeight: 800,
+    color: '#0f7a44',
+  };
 
   return (
     <Card
@@ -363,15 +467,17 @@ function PayoutStatusCard({ payouts, names, you }) {
       </Section>
 
       {dueMs !== null && (
-        <div className="payout-due" role="group" aria-label="Due date">
-          <span className="payout-due-label">Due Date</span>
-          <div className="payout-due-clock" role="timer" aria-live="off">
+        <div style={dueStripStyle} role="group" aria-label="Due date">
+          <span style={dueLabelStyle}>Due Date</span>
+          <div style={dueClockStyle} role="timer" aria-live="off">
             {duePassed ? (
-              <span className="payout-due-digits is-cleared">Hold cleared</span>
+              <span style={{ ...dueDigitsStyle, fontSize: 15, letterSpacing: '-.2px', color: '#0f7a44' }}>
+                Hold cleared
+              </span>
             ) : (
               <>
-                <span className="payout-due-digits">{clock}</span>
-                <span className="payout-due-unit">left</span>
+                <span style={dueDigitsStyle}>{clock}</span>
+                <span style={dueUnitStyle}>left</span>
               </>
             )}
           </div>
@@ -379,24 +485,44 @@ function PayoutStatusCard({ payouts, names, you }) {
       )}
 
       {dueMs === null && holdNotStarted && (
-        <div className="payout-due" role="group" aria-label="Due date">
-          <span className="payout-due-label">Due Date</span>
-          <span className="payout-due-hint">Starts after payment settles</span>
+        <div style={dueStripStyle} role="group" aria-label="Due date">
+          <span style={dueLabelStyle}>Due Date</span>
+          <span style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: 13, color: '#64748b' }}>
+            Starts after payment settles
+          </span>
         </div>
       )}
 
       {anyDispute && (
-        <p className="payout-dispute">
+        <p
+          style={{
+            marginTop: 12,
+            padding: '8px 0 8px 12px',
+            borderLeft: '3px solid #fecaca',
+            fontSize: 12.5,
+            lineHeight: 1.55,
+            color: '#b42318',
+          }}
+        >
           One or more payouts are frozen while a dispute is open.
         </p>
       )}
 
-      <div className="payout-notice">
-        <span className="payout-notice-title">Notice:</span>
-        <ol className="payout-notice-list">
-          <li>Each payout is held for 3 days after its payment settles.</li>
-          <li>Buyer payment is separate from each payout below.</li>
-          <li>No manual action is required.</li>
+      <div style={noticeWrapStyle}>
+        <span style={noticePrefixStyle}>Notice:</span>
+        <ol style={noticeListStyle}>
+          <li style={noticeItemStyle}>
+            <span style={noticeNumStyle}>1)</span>
+            Each payout is held for 3 days after its payment settles.
+          </li>
+          <li style={noticeItemStyle}>
+            <span style={noticeNumStyle}>2)</span>
+            Buyer payment is separate from each payout below.
+          </li>
+          <li style={noticeItemStyle}>
+            <span style={noticeNumStyle}>3)</span>
+            No manual action is required.
+          </li>
         </ol>
       </div>
     </Card>
@@ -428,10 +554,7 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
   const { isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob } = flags;
   const role = isBuyer ? 'Buying' : isSeller ? 'Selling' : 'Order';
   const showBuyer = isSeller;
-  // The other party is shown top-right (name + avatar); the viewer's own
-  // party stays in the Details grid.
   const other = showBuyer ? order.buyer : order.seller;
-  const otherRole = showBuyer ? 'Buyer' : 'Seller';
   const delivered = ['DELIVERED', 'COMPLETED'].includes(order.status) || transportJob?.status === 'DELIVERED';
 
   const steps = [
@@ -441,36 +564,32 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
     { label: 'Completed', done: order.status === 'COMPLETED' },
   ];
 
-  // Latest status → right side of the "Order status" header (plain coloured text)
-  const closed = ['CANCELLED', 'REJECTED', 'FAILED', 'DISPUTED'].includes(String(order.status || '').toUpperCase());
-  const currentStep = steps.find((s) => !s.done);
-  const latestStatus = closed ? label(order.status) : currentStep ? currentStep.label : 'Completed';
-  const latestTone = closed ? statusTone(order.status) : currentStep ? 'wait' : 'good';
-
   return (
     <Card
       className="od-card-overview"
       eyebrow={role}
       eyebrowClass={isSeller ? 'is-selling' : ''}
       title={title}
-      side={<PartyBadge role={otherRole} name={other?.name} />}
+      side={
+        <div className="od-card-side-wrap">
+          <div className="od-card-side-party">
+            <div>
+              <span className="od-card-side-label">{isBuyer ? 'Seller' : 'Buyer'}</span>
+              <span className="od-card-side-value">{other?.name || '—'}</span>
+            </div>
+            <Avatar name={other?.name} />
+          </div>
+          <span className="od-card-side-code">ORD {shortId(order.id).toUpperCase()}</span>
+        </div>
+      }
     >
-      <Section
-        title="Order status"
-        bare
-        meta={<span className={`od-section-status od-text-${latestTone}`}>{latestStatus}</span>}
-      >
+      <Section title="Order status">
         <OrderProgress steps={steps} />
       </Section>
 
       <Section title="Details">
         <Facts>
           <Fact name="Amount">{money(order.finalPrice)} ETB</Fact>
-          {showBuyer ? (
-            <Fact name="Seller">{order.seller?.name || '—'}{isSeller && <YouTag inline />}</Fact>
-          ) : (
-            <Fact name="Buyer">{order.buyer?.name || '—'}{isBuyer && <YouTag inline />}</Fact>
-          )}
           {order.listing?.cropType && <Fact name="Product">{order.listing.cropType}</Fact>}
           {order.listing?.quantity != null && <Fact name="Quantity">{order.listing.quantity} units</Fact>}
           <Fact name="Ordered from">{order.listing?.location || '—'}</Fact>
@@ -478,13 +597,9 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
         </Facts>
       </Section>
 
-      {/* Created date (left) + ORD code (right) */}
-      <div className="od-meta">
-        <span className="od-meta-time">
-          Created {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}
-        </span>
-        <span className="od-meta-code">ORD {shortId(order.id).toUpperCase()}</span>
-      </div>
+      <p className="od-meta">
+        <span className="od-meta-time">Created {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}</span>
+      </p>
 
       {canCancel && (
         <Button className="btn btn-outline btn-block" disabled={busy === 'cancel'} onClick={onCancel} busy={busy === 'cancel'} busyText="Cancelling…">
@@ -937,7 +1052,7 @@ function InspectionCard({ order, title, i }) {
           )}
 
           {isRequester && (
-            <div className="od-mt-sm">
+            <div style={{ marginTop: 12 }}>
               <ReleaseAgreementControl
                 acceptedQuote={leafQuotes(request.quotes).find((q) => q.status === 'ACCEPTED')}
                 label="Inspector unavailable — choose another"
@@ -945,7 +1060,7 @@ function InspectionCard({ order, title, i }) {
                 disabled={Boolean(i.busy)}
                 onConfirm={(reason, note) => i.withdrawInspectionAgreement(request.id, { reason, note })}
               />
-              <p className="muted small od-mt-xs">
+              <p className="muted small" style={{ marginTop: 6 }}>
                 Provisional agreement — release it if the inspector drops out
                 before payment.
               </p>
@@ -1100,7 +1215,7 @@ function ReleaseAgreementControl({ acceptedQuote, label, busy, disabled, onConfi
   }
 
   return (
-    <div className="od-release-form">
+    <div className="od-release-form" style={{ display: 'grid', gap: 8, marginTop: 8 }}>
       <label>
         Reason for releasing
         <select value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy}>
@@ -1124,7 +1239,7 @@ function ReleaseAgreementControl({ acceptedQuote, label, busy, disabled, onConfi
         Each release is recorded against your account and visible to MarketBridge admin.
         After 2 releases on this job, further releases need admin review.
       </p>
-      <div className="od-actions-inline">
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <Button
           variant="light"
           size="sm"
@@ -1706,25 +1821,19 @@ function BuyerConfidenceCard({ order, recoveryRequests }) {
   }
 
   return (
-    <Card
-      className={`od-card-protection ${tone}`}
-      live="polite"
-      eyebrow="MarketBridge Order Protection"
-      title={status}
-      side={<span className="od-protect-icon" aria-hidden="true">{hasOpenDispute || recoveryPending ? 'i' : '✓'}</span>}
-    >
-      <Section title="What this means">
-        <p className="od-protect-text">{detail}</p>
-      </Section>
-
-      <Section title="Your protection">
-        <ul className="od-protect-list">
-          <li>Service issues reviewed separately</li>
-          <li>No automatic replacement charge</li>
-          <li>Payment and refund status stays visible</li>
-        </ul>
-      </Section>
-    </Card>
+    <section className={`card od-buyer-confidence ${tone}`} aria-live="polite">
+      <div className="od-confidence-icon" aria-hidden="true">{hasOpenDispute || recoveryPending ? 'i' : '✓'}</div>
+      <div className="od-confidence-main">
+        <span className="od-eyebrow">MARKETBRIDGE ORDER PROTECTION</span>
+        <h2>{status}</h2>
+        <p>{detail}</p>
+        <div className="od-confidence-promises">
+          <span><b aria-hidden="true">✓</b> Service issues reviewed separately</span>
+          <span><b aria-hidden="true">✓</b> No automatic replacement charge</span>
+          <span><b aria-hidden="true">✓</b> Payment and refund status stays visible</span>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -2481,7 +2590,7 @@ export default function OrderDetail() {
 
   if (loading) {
     return (
-      <main className="section mb-page order-detail-page">
+      <main className="section order-detail-page">
         <div className="container-narrow">
           <div className="card loading"><p>Loading order…</p></div>
         </div>
@@ -2491,7 +2600,7 @@ export default function OrderDetail() {
 
   if (!order) {
     return (
-      <main className="section mb-page order-detail-page">
+      <main className="section order-detail-page">
         <div className="container-narrow">
           <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
           <div className="alert error">{error || 'Order not found'}</div>
@@ -2570,7 +2679,7 @@ export default function OrderDetail() {
   };
 
   return (
-    <main className="section mb-page order-detail-page">
+    <main className="section order-detail-page">
       <div className="container-narrow">
         <div className="row-between page-bar">
           <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
