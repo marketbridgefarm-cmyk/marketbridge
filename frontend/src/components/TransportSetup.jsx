@@ -7,21 +7,19 @@ import api from '../api/client';
 // Initial "create the transport job" form — who arranges it, own truck vs.
 // hire, pickup/destination, structured load details, and special requirements.
 //
-// SECURITY: All load details and special requirements are structured enums
-// and numbers. No free text is allowed in fields visible to bidders,
-// preventing them from leaking contact info.
+// Either the buyer or the seller may initiate transport, but once one has
+// created a job, the other cannot create a competing one (enforced by the
+// single-transport-job-per-order rule on the server).
 //
-// Visual note: this renders INSIDE the Transport card on OrderDetail. It no
-// longer draws its own outer .card — the enclosing card already provides
-// the frame. Sections are flat blocks separated by hairlines; buttons and
-// inputs reuse the classes the surrounding page already styles.
+// SECURITY: Load details and special requirements are structured enums and
+// numbers. No free text is allowed in fields visible to bidders.
 // ============================================================================
 
 const CARGO_TYPES = [
   ['PRODUCE', 'Produce / Grains / Vegetables'],
   ['LIVESTOCK', 'Livestock'],
   ['GENERAL', 'General Goods'],
-  ['OTHER', 'Other (specify below)'],
+  ['OTHER', 'Other'],
 ];
 
 const CARGO_UNITS = [
@@ -50,7 +48,7 @@ const emptyForm = {
   specialRequirements: [],
 };
 
-/* ── Small inline style tokens ────────────────────────────── */
+/* ── Inline style tokens ─────────────────────────────────── */
 
 const lead = {
   margin: '0 0 14px',
@@ -211,6 +209,49 @@ export default function TransportSetup({
 
   const party = arrangingParty || (canBuyer ? 'BUYER' : canSeller ? 'SELLER' : '');
 
+  // ── Who-arranges options ────────────────────────────────────
+  // Buyer-only competitions hide the seller/joint options entirely.
+  // Otherwise each option is shown only for the roles that are allowed.
+  const arrangerOptions = (() => {
+    const opts = [];
+    if (buyerOnlyCompetition) {
+      if (canBuyer) {
+        opts.push({
+          value: 'BUYER',
+          label: 'Buyer arranges',
+          hint: 'You control the transporter request and quote selection.',
+        });
+      }
+    } else {
+      if (canBuyer) {
+        opts.push({
+          value: 'BUYER',
+          label: 'Buyer arranges',
+          hint: canSeller
+            ? 'Buyer controls the request and quote selection.'
+            : 'You control the request and quote selection.',
+        });
+      }
+      if (canSeller) {
+        opts.push({
+          value: 'SELLER',
+          label: 'Seller arranges',
+          hint: canBuyer
+            ? 'Seller controls the request and quote selection.'
+            : 'You control the request and quote selection.',
+        });
+      }
+      if (canBuyer && canSeller) {
+        opts.push({
+          value: 'JOINT',
+          label: 'Joint arrangement',
+          hint: 'Buyer and seller agree together; hired transporter only.',
+        });
+      }
+    }
+    return opts;
+  })();
+
   const toggleSpecial = (value) => {
     setForm((prev) => {
       const current = prev.specialRequirements || [];
@@ -277,8 +318,8 @@ export default function TransportSetup({
     <form className="mb-transport-setup" onSubmit={submit}>
       <p style={lead}>
         {buyerOnlyCompetition
-          ? 'Choose who arranges the transporter for these goods. Either you or the counterparty may initiate — once one of you does, the other cannot create a competing arrangement. Registered truck owners submit sealed quotes and the arranging party selects and negotiates one.'
-          : 'Choose who controls the transport arrangement. Either you or the counterparty may initiate — once one of you does, the other cannot create a competing arrangement. The buyer remains responsible for paying a hired transporter.'}
+          ? 'The buyer controls the transporter competition. Registered truck owners submit sealed quotes, then the buyer selects and negotiates one.'
+          : 'Either you or the counterparty may initiate transport. Once one of you does, the other cannot create a competing arrangement. The buyer remains responsible for paying a hired transporter.'}
       </p>
 
       {/* ── Who arranges ─────────────────────────────────── */}
@@ -287,41 +328,32 @@ export default function TransportSetup({
           <h3 style={sectionTitle}>Who arranges transport</h3>
         </div>
 
-        <div style={choiceGrid}>
-          {canBuyer && (
-            <button
-              type="button"
-              style={party === 'BUYER' ? choiceSelected : choiceBase}
-              onClick={() => setArrangingParty('BUYER')}
-            >
-              <span style={party === 'BUYER' ? choiceLabelSelected : choiceLabel}>Buyer arranges</span>
-              <span style={choiceHint}>Buyer controls the request and quote selection.</span>
-            </button>
-          )}
-          {canSeller && (
-            <button
-              type="button"
-              style={party === 'SELLER' ? choiceSelected : choiceBase}
-              onClick={() => setArrangingParty('SELLER')}
-            >
-              <span style={party === 'SELLER' ? choiceLabelSelected : choiceLabel}>Seller arranges</span>
-              <span style={choiceHint}>Seller controls the request and quote selection.</span>
-            </button>
-          )}
-          {canBuyer && canSeller && (
-            <button
-              type="button"
-              style={party === 'JOINT' ? choiceSelected : choiceBase}
-              onClick={() => {
-                setArrangingParty('JOINT');
-                if (method === 'OWN_TRUCK') setMethod('HIRE_TRANSPORTER');
-              }}
-            >
-              <span style={party === 'JOINT' ? choiceLabelSelected : choiceLabel}>Joint arrangement</span>
-              <span style={choiceHint}>Buyer and seller agree together; hired transporter only.</span>
-            </button>
-          )}
-        </div>
+        {arrangerOptions.length === 0 ? (
+          <p style={truckMeta}>
+            Only the listing buyer or seller can arrange transport for this order.
+          </p>
+        ) : (
+          <div style={choiceGrid}>
+            {arrangerOptions.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                style={party === opt.value ? choiceSelected : choiceBase}
+                onClick={() => {
+                  setArrangingParty(opt.value);
+                  if (opt.value === 'JOINT' && method === 'OWN_TRUCK') {
+                    setMethod('HIRE_TRANSPORTER');
+                  }
+                }}
+              >
+                <span style={party === opt.value ? choiceLabelSelected : choiceLabel}>
+                  {opt.label}
+                </span>
+                <span style={choiceHint}>{opt.hint}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Method ───────────────────────────────────────── */}
@@ -331,19 +363,27 @@ export default function TransportSetup({
         </div>
 
         <div style={choiceGrid}>
-          <button
-            type="button"
-            disabled={party === 'JOINT'}
-            style={party === 'JOINT' ? choiceDisabled : (method === 'OWN_TRUCK' ? choiceSelected : choiceBase)}
-            onClick={() => setMethod('OWN_TRUCK')}
-          >
-            <span style={method === 'OWN_TRUCK' && party !== 'JOINT' ? choiceLabelSelected : choiceLabel}>
-              🚚 Use my own truck
-            </span>
-            <span style={choiceHint}>
-              Record your own legally permitted vehicle. No transport-hiring commission.
-            </span>
-          </button>
+          {!buyerOnlyCompetition && (
+            <button
+              type="button"
+              disabled={party === 'JOINT'}
+              style={
+                party === 'JOINT'
+                  ? choiceDisabled
+                  : method === 'OWN_TRUCK'
+                    ? choiceSelected
+                    : choiceBase
+              }
+              onClick={() => setMethod('OWN_TRUCK')}
+            >
+              <span style={method === 'OWN_TRUCK' && party !== 'JOINT' ? choiceLabelSelected : choiceLabel}>
+                🚚 Use my own truck
+              </span>
+              <span style={choiceHint}>
+                Record your own legally permitted vehicle. No transport-hiring commission.
+              </span>
+            </button>
+          )}
 
           <button
             type="button"
