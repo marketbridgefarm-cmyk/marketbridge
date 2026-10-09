@@ -5,50 +5,45 @@ import api from '../api/client';
 // TRANSPORT SETUP
 // ============================================================================
 // Initial "create the transport job" form — who arranges it, own truck vs.
-// hire, pickup/destination, structured load details, and special requirements.
+// hire, pickup/destination/load details, and (for hired transport) the
+// matcher UI.
 //
-// Either the buyer or the seller may initiate transport, but once one has
-// created a job, the other cannot create a competing one (enforced by the
-// single-transport-job-per-order rule on the server).
-//
-// SECURITY: Load details and special requirements are structured enums and
-// numbers. No free text is allowed in fields visible to bidders.
+// Visual note: this renders INSIDE the Transport card on OrderDetail. It no
+// longer draws its own outer .card — the enclosing card already provides
+// the frame. Sections are flat blocks separated by hairlines; buttons and
+// inputs reuse the classes the surrounding page already styles.
 // ============================================================================
-
-const CARGO_TYPES = [
-  ['PRODUCE', 'Produce / Grains / Vegetables'],
-  ['LIVESTOCK', 'Livestock'],
-  ['GENERAL', 'General Goods'],
-  ['OTHER', 'Other'],
-];
-
-const CARGO_UNITS = [
-  ['tons', 'tons'],
-  ['kg', 'kg'],
-  ['quintals', 'quintals'],
-  ['units', 'units'],
-];
-
-const SPECIAL_OPTIONS = [
-  ['TARPAULIN', 'Tarpaulin / cover'],
-  ['STRAPS_ROPES', 'Straps / ropes'],
-  ['REFRIGERATION', 'Refrigeration needed'],
-  ['LIVE_ANIMAL_RAMP', 'Livestock ramp'],
-  ['LIFTING_GEAR', 'Crane / lifting gear'],
-  ['ACCESS_RESTRICTED', 'Restricted access / small gate'],
-];
 
 const emptyForm = {
   pickupLocation: '',
   destination: '',
-  cargoType: 'PRODUCE',
-  cargoQuantityValue: '',
-  cargoQuantityUnit: 'tons',
+  load: '',
   requiredCapacity: '',
-  specialRequirements: [],
+  specialRequirements: '',
 };
 
-/* ── Inline style tokens ─────────────────────────────────── */
+/* ── Small inline style tokens ────────────────────────────── */
+
+const eyebrow = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  color: '#12734a',
+  fontFamily: "'DM Sans', system-ui, sans-serif",
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: '.16em',
+  textTransform: 'uppercase',
+  margin: '0 0 6px',
+};
+
+const eyebrowLine = {
+  display: 'inline-block',
+  width: 18,
+  height: 2,
+  borderRadius: 2,
+  background: 'currentColor',
+};
 
 const lead = {
   margin: '0 0 14px',
@@ -133,6 +128,20 @@ const choiceHint = {
   color: '#64748b',
 };
 
+const truckRow = (isChosen) => ({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  flexWrap: 'wrap',
+  padding: '14px 0',
+  borderBottom: '1px solid #eef1f5',
+  background: 'transparent',
+  border: 'none',
+  borderTop: '1px solid #eef1f5',
+  borderBottomWidth: 1,
+});
+
 const truckInfo = {
   minWidth: 0,
   flex: '1 1 auto',
@@ -209,58 +218,6 @@ export default function TransportSetup({
 
   const party = arrangingParty || (canBuyer ? 'BUYER' : canSeller ? 'SELLER' : '');
 
-  // ── Who-arranges options ────────────────────────────────────
-  // Buyer-only competitions hide the seller/joint options entirely.
-  // Otherwise each option is shown only for the roles that are allowed.
-  const arrangerOptions = (() => {
-    const opts = [];
-    if (buyerOnlyCompetition) {
-      if (canBuyer) {
-        opts.push({
-          value: 'BUYER',
-          label: 'Buyer arranges',
-          hint: 'You control the transporter request and quote selection.',
-        });
-      }
-    } else {
-      if (canBuyer) {
-        opts.push({
-          value: 'BUYER',
-          label: 'Buyer arranges',
-          hint: canSeller
-            ? 'Buyer controls the request and quote selection.'
-            : 'You control the request and quote selection.',
-        });
-      }
-      if (canSeller) {
-        opts.push({
-          value: 'SELLER',
-          label: 'Seller arranges',
-          hint: canBuyer
-            ? 'Seller controls the request and quote selection.'
-            : 'You control the request and quote selection.',
-        });
-      }
-      if (canBuyer && canSeller) {
-        opts.push({
-          value: 'JOINT',
-          label: 'Joint arrangement',
-          hint: 'Buyer and seller agree together; hired transporter only.',
-        });
-      }
-    }
-    return opts;
-  })();
-
-  const toggleSpecial = (value) => {
-    setForm((prev) => {
-      const current = prev.specialRequirements || [];
-      const has = current.includes(value);
-      const next = has ? current.filter((v) => v !== value) : [...current, value];
-      return { ...prev, specialRequirements: next };
-    });
-  };
-
   const findMatches = async () => {
     try {
       const response = await api.get('/transport/match', {
@@ -298,9 +255,7 @@ export default function TransportSetup({
         truckId: method === 'OWN_TRUCK' ? truck : undefined,
         pickupLocation: form.pickupLocation,
         destination: form.destination,
-        cargoType: form.cargoType,
-        cargoQuantityValue: form.cargoQuantityValue ? Number(form.cargoQuantityValue) : undefined,
-        cargoQuantityUnit: form.cargoQuantityUnit,
+        load: form.load,
         requiredCapacity: form.requiredCapacity ? Number(form.requiredCapacity) : undefined,
         specialRequirements: form.specialRequirements,
       });
@@ -319,7 +274,7 @@ export default function TransportSetup({
       <p style={lead}>
         {buyerOnlyCompetition
           ? 'The buyer controls the transporter competition. Registered truck owners submit sealed quotes, then the buyer selects and negotiates one.'
-          : 'Either you or the counterparty may initiate transport. Once one of you does, the other cannot create a competing arrangement. The buyer remains responsible for paying a hired transporter.'}
+          : 'Choose who controls the transport arrangement. The buyer remains responsible for paying a hired transporter.'}
       </p>
 
       {/* ── Who arranges ─────────────────────────────────── */}
@@ -328,32 +283,41 @@ export default function TransportSetup({
           <h3 style={sectionTitle}>Who arranges transport</h3>
         </div>
 
-        {arrangerOptions.length === 0 ? (
-          <p style={truckMeta}>
-            Only the listing buyer or seller can arrange transport for this order.
-          </p>
-        ) : (
-          <div style={choiceGrid}>
-            {arrangerOptions.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                style={party === opt.value ? choiceSelected : choiceBase}
-                onClick={() => {
-                  setArrangingParty(opt.value);
-                  if (opt.value === 'JOINT' && method === 'OWN_TRUCK') {
-                    setMethod('HIRE_TRANSPORTER');
-                  }
-                }}
-              >
-                <span style={party === opt.value ? choiceLabelSelected : choiceLabel}>
-                  {opt.label}
-                </span>
-                <span style={choiceHint}>{opt.hint}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        <div style={choiceGrid}>
+          {canBuyer && (
+            <button
+              type="button"
+              style={party === 'BUYER' ? choiceSelected : choiceBase}
+              onClick={() => setArrangingParty('BUYER')}
+            >
+              <span style={party === 'BUYER' ? choiceLabelSelected : choiceLabel}>Buyer arranges</span>
+              <span style={choiceHint}>Buyer controls the request and quote selection.</span>
+            </button>
+          )}
+          {canSeller && !buyerOnlyCompetition && (
+            <button
+              type="button"
+              style={party === 'SELLER' ? choiceSelected : choiceBase}
+              onClick={() => setArrangingParty('SELLER')}
+            >
+              <span style={party === 'SELLER' ? choiceLabelSelected : choiceLabel}>Seller arranges</span>
+              <span style={choiceHint}>Seller controls the request and quote selection.</span>
+            </button>
+          )}
+          {canBuyer && canSeller && !buyerOnlyCompetition && (
+            <button
+              type="button"
+              style={party === 'JOINT' ? choiceSelected : choiceBase}
+              onClick={() => {
+                setArrangingParty('JOINT');
+                if (method === 'OWN_TRUCK') setMethod('HIRE_TRANSPORTER');
+              }}
+            >
+              <span style={party === 'JOINT' ? choiceLabelSelected : choiceLabel}>Joint arrangement</span>
+              <span style={choiceHint}>Buyer and seller agree together; hired transporter only.</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Method ───────────────────────────────────────── */}
@@ -367,13 +331,7 @@ export default function TransportSetup({
             <button
               type="button"
               disabled={party === 'JOINT'}
-              style={
-                party === 'JOINT'
-                  ? choiceDisabled
-                  : method === 'OWN_TRUCK'
-                    ? choiceSelected
-                    : choiceBase
-              }
+              style={party === 'JOINT' ? choiceDisabled : (method === 'OWN_TRUCK' ? choiceSelected : choiceBase)}
               onClick={() => setMethod('OWN_TRUCK')}
             >
               <span style={method === 'OWN_TRUCK' && party !== 'JOINT' ? choiceLabelSelected : choiceLabel}>
@@ -421,7 +379,6 @@ export default function TransportSetup({
               required
               value={form.pickupLocation}
               onChange={(e) => setForm({ ...form, pickupLocation: e.target.value })}
-              placeholder="e.g. Bahirdar, Lot B warehouse"
             />
           </div>
           <div className="field">
@@ -431,73 +388,34 @@ export default function TransportSetup({
               required
               value={form.destination}
               onChange={(e) => setForm({ ...form, destination: e.target.value })}
-              placeholder="e.g. Addis Ababa, Merkato"
             />
           </div>
-
           <div className="field">
-            <label htmlFor="ts-cargo-type">Cargo type</label>
-            <select
-              id="ts-cargo-type"
-              value={form.cargoType}
-              onChange={(e) => setForm({ ...form, cargoType: e.target.value })}
-            >
-              {CARGO_TYPES.map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
+            <label htmlFor="ts-load">Load</label>
+            <input
+              id="ts-load"
+              required
+              value={form.load}
+              onChange={(e) => setForm({ ...form, load: e.target.value })}
+            />
           </div>
-
           <div className="field">
-            <label>Cargo quantity</label>
-            <div className="od-quantity-row">
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="e.g. 500"
-                value={form.cargoQuantityValue}
-                onChange={(e) => setForm({ ...form, cargoQuantityValue: e.target.value })}
-                required
-              />
-              <select
-                value={form.cargoQuantityUnit}
-                onChange={(e) => setForm({ ...form, cargoQuantityUnit: e.target.value })}
-              >
-                {CARGO_UNITS.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="field">
-            <label htmlFor="ts-capacity">Required vehicle capacity (tons)</label>
+            <label htmlFor="ts-capacity">Required capacity (tons)</label>
             <input
               id="ts-capacity"
               type="number"
-              min="0"
-              step="0.1"
               value={form.requiredCapacity}
               onChange={(e) => setForm({ ...form, requiredCapacity: e.target.value })}
-              placeholder="e.g. 10"
             />
           </div>
-
           <div className="field field-span">
-            <label>Special requirements (select all that apply)</label>
-            <div className="od-check-grid">
-              {SPECIAL_OPTIONS.map(([value, label]) => (
-                <label key={value} className="od-check-option">
-                  <input
-                    type="checkbox"
-                    checked={form.specialRequirements.includes(value)}
-                    onChange={() => toggleSpecial(value)}
-                  />
-                  <span>{label}</span>
-                </label>
-              ))}
-            </div>
+            <label htmlFor="ts-requirements">Special requirements</label>
+            <input
+              id="ts-requirements"
+              value={form.specialRequirements}
+              onChange={(e) => setForm({ ...form, specialRequirements: e.target.value })}
+              placeholder="Access, loading, route…"
+            />
           </div>
         </div>
       </div>
