@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../api/client';
 import {
   ACCESS_NOTES, CAPACITY_TONS, DEADLINE_WINDOWS, PACKAGE_COUNTS, WEIGHT_OPTIONS, deadlineFromWindow,
-} from './requestOptions.js';
+} from './RequestOptions.js';
 
 // ============================================================================
 // TRANSPORT SETUP
