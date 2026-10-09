@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../api/client';
 import EvidenceUploader from './EvidenceUploader.jsx';
-import './TransportCoordinationSeller.css'; // <--- Add this line
+import './ProvidersCoordination.css'; // <--- Add this line
 
 // ============================================================================
 // TRANSPORT COORDINATION — SELLER VIEW
