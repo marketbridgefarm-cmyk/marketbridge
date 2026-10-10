@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import './PaymentCenter.css';   // ← add this line
+import './PaymentCenter.css';
 // ============================================================================
 // PAYMENT CENTER
 // ============================================================================
@@ -302,7 +302,11 @@ export default function PaymentCenter({
                     A seller payment is being processed. Check the payment status before
                     starting another checkout.
                   </span>
-                ) : null}
+                ) : (
+                  <span className="pc-row-sub">
+                    {marketplaceBlockedReason || 'Payment is not available yet. See the note above.'}
+                  </span>
+                )}
               </div>
             )}
           </ObligationRow>
@@ -318,7 +322,7 @@ export default function PaymentCenter({
             processing={row.processing}
             note={row.note}
           >
-            {row.canPay && !row.paid && (
+            {!row.paid && (
               <div className="pc-row-actions">
                 {row.canCheck ? (
                   <button
@@ -338,7 +342,7 @@ export default function PaymentCenter({
                   >
                     {busy === row.busyKey ? 'Redirecting…' : 'Resume inspector payment'}
                   </button>
-                ) : (
+                ) : row.canPay ? (
                   <button
                     type="button"
                     className="pc-btn pc-btn--primary"
@@ -347,6 +351,10 @@ export default function PaymentCenter({
                   >
                     {busy === row.busyKey ? 'Submitting…' : 'Pay inspector now'}
                   </button>
+                ) : (
+                  <span className="pc-row-sub">
+                    Payment not yet available. See the note above for the current gate.
+                  </span>
                 )}
               </div>
             )}
@@ -366,7 +374,7 @@ export default function PaymentCenter({
             processing={transport.processing}
             note={transport.note}
           >
-            {isBuyer && !transport.paid && transport.readyToPay && (
+            {isBuyer && !transport.paid && (
               <div className="pc-row-actions">
                 {transport.canCheck ? (
                   <button
@@ -407,7 +415,11 @@ export default function PaymentCenter({
                   <span className="pc-row-sub">
                     A transport payment is pending. Refresh this page after checkout.
                   </span>
-                ) : null}
+                ) : (
+                  <span className="pc-row-sub">
+                    Payment not yet available. See the note above for the current gate.
+                  </span>
+                )}
               </div>
             )}
           </ObligationRow>
