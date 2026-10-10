@@ -65,10 +65,6 @@ const ACTIVE_TRUCK_JOB_STATUSES = [
   'IN_TRANSIT',
 ];
 
-// ============================================================================
-// TRANSPORT LOADING REPORT — ENUM VALUES
-// ============================================================================
-
 const LOADING_WHAT_OPTIONS = [
   'AS_LISTED',
   'SAME_PRODUCT_DIFFERENT_VARIETY',
@@ -141,8 +137,6 @@ function quoteTurn(quote) {
   return null;
 }
 
-// Another live negotiation thread on the same job (mirrors
-// findCompetingLiveQuote in routes/inspections.js). Only leaf rows count.
 async function findCompetingLiveQuote(tx, transportJobId, exceptQuoteId) {
   return tx.transportQuote.findFirst({
     where: {
@@ -155,13 +149,6 @@ async function findCompetingLiveQuote(tx, transportJobId, exceptQuoteId) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// LEAF RESOLUTION
-// ---------------------------------------------------------------------------
-// A counter-chain is a linked list of immutable rows. The leaf is the row
-// with no children — the current live price. Every mutation must resolve the
-// leaf first so a stale parent id can never be acted on. A parent id returns
-// null and the caller rejects with 409, forcing the client to refresh.
 function findLeafQuote(tx, quoteId, extra = {}) {
   return tx.transportQuote.findFirst({
     where: { id: quoteId, childQuotes: { none: {} } },
@@ -176,10 +163,6 @@ function isQuoteExpired(quote) {
 function quoteExpiry(hours = 24) {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
-
-// ============================================================================
-// SILENT-RELEASE WINDOW (mirrors INSPECTION_RELEASE_AFTER_HOURS)
-// ============================================================================
 
 function transportReleaseAfterHours() {
   const configured = Number(process.env.TRANSPORT_RELEASE_AFTER_HOURS);
@@ -532,8 +515,6 @@ router.post(
         if (!inspectionPaid) {
           return res.status(409).json({ code: 'INSPECTION_PAYMENT_REQUIRED', error: 'All required inspection payments must be completed before arranging transport.' });
         }
-        // The final BUY decision and seller payment intentionally happen later:
-        // after a transporter is selected and the seller confirms transporter preparation.
       }
 
       if (isAgricultural && order.listing.pickupWindowEnd) {
@@ -1120,8 +1101,6 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
       const fresh = await tx.transportJob.findUnique({ where: { id: job.id } });
       if (!fresh) throw Object.assign(new Error('Transport job not found'), { statusCode: 404 });
       if (!['REQUESTED', 'QUOTED'].includes(fresh.status)) throw Object.assign(new Error(`Transport bidding cannot be reopened while the job is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
-      // A fresh request form is released only when nobody is waiting or pending: unselected
-      // transporters stay pending until the selected transporter has delivered.
       const liveBidders = await tx.transportQuote.count({ where: { transportJobId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } } });
       if (liveBidders > 0) {
         throw Object.assign(new Error(`A fresh transport form cannot be released while ${liveBidders} transporter bid(s) are still waiting or pending. They stay pending until the selected transporter delivers or they release themselves.`), { statusCode: 409 });
@@ -1186,16 +1165,6 @@ router.post('/:id/seller-confirm-pickup', authenticate, requireRole('SELLER'), [
     return res.status(500).json({ error: 'Could not confirm transport pickup readiness' });
   }
 });
-
-// ============================================================================
-// TRUCK ARRIVED ON SITE
-// ----------------------------------------------------------------------------
-// Seller (site host) or the assigned transporter (driver) can confirm the
-// truck is physically at the pickup site. This is the second gate for the
-// buyer's transport payment: seller confirms loading prep (goods ready, not
-// loaded) + truck on site → transport payment becomes payable. The loading
-// report comes AFTER payment, not before.
-// ============================================================================
 
 router.post('/:id/truck-arrived', authenticate, async (req, res) => {
   try {
@@ -1562,6 +1531,16 @@ router.post(
 
       if (!job) return res.status(404).json({ error: 'Transport job not found' });
 
+      // [I] — a disputed or cancelled order freezes all transport activity,
+      // including new quotes. Without this check a truck owner could bid on a
+      // frozen order and, downstream, start a payment on it.
+      if (job.order && ['DISPUTED', 'CANCELLED'].includes(job.order.status)) {
+        return res.status(409).json({
+          code: 'ORDER_DISPUTED',
+          error: `This order is ${job.order.status.toLowerCase()}. Transport quote proceedings are paused until it is resolved.`,
+        });
+      }
+
       await assertProviderCanBid(prisma, req.user.id);
 
       if (job.method !== 'HIRE_TRANSPORTER') {
@@ -1599,8 +1578,6 @@ router.post(
         }
       }
 
-      // A truck owner who withdrew (or was released) cannot bid on the same
-      // job again, with any truck.
       const withdrawnBefore = await prisma.transportQuote.findFirst({
         where: { transportJobId: job.id, truckOwnerId: req.user.id, status: 'WITHDRAWN' },
         select: { id: true },
@@ -1628,6 +1605,10 @@ router.post(
       }
 
       const quote = await prisma.$transaction(async (tx) => {
+        // [I] — lock the order inside the transaction too, so a dispute cannot
+        // slip in between the pre-check above and the write.
+        await lockOrderAndAssertNotClosed(tx, job.orderId, 'a transport quote cannot be submitted until that is resolved');
+
         const truck = await tx.truck.findUnique({ where: { id: truckId } });
 
         if (!truck) {
@@ -1681,6 +1662,10 @@ router.post(
 
       if (error.code === 'TRUCK_CONFLICT') {
         return res.status(409).json({ error: error.message });
+      }
+
+      if (error.code === 'ORDER_NOT_ACTIONABLE') {
+        return res.status(error.status || 409).json({ error: error.message });
       }
 
       if (error.code === 'P2002') {
@@ -1874,9 +1859,6 @@ router.patch(
           );
         }
 
-        // Mirrors inspections: a provisionally accepted transporter must be
-        // released explicitly (PATCH .../withdraw) before another bid can be
-        // selected, so an agreed deal is never dropped silently.
         const acceptedElsewhere = await tx.transportQuote.findFirst({
           where: { transportJobId: job.id, id: { not: fresh.id }, status: 'ACCEPTED', childQuotes: { none: {} } },
           select: { id: true },
@@ -2125,6 +2107,11 @@ router.patch(
         return rejected;
       }, { maxWait: 10000, timeout: 15000 });
 
+      await noticeTransportWaitingUnlocked(prisma, {
+        transportJobId: job.id,
+        reason: 'QUOTE_REJECTED',
+      });
+
       return res.json({ message: 'Quote rejected', quote: updatedQuote });
     } catch (error) {
       req.log.error({ err: error }, 'REJECT TRANSPORT QUOTE ERROR:');
@@ -2147,7 +2134,7 @@ router.patch(
 );
 
 // ============================================================================
-// COUNTER A TRANSPORT QUOTE — immutable child-row chain
+// COUNTER A TRANSPORT QUOTE
 // ============================================================================
 
 router.post(
@@ -2213,9 +2200,6 @@ router.post(
           throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
         }
 
-        // Immutable counter chain: the current leaf becomes historical
-        // (status COUNTERED with a child), and a new child row becomes the
-        // live negotiation thread. Mirrors the offers flow exactly.
         await tx.transportQuote.update({
           where: { id: freshQuote.id },
           data: { status: 'COUNTERED' },
@@ -2284,9 +2268,6 @@ router.post(
 // ============================================================================
 // WITHDRAW / RELEASE A TRANSPORT QUOTE
 // ============================================================================
-// Mirrors PATCH /inspections/:id/quotes/:quoteId/withdraw.
-// Only the arranging party (REQUESTER) may release. The truck owner uses
-// POST /withdraw-bid while their quote is still PENDING.
 
 router.patch(
   '/:id/quotes/:quoteId/withdraw',
@@ -2301,13 +2282,6 @@ router.patch(
       const { quote, job, actorRole } = loaded;
       const effectiveRole = actorRole;
 
-      // Only the requester can release a negotiation. A truck owner who no
-      // longer wants to proceed uses POST /withdraw-bid while PENDING. Once
-      // SELECTED or COUNTERED, the truck owner must respond to keep or end
-      // the thread; they cannot unilaterally abandon a live negotiation.
-      // Exception: the truck owner on a provisionally ACCEPTED quote may
-      // drop out before transport payment (reason required and recorded; no
-      // wait period, and it does not count against the requester's cap).
       const isProviderRelease =
         actorRole === 'PROVIDER' &&
         quote.status === 'ACCEPTED' &&
@@ -2340,7 +2314,6 @@ router.patch(
         }
       }
 
-      // Release limits for a provisional (ACCEPTED) agreement: reason + wait.
       let releaseInfo = { reason: 'NO_RESPONSE', note: null };
       if (isAcceptedRelease) {
         try {
@@ -2361,10 +2334,15 @@ router.patch(
           job.id
         );
 
+        // [H] — the release cap now applies to any requester release, silent
+        // or accepted. Previously silent releases skipped this block, letting
+        // a requester free the negotiation slot indefinitely.
         let releaseNumber = null;
-        if (isAcceptedRelease && !isProviderRelease) {
+        if (!isProviderRelease) {
           const { used, allowed } = await releaseAllowance(tx, {
-            action: 'TRANSPORT_QUOTE_WITHDRAWN',
+            action: isAcceptedRelease
+              ? 'TRANSPORT_QUOTE_WITHDRAWN'
+              : 'TRANSPORT_SILENT_QUOTE_RELEASED',
             metadataKey: 'transportJobId',
             jobId: job.id,
           });
@@ -2381,6 +2359,7 @@ router.patch(
                 attemptedReason: releaseInfo.reason,
                 releasesUsed: used,
                 limit: allowed,
+                wasSilent: isSilentRelease,
               },
             });
             return { blocked: true };
@@ -2406,11 +2385,6 @@ router.patch(
         }
 
         if (isAcceptedRelease) {
-          // ACCEPTED means the provisional agreement is live and the job is
-          // ACCEPTED — not QUOTED. Re-read the job inside the lock and verify
-          // the exact provisional agreement we are about to release is still
-          // the live one, owned by the same transporter. Mirrors the
-          // inspections.js withdraw branch.
           const freshJob = await tx.transportJob.findUnique({
             where: { id: freshQuote.transportJobId },
             select: { id: true, status: true, truckOwnerId: true },
@@ -2430,8 +2404,6 @@ router.patch(
             }
           }
         } else {
-          // Silent release: no accepted transporter yet, the job must still be
-          // QUOTED. The waiting window applies.
           if (freshQuote.transportJob.status !== 'QUOTED') {
             throw quoteError(`This transport agreement cannot be released while the job is ${freshQuote.transportJob.status}`, 409);
           }
@@ -2460,9 +2432,6 @@ router.patch(
               sellerPreparationDueAt: null,
               buyerLoadingConfirmedAt: null,
               buyerLoadingDueAt: null,
-              // Requester releases count against the cap. Provider releases
-              // (isProviderRelease) are tracked via the provider standing
-              // system and must not inflate the requester's count.
               ...(isProviderRelease ? {} : { acceptedReleaseCount: { increment: 1 } }),
             },
           });
@@ -2477,6 +2446,13 @@ router.patch(
               transportJobId: freshQuote.transportJobId,
               reason: 'TRANSPORTER_RELEASED',
             },
+          });
+        } else if (isSilentRelease) {
+          // [H] — silent requester releases also increment the durable counter
+          // on the transport job, so they are counted against the cap.
+          await tx.transportJob.update({
+            where: { id: freshQuote.transportJobId },
+            data: { acceptedReleaseCount: { increment: 1 } },
           });
         }
 
@@ -2510,7 +2486,6 @@ router.patch(
           },
         });
 
-        // Automatic penalties for frequent provider cancellations.
         if (isProviderRelease) {
           standingOutcome = await applyProviderCancellation(tx, {
             userId: req.user.id,
@@ -2519,7 +2494,6 @@ router.patch(
           });
         }
 
-        // Tell the other side (in-app + SMS opt-in) what happened.
         await recordOrderEvent(tx, {
           orderId: freshQuote.transportJob.orderId,
           actorId: req.user.id,
@@ -2716,9 +2690,6 @@ router.post(
         return res.status(400).json({ error: 'loadingStartedAt cannot be later than loadingFinishedAt' });
       }
 
-      // Payment gates: seller payment must be settled, and — for hired
-      // transport — the transport payment must be settled as well. Loading
-      // happens after payment, not before.
       const goodsPaid = await prisma.payment.findFirst({ where: { orderId: job.orderId, type: 'MARKETPLACE', status: 'PAID' }, select: { id: true } });
       if (!goodsPaid) return res.status(409).json({ code: 'GOODS_PAYMENT_REQUIRED', error: 'The seller payment must be completed before the loading report can be submitted.' });
 
