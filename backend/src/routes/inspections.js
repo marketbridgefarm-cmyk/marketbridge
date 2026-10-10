@@ -76,10 +76,6 @@ function quoteError(message, statusCode = 400) {
 
 // ============================================================================
 // INSPECTION WORK DETAILS — allow-listed, size-capped
-// ----------------------------------------------------------------------------
-// The requester describes the scope of inspection work. Every bidding
-// inspector reads this before quoting, so it must never carry contact
-// information. It is stored as JSON on InspectionRequest.workDetails.
 // ============================================================================
 const WORK_CATEGORIES = new Set([
   'GENERAL_QUALITY',
@@ -117,9 +113,17 @@ function sanitizeWorkDetails(input) {
     out.workCategory = input.workCategory;
   }
 
-  if (typeof input.quantityToInspect === 'string') {
+  if (typeof input.quantityValue === 'string') {
+    const v = input.quantityValue.trim();
+    if (v) out.quantityValue = v.slice(0, 40);
+  } else if (typeof input.quantityToInspect === 'string') {
     const v = input.quantityToInspect.trim();
-    if (v) out.quantityToInspect = v.slice(0, 120);
+    if (v) out.quantityValue = v.slice(0, 40);
+  }
+
+  if (typeof input.quantityUnit === 'string') {
+    const u = input.quantityUnit.trim();
+    if (u) out.quantityUnit = u.slice(0, 40);
   }
 
   if (input.lotCount != null && input.lotCount !== '') {
@@ -153,8 +157,6 @@ function sanitizeWorkDetails(input) {
 
 function quoteTurn(quote) {
   if (quote.status === 'PENDING') return 'REQUESTER';
-  // Selecting a provider bid is not acceptance. The requester owns the
-  // next decision: accept the provider's original offer or counter it.
   if (quote.status === 'SELECTED') return 'REQUESTER';
   if (quote.status === 'COUNTERED') {
     return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
@@ -392,8 +394,6 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
       const fresh = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
       if (!fresh) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
       if (!['REQUESTED', 'ACCEPTED', 'STALLED'].includes(fresh.status)) throw Object.assign(new Error(`Inspection bidding cannot be reopened while the request is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
-      // A fresh request form is released only when nobody is waiting or pending: unselected
-      // inspectors stay on the waiting list until the selected inspector submits the report.
       const liveBidders = await tx.inspectionQuote.count({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } } });
       if (liveBidders > 0) {
         throw Object.assign(new Error(`A fresh inspection form cannot be released while ${liveBidders} inspector bid(s) are still waiting or pending. They stay on the waiting list until the selected inspector submits the report or they release themselves.`), { statusCode: 409 });
@@ -592,8 +592,6 @@ router.post(
         });
       }
 
-      // An inspector who cancelled an accepted deal on this request cannot
-      // bid on it again (mirrors the transport rule).
       const cancelledBefore = await prisma.auditEvent.count({
         where: {
           actorId: req.user.id,
@@ -704,7 +702,7 @@ router.get(
 );
 
 // ============================================================================
-// SHARED LOOKUP: request + leaf quote, with the caller's role
+// SHARED LOOKUP
 // ============================================================================
 
 async function loadQuoteForNegotiation(req, res) {
@@ -783,8 +781,6 @@ router.patch(
         return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
       }, { maxWait: 10000, timeout: 15000 });
 
-      // Best-effort notices, fired after commit so they can never roll back
-      // the selection.
       await noticeInspectionWaitingLocked(prisma, {
         inspectionRequestId: request.id,
         selectedQuoteId: selected.id,
@@ -855,7 +851,6 @@ router.patch(
             buyerFeeAmount: request.feePayer === 'SELLER' ? null : request.feePayer === 'SPLIT' ? Math.round(finalAmount * 50) / 100 : finalAmount,
             sellerFeeAmount: request.feePayer === 'BUYER' ? null : request.feePayer === 'SPLIT' ? Math.round((finalAmount - Math.round(finalAmount * 50) / 100) * 100) / 100 : finalAmount,
             status: 'ACCEPTED',
-            // Provisional agreement: the seller has a bounded window to confirm.
             workflowDueAt: sellerConfirmationDueAt,
             startDueAt: null,
             completionDueAt: null,
@@ -996,9 +991,6 @@ router.post(
           );
         }
 
-        // Immutable counter chain: the current leaf becomes historical
-        // (status COUNTERED with a child), and a new child row becomes the
-        // live negotiation thread. Mirrors the offers flow exactly.
         await tx.inspectionQuote.update({
           where: { id: freshQuote.id },
           data: { status: 'COUNTERED' },
@@ -1060,15 +1052,17 @@ router.post(
 router.patch(
   '/:id/quotes/:quoteId/withdraw',
   authenticate,
+  // [J] — validator middleware, matching every other quote route.
+  [
+    param('id').notEmpty(),
+    param('quoteId').notEmpty(),
+  ],
   async (req, res) => {
     try {
       const loaded = await loadQuoteForNegotiation(req, res);
       if (!loaded) return;
       const { request, quote, actorRole } = loaded;
 
-      // Exception: the inspector on a provisionally ACCEPTED quote may drop
-      // out before payment (reason required and recorded; no wait period, and
-      // it does not count against the requester's cap).
       const isProviderRelease =
         actorRole === 'PROVIDER' &&
         quote.status === 'ACCEPTED' &&
@@ -1099,7 +1093,6 @@ router.patch(
         }
       }
 
-      // Release limits for a provisional (ACCEPTED) agreement: reason + wait.
       let releaseInfo = { reason: 'NO_RESPONSE', note: null };
       if (isAcceptedRelease) {
         try {
@@ -1117,10 +1110,16 @@ router.patch(
       const result = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection agreement cannot be released until the order dispute is resolved');
 
+        // [H] — the release cap now applies to any requester release, silent
+        // or accepted. Previously silent releases skipped this block entirely,
+        // letting a requester free the negotiation slot indefinitely without
+        // ever hitting the cap.
         let releaseNumber = null;
-        if (isAcceptedRelease && !isProviderRelease) {
+        if (!isProviderRelease) {
           const { used, allowed } = await releaseAllowance(tx, {
-            action: 'INSPECTION_QUOTE_WITHDRAWN',
+            action: isAcceptedRelease
+              ? 'INSPECTION_QUOTE_WITHDRAWN'
+              : 'INSPECTION_SILENT_INSPECTOR_RELEASED',
             metadataKey: 'inspectionRequestId',
             jobId: request.id,
           });
@@ -1137,6 +1136,7 @@ router.patch(
                 attemptedReason: releaseInfo.reason,
                 releasesUsed: used,
                 limit: allowed,
+                wasSilent: isSilentRelease,
               },
             });
             return { blocked: true };
@@ -1205,12 +1205,16 @@ router.patch(
               completionDueAt: null,
               startedAt: null,
               status: 'REQUESTED',
-              // Durable per-request release counter, incremented atomically in
-              // the same transaction as the audit event. Requester releases
-              // count against the cap; provider releases (isProviderRelease)
-              // are tracked by the standing system and must not inflate it.
               ...(isProviderRelease ? {} : { acceptedReleaseCount: { increment: 1 } }),
             },
+          });
+        } else if (isSilentRelease) {
+          // [H] — silent requester releases also increment the durable counter
+          // on the request, so they are counted the same way as accepted
+          // releases against the cap.
+          await tx.inspectionRequest.update({
+            where: { id: request.id },
+            data: { acceptedReleaseCount: { increment: 1 } },
           });
         }
 
@@ -1246,7 +1250,6 @@ router.patch(
           },
         });
 
-        // Automatic penalties for frequent provider cancellations.
         if (isProviderRelease) {
           standingOutcome = await applyProviderCancellation(tx, {
             userId: req.user.id,
@@ -1255,7 +1258,6 @@ router.patch(
           });
         }
 
-        // Tell the other side (in-app + SMS opt-in) what happened.
         await recordOrderEvent(tx, {
           orderId: request.orderId,
           actorId: req.user.id,
@@ -1274,7 +1276,6 @@ router.patch(
         return res.status(409).json({ error: LIMIT_MESSAGE, code: 'RELEASE_LIMIT_REACHED' });
       }
 
-      // Best-effort notices to the waiting inspectors, only after a real release.
       await noticeInspectionWaitingUnlocked(prisma, {
         inspectionRequestId: request.id,
         reason: isAcceptedRelease ? 'PROVISIONAL_RELEASED' : 'SILENT_RELEASED',
@@ -1359,6 +1360,11 @@ router.post(
 router.patch(
   '/:id/quotes/:quoteId/reject',
   authenticate,
+  // [J] — validator middleware, matching every other quote route.
+  [
+    param('id').notEmpty(),
+    param('quoteId').notEmpty(),
+  ],
   async (req, res) => {
     try {
       const loaded = await loadQuoteForNegotiation(req, res);
@@ -1406,10 +1412,6 @@ router.patch(
         return rejected;
       }, { maxWait: 10000, timeout: 15000 });
 
-      // The reject freed the exclusive negotiation slot. Notify the waiting
-      // inspectors that the waiting list is unlocked, mirroring offers.js.
-      // Best-effort, after commit, so a notice failure can never roll back
-      // the rejection.
       await noticeInspectionWaitingUnlocked(prisma, {
         inspectionRequestId: loaded.request.id,
         reason: 'QUOTE_REJECTED',
@@ -1475,9 +1477,6 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
         throw Object.assign(new Error('The confirmation window has expired. The provisional agreement is being closed.'), { statusCode: 409 });
       }
 
-      // The order is the authoritative ownership boundary. listing.sellerId
-      // is retained for historical data but must not decide who can confirm
-      // an order-owned inspection.
       if (!request.order || request.order.sellerId !== req.user.id) {
         throw Object.assign(new Error('Only the order seller can confirm this inspection'), { statusCode: 403 });
       }
@@ -1510,8 +1509,6 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
           lockedFeePayer: request.feePayer,
           lockedBuyerFeeAmount: request.feePayer === 'SELLER' ? null : request.feePayer === 'SPLIT' ? Math.round(Number(request.fee) * 50) / 100 : request.fee,
           lockedSellerFeeAmount: request.feePayer === 'BUYER' ? null : request.feePayer === 'SPLIT' ? Math.round((Number(request.fee) - Math.round(Number(request.fee) * 50) / 100) * 100) / 100 : request.fee,
-          // Payment window replaces the confirmation window. The inspector's
-          // start clock only begins once the fee is fully paid (maintenance).
           workflowDueAt: computeInspectionPaymentDueAt(),
           startDueAt: null,
           sellerMessage: message || null,
@@ -1520,7 +1517,6 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
       });
       if (!updated.count) throw Object.assign(new Error('Inspection was already confirmed or its status changed'), { statusCode: 409 });
 
-      // Create/reopen the exact payer obligation(s) only after confirmation.
       await syncOrderPaymentObligations(tx, request.orderId);
 
       await recordAuditEvent(tx, {
@@ -1549,14 +1545,6 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
     return res.status(error.statusCode || 500).json({ error: error.message || 'Could not confirm inspection' });
   }
 });
-
-// ============================================================================
-// SELLER CONFIRMS INSPECTOR ARRIVED ON SITE
-// ----------------------------------------------------------------------------
-// Distinct from /seller-confirm (which locks commercial terms). This is the
-// physical-arrival gate: the seller confirms the inspector is on site and
-// ready to start work. Inspection payment becomes payable only after this.
-// ============================================================================
 
 router.post('/:id/inspector-arrived', authenticate, requireRole('SELLER'), async (req, res) => {
   try {
@@ -1649,13 +1637,17 @@ router.post('/:id/seller-decline', authenticate, requireRole('SELLER'), async (r
       if (!outcome.lapsed) throw Object.assign(new Error('The inspection could not be declined in its current state'), { statusCode: 409 });
       return outcome;
     }, { maxWait: 10000, timeout: 15000 });
-    const listingId = await prisma.inspectionRequest.findUnique({
-      where: { id: req.params.id },
-      select: { listingId: true, status: true },
-    }).catch(() => null);
-    if (listingId?.status === 'CANCELLED') {
-      await noticeWaitingUnlocked(prisma, { listingId: listingId.listingId, reason: 'INSPECTION_SELLER_DECLINED' });
-    }
+
+    // [G] — this is an inspection-level event, not a listing-level one. Fire
+    // the inspection waiting-list notice (the same one used by every other
+    // inspection release path) so the waiting inspectors learn the slot is
+    // free again. Previously this called the listing-channel notice, which
+    // reached nobody who cared about the inspection.
+    await noticeInspectionWaitingUnlocked(prisma, {
+      inspectionRequestId: req.params.id,
+      reason: 'INSPECTION_SELLER_DECLINED',
+    }).catch(() => {});
+
     return res.json({ message: 'Inspection declined. The provisional purchase has been closed and the buyer notified.', ...result });
   } catch (error) {
     req.log.error({ err: error }, 'SELLER INSPECTION DECLINE ERROR');
@@ -1669,7 +1661,6 @@ router.post('/:id/seller-message', authenticate, requireRole('SELLER'), async (r
     if (!message || message.length > 500) return res.status(400).json({ error: 'Message must contain 1–500 characters' });
     const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { listing: true, order: { select: { sellerId: true } } } });
     if (!request) return res.status(404).json({ error: 'Inspection request not found' });
-    // Order ownership is authoritative; listing.sellerId is only a legacy fallback for orderless requests.
     const authoritativeSellerId = request.order ? request.order.sellerId : request.listing.sellerId;
     if (authoritativeSellerId !== req.user.id) return res.status(403).json({ error: 'Only the order seller can send inspection instructions' });
 
@@ -1893,25 +1884,12 @@ async function canAccessInspection(req, requestId) {
   return { request, allowed };
 }
 
-// ============================================================================
-// BUYER MEDIA GATE
-// ----------------------------------------------------------------------------
-// Text-based contact guards cannot scan photos or videos for a phone number
-// written on a piece of paper. Until the buyer has actually paid for the
-// goods, the buyer sees the structured inspection findings (grade, quantity,
-// defects, notes) but not the media the inspector captured. Sellers,
-// assigned inspectors, and admins always see the full evidence.
-//
-// The gate opens the instant a MARKETPLACE payment reaches PAID. It does not
-// care whether that payment was instant, split, or in installments — the
-// parent MARKETPLACE payment is the trigger.
-// ============================================================================
 async function buyerCanSeeInspectionMedia(request, userId, userRoles) {
   const isAdmin = Array.isArray(userRoles) && userRoles.includes('ADMIN');
   if (isAdmin) return true;
 
   const isBuyer = request.order?.buyerId === userId;
-  if (!isBuyer) return true;   // seller, inspector, requester-who-is-not-buyer
+  if (!isBuyer) return true;
   if (!request.orderId) return false;
 
   const paid = await prisma.payment.findFirst({
@@ -2018,10 +1996,6 @@ router.get('/:id/evidence/:evidenceId/media', authenticate, [
     return res.status(503).json({ error: 'Protected media is temporarily unavailable' });
   }
 });
-
-// ============================================================================
-// UPLOAD INSPECTION EVIDENCE MEDIA
-// ============================================================================
 
 router.post('/:id/evidence/media', authenticate, requireRole('INSPECTOR'), evidenceUpload.array('files', 5), async (req, res) => {
   try {
@@ -2227,8 +2201,6 @@ router.post(
         timeout: 15000,
       });
 
-      // Terminal event: release any inspector quotes still waiting on this
-      // request. Best-effort, after commit — never rolls back the report.
       await releaseWaitingInspectors(prisma, {
         inspectionRequestId: request.id,
         actorId: req.user.id,
