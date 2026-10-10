@@ -447,6 +447,45 @@ router.get('/match', authenticate, async (req, res) => {
   }
 });
 
+
+// ============================================================================
+// MY ACTIVE QUOTES (provider side)
+// ============================================================================
+router.get(
+  '/my-quotes',
+  authenticate,
+  requireRole('TRUCK_OWNER'),
+  async (req, res) => {
+    try {
+      const quotes = await prisma.transportQuote.findMany({
+        where: {
+          truckOwnerId: req.user.id,
+          status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
+          childQuotes: { none: {} },
+        },
+        include: {
+          transportJob: {
+            include: {
+              order: {
+                include: {
+                  buyer: { select: { id: true, name: true } },
+                  seller: { select: { id: true, name: true } },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return res.json({ quotes });
+    } catch (error) {
+      req.log.error({ err: error }, 'MY TRANSPORT QUOTES ERROR:');
+      return res.status(500).json({ error: 'Could not load your transport quotes' });
+    }
+  }
+);
+
 // ============================================================================
 // CREATE TRANSPORT JOB
 // ============================================================================
