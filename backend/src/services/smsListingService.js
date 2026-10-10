@@ -22,6 +22,12 @@
 //     MarketBridge, so the safer default is "saved, needs one more step to
 //     go live."
 //
+//     A default pickup window (30 days by default) is set automatically
+//     because the agricultural listing policy requires one and an SMS
+//     command has no easy way to enter a datetime. The farmer can edit it
+//     in the app before ACTIVATE; if they don't, ACTIVATE refreshes the
+//     window to "now → now + N days" so an old draft can still go live.
+//
 //   ACTIVATE <code>
 //     Publishes a DRAFT listing created via SMS (or otherwise) that belongs
 //     to this phone number, identified by the last 6 characters of its id
@@ -36,6 +42,18 @@ const prisma = require('../config/db');
 const { normalizeEthiopianPhone } = require('./smsService');
 
 const SHORT_CODE_LENGTH = 6;
+
+// Default pickup window length for SMS-created listings. The seller can
+// adjust it in the app before ACTIVATE. Env-overridable for testing.
+function defaultPickupWindowDays() {
+  const configured = Number(process.env.SMS_LISTING_PICKUP_WINDOW_DAYS);
+  return Number.isFinite(configured) && configured > 0 ? configured : 30;
+}
+
+function defaultPickupWindow(now = new Date()) {
+  const end = new Date(now.getTime() + defaultPickupWindowDays() * 24 * 60 * 60 * 1000);
+  return { start: now, end };
+}
 
 function shortCode(listingId) {
   return listingId.slice(-SHORT_CODE_LENGTH).toUpperCase();
@@ -94,6 +112,11 @@ async function handleListCommand(user, tokens) {
   const parsed = parseListCommand(tokens);
   if (parsed.error) return { reply: `Could not create listing: ${parsed.error}` };
 
+  // Agricultural listings must have a pickup window (policy). SMS has no
+  // way to enter a datetime, so default to "now → now + N days". The
+  // seller can edit this in the app before ACTIVATE.
+  const { start, end } = defaultPickupWindow();
+
   const listing = await prisma.listing.create({
     data: {
       sellerId: user.id,
@@ -106,12 +129,15 @@ async function handleListCommand(user, tokens) {
       location: parsed.location,
       status: 'DRAFT',
       description: 'Created via SMS',
+      pickupWindowStart: start,
+      pickupWindowEnd: end,
     },
   });
 
   const code = shortCode(listing.id);
+  const endLabel = end.toISOString().slice(0, 10);
   return {
-    reply: `Draft listing saved: ${parsed.quantity}${parsed.unit} ${parsed.cropType} at ${parsed.askingPrice}/${parsed.unit} in ${parsed.location}. Reply ACTIVATE ${code} to publish it, or edit it in the app first.`,
+    reply: `Draft listing saved: ${parsed.quantity}${parsed.unit} ${parsed.cropType} at ${parsed.askingPrice}/${parsed.unit} in ${parsed.location}. Pickup window ends ${endLabel}. Reply ACTIVATE ${code} to publish, or edit it in the app first.`,
     listing,
   };
 }
@@ -122,7 +148,7 @@ async function handleActivateCommand(user, tokens) {
 
   const candidates = await prisma.listing.findMany({
     where: { sellerId: user.id, status: 'DRAFT', category: 'AGRICULTURAL' },
-    select: { id: true, cropType: true },
+    select: { id: true, cropType: true, pickupWindowStart: true, pickupWindowEnd: true },
     orderBy: { createdAt: 'desc' },
     take: 200,
   });
@@ -132,8 +158,29 @@ async function handleActivateCommand(user, tokens) {
     return { reply: `No draft listing found with code ${code}. It may already be published, or belong to a different account.` };
   }
 
-  await prisma.listing.update({ where: { id: match.id }, data: { status: 'ACTIVE' } });
-  return { reply: `Listing ${code} (${match.cropType || 'produce'}) is now live on MarketBridge.` };
+  // The pickup window must be in the future for ACTIVATE to be valid. If
+  // the draft has been sitting long enough that its window has passed,
+  // refresh to "now → now + N days" so the listing can still go live.
+  // The seller can still edit it afterwards.
+  const endMs = match.pickupWindowEnd ? new Date(match.pickupWindowEnd).getTime() : 0;
+  const windowExpired = !Number.isFinite(endMs) || endMs <= Date.now();
+
+  const updateData = { status: 'ACTIVE' };
+  if (windowExpired) {
+    const { start, end } = defaultPickupWindow();
+    updateData.pickupWindowStart = start;
+    updateData.pickupWindowEnd = end;
+  }
+
+  await prisma.listing.update({ where: { id: match.id }, data: updateData });
+
+  const refreshed = windowExpired
+    ? ` The previous pickup window had expired, so a fresh one was set to ${updateData.pickupWindowEnd.toISOString().slice(0, 10)}.`
+    : '';
+
+  return {
+    reply: `Listing ${code} (${match.cropType || 'produce'}) is now live on MarketBridge.${refreshed}`,
+  };
 }
 
 /**
