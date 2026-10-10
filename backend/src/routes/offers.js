@@ -19,6 +19,12 @@ const {
   validAmount,
   noContactInfo,
 } = require('../utils/contactGuard');
+const {
+  parseReleaseReason,
+  assertAcceptedReleaseWindowElapsed,
+  releaseAllowance,
+  LIMIT_MESSAGE,
+} = require('../services/releaseLimitsService');
 
 const router = express.Router();
 
@@ -91,6 +97,20 @@ function releaseAvailableAt(offer) {
   return new Date(since + releaseAfterHours() * 60 * 60 * 1000);
 }
 
+// Provisional release window (24h by default). This is the "you must wait
+// before you can release a provisional agreement" cooldown.
+const PROVISIONAL_RELEASE_AFTER_HOURS = (() => {
+  const configured = Number(process.env.OFFER_PROVISIONAL_RELEASE_AFTER_HOURS);
+  return Number.isFinite(configured) && configured >= 0 ? configured : 24;
+})();
+
+function provisionalReleaseAvailableAt(offer) {
+  if (!offer) return null;
+  const since = new Date(offer.updatedAt || offer.createdAt).getTime();
+  if (!Number.isFinite(since)) return null;
+  return new Date(since + PROVISIONAL_RELEASE_AFTER_HOURS * 60 * 60 * 1000);
+}
+
 function isOfferExpired(offer) {
   return Boolean(
     offer.expiresAt &&
@@ -103,8 +123,7 @@ function isOfferExpired(offer) {
 // ---------------------------------------------------------------------------
 // A counter-chain is a linked list of immutable rows. The leaf is the row
 // with no children — the current live price. Every mutation must resolve the
-// leaf first so a stale parent id can never be acted on. A parent id returns
-// null and the caller rejects with 409, forcing the client to refresh.
+// leaf first so a stale parent id can never be acted on.
 function findLeafOffer(tx, offerId, extra = {}) {
   return tx.offer.findFirst({
     where: { id: offerId, childOffers: { none: {} } },
@@ -114,7 +133,7 @@ function findLeafOffer(tx, offerId, extra = {}) {
 
 async function expireOfferIfNeeded(tx, offer, actorId = null) {
   if (!offer || !isOfferExpired(offer)) return false;
-  if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(offer.status)) return false;
+  if (!['PENDING', 'SELECTED', 'COUNTERED', 'PROVISIONAL'].includes(offer.status)) return false;
 
   const updated = await tx.offer.update({
     where: { id: offer.id },
@@ -253,7 +272,7 @@ router.post(
             listingId,
             buyerId: req.user.id,
             status: {
-              in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'],
+              in: ['PENDING', 'SELECTED', 'COUNTERED', 'PROVISIONAL', 'ACCEPTED'],
             },
             childOffers: { none: {} },
           },
@@ -340,10 +359,6 @@ router.post(
 // ============================================================================
 // BUYER — MY OFFERS
 // GET /api/offers/mine
-// ----------------------------------------------------------------------------
-// Lightweight list for the Dashboard "My buying activity" panel. Only the
-// fields a buyer needs to render an offer card are selected; the full
-// listing graph (photos, videos, coordinates, etc.) is NOT fetched here.
 // ============================================================================
 
 router.get(
@@ -389,7 +404,7 @@ router.get(
                 title: true,
                 cropType: true,
                 category: true,
-                photos: true, // String[] — cannot be paginated via take.
+                photos: true,
                 askingPrice: true,
                 location: true,
                 status: true,
@@ -449,6 +464,12 @@ router.get(
 
       const admin = isAdmin(req);
 
+      const annotate = (o, supersededIds) => ({
+        ...o,
+        releaseAvailableAt: supersededIds.has(o.id) ? null : releaseAvailableAt(o),
+        provisionalReleaseAvailableAt: o.status === 'PROVISIONAL' ? provisionalReleaseAvailableAt(o) : null,
+      });
+
       if (admin || isSeller) {
         const offers =
           await prisma.offer.findMany({
@@ -476,10 +497,7 @@ router.get(
 
         const supersededIds = new Set(offers.map((o) => o.parentOfferId).filter(Boolean));
         return res.json({
-          offers: offers.map((o) => ({
-            ...o,
-            releaseAvailableAt: supersededIds.has(o.id) ? null : releaseAvailableAt(o),
-          })),
+          offers: offers.map((o) => annotate(o, supersededIds)),
           count: offers.length,
         });
       }
@@ -510,8 +528,9 @@ router.get(
           },
         });
 
+      const supersededIds = new Set(offers.map((o) => o.parentOfferId).filter(Boolean));
       return res.json({
-        offers,
+        offers: offers.map((o) => annotate(o, supersededIds)),
         count: offers.length,
       });
     } catch (error) {
@@ -524,6 +543,48 @@ router.get(
     }
   }
 );
+
+// ============================================================================
+// PROVISIONAL TRANSITION
+// ============================================================================
+
+async function moveOfferToProvisional(tx, offer, finalUnitPrice, actorId) {
+  if (!['AGRICULTURAL', 'PRODUCT'].includes(offer.listing.category)) {
+    throw offerError('Offers can only create orders for physical goods listings', 400);
+  }
+  if (isOfferExpired(offer)) {
+    throw offerError('Offer has expired and can no longer be accepted', 409);
+  }
+
+  const unitPrice = Number(finalUnitPrice);
+  if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+    throw offerError('Offer does not have a valid unit price', 400);
+  }
+
+  const claim = await tx.offer.updateMany({
+    where: { id: offer.id, status: { in: ['SELECTED', 'COUNTERED'] } },
+    data: { status: 'PROVISIONAL' },
+  });
+  if (claim.count !== 1) throw offerError('This offer has already been acted on', 409);
+
+  const updatedOffer = await tx.offer.findUnique({ where: { id: offer.id } });
+
+  await recordAuditEvent(tx, {
+    actorId,
+    action: 'OFFER_PROVISIONAL_AGREED',
+    resourceType: 'Offer',
+    resourceId: updatedOffer.id,
+    metadata: {
+      listingId: offer.listingId,
+      buyerId: offer.buyerId,
+      sellerId: offer.sellerId,
+      agreedUnitPrice: unitPrice,
+      quantity: Number(offer.quantity),
+    },
+  });
+
+  return { offer: updatedOffer };
+}
 
 // ============================================================================
 // ACCEPT OFFER AND CREATE ORDER
@@ -540,9 +601,6 @@ async function acceptOfferAndCreateOrder(
     throw offerError('Offers can only create orders for physical goods listings', 400);
   }
 
-  // Re-check expiry at the mutation point. The request-level check can race
-  // with the transaction: an offer may expire after the HTTP handler first
-  // reads it but before the order is created.
   if (isOfferExpired(offer)) {
     throw offerError('Offer has expired and can no longer be accepted', 409);
   }
@@ -557,9 +615,6 @@ async function acceptOfferAndCreateOrder(
     throw offerError('Offer does not have a valid unit price', 400);
   }
 
-  // Lock and re-read the listing at the mutation point. Offer creation checks
-  // availability too, but acceptance can happen after another workflow changed
-  // the listing. The lock makes the quantity check authoritative for this deal.
   const lockedListingRows = await tx.$queryRaw`
     SELECT "id", "availableQuantity", "quantity", "minAcceptablePrice", "category", "sellerId"
     FROM "Listing"
@@ -583,8 +638,6 @@ async function acceptOfferAndCreateOrder(
     );
   }
 
-  // amount is the negotiated PER-UNIT price. The order/payment amount is the
-  // immutable server-calculated total.
   const totalPrice = Math.round(unitPrice * requestedQuantity * 100) / 100;
   const minimumUnitPrice = lockedListing.minAcceptablePrice == null
     ? null
@@ -596,11 +649,10 @@ async function acceptOfferAndCreateOrder(
     );
   }
 
-  // Claim the offer itself before allocating inventory.
   const offerClaim = await tx.offer.updateMany({
     where: {
       id: offer.id,
-      status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
+      status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'PROVISIONAL'] },
     },
     data: { status: 'ACCEPTED' },
   });
@@ -613,8 +665,6 @@ async function acceptOfferAndCreateOrder(
     where: { id: offer.id },
   });
 
-  // There can be only one live provisional buyer/order for a listing at a
-  // time.
   const existingProvisionalOrder = await tx.order.findFirst({
     where: {
       listingId: offer.listingId,
@@ -630,11 +680,6 @@ async function acceptOfferAndCreateOrder(
     );
   }
 
-  // Any order that will run through the inspection lifecycle is provisional
-  // until the buyer explicitly chooses BUY and pays. Applies to AGRICULTURAL
-  // (always inspected) AND to PRODUCT listings that opted into inspection
-  // via `inspectionRequired: true`. The buyer-decision endpoint starts
-  // paymentDueAt at the correct lifecycle point.
   const inspectionRequired =
     offer.listing.category === 'AGRICULTURAL' ||
     offer.listing.inspectionRequired === true;
@@ -708,8 +753,6 @@ async function acceptOfferAndCreateOrder(
 
 // ============================================================================
 // WAITING-LIST / NEGOTIATION NOTICES
-// GET   /api/offers/notices        -> my latest notices (unread first)
-// PATCH /api/offers/notices/read   -> mark all of my notices read
 // ============================================================================
 
 router.get('/notices', authenticate, async (req, res) => {
@@ -745,20 +788,6 @@ router.patch('/notices/read', authenticate, async (req, res) => {
 // ============================================================================
 // ADMIN REOPEN-BIDDING
 // PATCH /api/offers/listing/:listingId/reopen-bidding
-// ----------------------------------------------------------------------------
-// Escape hatch for a stuck listing negotiation. Resets a listing that can no
-// longer progress through the normal flow back to ACTIVE so buyers can bid
-// again. Admin-only, MFA-required. Mirrors the reopen-bidding routes in
-// inspections.js and transport.js.
-//
-// Refuses when:
-//   - the listing is not in an open state
-//   - any live leaf offer still exists (waiting or in negotiation)
-//   - an active provisional order exists on the listing
-//   - a payment is pending, processing, paid, or pending reconciliation
-//
-// Only the listing status is reset. Offer history is untouched — no rows are
-// deleted, rejected, or withdrawn by this route.
 // ============================================================================
 
 router.patch(
@@ -785,7 +814,6 @@ router.patch(
       }
 
       const reopened = await prisma.$transaction(async (tx) => {
-        // Serialize reopen attempts on the same listing.
         const lockedListings = await tx.$queryRaw`
           SELECT "id", "status"
           FROM "Listing"
@@ -804,13 +832,10 @@ router.patch(
           );
         }
 
-        // Live-bidder guard: a fresh reopen is only safe when nobody is
-        // waiting or in negotiation. Waiting offers stay locked until the
-        // current negotiation/order ends.
         const liveLeafOffers = await tx.offer.count({
           where: {
             listingId,
-            status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
+            status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'PROVISIONAL', 'ACCEPTED'] },
             childOffers: { none: {} },
           },
         });
@@ -821,7 +846,6 @@ router.patch(
           );
         }
 
-        // Active provisional order guard.
         const activeOrder = await tx.order.findFirst({
           where: {
             listingId,
@@ -836,9 +860,6 @@ router.patch(
           );
         }
 
-        // Active payment guard. A completed order can still have a payment
-        // pending reconciliation, so check payments regardless of order
-        // status.
         const activePayment = await tx.payment.findFirst({
           where: {
             order: { listingId },
@@ -872,8 +893,6 @@ router.patch(
         return updated;
       }, { maxWait: 10000, timeout: 15000 });
 
-      // Best-effort waiting-list unlock notice, after commit, so a notice
-      // failure can never roll back the reopen.
       await noticeWaitingUnlocked(prisma, {
         listingId: reopened.id,
         reason: 'ADMIN_REOPENED_BIDDING',
@@ -923,6 +942,8 @@ router.patch(
         'SELECT',
         'WITHDRAW',
         'RELEASE',
+        'CONFIRM_PROVISIONAL',
+        'RELEASE_PROVISIONAL',
       ];
 
       if (
@@ -996,8 +1017,6 @@ router.patch(
         }
 
         const selected = await prisma.$transaction(async (tx) => {
-          // Serialize selection attempts for this listing. The listing row lock
-          // prevents two simultaneous requests from selecting different buyers.
           const lockedListings = await tx.$queryRaw`
             SELECT "id", "sellerId"
             FROM "Listing"
@@ -1033,14 +1052,10 @@ router.patch(
             throw offerError(negotiationWindowError, 409);
           }
 
-          // A selected bid or any counter-offer chain means that buyer already
-          // owns the exclusive negotiation slot. Never silently switch buyers.
           const activeNegotiation = await tx.offer.findFirst({
             where: {
               listingId: fresh.listingId,
-              status: { in: ['SELECTED', 'COUNTERED'] },
-              // Superseded offers in a counter chain stay COUNTERED for history;
-              // only the live (leaf) offer holds the exclusive slot.
+              status: { in: ['SELECTED', 'COUNTERED', 'PROVISIONAL'] },
               childOffers: { none: {} },
             },
             select: { id: true, buyerId: true, status: true },
@@ -1053,7 +1068,6 @@ router.patch(
             );
           }
 
-          // A provisional order must also block selection of another buyer.
           const provisionalOrder = await tx.order.findFirst({
             where: {
               listingId: fresh.listingId,
@@ -1108,7 +1122,7 @@ router.patch(
       }
 
       // ======================================================================
-      // BUYER ACCEPTS SELLER COUNTER
+      // BUYER ACCEPTS SELECTED BID  →  PROVISIONAL
       // ======================================================================
 
       if (action === 'ACCEPT_SELECTED') {
@@ -1121,10 +1135,18 @@ router.patch(
             throw offerError('This selected bid has expired and can no longer be accepted', 409);
           }
           if (fresh.status !== 'SELECTED') throw offerError('This selected bid is no longer available', 409);
-          return acceptOfferAndCreateOrder(tx, fresh, Number(fresh.amount), fresh.listing.sellerId, req.user.id);
+          return moveOfferToProvisional(tx, fresh, Number(fresh.amount), req.user.id);
         }, { maxWait: 10000, timeout: 15000 });
-        return res.json({ message: 'Selected buyer bid accepted and order created successfully', offer: result.offer, order: result.order, transportAutomaticallyAssigned: false });
+        return res.json({
+          message: 'Provisional agreement reached. Either party can confirm to create the order.',
+          offer: result.offer,
+          provisionalReleaseAvailableAt: provisionalReleaseAvailableAt(result.offer),
+        });
       }
+
+      // ======================================================================
+      // BUYER ACCEPTS SELLER COUNTER  →  PROVISIONAL
+      // ======================================================================
 
       if (action === 'ACCEPT_COUNTER') {
         if (!isBuyer && !admin) {
@@ -1204,28 +1226,111 @@ router.patch(
                 );
               }
 
-              return acceptOfferAndCreateOrder(
-                tx,
-                freshOffer,
-                Number(
-                  freshOffer.counterAmount
-                ),
-                freshOffer.listing.sellerId,
-                req.user.id
-              );
+              return moveOfferToProvisional(tx, freshOffer, Number(freshOffer.counterAmount), req.user.id);
             },
             { maxWait: 10000, timeout: 15000 }
           );
 
         return res.json({
-          message:
-            'Seller counter-offer accepted and order created successfully',
-
+          message: 'Provisional agreement reached. Either party can confirm to create the order.',
           offer: result.offer,
-          order: result.order,
+          provisionalReleaseAvailableAt: provisionalReleaseAvailableAt(result.offer),
+        });
+      }
 
-          transportAutomaticallyAssigned:
-            false,
+      // ======================================================================
+      // SELLER ACCEPTS  →  PROVISIONAL
+      // ======================================================================
+
+      if (action === 'ACCEPT') {
+        if (!isSeller && !admin) {
+          return res.status(403).json({
+            error:
+              'Only the seller can accept an offer',
+          });
+        }
+
+        if (!['SELECTED', 'COUNTERED'].includes(offer.status)) {
+          return res.status(400).json({ error: `Offer cannot be accepted because it is ${offer.status}` });
+        }
+
+        if (
+          offer.status === 'COUNTERED' &&
+          offer.counteredBy !== 'BUYER'
+        ) {
+          return res.status(409).json({
+            error:
+              'The seller cannot accept their own counter-offer. The buyer must respond first.',
+          });
+        }
+
+        const result =
+          await prisma.$transaction(
+            async (tx) => {
+              const freshOffer =
+                await findLeafOffer(tx, offer.id, { include: { listing: true } });
+
+              if (!freshOffer) {
+                throw offerError(
+                  'This negotiation has moved on. Refresh and try again.',
+                  409
+                );
+              }
+
+              if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
+                throw offerError('Offer has expired and can no longer be accepted', 409);
+              }
+
+              if (!['SELECTED', 'COUNTERED'].includes(freshOffer.status)) {
+                throw offerError(
+                  `Offer cannot be accepted because it is ${freshOffer.status}`,
+                  409
+                );
+              }
+
+              if (
+                freshOffer.status ===
+                  'COUNTERED' &&
+                freshOffer.counteredBy !==
+                  'BUYER'
+              ) {
+                throw offerError(
+                  'The seller cannot accept their own counter-offer. The buyer must respond first.',
+                  409
+                );
+              }
+
+              const finalPrice =
+                freshOffer.status ===
+                  'COUNTERED'
+                  ? Number(
+                      freshOffer.counterAmount
+                    )
+                  : Number(
+                      freshOffer.amount
+                    );
+
+              if (
+                !Number.isFinite(
+                  finalPrice
+                ) ||
+                finalPrice <= 0
+              ) {
+                throw offerError(
+                  'Offer does not have a valid final price',
+                  400
+                );
+              }
+
+              return moveOfferToProvisional(tx, freshOffer, finalPrice, req.user.id);
+            },
+            { maxWait: 10000, timeout: 15000 }
+          );
+
+        return res.json({
+          message: 'Provisional agreement reached. Either party can confirm to create the order.',
+          offer: result.offer,
+          provisionalReleaseAvailableAt: provisionalReleaseAvailableAt(result.offer),
         });
       }
 
@@ -1335,6 +1440,7 @@ router.patch(
                 },
               });
 
+              // [L] — persist the reason the buyer picked in the counter UI.
               await recordAuditEvent(tx, {
                 actorId: req.user.id,
                 action: 'OFFER_COUNTERED',
@@ -1345,6 +1451,7 @@ router.patch(
                   parentOfferId: freshOffer.id,
                   previousAmount: freshOffer.counterAmount ?? freshOffer.amount,
                   counterAmount: numericCounter,
+                  reasonCode: req.body.reasonCode || null,
                 },
               });
 
@@ -1362,118 +1469,7 @@ router.patch(
       }
 
       // ======================================================================
-      // SELLER ACCEPTS
-      // ======================================================================
-
-      if (action === 'ACCEPT') {
-        if (!isSeller && !admin) {
-          return res.status(403).json({
-            error:
-              'Only the seller can accept an offer',
-          });
-        }
-
-        if (!['SELECTED', 'COUNTERED'].includes(offer.status)) {
-          return res.status(400).json({ error: `Offer cannot be accepted because it is ${offer.status}` });
-        }
-
-        if (
-          offer.status === 'COUNTERED' &&
-          offer.counteredBy !== 'BUYER'
-        ) {
-          return res.status(409).json({
-            error:
-              'The seller cannot accept their own counter-offer. The buyer must respond first.',
-          });
-        }
-
-        const result =
-          await prisma.$transaction(
-            async (tx) => {
-              const freshOffer =
-                await findLeafOffer(tx, offer.id, { include: { listing: true } });
-
-              if (!freshOffer) {
-                throw offerError(
-                  'This negotiation has moved on. Refresh and try again.',
-                  409
-                );
-              }
-
-              if (await expireOfferIfNeeded(tx, freshOffer, req.user.id)) {
-                throw offerError('Offer has expired and can no longer be accepted', 409);
-              }
-
-              if (!['SELECTED', 'COUNTERED'].includes(freshOffer.status)) {
-                throw offerError(
-                  `Offer cannot be accepted because it is ${freshOffer.status}`,
-                  409
-                );
-              }
-
-              if (
-                freshOffer.status ===
-                  'COUNTERED' &&
-                freshOffer.counteredBy !==
-                  'BUYER'
-              ) {
-                throw offerError(
-                  'The seller cannot accept their own counter-offer. The buyer must respond first.',
-                  409
-                );
-              }
-
-              const finalPrice =
-                freshOffer.status ===
-                  'COUNTERED'
-                  ? Number(
-                      freshOffer.counterAmount
-                    )
-                  : Number(
-                      freshOffer.amount
-                    );
-
-              if (
-                !Number.isFinite(
-                  finalPrice
-                ) ||
-                finalPrice <= 0
-              ) {
-                throw offerError(
-                  'Offer does not have a valid final price',
-                  400
-                );
-              }
-
-              return acceptOfferAndCreateOrder(
-                tx,
-                freshOffer,
-                finalPrice,
-                freshOffer.listing.sellerId,
-                req.user.id
-              );
-            },
-            { maxWait: 10000, timeout: 15000 }
-          );
-
-        return res.json({
-          message:
-            'Offer accepted and order created successfully',
-
-          offer: result.offer,
-          order: result.order,
-
-          transportAutomaticallyAssigned:
-            false,
-        });
-      }
-
-      // ======================================================================
-      // SELLER RELEASES A SILENT BUYER (safety valve, not a rejection)
-      //  - Seller never rejects. A release is only possible when it is the
-      //    buyer's turn and the buyer has been inactive for the configured time.
-      //  - The released offer becomes WITHDRAWN ("Released"); the buyer may bid
-      //    again and the seller may select another waiting bid.
+      // SELLER RELEASES A SILENT BUYER (during negotiation — 72h)
       // ======================================================================
 
       if (action === 'RELEASE') {
@@ -1517,7 +1513,7 @@ router.patch(
             const remainingActiveLeafOffers = await tx.offer.count({
               where: {
                 listingId: freshOffer.listingId,
-                status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
+                status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'PROVISIONAL'] },
                 childOffers: { none: {} },
               },
             });
@@ -1558,12 +1554,174 @@ router.patch(
       }
 
       // ======================================================================
+      // CONFIRM PROVISIONAL → ORDER CREATED
+      // ======================================================================
+
+      if (action === 'CONFIRM_PROVISIONAL') {
+        if (!isBuyer && !isSeller && !admin) {
+          return res.status(403).json({ error: 'Only a participant can confirm the provisional agreement' });
+        }
+        if (offer.status !== 'PROVISIONAL') {
+          return res.status(400).json({ error: `Offer must be PROVISIONAL before confirmation (current: ${offer.status})` });
+        }
+
+        const result = await prisma.$transaction(async (tx) => {
+          const fresh = await findLeafOffer(tx, offer.id, { include: { listing: true } });
+          if (!fresh) throw offerError('This provisional agreement is no longer available', 409);
+          if (await expireOfferIfNeeded(tx, fresh, req.user.id)) {
+            throw offerError('This provisional agreement has expired', 409);
+          }
+          if (fresh.status !== 'PROVISIONAL') {
+            throw offerError('This provisional agreement is no longer available', 409);
+          }
+
+          const finalPrice =
+            fresh.counteredBy != null && Number.isFinite(Number(fresh.counterAmount))
+              ? Number(fresh.counterAmount)
+              : Number(fresh.amount);
+
+          return acceptOfferAndCreateOrder(tx, fresh, finalPrice, fresh.listing.sellerId, req.user.id);
+        }, { maxWait: 10000, timeout: 15000 });
+
+        return res.json({
+          message: 'Provisional agreement confirmed and order created successfully',
+          offer: result.offer,
+          order: result.order,
+          transportAutomaticallyAssigned: false,
+        });
+      }
+
+      // ======================================================================
+      // RELEASE PROVISIONAL (24h cooldown + reason + cap for the seller)
+      // ======================================================================
+
+      if (action === 'RELEASE_PROVISIONAL') {
+        if (!isBuyer && !isSeller && !admin) {
+          return res.status(403).json({ error: 'Only a participant can release the provisional agreement' });
+        }
+        if (offer.status !== 'PROVISIONAL') {
+          return res.status(400).json({ error: `Only a provisional agreement can be released (current: ${offer.status})` });
+        }
+
+        const availableAt = provisionalReleaseAvailableAt(offer);
+        if (availableAt && !admin && availableAt.getTime() > Date.now()) {
+          return res.status(409).json({
+            error: `The provisional agreement was made recently. You can release it from ${availableAt.toISOString()}.`,
+            releaseAvailableAt: availableAt,
+          });
+        }
+
+        const isBuyerRelease = isBuyer;
+
+        let releaseInfo;
+        try {
+          releaseInfo = parseReleaseReason(req.body, { provider: isBuyerRelease });
+        } catch (limitErr) {
+          return res.status(limitErr.statusCode || 400).json({ error: limitErr.message });
+        }
+
+        const released = await prisma.$transaction(async (tx) => {
+          const lockedListings = await tx.$queryRaw`
+            SELECT "id" FROM "Listing" WHERE "id" = ${offer.listingId} FOR UPDATE
+          `;
+          if (!lockedListings?.length) throw offerError('Listing not found', 404);
+
+          let releaseNumber = null;
+          if (isSeller && !admin) {
+            const { used, allowed } = await releaseAllowance(tx, {
+              action: 'OFFER_PROVISIONAL_RELEASED',
+              metadataKey: 'listingId',
+              jobId: offer.listingId,
+            });
+            if (used >= allowed) {
+              await recordAuditEvent(tx, {
+                actorId: req.user.id,
+                action: 'OFFER_RELEASE_BLOCKED_ADMIN_REVIEW',
+                resourceType: 'Offer',
+                resourceId: offer.id,
+                metadata: {
+                  listingId: offer.listingId,
+                  sellerId: offer.sellerId,
+                  attemptedReason: releaseInfo.reason,
+                  releasesUsed: used,
+                  limit: allowed,
+                },
+              });
+              return { blocked: true };
+            }
+            releaseNumber = used + 1;
+          }
+
+          const fresh = await findLeafOffer(tx, offer.id, { include: { listing: true } });
+          if (!fresh || fresh.status !== 'PROVISIONAL') {
+            throw offerError('This provisional agreement is no longer available', 409);
+          }
+
+          const freshAvailableAt = provisionalReleaseAvailableAt(fresh);
+          if (freshAvailableAt && !admin && freshAvailableAt.getTime() > Date.now()) {
+            throw offerError('This provisional agreement was made recently. Refresh and try again.', 409);
+          }
+
+          const updated = await tx.offer.update({
+            where: { id: fresh.id },
+            data: { status: 'WITHDRAWN' },
+          });
+
+          const remainingActiveLeafOffers = await tx.offer.count({
+            where: {
+              listingId: fresh.listingId,
+              status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'PROVISIONAL'] },
+              childOffers: { none: {} },
+            },
+          });
+          if (remainingActiveLeafOffers === 0) {
+            await tx.listing.update({ where: { id: fresh.listingId }, data: { status: 'ACTIVE' } });
+          }
+
+          await recordAuditEvent(tx, {
+            actorId: req.user.id,
+            action: isBuyerRelease
+              ? 'OFFER_PROVISIONAL_RELEASED_BY_BUYER'
+              : 'OFFER_PROVISIONAL_RELEASED',
+            resourceType: 'Offer',
+            resourceId: updated.id,
+            metadata: {
+              listingId: fresh.listingId,
+              buyerId: fresh.buyerId,
+              sellerId: fresh.sellerId,
+              releasedBy: isBuyerRelease ? 'BUYER' : 'SELLER',
+              reason: releaseInfo.reason,
+              note: releaseInfo.note,
+              releaseNumber,
+              remainingActiveLeafOffers,
+            },
+          });
+
+          return updated;
+        }, { maxWait: 10000, timeout: 15000 });
+
+        if (released && released.blocked) {
+          return res.status(409).json({ error: LIMIT_MESSAGE, code: 'RELEASE_LIMIT_REACHED' });
+        }
+
+        await noticeBuyerReleased(prisma, {
+          listingId: released.listingId,
+          offerId: released.id,
+          buyerId: released.buyerId,
+        }).catch(() => {});
+        await noticeWaitingUnlocked(prisma, {
+          listingId: released.listingId,
+          reason: 'PROVISIONAL_RELEASED',
+        }).catch(() => {});
+
+        return res.json({
+          message: 'Provisional agreement released. Other waiting bids are available again.',
+          offer: released,
+        });
+      }
+
+      // ======================================================================
       // REJECT (buyer only) / WITHDRAW (buyer only, waiting bid)
-      //  - The seller can NEVER reject or release a bid: they select, accept or
-      //    counter. Waiting bids are locked for the seller.
-      //  - The buyer in negotiation (SELECTED / COUNTERED) may reject; the seller
-      //    then selects another waiting bid.
-      //  - A waiting (PENDING) bidder may withdraw from the waiting list.
       // ======================================================================
 
       if (action === 'REJECT' || action === 'WITHDRAW') {
@@ -1617,11 +1775,10 @@ router.patch(
                   data: { status: terminalStatus },
                 });
 
-              // Live offers = leaves still waiting or in negotiation.
               const remainingActiveLeafOffers = await tx.offer.count({
                 where: {
                   listingId: freshOffer.listingId,
-                  status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
+                  status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'PROVISIONAL'] },
                   childOffers: { none: {} },
                 },
               });
@@ -1651,7 +1808,6 @@ router.patch(
             { maxWait: 10000, timeout: 15000 }
           );
 
-        // A rejected negotiation unlocks the waiting list for the seller.
         if (!isWithdraw) {
           await noticeWaitingUnlocked(prisma, { listingId: result.listingId, reason: 'BUYER_REJECTED' });
         }
@@ -1781,6 +1937,7 @@ router.patch(
                 },
               });
 
+              // [L] — persist the reason the seller picked in the counter UI.
               await recordAuditEvent(tx, {
                 actorId: req.user.id,
                 action: 'OFFER_COUNTERED',
@@ -1791,6 +1948,7 @@ router.patch(
                   parentOfferId: freshOffer.id,
                   previousAmount: freshOffer.counterAmount ?? freshOffer.amount,
                   counterAmount: numericCounter,
+                  reasonCode: req.body.reasonCode || null,
                 },
               });
 
