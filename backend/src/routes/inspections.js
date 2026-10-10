@@ -701,6 +701,51 @@ router.get(
   }
 );
 
+
+// ============================================================================
+// MY ACTIVE QUOTES (provider side)
+// ----------------------------------------------------------------------------
+// Every live quote the calling inspector owns, regardless of the parent
+// request's status. Without this endpoint a waiting inspector disappears
+// from their own Negotiations page the moment another inspector is selected.
+// ============================================================================
+router.get(
+  '/my-quotes',
+  authenticate,
+  requireRole('INSPECTOR'),
+  async (req, res) => {
+    try {
+      const quotes = await prisma.inspectionQuote.findMany({
+        where: {
+          inspectorId: req.user.id,
+          status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
+          childQuotes: { none: {} },
+        },
+        include: {
+          inspectionRequest: {
+            select: {
+              id: true,
+              status: true,
+              mode: true,
+              requestedById: true,
+              inspectorId: true,
+              listing: { select: { id: true, cropType: true, title: true, location: true } },
+              requestedBy: { select: { id: true, name: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return res.json({ quotes });
+    } catch (error) {
+      req.log.error({ err: error }, 'MY INSPECTION QUOTES ERROR:');
+      return res.status(500).json({ error: 'Could not load your inspection quotes' });
+    }
+  }
+);
+
+
 // ============================================================================
 // SHARED LOOKUP
 // ============================================================================
