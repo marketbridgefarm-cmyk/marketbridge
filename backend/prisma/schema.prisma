@@ -103,6 +103,7 @@ enum InspectionMode {
 enum RecoveryRequestType {
   INSPECTION
   TRANSPORT
+  OFFER
 }
 
 enum RecoveryRequestStatus {
@@ -819,6 +820,13 @@ model InspectionRequest {
   sellerMessage String?
   sellerMessageAt DateTime?
 
+  // Seller confirms the inspector has physically arrived at the site and is
+  // ready to start work. Distinct from sellerConfirmedAt (which only locks
+  // commercial terms). Inspection payment obligations stay OPEN until this
+  // is set; POST /inspections/:id/start and /report require it.
+  inspectorOnSiteConfirmedAt DateTime?
+  inspectorOnSiteConfirmedBy String?
+
   // Deadline for the open inspection-request/quote competition. Accepted or
   // in-progress inspections are never auto-expired by maintenance.
   workflowDueAt DateTime?
@@ -843,6 +851,12 @@ model InspectionRequest {
   lockedFeePayer InspectionFeePayer?
   lockedBuyerFeeAmount Decimal? @db.Decimal(18, 2)
   lockedSellerFeeAmount Decimal? @db.Decimal(18, 2)
+
+  // Durable per-request count of accepted-agreement releases recorded against
+  // this request. Replaces the audit-JSON scan in releaseLimitsService;
+  // incremented atomically inside the release transaction, so it can never
+  // disagree with the audit trail. Reset to 0 on admin reopen-bidding.
+  acceptedReleaseCount Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1059,6 +1073,12 @@ model Order {
   // Buyer must choose BUY or CANCEL after the inspection/report and transport preparation.
   buyerDecisionDueAt DateTime?
 
+  // Explicit record that the buyer reviewed the completed inspection report.
+  // Set at the same moment as BUY; kept as a separate field so the buyer's
+  // review is a first-class auditable event distinct from the commercial
+  // BUY/CANCEL choice.
+  buyerReviewedReportAt DateTime?
+
   inspectionRequests InspectionRequest[]
 
   arrangingParty ArrangingParty?
@@ -1192,10 +1212,21 @@ model TransportJob {
   // Buyer must approve the transporter's loading report before physical loading.
   buyerLoadingDueAt DateTime?
 
+  // Physical arrival of the assigned truck at the pickup site. Set by the
+  // seller or the transporter once the truck is on site. The buyer's
+  // TRANSPORT payment is gated on this AND sellerPickupConfirmedAt (goods
+  // prepared but not yet loaded). The loading report comes after payment.
+  truckArrivedAt DateTime?
+  truckArrivedConfirmedBy String?
+
   pickupConfirmedAt   DateTime?
   deliveredConfirmedAt DateTime?
 
   incidentNotes String?
+
+  // Durable per-job count of accepted-agreement releases recorded against
+  // this job. Replaces the audit-JSON scan in releaseLimitsService.
+  acceptedReleaseCount Int @default(0)
 
   // Structured transport work requirements (weight, packages, vehicle type,
   // handling, deadline). Allow-listed at write time by routes/transport.js.
@@ -2231,7 +2262,7 @@ model OfferNotification {
   userId    String
   listingId String
   offerId   String?
-  type      String   // BID_SELECTED, WAITING_LOCKED, WAITING_UNLOCKED, WAITING_RELEASED
+  type      String   // BID_SELECTED, WAITING_LOCKED, WAITING_UNLOCKED, WAITING_RELEASED, WAITING_CANCELLED
   title     String
   body      String
   metadata  Json?
@@ -2256,7 +2287,7 @@ model InspectionNotification {
   userId              String
   inspectionRequestId String
   quoteId             String?
-  type                String   // BID_SELECTED, WAITING_LOCKED, WAITING_UNLOCKED, WAITING_RELEASED
+  type                String   // BID_SELECTED, WAITING_LOCKED, WAITING_UNLOCKED, WAITING_RELEASED, WAITING_CANCELLED
   title               String
   body                String
   metadata            Json?
@@ -2279,7 +2310,7 @@ model TransportNotification {
   userId         String
   transportJobId String
   quoteId        String?
-  type           String   // BID_SELECTED, WAITING_LOCKED, WAITING_UNLOCKED, WAITING_RELEASED
+  type           String   // BID_SELECTED, WAITING_LOCKED, WAITING_UNLOCKED, WAITING_RELEASED, WAITING_CANCELLED
   title          String
   body           String
   metadata       Json?
