@@ -53,6 +53,12 @@ export default function CreateListing() {
     longitude: '',
     harvestedDate: '',
     readinessDate: '',
+    // ── Pickup window (required for AGRICULTURAL) ──────────────────────
+    // The pickup window is the only natural deadline for offer negotiation
+    // and the inspection lifecycle on agricultural listings. The backend
+    // rejects any AGRICULTURAL listing without both fields.
+    pickupWindowStart: '',
+    pickupWindowEnd: '',
     photos: [], // [{ key, name, previewUrl }]
     videos: [],  // [{ key, name, previewUrl }]
     description: '',
@@ -136,6 +142,14 @@ export default function CreateListing() {
   async function submit(e) {
     e.preventDefault();
     setError('');
+
+    // Client-side pre-check: the backend will also reject, but this avoids
+    // a round-trip and gives a clearer message before submit.
+    if (category === 'AGRICULTURAL' && (!form.pickupWindowStart || !form.pickupWindowEnd)) {
+      setError('Agricultural listings require both the pickup window start and end.');
+      return;
+    }
+
     try {
       const r = await api.post('/listings', {
         category,
@@ -155,6 +169,9 @@ export default function CreateListing() {
         longitude: form.longitude !== '' ? Number(form.longitude) : undefined,
         harvestedDate: category === 'AGRICULTURAL' && form.harvestedDate ? form.harvestedDate : undefined,
         readinessDate: category === 'AGRICULTURAL' && form.readinessDate ? form.readinessDate : undefined,
+        // Pickup window is required for AGRICULTURAL and rejected for PRODUCT.
+        pickupWindowStart: category === 'AGRICULTURAL' && form.pickupWindowStart ? form.pickupWindowStart : undefined,
+        pickupWindowEnd: category === 'AGRICULTURAL' && form.pickupWindowEnd ? form.pickupWindowEnd : undefined,
         description: form.description || undefined,
         photos: form.photos.map(p => p.key),
         videos: form.videos.map(v => v.key),
@@ -219,7 +236,7 @@ export default function CreateListing() {
               <div className="form-grid">
                 <div><label>Produce</label><input required value={form.cropType} onChange={set('cropType')} placeholder="Potatoes, wheat, barley..." /></div>
                 <div><label>Quantity</label><input required type="number" min="0.01" value={form.quantity} onChange={set('quantity')} /></div>
-                <div><label>Unit</label><select value={form.unit} onChange={set('unit')}><option>quintal</option><option>ton</option><option>kg</option><option>crate</option><option>bag</option></select></div>
+                <div><label>Unit</label><select value={form.unit} onChange={set('unit')}><option>quintal</option><option>ton</option><option>kg</option><option>crate</option><option value="bag">bag</option></select></div>
               </div>
             ) : (
               <div className="form-grid">
@@ -263,6 +280,32 @@ export default function CreateListing() {
               <>
                 <div><label>Harvest date</label><input type="date" value={form.harvestedDate} onChange={set('harvestedDate')} /></div>
                 <div><label>Ready / pickup date</label><input type="date" value={form.readinessDate} onChange={set('readinessDate')} /></div>
+
+                {/* ── Pickup window (required) ─────────────────────────────────
+                    Offers on this listing stay open only until the pickup
+                    window closes. The end must be a future date-time; the
+                    backend enforces both fields and this order. */}
+                <div>
+                  <label>Pickup window starts</label>
+                  <input
+                    required
+                    type="datetime-local"
+                    value={form.pickupWindowStart}
+                    onChange={set('pickupWindowStart')}
+                  />
+                </div>
+                <div>
+                  <label>Pickup window ends</label>
+                  <input
+                    required
+                    type="datetime-local"
+                    value={form.pickupWindowEnd}
+                    onChange={set('pickupWindowEnd')}
+                  />
+                  <small className="muted" style={{ display: 'block' }}>
+                    Buyers can bid until this moment. Offers expire when it passes.
+                  </small>
+                </div>
               </>
             )}
           </div>
