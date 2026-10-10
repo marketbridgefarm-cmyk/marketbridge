@@ -17,15 +17,6 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 
-/**
- * Listing photos/videos are stored as private object-storage keys. Resolve
- * each key to a short-lived signed URL right before sending a response.
- *
- * Performance note: for list endpoints where the caller only renders a card
- * thumbnail, pass `firstPhotoOnly: true`. Signing every photo AND every
- * video for every listing on a 50-item page results in hundreds of signed
- * URL requests per page load (each an object-storage round trip).
- */
 async function resolveMediaUrl(value) {
   if (!value) return null;
   if (/^https?:\/\//i.test(value)) return value;
@@ -44,8 +35,6 @@ async function attachMediaUrls(listing, { includePrivateKeys = false, firstPhoto
   const photoKeys = listing.photos || [];
   const videoKeys = listing.videos || [];
 
-  // For list views (cards) we only need the first photo as a thumbnail.
-  // Videos are not shown on cards, so skip signing them entirely.
   const keysToSign = firstPhotoOnly ? photoKeys.slice(0, 1) : photoKeys;
   const videoKeysToSign = firstPhotoOnly ? [] : videoKeys;
 
@@ -62,12 +51,6 @@ async function attachMediaUrls(listing, { includePrivateKeys = false, firstPhoto
   };
 }
 
-/**
- * Fields that are safe to expose on public listing endpoints.
- *
- * IMPORTANT:
- * minAcceptablePrice is intentionally absent.
- */
 const PUBLIC_LISTING_FIELDS = {
   id: true,
   sellerId: true,
@@ -93,14 +76,12 @@ const PUBLIC_LISTING_FIELDS = {
   videos: true,
   description: true,
   status: true,
+  inspectionRequired: true,
   createdByInspectorId: true,
   createdAt: true,
   updatedAt: true,
 };
 
-/**
- * Explicitly serialize a listing for public API responses.
- */
 function toPublicListing(listing) {
   if (!listing) return listing;
 
@@ -127,9 +108,6 @@ function toPublicListing(listing) {
   return publicListing;
 }
 
-/**
- * Convert an incoming date into a valid Date.
- */
 function parseDate(value) {
   if (value === undefined || value === null || value === '') {
     return null;
@@ -144,9 +122,6 @@ function parseDate(value) {
   return date;
 }
 
-/**
- * Validate price relationships.
- */
 function validatePrices(askingPrice, minAcceptablePrice) {
   if (
     askingPrice !== undefined &&
@@ -180,9 +155,6 @@ function validatePrices(askingPrice, minAcceptablePrice) {
   return null;
 }
 
-/**
- * Validate agricultural dates.
- */
 function validateAgriculturalDates(
   category,
   harvestedDate,
@@ -235,9 +207,6 @@ function validateAgriculturalDates(
   return null;
 }
 
-/**
- * Validate an agricultural pickup window.
- */
 function validatePickupWindow(
   category,
   pickupWindowStart,
@@ -624,10 +593,6 @@ router.get('/', optionalAuthenticate, async (req, res) => {
         where,
       });
 
-    // PERFORMANCE: only sign the first photo per listing as a card thumbnail.
-    // Signing every photo and video of 50 listings was resulting in 300+
-    // object-storage round trips per page load and was the dominant
-    // contributor to multi-second GET /listings response times.
     listings = await Promise.all(
       listings.map((listing) =>
         attachMediaUrls(listing, {
@@ -657,17 +622,9 @@ router.get('/', optionalAuthenticate, async (req, res) => {
   }
 });
 
-// ============================================================================
-// STRUCTURED ETHIOPIAN GEOGRAPHY
-// ============================================================================
-
 router.get('/meta/regions', (req, res) => {
   res.json({ regions: REGIONS });
 });
-
-// ============================================================================
-// MARKET PRICE TRENDS
-// ============================================================================
 
 router.get('/market-trends', optionalAuthenticate, async (req, res) => {
   try {
@@ -734,10 +691,6 @@ router.get('/market-trends', optionalAuthenticate, async (req, res) => {
   }
 });
 
-// ============================================================================
-// NEARBY LISTINGS
-// ============================================================================
-
 router.get('/nearby', optionalAuthenticate, async (req, res) => {
   try {
     const lat = Number(req.query.lat);
@@ -796,12 +749,6 @@ router.get('/nearby', optionalAuthenticate, async (req, res) => {
     return res.status(500).json({ error: 'Could not load nearby listings' });
   }
 });
-
-// ============================================================================
-// GET SINGLE PUBLIC LISTING
-// ============================================================================
-// Detail view — sign every photo and video since the detail page renders a
-// gallery.
 
 router.get('/:id', optionalAuthenticate, async (req, res) => {
   try {
@@ -872,11 +819,6 @@ router.get('/:id', optionalAuthenticate, async (req, res) => {
                 OR: [
                   { requestedById: req.user.id },
                   { inspectorId: req.user.id },
-                  // A buyer of an order on this listing must see the
-                  // inspection request that gates their payment, even when
-                  // the seller or a joint mode opened it. Without this, the
-                  // listing detail page shows no inspection and no scope for
-                  // that buyer.
                   { order: { buyerId: req.user.id } },
                 ],
               },
@@ -915,10 +857,6 @@ router.get('/:id', optionalAuthenticate, async (req, res) => {
     return res.status(500).json({ error: 'Could not load listing' });
   }
 });
-
-// ============================================================================
-// UPLOAD LISTING MEDIA
-// ============================================================================
 
 router.post(
   '/media',
@@ -1051,6 +989,11 @@ router.post(
       .isLength({ max: 5000 })
       .withMessage('description must be 5000 characters or fewer')
       .custom(noContactInfo),
+
+    body('inspectionRequired')
+      .optional()
+      .isBoolean()
+      .withMessage('inspectionRequired must be a boolean'),
   ],
 
   async (req, res) => {
@@ -1087,7 +1030,15 @@ router.post(
         photos,
         videos,
         description,
+        inspectionRequired: requestedInspectionRequired,
       } = req.body;
+
+      // Agricultural listings always require inspection (policy). PRODUCT
+      // listings can opt in with inspectionRequired: true.
+      const inspectionRequired =
+        category === 'AGRICULTURAL'
+          ? true
+          : requestedInspectionRequired === true;
 
       const sellerId =
         category === 'PRODUCT'
@@ -1186,6 +1137,15 @@ router.post(
 
       if (pickupWindowError) {
         return res.status(400).json({ error: pickupWindowError });
+      }
+
+      // Agricultural listings must have a pickup window: it is the only
+      // natural deadline for offer negotiation and the inspection lifecycle.
+      // Without it, offers on the listing would never expire.
+      if (category === 'AGRICULTURAL' && !pickupWindowEnd) {
+        return res.status(400).json({
+          error: 'Agricultural listings require pickupWindowStart and pickupWindowEnd.',
+        });
       }
 
       if (
@@ -1301,6 +1261,8 @@ router.post(
 
             status: 'ACTIVE',
 
+            inspectionRequired,
+
             createdByInspectorId:
               req.user.roles.includes(
                 'INSPECTOR'
@@ -1317,6 +1279,7 @@ router.post(
         resourceId: listing.id,
         metadata: {
           category: listing.category,
+          inspectionRequired: listing.inspectionRequired,
           pickupWindowStart: listing.pickupWindowStart,
           pickupWindowEnd: listing.pickupWindowEnd,
         },
@@ -1385,6 +1348,7 @@ router.patch(
         kebele,
         latitude,
         longitude,
+        inspectionRequired,
       } = req.body;
 
       if (description !== undefined && description !== null) {
@@ -1574,6 +1538,17 @@ router.patch(
         return res.status(400).json({ error: pickupWindowError });
       }
 
+      // Agricultural listings must keep a pickup window at all times.
+      if (listing.category === 'AGRICULTURAL') {
+        const effectiveStart = pickupWindowStart !== undefined ? pickupWindowStart : listing.pickupWindowStart;
+        const effectiveEnd = pickupWindowEnd !== undefined ? pickupWindowEnd : listing.pickupWindowEnd;
+        if (!effectiveStart || !effectiveEnd) {
+          return res.status(400).json({
+            error: 'Agricultural listings must have both pickupWindowStart and pickupWindowEnd.',
+          });
+        }
+      }
+
       const allowedStatuses = [
         'DRAFT',
         'ACTIVE',
@@ -1687,6 +1662,14 @@ router.patch(
             ...(status !==
               undefined && {
               status,
+            }),
+
+            // PRODUCT listings can toggle inspection on/off. AGRICULTURAL
+            // listings always require inspection (policy); attempts to
+            // disable it are ignored.
+            ...(inspectionRequired !== undefined &&
+              listing.category !== 'AGRICULTURAL' && {
+              inspectionRequired: Boolean(inspectionRequired),
             }),
 
             ...(harvestedDate !==
@@ -1820,8 +1803,6 @@ router.get(
   }
 );
 
-// Export the serializer for regression testing.
-router.toPublicListing =
-  toPublicListing;
+router.toPublicListing = toPublicListing;
 
 module.exports = router;
