@@ -591,3 +591,13 @@
   .neg-group .sd-btn,
   .neg-card .sd-btn { transition: none; }
 }
+
+.neg-card--provisional {
+  border-left: 3px solid #f59e0b;
+  background: #fffbeb;
+}
+
+.neg-card--provisional .neg-turn-label {
+  background: #f59e0b;
+  color: #fff;
+}
