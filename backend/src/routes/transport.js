@@ -155,6 +155,20 @@ async function findCompetingLiveQuote(tx, transportJobId, exceptQuoteId) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// LEAF RESOLUTION
+// ---------------------------------------------------------------------------
+// A counter-chain is a linked list of immutable rows. The leaf is the row
+// with no children — the current live price. Every mutation must resolve the
+// leaf first so a stale parent id can never be acted on. A parent id returns
+// null and the caller rejects with 409, forcing the client to refresh.
+function findLeafQuote(tx, quoteId, extra = {}) {
+  return tx.transportQuote.findFirst({
+    where: { id: quoteId, childQuotes: { none: {} } },
+    ...extra,
+  });
+}
+
 function isQuoteExpired(quote) {
   return Boolean(quote.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
 }
@@ -1848,7 +1862,7 @@ router.patch(
           throw quoteError('This transport request is no longer accepting bids', 409);
         }
 
-        const fresh = await tx.transportQuote.findUnique({ where: { id: quote.id } });
+        const fresh = await findLeafQuote(tx, quote.id);
         if (!fresh || fresh.status !== 'PENDING') throw quoteError('This bid is no longer available', 409);
         if (isQuoteExpired(fresh)) throw quoteError('This quote has expired', 409);
 
@@ -1948,15 +1962,12 @@ router.patch(
           throw quoteError('Transport negotiation is locked because a transport payment has already started', 409);
         }
 
-        const freshQuote = await tx.transportQuote.findUnique({
-          where: { id: quote.id },
+        const freshQuote = await findLeafQuote(tx, quote.id, {
           include: { transportJob: { include: { order: true } } },
         });
 
         if (!freshQuote) {
-          const error = new Error('Quote not found');
-          error.statusCode = 404;
-          throw error;
+          throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
         }
 
         if (!['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
@@ -2089,7 +2100,7 @@ router.patch(
           throw quoteError('Transport negotiation is locked because a transport payment has already started', 409);
         }
 
-        const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
+        const freshQuote = await findLeafQuote(tx, quote.id);
         if (!freshQuote || !['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
           throw quoteError('This quote is no longer available for rejection', 409);
         }
@@ -2189,8 +2200,8 @@ router.post(
           throw quoteError('Transport negotiation is locked because a transport payment has already started', 409);
         }
 
-        const freshQuote = await tx.transportQuote.findUnique({ where: { id: quote.id } });
-        if (!freshQuote) throw quoteError('Quote not found', 404);
+        const freshQuote = await findLeafQuote(tx, quote.id);
+        if (!freshQuote) throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
         if (!['SELECTED', 'COUNTERED'].includes(freshQuote.status)) {
           throw quoteError(`Quote cannot be countered because it is ${freshQuote.status}`, 409);
         }
@@ -2377,11 +2388,10 @@ router.patch(
           releaseNumber = used + 1;
         }
 
-        const freshQuote = await tx.transportQuote.findUnique({
-          where: { id: quote.id },
+        const freshQuote = await findLeafQuote(tx, quote.id, {
           include: { transportJob: { include: { order: true } } },
         });
-        if (!freshQuote) throw quoteError('Quote not found', 404);
+        if (!freshQuote) throw quoteError('This negotiation has moved on. Refresh and try again.', 409);
 
         const activePayment = await tx.payment.findFirst({
           where: {
@@ -2589,7 +2599,7 @@ router.post(
       }
 
       const withdrawn = await prisma.$transaction(async (tx) => {
-        const fresh = await tx.transportQuote.findUnique({ where: { id: quote.id } });
+        const fresh = await findLeafQuote(tx, quote.id);
         if (!fresh || fresh.status !== 'PENDING') {
           throw quoteError('This bid is no longer waiting. Refresh and try again.', 409);
         }
