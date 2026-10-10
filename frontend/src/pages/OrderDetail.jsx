@@ -22,6 +22,7 @@ import TransportLoadingReport, {
 } from '../components/TransportLoadingReport.jsx';
 import TransportCoordinationSeller from '../components/TransportCoordinationSeller.jsx';
 import TransportCoordinationTransporter from '../components/TransportCoordinationTransporter.jsx';
+import ProviderReleaseDialog from '../components/ProviderReleaseDialog.jsx';
 
 import RatingBox from '../components/RatingBox.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
@@ -34,7 +35,7 @@ import TransportSetup from '../components/TransportSetup.jsx';
 import { InspectionRequestSummary, TransportRequestSummary } from '../components/RequestScopeSummary.jsx';
 import { DEADLINE_WINDOWS, QUANTITY_VALUES, deadlineFromWindow } from '../components/RequestOptions.js';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
- 
+
 const PAYMENT_METHODS = [
   { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
   { value: 'QR', label: 'QR Code' },
@@ -136,7 +137,6 @@ function useNowUntil(targetMs) {
    2. UI primitives
    ======================================================================== */
 
-// ── Modal shell ───────────────────────────────────────────────────────────
 function Modal({ isOpen, onClose, title, children }) {
   if (!isOpen) return null;
   return (
@@ -615,7 +615,6 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
    5. Inspection — request form (popup) + status card
    ======================================================================== */
 
-// ── Inspection request form (opened in a modal) ───────────────────────────
 function InspectionRequestForm({ workDetails, setWorkDetails, requesting, request, isBuyer, onCancel }) {
   return (
     <div className="od-inspection-work-form">
@@ -810,7 +809,6 @@ function InspectionCard({ order, title, i }) {
 
   const report = request.report;
   const reportReady = request.status === 'COMPLETED' && Boolean(report);
-  // A fresh form is released only when no inspector is waiting or pending.
   const liveBidderCount = leafQuotes(request.quotes).filter((q) => ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)).length;
   const inspectorName = request.inspector?.name || null;
   const inspectionDate =
@@ -843,6 +841,9 @@ function InspectionCard({ order, title, i }) {
     myInspectionObligation?.payment?.status === 'PENDING' ||
     myInspectionObligation?.payment?.status === 'PROCESSING'
   );
+
+  const acceptedLeaf = leafQuotes(request.quotes).find((q) => q.status === 'ACCEPTED');
+  const viewerIsAssignedInspector = request.inspectorId && request.inspectorId === i.currentUserId;
 
   return (
     <Card
@@ -1023,9 +1024,11 @@ function InspectionCard({ order, title, i }) {
       {request.status === 'ACCEPTED' && request.fee != null && (
         <Section title={request.sellerConfirmedAt ? 'Inspector confirmed — fee payment' : 'Inspector provisionally selected'}>
           <p className="muted">
-            {request.sellerConfirmedAt
-              ? 'The seller confirmed the inspector and agreed fee. The designated payer(s) can now pay the inspection obligation.'
-              : 'The inspector and fee are provisionally agreed. The seller must confirm them before inspection payment can begin.'}
+            {!request.sellerConfirmedAt
+              ? 'The inspector and fee are provisionally agreed. The seller must confirm them before inspection payment can begin.'
+              : !request.inspectorOnSiteConfirmedAt
+                ? 'Fee confirmed. Now the seller confirms the inspector has physically arrived on site and is ready to start.'
+                : 'Fee confirmed and inspector on site. The designated payer(s) may now pay the inspection fee.'}
           </p>
           <p>
             Fee: <strong>{money(request.fee)} ETB</strong>
@@ -1037,67 +1040,25 @@ function InspectionCard({ order, title, i }) {
             <p className="muted small">
               A payment for this inspection is pending or processing.
             </p>
-          ) : i.isSeller && !request.sellerConfirmedAt ? (
-            <>
-              <p className="muted small">
-                Confirm the inspector and agreed fee to unlock payment and let
-                work begin. If you do not respond
-                {request.workflowDueAt ? ` by ${new Date(request.workflowDueAt).toLocaleString()}` : ' in time'},
-                the provisional purchase is closed automatically.
-              </p>
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={Boolean(i.busy)}
-                busy={i.busy === `seller-confirm-${request.id}`}
-                busyText="Confirming…"
-                onClick={() => i.confirmSellerInspection(request.id)}
-              >
-                Confirm inspector &amp; fee
-              </Button>
-              <Button
-                variant="light"
-                size="sm"
-                disabled={Boolean(i.busy)}
-                busy={i.busy === `seller-decline-${request.id}`}
-                busyText="Declining…"
-                onClick={() => {
-                  if (window.confirm('Decline this inspector and fee? The provisional purchase will be closed and the buyer notified.')) {
-                    i.declineSellerInspection(request.id);
-                  }
-                }}
-              >
-                Decline
-              </Button>
-            </>
-          ) : i.canPayInspection ? (
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={isBusy(request.id, 'pay')}
-              busy={isBusy(request.id, 'pay')}
-              busyText="Starting…"
-              onClick={() => i.payInspection(request)}
-            >
-              Pay inspection fee
-            </Button>
-          ) : request.sellerConfirmedAt ? (
+          ) : !request.sellerConfirmedAt ? (
             <p className="muted small">
-              Seller confirmed. The designated payer can now pay the inspection fee
-              {request.workflowDueAt ? ` before ${new Date(request.workflowDueAt).toLocaleString()}` : ''}.
+              Waiting for the seller to confirm the selected inspector and agreed fee.
+              {request.workflowDueAt ? ` Deadline: ${new Date(request.workflowDueAt).toLocaleString()}.` : ''}
+            </p>
+          ) : !request.inspectorOnSiteConfirmedAt ? (
+            <p className="muted small">
+              Waiting for the seller to confirm the inspector is on site and ready to start.
             </p>
           ) : (
             <p className="muted small">
-              Waiting for the seller to confirm the selected inspector before
-              payment can begin
-              {request.workflowDueAt ? `. If the seller does not respond by ${new Date(request.workflowDueAt).toLocaleString()}, this purchase is closed automatically` : ''}.
+              Ready to pay. Use the Action Center above to make the inspection payment.
             </p>
           )}
 
           {isRequester && (
             <div style={{ marginTop: 12 }}>
               <ReleaseAgreementControl
-                acceptedQuote={leafQuotes(request.quotes).find((q) => q.status === 'ACCEPTED')}
+                acceptedQuote={acceptedLeaf}
                 label="Inspector unavailable — choose another"
                 busy={i.busy === `withdraw-inspection-${request.id}`}
                 disabled={Boolean(i.busy)}
@@ -1106,6 +1067,28 @@ function InspectionCard({ order, title, i }) {
               <p className="muted small" style={{ marginTop: 6 }}>
                 Provisional agreement — release it if the inspector drops out
                 before payment.
+              </p>
+            </div>
+          )}
+
+          {viewerIsAssignedInspector && acceptedLeaf && (
+            <div style={{ marginTop: 12 }}>
+              <Button
+                variant="light"
+                size="sm"
+                disabled={Boolean(i.busy)}
+                onClick={() => i.openProviderRelease({
+                  service: 'INSPECTION',
+                  quoteId: acceptedLeaf.id,
+                  inspectionRequestId: request.id,
+                })}
+              >
+                Cancel provisional agreement
+              </Button>
+              <p className="muted small" style={{ marginTop: 6 }}>
+                Your provisional agreement is not committed yet. Cancelling it
+                releases the slot for another inspector and is recorded against
+                your standing.
               </p>
             </div>
           )}
@@ -1388,6 +1371,28 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
           </div>
         )}
 
+        {isOwner && quote.status === 'ACCEPTED' && (
+          <div style={{ marginTop: 12 }}>
+            <Button
+              variant="light"
+              size="sm"
+              disabled={working}
+              onClick={() => t.openProviderRelease({
+                service: 'TRANSPORT',
+                quoteId: quote.id,
+                transportJobId: t.job.id,
+              })}
+            >
+              Cancel provisional agreement
+            </Button>
+            <p className="muted small" style={{ marginTop: 6 }}>
+              Your provisional agreement is not committed yet. Cancelling it
+              releases the slot for another transporter and is recorded against
+              your standing.
+            </p>
+          </div>
+        )}
+
         {t.isArranger && !t.pending && (
           quote.status === 'ACCEPTED' ? (
             <>
@@ -1432,7 +1437,6 @@ function TransportCard({ order, t }) {
   const hasActiveNegotiation = quotes.some((q) =>
     ['SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)
   );
-  // A fresh form is released only when no transporter is waiting or pending.
   const liveBidderCount = quotes.filter((q) => ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)).length;
 
   if (!job) {
@@ -1549,12 +1553,29 @@ function TransportCard({ order, t }) {
           </Section>
         )}
 
+        {(t.isSeller || t.isTransporter) &&
+          job.status === 'ACCEPTED' &&
+          job.sellerPickupConfirmedAt &&
+          !job.truckArrivedAt && (
+            <Section title="Truck arrival">
+              <p className="muted small">
+                {t.isSeller
+                  ? 'Waiting for the truck to arrive on site. Confirm arrival from the Action Center when it happens.'
+                  : 'Waiting for your truck to arrive on site. Confirm arrival from the Action Center.'}
+              </p>
+            </Section>
+          )}
+
+        {job.truckArrivedAt && (
+          <Section title="Truck arrival" meta={formatDateTime(job.truckArrivedAt)} strong />
+        )}
+
         {t.isTransporter && job.status === 'ACCEPTED' && (
           <TransportLoadingReport
             transportJobId={job.id}
             jobStatus={job.status}
             sellerConfirmed={Boolean(job.sellerPickupConfirmedAt)}
-            paymentsReady={t.marketplacePaid}
+            paymentsReady={t.marketplacePaid && t.paid}
             missingPayments={t.missingPayments}
             onSubmitted={t.reload}
           />
@@ -1574,10 +1595,10 @@ function TransportCard({ order, t }) {
                 <p className="muted small">Review what the transporter plans to load, the quantity, timing and condition. Approve it before physical loading begins.</p>
                 <Button
                   variant="primary"
-                  disabled={busy === 'confirm-loading'}
-                  busy={busy === 'confirm-loading'}
+                  disabled={t.busy === 'confirm-loading'}
+                  busy={t.busy === 'confirm-loading'}
                   busyText="Confirming…"
-                  onClick={() => run('confirm-loading', () => api.post(`/transport/${job.id}/confirm-loading`), 'Could not approve the loading report')}
+                  onClick={() => t.run('confirm-loading', () => api.post(`/transport/${job.id}/confirm-loading`), 'Could not approve the loading report')}
                 >
                   Approve loading report
                 </Button>
@@ -1682,7 +1703,10 @@ function TransportCard({ order, t }) {
             strong
           >
             <p className="muted">
-              Transport payment is separate from the seller payment. It becomes available only after the buyer makes the final BUY decision and the seller payment is confirmed. The transporter cannot start loading until the required payments and loading approvals are complete.
+              Transport payment is separate from the seller payment. It becomes
+              available only after the buyer makes the final BUY decision and
+              the seller payment is confirmed. The seller must confirm loading
+              preparation and the truck must be on site before payment.
             </p>
 
             {t.canStartPayment && (
@@ -1914,6 +1938,9 @@ export default function OrderDetail() {
 
   const [activeModal, setActiveModal] = useState(null);
 
+  const [providerReleaseTarget, setProviderReleaseTarget] = useState(null);
+  // Shape: { service: 'INSPECTION' | 'TRANSPORT', quoteId, inspectionRequestId?, transportJobId? }
+
   const [payMethod, setPayMethod] = useState('TELEBIRR');
 
   const [counterInputs, setCounterInputs] = useState({});
@@ -2004,7 +2031,6 @@ export default function OrderDetail() {
   useEffect(() => { load(); }, [load]);
   const reload = useCallback(() => load({ silent: true }), [load]);
 
-  // Section targets that need a request form open the popup (after scrolling to the card).
   const goToSection = (id, delay = 0) => {
     const needsInspectionForm =
       id === 'inspection-section' && !currentInspection && (inspections.length === 0 || inspectionFormReleased);
@@ -2078,8 +2104,6 @@ export default function OrderDetail() {
         (transportJob.arrangingParty === 'SELLER' && isSeller) ||
         (transportJob.arrangingParty === 'JOINT' && isParticipant))
   );
-  // Same rules the server enforces: for physical goods, transport opens only after the
-  // inspection report is published and its fee paid, and the buyer runs the transporter competition.
   const isPhysicalGoods = isAgricultural || isProduct;
   const inspectionReportDone = Boolean(currentInspection && currentInspection.status === 'COMPLETED' && currentInspection.report);
   const paidInspections = inspections.filter((r) => r.fee != null && Number(r.fee) > 0);
@@ -2191,6 +2215,8 @@ export default function OrderDetail() {
     ['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
     order?.buyerDecision === 'BUY' &&
     marketplacePaid &&
+    Boolean(transportJob.sellerPickupConfirmedAt) &&
+    Boolean(transportJob.truckArrivedAt) &&
     !transportPayments.some((p) => ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)) &&
     isBuyer;
 
@@ -2230,6 +2256,12 @@ export default function OrderDetail() {
     if (!isParticipant) return setError('You are not authorized to pay for this transport');
     if (!hiredTransport) return setError('Transport payment is only required for hired transport');
     if (!transportJob.truckOwnerId) return setError('A transporter must be selected before transport payment');
+    if (!transportJob.sellerPickupConfirmedAt) {
+      return setError('The seller must confirm loading preparation before transport payment can begin.');
+    }
+    if (!transportJob.truckArrivedAt) {
+      return setError('The truck must be physically on site before transport payment can begin.');
+    }
     const amount = Number(transportJob.agreedAmount);
     if (!Number.isFinite(amount) || amount <= 0) return setError('Invalid transport payment amount');
     return run('pay-transport', () => startChapaPayment({ type: 'TRANSPORT', orderId: order.id, amount, method: payMethod }), 'Could not start transport payment');
@@ -2237,6 +2269,14 @@ export default function OrderDetail() {
 
   const payInspection = (request) => {
     if (!request?.id || !request.fee) return;
+    if (!request.sellerConfirmedAt) {
+      setError('The seller must confirm the inspector and agreed fee before payment can begin.');
+      return;
+    }
+    if (!request.inspectorOnSiteConfirmedAt) {
+      setError('The seller must confirm the inspector is on site and ready to start before inspection payment can begin.');
+      return;
+    }
     const obligation = (order?.paymentObligations || []).find(
       (o) => o.type === 'INSPECTOR' &&
         o.inspectionRequestId === request.id &&
@@ -2291,15 +2331,25 @@ export default function OrderDetail() {
   const transportObligation = transportJob
     ? {
         required: hiredTransport,
-        readyToPay: ['QUOTED', 'ACCEPTED'].includes(transportJob.status) && Boolean(acceptedQuote) && transportJob.agreedAmount != null && order?.buyerDecision === 'BUY' && marketplacePaid,
+        readyToPay: canStartTransportPayment,
         amount: transportJob.agreedAmount,
         paid: transportPaid,
         pending: transportPending,
         processing: transportProcessing,
         note:
-          hiredTransport && !['QUOTED', 'ACCEPTED'].includes(transportJob.status) && !transportPaid && !transportPending
+          !hiredTransport ? null
+          : transportPaid ? null
+          : !['QUOTED', 'ACCEPTED'].includes(transportJob.status)
             ? 'Transporter payment becomes available after the final BUY decision and confirmed seller payment.'
-            : null,
+            : !marketplacePaid
+              ? 'Pay the seller before paying the transporter.'
+              : order?.buyerDecision !== 'BUY'
+                ? 'Final BUY decision is required before transport payment.'
+                : !transportJob.sellerPickupConfirmedAt
+                  ? 'The seller must confirm loading preparation before transport payment can begin.'
+                  : !transportJob.truckArrivedAt
+                    ? 'The truck must be physically on site before transport payment can begin.'
+                    : null,
         canStart: canStartTransportPayment,
         canResume: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
         canCheck: Boolean(transportPayment) && transportPayment.status === 'PROCESSING' && isBuyer,
@@ -2318,6 +2368,17 @@ export default function OrderDetail() {
         const open = mine?.payment || null;
         const key = `${open?.status === 'PROCESSING' ? 'check' : open ? 'resume' : 'pay'}-inspection-${request.id}`;
         const allPaid = obligations.length > 0 && obligations.every((o) => o.status === 'PAID' || o.payment?.status === 'PAID');
+        const arrivalConfirmed = Boolean(request.inspectorOnSiteConfirmedAt);
+        const sellerConfirmed = Boolean(request.sellerConfirmedAt);
+        const viewerIsPayer = Boolean(mine && mine.payerId === currentUserId);
+        const canPay = Boolean(
+          sellerConfirmed &&
+          arrivalConfirmed &&
+          viewerIsPayer &&
+          mine &&
+          mine.status !== 'PAID' &&
+          !['PENDING', 'PROCESSING'].includes(open?.status)
+        );
         return {
           id: request.id,
           label: `${request.inspector?.name || 'Inspector'} — inspection fee`,
@@ -2325,14 +2386,19 @@ export default function OrderDetail() {
           paid: allPaid,
           pending: Boolean(open && ['PENDING', 'PROCESSING'].includes(open.status)),
           processing: open?.status === 'PROCESSING',
-          note: !request.sellerConfirmedAt
+          note: !sellerConfirmed
             ? 'Waiting for seller confirmation before inspection payment can begin.'
-            : !mine
-              ? 'No inspection payment obligation is assigned to your account.'
-              : request.feePayer === 'SPLIT'
-                ? `Your share of the inspection fee is ${Number(mine.amount).toLocaleString()} ETB.`
-                : request.status !== 'COMPLETED' ? `Inspection status: ${request.status}` : null,
+            : !arrivalConfirmed
+              ? 'Waiting for the seller to confirm the inspector is on site and ready to start.'
+              : !mine
+                ? 'No inspection payment obligation is assigned to your account.'
+                : !viewerIsPayer
+                  ? 'Only the designated payer for this inspection can pay.'
+                  : request.feePayer === 'SPLIT'
+                    ? `Your share of the inspection fee is ${Number(mine.amount).toLocaleString()} ETB.`
+                    : null,
           busyKey: key,
+          canPay,
           canCheck: Boolean(open) && open.status === 'PROCESSING',
           canResume: Boolean(open) && open.status !== 'PROCESSING',
           onCheck: () => checkPayment(open?.id, key),
@@ -2341,6 +2407,33 @@ export default function OrderDetail() {
         };
       })
     : [];
+
+  // ----------------------------------------------------------------------
+  // SHARED PROVIDER RELEASE HANDLER
+  // ----------------------------------------------------------------------
+  const submitProviderRelease = async ({ reason, note }) => {
+    if (!providerReleaseTarget) return false;
+    const { service, quoteId, inspectionRequestId, transportJobId } = providerReleaseTarget;
+    if (!quoteId) {
+      setError('No provisional agreement is available to release.');
+      return false;
+    }
+    const url = service === 'INSPECTION'
+      ? `/inspections/${inspectionRequestId}/quotes/${quoteId}/withdraw`
+      : `/transport/${transportJobId}/quotes/${quoteId}/withdraw`;
+    const key = service === 'INSPECTION'
+      ? `withdraw-inspection-${inspectionRequestId}`
+      : `withdraw-transport-${transportJobId}`;
+    const ok = await run(
+      key,
+      () => api.patch(url, { reason, note: note || undefined }),
+      `Could not release ${service.toLowerCase()} agreement`
+    );
+    if (ok) setProviderReleaseTarget(null);
+    return ok;
+  };
+
+  const openProviderRelease = (target) => setProviderReleaseTarget(target);
 
   const transportActions = {
     selectQuote: (quoteId) => {
@@ -2552,15 +2645,23 @@ export default function OrderDetail() {
         () => api.post(`/inspections/${requestId}/seller-decline`),
         'Could not decline the inspection'
       ),
+    confirmInspectorArrived: (requestId) =>
+      run(
+        `inspector-arrived-${requestId}`,
+        () => api.post(`/inspections/${requestId}/inspector-arrived`),
+        'Could not confirm inspector arrival'
+      ),
     payInspection: (request) => payInspection(request),
     currentUserId,
     counterInputs,
     setCounterInputs,
+    openProviderRelease,
     canPayInspection: Boolean(
       currentInspection &&
       currentInspection.status === 'ACCEPTED' &&
       currentInspection.fee != null &&
       currentInspection.sellerConfirmedAt != null &&
+      currentInspection.inspectorOnSiteConfirmedAt != null &&
       (order?.paymentObligations || []).some(
         (o) => o.type === 'INSPECTOR' &&
           o.inspectionRequestId === currentInspection.id &&
@@ -2767,6 +2868,8 @@ export default function OrderDetail() {
     marketplacePaid,
     missingPayments,
     onOpenModal: setActiveModal,
+    openProviderRelease,
+    run,
     ...transportActions,
   };
 
@@ -2919,7 +3022,6 @@ export default function OrderDetail() {
 
       {/* ── MODALS ─────────────────────────────────────────────────── */}
 
-      {/* Inspection request form */}
       <Modal
         isOpen={activeModal === 'inspection-request-form'}
         onClose={() => setActiveModal(null)}
@@ -2938,7 +3040,6 @@ export default function OrderDetail() {
         />
       </Modal>
 
-      {/* Transport setup form */}
       <Modal
         isOpen={activeModal === 'transport-setup-form'}
         onClose={() => setActiveModal(null)}
@@ -2959,7 +3060,6 @@ export default function OrderDetail() {
         />
       </Modal>
 
-      {/* Inspection coordination (seller) */}
       <Modal
         isOpen={activeModal === 'inspection-coordination'}
         onClose={() => setActiveModal(null)}
@@ -2970,7 +3070,6 @@ export default function OrderDetail() {
         )}
       </Modal>
 
-      {/* Transport coordination (seller) */}
       <Modal
         isOpen={activeModal === 'seller-transport-coordination'}
         onClose={() => setActiveModal(null)}
@@ -2979,7 +3078,6 @@ export default function OrderDetail() {
         {transportJob?.id && <TransportCoordinationSeller transportJobId={transportJob.id} />}
       </Modal>
 
-      {/* Transport coordination (transporter) */}
       <Modal
         isOpen={activeModal === 'transporter-transport-coordination'}
         onClose={() => setActiveModal(null)}
@@ -2987,6 +3085,14 @@ export default function OrderDetail() {
       >
         {transportJob?.id && <TransportCoordinationTransporter transportJobId={transportJob.id} />}
       </Modal>
+
+      <ProviderReleaseDialog
+        open={Boolean(providerReleaseTarget)}
+        serviceLabel={providerReleaseTarget?.service === 'INSPECTION' ? 'inspection' : 'transport'}
+        busy={Boolean(busy)}
+        onConfirm={submitProviderRelease}
+        onClose={() => setProviderReleaseTarget(null)}
+      />
 
       {error && (
         <div className="order-detail-toast" role="alert" aria-live="assertive">
