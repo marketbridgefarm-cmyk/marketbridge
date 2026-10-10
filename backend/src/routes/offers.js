@@ -98,6 +98,20 @@ function isOfferExpired(offer) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// LEAF RESOLUTION
+// ---------------------------------------------------------------------------
+// A counter-chain is a linked list of immutable rows. The leaf is the row
+// with no children — the current live price. Every mutation must resolve the
+// leaf first so a stale parent id can never be acted on. A parent id returns
+// null and the caller rejects with 409, forcing the client to refresh.
+function findLeafOffer(tx, offerId, extra = {}) {
+  return tx.offer.findFirst({
+    where: { id: offerId, childOffers: { none: {} } },
+    ...extra,
+  });
+}
+
 async function expireOfferIfNeeded(tx, offer, actorId = null) {
   if (!offer || !isOfferExpired(offer)) return false;
   if (!['PENDING', 'SELECTED', 'COUNTERED'].includes(offer.status)) return false;
@@ -844,10 +858,7 @@ router.patch(
             throw offerError('Listing seller changed; refresh and try again', 409);
           }
 
-          const fresh = await tx.offer.findUnique({
-            where: { id: offer.id },
-            include: { listing: true },
-          });
+          const fresh = await findLeafOffer(tx, offer.id, { include: { listing: true } });
 
           if (!fresh) throw offerError('Offer not found', 404);
 
@@ -949,7 +960,7 @@ router.patch(
         if (!isBuyer && !admin) return res.status(403).json({ error: 'Only the buyer can accept a selected bid' });
         if (offer.status !== 'SELECTED') return res.status(400).json({ error: `Offer must be SELECTED before acceptance (current: ${offer.status})` });
         const result = await prisma.$transaction(async (tx) => {
-          const fresh = await tx.offer.findUnique({ where: { id: offer.id }, include: { listing: true } });
+          const fresh = await findLeafOffer(tx, offer.id, { include: { listing: true } });
           if (!fresh) throw offerError('This selected bid is no longer available', 409);
           if (await expireOfferIfNeeded(tx, fresh, req.user.id)) {
             throw offerError('This selected bid has expired and can no longer be accepted', 409);
@@ -1000,20 +1011,12 @@ router.patch(
           await prisma.$transaction(
             async (tx) => {
               const freshOffer =
-                await tx.offer.findUnique({
-                  where: {
-                    id: offer.id,
-                  },
-
-                  include: {
-                    listing: true,
-                  },
-                });
+                await findLeafOffer(tx, offer.id, { include: { listing: true } });
 
               if (!freshOffer) {
                 throw offerError(
-                  'Offer not found',
-                  404
+                  'This negotiation has moved on. Refresh and try again.',
+                  409
                 );
               }
 
@@ -1110,17 +1113,12 @@ router.patch(
           await prisma.$transaction(
             async (tx) => {
               const freshOffer =
-                await tx.offer.findUnique({
-                  where: {
-                    id: offer.id,
-                  },
-                  include: { listing: true },
-                });
+                await findLeafOffer(tx, offer.id, { include: { listing: true } });
 
               if (!freshOffer) {
                 throw offerError(
-                  'Offer not found',
-                  404
+                  'This negotiation has moved on. Refresh and try again.',
+                  409
                 );
               }
 
@@ -1238,20 +1236,12 @@ router.patch(
           await prisma.$transaction(
             async (tx) => {
               const freshOffer =
-                await tx.offer.findUnique({
-                  where: {
-                    id: offer.id,
-                  },
-
-                  include: {
-                    listing: true,
-                  },
-                });
+                await findLeafOffer(tx, offer.id, { include: { listing: true } });
 
               if (!freshOffer) {
                 throw offerError(
-                  'Offer not found',
-                  404
+                  'This negotiation has moved on. Refresh and try again.',
+                  409
                 );
               }
 
@@ -1351,8 +1341,8 @@ router.patch(
 
         const released = await prisma.$transaction(
           async (tx) => {
-            const freshOffer = await tx.offer.findUnique({ where: { id: offer.id } });
-            if (!freshOffer) throw offerError('Offer not found', 404);
+            const freshOffer = await findLeafOffer(tx, offer.id);
+            if (!freshOffer) throw offerError('This negotiation has moved on. Refresh and try again.', 409);
 
             const freshAvailableAt = releaseAvailableAt(freshOffer);
             if (!freshAvailableAt || (!admin && freshAvailableAt.getTime() > Date.now())) {
@@ -1448,14 +1438,10 @@ router.patch(
         const result =
           await prisma.$transaction(
             async (tx) => {
-              const freshOffer =
-                await tx.offer.findUnique({
-                  where: { id: offer.id },
-                  include: { listing: true },
-                });
+              const freshOffer = await findLeafOffer(tx, offer.id, { include: { listing: true } });
 
               if (!freshOffer) {
-                throw offerError('Offer not found', 404);
+                throw offerError('This negotiation has moved on. Refresh and try again.', 409);
               }
 
               if (!allowedStatuses.includes(freshOffer.status)) {
@@ -1572,17 +1558,12 @@ router.patch(
           await prisma.$transaction(
             async (tx) => {
               const freshOffer =
-                await tx.offer.findUnique({
-                  where: {
-                    id: offer.id,
-                  },
-                  include: { listing: true },
-                });
+                await findLeafOffer(tx, offer.id, { include: { listing: true } });
 
               if (!freshOffer) {
                 throw offerError(
-                  'Offer not found',
-                  404
+                  'This negotiation has moved on. Refresh and try again.',
+                  409
                 );
               }
 
