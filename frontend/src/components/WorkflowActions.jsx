@@ -44,6 +44,10 @@ const ACTION_UI = {
   PROVIDER_CANCEL_TRANSPORT: { kind: 'scroll', target: 'transport-section', label: 'Cancel provisional agreement' },
 
   // ── Seller confirmations ─────────────────────────────────────────────
+  // ── Inspection request ───────────────────────────────────────────────
+  REQUEST_INSPECTION: { kind: 'scroll', target: 'inspection-section', label: 'Request an inspection' },
+
+// ── Seller confirmations ─────────────────────────────────────────────
   CONFIRM_INSPECTION: { kind: 'execute', label: 'Confirm inspector and fee' },
   DECLINE_INSPECTION: { kind: 'confirm-execute', label: 'Decline inspector and fee' },
   CONFIRM_INSPECTOR_ARRIVAL: { kind: 'execute', label: 'Confirm inspector on site' },
