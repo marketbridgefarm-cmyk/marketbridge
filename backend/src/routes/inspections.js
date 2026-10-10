@@ -33,11 +33,6 @@ const {
   noContactInfo,
 } = require('../utils/contactGuard');
 const {
-  QUANTITY_VALUES, QUANTITY_UNITS, WEIGHT_OPTIONS, PACKAGE_COUNTS, CAPACITY_TONS,
-  BID_MESSAGES, SELLER_INSPECTION_MESSAGES, SELLER_TRANSPORT_MESSAGES,
-  presetMessage, accessNotesOnly, withinDeadlineRange,
-} = require('../utils/requestOptions');
-const {
   assertCoordinationStage,
   viewerRoleFor,
   closeCoordination,
@@ -81,6 +76,10 @@ function quoteError(message, statusCode = 400) {
 
 // ============================================================================
 // INSPECTION WORK DETAILS — allow-listed, size-capped
+// ----------------------------------------------------------------------------
+// The requester describes the scope of inspection work. Every bidding
+// inspector reads this before quoting, so it must never carry contact
+// information. It is stored as JSON on InspectionRequest.workDetails.
 // ============================================================================
 const WORK_CATEGORIES = new Set([
   'GENERAL_QUALITY',
@@ -118,12 +117,9 @@ function sanitizeWorkDetails(input) {
     out.workCategory = input.workCategory;
   }
 
-  const qv = Number(input.quantityValue);
-  if (input.quantityValue != null && input.quantityValue !== '' && QUANTITY_VALUES.includes(qv)) {
-    const unit = QUANTITY_UNITS.includes(input.quantityUnit) ? input.quantityUnit : 'kg';
-    out.quantityValue = qv;
-    out.quantityUnit = unit;
-    out.quantityToInspect = `${qv} ${unit}`;
+  if (typeof input.quantityToInspect === 'string') {
+    const v = input.quantityToInspect.trim();
+    if (v) out.quantityToInspect = v.slice(0, 120);
   }
 
   if (input.lotCount != null && input.lotCount !== '') {
@@ -145,7 +141,7 @@ function sanitizeWorkDetails(input) {
 
   if (typeof input.requiredBy === 'string') {
     const d = new Date(input.requiredBy);
-    if (!Number.isNaN(d.getTime()) && withinDeadlineRange(input.requiredBy)) out.requiredBy = d.toISOString();
+    if (!Number.isNaN(d.getTime())) out.requiredBy = d.toISOString();
   }
 
   return Object.keys(out).length ? out : null;
@@ -157,6 +153,8 @@ function sanitizeWorkDetails(input) {
 
 function quoteTurn(quote) {
   if (quote.status === 'PENDING') return 'REQUESTER';
+  // Selecting a provider bid is not acceptance. The requester owns the
+  // next decision: accept the provider's original offer or counter it.
   if (quote.status === 'SELECTED') return 'REQUESTER';
   if (quote.status === 'COUNTERED') {
     return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
@@ -345,8 +343,6 @@ router.post(
 // ============================================================================
 // CANCEL INSPECTION REQUEST
 // ============================================================================
-// Cancelling expires every live quote on the request (including waiting ones),
-// so there is no waiting list left to notify; no waiting-list notice is sent.
 
 router.patch('/:id/cancel', authenticate, async (req, res) => {
   try {
@@ -365,19 +361,7 @@ router.patch('/:id/cancel', authenticate, async (req, res) => {
       const fresh = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
       if (!fresh) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
       if (['COMPLETED', 'IN_PROGRESS'].includes(fresh.status)) throw Object.assign(new Error(`An inspection cannot be cancelled while it is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
-      const updated = await tx.inspectionRequest.update({
-        where: { id: fresh.id },
-        data: {
-          inspectorId: null,
-          fee: null,
-          feeTermsLockedAt: null,
-          lockedFee: null,
-          lockedFeePayer: null,
-          lockedBuyerFeeAmount: null,
-          lockedSellerFeeAmount: null,
-          status: 'CANCELLED',
-        },
-      });
+      const updated = await tx.inspectionRequest.update({ where: { id: fresh.id }, data: { inspectorId: null, fee: null, feeTermsLockedAt: null, lockedFee: null, lockedFeePayer: null, lockedBuyerFeeAmount: null, lockedSellerFeeAmount: null, status: 'CANCELLED' } });
       await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } }, data: { status: 'EXPIRED' } });
       await closeCoordination(tx, fresh.id, 'INSPECTION_CANCELLED');
       await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_REQUEST_CANCELLED', resourceType: 'InspectionRequest', resourceId: fresh.id, metadata: { orderId: fresh.orderId } });
@@ -408,6 +392,8 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
       const fresh = await tx.inspectionRequest.findUnique({ where: { id: request.id } });
       if (!fresh) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
       if (!['REQUESTED', 'ACCEPTED', 'STALLED'].includes(fresh.status)) throw Object.assign(new Error(`Inspection bidding cannot be reopened while the request is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
+      // A fresh request form is released only when nobody is waiting or pending: unselected
+      // inspectors stay on the waiting list until the selected inspector submits the report.
       const liveBidders = await tx.inspectionQuote.count({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } } });
       if (liveBidders > 0) {
         throw Object.assign(new Error(`A fresh inspection form cannot be released while ${liveBidders} inspector bid(s) are still waiting or pending. They stay on the waiting list until the selected inspector submits the report or they release themselves.`), { statusCode: 409 });
@@ -556,7 +542,7 @@ router.post(
       .trim()
       .isLength({ max: 1000 })
       .withMessage('Quote message is too long')
-      .custom(presetMessage(BID_MESSAGES)),
+      .custom(noContactInfo),
   ],
   async (req, res) => {
     try {
@@ -606,6 +592,8 @@ router.post(
         });
       }
 
+      // An inspector who cancelled an accepted deal on this request cannot
+      // bid on it again (mirrors the transport rule).
       const cancelledBefore = await prisma.auditEvent.count({
         where: {
           actorId: req.user.id,
@@ -795,6 +783,8 @@ router.patch(
         return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
       }, { maxWait: 10000, timeout: 15000 });
 
+      // Best-effort notices, fired after commit so they can never roll back
+      // the selection.
       await noticeInspectionWaitingLocked(prisma, {
         inspectionRequestId: request.id,
         selectedQuoteId: selected.id,
@@ -865,6 +855,7 @@ router.patch(
             buyerFeeAmount: request.feePayer === 'SELLER' ? null : request.feePayer === 'SPLIT' ? Math.round(finalAmount * 50) / 100 : finalAmount,
             sellerFeeAmount: request.feePayer === 'BUYER' ? null : request.feePayer === 'SPLIT' ? Math.round((finalAmount - Math.round(finalAmount * 50) / 100) * 100) / 100 : finalAmount,
             status: 'ACCEPTED',
+            // Provisional agreement: the seller has a bounded window to confirm.
             workflowDueAt: sellerConfirmationDueAt,
             startDueAt: null,
             completionDueAt: null,
@@ -873,7 +864,6 @@ router.patch(
             sellerConfirmedAt: null,
             sellerMessage: null,
             sellerMessageAt: null,
-            inspectorOnSiteConfirmedAt: null,
           },
         });
 
@@ -940,7 +930,7 @@ router.patch(
 );
 
 // ============================================================================
-// COUNTER INSPECTION QUOTE — immutable child-row chain
+// COUNTER INSPECTION QUOTE
 // ============================================================================
 
 router.post(
@@ -950,7 +940,7 @@ router.post(
     param('id').notEmpty(),
     param('quoteId').notEmpty(),
     body('counterAmount').custom(validAmount(AMOUNT_LIMITS.inspection)),
-    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }).custom(presetMessage(BID_MESSAGES)),
+    body('message').optional({ nullable: true }).isString().trim().isLength({ max: 1000 }).custom(noContactInfo),
   ],
   async (req, res) => {
     try {
@@ -1076,6 +1066,9 @@ router.patch(
       if (!loaded) return;
       const { request, quote, actorRole } = loaded;
 
+      // Exception: the inspector on a provisionally ACCEPTED quote may drop
+      // out before payment (reason required and recorded; no wait period, and
+      // it does not count against the requester's cap).
       const isProviderRelease =
         actorRole === 'PROVIDER' &&
         quote.status === 'ACCEPTED' &&
@@ -1106,6 +1099,7 @@ router.patch(
         }
       }
 
+      // Release limits for a provisional (ACCEPTED) agreement: reason + wait.
       let releaseInfo = { reason: 'NO_RESPONSE', note: null };
       if (isAcceptedRelease) {
         try {
@@ -1252,6 +1246,7 @@ router.patch(
           },
         });
 
+        // Automatic penalties for frequent provider cancellations.
         if (isProviderRelease) {
           standingOutcome = await applyProviderCancellation(tx, {
             userId: req.user.id,
@@ -1260,6 +1255,7 @@ router.patch(
           });
         }
 
+        // Tell the other side (in-app + SMS opt-in) what happened.
         await recordOrderEvent(tx, {
           orderId: request.orderId,
           actorId: req.user.id,
@@ -1278,6 +1274,7 @@ router.patch(
         return res.status(409).json({ error: LIMIT_MESSAGE, code: 'RELEASE_LIMIT_REACHED' });
       }
 
+      // Best-effort notices to the waiting inspectors, only after a real release.
       await noticeInspectionWaitingUnlocked(prisma, {
         inspectionRequestId: request.id,
         reason: isAcceptedRelease ? 'PROVISIONAL_RELEASED' : 'SILENT_RELEASED',
@@ -1429,7 +1426,7 @@ router.patch('/:id/accept', authenticate, requireRole('INSPECTOR'), async (req, 
 });
 
 // ============================================================================
-// SELLER REVIEW QUEUE
+// Seller review queue: the seller must confirm before the inspector can start.
 // ============================================================================
 
 router.get('/seller-pending', authenticate, requireRole('SELLER'), async (req, res) => {
@@ -1451,10 +1448,6 @@ router.get('/seller-pending', authenticate, requireRole('SELLER'), async (req, r
   }
 });
 
-// ============================================================================
-// SELLER CONFIRMS INSPECTOR AND FEE (commercial terms)
-// ============================================================================
-
 router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (req, res) => {
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -1473,6 +1466,9 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
         throw Object.assign(new Error('The confirmation window has expired. The provisional agreement is being closed.'), { statusCode: 409 });
       }
 
+      // The order is the authoritative ownership boundary. listing.sellerId
+      // is retained for historical data but must not decide who can confirm
+      // an order-owned inspection.
       if (!request.order || request.order.sellerId !== req.user.id) {
         throw Object.assign(new Error('Only the order seller can confirm this inspection'), { statusCode: 403 });
       }
@@ -1490,9 +1486,6 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
       const message = typeof req.body?.message === 'string'
         ? req.body.message.trim().slice(0, 500)
         : null;
-      if (message && !SELLER_INSPECTION_MESSAGES.includes(message)) {
-        throw Object.assign(new Error('Choose one of the provided messages'), { statusCode: 400 });
-      }
 
       const updated = await tx.inspectionRequest.updateMany({
         where: {
@@ -1508,6 +1501,8 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
           lockedFeePayer: request.feePayer,
           lockedBuyerFeeAmount: request.feePayer === 'SELLER' ? null : request.feePayer === 'SPLIT' ? Math.round(Number(request.fee) * 50) / 100 : request.fee,
           lockedSellerFeeAmount: request.feePayer === 'BUYER' ? null : request.feePayer === 'SPLIT' ? Math.round((Number(request.fee) - Math.round(Number(request.fee) * 50) / 100) * 100) / 100 : request.fee,
+          // Payment window replaces the confirmation window. The inspector's
+          // start clock only begins once the fee is fully paid (maintenance).
           workflowDueAt: computeInspectionPaymentDueAt(),
           startDueAt: null,
           sellerMessage: message || null,
@@ -1516,6 +1511,7 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
       });
       if (!updated.count) throw Object.assign(new Error('Inspection was already confirmed or its status changed'), { statusCode: 409 });
 
+      // Create/reopen the exact payer obligation(s) only after confirmation.
       await syncOrderPaymentObligations(tx, request.orderId);
 
       await recordAuditEvent(tx, {
@@ -1618,10 +1614,6 @@ router.post('/:id/inspector-arrived', authenticate, requireRole('SELLER'), async
   }
 });
 
-// ============================================================================
-// SELLER DECLINES INSPECTION
-// ============================================================================
-
 router.post('/:id/seller-decline', authenticate, requireRole('SELLER'), async (req, res) => {
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -1648,22 +1640,13 @@ router.post('/:id/seller-decline', authenticate, requireRole('SELLER'), async (r
       if (!outcome.lapsed) throw Object.assign(new Error('The inspection could not be declined in its current state'), { statusCode: 409 });
       return outcome;
     }, { maxWait: 10000, timeout: 15000 });
-
-    const closed = await prisma.inspectionRequest.findUnique({
+    const listingId = await prisma.inspectionRequest.findUnique({
       where: { id: req.params.id },
-      select: { id: true, listingId: true, status: true },
+      select: { listingId: true, status: true },
     }).catch(() => null);
-    if (closed?.status === 'CANCELLED') {
-      await noticeWaitingUnlocked(prisma, {
-        listingId: closed.listingId,
-        reason: 'INSPECTION_SELLER_DECLINED',
-      });
-      await noticeInspectionWaitingUnlocked(prisma, {
-        inspectionRequestId: closed.id,
-        reason: 'INSPECTION_SELLER_DECLINED',
-      });
+    if (listingId?.status === 'CANCELLED') {
+      await noticeWaitingUnlocked(prisma, { listingId: listingId.listingId, reason: 'INSPECTION_SELLER_DECLINED' });
     }
-
     return res.json({ message: 'Inspection declined. The provisional purchase has been closed and the buyer notified.', ...result });
   } catch (error) {
     req.log.error({ err: error }, 'SELLER INSPECTION DECLINE ERROR');
@@ -1671,16 +1654,13 @@ router.post('/:id/seller-decline', authenticate, requireRole('SELLER'), async (r
   }
 });
 
-// ============================================================================
-// SELLER MESSAGE
-// ============================================================================
-
 router.post('/:id/seller-message', authenticate, requireRole('SELLER'), async (req, res) => {
   try {
     const message = String(req.body?.message || '').trim();
-    if (!message || !SELLER_INSPECTION_MESSAGES.includes(message)) return res.status(400).json({ error: 'Choose one of the provided messages' });
+    if (!message || message.length > 500) return res.status(400).json({ error: 'Message must contain 1–500 characters' });
     const request = await prisma.inspectionRequest.findUnique({ where: { id: req.params.id }, include: { listing: true, order: { select: { sellerId: true } } } });
     if (!request) return res.status(404).json({ error: 'Inspection request not found' });
+    // Order ownership is authoritative; listing.sellerId is only a legacy fallback for orderless requests.
     const authoritativeSellerId = request.order ? request.order.sellerId : request.listing.sellerId;
     if (authoritativeSellerId !== req.user.id) return res.status(403).json({ error: 'Only the order seller can send inspection instructions' });
 
@@ -1906,7 +1886,7 @@ async function canAccessInspection(req, requestId) {
 
 // ============================================================================
 // BUYER MEDIA GATE
-// ============================================================================
+// ----------------------------------------------------------------------------
 // Text-based contact guards cannot scan photos or videos for a phone number
 // written on a piece of paper. Until the buyer has actually paid for the
 // goods, the buyer sees the structured inspection findings (grade, quantity,
@@ -1922,7 +1902,7 @@ async function buyerCanSeeInspectionMedia(request, userId, userRoles) {
   if (isAdmin) return true;
 
   const isBuyer = request.order?.buyerId === userId;
-  if (!isBuyer) return true;
+  if (!isBuyer) return true;   // seller, inspector, requester-who-is-not-buyer
   if (!request.orderId) return false;
 
   const paid = await prisma.payment.findFirst({
@@ -2238,7 +2218,8 @@ router.post(
         timeout: 15000,
       });
 
-      // Terminal event: release any inspector quotes still waiting on this request.
+      // Terminal event: release any inspector quotes still waiting on this
+      // request. Best-effort, after commit — never rolls back the report.
       await releaseWaitingInspectors(prisma, {
         inspectionRequestId: request.id,
         actorId: req.user.id,

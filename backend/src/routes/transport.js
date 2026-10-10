@@ -6,6 +6,7 @@ const {
 } = require('../utils/requestOptions');
 const { body, param, validationResult } = require('express-validator');
 
+
 const prisma = require('../config/db');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
@@ -140,6 +141,8 @@ function quoteTurn(quote) {
   return null;
 }
 
+// Another live negotiation thread on the same job (mirrors
+// findCompetingLiveQuote in routes/inspections.js). Only leaf rows count.
 async function findCompetingLiveQuote(tx, transportJobId, exceptQuoteId) {
   return tx.transportQuote.findFirst({
     where: {
@@ -161,7 +164,7 @@ function quoteExpiry(hours = 24) {
 }
 
 // ============================================================================
-// SILENT-RELEASE WINDOW
+// SILENT-RELEASE WINDOW (mirrors INSPECTION_RELEASE_AFTER_HOURS)
 // ============================================================================
 
 function transportReleaseAfterHours() {
@@ -448,56 +451,6 @@ router.get('/match', authenticate, async (req, res) => {
 });
 
 // ============================================================================
-// TRANSPORT WORK DETAILS — allow-listed, size-capped
-// ============================================================================
-const TRANSPORT_WEIGHT_UNITS = new Set(['kg', 'tons', 'quintals']);
-const TRANSPORT_VEHICLE_TYPES = new Set([
-  'Pickup', 'Small truck', 'Medium truck', 'Large truck', 'Refrigerated truck', 'Flatbed',
-]);
-const TRANSPORT_HANDLING = new Set([
-  'FRAGILE', 'KEEP_COOL', 'KEEP_DRY', 'THIS_SIDE_UP', 'VENTILATED', 'COVERED',
-]);
-
-function sanitizeTransportWorkDetails(input) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
-  const out = {};
-
-  if (typeof input.weight === 'string') {
-    const m = input.weight.trim().match(/^(\d+(?:\.\d+)?)\s+([a-z]+)$/i);
-    if (m) {
-      const n = Number(m[1]);
-      const unit = m[2].toLowerCase();
-      const normalized = `${n} ${unit}`;
-      if (Number.isFinite(n) && TRANSPORT_WEIGHT_UNITS.has(unit) && WEIGHT_OPTIONS.includes(normalized)) {
-        out.weight = normalized;
-      }
-    }
-  }
-
-  if (input.packageCount != null && input.packageCount !== '') {
-    const n = Number(input.packageCount);
-    if (PACKAGE_COUNTS.includes(n)) out.packageCount = n;
-  }
-
-  if (typeof input.vehicleType === 'string' && TRANSPORT_VEHICLE_TYPES.has(input.vehicleType)) {
-    out.vehicleType = input.vehicleType;
-  }
-
-  if (typeof input.deliveryDeadline === 'string') {
-    const d = new Date(input.deliveryDeadline);
-    if (!Number.isNaN(d.getTime()) && withinDeadlineRange(input.deliveryDeadline)) out.deliveryDeadline = d.toISOString();
-  }
-
-  if (Array.isArray(input.handling)) {
-    out.handling = [
-      ...new Set(input.handling.filter((v) => typeof v === 'string' && TRANSPORT_HANDLING.has(v))),
-    ].slice(0, TRANSPORT_HANDLING.size);
-  }
-
-  return Object.keys(out).length ? out : null;
-}
-
-// ============================================================================
 // CREATE TRANSPORT JOB
 // ============================================================================
 
@@ -508,13 +461,12 @@ router.post(
     body('orderId').isUUID().withMessage('orderId is required'),
     body('arrangingParty').isIn(['SELLER', 'BUYER', 'JOINT']),
     body('method').isIn(['OWN_TRUCK', 'HIRE_TRANSPORTER']),
-    body('pickupLocation').isString().trim().notEmpty().isLength({ max: 120 }).custom(noContactInfo),
-    body('destination').isString().trim().notEmpty().isLength({ max: 120 }).custom(noContactInfo),
-    body('load').isString().trim().notEmpty().isLength({ max: 120 }).custom(noContactInfo),
-    body('requiredCapacity').optional({ nullable: true }).isFloat({ min: 0 }).custom((v) => v === '' || CAPACITY_TONS.includes(Number(v))).withMessage('Choose a capacity from the list'),
-    body('specialRequirements').optional({ nullable: true }).isString().trim().custom(accessNotesOnly),
+    body('pickupLocation').isString().trim().notEmpty(),
+    body('destination').isString().trim().notEmpty(),
+    body('load').isString().trim().notEmpty(),
+    body('requiredCapacity').optional().isFloat({ min: 0 }),
+    body('specialRequirements').optional().isString().trim().custom(noContactInfo),
     body('truckId').optional().isUUID(),
-    body('workDetails').optional({ nullable: true }).isObject(),
   ],
   validate,
   async (req, res) => {
@@ -523,7 +475,6 @@ router.post(
         orderId, arrangingParty, method, pickupLocation, destination,
         load, requiredCapacity, specialRequirements, truckId,
       } = req.body;
-      const safeWorkDetails = sanitizeTransportWorkDetails(req.body.workDetails);
 
       const order = await prisma.order.findUnique({
         where: { id: orderId },
@@ -567,6 +518,8 @@ router.post(
         if (!inspectionPaid) {
           return res.status(409).json({ code: 'INSPECTION_PAYMENT_REQUIRED', error: 'All required inspection payments must be completed before arranging transport.' });
         }
+        // The final BUY decision and seller payment intentionally happen later:
+        // after a transporter is selected and the seller confirms transporter preparation.
       }
 
       if (isAgricultural && order.listing.pickupWindowEnd) {
@@ -642,7 +595,7 @@ router.post(
                   where: { id: freshOrder.transportJob.id },
                   data: {
                     arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
-                    requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null, workDetails: safeWorkDetails,
+                    requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
                     truckOwnerId: null, truckId: null, agreedAmount: null, status: 'REQUESTED',
                     pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
                     sellerPickupConfirmedAt: null,
@@ -661,7 +614,7 @@ router.post(
                 arrangingParty: resolvedArrangingParty,
                 method, pickupLocation, destination, load,
                 requiredCapacity: requiredCapacity || null,
-                specialRequirements: specialRequirements || null, workDetails: safeWorkDetails,
+                specialRequirements: specialRequirements || null,
                 truckOwnerId: null, truckId: null,
                 status: 'REQUESTED',
               },
@@ -736,7 +689,7 @@ router.post(
                 where: { id: freshOrder.transportJob.id },
                 data: {
                   arrangingParty: resolvedArrangingParty, method, pickupLocation, destination, load,
-                  requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null, workDetails: safeWorkDetails,
+                  requiredCapacity: requiredCapacity || null, specialRequirements: specialRequirements || null,
                   truckOwnerId: truck.ownerId, truckId: truck.id, agreedAmount: null, status: 'ACCEPTED',
                   sellerPreparationDueAt: computeSellerPreparationDueAt(), buyerLoadingDueAt: null,
                   pickupConfirmedAt: null, deliveredConfirmedAt: null, incidentNotes: null,
@@ -754,7 +707,7 @@ router.post(
               arrangingParty: resolvedArrangingParty,
               method, pickupLocation, destination, load,
               requiredCapacity: requiredCapacity || null,
-              specialRequirements: specialRequirements || null, workDetails: safeWorkDetails,
+              specialRequirements: specialRequirements || null,
               truckOwnerId: truck.ownerId,
               truckId: truck.id,
               status: 'ACCEPTED',
@@ -849,10 +802,6 @@ router.get(
     }
   }
 );
-
-// ============================================================================
-// TRANSPORT EVIDENCE
-// ============================================================================
 
 router.post(
   '/:id/evidence/media',
@@ -1072,10 +1021,6 @@ router.get(
   }
 );
 
-// ============================================================================
-// TRANSPORT PAYMENT GATES
-// ============================================================================
-
 async function getTransportPaymentGate(client, jobId) {
   const job = await client.transportJob.findUnique({
     where: { id: jobId },
@@ -1148,10 +1093,6 @@ async function checkLoadingReportGate(client, jobId) {
   return { ready: missing.length === 0, missing };
 }
 
-// ============================================================================
-// REOPEN TRANSPORT BIDDING (admin)
-// ============================================================================
-
 router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
   try {
     const job = await prisma.transportJob.findUnique({ where: { id: req.params.id }, include: { order: true } });
@@ -1165,6 +1106,8 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
       const fresh = await tx.transportJob.findUnique({ where: { id: job.id } });
       if (!fresh) throw Object.assign(new Error('Transport job not found'), { statusCode: 404 });
       if (!['REQUESTED', 'QUOTED'].includes(fresh.status)) throw Object.assign(new Error(`Transport bidding cannot be reopened while the job is ${fresh.status.toLowerCase()}`), { statusCode: 409 });
+      // A fresh request form is released only when nobody is waiting or pending: unselected
+      // transporters stay pending until the selected transporter has delivered.
       const liveBidders = await tx.transportQuote.count({ where: { transportJobId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } } });
       if (liveBidders > 0) {
         throw Object.assign(new Error(`A fresh transport form cannot be released while ${liveBidders} transporter bid(s) are still waiting or pending. They stay pending until the selected transporter delivers or they release themselves.`), { statusCode: 409 });
@@ -1203,11 +1146,7 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
   }
 });
 
-// ============================================================================
-// SELLER CONFIRMS TRANSPORT PREPARATION
-// ============================================================================
-
-router.post('/:id/seller-confirm-pickup', authenticate, requireRole('SELLER'), [param('id').isUUID(), body('message').optional().isString().trim().custom(presetMessage(SELLER_TRANSPORT_MESSAGES))], validate, async (req, res) => {
+router.post('/:id/seller-confirm-pickup', authenticate, requireRole('SELLER'), [param('id').isUUID(), body('message').optional().isString().trim().isLength({ max: 500 })], validate, async (req, res) => {
   try {
     const job = await prisma.transportJob.findUnique({ where: { id: req.params.id }, include: { order: { select: { id: true, sellerId: true } } } });
     if (!job) return res.status(404).json({ error: 'Transport job not found' });
@@ -1310,10 +1249,6 @@ router.post('/:id/truck-arrived', authenticate, async (req, res) => {
   }
 });
 
-// ============================================================================
-// BUYER CONFIRMS LOADING
-// ============================================================================
-
 router.post(
   '/:id/confirm-loading',
   authenticate,
@@ -1359,10 +1294,6 @@ router.post(
     }
   }
 );
-
-// ============================================================================
-// UPDATE TRANSPORT STATUS
-// ============================================================================
 
 router.patch(
   '/:id/status',
@@ -1654,6 +1585,8 @@ router.post(
         }
       }
 
+      // A truck owner who withdrew (or was released) cannot bid on the same
+      // job again, with any truck.
       const withdrawnBefore = await prisma.transportQuote.findFirst({
         where: { transportJobId: job.id, truckOwnerId: req.user.id, status: 'WITHDRAWN' },
         select: { id: true },
@@ -1786,6 +1719,7 @@ router.get(
     }
   }
 );
+
 
 // ============================================================================
 // SHARED LOOKUP
@@ -1926,6 +1860,9 @@ router.patch(
           );
         }
 
+        // Mirrors inspections: a provisionally accepted transporter must be
+        // released explicitly (PATCH .../withdraw) before another bid can be
+        // selected, so an agreed deal is never dropped silently.
         const acceptedElsewhere = await tx.transportQuote.findFirst({
           where: { transportJobId: job.id, id: { not: fresh.id }, status: 'ACCEPTED', childQuotes: { none: {} } },
           select: { id: true },
@@ -1963,7 +1900,7 @@ router.patch(
 );
 
 // ============================================================================
-// ACCEPT TRANSPORT QUOTE
+// ACCEPT A TRANSPORT QUOTE
 // ============================================================================
 
 router.patch(
@@ -2104,7 +2041,7 @@ router.patch(
 );
 
 // ============================================================================
-// REJECT TRANSPORT QUOTE
+// REJECT A TRANSPORT QUOTE
 // ============================================================================
 
 router.patch(
@@ -2199,7 +2136,7 @@ router.patch(
 );
 
 // ============================================================================
-// COUNTER TRANSPORT QUOTE — immutable child-row chain
+// COUNTER A TRANSPORT QUOTE — immutable child-row chain
 // ============================================================================
 
 router.post(
@@ -2336,6 +2273,9 @@ router.post(
 // ============================================================================
 // WITHDRAW / RELEASE A TRANSPORT QUOTE
 // ============================================================================
+// Mirrors PATCH /inspections/:id/quotes/:quoteId/withdraw.
+// Only the arranging party (REQUESTER) may release. The truck owner uses
+// POST /withdraw-bid while their quote is still PENDING.
 
 router.patch(
   '/:id/quotes/:quoteId/withdraw',
@@ -2350,6 +2290,13 @@ router.patch(
       const { quote, job, actorRole } = loaded;
       const effectiveRole = actorRole;
 
+      // Only the requester can release a negotiation. A truck owner who no
+      // longer wants to proceed uses POST /withdraw-bid while PENDING. Once
+      // SELECTED or COUNTERED, the truck owner must respond to keep or end
+      // the thread; they cannot unilaterally abandon a live negotiation.
+      // Exception: the truck owner on a provisionally ACCEPTED quote may
+      // drop out before transport payment (reason required and recorded; no
+      // wait period, and it does not count against the requester's cap).
       const isProviderRelease =
         actorRole === 'PROVIDER' &&
         quote.status === 'ACCEPTED' &&
@@ -2382,6 +2329,7 @@ router.patch(
         }
       }
 
+      // Release limits for a provisional (ACCEPTED) agreement: reason + wait.
       let releaseInfo = { reason: 'NO_RESPONSE', note: null };
       if (isAcceptedRelease) {
         try {
@@ -2451,7 +2399,8 @@ router.patch(
           // ACCEPTED means the provisional agreement is live and the job is
           // ACCEPTED — not QUOTED. Re-read the job inside the lock and verify
           // the exact provisional agreement we are about to release is still
-          // the live one, owned by the same transporter.
+          // the live one, owned by the same transporter. Mirrors the
+          // inspections.js withdraw branch.
           const freshJob = await tx.transportJob.findUnique({
             where: { id: freshQuote.transportJobId },
             select: { id: true, status: true, truckOwnerId: true },
@@ -2471,6 +2420,8 @@ router.patch(
             }
           }
         } else {
+          // Silent release: no accepted transporter yet, the job must still be
+          // QUOTED. The waiting window applies.
           if (freshQuote.transportJob.status !== 'QUOTED') {
             throw quoteError(`This transport agreement cannot be released while the job is ${freshQuote.transportJob.status}`, 409);
           }
@@ -2549,6 +2500,7 @@ router.patch(
           },
         });
 
+        // Automatic penalties for frequent provider cancellations.
         if (isProviderRelease) {
           standingOutcome = await applyProviderCancellation(tx, {
             userId: req.user.id,
@@ -2557,6 +2509,7 @@ router.patch(
           });
         }
 
+        // Tell the other side (in-app + SMS opt-in) what happened.
         await recordOrderEvent(tx, {
           orderId: freshQuote.transportJob.orderId,
           actorId: req.user.id,

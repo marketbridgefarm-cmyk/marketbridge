@@ -616,6 +616,15 @@ async function acceptOfferAndCreateOrder(
     );
   }
 
+  // Any order that will run through the inspection lifecycle is provisional
+  // until the buyer explicitly chooses BUY and pays. Applies to AGRICULTURAL
+  // (always inspected) AND to PRODUCT listings that opted into inspection
+  // via `inspectionRequired: true`. The buyer-decision endpoint starts
+  // paymentDueAt at the correct lifecycle point.
+  const inspectionRequired =
+    offer.listing.category === 'AGRICULTURAL' ||
+    offer.listing.inspectionRequired === true;
+
   const order =
     await tx.order.create({
       data: {
@@ -628,13 +637,7 @@ async function acceptOfferAndCreateOrder(
         status: 'PENDING_PAYMENT',
         agreedOfferId: updatedOffer.id,
         agreedAt: new Date(),
-        // Agricultural orders are provisional until the inspection report is reviewed and
-        // the buyer explicitly chooses BUY. Do not start the goods-payment clock here.
-        // The buyer-decision endpoint starts paymentDueAt at the correct lifecycle point.
-        paymentDueAt: (
-  offer.listing.category === 'AGRICULTURAL' ||
-  offer.listing.inspectionRequired === true
-) ? null : computePaymentDueAt(),
+        paymentDueAt: inspectionRequired ? null : computePaymentDueAt(),
       },
     });
 
