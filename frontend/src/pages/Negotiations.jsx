@@ -16,6 +16,12 @@ import './negotiations/Negotiations.css';
 //
 // Competition groups render inline as flat sections inside one card.
 // Bilateral deals render as NegotiationRow cards.
+//
+// Notices come from GET /api/notifications, which merges the order-event,
+// inspection waiting-list, and transport waiting-list notification tables
+// into one timeline. The backend returns each row with a `scope` field
+// ('ORDER' | 'INSPECTION' | 'TRANSPORT') so the UI can label where it came
+// from without three separate fetches.
 // ============================================================================
 
 const SELLER_LISTING_STATUSES = ['ACTIVE', 'UNDER_NEGOTIATION', 'SOLD'];
@@ -35,6 +41,12 @@ const RELEASE_REASONS = [
   ['SCHEDULE_CONFLICT', 'Schedule conflict'],
   ['OTHER', 'Other (add a note)'],
 ];
+
+const NOTICE_SCOPE_LABEL = {
+  ORDER:      'Order',
+  INSPECTION: 'Inspection',
+  TRANSPORT:  'Transport',
+};
 
 function quoteTurn(quote) {
   if (quote.status === 'PENDING')   return 'REQUESTER';
@@ -646,7 +658,7 @@ export default function Negotiations() {
 
   const markNoticesRead = useCallback(async () => {
     try {
-      await api.patch('/offers/notices/read');
+      await api.post('/notifications/read-all');
       setNotices((prev) => prev.map((n) => ({ ...n, readAt: n.readAt || new Date().toISOString() })));
     } catch (_) { /* ignore */ }
   }, []);
@@ -658,8 +670,10 @@ export default function Negotiations() {
     const collected = [];
     const groups    = [];
 
-    api.get('/offers/notices')
-      .then((res) => setNotices(res.data?.notices || []))
+    // Unified notification feed: order events + inspection waiting-list +
+    // transport waiting-list, merged server-side into one array.
+    api.get('/notifications', { params: { limit: 50 } })
+      .then((res) => setNotices(res.data?.notifications || []))
       .catch(() => {});
 
     try {
@@ -918,6 +932,7 @@ export default function Negotiations() {
   );
 
   const hasAnything = visibleGroups.length > 0 || visible.length > 0;
+  const unreadNotices = notices.filter((n) => !n.readAt);
 
   return (
     <main className="section neg-page">
@@ -947,11 +962,16 @@ export default function Negotiations() {
           ))}
         </div>
 
-        {notices.some((n) => !n.readAt) && (
-          <section className="card neg-notices" aria-label="Waiting list updates">
+        {unreadNotices.length > 0 && (
+          <section className="card neg-notices" aria-label="Waiting list and order updates">
             <h2 className="neg-notices-title">Updates on your bids</h2>
-            {notices.filter((n) => !n.readAt).slice(0, 5).map((n) => (
-              <p key={n.id} className="neg-notices-item">
+            {unreadNotices.slice(0, 5).map((n) => (
+              <p key={`${n.scope || 'ORDER'}:${n.id}`} className="neg-notices-item">
+                {n.scope && (
+                  <span className="role-chip" style={{ marginRight: 6 }}>
+                    {NOTICE_SCOPE_LABEL[n.scope] || n.scope}
+                  </span>
+                )}
                 <strong>{n.title}.</strong> {n.body}
               </p>
             ))}
