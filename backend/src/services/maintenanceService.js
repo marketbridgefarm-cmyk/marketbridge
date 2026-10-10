@@ -608,12 +608,15 @@ async function expireUnpaidOrders(now = new Date()) {
         // chooses BUY after the inspection report. Never expire them from
         // the generic goods-payment timer before that decision. Legacy rows
         // may still carry an old inspection-workflow deadline, so clear it.
-        if (current.listing?.category === 'AGRICULTURAL' && current.buyerDecision !== 'BUY') {
-          await tx.order.update({ where: { id: current.id }, data: { paymentDueAt: null } });
-          logger.info({ orderId: current.id }, 'Cleared premature agricultural payment deadline before BUY decision');
-          return;
-        }
+        const inspectionRequired =
+  current.listing?.category === 'AGRICULTURAL' ||
+  current.listing?.inspectionRequired === true;
 
+if (inspectionRequired && current.buyerDecision !== 'BUY') {
+  await tx.order.update({ where: { id: current.id }, data: { paymentDueAt: null } });
+  logger.info({ orderId: current.id }, 'Cleared premature inspection-gated payment deadline before BUY decision');
+  return;
+}
         if (current.payments.some((p) => p.status === 'PAID')) {
           logger.warn({ orderId: current.id }, 'Skipping auto-expire: order has a PAID payment despite PENDING_PAYMENT status');
           return;
