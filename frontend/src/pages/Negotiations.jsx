@@ -10,19 +10,12 @@ import './negotiations/Negotiations.css';
 // ============================================================================
 //
 // 1. LISTING_OFFER      many buyers → seller selection → bilateral negotiation
+//                       → PROVISIONAL → CONFIRM (order) or RELEASE (24h + reason + cap)
 // 2. TRANSPORT_QUOTE    arranging party ↔ truck owners
 // 3. INSPECTION_QUOTE   requester ↔ inspectors
 //
 // Competition groups render inline as flat sections inside one card.
 // Bilateral deals render as NegotiationRow cards.
-//
-// Focus of the current revision:
-//   • The reason picker is only rendered for LISTING_OFFER, because the
-//     inspection and transport counter routes do not accept or store a
-//     reasonCode. Requiring it there blocked Counter on those two channels.
-//   • The Counter button's disabled condition matches what the backend
-//     actually needs per channel: amount-only for provider channels, amount
-//     and reason for listing offers.
 // ============================================================================
 
 const SELLER_LISTING_STATUSES = ['ACTIVE', 'UNDER_NEGOTIATION', 'SOLD'];
@@ -34,6 +27,13 @@ const PRICE_ADJUSTMENT_OPTIONS = [
   { value: 'MARKET_PRICE_FALL', label: 'Buyer: market price has fallen suddenly' },
   { value: 'QUALITY_OR_QUANTITY_CHANGE', label: 'Review due to confirmed quality or quantity difference' },
   { value: 'KEEP_CURRENT_PRICE', label: 'Keep the current negotiated price' },
+];
+const RELEASE_REASONS = [
+  ['PROVIDER_UNAVAILABLE', 'Provider is unavailable'],
+  ['NO_RESPONSE', 'Provider is not responding'],
+  ['PRICE_CHANGED', 'Price changed'],
+  ['SCHEDULE_CONFLICT', 'Schedule conflict'],
+  ['OTHER', 'Other (add a note)'],
 ];
 
 function quoteTurn(quote) {
@@ -56,13 +56,14 @@ function leavesOnly(items, parentKey) {
 
 function humanStatus(status) {
   return ({
-    PENDING:   'Bid pending',
-    SELECTED:  'Selected',
-    COUNTERED: 'Counter-offer',
-    ACCEPTED:  'Accepted',
-    REJECTED:  'Rejected',
-    WITHDRAWN: 'Released',
-    EXPIRED:   'Expired',
+    PENDING:     'Bid pending',
+    SELECTED:    'Selected',
+    COUNTERED:   'Counter-offer',
+    PROVISIONAL: 'Provisional agreement',
+    ACCEPTED:    'Accepted',
+    REJECTED:    'Rejected',
+    WITHDRAWN:   'Released',
+    EXPIRED:     'Expired',
   }[status] || String(status || '').replaceAll('_', ' '));
 }
 
@@ -94,9 +95,6 @@ function CompetitionGroup({ group, busyKey, onRespond }) {
     PREVIOUS_QUOTE_STATUSES.includes(q.status)
   );
 
-  // Once any bid is SELECTED or COUNTERED, the pool is locked to that
-  // negotiation thread. Mirrors the backend select guard so the UI cannot
-  // offer a "Select" button that the server would refuse.
   const hasActiveNegotiation = activeQuotes.some((q) =>
     ['SELECTED', 'COUNTERED'].includes(q.status)
   );
@@ -119,7 +117,6 @@ function CompetitionGroup({ group, busyKey, onRespond }) {
         </div>
       </header>
 
-      {/* ── Active bids ────────────────────────────────────── */}
       <section className="neg-subsection">
         <div className="neg-subsection-head">
           <h3 className="neg-subsection-title">Active bids</h3>
@@ -147,7 +144,6 @@ function CompetitionGroup({ group, busyKey, onRespond }) {
         )}
       </section>
 
-      {/* ── Previous bids ──────────────────────────────────── */}
       {previousQuotes.length > 0 && (
         <section className="neg-subsection neg-subsection--previous">
           <div className="neg-subsection-head">
@@ -168,7 +164,6 @@ function CompetitionGroup({ group, busyKey, onRespond }) {
         </section>
       )}
 
-      {/* ── Notice + footer action ─────────────────────────── */}
       <footer className="neg-group-footer">
         <div className="neg-notice">
           <span className="neg-notice-prefix">Notice:</span>
@@ -346,12 +341,20 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
   const counterValue = Number(counterDraft);
   const counterValid = Number.isFinite(counterValue) && counterValue > 0;
   const [reasonCode, setReasonCode] = React.useState('');
+  const [releaseReason, setReleaseReason] = React.useState('');
+  const [releaseNote, setReleaseNote] = React.useState('');
 
-  // Only listing offers carry a reason code through to the backend. The
-  // inspections and transport counter routes accept only `counterAmount`,
-  // so requiring a reason there made Counter appear to be broken.
   const requiresReason = item.type === 'LISTING_OFFER';
   const canSubmitCounter = counterValid && (!requiresReason || Boolean(reasonCode));
+
+  const isProvisional = item.type === 'LISTING_OFFER' && item.status === 'PROVISIONAL';
+  const provisionalAvailableAt = isProvisional && item.raw?.provisionalReleaseAvailableAt
+    ? new Date(item.raw.provisionalReleaseAvailableAt)
+    : null;
+  const releaseUnlocked = !provisionalAvailableAt || provisionalAvailableAt.getTime() <= Date.now();
+  const needsReleaseNote = releaseReason === 'OTHER';
+  const canSubmitRelease =
+    Boolean(releaseReason) && (!needsReleaseNote || releaseNote.trim().length > 0);
 
   let canAct        = false;
   let acceptAction  = 'ACCEPT';
@@ -359,7 +362,9 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
   let waitingMessage = null;
 
   if (item.type === 'LISTING_OFFER') {
-    if (item.viewerRole === 'SELLER') {
+    if (item.status === 'PROVISIONAL') {
+      canAct = false;
+    } else if (item.viewerRole === 'SELLER') {
       if (item.status === 'PENDING') {
         if (item.listingLocked) {
           waitingMessage = 'Waiting list locked: you are negotiating with a selected buyer or an order is in progress. You can select another bid when that buyer rejects, you release a silent buyer, or the order is cancelled.';
@@ -391,17 +396,17 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
     }
   }
 
-  if (expired && ['PENDING', 'SELECTED', 'COUNTERED'].includes(item.status)) {
+  if (expired && ['PENDING', 'SELECTED', 'COUNTERED', 'PROVISIONAL'].includes(item.status)) {
     canAct = false;
     waitingMessage = 'This quote has expired.';
   }
 
   const myTurn = canAct && !waitingMessage;
 
-
   return (
-    <article className={`neg-card${myTurn ? ' neg-card--my-turn' : ''}`}>
+    <article className={`neg-card${myTurn ? ' neg-card--my-turn' : ''}${isProvisional ? ' neg-card--provisional' : ''}`}>
       {myTurn && <span className="neg-turn-label" aria-label="Your turn">⚡ Your turn</span>}
+      {isProvisional && <span className="neg-turn-label" aria-label="Provisional">⏳ Provisional</span>}
 
       <header className="neg-card-head">
         <div className="neg-card-head-main">
@@ -411,7 +416,6 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
               : 'INSPECTION'}
           </span>
           <h3 className="neg-title">{item.title}</h3>
-          {/* Listing offers already show the type (eyebrow) and role (chip) */}
           {item.type !== 'LISTING_OFFER' && item.subtitle && (
             <p className="neg-card-subtitle">{item.subtitle}</p>
           )}
@@ -448,8 +452,72 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
 
       {item.status === 'ACCEPTED' && (
         <p className="neg-deal-context">
-          Provisional agreement at <strong>{Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB</strong>.
+          Agreement at <strong>{Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB</strong>. Order created.
         </p>
+      )}
+
+      {isProvisional && (
+        <>
+          <p className="neg-deal-context">
+            A provisional price of <strong>{Number.isFinite(amount) ? amount.toLocaleString() : '—'} ETB</strong> has been agreed.
+            Either party can confirm to create the order.
+          </p>
+
+          <div className="neg-actions">
+            <button
+              type="button"
+              className="sd-btn sd-btn-primary"
+              disabled={anyBusy}
+              onClick={() => onRespond(item, 'CONFIRM_PROVISIONAL')}
+            >
+              {busy('CONFIRM_PROVISIONAL') ? 'Confirming…' : 'Confirm & create order'}
+            </button>
+          </div>
+
+          {releaseUnlocked ? (
+            <div className="neg-actions">
+              <select
+                className="neg-reason-picker"
+                aria-label="Reason for releasing"
+                value={releaseReason}
+                onChange={(e) => setReleaseReason(e.target.value)}
+                disabled={anyBusy}
+              >
+                <option value="">Choose a reason (required)</option>
+                {RELEASE_REASONS.map(([value, text]) => (
+                  <option key={value} value={value}>{text}</option>
+                ))}
+              </select>
+              {needsReleaseNote && (
+                <input
+                  type="text"
+                  className="neg-counter-picker"
+                  maxLength={200}
+                  placeholder="Short note"
+                  value={releaseNote}
+                  onChange={(e) => setReleaseNote(e.target.value)}
+                  disabled={anyBusy}
+                />
+              )}
+              <button
+                type="button"
+                className="sd-btn sd-btn-outline sd-btn-danger"
+                disabled={!canSubmitRelease || anyBusy}
+                onClick={() => onRespond(item, 'RELEASE_PROVISIONAL', null, undefined, releaseReason, releaseNote)}
+              >
+                {busy('RELEASE_PROVISIONAL') ? 'Releasing…' : 'Release provisional'}
+              </button>
+            </div>
+          ) : (
+            <p className="neg-waiting">
+              Release opens {provisionalAvailableAt.toLocaleString()} (24h after the provisional agreement).
+            </p>
+          )}
+
+          <p className="neg-deal-context muted">
+            Releasing a provisional agreement is recorded against your account. After 2 provisional releases on this listing, further releases require admin review.
+          </p>
+        </>
       )}
 
       {canAct && (
@@ -462,7 +530,7 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
           >
             {busy(acceptAction)
               ? (acceptAction === 'SELECT' ? 'Selecting…' : 'Accepting…')
-              : (acceptAction === 'SELECT' ? 'Select buyer for negotiation' : 'Agree price & create order')}
+              : (acceptAction === 'SELECT' ? 'Select buyer for negotiation' : 'Agree price (provisional)')}
           </button>
 
           {!(item.type === 'LISTING_OFFER' && item.viewerRole === 'SELLER') && (
@@ -583,7 +651,6 @@ export default function Negotiations() {
     } catch (_) { /* ignore */ }
   }, []);
 
-  // --------------------------------------------------------------------------
   const loadAll = useCallback(async () => {
     if (!user?.id) return;
     setError('');
@@ -618,7 +685,7 @@ export default function Negotiations() {
       const leafOffers = leavesOnly([...buyerOffers, ...sellerOffers], 'parentOfferId');
       const lockedListingIds = new Set(
         leafOffers
-          .filter((o) => o.viewerRole === 'SELLER' && ['SELECTED', 'COUNTERED', 'ACCEPTED'].includes(o.status))
+          .filter((o) => o.viewerRole === 'SELLER' && ['SELECTED', 'COUNTERED', 'PROVISIONAL', 'ACCEPTED'].includes(o.status))
           .map((o) => o.listingId)
       );
 
@@ -759,10 +826,7 @@ export default function Negotiations() {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   // ---- Respond: bilateral NegotiationRow ---------------------------------
-  // `reasonCode` is only meaningful for LISTING_OFFER; the inspections and
-  // transport counter routes accept only `counterAmount`, so we forward the
-  // reason only where the backend actually reads it.
-  const respond = useCallback(async (item, action, counterAmount, reasonCode) => {
+  const respond = useCallback(async (item, action, counterAmount, reasonCode, releaseReason, releaseNote) => {
     const key = `${item.id}:${action}`;
     setBusyKey(key);
     try {
@@ -772,6 +836,10 @@ export default function Negotiations() {
         if (action === 'COUNTER' || action === 'RE_COUNTER') {
           payload.counterAmount = Number(counterAmount);
           if (reasonCode) payload.reasonCode = reasonCode;
+        }
+        if (action === 'RELEASE_PROVISIONAL') {
+          payload.reason = releaseReason;
+          if (releaseNote) payload.note = releaseNote;
         }
         response = await api.patch(`/offers/${item.raw.id}`, payload);
       } else if (item.type === 'TRANSPORT_QUOTE') {
@@ -834,10 +902,13 @@ export default function Negotiations() {
 
   // ---- Filters -----------------------------------------------------------
   const visible = useMemo(() => {
-    let list = [...items].sort((a, b) =>
-      ['PENDING', 'SELECTED', 'COUNTERED'].includes(a.status) ? -1 : 1
-    );
-    if (filter === 'active') list = list.filter((i) => ['PENDING', 'SELECTED', 'COUNTERED'].includes(i.status));
+    let list = [...items].sort((a, b) => {
+      const aActive = ['PENDING', 'SELECTED', 'COUNTERED', 'PROVISIONAL'].includes(a.status);
+      const bActive = ['PENDING', 'SELECTED', 'COUNTERED', 'PROVISIONAL'].includes(b.status);
+      if (aActive === bActive) return 0;
+      return aActive ? -1 : 1;
+    });
+    if (filter === 'active') list = list.filter((i) => ['PENDING', 'SELECTED', 'COUNTERED', 'PROVISIONAL'].includes(i.status));
     if (typeFilter !== 'all') list = list.filter((i) => i.type === typeFilter);
     return list;
   }, [items, filter, typeFilter]);
