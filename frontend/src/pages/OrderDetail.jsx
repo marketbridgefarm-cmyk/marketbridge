@@ -612,7 +612,7 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
 }
 
 /* ========================================================================
-   5. Inspection — request form (popup) + status card
+   5. Inspection — request form + status card
    ======================================================================== */
 
 function InspectionRequestForm({ workDetails, setWorkDetails, requesting, request, isBuyer, onCancel }) {
@@ -763,10 +763,9 @@ function InspectionRequestForm({ workDetails, setWorkDetails, requesting, reques
       <div className="od-actions">
         <Button
           variant="primary"
-          disabled={requesting}
+          disabled={requesting || !workDetails.quantityValue}
           busy={requesting}
           busyText="Requesting…"
-          disabled={!workDetails.quantityValue}
           onClick={() => request(isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}
         >
           Open inspection competition
@@ -847,9 +846,6 @@ function InspectionCard({ order, title, i }) {
   const acceptedLeaf = leafList.find((q) => q.status === 'ACCEPTED');
   const viewerIsAssignedInspector = request.inspectorId && request.inspectorId === i.currentUserId;
 
-  // The bids section stays visible through REQUESTED / ACCEPTED / IN_PROGRESS /
-  // COMPLETED. Only when the request is CANCELLED/STALLED (or the terminal
-  // COMPLETED with the waiting list already released) does it drop off.
   const showBidsSection =
     !['CANCELLED', 'STALLED'].includes(request.status) &&
     (request.status === 'REQUESTED' ||
@@ -933,6 +929,8 @@ function InspectionCard({ order, title, i }) {
                     isRequester && request.status === 'REQUESTED' && (isSelected || isCounteredByProvider);
                   const canSelect = isRequester && request.status === 'REQUESTED' && isPending;
                   const isWaiting = isPending && request.status !== 'REQUESTED';
+                  const counterValue = Number(i.counterInputs[counterKeyFor(quote.id)] || 0);
+                  const counterIsValid = Number.isFinite(counterValue) && counterValue > 0;
 
                   return (
                     <div className="transporter" key={quote.id}>
@@ -1020,7 +1018,7 @@ function InspectionCard({ order, title, i }) {
                             <Button
                               variant="light"
                               size="sm"
-                              disabled={isBusy(quote.id, 'counter') || !Number(i.counterInputs[counterKeyFor(quote.id)])}
+                              disabled={isBusy(quote.id, 'counter') || !counterIsValid}
                               busy={isBusy(quote.id, 'counter')}
                               busyText="Sending…"
                               onClick={() =>
@@ -1356,6 +1354,8 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
 
   const isWaitingPending =
     quote.status === 'PENDING' && !['REQUESTED', 'QUOTED'].includes(t.job?.status);
+  const counterValue = Number(t.counterInputs[quote.id] || 0);
+  const counterIsValid = Number.isFinite(counterValue) && counterValue > 0;
 
   return (
     <div className="transporter">
@@ -1421,7 +1421,7 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
             <Button
               variant="light"
               size="sm"
-              disabled={working || !Number(t.counterInputs[quote.id])}
+              disabled={working || !counterIsValid}
               busy={working}
               busyText="Sending…"
               onClick={() => t.counterQuote(quote.id)}
@@ -1547,14 +1547,6 @@ function TransportCard({ order, t }) {
     job.status === 'IN_TRANSIT' ||
     job.status === 'DELIVERED' ||
     job.incidentNotes;
-
-  // The quotes section is visible until the terminal event (DELIVERED) or a
-  // full cancellation. Hiding it once transport payment settled left the
-  // still-PENDING truck owners invisible to the requester.
-  const showQuotesSection =
-    hired &&
-    !['DELIVERED', 'CANCELLED'].includes(job.status) &&
-    job.status !== 'REQUESTED' ? false : hired;
 
   const quotesSectionVisible =
     hired &&
@@ -2029,7 +2021,6 @@ export default function OrderDetail() {
   const [activeModal, setActiveModal] = useState(null);
 
   const [providerReleaseTarget, setProviderReleaseTarget] = useState(null);
-  // Shape: { service: 'INSPECTION' | 'TRANSPORT', quoteId, inspectionRequestId?, transportJobId? }
 
   const [payMethod, setPayMethod] = useState('TELEBIRR');
 
@@ -2505,9 +2496,6 @@ export default function OrderDetail() {
       })
     : [];
 
-  // ----------------------------------------------------------------------
-  // SHARED PROVIDER RELEASE HANDLER
-  // ----------------------------------------------------------------------
   const submitProviderRelease = async ({ reason, note }) => {
     if (!providerReleaseTarget) return false;
     const { service, quoteId, inspectionRequestId, transportJobId } = providerReleaseTarget;
@@ -3116,8 +3104,6 @@ export default function OrderDetail() {
           )}
         </div>
       </div>
-
-      {/* ── MODALS ─────────────────────────────────────────────────── */}
 
       <Modal
         isOpen={activeModal === 'inspection-request-form'}
