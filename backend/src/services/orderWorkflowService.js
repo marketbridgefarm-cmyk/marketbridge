@@ -747,17 +747,24 @@ function buildActions(order, payments, viewer) {
     }
   }
 
-  // Request inspection if none exists yet.
-  if (['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category) && !payments.inspectionRequestsExist && !terminal) {
-    push({
-      code: 'REQUEST_INSPECTION',
-      label: 'Request inspection',
-      actorRole: 'BUYER_OR_SELLER',
-      viewerCanPerform: isBuyer || isSeller,
-      ready: true,
-      route: null,
-    });
-  }
+// Request inspection if none exists yet AND the listing actually requires
+// one. AGRICULTURAL always requires it; PRODUCT only if the seller set
+// inspectionRequired on the listing.
+const listingCategory = order.listing?.category;
+const inspectionRequiredByPolicy =
+  listingCategory === 'AGRICULTURAL' ||
+  order.listing?.inspectionRequired === true;
+
+if (inspectionRequiredByPolicy && !payments.inspectionRequestsExist && !terminal) {
+  push({
+    code: 'REQUEST_INSPECTION',
+    label: 'Request inspection',
+    actorRole: 'BUYER_OR_SELLER',
+    viewerCanPerform: isBuyer || isSeller,
+    ready: true,
+    route: null,
+  });
+}
 
   // ---------------------------------------------------------------------------
   // 2. BUYER DECISION (BUY / CANCEL after inspection)
