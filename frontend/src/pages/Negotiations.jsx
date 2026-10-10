@@ -15,6 +15,14 @@ import './negotiations/Negotiations.css';
 //
 // Competition groups render inline as flat sections inside one card.
 // Bilateral deals render as NegotiationRow cards.
+//
+// Focus of the current revision:
+//   • The reason picker is only rendered for LISTING_OFFER, because the
+//     inspection and transport counter routes do not accept or store a
+//     reasonCode. Requiring it there blocked Counter on those two channels.
+//   • The Counter button's disabled condition matches what the backend
+//     actually needs per channel: amount-only for provider channels, amount
+//     and reason for listing offers.
 // ============================================================================
 
 const SELLER_LISTING_STATUSES = ['ACTIVE', 'UNDER_NEGOTIATION', 'SOLD'];
@@ -339,6 +347,12 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
   const counterValid = Number.isFinite(counterValue) && counterValue > 0;
   const [reasonCode, setReasonCode] = React.useState('');
 
+  // Only listing offers carry a reason code through to the backend. The
+  // inspections and transport counter routes accept only `counterAmount`,
+  // so requiring a reason there made Counter appear to be broken.
+  const requiresReason = item.type === 'LISTING_OFFER';
+  const canSubmitCounter = counterValid && (!requiresReason || Boolean(reasonCode));
+
   let canAct        = false;
   let acceptAction  = 'ACCEPT';
   let counterAction = 'COUNTER';
@@ -462,10 +476,21 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
             </button>
           )}
 
-          <select className="neg-reason-picker" aria-label="Price adjustment reason" value={reasonCode} onChange={(event) => setReasonCode(event.target.value)} disabled={anyBusy}>
-            <option value="">Choose a reason (required)</option>
-            {PRICE_ADJUSTMENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
+          {requiresReason && (
+            <select
+              className="neg-reason-picker"
+              aria-label="Price adjustment reason"
+              value={reasonCode}
+              onChange={(event) => setReasonCode(event.target.value)}
+              disabled={anyBusy}
+            >
+              <option value="">Choose a reason (required)</option>
+              {PRICE_ADJUSTMENT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          )}
+
           <AmountPicker
             className="neg-counter-picker"
             reference={amountOf(item)}
@@ -479,8 +504,8 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
           <button
             type="button"
             className="sd-btn sd-btn-outline"
-            disabled={!counterValid || !reasonCode || anyBusy}
-            onClick={() => onRespond(item, counterAction, counterValue, reasonCode)}
+            disabled={!canSubmitCounter || anyBusy}
+            onClick={() => onRespond(item, counterAction, counterValue, reasonCode || undefined)}
           >
             {busy(counterAction) ? 'Sending…' : 'Counter'}
           </button>
@@ -734,6 +759,9 @@ export default function Negotiations() {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   // ---- Respond: bilateral NegotiationRow ---------------------------------
+  // `reasonCode` is only meaningful for LISTING_OFFER; the inspections and
+  // transport counter routes accept only `counterAmount`, so we forward the
+  // reason only where the backend actually reads it.
   const respond = useCallback(async (item, action, counterAmount, reasonCode) => {
     const key = `${item.id}:${action}`;
     setBusyKey(key);
@@ -741,7 +769,10 @@ export default function Negotiations() {
       let response;
       if (item.type === 'LISTING_OFFER') {
         const payload = { action };
-        if (action === 'COUNTER' || action === 'RE_COUNTER') { payload.counterAmount = Number(counterAmount); payload.reasonCode = reasonCode; }
+        if (action === 'COUNTER' || action === 'RE_COUNTER') {
+          payload.counterAmount = Number(counterAmount);
+          if (reasonCode) payload.reasonCode = reasonCode;
+        }
         response = await api.patch(`/offers/${item.raw.id}`, payload);
       } else if (item.type === 'TRANSPORT_QUOTE') {
         const base = `/transport/${item.raw.jobId}/quotes/${item.raw.quoteId}`;
