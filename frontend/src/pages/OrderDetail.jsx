@@ -809,7 +809,9 @@ function InspectionCard({ order, title, i }) {
 
   const report = request.report;
   const reportReady = request.status === 'COMPLETED' && Boolean(report);
-  const liveBidderCount = leafQuotes(request.quotes).filter((q) => ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)).length;
+  const leafList = leafQuotes(request.quotes);
+  const pendingLeafCount = leafList.filter((q) => q.status === 'PENDING').length;
+  const liveBidderCount = leafList.filter((q) => ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)).length;
   const inspectorName = request.inspector?.name || null;
   const inspectionDate =
     report?.inspectedAt || report?.completedAt || request.completedAt || request.updatedAt || request.createdAt || null;
@@ -823,7 +825,7 @@ function InspectionCard({ order, title, i }) {
   );
 
   const isRequester = request.requestedById === i.currentUserId;
-  const quotes = leafQuotes(request.quotes);
+  const quotes = leafList;
   const counterKeyFor = (quoteId) => `inspection-counter-${quoteId}`;
   const busyKey = (quoteId, action) => `inspection-quote-${quoteId}-${action}`;
   const isBusy = (quoteId, action) => i.busy === busyKey(quoteId, action);
@@ -842,8 +844,18 @@ function InspectionCard({ order, title, i }) {
     myInspectionObligation?.payment?.status === 'PROCESSING'
   );
 
-  const acceptedLeaf = leafQuotes(request.quotes).find((q) => q.status === 'ACCEPTED');
+  const acceptedLeaf = leafList.find((q) => q.status === 'ACCEPTED');
   const viewerIsAssignedInspector = request.inspectorId && request.inspectorId === i.currentUserId;
+
+  // The bids section stays visible through REQUESTED / ACCEPTED / IN_PROGRESS /
+  // COMPLETED. Only when the request is CANCELLED/STALLED (or the terminal
+  // COMPLETED with the waiting list already released) does it drop off.
+  const showBidsSection =
+    !['CANCELLED', 'STALLED'].includes(request.status) &&
+    (request.status === 'REQUESTED' ||
+      request.status === 'ACCEPTED' ||
+      request.status === 'IN_PROGRESS' ||
+      request.status === 'COMPLETED');
 
   return (
     <Card
@@ -877,16 +889,26 @@ function InspectionCard({ order, title, i }) {
         </Section>
       )}
 
-      {request.status === 'REQUESTED' && (
+      {showBidsSection && quotes.length > 0 && (
         <Section
-          title="Inspector bids"
+          title={
+            request.status === 'REQUESTED'
+              ? 'Inspector bids'
+              : pendingLeafCount > 0
+                ? `Waiting inspector bids (${pendingLeafCount})`
+                : 'Inspector bids'
+          }
           meta={`${quotes.length} bid${quotes.length === 1 ? '' : 's'}`}
         >
-          {!isRequester ? (
+          {!isRequester && request.status === 'REQUESTED' ? (
             <p className="muted">
               {quotes.length === 0
                 ? 'Waiting for registered inspectors to submit sealed bids.'
                 : `The requester is reviewing ${quotes.length} inspector bid(s). You will see the assigned inspector once a quote is accepted.`}
+            </p>
+          ) : !isRequester ? (
+            <p className="muted">
+              The requester is reviewing inspector bids. You will see the assigned inspector once a quote is accepted.
             </p>
           ) : quotes.length === 0 ? (
             <p className="muted">
@@ -894,129 +916,152 @@ function InspectionCard({ order, title, i }) {
               all bids, then select one for price negotiation.
             </p>
           ) : (
-            <div className="od-card-grid">
-              {quotes.map((quote) => {
-                const displayAmount =
-                  quote.status === 'COUNTERED'
-                    ? quote.counterAmount ?? quote.amount
-                    : quote.amount;
-                const isPending = quote.status === 'PENDING';
-                const isSelected = quote.status === 'SELECTED';
-                const isCounteredByProvider =
-                  quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER';
-                const isCounteredByRequester =
-                  quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
-                const requesterCanAct =
-                  isRequester && (isSelected || isCounteredByProvider);
-                const canSelect = isRequester && isPending;
+            <>
+              <div className="od-card-grid">
+                {quotes.map((quote) => {
+                  const displayAmount =
+                    quote.status === 'COUNTERED'
+                      ? quote.counterAmount ?? quote.amount
+                      : quote.amount;
+                  const isPending = quote.status === 'PENDING';
+                  const isSelected = quote.status === 'SELECTED';
+                  const isCounteredByProvider =
+                    quote.status === 'COUNTERED' && quote.counteredBy === 'PROVIDER';
+                  const isCounteredByRequester =
+                    quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
+                  const requesterCanAct =
+                    isRequester && request.status === 'REQUESTED' && (isSelected || isCounteredByProvider);
+                  const canSelect = isRequester && request.status === 'REQUESTED' && isPending;
+                  const isWaiting = isPending && request.status !== 'REQUESTED';
 
-                return (
-                  <div className="transporter" key={quote.id}>
-                    <div>
-                      <div className="od-person">
-                        <Avatar small name={quote.inspector?.name || 'Inspector'} />
-                        <strong>{quote.inspector?.name || 'Inspector'}</strong>
-                      </div>
-                      <p>
-                        {quote.inspector?.location || 'Location not set'}
-                        {typeof quote.inspector?.rating === 'number' &&
-                          ` · ★ ${quote.inspector.rating.toFixed(1)}`}
-                        {quote.inspector?.verificationStatus &&
-                          ` · ${quote.inspector.verificationStatus}`}
-                      </p>
-                      {quote.message && <p className="muted">{quote.message}</p>}
-                      <p>
-                        Status:{' '}
-                        <span className="badge">{label(quote.status || 'PENDING')}</span>
-                      </p>
-                      {isCounteredByRequester && (
-                        <p className="muted small">
-                          You countered {money(displayAmount)} ETB — waiting for the
-                          inspector.
-                        </p>
-                      )}
-                    </div>
-
-                    <div>
-                      <strong>{money(displayAmount)} ETB</strong>
-
-                      {canSelect && (
-                        <>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            disabled={isBusy(quote.id, 'select')}
-                            busy={isBusy(quote.id, 'select')}
-                            busyText="Selecting…"
-                            onClick={() => i.selectInspectionQuote(quote.id)}
-                          >
-                            Select bid for deal
-                          </Button>
-                          <span className="muted small">
-                            Selecting opens price negotiation.
-                          </span>
-                        </>
-                      )}
-
-                      {requesterCanAct && (
-                        <div className="od-quote-actions">
-                          <Button
-                            size="sm"
-                            disabled={isBusy(quote.id, 'accept')}
-                            busy={isBusy(quote.id, 'accept')}
-                            busyText="Accepting…"
-                            onClick={() => i.acceptInspectionQuote(quote.id)}
-                          >
-                            Accept quote
-                          </Button>
-                          <AmountPicker
-                            className="field-inline"
-                            reference={Number(quote.counterAmount ?? quote.amount)}
-                            min={1}
-                            placeholder="Counter (ETB)"
-                            value={
-                              i.counterInputs[counterKeyFor(quote.id)] || ''
-                            }
-                            onChange={(v) =>
-                              i.setCounterInputs((prev) => ({
-                                ...prev,
-                                [counterKeyFor(quote.id)]: v,
-                              }))
-                            }
-                            ariaLabel="Counter amount in ETB"
-                          />
-                          <Button
-                            variant="light"
-                            size="sm"
-                            disabled={isBusy(quote.id, 'counter')}
-                            busy={isBusy(quote.id, 'counter')}
-                            busyText="Sending…"
-                            onClick={() =>
-                              i.counterInspectionQuote(
-                                quote.id,
-                                counterKeyFor(quote.id)
-                              )
-                            }
-                          >
-                            Counter
-                          </Button>
-                          <Button
-                            variant="light"
-                            size="sm"
-                            disabled={isBusy(quote.id, 'reject')}
-                            busy={isBusy(quote.id, 'reject')}
-                            busyText="Rejecting…"
-                            onClick={() => i.rejectInspectionQuote(quote.id)}
-                          >
-                            Reject
-                          </Button>
+                  return (
+                    <div className="transporter" key={quote.id}>
+                      <div>
+                        <div className="od-person">
+                          <Avatar small name={quote.inspector?.name || 'Inspector'} />
+                          <strong>{quote.inspector?.name || 'Inspector'}</strong>
                         </div>
-                      )}
+                        <p>
+                          {quote.inspector?.location || 'Location not set'}
+                          {typeof quote.inspector?.rating === 'number' &&
+                            ` · ★ ${quote.inspector.rating.toFixed(1)}`}
+                          {quote.inspector?.verificationStatus &&
+                            ` · ${quote.inspector.verificationStatus}`}
+                        </p>
+                        {quote.message && <p className="muted">{quote.message}</p>}
+                        <p>
+                          Status:{' '}
+                          <span className="badge">{label(quote.status || 'PENDING')}</span>
+                          {isWaiting && (
+                            <span className="badge" style={{ marginLeft: 6 }}>Waiting</span>
+                          )}
+                        </p>
+                        {isCounteredByRequester && (
+                          <p className="muted small">
+                            You countered {money(displayAmount)} ETB — waiting for the
+                            inspector.
+                          </p>
+                        )}
+                        {isWaiting && (
+                          <p className="muted small">
+                            This inspector stays queued until the selected inspection is completed.
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <strong>{money(displayAmount)} ETB</strong>
+
+                        {canSelect && (
+                          <>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              disabled={isBusy(quote.id, 'select')}
+                              busy={isBusy(quote.id, 'select')}
+                              busyText="Selecting…"
+                              onClick={() => i.selectInspectionQuote(quote.id)}
+                            >
+                              Select bid for deal
+                            </Button>
+                            <span className="muted small">
+                              Selecting opens price negotiation.
+                            </span>
+                          </>
+                        )}
+
+                        {requesterCanAct && (
+                          <div className="od-quote-actions">
+                            <Button
+                              size="sm"
+                              disabled={isBusy(quote.id, 'accept')}
+                              busy={isBusy(quote.id, 'accept')}
+                              busyText="Accepting…"
+                              onClick={() => i.acceptInspectionQuote(quote.id)}
+                            >
+                              Accept quote
+                            </Button>
+                            <AmountPicker
+                              className="field-inline"
+                              reference={Number(quote.counterAmount ?? quote.amount)}
+                              min={1}
+                              placeholder="Counter (ETB)"
+                              value={
+                                i.counterInputs[counterKeyFor(quote.id)] || ''
+                              }
+                              onChange={(v) =>
+                                i.setCounterInputs((prev) => ({
+                                  ...prev,
+                                  [counterKeyFor(quote.id)]: v,
+                                }))
+                              }
+                              ariaLabel="Counter amount in ETB"
+                            />
+                            <Button
+                              variant="light"
+                              size="sm"
+                              disabled={isBusy(quote.id, 'counter') || !Number(i.counterInputs[counterKeyFor(quote.id)])}
+                              busy={isBusy(quote.id, 'counter')}
+                              busyText="Sending…"
+                              onClick={() =>
+                                i.counterInspectionQuote(
+                                  quote.id,
+                                  counterKeyFor(quote.id)
+                                )
+                              }
+                            >
+                              Counter
+                            </Button>
+                            <Button
+                              variant="light"
+                              size="sm"
+                              disabled={isBusy(quote.id, 'reject')}
+                              busy={isBusy(quote.id, 'reject')}
+                              busyText="Rejecting…"
+                              onClick={() => i.rejectInspectionQuote(quote.id)}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        )}
+
+                        {isPending && request.status === 'REQUESTED' && isRequester && !canSelect && (
+                          <span className="muted small">
+                            Locked — another inspector bid is in negotiation. Resolve it first.
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+              {pendingLeafCount > 0 && request.status !== 'REQUESTED' && (
+                <p className="muted small" style={{ marginTop: 8 }}>
+                  {pendingLeafCount} inspector bid(s) are still waiting. They will be
+                  released automatically once this inspection is completed.
+                </p>
+              )}
+            </>
           )}
         </Section>
       )}
@@ -1309,6 +1354,9 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
   const rating = typeof quote.truckOwner?.rating === 'number' ? quote.truckOwner.rating.toFixed(1) : '—';
   const ownerName = quote.truckOwner?.name || 'Truck owner';
 
+  const isWaitingPending =
+    quote.status === 'PENDING' && !['REQUESTED', 'QUOTED'].includes(t.job?.status);
+
   return (
     <div className="transporter">
       <div>
@@ -1321,9 +1369,17 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
           {quote.truck?.registration || 'Registration —'} · ★ {rating}
         </p>
         {quote.message && <p className="muted">{quote.message}</p>}
-        <p>Status: <span className="badge">{quote.status || 'PENDING'}</span></p>
+        <p>
+          Status: <span className="badge">{quote.status || 'PENDING'}</span>
+          {isWaitingPending && <span className="badge" style={{ marginLeft: 6 }}>Waiting</span>}
+        </p>
         {quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER' && (
           <p className="muted">You countered {money(amount)} ETB — waiting for the transporter.</p>
+        )}
+        {isWaitingPending && (
+          <p className="muted small">
+            This transporter stays queued until the selected transport is delivered.
+          </p>
         )}
       </div>
 
@@ -1362,7 +1418,14 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
               onChange={(v) => t.setCounterInputs((q) => ({ ...q, [quote.id]: v }))}
               ariaLabel="Counter amount in ETB"
             />
-            <Button variant="light" size="sm" disabled={working} busy={working} busyText="Sending…" onClick={() => t.counterQuote(quote.id)}>
+            <Button
+              variant="light"
+              size="sm"
+              disabled={working || !Number(t.counterInputs[quote.id])}
+              busy={working}
+              busyText="Sending…"
+              onClick={() => t.counterQuote(quote.id)}
+            >
               Counter
             </Button>
             <Button variant="light" size="sm" disabled={working} busy={working} busyText="Rejecting…" onClick={() => t.rejectQuote(quote.id)}>
@@ -1433,6 +1496,7 @@ function TransportCard({ order, t }) {
   const job = t.job;
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
+  const pendingLeafCount = quotes.filter((q) => q.status === 'PENDING').length;
 
   const hasActiveNegotiation = quotes.some((q) =>
     ['SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)
@@ -1483,6 +1547,19 @@ function TransportCard({ order, t }) {
     job.status === 'IN_TRANSIT' ||
     job.status === 'DELIVERED' ||
     job.incidentNotes;
+
+  // The quotes section is visible until the terminal event (DELIVERED) or a
+  // full cancellation. Hiding it once transport payment settled left the
+  // still-PENDING truck owners invisible to the requester.
+  const showQuotesSection =
+    hired &&
+    !['DELIVERED', 'CANCELLED'].includes(job.status) &&
+    job.status !== 'REQUESTED' ? false : hired;
+
+  const quotesSectionVisible =
+    hired &&
+    job.status !== 'CANCELLED' &&
+    job.status !== 'DELIVERED';
 
   return (
     <div className="od-card-grid">
@@ -1668,8 +1745,15 @@ function TransportCard({ order, t }) {
           ) : null
         }
       >
-        {hired && !t.paid && (
-          <Section title="Transport quotes" meta="Bids">
+        {quotesSectionVisible && (
+          <Section
+            title={
+              t.paid
+                ? `Waiting transporter bids (${pendingLeafCount})`
+                : 'Transport quotes'
+            }
+            meta="Bids"
+          >
             {quotes.length ? (
               quotes.map((q) => (
                 <QuoteRow
@@ -1682,6 +1766,12 @@ function TransportCard({ order, t }) {
             ) : (
               <p className="muted">
                 Waiting for registered truck owners to submit quotes.
+              </p>
+            )}
+            {pendingLeafCount > 0 && t.paid && (
+              <p className="muted small" style={{ marginTop: 8 }}>
+                {pendingLeafCount} transporter bid(s) are still waiting. They will be
+                released automatically once this transport is delivered.
               </p>
             )}
           </Section>
@@ -1972,7 +2062,7 @@ export default function OrderDetail() {
 
   useEffect(() => {
     if (!error) return undefined;
-    const timer = window.setTimeout(() => setError(''), 3000);
+    const timer = window.setTimeout(() => setError(''), 8000);
     return () => window.clearTimeout(timer);
   }, [error]);
 
@@ -2075,12 +2165,12 @@ export default function OrderDetail() {
   const isProduct = order?.listing?.category === 'PRODUCT';
   const inspectionRequiredByFlag = Boolean(order?.listing?.inspectionRequired);
   const hasInspectionRequest =
-  (order?.inspectionRequests?.length || 0) > 0 ||
-  (order?.listing?.inspectionRequests?.length || 0) > 0;
+    (order?.inspectionRequests?.length || 0) > 0 ||
+    (order?.listing?.inspectionRequests?.length || 0) > 0;
   const inspectionApplies =
-  isAgricultural ||
-  inspectionRequiredByFlag ||
-  hasInspectionRequest;
+    isAgricultural ||
+    inspectionRequiredByFlag ||
+    hasInspectionRequest;
   const title = order?.listing?.title || order?.listing?.cropType || 'Order';
   const allInspections = useMemo(
     () =>
