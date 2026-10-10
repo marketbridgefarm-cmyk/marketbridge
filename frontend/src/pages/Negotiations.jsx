@@ -19,9 +19,13 @@ import './negotiations/Negotiations.css';
 //
 // Notices come from GET /api/notifications, which merges the order-event,
 // inspection waiting-list, and transport waiting-list notification tables
-// into one timeline. The backend returns each row with a `scope` field
-// ('ORDER' | 'INSPECTION' | 'TRANSPORT') so the UI can label where it came
-// from without three separate fetches.
+// into one timeline.
+//
+// Provider-side cards come from GET /api/transport/my-quotes and
+// GET /api/inspections/my-quotes. Those endpoints return the calling
+// provider's own live quotes regardless of the parent request's status, so
+// a waiting provider still sees their bid and the "Leave waiting list"
+// button after another provider has been selected.
 // ============================================================================
 
 const SELLER_LISTING_STATUSES = ['ACTIVE', 'UNDER_NEGOTIATION', 'SOLD'];
@@ -368,6 +372,14 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
   const canSubmitRelease =
     Boolean(releaseReason) && (!needsReleaseNote || releaseNote.trim().length > 0);
 
+  // A waiting provider (inspection / transport) whose quote is still PENDING
+  // can withdraw from the waiting list at any time.
+  const canWithdrawProviderBid =
+    (item.type === 'INSPECTION_QUOTE' || item.type === 'TRANSPORT_QUOTE') &&
+    item.viewerRole === 'PROVIDER' &&
+    item.status === 'PENDING' &&
+    !expired;
+
   let canAct        = false;
   let acceptAction  = 'ACCEPT';
   let counterAction = 'COUNTER';
@@ -405,6 +417,12 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
         ? (item.type === 'TRANSPORT_QUOTE' ? 'arranging party' : 'requester')
         : (item.type === 'TRANSPORT_QUOTE' ? 'truck owner' : 'inspector');
       waitingMessage = `Waiting for the ${other} to respond.`;
+    }
+    // Waiting provider: their bid is still PENDING while someone else is in
+    // negotiation. Show the waiting message rather than nothing, so the card
+    // is not blank.
+    if (!canAct && item.viewerRole === 'PROVIDER' && item.status === 'PENDING' && !waitingMessage) {
+      waitingMessage = 'Another provider is in negotiation. You stay on the waiting list until that negotiation or order ends. You can withdraw at any time.';
     }
   }
 
@@ -624,6 +642,19 @@ function NegotiationRow({ item, busyKey, counterDraft, onCounterDraftChange, onR
         </div>
       )}
 
+      {canWithdrawProviderBid && (
+        <div className="neg-actions">
+          <button
+            type="button"
+            className="sd-btn sd-btn-outline"
+            disabled={anyBusy}
+            onClick={() => onRespond(item, 'WITHDRAW_BID')}
+          >
+            {busy('WITHDRAW_BID') ? 'Leaving…' : 'Leave waiting list'}
+          </button>
+        </div>
+      )}
+
       {item.linkTo && (
         <footer className="neg-card-footer">
           <Link className="btn btn-outline" to={item.linkTo}>Open listing →</Link>
@@ -777,13 +808,15 @@ export default function Negotiations() {
       });
 
       // ---- 3. Transport quotes, PROVIDER side ----------------------------
+      // Uses /transport/my-quotes, which returns the caller's own live quotes
+      // regardless of the parent job's status. That is what keeps a waiting
+      // truck owner's card visible after another truck owner is selected.
       if (roles.includes('TRUCK_OWNER')) {
-        const openRes = await api.get('/transport/open');
-        (openRes.data?.jobs || []).forEach((job) => {
-          const myQuotes = leavesOnly(job.quotes || [], 'parentQuoteId').filter((q) =>
-            ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'].includes(q.status)
-          );
-          myQuotes.forEach((quote) => {
+        try {
+          const myQuotesRes = await api.get('/transport/my-quotes');
+          (myQuotesRes.data?.quotes || []).forEach((quote) => {
+            const job = quote.transportJob;
+            if (!job) return;
             collected.push({
               type:        'TRANSPORT_QUOTE',
               id:          quote.id,
@@ -799,17 +832,41 @@ export default function Negotiations() {
               raw:         { jobId: job.id, quoteId: quote.id },
             });
           });
-        });
+        } catch (_) {
+          // Older backend without /my-quotes: fall back to the open-jobs feed.
+          const openRes = await api.get('/transport/open');
+          (openRes.data?.jobs || []).forEach((job) => {
+            const myQuotes = leavesOnly(job.quotes || [], 'parentQuoteId').filter((q) =>
+              ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'].includes(q.status)
+            );
+            myQuotes.forEach((quote) => {
+              collected.push({
+                type:        'TRANSPORT_QUOTE',
+                id:          quote.id,
+                status:      quote.status,
+                counteredBy: quote.counteredBy,
+                amount:      amountOf(quote),
+                message:     quote.message,
+                viewerRole:  'PROVIDER',
+                title:       `Transport bid — order for ${job.order?.buyer?.name || job.order?.seller?.name || 'buyer'}`,
+                subtitle:    'You submitted this quote',
+                linkTo:      null,
+                expiresAt:   quote.expiresAt,
+                raw:         { jobId: job.id, quoteId: quote.id },
+              });
+            });
+          });
+        }
       }
 
       // ---- 4. Inspection quotes, PROVIDER side ---------------------------
+      // Uses /inspections/my-quotes, same rationale as section 3.
       if (roles.includes('INSPECTOR')) {
-        const availableRes = await api.get('/inspections/available');
-        (availableRes.data?.requests || []).forEach((request) => {
-          const myQuotes = leavesOnly(request.quotes || [], 'parentQuoteId').filter((q) =>
-            ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'].includes(q.status)
-          );
-          myQuotes.forEach((quote) => {
+        try {
+          const myQuotesRes = await api.get('/inspections/my-quotes');
+          (myQuotesRes.data?.quotes || []).forEach((quote) => {
+            const request = quote.inspectionRequest;
+            if (!request) return;
             collected.push({
               type:        'INSPECTION_QUOTE',
               id:          quote.id,
@@ -825,7 +882,31 @@ export default function Negotiations() {
               raw:         { requestId: request.id, quoteId: quote.id },
             });
           });
-        });
+        } catch (_) {
+          // Older backend without /my-quotes: fall back to the available feed.
+          const availableRes = await api.get('/inspections/available');
+          (availableRes.data?.requests || []).forEach((request) => {
+            const myQuotes = leavesOnly(request.quotes || [], 'parentQuoteId').filter((q) =>
+              ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED', 'REJECTED'].includes(q.status)
+            );
+            myQuotes.forEach((quote) => {
+              collected.push({
+                type:        'INSPECTION_QUOTE',
+                id:          quote.id,
+                status:      quote.status,
+                counteredBy: quote.counteredBy,
+                amount:      amountOf(quote),
+                message:     quote.message,
+                viewerRole:  'PROVIDER',
+                title:       `Inspection bid — ${request.listing?.cropType || request.listing?.title || 'listing'}`,
+                subtitle:    `Requested by ${request.requestedBy?.name || 'buyer'}`,
+                linkTo:      null,
+                expiresAt:   quote.expiresAt,
+                raw:         { requestId: request.id, quoteId: quote.id },
+              });
+            });
+          });
+        }
       }
 
       setItems(collected);
@@ -858,17 +939,19 @@ export default function Negotiations() {
         response = await api.patch(`/offers/${item.raw.id}`, payload);
       } else if (item.type === 'TRANSPORT_QUOTE') {
         const base = `/transport/${item.raw.jobId}/quotes/${item.raw.quoteId}`;
-        if (action === 'SELECT')       response = await api.patch(`${base}/select`);
-        else if (action === 'ACCEPT')  response = await api.patch(`${base}/accept`);
-        else if (action === 'REJECT')  response = await api.patch(`${base}/reject`);
-        else if (action === 'WITHDRAW') response = await api.patch(`${base}/withdraw`);
-        else if (action === 'COUNTER') response = await api.post(`${base}/counter`, { counterAmount: Number(counterAmount) });
+        if (action === 'SELECT')            response = await api.patch(`${base}/select`);
+        else if (action === 'ACCEPT')       response = await api.patch(`${base}/accept`);
+        else if (action === 'REJECT')       response = await api.patch(`${base}/reject`);
+        else if (action === 'WITHDRAW')     response = await api.patch(`${base}/withdraw`);
+        else if (action === 'COUNTER')      response = await api.post(`${base}/counter`, { counterAmount: Number(counterAmount) });
+        else if (action === 'WITHDRAW_BID') response = await api.post(`${base}/withdraw-bid`);
       } else if (item.type === 'INSPECTION_QUOTE') {
         const { requestId, quoteId } = item.raw;
-        if      (action === 'SELECT')  response = await api.patch(`/inspections/${requestId}/quotes/${quoteId}/select`);
-        else if (action === 'ACCEPT')  response = await api.patch(`/inspections/${requestId}/quotes/${quoteId}/accept`);
-        else if (action === 'REJECT')  response = await api.patch(`/inspections/${requestId}/quotes/${quoteId}/reject`);
-        else if (action === 'COUNTER') response = await api.post(`/inspections/${requestId}/quotes/${quoteId}/counter`, { counterAmount: Number(counterAmount) });
+        if      (action === 'SELECT')       response = await api.patch(`/inspections/${requestId}/quotes/${quoteId}/select`);
+        else if (action === 'ACCEPT')       response = await api.patch(`/inspections/${requestId}/quotes/${quoteId}/accept`);
+        else if (action === 'REJECT')       response = await api.patch(`/inspections/${requestId}/quotes/${quoteId}/reject`);
+        else if (action === 'COUNTER')      response = await api.post(`/inspections/${requestId}/quotes/${quoteId}/counter`, { counterAmount: Number(counterAmount) });
+        else if (action === 'WITHDRAW_BID') response = await api.post(`/inspections/${requestId}/quotes/${quoteId}/withdraw-bid`);
       }
       toast(response?.data?.message || 'Updated.');
       setCounterDrafts((prev) => ({ ...prev, [item.id]: '' }));
