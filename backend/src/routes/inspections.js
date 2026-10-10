@@ -1406,6 +1406,15 @@ router.patch(
         return rejected;
       }, { maxWait: 10000, timeout: 15000 });
 
+      // The reject freed the exclusive negotiation slot. Notify the waiting
+      // inspectors that the waiting list is unlocked, mirroring offers.js.
+      // Best-effort, after commit, so a notice failure can never roll back
+      // the rejection.
+      await noticeInspectionWaitingUnlocked(prisma, {
+        inspectionRequestId: loaded.request.id,
+        reason: 'QUOTE_REJECTED',
+      });
+
       return res.json({ message: 'Quote rejected', quote: updated });
     } catch (error) {
       if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
