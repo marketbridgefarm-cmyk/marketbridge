@@ -2071,10 +2071,17 @@ export default function OrderDetail() {
   const buyerIdentityMismatch = Boolean(order && currentUserId && !isParticipant && !isAdmin);
 
   const isAgricultural = order?.listing?.category === 'AGRICULTURAL';
-  const isProduct = order?.listing?.category === 'PRODUCT';
-  const inspectionApplies = isAgricultural || isProduct;
-  const title = order?.listing?.title || order?.listing?.cropType || 'Order';
 
+  const isProduct = order?.listing?.category === 'PRODUCT';
+  const inspectionRequiredByFlag = Boolean(order?.listing?.inspectionRequired);
+  const hasInspectionRequest =
+  (order?.inspectionRequests?.length || 0) > 0 ||
+  (order?.listing?.inspectionRequests?.length || 0) > 0;
+  const inspectionApplies =
+  isAgricultural ||
+  inspectionRequiredByFlag ||
+  hasInspectionRequest;
+  const title = order?.listing?.title || order?.listing?.cropType || 'Order';
   const allInspections = useMemo(
     () =>
       (order?.inspectionRequests || order?.listing?.inspectionRequests || [])
