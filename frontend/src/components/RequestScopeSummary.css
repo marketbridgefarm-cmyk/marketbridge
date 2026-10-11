@@ -6,10 +6,11 @@
    no padding. The parent card provides the frame.
 
    Layout:
-     • .rs-title    → small green uppercase eyebrow
-     • .rs-grid     → fact grid, max 3 items per column (grid-auto-flow: column)
-                      4 facts → 2 cols (3+1) · 6 facts → 2 cols (3+3)
-     • .rs-chips    → green tint pills on their own row (spans the row width)
+     • .rs-title         small green eyebrow (matches "Scope to inspect")
+     • .rs-grid          fact grid, max 3 items per column
+     • .rs-checks-title  same green eyebrow as .rs-title
+     • .rs-checks-list   same 3-per-column grid, plain text items with a
+                         soft check mark, no pills, no slashes
 
    Every value comes from mb-tokens.css. No local palette.
    ========================================================================== */
@@ -19,7 +20,6 @@
    -------------------------------------------------------------------------- */
 
 .rs-box {
-  /* Defensive reset: nullify any card-in-card rule that may apply. */
   background: transparent !important;
   border: 0 !important;
   border-radius: 0 !important;
@@ -36,10 +36,11 @@
 .rs-box > * { box-sizing: border-box; }
 
 /* --------------------------------------------------------------------------
-   2. Title — small green eyebrow, matching the rest of the card system
+   2. Section title (used by both "Scope to inspect" and "Checks required")
    -------------------------------------------------------------------------- */
 
-.rs-title {
+.rs-title,
+.rs-checks-title {
   display: block;
   margin: 0 0 14px;
   color: var(--mb-ok);
@@ -69,7 +70,6 @@
   padding: 0;
 }
 
-/* On wider cards give columns a soft minimum so they don't squash. */
 @container (min-width: 460px) {
   .rs-grid {
     grid-auto-columns: minmax(150px, 1fr);
@@ -100,51 +100,64 @@
 }
 
 /* --------------------------------------------------------------------------
-   4. Chips — own row under the facts grid, wrapped, no box
+   4. Checks / handling list — same 3-per-column grid, plain text items
    -------------------------------------------------------------------------- */
 
-.rs-chips-block {
-  margin: 18px 0 0;
+.rs-checks {
+  margin: 22px 0 0;
   padding: 0;
   border: 0;
 }
 
-.rs-chips-label {
-  display: block;
-  margin: 0 0 8px;
-  color: var(--mb-muted);
-  font-size: 11px;
+/* .rs-checks-title inherits the eyebrow style from section 2 above */
+
+.rs-checks-list {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(3, auto);
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 8px 24px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@container (min-width: 460px) {
+  .rs-checks-list {
+    grid-auto-columns: minmax(150px, 1fr);
+  }
+}
+
+.rs-check {
+  position: relative;
+  min-width: 0;
+  padding-left: 20px;
+  color: var(--mb-ink);
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
-.rs-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.rs-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  background: var(--mb-ok-bg);
-  border: var(--mb-bw) solid var(--mb-ok-border);
-  border-radius: var(--mb-radius-pill);
+.rs-check::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  top: 0;
   color: var(--mb-ok);
-  font-size: var(--mb-fs-sm);
-  font-weight: 700;
-  line-height: 1.3;
-  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.4;
 }
 
 /* --------------------------------------------------------------------------
-   5. Narrow phones
+   5. Narrow phones — keep the columns, tighten the gaps
    -------------------------------------------------------------------------- */
 
 @media (max-width: 480px) {
-  .rs-grid {
+  .rs-grid,
+  .rs-checks-list {
     gap: 12px 18px;
   }
 
@@ -152,19 +165,28 @@
     font-size: 14px;
   }
 
-  .rs-chip {
-    font-size: 12.5px;
-    padding: 3px 10px;
+  .rs-check {
+    font-size: 13px;
+    padding-left: 18px;
+  }
+
+  .rs-check::before {
+    font-size: 12px;
   }
 }
 
 @media (max-width: 360px) {
-  .rs-grid {
+  .rs-grid,
+  .rs-checks-list {
     gap: 10px 14px;
   }
 
   .rs-item > strong {
     font-size: 13.5px;
+  }
+
+  .rs-check {
+    font-size: 12.5px;
   }
 }
 
@@ -175,7 +197,8 @@
 @media (prefers-reduced-motion: reduce) {
   .rs-box,
   .rs-grid,
-  .rs-chips {
+  .rs-checks,
+  .rs-checks-list {
     transition: none;
   }
 }
