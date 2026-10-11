@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../api/client';
 import './ProvidersCoordination.css';
+
 // ============================================================================
 // INSPECTION COORDINATION — SELLER VIEW
 // ============================================================================
@@ -73,9 +74,7 @@ export default function InspectionCoordinationSeller({ inspectionRequestId }) {
       });
       setSubmittedAt(row.sellerSubmittedAt || null);
 
-      // Only surface the inspector's half once they have submitted it —
-      // otherwise show a "waiting" state so the seller knows the field exists
-      // but is not yet filled.
+      // Only surface the inspector's half once they have submitted it.
       const inspectorHasSubmitted = Boolean(row.inspectorSubmittedAt);
       setInspectorSide(inspectorHasSubmitted ? {
         inspectorContactName: row.inspectorContactName || null,
@@ -170,15 +169,12 @@ export default function InspectionCoordinationSeller({ inspectionRequestId }) {
 
   return (
     <section className="card inspection-coordination" id="inspection-coordination">
+      {/* ── Header: eyebrow + title over the 2px rule.
+             Description sits BELOW the rule, indented. ─────────────────── */}
       <header className="ic-header">
-        <div>
+        <div className="ic-header-main">
           <span className="ic-eyebrow">INSPECTION COORDINATION</span>
           <h2>Site handoff</h2>
-          <p className="ic-sub">
-            Tell the inspector where to come, who to ask for, when you are
-            available, and any site preparation. This is visible to the
-            assigned inspector only.
-          </p>
         </div>
         {submittedAt && (
           <span className="ic-status ic-status--sent">
@@ -186,6 +182,12 @@ export default function InspectionCoordinationSeller({ inspectionRequestId }) {
           </span>
         )}
       </header>
+
+      <p className="ic-header-text">
+        Tell the inspector where to come, who to ask for, when you are
+        available, and any site preparation. This is visible to the assigned
+        inspector only.
+      </p>
 
       {error && <div className="alert error">{error}</div>}
       {notice && <div className="alert success">{notice}</div>}
@@ -306,29 +308,42 @@ export default function InspectionCoordinationSeller({ inspectionRequestId }) {
       <section className="ic-inspector-side">
         <h3>Inspector's handoff</h3>
         {inspectorSide ? (
-          <div className="ic-inspector-details">
-            {inspectorSide.inspectorContactName && (
-              <div><span>Contact</span><strong>{inspectorSide.inspectorContactName}</strong></div>
+          <>
+            <div className="ic-inspector-details ic-inspector-details--cols">
+              {inspectorSide.inspectorContactName && (
+                <div><span>Contact</span><strong>{inspectorSide.inspectorContactName}</strong></div>
+              )}
+              {inspectorSide.inspectorPhone && (
+                <div><span>Primary phone</span><strong>{inspectorSide.inspectorPhone}</strong></div>
+              )}
+              {inspectorSide.inspectorAlternativePhone && (
+                <div><span>Alternative</span><strong>{inspectorSide.inspectorAlternativePhone}</strong></div>
+              )}
+              {inspectorSide.inspectorEmail && (
+                <div><span>Email</span><strong>{inspectorSide.inspectorEmail}</strong></div>
+              )}
+              {inspectorSide.inspectorPreferredContact && (
+                <div><span>Preferred contact</span><strong>{inspectorSide.inspectorPreferredContact}</strong></div>
+              )}
+            </div>
+
+            {(inspectorSide.inspectorArrivalNotes || inspectorSide.inspectorNotes) && (
+              <div className="ic-inspector-blocks">
+                {inspectorSide.inspectorArrivalNotes && (
+                  <div className="ic-inspector-block">
+                    <span>Arrival notes</span>
+                    <strong>{inspectorSide.inspectorArrivalNotes}</strong>
+                  </div>
+                )}
+                {inspectorSide.inspectorNotes && (
+                  <div className="ic-inspector-block">
+                    <span>Inspector notes</span>
+                    <strong>{inspectorSide.inspectorNotes}</strong>
+                  </div>
+                )}
+              </div>
             )}
-            {inspectorSide.inspectorPhone && (
-              <div><span>Primary phone</span><strong>{inspectorSide.inspectorPhone}</strong></div>
-            )}
-            {inspectorSide.inspectorAlternativePhone && (
-              <div><span>Alternative</span><strong>{inspectorSide.inspectorAlternativePhone}</strong></div>
-            )}
-            {inspectorSide.inspectorEmail && (
-              <div><span>Email</span><strong>{inspectorSide.inspectorEmail}</strong></div>
-            )}
-            {inspectorSide.inspectorPreferredContact && (
-              <div><span>Preferred contact</span><strong>{inspectorSide.inspectorPreferredContact}</strong></div>
-            )}
-            {inspectorSide.inspectorArrivalNotes && (
-              <div className="ic-full"><span>Arrival notes</span><strong>{inspectorSide.inspectorArrivalNotes}</strong></div>
-            )}
-            {inspectorSide.inspectorNotes && (
-              <div className="ic-full"><span>Inspector notes</span><strong>{inspectorSide.inspectorNotes}</strong></div>
-            )}
-          </div>
+          </>
         ) : (
           <p className="ic-sub">
             Waiting for the inspector to share their contact and arrival details.
