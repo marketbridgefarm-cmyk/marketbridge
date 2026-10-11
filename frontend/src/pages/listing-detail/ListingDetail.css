@@ -7,10 +7,12 @@
      • 2px header rule + 44px accent segment
      • green eyebrow (16×3 dash, wide tracking)
      • 1.5px sub-header line, green title
-     • body description BELOW the rule, indented to match the card body
+     • description BELOW the rule, indented to match the card body
      • one button style everywhere; .full buttons are large, centered,
-       and capped at 420px so they don't stretch on wide cards
+       and capped at 420px
      • facts grid — max 3 items per column, extras spill into a new column
+     • sub-sections (evidence, facts, inspection scope) draw NO box of their
+       own — they are flat content inside the parent card
 
    NOTE ON SPECIFICITY: mb-cards.css is loaded last and prefixes every rule
    with #root (1,2,0). Any rule here that must override a card default is
@@ -60,9 +62,6 @@
 
 .back-link:hover { color: var(--mb-accent); }
 
-/* Two-column layout: media + content + inspection on the left, buyer /
-   seller / negotiation cards in the aside. Collapses to a single column
-   under 960px. */
 .detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -148,10 +147,7 @@
 }
 
 .detail-media-thumb:hover { border-color: var(--mb-accent-border); }
-
-.detail-media-thumb.active {
-  border-color: var(--mb-accent);
-}
+.detail-media-thumb.active { border-color: var(--mb-accent); }
 
 .detail-media-thumb-play {
   position: absolute;
@@ -191,9 +187,7 @@
   min-width: 0;
 }
 
-.detail-page .sticky-card {
-  position: relative;
-}
+.detail-page .sticky-card { position: relative; }
 
 @media (min-width: 960px) {
   .detail-page .sticky-card {
@@ -203,10 +197,20 @@
   }
 }
 
+/* Defensive: a `.card` inside a `.card` on this page becomes a flat sub-block,
+   never a second floating tile. Everything below (facts, evidence, scope)
+   also has its own reset so no box can leak through. */
+#root .detail-page .card .card {
+  padding: 14px 16px;
+  margin: 0 0 12px;
+  background: var(--mb-soft);
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  box-shadow: none;
+}
+
 /* --------------------------------------------------------------------------
-   4. Card head — 2px rule + 44px accent segment.
-   The subtitle / description sits BELOW the rule, indented to match the
-   body of the card.
+   4. Card head — 2px rule + 44px accent segment
    -------------------------------------------------------------------------- */
 
 .ld-card-head {
@@ -249,7 +253,6 @@
   text-align: right;
 }
 
-/* Eyebrow: green, 16×3 dash, wide tracking. */
 .ld-eyebrow {
   display: inline-flex;
   align-items: center;
@@ -283,7 +286,6 @@
   word-break: break-word;
 }
 
-/* Description sits BELOW the 2px rule, indented 20px. */
 .ld-card-subtitle {
   margin: 14px 0 0;
   padding-inline-start: 20px;
@@ -293,8 +295,6 @@
   line-height: 1.55;
 }
 
-/* Side label + value (used for Status / Current / Rating pills at the top
-   right of a card). */
 .ld-card-side-label {
   display: block;
   color: var(--mb-muted);
@@ -317,7 +317,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   5. Badges — tone-based, same geometry as .status-pill
+   5. Badges
    -------------------------------------------------------------------------- */
 
 .ld-badge {
@@ -413,35 +413,39 @@
 }
 
 /* --------------------------------------------------------------------------
-   8. Facts grid — max 3 items per column, extras spill into a new column
+   8. Facts grid — max 3 items per column, extras spill into a new column.
+   No box, no surface: the facts sit directly on the parent card.
         4 facts → 2 columns (3 + 1)
         6 facts → 2 columns (3 + 3)
         7 facts → 3 columns (3 + 3 + 1)
-        9 facts → 3 columns (3 + 3 + 3)
    -------------------------------------------------------------------------- */
 
-.detail-facts {
+#root .detail-page .detail-facts {
+  /* Defensive — kill any wrapper rule from a parent sheet. */
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+
   display: grid;
   grid-auto-flow: column;
   grid-template-rows: repeat(3, auto);
   grid-auto-columns: minmax(0, 1fr);
   gap: 14px 22px;
   margin: 0;
-  padding: 0;
   width: 100%;
 }
 
 @container (min-width: 460px) {
-  .detail-facts {
+  #root .detail-page .detail-facts {
     grid-auto-columns: minmax(150px, 1fr);
   }
 }
 
-.detail-facts > div {
-  min-width: 0;
-}
+#root .detail-page .detail-facts > div { min-width: 0; }
 
-.detail-facts > div > span {
+#root .detail-page .detail-facts > div > span {
   display: block;
   color: var(--mb-muted);
   font-size: 11px;
@@ -450,7 +454,7 @@
   text-transform: uppercase;
 }
 
-.detail-facts > div > strong {
+#root .detail-page .detail-facts > div > strong {
   display: block;
   margin-top: 4px;
   color: var(--mb-ink);
@@ -461,15 +465,17 @@
 }
 
 /* --------------------------------------------------------------------------
-   9. Evidence block (used in the Inspection card)
+   9. Evidence block — FLAT. No box, no surface, no border.
+   The inspection scope inside it does the styling.
    -------------------------------------------------------------------------- */
 
-.detail-page .evidence {
+#root .detail-page .evidence {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
   margin: 0;
-  padding: 18px;
-  background: var(--mb-surface);
-  border: 1.5px solid var(--mb-line);
-  border-radius: var(--mb-radius-field);
 }
 
 .evidence-head {
@@ -483,14 +489,15 @@
 }
 
 .evidence-head > strong {
-  color: var(--mb-ink);
+  color: var(--mb-ok);
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   text-transform: capitalize;
+  letter-spacing: 0;
 }
 
 .evidence-line {
-  margin: 6px 0 12px;
+  margin: 6px 0 14px;
   color: var(--mb-muted);
   font-size: 13.5px;
   line-height: 1.55;
@@ -532,8 +539,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   11. Buttons — standard style, one look everywhere.
-   Uses #root to out-rank mb-cards.css (1,2,0) → (1,3,0).
+   11. Buttons
    -------------------------------------------------------------------------- */
 
 #root .detail-page .btn {
@@ -590,7 +596,6 @@
   cursor: not-allowed;
 }
 
-/* Small button (used inside offer rows). */
 #root .detail-page .btn.btn-sm {
   min-height: 40px;
   padding: 0 14px;
@@ -598,8 +603,6 @@
   border-radius: var(--mb-radius-sm);
 }
 
-/* Large full-width button — centered in the card body, capped at 420px so
-   it never stretches uncomfortably on wide cards. */
 #root .detail-page .btn.full {
   display: flex;
   width: 100%;
@@ -640,7 +643,6 @@
 
 .negotiation-actions .btn { flex: 0 0 auto; }
 
-/* The AmountPicker used inline in negotiation and offer rows. */
 .inline-picker {
   flex: 1 1 180px;
   min-width: 0;
@@ -698,29 +700,17 @@
 
 #root .detail-page .card label:first-of-type { margin-top: 0; }
 
-/* Form paragraphs and small notes. */
 .detail-page .card .muted {
   color: var(--mb-muted);
   font-size: 13.5px;
   line-height: 1.55;
 }
 
-.detail-page .card .muted.small {
-  font-size: 12.5px;
-}
+.detail-page .card .muted.small { font-size: 12.5px; }
 
 /* --------------------------------------------------------------------------
-   14. Market reference card (nested inside the buyer card)
+   14. Market reference tile (nested card)
    -------------------------------------------------------------------------- */
-
-#root .detail-page .card .card {
-  padding: 14px 16px;
-  margin: 0 0 12px;
-  background: var(--mb-soft);
-  border: 1.5px solid var(--mb-line);
-  border-radius: var(--mb-radius-field);
-  box-shadow: none;
-}
 
 #root .detail-page .card .card > strong {
   display: block;
@@ -797,9 +787,7 @@
    -------------------------------------------------------------------------- */
 
 @media (max-width: 720px) {
-  .detail-page .container-wide {
-    padding-inline: 16px;
-  }
+  .detail-page .container-wide { padding-inline: 16px; }
 }
 
 @media (max-width: 480px) {
@@ -819,12 +807,11 @@
 
   .detail-media-thumb { width: 68px; height: 52px; }
 
-  /* Tighter facts grid so 3 columns still fit on small phones. */
-  .detail-facts {
+  #root .detail-page .detail-facts {
     gap: 12px 16px;
   }
 
-  .detail-facts > div > strong { font-size: 14px; }
+  #root .detail-page .detail-facts > div > strong { font-size: 14px; }
 
   #root .detail-page .btn {
     font-size: 15px;
@@ -847,7 +834,7 @@
   .detail-page .card { padding: 14px; }
   .ld-card-title { font-size: 17px; }
   .ld-section-title { font-size: 14px; }
-  .detail-facts > div > strong { font-size: 13.5px; }
+  #root .detail-page .detail-facts > div > strong { font-size: 13.5px; }
 
   #root .detail-page .btn.full {
     font-size: 15px;
