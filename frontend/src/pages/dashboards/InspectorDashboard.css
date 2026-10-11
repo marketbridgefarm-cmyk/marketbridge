@@ -1,19 +1,15 @@
 /* ==========================================================================
    InspectorDashboard — MarketBridge card style
    Matched to pages/orders/Orders.css (the reference look) and the same
-   tokens used by OrderDetail.css on this project. Every card shares:
-   - frosted surface, 22px radius, soft shadow, no border
-   - 2px header rule + 44px accent segment
-   - green eyebrow (16×3 dash, wide tracking)
-   - 1.5px sub-header line, green 15px/700 title
-   - tone-coloured pills and stat chips
-   - ONE button style: 1px orange border, dark-orange text, transparent bg
-   - body content indented with clamp(16px, 13cqw, 48px)
-   The page shell reuses the same gradient background as OrderDetail.
+   tokens used by OrderDetail.css on this project.
 
-   NOTE ON SPECIFICITY: mb-cards.css is loaded last and every rule there is
-   prefixed with #root (1,2,0). Any rule that must override a card default
-   is therefore also prefixed with #root so it becomes (1,3,0) and wins.
+   Buttons — ONE style everywhere (see section 7):
+     • 1px accent (orange) border, dark-orange text, transparent background
+     • 48px min-height, 16px radius
+     • Tabs are the same button, with a filled accent state for "active"
+     • Responsive: 44px / 15px at ≤480px (kept from before)
+
+   Tabs (section 8) are now standard large buttons, not pills.
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -181,11 +177,8 @@
 
 .sd-toolbar .sd-muted { max-width: 62ch; }
 
-/* --- Stacked variant used for tab-content toolbars ---------------------
- * The eyebrow + title stack tightly together (small gap so it reads as a
- * single block), and the description sits BELOW the 2px rule, indented
- * to match the surrounding card body. */
-
+/* Stacked variant — eyebrow + title sit tightly together; description sits
+   below the 2px rule and is slightly indented to the right. */
 .sd-toolbar--stacked {
   display: block;
   padding: 0;
@@ -215,11 +208,12 @@
   background: var(--mb-accent);
 }
 
+.sd-toolbar-head h1,
 .sd-toolbar-head h2 { margin: 0; }
 
 .sd-toolbar-text {
   margin: 14px 0 0;
-  padding-inline-start: clamp(16px, 13cqw, 48px);
+  padding-inline-start: 20px;
   max-width: 62ch;
   color: var(--mb-muted);
   font-size: 14.5px;
@@ -227,7 +221,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   5. Stat grid — flat tiles, no left accent bar, large tabular number
+   5. Stat grid — flat tiles, no accent bar, large tabular number
    -------------------------------------------------------------------------- */
 
 .sd-stat-grid {
@@ -237,9 +231,6 @@
   margin: 0 0 20px;
 }
 
-/* Every selector carries #root + the page scope so it outranks the
-   tile rule in mb-cards.css. Left border is intentionally identical to the
-   other three sides so no accent bar can bleed through. */
 #root .sd-dashboard .sd-stat {
   box-sizing: border-box;
   position: relative;
@@ -255,7 +246,6 @@
   box-shadow: none;
 }
 
-/* Kill any ::before/::after accent bar applied by a parent stylesheet. */
 #root .sd-dashboard .sd-stat::before,
 #root .sd-dashboard .sd-stat::after {
   content: none !important;
@@ -287,7 +277,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   6. Panels (error, table wrap)
+   6. Panels
    -------------------------------------------------------------------------- */
 
 #root .sd-dashboard .sd-panel {
@@ -319,12 +309,10 @@
   opacity: 0.85;
 }
 
-#root .sd-dashboard .sd-panel--error .sd-btn {
-  margin-top: 12px;
-}
+#root .sd-dashboard .sd-panel--error .sd-btn { margin-top: 12px; }
 
 /* --------------------------------------------------------------------------
-   7. Buttons — ONE style everywhere.
+   7. Buttons — ONE style everywhere (large, standard).
    Uses #root to out-rank mb-cards.css (1,2,0) → (1,3,0).
    -------------------------------------------------------------------------- */
 
@@ -379,13 +367,15 @@
 }
 
 /* --------------------------------------------------------------------------
-   8. Tabs (segmented control — active tab is filled)
+   8. Tabs — now standard large buttons (not pills).
+   Active tab is filled with the accent; inactive tabs share the standard
+   button look. Same responsiveness as before (44px / 15px at ≤480px).
    -------------------------------------------------------------------------- */
 
 .sd-tabs {
   display: flex;
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: 10px;
   margin: 0 0 20px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -395,19 +385,21 @@
 
 .sd-tabs::-webkit-scrollbar { display: none; }
 
-.sd-tab {
+#root .sd-dashboard .sd-tab {
   flex: none;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 0 16px;
-  background: var(--mb-surface);
-  border: 1.5px solid var(--mb-line);
-  border-radius: var(--mb-radius-pill);
-  color: var(--mb-ink-2);
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 0 18px;
+  background: transparent;
+  border: 1px solid var(--mb-accent);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-accent-ink);
   font-family: inherit;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
@@ -415,25 +407,35 @@
     background-color 0.15s ease,
     border-color 0.15s ease,
     color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
-.sd-tab:hover { border-color: var(--mb-accent-border); }
+#root .sd-dashboard .sd-tab:hover:not(.sd-active) {
+  background: var(--mb-accent-tint);
+  border-color: var(--mb-accent-ink);
+  color: var(--mb-accent-ink);
+}
 
-.sd-tab > span {
-  color: var(--mb-muted);
-  font-size: 13px;
+#root .sd-dashboard .sd-tab > span {
+  color: inherit;
+  opacity: 0.75;
+  font-size: 14px;
   font-weight: 700;
 }
 
-.sd-tab.sd-active {
+#root .sd-dashboard .sd-tab.sd-active {
   background: var(--mb-accent);
   border-color: var(--mb-accent);
   color: #ffffff;
 }
 
-.sd-tab.sd-active > span { color: rgba(255, 255, 255, 0.85); }
+#root .sd-dashboard .sd-tab.sd-active > span {
+  color: #ffffff;
+  opacity: 0.85;
+}
 
-.sd-tab:focus-visible {
+#root .sd-dashboard .sd-tab:focus-visible {
   outline: 3px solid var(--mb-accent-border);
   outline-offset: 2px;
 }
@@ -488,7 +490,6 @@
   min-width: 0;
 }
 
-/* Card head — 2px rule + 44px accent segment */
 .sd-card-head {
   position: relative;
   display: flex;
@@ -537,7 +538,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Party block on the right: role + name stacked, avatar circle. */
 .sd-card-head-party {
   flex: none;
   display: flex;
@@ -611,14 +611,9 @@
   color: var(--mb-ink-2);
 }
 
-.sd-card-body {
-  display: block;
-}
+.sd-card-body { display: block; }
 
-.sd-card-block {
-  margin-top: 22px;
-}
-
+.sd-card-block { margin-top: 22px; }
 .sd-card-block:first-child { margin-top: 0; }
 
 .sd-card-block-title {
@@ -640,8 +635,7 @@
   letter-spacing: 0;
 }
 
-/* The note is now PLAIN TEXT — no pill, no border, no background.
-   Tone colours signal meaning: "Sealed" and "Your turn" read as info / accent. */
+/* Plain-text "Sealed" / status note — no pill, no border, no background. */
 .sd-card-block-note {
   padding: 0;
   background: transparent;
@@ -675,6 +669,11 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 18px;
+}
+
+/* Right-aligned actions — used by the "Submit a quote" row. */
+.sd-card-actions--right {
+  justify-content: flex-end;
 }
 
 .sd-card-actions > p {
@@ -717,8 +716,6 @@
   font-weight: 800;
   overflow-wrap: anywhere;
 }
-
-/* ---- Inline variant: one "Label: Value" per line ------------------------ */
 
 .sd-job-meta--inline {
   display: flex;
@@ -1058,9 +1055,7 @@
    16. Section heads (Active / Completed)
    -------------------------------------------------------------------------- */
 
-.sd-jobs-section {
-  margin: 0 0 20px;
-}
+.sd-jobs-section { margin: 0 0 20px; }
 
 .sd-jobs-section-head {
   position: relative;
@@ -1446,11 +1441,14 @@
   .sd-report-modal { padding: 18px; border-radius: 18px; }
   .sd-report-header h2 { font-size: 18px; }
 
+  /* Buttons keep their standard look but scale down on phones */
   #root .sd-dashboard .sd-btn,
   #root .sd-dashboard .sd-btn-primary,
-  #root .sd-dashboard .sd-btn-outline {
+  #root .sd-dashboard .sd-btn-outline,
+  #root .sd-dashboard .sd-tab {
     font-size: 15px;
     min-height: 44px;
+    padding: 0 16px;
   }
 
   .sd-job-meta--inline .sd-job-meta-item > span { font-size: 13px; }
@@ -1469,6 +1467,14 @@
   .sd-job-meta--inline .sd-job-meta-item > strong { font-size: 13px; }
 
   #root .sd-dashboard .sd-stat > b { font-size: 22px; }
+
+  #root .sd-dashboard .sd-btn,
+  #root .sd-dashboard .sd-btn-primary,
+  #root .sd-dashboard .sd-btn-outline,
+  #root .sd-dashboard .sd-tab {
+    font-size: 14.5px;
+    padding: 0 14px;
+  }
 }
 
 /* --------------------------------------------------------------------------
