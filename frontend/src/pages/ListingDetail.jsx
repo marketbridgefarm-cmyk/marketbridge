@@ -11,18 +11,29 @@ const money = (n) => Number(n || 0).toLocaleString();
 
 const pick = (...values) => values.find((v) => v != null && v !== '');
 
+
+
+
 function CardHead({ eyebrow, title, subtitle, side, id }) {
   return (
-    <header className="ld-card-head">
-      <div className="ld-card-head-main">
-        {eyebrow && <span className="ld-eyebrow">{eyebrow}</span>}
-        <h2 className="ld-card-title" id={id}>{title}</h2>
-        {subtitle && <p className="ld-card-subtitle">{subtitle}</p>}
-      </div>
-      {side && <div className="ld-card-head-side">{side}</div>}
-    </header>
+    <>
+      <header className="ld-card-head">
+        <div className="ld-card-head-main">
+          {eyebrow && <span className="ld-eyebrow">{eyebrow}</span>}
+          <h2 className="ld-card-title" id={id}>{title}</h2>
+        </div>
+        {side && <div className="ld-card-head-side">{side}</div>}
+      </header>
+      {subtitle && <p className="ld-card-subtitle">{subtitle}</p>}
+    </>
   );
 }
+
+
+
+
+
+
 
 function SectionHead({ title, meta, strong }) {
   return (
