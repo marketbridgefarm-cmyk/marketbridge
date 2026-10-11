@@ -6,19 +6,6 @@
      - TransportCoordinationSeller.jsx
      - TransportCoordinationTransporter.jsx
 
-   Layout contract:
-
-     • Each coordination view renders as TWO .ic-block tiles side by side
-       (stacked vertically):
-         .ic-block--header   eyebrow + title + description below the rule
-         .ic-block--body     everything else (site info, form, slots,
-                             footnote, save CTA at the end)
-
-     • Seller views additionally wrap both tiles in `.card` so the modal
-       gets the full card shell. Inspector / transporter views rely on the
-       parent `.sd-card` already providing the surface, so they draw no
-       outer shell of their own.
-
    Every value reads from the --mb-* tokens in mb-tokens.css.
    Buttons, fields, and alerts are scoped under `#root` so they outrank the
    card defaults in mb-cards.css.
@@ -37,7 +24,6 @@
   font-family: var(--mb-font-body);
 }
 
-/* Flat variant — content lives directly inside the parent .sd-card. */
 .inspection-coordination--inspector {
   margin: 22px 0 0;
   padding: 0;
@@ -46,7 +32,6 @@
   gap: 16px;
 }
 
-/* Seller views inside a modal — draw their own outer card shell. */
 .inspection-coordination.card {
   padding: var(--mb-card-pad);
   background: var(--mb-card);
@@ -59,7 +44,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   2. Two-block shell
+   2. Two-block shell (used by flat variants like the inspector view)
    -------------------------------------------------------------------------- */
 
 .ic-block {
@@ -70,13 +55,8 @@
   border-radius: var(--mb-radius-field);
 }
 
-.ic-block--header {
-  padding: 18px 20px;
-}
-
-.ic-block--body {
-  /* Body block is intentionally taller; content flows inside. */
-}
+.ic-block--header { padding: 18px 20px; }
+.ic-block--body { }
 
 /* --------------------------------------------------------------------------
    3. Loading
@@ -90,9 +70,9 @@
 }
 
 /* --------------------------------------------------------------------------
-   4. Card-1 header — eyebrow + title over a 2px rule with accent segment.
-   The description is a SIBLING of the header (below the rule) and indented
-   to match the card body.
+   4. Card header — 2px rule + 44px accent segment.
+   The description is a SIBLING of the header and sits BELOW the rule,
+   indented slightly to the right.
    -------------------------------------------------------------------------- */
 
 .ic-header {
@@ -156,7 +136,7 @@
 
 .ic-header h4 { font-size: 18px; }
 
-/* Description sits BELOW the 2px rule and is indented slightly right. */
+/* Description below the rule, slightly indented. */
 .ic-header-text {
   margin: 14px 0 0;
   padding-inline-start: 20px;
@@ -174,7 +154,7 @@
   line-height: 1.55;
 }
 
-/* Status pill on the right ("Sent <date>") */
+/* Status pill on the right */
 .ic-status {
   flex: none;
   display: inline-flex;
@@ -279,9 +259,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   6. Actions row — save CTA lives here, at the end of the body block.
-   `.ic-actions--end` gets a top hairline so the button reads as the block's
-   primary submit action.
+   6. Actions row (form submit / save CTA)
    -------------------------------------------------------------------------- */
 
 .ic-actions {
@@ -303,7 +281,7 @@
    -------------------------------------------------------------------------- */
 
 .ic-inspector-side {
-  margin: 0;
+  margin: 22px 0 0;
   padding: 0;
 }
 
@@ -317,10 +295,27 @@
   font-weight: 700;
 }
 
+/* Default fact grid — flows left→right with auto-fit columns. Used by views
+   that don't opt into the max-3-per-column rule. */
 .ic-inspector-details {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px 18px;
+}
+
+/* Compact variant: max 3 items per column, extras spill into a new column.
+   Used by the seller view for the "Inspector's handoff" section. */
+.ic-inspector-details--cols {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(3, auto);
+  grid-auto-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 460px) {
+  .ic-inspector-details--cols {
+    grid-auto-columns: minmax(140px, 1fr);
+  }
 }
 
 .ic-inspector-details > div { min-width: 0; }
@@ -352,6 +347,39 @@
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+/* Full-width text blocks that sit BELOW the compact fact grid — used for
+   fields that would break the column rhythm (arrival notes, inspector notes,
+   access instructions on a long form). */
+.ic-inspector-blocks {
+  margin: 18px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ic-inspector-block {
+  min-width: 0;
+}
+
+.ic-inspector-block > span {
+  display: block;
+  color: var(--mb-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ic-inspector-block > strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--mb-ink);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 /* --------------------------------------------------------------------------
@@ -508,7 +536,7 @@
    -------------------------------------------------------------------------- */
 
 #root .inspection-coordination .alert {
-  margin: 0 0 14px;
+  margin: 14px 0 0;
   padding: 12px 14px;
   background: var(--mb-surface);
   border: 1.5px solid var(--mb-line);
