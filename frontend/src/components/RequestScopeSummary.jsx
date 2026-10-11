@@ -7,7 +7,10 @@ import './RequestScopeSummary.css';
 // One read-only summary of what a requester asked for, used on BOTH sides:
 //   - requester: OrderDetail (inspection / transport cards)
 //   - bidders:   inspector "available requests" and truck-owner "open jobs"
-// Self-contained styles (rs- prefix) so it looks the same on any page.
+//
+// Renders as a FLAT sub-section of the parent card — no box, no border,
+// no shadow, no background. The parent card provides the frame. Uses the
+// shared --mb-* design tokens so it looks the same on any page.
 // Reads only allow-listed workDetails fields — no free text, no contact info.
 // ============================================================================
 
@@ -62,8 +65,8 @@ function Item({ name, children }) {
 function Chips({ name, values }) {
   if (!Array.isArray(values) || !values.length) return null;
   return (
-    <div className="rs-item rs-full">
-      <span>{name}</span>
+    <div className="rs-chips-block">
+      <span className="rs-chips-label">{name}</span>
       <div className="rs-chips">
         {values.map((v) => (
           <span key={v} className="rs-chip">{v}</span>
@@ -84,16 +87,18 @@ export function InspectionRequestSummary({ inspection, title = 'Inspection scope
   if (!any) return null;
 
   return (
-    <div className="rs-box">
+    <div className="rs-box" aria-label={title}>
       <p className="rs-title">{title}</p>
+
       <div className="rs-grid">
         <Item name="Category">{CATEGORY_LABELS[w.workCategory] || w.workCategory}</Item>
         <Item name="Quantity to inspect">{quantity}</Item>
         <Item name="Lots">{w.lotCount}</Item>
         <Item name="Deadline">{w.requiredBy && fmtDate(w.requiredBy)}</Item>
         <Item name="Report">{REPORT_LABELS[w.reportFormat] || w.reportFormat}</Item>
-        <Chips name="Checks required" values={checks} />
       </div>
+
+      <Chips name="Checks required" values={checks} />
     </div>
   );
 }
@@ -106,19 +111,25 @@ export function TransportRequestSummary({ job, title = 'Transport request', comp
   const route = job.pickupLocation && job.destination ? `${job.pickupLocation} → ${job.destination}` : null;
 
   return (
-    <div className="rs-box">
+    <div className="rs-box" aria-label={title}>
       <p className="rs-title">{title}</p>
+
       <div className="rs-grid">
         {!compact && <Item name="Route">{route}</Item>}
         {!compact && <Item name="Load">{job.load}</Item>}
         <Item name="Weight">{w.weight}</Item>
         <Item name="Packages">{w.packageCount}</Item>
-        {!compact && <Item name="Min. capacity">{job.requiredCapacity != null ? `${job.requiredCapacity} t` : null}</Item>}
+        {!compact && (
+          <Item name="Min. capacity">
+            {job.requiredCapacity != null ? `${job.requiredCapacity} t` : null}
+          </Item>
+        )}
         <Item name="Vehicle">{w.vehicleType}</Item>
         <Item name="Deadline">{w.deliveryDeadline && fmtDate(w.deliveryDeadline)}</Item>
-        <Chips name="Handling" values={handling} />
         <Item name="Special requirements">{job.specialRequirements}</Item>
       </div>
+
+      <Chips name="Handling" values={handling} />
     </div>
   );
 }
