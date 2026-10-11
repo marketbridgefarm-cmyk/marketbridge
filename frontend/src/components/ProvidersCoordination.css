@@ -6,20 +6,22 @@
      - TransportCoordinationSeller.jsx
      - TransportCoordinationTransporter.jsx
 
-   Two contexts are supported by the same stylesheet:
+   Layout contract:
 
-     1. Seller views — the JSX carries `className="card inspection-coordination"`,
-        so the component draws its own card shell (title rule, rounded
-        surface). The rules here only shape the internals.
+     • Each coordination view renders as TWO .ic-block tiles side by side
+       (stacked vertically):
+         .ic-block--header   eyebrow + title + description below the rule
+         .ic-block--body     everything else (site info, form, slots,
+                             footnote, save CTA at the end)
 
-     2. Inspector / transporter views — the JSX carries
-        `className="inspection-coordination inspection-coordination--inspector"`,
-        so the component reads as a flat sub-section of the parent `.sd-card`
-        (no surface of its own).
+     • Seller views additionally wrap both tiles in `.card` so the modal
+       gets the full card shell. Inspector / transporter views rely on the
+       parent `.sd-card` already providing the surface, so they draw no
+       outer shell of their own.
 
-   Everything reads from the canonical --mb-* tokens in mb-tokens.css.
-   Buttons, fields, and alerts are scoped under `#root .inspection-coordination`
-   so they outrank the card-default rules in mb-cards.css (1,2,0 → 1,3,0).
+   Every value reads from the --mb-* tokens in mb-tokens.css.
+   Buttons, fields, and alerts are scoped under `#root` so they outrank the
+   card defaults in mb-cards.css.
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -27,7 +29,6 @@
    -------------------------------------------------------------------------- */
 
 .inspection-coordination {
-  /* The parent (card or modal) supplies the surface. Nothing here draws one. */
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -36,24 +37,49 @@
   font-family: var(--mb-font-body);
 }
 
-/* Flat variant used inside parent cards (inspector / transporter views). */
+/* Flat variant — content lives directly inside the parent .sd-card. */
 .inspection-coordination--inspector {
   margin: 22px 0 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-/* When .inspection-coordination also carries .card (seller views inside a
-   Modal), it draws its own shell using the standard card geometry. */
+/* Seller views inside a modal — draw their own outer card shell. */
 .inspection-coordination.card {
   padding: var(--mb-card-pad);
   background: var(--mb-card);
   border: none;
   border-radius: var(--mb-radius-card);
   box-shadow: var(--mb-shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 /* --------------------------------------------------------------------------
-   2. Loading
+   2. Two-block shell
+   -------------------------------------------------------------------------- */
+
+.ic-block {
+  box-sizing: border-box;
+  padding: 20px;
+  background: var(--mb-surface);
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+}
+
+.ic-block--header {
+  padding: 18px 20px;
+}
+
+.ic-block--body {
+  /* Body block is intentionally taller; content flows inside. */
+}
+
+/* --------------------------------------------------------------------------
+   3. Loading
    -------------------------------------------------------------------------- */
 
 .ic-loading {
@@ -64,7 +90,9 @@
 }
 
 /* --------------------------------------------------------------------------
-   3. Header — 2px rule + 44px accent segment (matches the card system)
+   4. Card-1 header — eyebrow + title over a 2px rule with accent segment.
+   The description is a SIBLING of the header (below the rule) and indented
+   to match the card body.
    -------------------------------------------------------------------------- */
 
 .ic-header {
@@ -73,8 +101,8 @@
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px 16px;
-  margin: 0 0 20px;
+  gap: 10px 12px;
+  margin: 0;
   padding: 0 0 10px;
   border-bottom: 2px solid var(--mb-line);
 }
@@ -87,6 +115,11 @@
   width: 44px;
   height: 4px;
   background: var(--mb-accent);
+}
+
+.ic-header-main {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .ic-eyebrow {
@@ -123,6 +156,16 @@
 
 .ic-header h4 { font-size: 18px; }
 
+/* Description sits BELOW the 2px rule and is indented slightly right. */
+.ic-header-text {
+  margin: 14px 0 0;
+  padding-inline-start: 20px;
+  max-width: 62ch;
+  color: var(--mb-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
 .ic-sub {
   max-width: 62ch;
   margin: 6px 0 0;
@@ -153,11 +196,11 @@
 }
 
 /* --------------------------------------------------------------------------
-   4. Form
+   5. Form
    -------------------------------------------------------------------------- */
 
 .ic-form {
-  margin: 0;
+  margin: 22px 0 0;
   padding: 0;
   display: block;
 }
@@ -168,7 +211,7 @@
   border: 0;
 }
 
-.ic-form fieldset:first-of-type { margin-top: 4px; }
+.ic-form fieldset:first-of-type { margin-top: 0; }
 
 .ic-form legend {
   display: block;
@@ -198,7 +241,6 @@
   font-weight: 700;
 }
 
-/* Fields — same geometry as the rest of the app. */
 #root .inspection-coordination :is(
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]),
   select,
@@ -236,6 +278,12 @@
   color: #94a3b8;
 }
 
+/* --------------------------------------------------------------------------
+   6. Actions row — save CTA lives here, at the end of the body block.
+   `.ic-actions--end` gets a top hairline so the button reads as the block's
+   primary submit action.
+   -------------------------------------------------------------------------- */
+
 .ic-actions {
   display: flex;
   flex-wrap: wrap;
@@ -243,12 +291,19 @@
   margin-top: 20px;
 }
 
+.ic-actions--end {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1.5px solid var(--mb-line);
+  justify-content: flex-end;
+}
+
 /* --------------------------------------------------------------------------
-   5. Read-only side panel (site info from the counterparty)
+   7. Read-only side panel (counterparty info)
    -------------------------------------------------------------------------- */
 
 .ic-inspector-side {
-  margin: 22px 0 0;
+  margin: 0;
   padding: 0;
 }
 
@@ -300,7 +355,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   6. Availability (slot list + inline add form)
+   8. Availability
    -------------------------------------------------------------------------- */
 
 .ic-availability {
@@ -339,7 +394,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 10px 14px;
-  background: var(--mb-surface);
+  background: var(--mb-soft);
   border: 1.5px solid var(--mb-line);
   border-radius: var(--mb-radius-field);
   color: var(--mb-ink-2);
@@ -382,7 +437,6 @@
   outline-offset: 2px;
 }
 
-/* Slot add form: date + start time + dash + end time + submit */
 .ic-slot-form {
   display: flex;
   flex-wrap: wrap;
@@ -408,7 +462,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   7. Check grid (equipment options)
+   9. Check grid (equipment options)
    -------------------------------------------------------------------------- */
 
 .ic-check-grid {
@@ -437,11 +491,11 @@
 }
 
 /* --------------------------------------------------------------------------
-   8. Footnote
+   10. Footnote
    -------------------------------------------------------------------------- */
 
 .ic-footnote {
-  margin: 24px 0 0;
+  margin: 22px 0 0;
   padding-top: 14px;
   border-top: 1.5px solid var(--mb-line);
   color: var(--mb-muted);
@@ -450,11 +504,11 @@
 }
 
 /* --------------------------------------------------------------------------
-   9. Alerts (error + success) — flat tones, matching the app
+   11. Alerts
    -------------------------------------------------------------------------- */
 
 #root .inspection-coordination .alert {
-  margin: 14px 0 0;
+  margin: 0 0 14px;
   padding: 12px 14px;
   background: var(--mb-surface);
   border: 1.5px solid var(--mb-line);
@@ -477,9 +531,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   10. Buttons — aligned with the standard app button style.
-   Primary = filled accent, secondary (.btn-light) = outlined accent.
-   Prefixed with #root so they beat card defaults from mb-cards.css.
+   12. Buttons — standard app style
    -------------------------------------------------------------------------- */
 
 #root .inspection-coordination .btn {
@@ -534,10 +586,15 @@
 }
 
 /* --------------------------------------------------------------------------
-   11. Responsive
+   13. Responsive
    -------------------------------------------------------------------------- */
 
 @media (max-width: 480px) {
+  .ic-block { padding: 16px; }
+  .ic-block--header { padding: 14px 16px; }
+
+  .ic-header-text { padding-inline-start: 14px; font-size: 13.5px; }
+
   .ic-grid,
   .ic-check-grid {
     grid-template-columns: 1fr;
@@ -565,7 +622,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   12. Reduced motion
+   14. Reduced motion
    -------------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
