@@ -7,8 +7,8 @@
    - Header line = 2px; sub-header line = 1.5px; 44px accent segment.
    - Header status pill in the section header = plain colored text.
    - Meta row at the bottom of the overview: Created (left) + ORD code (right).
-   - All large (block) buttons share the Cancel-order look: 2px border matching
-     the line under the card title. Primary CTAs keep their accent fill.
+   - All large (block) buttons use the orange accent border (matching the
+     44px segment under the card title). Primary CTAs keep their accent fill.
    - Party badge in the header (role + name + avatar), right-aligned.
    - Card title shrinks with card width so long names / numbers wrap cleanly.
    Facts grid: max 3 items per column (grid-auto-flow: column, 3 rows).
@@ -302,23 +302,25 @@
 
 /* --------------------------------------------------------------------------
    Large (block) buttons — every non-primary block button on the page uses
-   the same outline style as "Cancel order": 2px border matching the line
-   under the card title. Primary CTAs keep their accent fill.
+   the orange accent border, matching the 44px segment under the card title.
+   Primary CTAs keep their accent fill.
    -------------------------------------------------------------------------- */
 
 .order-detail-page .btn-block:not(.btn-primary) {
-  border: 2px solid var(--mb-line);
+  border: 2px solid var(--mb-accent);
   border-radius: var(--mb-radius-field);
-  color: var(--mb-ink-2);
+  color: var(--mb-accent);
   background: transparent;
   min-height: 48px;
   font-size: 16px;
   font-weight: 700;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .order-detail-page .btn-block:not(.btn-primary):hover {
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--mb-accent-tint);
+  border-color: var(--mb-accent-ink);
+  color: var(--mb-accent-ink);
 }
 
 .order-detail-page .btn-block:not(.btn-primary):focus-visible {
