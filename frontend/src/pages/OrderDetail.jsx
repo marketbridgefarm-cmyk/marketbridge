@@ -50,6 +50,8 @@ const DISPUTE_TYPES = [
   ['OTHER', 'Other'],
 ];
 
+const EMPTY_ELIGIBILITY = { INSPECTION: false, TRANSPORT: false, OFFER: false };
+
 const pad2 = (n) => String(n).padStart(2, '0');
 
 const shortId = (id) => id?.slice(0, 8) || '—';
@@ -802,6 +804,33 @@ function InspectionCard({ order, title, i }) {
             </Button>
           </Section>
         )}
+
+        {i.isParticipant && i.recoveryEligibility?.INSPECTION && (
+          <Section title="No inspector is bidding yet">
+            <p className="muted">
+              This inspection request has no live bids on the waiting list. You can ask MarketBridge
+              admin to release a fresh bidding form so registered inspectors can compete again.
+            </p>
+            {i.recoveryRequests
+              .filter((r) => r.type === 'INSPECTION')
+              .map((r) => (
+                <p className="muted small" key={r.id}>
+                  Recovery: <strong>{r.status}</strong>
+                  {r.formReleasedAt ? ' — fresh form released' : ' — awaiting admin approval'}
+                </p>
+              ))}
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={Boolean(i.busy) || i.recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'PENDING')}
+              busy={i.busy === 'recovery-INSPECTION'}
+              busyText="Requesting…"
+              onClick={i.requestInspectionRecovery}
+            >
+              Request fresh bidding form
+            </Button>
+          </Section>
+        )}
       </Card>
     );
   }
@@ -1177,10 +1206,37 @@ function InspectionCard({ order, title, i }) {
                 {liveBidderCount} inspector bid(s) are still waiting or pending. A fresh form can be released only when none remain — they stay on the waiting list until the selected inspector submits the report.
               </p>
             )}
+            {i.isParticipant && i.recoveryEligibility?.INSPECTION && (
+              <>
+                {i.recoveryRequests
+                  .filter((r) => r.type === 'INSPECTION')
+                  .map((r) => (
+                    <p className="muted small" key={r.id}>
+                      Recovery: <strong>{r.status}</strong>
+                      {r.formReleasedAt ? ' — fresh form released' : ' — awaiting admin approval'}
+                    </p>
+                  ))}
+                <p className="muted small">
+                  No inspector is on the waiting list for this request. Ask MarketBridge admin to
+                  release a fresh bidding form so new inspectors can compete.
+                </p>
+              </>
+            )}
             <Actions>
               {i.isAdmin && (
                 <Button variant="primary" disabled={Boolean(i.busy) || liveBidderCount > 0} busy={i.busy === `reopen-inspection-${request.id}`} busyText="Releasing…" onClick={i.reopenBidding}>
                   Release fresh inspection form
+                </Button>
+              )}
+              {i.isParticipant && i.recoveryEligibility?.INSPECTION && (
+                <Button
+                  variant="primary"
+                  disabled={Boolean(i.busy) || i.recoveryRequests.some((r) => r.type === 'INSPECTION' && r.status === 'PENDING')}
+                  busy={i.busy === 'recovery-INSPECTION'}
+                  busyText="Requesting…"
+                  onClick={i.requestInspectionRecovery}
+                >
+                  Request fresh bidding form
                 </Button>
               )}
               <Button variant="light" disabled={Boolean(i.busy)} busy={i.busy === `cancel-inspection-${request.id}`} busyText="Cancelling…" onClick={i.cancel}>
@@ -1866,6 +1922,12 @@ function TransportCard({ order, t }) {
                   {liveBidderCount} transporter bid(s) are still waiting or pending. A fresh form can be released only when none remain — they stay pending until the selected transporter delivers.
                 </p>
               )}
+              {t.recoveryEligibility?.TRANSPORT && liveBidderCount === 0 && (
+                <p className="muted small">
+                  No transporter is on the waiting list for this job. Ask MarketBridge admin to
+                  release a fresh bidding form so new truck owners can compete.
+                </p>
+              )}
               <Button
                 variant="primary"
                 disabled={
@@ -1875,7 +1937,7 @@ function TransportCard({ order, t }) {
                     (r) => r.type === 'TRANSPORT' && r.status === 'PENDING'
                   )
                 }
-                busy={t.busy === 'recovery-transport'}
+                busy={t.busy === 'recovery-TRANSPORT'}
                 busyText="Requesting…"
                 onClick={t.requestRecovery}
               >
@@ -1892,7 +1954,16 @@ function TransportCard({ order, t }) {
    7. Offer, receipt, dispute, completed, admin
    ======================================================================== */
 
-function OfferCard({ amount, setAmount, reference, submitting, onSubmit }) {
+function OfferCard({
+  amount,
+  setAmount,
+  reference,
+  submitting,
+  onSubmit,
+  canRequestRecovery,
+  recoveryBusy,
+  onRequestRecovery,
+}) {
   return (
     <Card id="make-offer" eyebrow="Product marketplace" title="Make an offer" subtitle="Your offer enters the seller's competition. It does not charge you or reserve the product.">
       <form onSubmit={onSubmit} className="form">
@@ -1900,6 +1971,25 @@ function OfferCard({ amount, setAmount, reference, submitting, onSubmit }) {
         <AmountPicker id="offer-amount" reference={reference} min={1} placeholder="Select your offer" value={amount} onChange={setAmount} disabled={submitting} required ariaLabel="Offer amount in ETB" />
         <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Submitting…' : 'Make offer'}</button>
       </form>
+
+      {canRequestRecovery && (
+        <Section title="No buyer is bidding yet">
+          <p className="muted">
+            This listing has no live offers on the waiting list. You can ask MarketBridge admin
+            to release a fresh bidding form so buyers can compete again.
+          </p>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={Boolean(recoveryBusy)}
+            busy={recoveryBusy}
+            busyText="Requesting…"
+            onClick={onRequestRecovery}
+          >
+            Request fresh bidding form
+          </Button>
+        </Section>
+      )}
     </Card>
   );
 }
@@ -2013,6 +2103,7 @@ export default function OrderDetail() {
   const [order, setOrder] = useState(null);
   const [workflow, setWorkflow] = useState(null);
   const [recoveryRequests, setRecoveryRequests] = useState([]);
+  const [recoveryEligibility, setRecoveryEligibility] = useState(EMPTY_ELIGIBILITY);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -2079,11 +2170,16 @@ export default function OrderDetail() {
             ? workflowRes.value.data?.workflow || null
             : null
         );
-        setRecoveryRequests(
-          recoveryRes.status === 'fulfilled'
-            ? recoveryRes.value.data?.recoveryRequests || []
-            : []
-        );
+
+        if (recoveryRes.status === 'fulfilled') {
+          setRecoveryRequests(recoveryRes.value.data?.recoveryRequests || []);
+          setRecoveryEligibility(
+            recoveryRes.value.data?.eligibility || EMPTY_ELIGIBILITY
+          );
+        } else {
+          setRecoveryRequests([]);
+          setRecoveryEligibility(EMPTY_ELIGIBILITY);
+        }
 
         const job = nextOrder?.transportJob || null;
         if (job && ['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status)) {
@@ -2496,6 +2592,9 @@ export default function OrderDetail() {
       })
     : [];
 
+  // ----------------------------------------------------------------------
+  // SHARED PROVIDER RELEASE HANDLER
+  // ----------------------------------------------------------------------
   const submitProviderRelease = async ({ reason, note }) => {
     if (!providerReleaseTarget) return false;
     const { service, quoteId, inspectionRequestId, transportJobId } = providerReleaseTarget;
@@ -2519,6 +2618,32 @@ export default function OrderDetail() {
   };
 
   const openProviderRelease = (target) => setProviderReleaseTarget(target);
+
+  // ----------------------------------------------------------------------
+  // GENERIC RECOVERY HANDLER
+  // ----------------------------------------------------------------------
+  // One function for all three bidding channels. It posts to the same
+  // endpoint the admin queue already reads from; the `type` decides which
+  // competition the fresh form belongs to.
+  const requestRecovery = useCallback((type) => async () => {
+    if (!order?.id) return false;
+    return run(
+      `recovery-${type}`,
+      async () => {
+        await api.post('/recovery-requests', {
+          orderId: order.id,
+          type,
+          targetParties: isBuyer ? ['BUYER'] : ['SELLER'],
+          reason:
+            `No live ${type.toLowerCase()} bids remain on this order. ` +
+            `Requesting a fresh bidding form so the competition can restart.`,
+        });
+        setError(`Recovery request sent to MarketBridge admin for a fresh ${type.toLowerCase()} bidding form.`);
+      },
+      `Could not request ${type.toLowerCase()} recovery`
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.id, isBuyer, run]);
 
   const transportActions = {
     selectQuote: (quoteId) => {
@@ -2565,16 +2690,7 @@ export default function OrderDetail() {
       );
       if (ok) setCounterInputs((q) => ({ ...q, [quoteId]: '' }));
     },
-    requestRecovery: () =>
-      run('recovery-TRANSPORT', async () => {
-        await api.post('/recovery-requests', {
-          orderId: order.id,
-          type: 'TRANSPORT',
-          targetParties: isBuyer ? ['BUYER'] : ['SELLER'],
-          reason: 'Transport competition has no usable live bid or the previous transporter arrangement is no longer available.',
-        });
-        setError('Recovery request sent to MarketBridge admin for approval.');
-      }, 'Could not request workflow recovery'),
+    requestRecovery: requestRecovery('TRANSPORT'),
     submitEvidence: async (type, nextStatus) => {
       if (!transportJob || !isTransporter) return;
       const { photoKeys, videoKeys } = evidence;
@@ -2647,10 +2763,13 @@ export default function OrderDetail() {
       currentInspection &&
       window.confirm('Reopen inspection bidding? Previous bids will expire and inspectors can submit fresh bids.') &&
       run(`reopen-inspection-${currentInspection.id}`, () => api.patch(`/inspections/${currentInspection.id}/reopen-bidding`), 'Could not reopen inspection bidding'),
+    requestInspectionRecovery: requestRecovery('INSPECTION'),
     decide,
     isBuyer,
     isSeller,
     isParticipant,
+    recoveryRequests,
+    recoveryEligibility,
     createPriceReview: (proposedPrice, reasonCode) => run(
       'price-review-create',
       () => api.post(`/orders/${order.id}/price-reviews`, { proposedPrice, reasonCode }),
@@ -2940,6 +3059,7 @@ export default function OrderDetail() {
     busy,
     reload,
     recoveryRequests,
+    recoveryEligibility,
     counterInputs,
     setCounterInputs,
     evidence,
@@ -2971,6 +3091,8 @@ export default function OrderDetail() {
     submitted: disputeSubmitted,
     submit: submitDispute,
   };
+
+  const requestOfferRecovery = requestRecovery('OFFER');
 
   return (
     <main className="section order-detail-page">
@@ -3018,6 +3140,9 @@ export default function OrderDetail() {
               reference={Number(order.listing?.askingPrice ?? order.listing?.price)}
               submitting={submittingOffer}
               onSubmit={submitOffer}
+              canRequestRecovery={Boolean(isParticipant && recoveryEligibility?.OFFER)}
+              recoveryBusy={busy === 'recovery-OFFER'}
+              onRequestRecovery={requestOfferRecovery}
             />
           )}
 
