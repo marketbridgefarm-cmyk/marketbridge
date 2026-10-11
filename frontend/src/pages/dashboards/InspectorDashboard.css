@@ -3,13 +3,11 @@
    Matched to pages/orders/Orders.css (the reference look) and the same
    tokens used by OrderDetail.css on this project.
 
-   Buttons — ONE style everywhere (see section 7):
+   Buttons — ONE style everywhere (section 7):
      • 1px accent (orange) border, dark-orange text, transparent background
      • 48px min-height, 16px radius
-     • Tabs are the same button, with a filled accent state for "active"
-     • Responsive: 44px / 15px at ≤480px (kept from before)
-
-   Tabs (section 8) are now standard large buttons, not pills.
+     • .sd-btn--block: large, full-width-up-to-cap, centered (submit-quote)
+     • Responsive: 44px / 15px at ≤480px, 14.5px at ≤360px
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -177,8 +175,6 @@
 
 .sd-toolbar .sd-muted { max-width: 62ch; }
 
-/* Stacked variant — eyebrow + title sit tightly together; description sits
-   below the 2px rule and is slightly indented to the right. */
 .sd-toolbar--stacked {
   display: block;
   padding: 0;
@@ -366,10 +362,20 @@
   cursor: not-allowed;
 }
 
+/* Large block button — wider, taller, bigger text. Capped at 420px so it
+   doesn't stretch uncomfortably on wide cards; the parent row centers it. */
+#root .sd-dashboard .sd-btn--block {
+  width: 100%;
+  max-width: 420px;
+  min-height: 56px;
+  padding: 0 28px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
 /* --------------------------------------------------------------------------
-   8. Tabs — now standard large buttons (not pills).
-   Active tab is filled with the accent; inactive tabs share the standard
-   button look. Same responsiveness as before (44px / 15px at ≤480px).
+   8. Tabs — standard large buttons (not pills).
    -------------------------------------------------------------------------- */
 
 .sd-tabs {
@@ -635,7 +641,6 @@
   letter-spacing: 0;
 }
 
-/* Plain-text "Sealed" / status note — no pill, no border, no background. */
 .sd-card-block-note {
   padding: 0;
   background: transparent;
@@ -671,9 +676,10 @@
   margin-top: 18px;
 }
 
-/* Right-aligned actions — used by the "Submit a quote" row. */
-.sd-card-actions--right {
-  justify-content: flex-end;
+/* Center the actions row (used by the submit-quote CTA so the large button
+   is horizontally centered in the card). */
+.sd-card-actions--center {
+  justify-content: center;
 }
 
 .sd-card-actions > p {
@@ -1441,7 +1447,6 @@
   .sd-report-modal { padding: 18px; border-radius: 18px; }
   .sd-report-header h2 { font-size: 18px; }
 
-  /* Buttons keep their standard look but scale down on phones */
   #root .sd-dashboard .sd-btn,
   #root .sd-dashboard .sd-btn-primary,
   #root .sd-dashboard .sd-btn-outline,
@@ -1449,6 +1454,13 @@
     font-size: 15px;
     min-height: 44px;
     padding: 0 16px;
+  }
+
+  #root .sd-dashboard .sd-btn--block {
+    min-height: 52px;
+    font-size: 16px;
+    padding: 0 22px;
+    max-width: 100%;
   }
 
   .sd-job-meta--inline .sd-job-meta-item > span { font-size: 13px; }
@@ -1474,6 +1486,11 @@
   #root .sd-dashboard .sd-tab {
     font-size: 14.5px;
     padding: 0 14px;
+  }
+
+  #root .sd-dashboard .sd-btn--block {
+    font-size: 15px;
+    padding: 0 18px;
   }
 }
 
