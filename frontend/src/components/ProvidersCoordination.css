@@ -1,253 +1,332 @@
 /* ==========================================================================
-   ProviderCoordination.css
-   Shared styles for all four Provider Coordination components:
-   - InspectionCoordinationSeller.jsx
-   - InspectionCoordinationInspector.jsx
-   - TransportCoordinationSeller.jsx
-   - TransportCoordinationTransporter.jsx
+   ProvidersCoordination.css
+   Shared styles for:
+     - InspectionCoordinationSeller.jsx
+     - InspectionCoordinationInspector.jsx
+     - TransportCoordinationSeller.jsx
+     - TransportCoordinationTransporter.jsx
+
+   Two contexts are supported by the same stylesheet:
+
+     1. Seller views — the JSX carries `className="card inspection-coordination"`,
+        so the component draws its own card shell (title rule, rounded
+        surface). The rules here only shape the internals.
+
+     2. Inspector / transporter views — the JSX carries
+        `className="inspection-coordination inspection-coordination--inspector"`,
+        so the component reads as a flat sub-section of the parent `.sd-card`
+        (no surface of its own).
+
+   Everything reads from the canonical --mb-* tokens in mb-tokens.css.
+   Buttons, fields, and alerts are scoped under `#root .inspection-coordination`
+   so they outrank the card-default rules in mb-cards.css (1,2,0 → 1,3,0).
    ========================================================================== */
 
-/* ---- 1. Card Shell & Loading --------------------------------------------- */
+/* --------------------------------------------------------------------------
+   1. Wrapper
+   -------------------------------------------------------------------------- */
+
 .inspection-coordination {
-  /* Inherits core .card styling (padding, background, radius) from parent */
-  container-type: inline-size;
-  --card-tone: var(--mb-ok, #047857);
+  /* The parent (card or modal) supplies the surface. Nothing here draws one. */
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--mb-ink);
+  font-family: var(--mb-font-body);
 }
 
+/* Flat variant used inside parent cards (inspector / transporter views). */
 .inspection-coordination--inspector {
-  /* Specific tone for the inspector/transporter view */
-  --card-tone: var(--mb-ok, #047857);
+  margin: 22px 0 0;
+  padding: 0;
 }
+
+/* When .inspection-coordination also carries .card (seller views inside a
+   Modal), it draws its own shell using the standard card geometry. */
+.inspection-coordination.card {
+  padding: var(--mb-card-pad);
+  background: var(--mb-card);
+  border: none;
+  border-radius: var(--mb-radius-card);
+  box-shadow: var(--mb-shadow-card);
+}
+
+/* --------------------------------------------------------------------------
+   2. Loading
+   -------------------------------------------------------------------------- */
 
 .ic-loading {
-  padding: 48px 24px;
-  text-align: center;
-  color: var(--mb-muted, #64748b);
-  font-size: 15px;
+  padding: 20px 0;
+  color: var(--mb-muted);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-/* ---- 2. Header ---------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   3. Header — 2px rule + 44px accent segment (matches the card system)
+   -------------------------------------------------------------------------- */
+
 .ic-header {
+  position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--mb-line, #cbd5e1);
-  position: relative;
+  gap: 12px 16px;
+  margin: 0 0 20px;
+  padding: 0 0 10px;
+  border-bottom: 2px solid var(--mb-line);
 }
 
 .ic-header::after {
-  content: '';
+  content: "";
   position: absolute;
   left: 0;
   bottom: -2px;
   width: 44px;
   height: 4px;
-  background: var(--mb-accent, #c2410c);
+  background: var(--mb-accent);
 }
 
 .ic-eyebrow {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 12px;
-  margin: 0 0 8px;
-  color: var(--mb-ok, #047857);
-  font-family: var(--od-font-head, 'Manrope', system-ui, sans-serif);
-  font-size: 13px;
+  margin: 0 0 6px;
+  color: var(--mb-ok);
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.25em;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
+  line-height: 1.2;
 }
 
 .ic-eyebrow::before {
-  content: '';
+  content: "";
   flex: none;
   width: 16px;
   height: 3px;
-  border-radius: 2px;
   background: currentColor;
+  border-radius: 2px;
 }
 
 .ic-header h2,
 .ic-header h4 {
   margin: 0;
-  color: var(--mb-ink, #0f172a);
-  font-family: var(--od-font-head, 'Manrope', system-ui, sans-serif);
+  color: var(--mb-ink);
   font-size: 20px;
   font-weight: 800;
   line-height: 1.25;
+  letter-spacing: -0.2px;
 }
+
+.ic-header h4 { font-size: 18px; }
 
 .ic-sub {
+  max-width: 62ch;
   margin: 6px 0 0;
-  color: var(--mb-muted, #64748b);
+  color: var(--mb-muted);
   font-size: 14px;
-  line-height: 1.5;
-  max-width: 65ch;
+  line-height: 1.55;
 }
 
+/* Status pill on the right ("Sent <date>") */
 .ic-status {
+  flex: none;
   display: inline-flex;
   align-items: center;
   padding: 4px 12px;
-  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1.5px solid var(--mb-line-soft);
+  border-radius: var(--mb-radius-pill);
+  color: var(--mb-ink-2);
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
 }
 
 .ic-status--sent {
-  background: #ecfdf5;
-  border: 1.5px solid #a7f3d0;
-  color: #047857;
+  background: var(--mb-ok-bg);
+  border-color: var(--mb-ok-border);
+  color: var(--mb-ok);
 }
 
-/* ---- 3. Form Structure -------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   4. Form
+   -------------------------------------------------------------------------- */
+
 .ic-form {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-  margin-top: 22px;
-  padding-top: 22px;
-  border-top: 1.5px solid var(--mb-line, #cbd5e1);
+  margin: 0;
+  padding: 0;
+  display: block;
 }
 
 .ic-form fieldset {
-  min-width: 0;
-  margin: 0;
+  margin: 22px 0 0;
   padding: 0;
   border: 0;
 }
 
+.ic-form fieldset:first-of-type { margin-top: 4px; }
+
 .ic-form legend {
+  display: block;
   width: 100%;
-  margin-bottom: 14px;
-  padding-bottom: 8px;
-  border-bottom: 1.5px solid var(--mb-line, #cbd5e1);
-  color: var(--mb-ink, #0f172a);
-  font-size: 15px;
+  margin: 0 0 14px;
+  padding: 0 0 8px;
+  border-bottom: 1.5px solid var(--mb-line);
+  color: var(--mb-ok);
+  font-size: 14px;
   font-weight: 700;
+  letter-spacing: -0.05px;
 }
 
 .ic-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px;
 }
 
-.ic-full {
-  grid-column: 1 / -1;
-}
+.ic-full { grid-column: 1 / -1; }
 
-.ic-grid label,
-.ic-form fieldset > label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  color: var(--mb-ink, #0f172a);
+.ic-form label {
+  display: block;
+  margin: 0;
+  color: var(--mb-ink);
   font-size: 13px;
   font-weight: 700;
 }
 
-.ic-grid input,
-.ic-grid select,
-.ic-grid textarea,
-.ic-form fieldset > label > input,
-.ic-form fieldset > label > textarea {
+/* Fields — same geometry as the rest of the app. */
+#root .inspection-coordination :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]),
+  select,
+  textarea
+) {
+  box-sizing: border-box;
   width: 100%;
+  min-width: 0;
   min-height: 48px;
+  margin-top: 6px;
   padding: 10px 14px;
-  background: #fff;
-  border: 1.5px solid var(--mb-line, #cbd5e1);
-  border-radius: var(--mb-radius-field, 16px);
-  color: var(--mb-ink, #0f172a);
-  font-family: var(--od-font-body, 'DM Sans', system-ui, sans-serif);
-  font-size: 16px;
+  background: var(--mb-surface);
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  box-shadow: none;
+  color: var(--mb-ink);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
   line-height: 1.4;
 }
 
-.ic-grid textarea,
-.ic-form fieldset > label > textarea {
-  min-height: 92px;
+#root .inspection-coordination textarea {
+  min-height: 88px;
   resize: vertical;
 }
 
-.ic-grid input::placeholder,
-.ic-grid textarea::placeholder {
+#root .inspection-coordination :is(input, select, textarea):focus-visible {
+  outline: 3px solid var(--mb-accent-border);
+  outline-offset: 2px;
+  border-color: var(--mb-line);
+}
+
+#root .inspection-coordination :is(input, select, textarea)::placeholder {
   color: #94a3b8;
 }
 
-/* ---- 4. Equipment Checkboxes (Transporter) ------------------------------ */
-.ic-check-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-}
-
-.ic-check-grid label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 40px;
-  padding: 8px 12px;
-  background: #f8fafc;
-  border: 1.5px solid var(--mb-line, #cbd5e1);
-  border-radius: 12px;
-  color: var(--mb-ink, #0f172a);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.ic-check-grid label:hover {
-  background: #f1f5f9;
-}
-
-.ic-check-grid input[type="checkbox"] {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  accent-color: var(--mb-ok, #047857);
-  cursor: pointer;
-}
-
-/* ---- 5. Actions --------------------------------------------------------- */
 .ic-actions {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 6px;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
 }
 
-.ic-actions .btn {
-  width: 100%;
+/* --------------------------------------------------------------------------
+   5. Read-only side panel (site info from the counterparty)
+   -------------------------------------------------------------------------- */
+
+.ic-inspector-side {
+  margin: 22px 0 0;
+  padding: 0;
 }
 
-/* ---- 6. Availability Section -------------------------------------------- */
-.ic-availability {
-  margin-top: 22px;
-  padding-top: 22px;
-  border-top: 1.5px solid var(--mb-line, #cbd5e1);
-}
-
-.ic-availability header {
-  margin-bottom: 14px;
-}
-
-.ic-availability h3,
-.ic-availability h4 {
-  margin: 0 0 6px;
-  color: var(--mb-ink, #0f172a);
-  font-size: 15px;
+.ic-inspector-side > h3,
+.ic-inspector-side > h4 {
+  margin: 0 0 14px;
+  padding: 0 0 8px;
+  border-bottom: 1.5px solid var(--mb-line);
+  color: var(--mb-ok);
+  font-size: 14px;
   font-weight: 700;
 }
 
+.ic-inspector-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 18px;
+}
+
+.ic-inspector-details > div { min-width: 0; }
+
+.ic-inspector-details > div > span {
+  display: block;
+  color: var(--mb-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ic-inspector-details > div > strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--mb-ink);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.ic-inspector-side-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--mb-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------------------
+   6. Availability (slot list + inline add form)
+   -------------------------------------------------------------------------- */
+
+.ic-availability {
+  margin: 22px 0 0;
+  padding: 0;
+}
+
+.ic-availability > header {
+  margin: 0 0 14px;
+  padding: 0 0 8px;
+  border-bottom: 1.5px solid var(--mb-line);
+}
+
+.ic-availability > header > h3,
+.ic-availability > header > h4 {
+  margin: 0;
+  color: var(--mb-ok);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ic-availability > header .ic-sub { margin: 6px 0 0; }
+
 .ic-slot-list {
   list-style: none;
-  margin: 12px 0 0;
+  margin: 0 0 12px;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -255,216 +334,243 @@
 }
 
 .ic-slot {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 12px;
-  background: #f8fafc;
-  border: 1.5px solid var(--mb-line, #cbd5e1);
-  border-radius: 12px;
-  color: var(--mb-ink, #0f172a);
+  padding: 10px 14px;
+  background: var(--mb-surface);
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink-2);
   font-size: 14px;
-  font-weight: 500;
-  word-break: break-all;
+  font-weight: 600;
 }
 
 .ic-slot-remove {
   flex: none;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   background: transparent;
-  border: 0;
+  border: 1.5px solid var(--mb-line);
   border-radius: 50%;
-  color: var(--mb-danger, #b91c1c);
-  font-size: 20px;
+  color: var(--mb-ink-2);
+  font-family: inherit;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-@media (hover: hover) {
-  .ic-slot-remove:hover:not(:disabled) {
-    background: #fef2f2;
-  }
+.ic-slot-remove:hover:not(:disabled) {
+  background: var(--mb-danger-bg);
+  border-color: var(--mb-danger-border);
+  color: var(--mb-danger);
 }
 
 .ic-slot-remove:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
-.ic-slot-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 12px;
-  padding: 14px;
-  background: #fff;
-  border: 1.5px solid var(--mb-line, #cbd5e1);
-  border-radius: var(--mb-radius-field, 16px);
+.ic-slot-remove:focus-visible {
+  outline: 3px solid var(--mb-accent-border);
+  outline-offset: 2px;
 }
 
-.ic-slot-form input {
-  width: 100%;
+/* Slot add form: date + start time + dash + end time + submit */
+.ic-slot-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+#root .inspection-coordination .ic-slot-form :is(input[type="date"], input[type="time"]) {
+  flex: 1 1 140px;
+  min-width: 0;
   min-height: 44px;
+  margin-top: 0;
   padding: 8px 12px;
-  background: #fff;
-  border: 1.5px solid var(--mb-line, #cbd5e1);
-  border-radius: 12px;
-  color: var(--mb-ink, #0f172a);
-  font-family: inherit;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .ic-slot-dash {
-  display: none; /* Hidden on mobile, shown on desktop */
-  color: var(--mb-muted, #64748b);
+  flex: none;
+  color: var(--mb-muted);
+  font-size: 14px;
   font-weight: 700;
 }
 
-.ic-slot-form .btn {
-  width: 100%;
-  min-height: 44px;
-}
+/* --------------------------------------------------------------------------
+   7. Check grid (equipment options)
+   -------------------------------------------------------------------------- */
 
-/* ---- 7. Read-Only Handoff Sides (Inspector / Seller / Driver) ----------- */
-.ic-inspector-side {
-  margin-top: 22px;
-  padding-top: 22px;
-  border-top: 1.5px solid var(--mb-line, #cbd5e1);
-  padding-left: clamp(16px, 13cqw, 48px); /* Indents the entire section to the right */
-}
-
-.ic-inspector-side h3,
-.ic-inspector-side h4 {
-  margin: 0 0 14px;
-  color: var(--mb-ink, #0f172a);
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.ic-inspector-details {
+.ic-check-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr)); /* Two equal columns */
-  gap: 14px 20px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 14px;
+  margin: 0;
 }
 
-.ic-inspector-details > div {
+.ic-check-grid label {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--mb-ink-2);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-transform: capitalize;
 }
 
-/* Span full width for longer notes */
-.ic-inspector-details .ic-full {
-  grid-column: 1 / -1;
+.ic-check-grid input[type="checkbox"] {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--mb-accent);
 }
 
-.ic-inspector-details span {
-  color: var(--mb-muted, #64748b);
-  font-size: 13px;
-  font-weight: 700;
-}
+/* --------------------------------------------------------------------------
+   8. Footnote
+   -------------------------------------------------------------------------- */
 
-.ic-inspector-details strong {
-  color: var(--mb-ink, #0f172a);
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.ic-inspector-side-label {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--mb-muted, #64748b);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-/* ---- 8. Footnote -------------------------------------------------------- */
 .ic-footnote {
-  margin-top: 22px;
+  margin: 24px 0 0;
   padding-top: 14px;
-  border-top: 1.5px solid var(--mb-line, #cbd5e1);
-  color: var(--mb-muted, #64748b);
-  font-size: 13px;
-  line-height: 1.5;
+  border-top: 1.5px solid var(--mb-line);
+  color: var(--mb-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
 }
 
-/* ---- 9. Responsive & Container Queries ---------------------------------- */
+/* --------------------------------------------------------------------------
+   9. Alerts (error + success) — flat tones, matching the app
+   -------------------------------------------------------------------------- */
 
-/* Small phones */
+#root .inspection-coordination .alert {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  background: var(--mb-surface);
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink-2);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+#root .inspection-coordination .alert.error {
+  background: var(--mb-danger-bg);
+  border-color: var(--mb-danger-border);
+  color: var(--mb-danger);
+}
+
+#root .inspection-coordination .alert.success {
+  background: var(--mb-ok-bg);
+  border-color: var(--mb-ok-border);
+  color: var(--mb-ok);
+}
+
+/* --------------------------------------------------------------------------
+   10. Buttons — aligned with the standard app button style.
+   Primary = filled accent, secondary (.btn-light) = outlined accent.
+   Prefixed with #root so they beat card defaults from mb-cards.css.
+   -------------------------------------------------------------------------- */
+
+#root .inspection-coordination .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: var(--mb-radius-field);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+#root .inspection-coordination .btn.btn-primary {
+  background: var(--mb-accent);
+  border: 1px solid var(--mb-accent);
+  color: #ffffff;
+}
+
+#root .inspection-coordination .btn.btn-primary:hover:not(:disabled) {
+  background: var(--mb-accent-ink);
+  border-color: var(--mb-accent-ink);
+}
+
+#root .inspection-coordination .btn.btn-light {
+  background: transparent;
+  border: 1px solid var(--mb-accent);
+  color: var(--mb-accent-ink);
+}
+
+#root .inspection-coordination .btn.btn-light:hover:not(:disabled) {
+  background: var(--mb-accent-tint);
+  border-color: var(--mb-accent-ink);
+}
+
+#root .inspection-coordination .btn:focus-visible {
+  outline: 3px solid var(--mb-accent-border);
+  outline-offset: 2px;
+}
+
+#root .inspection-coordination .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+   11. Responsive
+   -------------------------------------------------------------------------- */
+
 @media (max-width: 480px) {
-  .ic-header h2,
-  .ic-header h4 {
-    font-size: 18px;
-  }
-  .ic-eyebrow {
-    gap: 10px;
-    letter-spacing: 0.2em;
-  }
-  .ic-eyebrow::before {
-    width: 13px;
-  }
-  /* Stack back to 1 column on very small screens */
-  .ic-inspector-details {
+  .ic-grid,
+  .ic-check-grid {
     grid-template-columns: 1fr;
   }
-}
 
-/* Tablets & Desktops */
-@media (min-width: 560px) {
-  .ic-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .ic-slot-form { gap: 6px; }
+
+  #root .inspection-coordination .ic-slot-form :is(input[type="date"], input[type="time"]) {
+    flex: 1 1 100%;
   }
-  
-  .ic-check-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .ic-actions .btn {
-    width: auto;
-    min-width: 220px;
-  }
-  
-  .ic-slot-form {
-    flex-direction: row;
-    align-items: center;
-  }
-  
-  .ic-slot-form input {
-    flex: 1 1 120px;
-    width: auto;
-  }
-  
-  .ic-slot-dash {
-    display: block;
-    flex: none;
-  }
-  
-  .ic-slot-form .btn {
-    flex: none;
-    width: auto;
-    min-width: 100px;
+
+  .ic-header h2 { font-size: 18px; }
+  .ic-header h4 { font-size: 16px; }
+
+  #root .inspection-coordination .btn {
+    font-size: 15px;
+    min-height: 44px;
+    padding: 0 16px;
   }
 }
 
-/* Wide Cards (Container Queries) */
-@container (min-width: 520px) {
-  .ic-check-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
+@media (max-width: 360px) {
+  .ic-header h2 { font-size: 17px; }
+  .ic-header h4 { font-size: 15px; }
 }
 
-@container (min-width: 760px) {
-  .ic-check-grid {
-    grid-template-columns: repeat(4, 1fr);
+/* --------------------------------------------------------------------------
+   12. Reduced motion
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .ic-slot-remove,
+  #root .inspection-coordination .btn {
+    transition: none;
   }
 }
