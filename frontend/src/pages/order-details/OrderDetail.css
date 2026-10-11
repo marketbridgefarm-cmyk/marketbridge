@@ -7,7 +7,8 @@
    - Header line = 2px; sub-header line = 1.5px; 44px accent segment.
    - Header status pill in the section header = plain colored text.
    - Meta row at the bottom of the overview: Created (left) + ORD code (right).
-   - Cancel button border matches the 2px line under the card title.
+   - All large (block) buttons share the Cancel-order look: 2px border matching
+     the line under the card title. Primary CTAs keep their accent fill.
    - Party badge in the header (role + name + avatar), right-aligned.
    - Card title shrinks with card width so long names / numbers wrap cleanly.
    Facts grid: max 3 items per column (grid-auto-flow: column, 3 rows).
@@ -300,20 +301,27 @@
 }
 
 /* --------------------------------------------------------------------------
-   Overview action button — border matches the 2px line under the card title
+   Large (block) buttons — every non-primary block button on the page uses
+   the same outline style as "Cancel order": 2px border matching the line
+   under the card title. Primary CTAs keep their accent fill.
    -------------------------------------------------------------------------- */
 
-.order-detail-page .od-card-overview .btn-block {
+.order-detail-page .btn-block:not(.btn-primary) {
   border: 2px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
   color: var(--mb-ink-2);
   background: transparent;
+  min-height: 48px;
+  font-size: 16px;
+  font-weight: 700;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.order-detail-page .od-card-overview .btn-block:hover {
+.order-detail-page .btn-block:not(.btn-primary):hover {
   background: rgba(255, 255, 255, 0.8);
 }
 
-.order-detail-page .od-card-overview .btn-block:focus-visible {
+.order-detail-page .btn-block:not(.btn-primary):focus-visible {
   outline: 3px solid var(--mb-accent-border);
   outline-offset: 2px;
 }
