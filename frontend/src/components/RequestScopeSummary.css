@@ -1,10 +1,181 @@
-.rs-box { margin-top: 14px; padding: 14px; background: #fff; border: 1.5px solid var(--mb-line, #e5e9ef); border-radius: var(--mb-radius-field, 12px); overflow-wrap: anywhere; }
-.rs-title { margin: 0 0 12px; font: 800 12px var(--od-font-head, 'Manrope', system-ui, sans-serif); letter-spacing: .14em; text-transform: uppercase; color: #12734a; }
-.rs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
-.rs-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.rs-item > span { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #64748b; }
-.rs-item > strong { font-size: 14px; font-weight: 700; color: var(--mb-ink, #0d1b2a); }
-.rs-full { grid-column: 1 / -1; }
-.rs-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.rs-chip { padding: 4px 10px; border-radius: 999px; background: #ecfdf3; color: #12734a; font-size: 12.5px; font-weight: 700; }
-@media (max-width: 420px) { .rs-grid { grid-template-columns: minmax(0, 1fr); } }
+/* ==========================================================================
+   RequestScopeSummary — flat sub-section of a parent card
+   --------------------------------------------------------------------------
+   Renders INSIDE an existing card (.card / .sd-card / .od-card-*). It has
+   NO surface of its own: no border, no radius, no background, no shadow,
+   no padding. The parent card provides the frame.
+
+   Layout:
+     • .rs-title    → small green uppercase eyebrow
+     • .rs-grid     → fact grid, max 3 items per column (grid-auto-flow: column)
+                      4 facts → 2 cols (3+1) · 6 facts → 2 cols (3+3)
+     • .rs-chips    → green tint pills on their own row (spans the row width)
+
+   Every value comes from mb-tokens.css. No local palette.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Wrapper — deliberately frameless
+   -------------------------------------------------------------------------- */
+
+.rs-box {
+  /* Defensive reset: nullify any card-in-card rule that may apply. */
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+
+  display: block;
+  margin: 20px 0 0;
+  padding: 0;
+  color: var(--mb-ink);
+  font-family: var(--mb-font-body);
+}
+
+.rs-box > * { box-sizing: border-box; }
+
+/* --------------------------------------------------------------------------
+   2. Title — small green eyebrow, matching the rest of the card system
+   -------------------------------------------------------------------------- */
+
+.rs-title {
+  display: block;
+  margin: 0 0 14px;
+  color: var(--mb-ok);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+/* --------------------------------------------------------------------------
+   3. Facts grid — max 3 items per column, extras spill into a new column
+      4 facts → 2 cols (3+1)
+      5 facts → 2 cols (3+2)
+      6 facts → 2 cols (3+3)
+      7 facts → 3 cols (3+3+1)
+   -------------------------------------------------------------------------- */
+
+.rs-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(3, auto);
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 14px 24px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* On wider cards give columns a soft minimum so they don't squash. */
+@container (min-width: 460px) {
+  .rs-grid {
+    grid-auto-columns: minmax(150px, 1fr);
+  }
+}
+
+.rs-item {
+  min-width: 0;
+}
+
+.rs-item > span {
+  display: block;
+  color: var(--mb-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.rs-item > strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--mb-ink);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   4. Chips — own row under the facts grid, wrapped, no box
+   -------------------------------------------------------------------------- */
+
+.rs-chips-block {
+  margin: 18px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.rs-chips-label {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--mb-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.rs-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rs-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  background: var(--mb-ok-bg);
+  border: var(--mb-bw) solid var(--mb-ok-border);
+  border-radius: var(--mb-radius-pill);
+  color: var(--mb-ok);
+  font-size: var(--mb-fs-sm);
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   5. Narrow phones
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 480px) {
+  .rs-grid {
+    gap: 12px 18px;
+  }
+
+  .rs-item > strong {
+    font-size: 14px;
+  }
+
+  .rs-chip {
+    font-size: 12.5px;
+    padding: 3px 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .rs-grid {
+    gap: 10px 14px;
+  }
+
+  .rs-item > strong {
+    font-size: 13.5px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   6. Reduced motion
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .rs-box,
+  .rs-grid,
+  .rs-chips {
+    transition: none;
+  }
+}
