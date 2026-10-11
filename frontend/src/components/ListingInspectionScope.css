@@ -1,191 +1,231 @@
 /* ==========================================================================
-   ListingInspectionScope — flat sub-section of the Inspection card
-   --------------------------------------------------------------------------
-   No wrapper surface of its own: content sits directly on the parent card.
-   Tokens fall back to local values if mb-tokens.css doesn't define them,
-   so rename the --mb-* names below to match your token file.
+   ListingInspectionScope — sub-section of the Inspection card
+   Layout:
+     head      eyebrow + title, deadline chip on the right
+     hero      category, large
+     stats     2-up tiles (quantity, lots, report); odd last tile goes full width
+     checks    header with count, 2-up list with green check badges
+   The root draws no frame; the parent card provides it. Rename the --mb-*
+   tokens to match mb-tokens.css (local fallbacks are used otherwise).
    ========================================================================== */
 
 .ld-inspection-scope {
   --ld-ink: var(--mb-ink, #0f172a);
   --ld-muted: var(--mb-muted, #64748b);
   --ld-line: var(--mb-line, #e2e8f0);
+  --ld-tile: var(--mb-surface-soft, #f8fafc);
   --ld-ok: var(--mb-ok, #047857);
-  --ld-ok-soft: var(--mb-ok-soft, #d1fae5);
+  --ld-ok-soft: var(--mb-ok-soft, #ecfdf5);
+  --ld-ok-line: var(--mb-ok-line, #a7f3d0);
+  --ld-warn: var(--mb-warn, #b45309);
+  --ld-warn-soft: var(--mb-warn-soft, #fffbeb);
+  --ld-warn-line: var(--mb-warn-line, #fde68a);
 
-  container-type: inline-size;
   display: block;
   margin: 20px 0 0;
   color: var(--ld-ink);
-
-  background: transparent !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  outline: 0 !important;
-  padding: 0 !important;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
-.ld-inspection-scope > * { box-sizing: border-box; }
+.ld-inspection-scope * { box-sizing: border-box; }
 
 /* 1. Head ------------------------------------------------------------- */
 
 .ld-inspection-scope-head {
-  margin: 0 0 18px;
-  padding: 0 0 12px;
-  border-bottom: 1px solid var(--ld-line);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 16px;
 }
 
+.ld-inspection-scope-headtext { min-width: 0; }
+
 .ld-inspection-scope-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 6px;
+  display: block;
+  margin: 0 0 4px;
   color: var(--ld-ok);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   line-height: 1.2;
 }
 
-.ld-inspection-scope-eyebrow::before {
-  content: "";
-  flex: none;
-  width: 14px;
-  height: 3px;
-  background: currentColor;
-  border-radius: 2px;
-}
-
 .ld-inspection-scope-title {
   margin: 0;
-  color: var(--ld-ink);
   font-size: 17px;
   font-weight: 700;
   line-height: 1.3;
   letter-spacing: -0.01em;
 }
 
-/* 2. Facts — max 3 per column (4 → 3+1, 6 → 3+3, 7 → 3+3+1) ------------ */
-
-.ld-inspection-scope-facts {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(3, auto);
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 18px 28px;
-  width: 100%;
-  margin: 0;
-  padding: 0;
+.ld-inspection-scope-deadline {
+  flex: none;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 6px 10px;
+  border: 1px solid var(--ld-warn-line);
+  border-radius: 10px;
+  background: var(--ld-warn-soft);
+  color: var(--ld-warn);
+  text-align: right;
+  line-height: 1.2;
 }
 
-@container (min-width: 460px) {
-  .ld-inspection-scope-facts {
-    grid-auto-columns: minmax(150px, 1fr);
-  }
+.ld-inspection-scope-deadline > span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-.ld-inspection-scope-fact { min-width: 0; }
+.ld-inspection-scope-deadline > strong {
+  font-size: 13px;
+  font-weight: 700;
+}
 
-.ld-inspection-scope-fact > span {
+/* 2. Hero (category) -------------------------------------------------- */
+
+.ld-inspection-scope-hero {
+  margin: 0 0 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--ld-line);
+  border-bottom: 1px solid var(--ld-line);
+}
+
+.ld-inspection-scope-hero > span {
   display: block;
   color: var(--ld-muted);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  line-height: 1.3;
 }
 
-.ld-inspection-scope-fact > strong {
+.ld-inspection-scope-hero > strong {
   display: block;
   margin-top: 4px;
-  color: var(--ld-ink);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+/* 3. Stat tiles ------------------------------------------------------- */
+
+.ld-inspection-scope-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+.ld-inspection-scope-stat {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--ld-line);
+  border-radius: 12px;
+  background: var(--ld-tile);
+}
+
+.ld-inspection-scope-stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+.ld-inspection-scope-stat > span {
+  display: block;
+  color: var(--ld-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ld-inspection-scope-stat > strong {
+  display: block;
+  margin-top: 4px;
   font-size: 15px;
   font-weight: 700;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-/* Phones: plain 2-column grid flowing left → right */
-@media (max-width: 480px) {
-  .ld-inspection-scope-facts {
-    grid-auto-flow: row;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: none;
-    grid-auto-columns: auto;
-    gap: 16px;
-  }
+/* 4. Checks ----------------------------------------------------------- */
 
-  .ld-inspection-scope-fact > strong { font-size: 14px; }
-}
+.ld-inspection-scope-checks { margin: 22px 0 0; }
 
-/* 3. Checks required --------------------------------------------------- */
-
-.ld-inspection-scope-checks {
-  margin: 24px 0 0;
-  padding: 0;
-  border: 0;
+.ld-inspection-scope-checks-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 10px;
 }
 
 .ld-inspection-scope-checks-label {
-  display: block;
-  margin: 0 0 14px;
-  padding: 0 0 12px;
-  border-bottom: 1px solid var(--ld-line);
   color: var(--ld-ok);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  line-height: 1.2;
+}
+
+.ld-inspection-scope-checks-count {
+  color: var(--ld-muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .ld-inspection-scope-checks-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 20px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .ld-inspection-scope-check {
-  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
-  padding-left: 28px;
-  color: var(--ld-ink);
-  font-size: 14px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--ld-ok-line);
+  border-radius: 10px;
+  background: var(--ld-ok-soft);
+  font-size: 13.5px;
   font-weight: 600;
-  line-height: 20px;
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
-/* ✓ in a soft green badge */
 .ld-inspection-scope-check::before {
   content: "✓";
-  position: absolute;
-  left: 0;
-  top: 0;
+  flex: none;
   display: grid;
   place-items: center;
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--ld-ok-soft);
-  color: var(--ld-ok);
+  background: var(--ld-ok);
+  color: #fff;
   font-size: 11px;
   font-weight: 900;
   line-height: 1;
 }
 
-/* Very narrow phones: single column */
-@media (max-width: 360px) {
-  .ld-inspection-scope-checks-list {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
+.ld-inspection-scope-check:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
-  .ld-inspection-scope-check { font-size: 13.5px; }
+@media (max-width: 360px) {
+  .ld-inspection-scope-head { flex-direction: column; }
+  .ld-inspection-scope-deadline { align-items: flex-start; text-align: left; }
+  .ld-inspection-scope-stats,
+  .ld-inspection-scope-checks-list { grid-template-columns: 1fr; }
 }
