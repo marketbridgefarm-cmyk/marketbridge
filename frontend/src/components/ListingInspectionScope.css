@@ -1,40 +1,52 @@
 /* ==========================================================================
-   ListingInspectionScope — inspection scope summary
-   Matched to the MarketBridge card system:
-   - Green eyebrow with 16×3 dash prefix
-   - Ink title, small and bold
-   - Fact grid with muted labels + bold ink values (2+ columns on wide cards)
-   - "Checks required" chips use the same 1.5px tone geometry as status pills
-   This component is designed to sit inside a parent .card — it does not
-   provide its own outer surface.
+   ListingInspectionScope — section inside a parent card
+   --------------------------------------------------------------------------
+   No wrapper surface, no border, no padding, no shadow. This component is
+   designed to drop inside an existing .card / .sd-card / .ld-card and look
+   like a regular sub-section of it:
+     • eyebrow (16×3 dash + wide tracking, green)
+     • title, followed by a 1.5px sub-header line (matches .card-block-title)
+     • facts grid — max 3 items per column, extra columns spill to the right
+     • chips (checks required) sit on their own row, full width, wrapping
    ========================================================================== */
 
 .ld-inspection-scope {
   --ld-ink: #0f172a;
-  --ld-ink-2: #334155;
   --ld-muted: #64748b;
   --ld-line: #cbd5e1;
   --ld-line-soft: #e2e8f0;
-  --ld-surface: #ffffff;
   --ld-ok: #047857;
   --ld-ok-bg: #ecfdf5;
   --ld-ok-border: #a7f3d0;
 
-  margin: 0;
+  margin: 22px 0 0;
   padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.ld-inspection-scope > * {
+  box-sizing: border-box;
 }
 
 /* --------------------------------------------------------------------------
-   1. Eyebrow + title
+   1. Head — eyebrow + title over a 1.5px sub-header line
    -------------------------------------------------------------------------- */
+
+.ld-inspection-scope-head {
+  margin: 0 0 14px;
+  padding: 0 0 8px;
+  border-bottom: 1.5px solid var(--ld-line);
+}
 
 .ld-inspection-scope-eyebrow {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   color: var(--ld-ok);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.25em;
   text-transform: uppercase;
@@ -50,30 +62,45 @@
 }
 
 .ld-inspection-scope-title {
-  margin: 0 0 18px;
+  margin: 0;
   color: var(--ld-ink);
-  font-size: 16px;
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1.3;
-  letter-spacing: -0.1px;
+  letter-spacing: 0;
 }
 
 /* --------------------------------------------------------------------------
-   2. Fact grid — same geometry as OrderDetail / InspectorDashboard facts
+   2. Facts — max 3 per column, extra items spill into a new column
+   Uses grid-auto-flow: column with exactly 3 rows so items fill top→bottom
+   and start a new column after the 3rd item.
+     4 facts → 2 columns (3 + 1)
+     5 facts → 2 columns (3 + 2)
+     6 facts → 2 columns (3 + 3)
+     7 facts → 3 columns (3 + 3 + 1)
    -------------------------------------------------------------------------- */
 
-.ld-inspection-scope-grid {
+.ld-inspection-scope-facts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 16px 20px;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(3, auto);
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 14px 24px;
+  width: 100%;
   margin: 0;
 }
 
-.ld-inspection-scope-grid > div {
+@container (min-width: 460px) {
+  .ld-inspection-scope-facts {
+    grid-auto-columns: minmax(150px, 1fr);
+  }
+}
+
+.ld-inspection-scope-fact {
   min-width: 0;
 }
 
-.ld-inspection-scope-grid > div > span {
+.ld-inspection-scope-fact > span {
   display: block;
   color: var(--ld-muted);
   font-size: 11px;
@@ -82,7 +109,7 @@
   text-transform: uppercase;
 }
 
-.ld-inspection-scope-grid > div > strong {
+.ld-inspection-scope-fact > strong {
   display: block;
   margin-top: 4px;
   color: var(--ld-ink);
@@ -92,14 +119,24 @@
   overflow-wrap: anywhere;
 }
 
-/* Rows that span the full grid width (checks required) */
-.ld-inspection-scope-full {
-  grid-column: 1 / -1;
+/* --------------------------------------------------------------------------
+   3. Checks required — full-width block under the facts
+   -------------------------------------------------------------------------- */
+
+.ld-inspection-scope-checks {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1.5px solid var(--ld-line);
 }
 
-/* --------------------------------------------------------------------------
-   3. Chips (checks required)
-   -------------------------------------------------------------------------- */
+.ld-inspection-scope-checks-label {
+  display: block;
+  color: var(--ld-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
 
 .ld-inspection-scope-chips {
   display: flex;
@@ -123,21 +160,30 @@
 }
 
 /* --------------------------------------------------------------------------
-   4. Responsive — tighter grid on very small screens
+   4. Narrow phones — keep the columns but shrink the gaps and chips
    -------------------------------------------------------------------------- */
 
-@media (max-width: 400px) {
-  .ld-inspection-scope-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
+@media (max-width: 480px) {
+  .ld-inspection-scope-facts {
+    gap: 12px 18px;
   }
 
-  .ld-inspection-scope-title {
-    font-size: 15px;
+  .ld-inspection-scope-fact > strong {
+    font-size: 14px;
   }
 
   .ld-inspection-scope-chip {
     font-size: 12.5px;
     padding: 3px 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .ld-inspection-scope-facts {
+    gap: 10px 14px;
+  }
+
+  .ld-inspection-scope-fact > strong {
+    font-size: 13.5px;
   }
 }
