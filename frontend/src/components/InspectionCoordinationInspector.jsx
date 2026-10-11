@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useId, useState } from 'react';
 import api from '../api/client';
 import './ProvidersCoordination.css';
+
 // ============================================================================
 // INSPECTION COORDINATION — INSPECTOR VIEW
 // ============================================================================
@@ -9,8 +10,14 @@ import './ProvidersCoordination.css';
 // that is ACCEPTED or later. Shares one coordination row with the seller:
 // each party writes only their own field prefix, enforced server-side.
 //
-// The seller's half is shown read-only and only after they have submitted it.
-// The inspector's half is editable until the report is submitted.
+// Renders as TWO blocks inside the parent card:
+//   1. .ic-block--header   → eyebrow + title + description below the rule
+//   2. .ic-block--body     → site info, contact form, arrival, availability,
+//                            footnote, and the "Save my handoff" CTA at end
+//
+// The save button lives outside the <form> and is associated via the HTML
+// `form` attribute (React 18 `useId`), so it sits at the bottom of the card
+// while still submitting the form above it.
 // ============================================================================
 
 const PREFERRED_CONTACT_OPTIONS = ['PHONE', 'EMAIL', 'IN_APP'];
@@ -36,6 +43,8 @@ const EMPTY_FORM = {
 };
 
 export default function InspectionCoordinationInspector({ inspectionRequestId }) {
+  const formId = useId();
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -68,7 +77,6 @@ export default function InspectionCoordinationInspector({ inspectionRequestId })
       });
       setSubmittedAt(row.inspectorSubmittedAt || null);
 
-      // Only surface the seller's half once they have submitted it.
       const sellerHasSubmitted = Boolean(row.sellerSubmittedAt);
       setSellerSide(sellerHasSubmitted ? {
         sellerContactName: row.sellerContactName || null,
@@ -165,180 +173,193 @@ export default function InspectionCoordinationInspector({ inspectionRequestId })
 
   return (
     <section className="inspection-coordination inspection-coordination--inspector">
-      <header className="ic-header">
-        <div>
-          <span className="ic-eyebrow">SITE HANDOFF</span>
-          <h4>Coordination with the seller</h4>
-          <p className="ic-sub">
-            Share your contact, arrival plan, and the times you can visit.
-            Visible only to the seller of this listing.
-          </p>
-        </div>
-        {submittedAt && (
-          <span className="ic-status ic-status--sent">
-            Sent {fmtDate(submittedAt)}
-          </span>
-        )}
-      </header>
-
-      {error && <div className="alert error">{error}</div>}
-      {notice && <div className="alert success">{notice}</div>}
-
-      {/* ── Seller's submitted site information ───────────────────── */}
-      <div className="ic-inspector-side">
-        <h4>Site information from the seller</h4>
-        {sellerSide ? (
-          <div className="ic-inspector-details">
-            {sellerSide.inspectionSite && (
-              <div><span>Site</span><strong>{sellerSide.inspectionSite}</strong></div>
-            )}
-            {sellerSide.meetingPoint && (
-              <div><span>Meeting point</span><strong>{sellerSide.meetingPoint}</strong></div>
-            )}
-            {sellerSide.sellerContactName && (
-              <div><span>Contact person</span><strong>{sellerSide.sellerContactName}</strong></div>
-            )}
-            {sellerSide.sellerPhone && (
-              <div><span>Primary phone</span><strong>{sellerSide.sellerPhone}</strong></div>
-            )}
-            {sellerSide.sellerAlternativePhone && (
-              <div><span>Alternative</span><strong>{sellerSide.sellerAlternativePhone}</strong></div>
-            )}
-            {sellerSide.sellerEmail && (
-              <div><span>Email</span><strong>{sellerSide.sellerEmail}</strong></div>
-            )}
-            {sellerSide.sellerPreferredContact && (
-              <div><span>Preferred contact</span><strong>{sellerSide.sellerPreferredContact}</strong></div>
-            )}
-            {sellerSide.accessInstructions && (
-              <div className="ic-full">
-                <span>Access instructions</span>
-                <strong>{sellerSide.accessInstructions}</strong>
-              </div>
-            )}
-            {sellerSide.sellerNotes && (
-              <div className="ic-full">
-                <span>Seller notes</span>
-                <strong>{sellerSide.sellerNotes}</strong>
-              </div>
-            )}
+      {/* ── Card 1 — Site handoff header ───────────────────────────────── */}
+      <div className="ic-block ic-block--header">
+        <header className="ic-header">
+          <div className="ic-header-main">
+            <span className="ic-eyebrow">SITE HANDOFF</span>
+            <h4>Coordination with the seller</h4>
           </div>
-        ) : (
-          <p className="ic-sub">
-            Waiting for the seller to share the site details. You can still save
-            your own handoff below.
-          </p>
-        )}
+          {submittedAt && (
+            <span className="ic-status ic-status--sent">
+              Sent {fmtDate(submittedAt)}
+            </span>
+          )}
+        </header>
+
+        <p className="ic-header-text">
+          Share your contact, arrival plan, and the times you can visit.
+          Visible only to the seller of this listing.
+        </p>
       </div>
 
-      {/* ── Inspector's own handoff ───────────────────────────────── */}
-      <form onSubmit={save} className="ic-form">
-        <fieldset>
-          <legend>Your contact</legend>
-          <div className="ic-grid">
-            <label>
-              Contact person
-              <input value={form.inspectorContactName} onChange={set('inspectorContactName')} placeholder="Your name" />
-            </label>
-            <label>
-              Primary phone
-              <input value={form.inspectorPhone} onChange={set('inspectorPhone')} placeholder="+251 ..." />
-            </label>
-            <label>
-              Alternative phone
-              <input value={form.inspectorAlternativePhone} onChange={set('inspectorAlternativePhone')} placeholder="Optional" />
-            </label>
-            <label>
-              Email
-              <input type="email" value={form.inspectorEmail} onChange={set('inspectorEmail')} placeholder="Optional" />
-            </label>
-            <label>
-              Preferred contact method
-              <select value={form.inspectorPreferredContact} onChange={set('inspectorPreferredContact')}>
-                {PREFERRED_CONTACT_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>{opt.replace('_', ' ')}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </fieldset>
+      {/* ── Card 2 — Site info, form, availability, save ──────────────── */}
+      <div className="ic-block ic-block--body">
+        {error && <div className="alert error">{error}</div>}
+        {notice && <div className="alert success">{notice}</div>}
 
-        <fieldset>
-          <legend>Arrival</legend>
-          <label>
-            Estimated arrival notes
-            <textarea
-              value={form.inspectorArrivalNotes}
-              onChange={set('inspectorArrivalNotes')}
-              rows={2}
-              placeholder="e.g. Arriving around 10:30 AM by taxi. Will call when 15 minutes away."
-            />
-          </label>
-          <label>
-            Inspector notes / questions
-            <textarea
-              value={form.inspectorNotes}
-              onChange={set('inspectorNotes')}
-              rows={3}
-              placeholder="e.g. Please confirm that the entire lot will be accessible when I arrive."
-            />
-          </label>
-        </fieldset>
+        {/* Seller's submitted site information */}
+        <div className="ic-inspector-side">
+          <h4>Site information from the seller</h4>
+          {sellerSide ? (
+            <div className="ic-inspector-details">
+              {sellerSide.inspectionSite && (
+                <div><span>Site</span><strong>{sellerSide.inspectionSite}</strong></div>
+              )}
+              {sellerSide.meetingPoint && (
+                <div><span>Meeting point</span><strong>{sellerSide.meetingPoint}</strong></div>
+              )}
+              {sellerSide.sellerContactName && (
+                <div><span>Contact person</span><strong>{sellerSide.sellerContactName}</strong></div>
+              )}
+              {sellerSide.sellerPhone && (
+                <div><span>Primary phone</span><strong>{sellerSide.sellerPhone}</strong></div>
+              )}
+              {sellerSide.sellerAlternativePhone && (
+                <div><span>Alternative</span><strong>{sellerSide.sellerAlternativePhone}</strong></div>
+              )}
+              {sellerSide.sellerEmail && (
+                <div><span>Email</span><strong>{sellerSide.sellerEmail}</strong></div>
+              )}
+              {sellerSide.sellerPreferredContact && (
+                <div><span>Preferred contact</span><strong>{sellerSide.sellerPreferredContact}</strong></div>
+              )}
+              {sellerSide.accessInstructions && (
+                <div className="ic-full">
+                  <span>Access instructions</span>
+                  <strong>{sellerSide.accessInstructions}</strong>
+                </div>
+              )}
+              {sellerSide.sellerNotes && (
+                <div className="ic-full">
+                  <span>Seller notes</span>
+                  <strong>{sellerSide.sellerNotes}</strong>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="ic-sub">
+              Waiting for the seller to share the site details. You can still save
+              your own handoff below.
+            </p>
+          )}
+        </div>
 
-        <div className="ic-actions">
-          <button type="submit" className="btn btn-primary" disabled={saving}>
+        {/* Inspector's own handoff form */}
+        <form id={formId} onSubmit={save} className="ic-form">
+          <fieldset>
+            <legend>Your contact</legend>
+            <div className="ic-grid">
+              <label>
+                Contact person
+                <input value={form.inspectorContactName} onChange={set('inspectorContactName')} placeholder="Your name" />
+              </label>
+              <label>
+                Primary phone
+                <input value={form.inspectorPhone} onChange={set('inspectorPhone')} placeholder="+251 ..." />
+              </label>
+              <label>
+                Alternative phone
+                <input value={form.inspectorAlternativePhone} onChange={set('inspectorAlternativePhone')} placeholder="Optional" />
+              </label>
+              <label>
+                Email
+                <input type="email" value={form.inspectorEmail} onChange={set('inspectorEmail')} placeholder="Optional" />
+              </label>
+              <label>
+                Preferred contact method
+                <select value={form.inspectorPreferredContact} onChange={set('inspectorPreferredContact')}>
+                  {PREFERRED_CONTACT_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{opt.replace('_', ' ')}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Arrival</legend>
+            <label>
+              Estimated arrival notes
+              <textarea
+                value={form.inspectorArrivalNotes}
+                onChange={set('inspectorArrivalNotes')}
+                rows={2}
+                placeholder="e.g. Arriving around 10:30 AM by taxi. Will call when 15 minutes away."
+              />
+            </label>
+            <label>
+              Inspector notes / questions
+              <textarea
+                value={form.inspectorNotes}
+                onChange={set('inspectorNotes')}
+                rows={3}
+                placeholder="e.g. Please confirm that the entire lot will be accessible when I arrive."
+              />
+            </label>
+          </fieldset>
+        </form>
+
+        {/* Inspector availability */}
+        <section className="ic-availability">
+          <header>
+            <h4>My availability</h4>
+            <p className="ic-sub">
+              Add the date/time windows when you can visit the site. You can add
+              more than one.
+            </p>
+          </header>
+
+          {availability.length > 0 ? (
+            <ul className="ic-slot-list">
+              {availability.map((slot) => (
+                <li key={slot.id} className="ic-slot">
+                  <span>{fmtSlot(slot)}</span>
+                  <button
+                    type="button"
+                    className="ic-slot-remove"
+                    onClick={() => removeSlot(slot.id)}
+                    disabled={slotBusy}
+                    aria-label="Remove availability slot"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="ic-sub">No availability slots added yet.</p>
+          )}
+
+          <form onSubmit={addSlot} className="ic-slot-form">
+            <input type="date" value={slotDate} onChange={(e) => setSlotDate(e.target.value)} required />
+            <input type="time" value={slotStart} onChange={(e) => setSlotStart(e.target.value)} required />
+            <span className="ic-slot-dash">–</span>
+            <input type="time" value={slotEnd} onChange={(e) => setSlotEnd(e.target.value)} required />
+            <button type="submit" className="btn btn-light" disabled={slotBusy}>
+              {slotBusy ? 'Adding…' : '+ Add'}
+            </button>
+          </form>
+          {slotError && <div className="alert error">{slotError}</div>}
+        </section>
+
+        <p className="ic-footnote">
+          Only the seller of this listing can see these details. The buyer does
+          not see your contact information.
+        </p>
+
+        {/* Save button — sits at the end of card 2, submits the form above */}
+        <div className="ic-actions ic-actions--end">
+          <button
+            type="submit"
+            form={formId}
+            className="btn btn-primary"
+            disabled={saving}
+          >
             {saving ? 'Saving…' : 'Save my handoff'}
           </button>
         </div>
-      </form>
-
-      {/* ── Inspector availability ────────────────────────────────── */}
-      <section className="ic-availability">
-        <header>
-          <h4>My availability</h4>
-          <p className="ic-sub">
-            Add the date/time windows when you can visit the site. You can add
-            more than one.
-          </p>
-        </header>
-
-        {availability.length > 0 ? (
-          <ul className="ic-slot-list">
-            {availability.map((slot) => (
-              <li key={slot.id} className="ic-slot">
-                <span>{fmtSlot(slot)}</span>
-                <button
-                  type="button"
-                  className="ic-slot-remove"
-                  onClick={() => removeSlot(slot.id)}
-                  disabled={slotBusy}
-                  aria-label="Remove availability slot"
-                >
-                  ×
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="ic-sub">No availability slots added yet.</p>
-        )}
-
-        <form onSubmit={addSlot} className="ic-slot-form">
-          <input type="date" value={slotDate} onChange={(e) => setSlotDate(e.target.value)} required />
-          <input type="time" value={slotStart} onChange={(e) => setSlotStart(e.target.value)} required />
-          <span className="ic-slot-dash">–</span>
-          <input type="time" value={slotEnd} onChange={(e) => setSlotEnd(e.target.value)} required />
-          <button type="submit" className="btn btn-light" disabled={slotBusy}>
-            {slotBusy ? 'Adding…' : '+ Add'}
-          </button>
-        </form>
-        {slotError && <div className="alert error">{slotError}</div>}
-      </section>
-
-      <p className="ic-footnote">
-        Only the seller of this listing can see these details. The buyer does
-        not see your contact information.
-      </p>
+      </div>
     </section>
   );
 }
