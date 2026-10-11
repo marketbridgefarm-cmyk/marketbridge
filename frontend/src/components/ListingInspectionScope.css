@@ -1,17 +1,13 @@
 /* ==========================================================================
-   ListingInspectionScope — listing inspection scope summary
-   Used by src/components/ListingInspectionScope.jsx
-   Matches the MarketBridge card system:
-   - Green eyebrow with 16×3 dash prefix (same as .sd-eyebrow / .od-eyebrow)
-   - Small ink title
-   - Fact grid with muted labels + bold ink values
-   - Chips use the same 1.5px tone border as status pills
-   This block is designed to sit inside a card — no outer surface of its own.
+   ListingInspectionScope — inspection scope summary
+   Matched to the MarketBridge card system:
+   - Green eyebrow with 16×3 dash prefix
+   - Ink title, small and bold
+   - Fact grid with muted labels + bold ink values (2+ columns on wide cards)
+   - "Checks required" chips use the same 1.5px tone geometry as status pills
+   This component is designed to sit inside a parent .card — it does not
+   provide its own outer surface.
    ========================================================================== */
-
-/* --------------------------------------------------------------------------
-   1. Wrapper
-   -------------------------------------------------------------------------- */
 
 .ld-inspection-scope {
   --ld-ink: #0f172a;
@@ -29,16 +25,16 @@
 }
 
 /* --------------------------------------------------------------------------
-   2. Eyebrow + title
+   1. Eyebrow + title
    -------------------------------------------------------------------------- */
 
 .ld-inspection-scope-eyebrow {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   color: var(--ld-ok);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.25em;
   text-transform: uppercase;
@@ -54,22 +50,22 @@
 }
 
 .ld-inspection-scope-title {
-  margin: 0 0 14px;
+  margin: 0 0 18px;
   color: var(--ld-ink);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   line-height: 1.3;
   letter-spacing: -0.1px;
 }
 
 /* --------------------------------------------------------------------------
-   3. Fact grid — same geometry as .od-detail-facts / .sd-job-meta
+   2. Fact grid — same geometry as OrderDetail / InspectorDashboard facts
    -------------------------------------------------------------------------- */
 
 .ld-inspection-scope-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 14px 20px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px 20px;
   margin: 0;
 }
 
@@ -96,20 +92,20 @@
   overflow-wrap: anywhere;
 }
 
-/* Rows that span the whole grid (checks required) */
+/* Rows that span the full grid width (checks required) */
 .ld-inspection-scope-full {
   grid-column: 1 / -1;
 }
 
 /* --------------------------------------------------------------------------
-   4. Chips (checks required)
+   3. Chips (checks required)
    -------------------------------------------------------------------------- */
 
 .ld-inspection-scope-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .ld-inspection-scope-chip {
@@ -127,13 +123,17 @@
 }
 
 /* --------------------------------------------------------------------------
-   5. Responsive — collapse to a single column on very narrow widths
+   4. Responsive — tighter grid on very small screens
    -------------------------------------------------------------------------- */
 
-@media (max-width: 360px) {
+@media (max-width: 400px) {
   .ld-inspection-scope-grid {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .ld-inspection-scope-title {
+    font-size: 15px;
   }
 
   .ld-inspection-scope-chip {
