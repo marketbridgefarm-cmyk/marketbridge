@@ -5,7 +5,7 @@ import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import ImageCarousel from '../components/ImageCarousel.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
-import './AdminDashboard.css';
+import '.dashboards/AdminDashboard.css';
 
 const VERIFICATION_OPTIONS = ['PENDING', 'VERIFIED', 'REJECTED'];
 
