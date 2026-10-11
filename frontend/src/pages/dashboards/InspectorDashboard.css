@@ -180,9 +180,7 @@
 
 .sd-toolbar .sd-muted { max-width: 62ch; }
 
-/* --- Stacked variant used for tab-content toolbars ---------------------- *
- * The bordered box only contains the eyebrow + title. The description sits
- * BELOW the 2px rule and is indented from the left like other body text. */
+/* --- Stacked variant used for tab-content toolbars --------------------- */
 
 .sd-toolbar--stacked {
   display: block;
@@ -364,7 +362,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   8. Tabs (kept as a segmented control — active tab is filled)
+   8. Tabs (segmented control — active tab is filled)
    -------------------------------------------------------------------------- */
 
 .sd-tabs {
@@ -501,15 +499,6 @@
   min-width: 0;
 }
 
-/* Title line: title on the left, date on the right (same row). */
-.sd-card-title-line {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
 .sd-card-title {
   margin: 0;
   flex: 1 1 auto;
@@ -521,18 +510,6 @@
   letter-spacing: -0.2px;
   overflow-wrap: anywhere;
   word-break: break-word;
-}
-
-/* Small muted date on the same line as the title, indented slightly from
-   the right edge so it sits just under the avatar block. */
-.sd-card-date {
-  flex: none;
-  color: var(--mb-muted);
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  padding-inline-end: 6px;
-  font-variant-numeric: tabular-nums;
 }
 
 .sd-card-sub {
@@ -689,9 +666,10 @@
 }
 
 /* --------------------------------------------------------------------------
-   11. Job meta + amount
+   11. Job meta — inline variant is one "Label: Value" line per row
    -------------------------------------------------------------------------- */
 
+/* Default stacked grid (kept for other pages) */
 .sd-job-meta {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -716,6 +694,49 @@
   font-weight: 800;
   overflow-wrap: anywhere;
 }
+
+/* ---- Inline variant: one "Label: Value" per line ------------------------ */
+
+.sd-job-meta--inline {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 18px;
+}
+
+.sd-job-meta--inline .sd-job-meta-item {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.sd-job-meta--inline .sd-job-meta-item > span {
+  display: inline;
+  margin: 0;
+  color: var(--mb-muted);
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.sd-job-meta--inline .sd-job-meta-item > strong {
+  display: inline;
+  margin: 0;
+  color: var(--mb-ink);
+  font-size: 14px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   12. Amount
+   -------------------------------------------------------------------------- */
 
 .sd-amount {
   display: flex;
@@ -747,7 +768,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   12. Form grid (inside cards + report modal)
+   13. Form grid (inside cards + report modal)
    -------------------------------------------------------------------------- */
 
 .sd-form-grid {
@@ -814,7 +835,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   13. Progress (pills + stepper)
+   14. Progress (pills + stepper)
    -------------------------------------------------------------------------- */
 
 .sd-pills {
@@ -959,7 +980,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   14. Empty state
+   15. Empty state
    -------------------------------------------------------------------------- */
 
 .sd-empty-state {
@@ -1011,7 +1032,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   15. Section heads (Active / Completed)
+   16. Section heads (Active / Completed)
    -------------------------------------------------------------------------- */
 
 .sd-jobs-section {
@@ -1061,7 +1082,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   16. Table (completed inspections)
+   17. Table (completed inspections)
    -------------------------------------------------------------------------- */
 
 #root .sd-dashboard .sd-table-wrap {
@@ -1098,7 +1119,6 @@
   font-weight: 700;
 }
 
-/* Table actions render as small outline buttons using the same accent. */
 .sd-table-action {
   display: inline-flex;
   align-items: center;
@@ -1168,7 +1188,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   17. Aside / evidence checklist
+   18. Aside / evidence checklist
    -------------------------------------------------------------------------- */
 
 .sd-aside { position: relative; }
@@ -1208,7 +1228,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   18. Report modal
+   19. Report modal
    -------------------------------------------------------------------------- */
 
 .sd-report-backdrop {
@@ -1327,7 +1347,7 @@
 .sd-modal-actions .sd-btn { min-width: 140px; }
 
 /* --------------------------------------------------------------------------
-   19. Toast
+   20. Toast
    -------------------------------------------------------------------------- */
 
 .sd-toast {
@@ -1371,7 +1391,7 @@
 .sd-toast-close:hover { color: #ffffff; }
 
 /* --------------------------------------------------------------------------
-   20. Responsive
+   21. Responsive
    -------------------------------------------------------------------------- */
 
 @media (max-width: 720px) {
@@ -1387,7 +1407,6 @@
 
   .sd-card-title { font-size: 17px; }
   .sd-card-sub { font-size: 13.5px; }
-  .sd-card-date { font-size: 12px; padding-inline-end: 4px; }
   .sd-card-block-title h4 { font-size: 14.5px; }
   .sd-eyebrow { gap: 10px; letter-spacing: 0.2em; }
   .sd-eyebrow::before { width: 13px; }
@@ -1410,6 +1429,9 @@
     font-size: 15px;
     min-height: 44px;
   }
+
+  .sd-job-meta--inline .sd-job-meta-item > span { font-size: 13px; }
+  .sd-job-meta--inline .sd-job-meta-item > strong { font-size: 13.5px; }
 }
 
 @media (max-width: 360px) {
@@ -1417,10 +1439,13 @@
   .sd-card-title { font-size: 16px; }
   .sd-card-block-title h4 { font-size: 14px; }
   .sd-party-info { max-width: 76px; }
+
+  .sd-job-meta--inline .sd-job-meta-item > span { font-size: 12.5px; }
+  .sd-job-meta--inline .sd-job-meta-item > strong { font-size: 13px; }
 }
 
 /* --------------------------------------------------------------------------
-   21. Reduced motion
+   22. Reduced motion
    -------------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
