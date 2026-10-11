@@ -13,8 +13,8 @@ import './ListingInspectionScope.css';
 // text is allowed, preventing bidders from leaking contact info via the
 // quantity field or other inputs.
 //
-// This component renders as a SECTION of the parent card — no wrapper
-// surface, no border. It relies on the parent card for its background.
+// Renders as a SECTION of the parent card — no wrapper surface, no border,
+// no shadow. The parent card provides the frame.
 // ============================================================================
 
 const CATEGORY_LABELS = {
@@ -27,20 +27,22 @@ const CATEGORY_LABELS = {
   SAFETY_COMPLIANCE: 'Safety-related checks',
 };
 
+// Labels keep their meaning but drop the "/" so they read cleanly as a
+// stacked list of plain text items (quality grading, size and weight, ...).
 const CHECK_LABELS = {
-  QUALITY_GRADE: 'Quality / grading',
-  SIZE_WEIGHT: 'Size / weight',
+  QUALITY_GRADE: 'Quality grading',
+  SIZE_WEIGHT: 'Size and weight',
   MOISTURE: 'Moisture',
-  VISIBLE_DEFECTS: 'Visible defects / damage',
+  VISIBLE_DEFECTS: 'Visible defects and damage',
   PACKAGING: 'Packaging condition',
-  SAMPLING: 'Sampling / testing',
-  PHOTOGRAPHS: 'Photos / evidence',
+  SAMPLING: 'Sampling and testing',
+  PHOTOGRAPHS: 'Photos and evidence',
 };
 
 const REPORT_LABELS = {
   CHECKLIST_PHOTOS: 'Checklist, findings and photos',
   MEASUREMENTS: 'Measurements and test results',
-  PASS_FAIL: 'Pass / fail against agreed criteria',
+  PASS_FAIL: 'Pass or fail against agreed criteria',
   FULL_REPORT: 'Full structured inspection report',
 };
 
@@ -70,8 +72,6 @@ export default function ListingInspectionScope({ inspection }) {
 
   if (!hasAnyField) return null;
 
-  // Facts are the discrete key/value rows. They flow top → bottom and spill
-  // into a new column after the 3rd row (grid-auto-flow: column).
   const facts = [];
   if (workCategory) {
     facts.push({
@@ -106,10 +106,10 @@ export default function ListingInspectionScope({ inspection }) {
   }
 
   return (
-    <section className="ld-inspection-scope" aria-label="Inspection scope">
+    <div className="ld-inspection-scope" aria-label="Inspection scope">
       <header className="ld-inspection-scope-head">
-        <span className="ld-inspection-scope-eyebrow">INSPECTION SCOPE</span>
-        <h4 className="ld-inspection-scope-title">What the inspection covers</h4>
+        <span className="ld-inspection-scope-eyebrow">Scope to inspect</span>
+        <h3 className="ld-inspection-scope-title">What the inspection covers</h3>
       </header>
 
       {facts.length > 0 && (
@@ -126,15 +126,15 @@ export default function ListingInspectionScope({ inspection }) {
       {hasChecks && (
         <div className="ld-inspection-scope-checks">
           <span className="ld-inspection-scope-checks-label">Checks required</span>
-          <div className="ld-inspection-scope-chips">
+          <ul className="ld-inspection-scope-checks-list">
             {checks.map((c) => (
-              <span key={c} className="ld-inspection-scope-chip">
+              <li key={c} className="ld-inspection-scope-check">
                 {CHECK_LABELS[c] || c}
-              </span>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
-    </section>
+    </div>
   );
 }
