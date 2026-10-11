@@ -1,205 +1,389 @@
 /* ==========================================================================
-   mb-cards.css — ONE card system for every MarketBridge page.
-   Source of truth: pages/orders/Orders.css (the reference look).
+   OrderDetail — MarketBridge card style
+   Matched to pages/orders/Orders.css:
+   - Card eyebrow = GREEN (--card-tone), not orange.
+   - Section sub-headers (h3) = GREEN, matching .card-block-title h3.
+   - Section body content indented with clamp(16px, 13cqw, 48px).
+   - Header line = 2px; sub-header line = 1.5px; 44px accent segment.
+   - Header status pill in the section header = plain colored text.
+   - Meta row at the bottom of the overview: Created (left) + ORD code (right).
+   - Large block buttons use the accent (orange) border, echoing the accent
+     segment under the card title. Primary CTAs keep their accent fill.
+   - Party badge in the header (role + name + avatar), right-aligned.
+   - Card title shrinks with card width so long names / numbers wrap cleanly.
+   Facts grid: max 3 items per column (grid-auto-flow: column, 3 rows).
 
-   What "Orders style" means here:
-     • Card      frosted surface, 22px radius, soft shadow, no border
-     • Title     2px rule + 44px accent segment (eyebrow above, optional sub-line)
-     • Sub-head  1.5px rule only, tone-coloured 15px/700 title
-     • Tile      white inner item, 1.5px line, 16px radius, no shadow
-     • Pill      1.5px border, 999px radius, 13px/700, tone colours
-     • Controls  48px buttons (accent = primary), 52px fields, accent focus ring
-
-   Load order (main.jsx): mb-tokens.css → styles.css → … → mb-cards.css (last).
-   Every rule is prefixed with #root so it out-ranks the older per-page card
-   rules (.sd-dashboard .sd-card, .dashboard-page .panel, .ac-panel, …) without
-   !important. Tokens come from mb-tokens.css — change a token, every card moves.
-   Cards that already follow the Orders look (.order-card, .neg-card, .bid-card,
-   .od-card-*, .ld-card-*) are intentionally NOT touched here.
+   NOTE ON SPECIFICITY: mb-cards.css is loaded last and every rule there is
+   prefixed with #root (1,2,0). Any rule here that must override a
+   card-button or field default is therefore also prefixed with #root so it
+   becomes (1,3,0) and out-ranks the global sheet.
    ========================================================================== */
 
-/* ---- 1. Tier 1 — the card surface --------------------------------------- */
-#root :is(
-  .card, .form-card, .dashboard-card, .workflow-card, .sticky-card,
-  .panel, .sd-card, .sd-panel, .ac-panel, .state-card
-) {
-  --card-tone: var(--mb-ok);
+.order-detail-page {
+  --mb-ink: #0f172a;
+  --mb-ink-2: #334155;
+  --mb-muted: #64748b;
+  --mb-accent: #c2410c;
+  --mb-accent-ink: #9a3412;
+  --mb-accent-tint: #fff7ed;
+  --mb-accent-border: #fed7aa;
+  --mb-ok: #047857;
+  --mb-danger: #b91c1c;
+  --mb-line: #cbd5e1;
+  --mb-card: rgba(248, 251, 255, 0.95);
+  --mb-radius-card: 22px;
+  --mb-radius-field: 16px;
+
+  background: linear-gradient(135deg, #eef0ff 0%, #dbe8f8 55%, #e6f6ee 100%);
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  padding-bottom: 64px;
+}
+
+/* --------------------------------------------------------------------------
+   Page bar / Back link
+   -------------------------------------------------------------------------- */
+
+.order-detail-page .page-bar {
+  margin-bottom: 16px;
+  gap: 12px;
+}
+
+.order-detail-page .back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  background: transparent;
+  border: none;
+  color: var(--mb-ink-2);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.order-detail-page .back-link:hover { color: var(--mb-accent); }
+
+/* --------------------------------------------------------------------------
+   Card shell — identical to .order-card in Orders
+   -------------------------------------------------------------------------- */
+
+.order-detail-page .card {
+  container-type: inline-size;
   position: relative;
-  min-width: 0;
   box-sizing: border-box;
-  padding: var(--mb-card-pad);
+  display: block;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 24px;
   background: var(--mb-card);
-  border: 0;
+  border: none;
   border-radius: var(--mb-radius-card);
-  box-shadow: var(--mb-shadow-card);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+  --card-tone: var(--mb-ok);
 }
 
-/* Static cards don't lift on hover (Orders cards don't either) */
-#root :is(.sd-card, .card, .panel):hover {
-  transform: none;
-  border-color: transparent;
-  box-shadow: var(--mb-shadow-card);
-}
-
-/* A card inside a card becomes a flat tile, never a second floating card */
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel)
-  :is(.card, .form-card, .dashboard-card, .panel, .sd-panel, .workflow-card) {
-  padding: 16px;
-  background: var(--mb-surface);
-  border: var(--mb-bw) solid var(--mb-line);
-  border-radius: var(--mb-radius-field);
-  box-shadow: none;
-}
-
-/* Error / warning variants keep their meaning in the new palette */
-#root :is(.sd-panel--error, .card.error, .card--error) {
-  background: var(--mb-danger-bg);
-  box-shadow: 0 0 0 var(--mb-bw) var(--mb-danger-border), var(--mb-shadow-card);
-}
-#root :is(.card.warning, .card--warning) {
-  background: var(--mb-wait-bg);
-  box-shadow: 0 0 0 var(--mb-bw) var(--mb-wait-border), var(--mb-shadow-card);
-}
-
-/* ---- 2. Tier 2 — tiles (items inside a card or grid) -------------------- */
-#root :is(
-  .ac-card, .ac-user-card, .ac-metric-card, .sd-stat, .sd-job-card,
-  .mini-panel, .service-access-card, .evidence, .loading-card
-) {
+.order-detail-page .card > * {
   box-sizing: border-box;
+  width: 100%;
+  max-width: none;
   min-width: 0;
-  background: var(--mb-surface);
-  border: var(--mb-bw) solid var(--mb-line);
-  border-radius: var(--mb-radius-field);
-  box-shadow: none;
-}
-#root :is(.sd-stat, .ac-card, .ac-user-card, .sd-job-card, .service-access-card):hover {
-  transform: none;
-  box-shadow: none;
-}
-@media (hover: hover) {
-  #root :is(.service-access-card, .ac-user-card):hover {
-    border-color: var(--mb-accent-border);
-  }
-}
-/* sd-stat used a 3px green left bar + gradient; the tile look replaces both */
-#root .sd-stat {
-  border-left-width: var(--mb-bw);
-  background-image: none;
 }
 
-/* ---- 3. Title block: eyebrow + title (+ sub-line) over a 2px rule ------- */
-#root :is(.card, .form-card, .dashboard-card, .panel, .workflow-card)
-  > :is(h1, h2):first-child,
-#root :is(.sd-card-head, .ac-panel-header, .ac-toolbar) {
+/* Left-border tone variants */
+.order-detail-page .card.od-card-warning {
+  border-left: 4px solid var(--mb-danger);
+  padding-left: 20px;
+  --card-tone: var(--mb-danger);
+}
+
+.order-detail-page .card.od-card-accent {
+  border-left: 4px solid var(--mb-accent);
+  padding-left: 20px;
+  --card-tone: var(--mb-accent);
+}
+
+/* --------------------------------------------------------------------------
+   Card head — same treatment as .order-card-head
+   -------------------------------------------------------------------------- */
+
+.od-card-head {
   position: relative;
-  padding-bottom: 8px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 0 0 10px;
   margin: 0 0 20px;
-  border-bottom: var(--mb-bw-strong) solid var(--mb-line);
+  border-bottom: 2px solid var(--mb-line);
 }
-#root :is(.card, .form-card, .dashboard-card, .panel, .workflow-card)
-  > :is(h1, h2):first-child {
-  color: var(--mb-ink);
-  font: 800 var(--mb-fs-xl) / 1.25 var(--mb-font-head);
-  letter-spacing: 0;
-  overflow-wrap: anywhere;
-}
-/* The accent segment that sits on the rule */
-#root :is(.card, .form-card, .dashboard-card, .panel, .workflow-card)
-  > :is(h1, h2):first-child::after,
-#root :is(.sd-card-head, .ac-panel-header, .ac-toolbar)::after {
-  content: '';
+
+.od-card-head::after {
+  content: "";
   position: absolute;
   left: 0;
-  bottom: calc(var(--mb-bw-strong) * -1);
+  bottom: -2px;
   width: 44px;
   height: 4px;
   background: var(--mb-accent);
 }
-/* Head layouts that were border-only before */
-#root .sd-card-head { grid-template-columns: minmax(0, 1fr) auto; }
-#root :is(.ac-panel-header, .ac-toolbar) { gap: 12px 16px; }
 
-#root :is(.ac-panel-header, .ac-toolbar) h2,
-#root .sd-card-title {
-  margin: 0;
-  color: var(--mb-ink);
-  font: 800 var(--mb-fs-xl) / 1.25 var(--mb-font-head);
-  letter-spacing: 0;
-  overflow-wrap: anywhere;
-}
-#root :is(.ac-panel-header, .ac-toolbar) p,
-#root :is(.sd-card-sub, .sd-card-head p) {
-  max-width: 60ch;
-  margin: 6px 0 0;
-  color: var(--mb-muted);
-  font-size: var(--mb-fs-md);
-  line-height: 1.5;
+.od-card-head-main {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
-/* Eyebrow: tone-coloured, 16px dash, wide tracking */
-#root :is(.ac-section-label, .sd-eyebrow) {
+.od-card-head-side {
+  flex: none;
+  align-self: flex-start;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* --------------------------------------------------------------------------
+   Eyebrow — GREEN, matching .order-card .eyebrow
+   -------------------------------------------------------------------------- */
+
+.od-eyebrow {
   display: flex;
   align-items: center;
   gap: 12px;
   margin: 0 0 8px;
   color: var(--card-tone, var(--mb-ok));
-  font: 700 var(--mb-fs-sm) / 1.2 var(--mb-font-head);
+  font-size: 13px;
+  font-weight: 700;
   letter-spacing: 0.25em;
   text-transform: uppercase;
 }
-#root :is(.ac-section-label, .sd-eyebrow)::before {
-  content: '';
+
+.od-eyebrow::before {
+  content: "";
   flex: none;
   width: 16px;
   height: 3px;
-  border-radius: 2px;
   background: currentColor;
+  border-radius: 2px;
 }
 
-/* ---- 4. Sub-headers: 1.5px rule only ------------------------------------ */
-#root :is(.panel-head, .sd-card-block-title, .card-block-title) {
+.od-eyebrow.is-selling { color: var(--mb-ok); }
+
+/* --------------------------------------------------------------------------
+   Card title + subtitle
+   Title shrinks with card width so long product names / numbers wrap cleanly
+   instead of overflowing.
+   -------------------------------------------------------------------------- */
+
+.od-card-title {
+  margin: 0;
+  color: var(--mb-ink);
+  font-size: clamp(17px, 4.6cqw, 20px);
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+.od-card-subtitle {
+  max-width: 60ch;
+  margin: 6px 0 0;
+  color: var(--mb-muted);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   Sections — sub-header is a 1.5px line only, h3 is GREEN
+   -------------------------------------------------------------------------- */
+
+.od-card-section {
+  margin-top: 22px;
+}
+
+.od-card-head + .od-card-section { margin-top: 0; }
+
+.od-card-section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: 12px;
   margin: 0 0 14px;
-  padding-bottom: 8px;
-  border-bottom: var(--mb-bw) solid var(--mb-line);
+  padding: 0 0 8px;
+  border-bottom: 1.5px solid var(--mb-line);
 }
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .ac-panel)
-  > :is(h3, h4),
-#root :is(.panel-head, .sd-card-block-title) :is(h3, h4) {
-  margin: 0 0 14px;
-  color: var(--card-tone, var(--mb-ok));
-  font: 700 var(--mb-fs-title-sm) / 1.3 var(--mb-font-body);
-  letter-spacing: 0;
+
+.od-card-section-title {
+  margin: 0;
+  color: var(--card-tone, var(--mb-ink));
+  font-size: 15px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .ac-panel)
-  > :is(h3, h4):not(:first-child) {
-  padding-bottom: 8px;
-  border-bottom: var(--mb-bw) solid var(--mb-line);
-}
-#root :is(.panel-head, .sd-card-block-title) :is(h3, h4) { margin: 0; }
-#root :is(.panel-head-note, .sd-card-block-note, .card-block-note) {
-  padding: 2px 10px;
-  background: var(--mb-surface);
-  border: var(--mb-bw) solid var(--mb-line);
-  border-radius: var(--mb-radius-pill);
+
+.od-card-section-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: var(--mb-ink-2);
-  font: 700 var(--mb-fs-sm) / 1.3 var(--mb-font-body);
+  font-size: 13px;
+  font-weight: 700;
   white-space: nowrap;
 }
 
-/* ---- 5. Party block in the head (name + avatar, top right) -------------- */
-#root .sd-card-head-party {
+.od-card-section-meta.is-strong {
+  color: var(--mb-ink);
+  font-size: 15px;
+}
+
+/* Header status — plain colored text (matches .header-pill in Orders) */
+.od-header-status {
+  color: #475569;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.od-header-status.is-good    { color: #047857; }
+.od-header-status.is-wait    { color: #92400e; }
+.od-header-status.is-info    { color: #1d4ed8; }
+.od-header-status.is-bad     { color: #b91c1c; }
+.od-header-status.is-neutral { color: #475569; }
+
+/* Indent section body content — matches .card-block-body indent in Orders. */
+.od-card-section > *:not(.od-card-section-head) {
+  padding-inline-start: clamp(16px, 13cqw, 48px);
+}
+
+/* Reset for grids/tables that already have their own layout. */
+.od-card-section > .od-card-grid,
+.od-card-section > .payout-table {
+  padding-inline-start: 0;
+  margin-inline-start: clamp(16px, 13cqw, 48px);
+  width: auto;
+}
+
+/* --------------------------------------------------------------------------
+   Meta row: created date (left) + ORD code (right)
+   Sits close to the details block, with clear breathing room before any
+   action button that follows.
+   -------------------------------------------------------------------------- */
+
+.od-order-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  margin-bottom: 24px;
+  padding-inline-start: clamp(16px, 13cqw, 48px);
+  padding-inline-end: 14px;
+}
+
+.od-order-time {
+  min-width: 0;
+  color: var(--mb-muted);
+  font-size: 14px;
+}
+
+.od-order-code {
+  flex: none;
+  color: var(--mb-muted);
+  font-size: 14px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
+   Large (block) buttons — every non-primary block button on the page uses
+   the accent (orange) border, echoing the accent segment under the card
+   title. Primary CTAs keep their accent fill.
+
+   IMPORTANT: mb-cards.css is loaded last and its card-button rule is
+   `#root :is(.card, …) :is(.btn, .btn-view)` = specificity (1,2,0).
+   Every selector below MUST include #root so it becomes (1,3,0) and wins.
+   -------------------------------------------------------------------------- */
+
+#root .order-detail-page .btn-outline.btn-block,
+#root .order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger) {
+  border: 2px solid var(--mb-accent);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-accent-ink);
+  background: transparent;
+  box-shadow: none;
+  min-height: 48px;
+  padding: 0 18px;
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+#root .order-detail-page .btn-outline.btn-block:hover:not(:disabled),
+#root .order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger):hover:not(:disabled) {
+  background: var(--mb-accent-tint);
+  border-color: var(--mb-accent-ink);
+  color: var(--mb-accent-ink);
+}
+
+#root .order-detail-page .btn-outline.btn-block:focus-visible,
+#root .order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger):focus-visible {
+  outline: 3px solid var(--mb-accent-border);
+  outline-offset: 2px;
+}
+
+#root .order-detail-page .btn-outline.btn-block:disabled,
+#root .order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger):disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+   Avatar / party — matches .order-avatar / .order-party-info in Orders
+   -------------------------------------------------------------------------- */
+
+.od-party-avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: #ecfdf5;
+  border: 1.5px solid #a7f3d0;
+  border-radius: 50%;
+  color: var(--mb-ok);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.od-party-avatar--sm {
+  width: 28px;
+  height: 28px;
+  font-size: 11px;
+}
+
+/* Party badge in card head: role + name on the left, avatar on the right.
+   Text is right-aligned and truncated so long names don't push the avatar. */
+.od-card-side-party {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-left: auto;
 }
-#root .sd-party-info {
+
+.od-card-side-party > div {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -207,245 +391,852 @@
   max-width: 120px;
   text-align: right;
 }
-#root .sd-party-role {
+
+.od-card-side-label {
   color: var(--mb-muted);
-  font: 700 var(--mb-fs-sm) / 1.2 var(--mb-font-body);
+  font-size: 13px;
+  font-weight: 700;
 }
-#root .sd-party-name {
+
+.od-card-side-value {
   max-width: 100%;
   overflow: hidden;
   color: var(--mb-ink);
-  font: 800 var(--mb-fs-title-sm) / 1.3 var(--mb-font-body);
+  font-size: 15px;
+  font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* ---- 6. Pills / badges -------------------------------------------------- */
-#root :is(.badge, .tag, .sd-badge) {
+.od-party-you {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  background: var(--mb-ok);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+/* --------------------------------------------------------------------------
+   Findings / facts — max 3 items per column, minimum 2 columns
+   - 4 items → 2 columns (3 + 1)
+   - 6 items → 2 columns (3 + 3)
+   - 7 items → 3 columns (3 + 3 + 1)
+   - 9 items → 3 columns (3 + 3 + 3)
+   -------------------------------------------------------------------------- */
+
+.od-detail-facts {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(3, auto);
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 14px 20px;
+  width: 100%;
+}
+
+@container (min-width: 400px) {
+  .od-detail-facts {
+    grid-auto-columns: minmax(140px, 1fr);
+  }
+}
+
+.od-detail-facts > div {
+  min-width: 0;
+}
+
+.od-detail-facts > div > span {
+  display: block;
+  color: var(--mb-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.od-detail-facts > div > strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--mb-ink);
+  font-size: 15px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.od-finding-flag {
+  color: var(--mb-danger);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* --------------------------------------------------------------------------
+   Status pills — identical to .status-pill in Orders
+   -------------------------------------------------------------------------- */
+
+.od-status-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 4px 12px;
-  background: var(--mb-neutral-bg);
-  border: var(--mb-bw) solid var(--mb-line-soft);
-  border-radius: var(--mb-radius-pill);
-  color: var(--mb-neutral);
-  font: 700 var(--mb-fs-sm) / 1.3 var(--mb-font-body);
-  letter-spacing: 0;
-  text-transform: none;
-}
-#root :is(.badge-success, .tag--good, .sd-badge.sd-good, .sd-badge.sd-ok, .sd-badge.sd-green) {
-  background: var(--mb-ok-bg);
-  border-color: var(--mb-ok-border);
-  color: var(--mb-ok);
-}
-#root :is(.badge-danger, .tag--bad, .sd-badge.sd-red, .sd-badge.sd-danger) {
-  background: var(--mb-danger-bg);
-  border-color: var(--mb-danger-border);
-  color: var(--mb-danger);
-}
-#root :is(.badge-pending, .badge-warning, .tag--negotiable, .sd-badge.sd-warn) {
-  background: var(--mb-wait-bg);
-  border-color: var(--mb-wait-border);
-  color: var(--mb-wait);
-}
-#root :is(.badge-info, .sd-badge.sd-blue) {
-  background: var(--mb-info-bg);
-  border-color: var(--mb-info-border);
-  color: var(--mb-info);
+  background: #f1f5f9;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 999px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
 }
 
-/* ---- 7. Buttons inside cards ------------------------------------------- */
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
-  :is(.btn, .btn-view) {
-  display: inline-flex;
+.od-status-pill-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.od-tone-good {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.od-tone-bad {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.od-tone-wait,
+.od-tone-warn {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.od-tone-info {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.od-tone-neutral {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #475569;
+}
+
+/* --------------------------------------------------------------------------
+   Actions / notices
+   -------------------------------------------------------------------------- */
+
+.od-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.od-notice {
+  margin-top: 14px;
+  padding: 16px 18px;
+  background: var(--mb-accent-tint);
+  border: 1.5px solid var(--mb-accent-border);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.od-notice > strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--mb-accent-ink);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------------------
+   Modal
+   -------------------------------------------------------------------------- */
+
+.od-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: var(--mb-btn-h);
-  padding: 0 18px;
-  background: transparent;
-  border: var(--mb-bw-strong) solid var(--mb-line);
-  border-radius: var(--mb-radius-field);
-  box-shadow: none;
-  color: var(--mb-ink-2);
-  font: 700 var(--mb-fs-base) / 1.2 var(--mb-font-body);
-  text-decoration: none;
-  transition: background-color 0.15s ease;
-  touch-action: manipulation;
-}
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
-  .btn-primary {
-  background: var(--mb-accent);
-  border-color: var(--mb-accent);
-  color: #fff;
-}
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
-  .btn-light {
-  background: var(--mb-surface);
-}
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
-  :is(.btn-danger, .btn-reject) {
-  background: transparent;
-  border-color: var(--mb-danger-border);
-  color: var(--mb-danger);
-}
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
-  .btn-sm {
-  min-height: var(--mb-btn-h-sm);
-  padding: 0 14px;
-  font-size: var(--mb-fs-md);
-  border-radius: var(--mb-radius-sm);
-}
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
-  .btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-@media (hover: hover) {
-  #root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
-    :is(.btn, .btn-view):hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.8);
-  }
-  #root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
-    .btn-primary:hover:not(:disabled) {
-    background: var(--mb-accent-ink);
-    border-color: var(--mb-accent-ink);
-  }
-  #root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card, .state-card)
-    :is(.btn-danger, .btn-reject):hover:not(:disabled) {
-    background: var(--mb-danger-bg);
-  }
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(3px);
 }
 
-/* ---- 8. Fields inside cards -------------------------------------------- */
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card)
-  :is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='hidden']), select, textarea) {
-  box-sizing: border-box;
+.od-modal {
   width: 100%;
-  min-width: 0;
-  min-height: var(--mb-field-h);
-  padding: 10px 14px;
-  background: var(--mb-surface);
-  border: var(--mb-bw) solid var(--mb-line);
-  border-radius: var(--mb-radius-field);
-  box-shadow: none;
-  color: var(--mb-ink);
-  font: 500 var(--mb-fs-base) / 1.4 var(--mb-font-body);
-}
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card) textarea {
-  min-height: 92px;
-  resize: vertical;
-}
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card)
-  :is(input, select, textarea):focus-visible {
-  outline: var(--mb-focus-ring);
-  outline-offset: var(--mb-focus-offset);
-  border-color: var(--mb-line);
-  box-shadow: none;
-}
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card)
-  :is(input, select, textarea)::placeholder {
-  color: #94a3b8;
-}
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel, .workflow-card)
-  :is(input, select, textarea):disabled {
-  background: var(--mb-soft);
-}
-#root :is(.form-card, .card form, .panel form) label {
-  color: var(--mb-ink);
-  font-size: var(--mb-fs-sm);
-  font-weight: 700;
-}
-/* Table cells and toolbars keep compact controls */
-#root :is(.card, .panel, .sd-card, .sd-panel, .ac-panel) table
-  :is(input:not([type='checkbox']):not([type='radio']), select, textarea) {
-  min-height: var(--mb-btn-h-sm);
-  padding: 6px 10px;
-  border-radius: var(--mb-radius-sm);
-  font-size: var(--mb-fs-md);
-}
-
-/* ---- 9. Notices + alerts ------------------------------------------------ */
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel) :is(.alert, .notice) {
-  margin-top: 14px;
-  padding: 14px 16px;
-  background: var(--mb-surface);
-  border: var(--mb-bw) solid var(--mb-line);
-  border-radius: var(--mb-radius-field);
-  box-shadow: none;
-  color: var(--mb-ink-2);
-  font-size: var(--mb-fs-md);
-}
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel) .alert.error {
-  background: var(--mb-danger-bg);
-  border-color: var(--mb-danger-border);
-  color: var(--mb-danger);
-}
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel) .alert.success {
-  background: var(--mb-ok-bg);
-  border-color: var(--mb-ok-border);
-  color: var(--mb-ok);
-}
-#root :is(.card, .form-card, .dashboard-card, .panel, .sd-card, .sd-panel, .ac-panel) .alert.warning {
-  background: var(--mb-wait-bg);
-  border-color: var(--mb-wait-border);
-  color: var(--mb-wait);
-}
-/* A card that IS a notice (e.g. "No negotiations here yet.") */
-#root .card.notice {
-  margin-top: 0;
-  padding: var(--mb-card-pad);
-  background: var(--mb-card);
-  border: 0;
+  max-width: 640px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: #fff;
   border-radius: var(--mb-radius-card);
-  box-shadow: var(--mb-shadow-card);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.24);
 }
 
-/* ---- 10. Empty / loading states ---------------------------------------- */
-#root .state-card h3 {
+.od-modal-head {
   position: relative;
-  margin: 0 0 14px;
-  padding-bottom: 8px;
-  border-bottom: var(--mb-bw-strong) solid var(--mb-line);
-  color: var(--mb-ink);
-  font: 800 var(--mb-fs-lg) / 1.3 var(--mb-font-head);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px 12px;
+  border-bottom: 2px solid var(--mb-line);
 }
-#root .state-card h3::after {
-  content: '';
+
+.od-modal-head::after {
+  content: "";
   position: absolute;
-  left: 0;
-  bottom: calc(var(--mb-bw-strong) * -1);
+  left: 24px;
+  bottom: -2px;
   width: 44px;
   height: 4px;
   background: var(--mb-accent);
 }
-#root .loading-card { padding: 24px; color: var(--mb-muted); }
 
-/* ---- 11. Phones: same breakpoints as Orders.css ------------------------- */
-@media (max-width: 480px) {
-  #root :is(.card, .form-card, .dashboard-card, .panel, .workflow-card)
-    > :is(h1, h2):first-child,
-  #root :is(.ac-panel-header, .ac-toolbar) h2,
-  #root .sd-card-title { font-size: 22px; }
-  #root :is(.ac-section-label, .sd-eyebrow) { gap: 10px; letter-spacing: 0.2em; }
-  #root :is(.ac-section-label, .sd-eyebrow)::before { width: 13px; }
-}
-@media (max-width: 360px) {
-  #root :is(.card, .form-card, .dashboard-card, .panel, .workflow-card)
-    > :is(h1, h2):first-child,
-  #root :is(.ac-panel-header, .ac-toolbar) h2,
-  #root .sd-card-title { font-size: 20px; }
-  #root .sd-party-info { max-width: 84px; }
-}
-/* Stack the head's side content under the title instead of squeezing it */
-@media (max-width: 560px) {
-  #root :is(.ac-panel-header, .ac-toolbar) { flex-direction: column; align-items: stretch; }
+.od-modal-title {
+  color: var(--mb-ink);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
-/* ---- 12. Motion --------------------------------------------------------- */
-@media (prefers-reduced-motion: reduce) {
-  #root :is(.card, .panel, .sd-card, .btn, .btn-view, .service-access-card) {
-    transition: none;
+.od-modal-close {
+  flex: none;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--mb-muted);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.od-modal-close:hover {
+  background: #f1f5f9;
+  color: var(--mb-ink);
+}
+
+.od-modal-body {
+  padding: 20px 24px 24px;
+}
+
+/* --------------------------------------------------------------------------
+   Inspection request form
+   -------------------------------------------------------------------------- */
+
+.od-inspection-work-form h3 {
+  margin: 0 0 8px;
+  color: var(--mb-ink);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.od-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin: 16px 0;
+}
+
+.od-quantity-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.od-inspection-checks {
+  display: block;
+  margin-top: 16px;
+}
+
+.od-inspection-checks-select {
+  width: 100%;
+  margin-top: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   Quote rows
+   -------------------------------------------------------------------------- */
+
+.od-quote-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.od-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* --------------------------------------------------------------------------
+   Release agreement form
+   -------------------------------------------------------------------------- */
+
+.od-release-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+}
+
+.od-release-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* --------------------------------------------------------------------------
+   Payout card — due date, dispute note, notice list
+   -------------------------------------------------------------------------- */
+
+.od-payout-due {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1.5px solid var(--mb-line);
+}
+
+.od-payout-due-label {
+  color: var(--mb-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.od-payout-due-clock {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.od-payout-due-digits {
+  color: var(--mb-ink);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+.od-payout-due-digits.is-cleared {
+  color: var(--mb-ok);
+  font-size: 16px;
+  letter-spacing: -0.2px;
+}
+
+.od-payout-due-unit {
+  color: var(--mb-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.od-payout-due-placeholder {
+  color: var(--mb-muted);
+  font-size: 14px;
+}
+
+.od-payout-dispute-note {
+  margin-top: 14px;
+  padding: 8px 0 8px 14px;
+  border-left: 3px solid #fecaca;
+  color: var(--mb-danger);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.od-payout-notice {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1.5px solid var(--mb-line);
+}
+
+.od-payout-notice-prefix {
+  display: block;
+  margin: 0 0 10px;
+  color: var(--mb-ok);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.od-payout-notice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.od-payout-notice-item {
+  position: relative;
+  padding-left: 26px;
+  color: var(--mb-ink-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.od-payout-notice-num {
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--mb-ok);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* --------------------------------------------------------------------------
+   Payout table
+   -------------------------------------------------------------------------- */
+
+.order-detail-page .payout-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.order-detail-page .payout-table th,
+.order-detail-page .payout-table td {
+  padding: 12px 8px;
+  text-align: left;
+  border-bottom: 1px solid #eef1f5;
+  vertical-align: top;
+}
+
+.order-detail-page .payout-table tr:last-child th,
+.order-detail-page .payout-table tr:last-child td {
+  border-bottom: none;
+}
+
+.order-detail-page .payout-table thead th {
+  color: var(--mb-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.order-detail-page .payout-amount-col,
+.order-detail-page .payout-amount,
+.order-detail-page .payout-status-col,
+.order-detail-page .payout-status {
+  text-align: right;
+}
+
+.order-detail-page .payout-party {
+  font-weight: 400;
+  text-align: left;
+}
+
+.order-detail-page .payout-party-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.order-detail-page .payout-party-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.order-detail-page .payout-party-role {
+  color: var(--mb-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.order-detail-page .payout-party-name {
+  color: var(--mb-ink);
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.order-detail-page .payout-party-note {
+  color: var(--mb-muted);
+  font-size: 12px;
+}
+
+.order-detail-page .payout-amount {
+  color: var(--mb-ink);
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.order-detail-page .payout-currency {
+  margin-left: 6px;
+  color: var(--mb-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* --------------------------------------------------------------------------
+   Progress stepper — vertical on narrow, horizontal on wide
+   -------------------------------------------------------------------------- */
+
+.order-progress {
+  display: flex;
+  flex-direction: column;
+  width: fit-content;
+  min-width: min(240px, 100%);
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.order-progress-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  color: var(--mb-muted);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.order-progress-step:last-child { padding-bottom: 0; }
+
+.order-progress-step::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 18px;
+  bottom: 0;
+  width: 2px;
+  background: var(--mb-line);
+}
+
+.order-progress-step:last-child::before { display: none; }
+
+.order-progress-dot {
+  flex: none;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border: 2px solid var(--mb-line);
+  border-radius: 50%;
+}
+
+.order-progress-step.is-done { color: var(--mb-ink-2); }
+.order-progress-step.is-done::before { background: var(--mb-ok); }
+.order-progress-step.is-done .order-progress-dot {
+  background: var(--mb-ok);
+  border-color: var(--mb-ok);
+}
+
+.order-progress-step.is-current { color: var(--mb-ink); }
+.order-progress-step.is-current .order-progress-dot {
+  background: var(--mb-accent);
+  border-color: var(--mb-accent);
+  box-shadow: inset 0 0 0 3px #fff;
+}
+
+@container (min-width: 520px) {
+  .order-progress {
+    flex-direction: row;
+    width: 100%;
   }
+
+  .order-progress-step {
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 0 8px 0 0;
+  }
+
+  .order-progress-step::before {
+    left: 26px;
+    right: 4px;
+    top: 8px;
+    bottom: auto;
+    width: auto;
+    height: 2px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Buyer confidence card
+   -------------------------------------------------------------------------- */
+
+.order-detail-page .card.od-buyer-confidence {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 22px 24px;
+}
+
+.od-buyer-confidence.is-safe {
+  border-left: 4px solid var(--mb-ok);
+  padding-left: 20px;
+  --card-tone: var(--mb-ok);
+}
+
+.od-buyer-confidence.is-review {
+  border-left: 4px solid var(--mb-accent);
+  padding-left: 20px;
+  --card-tone: var(--mb-accent);
+}
+
+.od-confidence-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.od-buyer-confidence.is-safe .od-confidence-icon {
+  background: #ecfdf5;
+  border: 1.5px solid #a7f3d0;
+  color: var(--mb-ok);
+}
+
+.od-buyer-confidence.is-review .od-confidence-icon {
+  background: var(--mb-accent-tint);
+  border: 1.5px solid var(--mb-accent-border);
+  color: var(--mb-accent-ink);
+}
+
+.od-confidence-main {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.od-confidence-main .od-eyebrow { margin: 0 0 6px; }
+
+.od-confidence-main h2 {
+  margin: 0 0 8px;
+  color: var(--mb-ink);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.od-confidence-main p {
+  margin: 0;
+  color: var(--mb-ink-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.od-confidence-promises {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin-top: 14px;
+  color: var(--mb-ink-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.od-confidence-promises b {
+  color: var(--mb-ok);
+  margin-right: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   Page grid
+   -------------------------------------------------------------------------- */
+
+.od-page-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.od-page-grid > .od-span-all {
+  grid-column: 1 / -1;
+}
+
+.od-page-grid > .od-span-all > .od-card-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.od-card-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+@media (max-width: 880px) {
+  .od-page-grid { grid-template-columns: 1fr; }
+}
+
+/* --------------------------------------------------------------------------
+   Small helpers used by the page
+   -------------------------------------------------------------------------- */
+
+.od-mt-6  { margin-top: 6px; }
+.od-mt-8  { margin-top: 8px; }
+.od-mt-12 { margin-top: 12px; }
+
+.od-badge-inline { margin-left: 6px; }
+
+.od-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+/* --------------------------------------------------------------------------
+   Flash highlight when scrolling to a section
+   -------------------------------------------------------------------------- */
+
+.od-flash {
+  animation: odFlash 1.8s ease-out;
+}
+
+@keyframes odFlash {
+  0%,
+  100% {
+    box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+  }
+  20% {
+    box-shadow:
+      0 8px 30px rgba(15, 23, 42, 0.08),
+      0 0 0 4px rgba(194, 65, 12, 0.32);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Toast
+   -------------------------------------------------------------------------- */
+
+.order-detail-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 1400;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 14px 18px;
+  background: #0f172a;
+  border-radius: var(--mb-radius-field);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.28);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.order-detail-toast-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: var(--mb-accent);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.order-detail-toast-message { flex: 1; }
+
+.order-detail-toast-close {
+  flex: none;
+  padding: 0 4px;
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.order-detail-toast-close:hover { color: #fff; }
+
+/* --------------------------------------------------------------------------
+   Responsive adjustments
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 480px) {
+  .order-detail-page .card {
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .od-card-title { font-size: 17px; }
+  .od-card-subtitle { font-size: 14px; }
+  .od-card-section-title { font-size: 14.5px; }
+  .od-eyebrow { gap: 10px; letter-spacing: 0.2em; }
+  .od-eyebrow::before { width: 13px; }
+
+  .od-card-side-party > div { max-width: 90px; }
+  .od-card-side-label { font-size: 12px; }
+  .od-card-side-value { font-size: 14px; }
+
+  .od-payout-due-digits { font-size: 22px; }
+  .od-confidence-main h2 { font-size: 17px; }
+}
+
+@media (max-width: 360px) {
+  .order-detail-page .card { padding: 14px; }
+  .od-card-title { font-size: 16px; }
+  .od-card-section-title { font-size: 14px; }
+  .od-card-side-party > div { max-width: 76px; }
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .od-flash { animation: none; }
+  .od-modal-close,
+  .order-detail-page .back-link { transition: none; }
 }
