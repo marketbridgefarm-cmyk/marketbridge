@@ -1,933 +1,868 @@
-/* ============================================================
-   MarketBridge — Listing detail
-   pages/listing-detail/ListingDetail.css
+/* ==========================================================================
+   ListingDetail — MarketBridge card style
+   Matched to pages/orders/Orders.css (the reference look) and to the design
+   tokens in mb-tokens.css. Every card shares:
 
-   Same card language as Orders / Order Detail / Digital Market:
-   eyebrow with dash → title → subtitle → right-side stack.
-   Section headings in green with a hairline under. Facts are
-   flat key-value rows — no boxes inside cards.
-   ============================================================ */
+     • frosted surface, 22px radius, soft shadow, no border
+     • 2px header rule + 44px accent segment
+     • green eyebrow (16×3 dash, wide tracking)
+     • 1.5px sub-header line, green title
+     • body description BELOW the rule, indented to match the card body
+     • one button style everywhere; .full buttons are large, centered,
+       and capped at 420px so they don't stretch on wide cards
+     • facts grid — max 3 items per column, extras spill into a new column
+
+   NOTE ON SPECIFICITY: mb-cards.css is loaded last and prefixes every rule
+   with #root (1,2,0). Any rule here that must override a card default is
+   therefore also prefixed with #root so it becomes (1,3,0) and wins.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Page shell
+   -------------------------------------------------------------------------- */
 
 .detail-page {
-  --ld-accent:      var(--mb-ok);
-  --ld-accent-2:    var(--mb-ok);
-  --ld-accent-ink:  var(--mb-ok);
-  --ld-accent-soft: var(--mb-ok-bg);
-  --ld-accent-line: var(--mb-ok-border);
-
-  --ld-ink:         var(--mb-ink);
-  --ld-ink-soft:    var(--mb-ink-2);
-  --ld-muted:       var(--mb-muted);
-  --ld-muted-2:     #94a3b8;
-
-  --ld-line:        var(--mb-line);
-  --ld-line-soft:   var(--mb-line-soft);
-
-  --ld-gold:        var(--mb-wait);
-  --ld-gold-soft:   var(--mb-wait-bg);
-  --ld-gold-line:   var(--mb-wait-border);
-
-  --ld-danger:      var(--mb-danger);
-  --ld-danger-soft: var(--mb-danger-bg);
-  --ld-danger-line: var(--mb-danger-border);
-
-  --ld-info:        var(--mb-info);
-  --ld-info-soft:   var(--mb-info-bg);
-  --ld-info-line:   var(--mb-info-border);
-
-  --ld-radius:      var(--mb-radius-card);
-  --ld-radius-sm:   var(--mb-radius-field);
-
-  --ld-shadow:      var(--mb-shadow-card);
-  --ld-shadow-sm:   0 1px 2px rgba(15, 30, 45, .05);
-  --ld-ring:        0 0 0 3px var(--mb-accent-border);
-  --ld-ease:        cubic-bezier(.2, .7, .3, 1);
-
-  min-height: calc(100vh - 72px);
-  color: var(--ld-ink);
-  font-family: var(--mb-font-body, 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif);
-  -webkit-font-smoothing: antialiased;
-
-  background:
-    radial-gradient(circle at 88% 0%,  rgba(230, 245, 236, .85), transparent 40%),
-    radial-gradient(circle at 5% 100%, rgba(231, 235, 245, .8),  transparent 40%),
-    linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
-  background-attachment: fixed;
+  background: linear-gradient(135deg, #eef0ff 0%, #dbe8f8 55%, #e6f6ee 100%);
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-bottom: 64px;
+  color: var(--mb-ink);
+  font-family: var(--mb-font-body);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 .detail-page .container-wide {
+  width: 100%;
   max-width: 1200px;
-  margin: 0 auto;
-  padding: 32px 24px 80px;
+  margin-inline: auto;
+  padding-inline: clamp(16px, 5vw, 28px);
 }
 
 .detail-page .loading {
-  padding: 60px 24px;
-  border: 1px dashed var(--ld-line);
-  border-radius: var(--ld-radius);
-  background: rgba(255, 255, 255, .7);
-  color: var(--ld-muted);
-  text-align: center;
-  font-size: 14.5px;
+  padding: 40px 0;
+  color: var(--mb-muted);
+  font-size: 15px;
 }
 
-/* ── Back link ─────────────────────────────────────────── */
-
-.detail-page .back-link {
+.back-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin: 0 0 18px;
-  padding: 8px 10px 8px 6px;
-  border-radius: 8px;
-  color: var(--ld-accent-2);
-  font: 700 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .01em;
+  margin: 20px 0 16px;
+  padding: 8px 0;
+  color: var(--mb-ink-2);
+  font-size: 15px;
+  font-weight: 700;
   text-decoration: none;
-  transition: color .15s var(--ld-ease), background .15s var(--ld-ease);
+  transition: color 0.15s ease;
 }
 
-.detail-page .back-link:hover {
-  color: var(--ld-accent);
-  background: var(--ld-accent-soft);
-}
+.back-link:hover { color: var(--mb-accent); }
 
-/* ── Layout ───────────────────────────────────────────── */
-
-.detail-page .detail-grid {
+/* Two-column layout: media + content + inspection on the left, buyer /
+   seller / negotiation cards in the aside. Collapses to a single column
+   under 960px. */
+.detail-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
   align-items: start;
 }
 
-.detail-page .detail-grid > section,
-.detail-page .detail-grid > aside { min-width: 0; }
-
-@media (max-width: 960px) {
-  .detail-page .detail-grid { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 960px) {
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
 }
 
-/* ── Media ─────────────────────────────────────────────── */
+/* --------------------------------------------------------------------------
+   2. Media
+   -------------------------------------------------------------------------- */
 
-.detail-page .detail-media {
+.detail-media {
+  container-type: inline-size;
   position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 10;
-  margin: 0 0 12px;
-  border-radius: var(--ld-radius);
   overflow: hidden;
-  background: linear-gradient(180deg, #f4f7f5 0%, #e9efeb 100%);
-  box-shadow: var(--ld-shadow);
+  margin: 0 0 12px;
+  aspect-ratio: 16 / 10;
+  background: var(--mb-soft);
+  border-radius: var(--mb-radius-card);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
 }
 
-.detail-page .detail-media > img,
-.detail-page .detail-media > video {
+.detail-media img,
+.detail-media video {
+  display: block;
   width: 100%;
   height: 100%;
-  display: block;
   object-fit: cover;
 }
 
-.detail-page .detail-media .media-placeholder {
-  width: 100%;
-  height: 100%;
+.media-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 100%;
   padding: 24px;
-  color: var(--ld-accent-ink);
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -.4px;
+  color: var(--mb-muted);
+  font-size: 16px;
+  font-weight: 700;
   text-align: center;
 }
 
-.detail-page .detail-media-thumbs {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+.detail-media-thumbs {
+  display: flex;
+  flex-wrap: nowrap;
   gap: 8px;
   margin: 0 0 20px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
 
-.detail-page .detail-media-thumb {
+.detail-media-thumbs::-webkit-scrollbar { display: none; }
+
+.detail-media-thumb {
   position: relative;
-  aspect-ratio: 1 / 1;
+  flex: none;
+  width: 80px;
+  height: 60px;
   padding: 0;
-  border: 1px solid var(--ld-line);
-  border-radius: 10px;
   overflow: hidden;
-  background: #fff;
+  background: var(--mb-soft);
+  border: 2px solid transparent;
+  border-radius: 12px;
   cursor: pointer;
-  transition: border-color .15s var(--ld-ease);
+  transition: border-color 0.15s ease, transform 0.1s ease;
 }
 
-.detail-page .detail-media-thumb:hover { border-color: rgba(30, 158, 90, .35); }
-.detail-page .detail-media-thumb.active {
-  border-color: var(--ld-accent);
-  box-shadow: 0 0 0 2px var(--ld-accent-soft);
-}
-
-.detail-page .detail-media-thumb > img,
-.detail-page .detail-media-thumb > video {
+.detail-media-thumb img,
+.detail-media-thumb video {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
 }
 
-.detail-page .detail-media-thumb-play {
+.detail-media-thumb:hover { border-color: var(--mb-accent-border); }
+
+.detail-media-thumb.active {
+  border-color: var(--mb-accent);
+}
+
+.detail-media-thumb-play {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(13, 27, 42, .35);
+  background: rgba(15, 23, 42, 0.35);
   color: #fff;
   font-size: 18px;
 }
 
-/* ── Cards ─────────────────────────────────────────────── */
+/* --------------------------------------------------------------------------
+   3. Card shell — same as OrderDetail / Orders
+   -------------------------------------------------------------------------- */
 
 .detail-page .card {
-  padding: 22px 24px 24px;
-  margin: 0 0 18px;
-  border: 1px solid var(--ld-line);
-  border-radius: var(--ld-radius);
-  background: #fff;
-  box-shadow: var(--ld-shadow);
+  container-type: inline-size;
+  position: relative;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: none;
+  margin: 0 0 20px;
+  padding: 24px;
+  background: var(--mb-card);
+  border: none;
+  border-radius: var(--mb-radius-card);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+  --card-tone: var(--mb-ok);
 }
 
-/* ── Card head (the reference shape) ──────────────────── */
-
-.detail-page .ld-card-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  column-gap: 16px;
-  padding: 0 0 16px;
-  margin: 0 0 18px;
-  border-bottom: 1px solid var(--ld-line);
-}
-
-.detail-page .ld-card-head-main {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
+.detail-page .card > * {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
   min-width: 0;
 }
 
-.detail-page .ld-card-head-side {
+.detail-page .sticky-card {
+  position: relative;
+}
+
+@media (min-width: 960px) {
+  .detail-page .sticky-card {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   4. Card head — 2px rule + 44px accent segment.
+   The subtitle / description sits BELOW the rule, indented to match the
+   body of the card.
+   -------------------------------------------------------------------------- */
+
+.ld-card-head {
+  position: relative;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin: 0 0 20px;
+  padding: 0 0 10px;
+  border-bottom: 2px solid var(--mb-line);
+}
+
+.ld-card-head::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 44px;
+  height: 4px;
+  background: var(--mb-accent);
+}
+
+.ld-card-head-main {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ld-card-head-side {
+  flex: none;
+  align-self: flex-start;
+  margin-left: auto;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  justify-content: flex-start;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  max-width: 200px;
+  max-width: 160px;
   text-align: right;
 }
 
-.detail-page .ld-eyebrow {
+/* Eyebrow: green, 16×3 dash, wide tracking. */
+.ld-eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  color: var(--ld-accent-ink);
-  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .16em;
-  text-transform: uppercase;
-}
-
-.detail-page .ld-eyebrow::before {
-  content: '';
-  flex: 0 0 18px;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
-}
-
-.detail-page .ld-card-title {
-  margin: 0;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 19px;
-  font-weight: 800;
-  letter-spacing: -.4px;
-  line-height: 1.22;
-  color: var(--ld-ink);
-  overflow-wrap: anywhere;
-}
-
-.detail-page .detail-content .ld-card-title {
-  font-size: clamp(22px, 2.6vw, 28px);
-  letter-spacing: -.6px;
-  line-height: 1.18;
-}
-
-.detail-page .ld-card-subtitle {
-  margin: 2px 0 0;
+  gap: 12px;
+  margin: 0 0 6px;
+  color: var(--card-tone, var(--mb-ok));
   font-size: 13px;
-  line-height: 1.55;
-  color: var(--ld-muted);
-  max-width: 60ch;
-}
-
-.detail-page .ld-card-side-label {
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .14em;
+  font-weight: 700;
+  letter-spacing: 0.25em;
   text-transform: uppercase;
-  color: var(--ld-accent-2);
+  line-height: 1.2;
 }
 
-.detail-page .ld-card-side-value {
-  font: 700 14px/1.3 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--ld-ink);
-  letter-spacing: -.1px;
-  font-variant-numeric: tabular-nums;
+.ld-eyebrow::before {
+  content: "";
+  flex: none;
+  width: 16px;
+  height: 3px;
+  background: currentColor;
+  border-radius: 2px;
+}
+
+.ld-card-title {
+  margin: 0;
+  color: var(--mb-ink);
+  font-size: clamp(18px, 4.6cqw, 22px);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.3px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Description sits BELOW the 2px rule, indented 20px. */
+.ld-card-subtitle {
+  margin: 14px 0 0;
+  padding-inline-start: 20px;
+  max-width: 62ch;
+  color: var(--mb-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* Side label + value (used for Status / Current / Rating pills at the top
+   right of a card). */
+.ld-card-side-label {
+  display: block;
+  color: var(--mb-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ld-card-side-value {
+  display: block;
+  margin-top: 2px;
+  max-width: 100%;
   overflow: hidden;
+  color: var(--mb-ink);
+  font-size: 15px;
+  font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
 }
 
-/* ── Section head (green title + hairline under) ──────── */
+/* --------------------------------------------------------------------------
+   5. Badges — tone-based, same geometry as .status-pill
+   -------------------------------------------------------------------------- */
 
-.detail-page .ld-section-head {
+.ld-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #f1f5f9;
+  border: 1.5px solid var(--mb-line-soft);
+  border-radius: var(--mb-radius-pill);
+  color: var(--mb-ink-2);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.ld-badge.tone-good {
+  background: var(--mb-ok-bg);
+  border-color: var(--mb-ok-border);
+  color: var(--mb-ok);
+}
+
+.ld-badge.tone-wait {
+  background: var(--mb-wait-bg);
+  border-color: var(--mb-wait-border);
+  color: var(--mb-wait);
+}
+
+.ld-badge.tone-info {
+  background: var(--mb-info-bg);
+  border-color: var(--mb-info-border);
+  color: var(--mb-info);
+}
+
+.ld-badge.tone-neutral {
+  background: #f1f5f9;
+  border-color: var(--mb-line-soft);
+  color: var(--mb-ink-2);
+}
+
+/* --------------------------------------------------------------------------
+   6. Section head — 1.5px line only, green title, muted meta
+   -------------------------------------------------------------------------- */
+
+.ld-section-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
-  padding: 0 0 10px;
-  margin: 18px 0 14px;
-  border-bottom: 1px solid var(--ld-line-soft);
+  margin: 22px 0 14px;
+  padding: 0 0 8px;
+  border-bottom: 1.5px solid var(--mb-line);
 }
 
-.detail-page .ld-section-title {
+.ld-section-title {
   margin: 0;
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 14.5px;
-  font-weight: 800;
-  letter-spacing: -.1px;
-  line-height: 1.3;
-  color: var(--ld-accent-2);
-}
-
-.detail-page .ld-section-meta {
-  font: 700 11.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--ld-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.detail-page .ld-section-meta.is-strong { color: var(--ld-ink); font-weight: 800; }
-
-/* ── Badges ────────────────────────────────────────────── */
-
-.detail-page .ld-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: var(--ld-line-soft);
-  border: 1px solid var(--ld-line);
-  color: var(--ld-ink-soft);
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.detail-page .ld-badge.tone-good {
-  background: var(--ld-accent-soft);
-  border-color: var(--ld-accent-line);
-  color: var(--ld-accent-ink);
-}
-
-/* ── Facts — flat key-value rows ──────────────────────── */
-
-.detail-page .detail-facts {
-  display: flex;
-  flex-direction: column;
-  margin: 0 0 4px;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-}
-
-.detail-page .detail-facts > div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  min-width: 0;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--ld-line-soft);
-}
-
-.detail-page .detail-facts > div:first-child {
-  border-top: 1px solid var(--ld-line-soft);
-}
-
-.detail-page .detail-facts > div > span {
-  flex: 0 0 auto;
-  font: 700 10.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--ld-muted);
-}
-
-.detail-page .detail-facts > div > strong {
-  flex: 1 1 auto;
-  min-width: 0;
-  text-align: right;
-  font: 700 14.5px/1.35 var(--mb-font-body, 'DM Sans', sans-serif);
-  color: var(--ld-ink);
-  letter-spacing: -.1px;
+  color: var(--card-tone, var(--mb-ok));
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
   overflow-wrap: anywhere;
 }
 
-/* ── Listing description ──────────────────────────────── */
-
-.detail-page .listing-description {
-  margin: 4px 0 4px;
-  padding: 0;
-  font-size: 14.5px;
-  line-height: 1.7;
-  color: var(--ld-ink-soft);
-  max-width: 68ch;
-  white-space: pre-wrap;
+.ld-section-meta {
+  display: inline-flex;
+  align-items: center;
+  color: var(--mb-muted);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-/* ── Text helpers ──────────────────────────────────────── */
+.ld-section-meta.is-strong {
+  color: var(--mb-ink);
+  font-size: 15px;
+}
 
-.detail-page .muted {
-  margin: 4px 0;
+/* --------------------------------------------------------------------------
+   7. Description body
+   -------------------------------------------------------------------------- */
+
+.listing-description {
+  margin: 0 0 8px;
+  padding-inline-start: clamp(16px, 13cqw, 48px);
+  color: var(--mb-ink-2);
+  font-size: 14.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   8. Facts grid — max 3 items per column, extras spill into a new column
+        4 facts → 2 columns (3 + 1)
+        6 facts → 2 columns (3 + 3)
+        7 facts → 3 columns (3 + 3 + 1)
+        9 facts → 3 columns (3 + 3 + 3)
+   -------------------------------------------------------------------------- */
+
+.detail-facts {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(3, auto);
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 14px 22px;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+@container (min-width: 460px) {
+  .detail-facts {
+    grid-auto-columns: minmax(150px, 1fr);
+  }
+}
+
+.detail-facts > div {
+  min-width: 0;
+}
+
+.detail-facts > div > span {
+  display: block;
+  color: var(--mb-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.detail-facts > div > strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--mb-ink);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   9. Evidence block (used in the Inspection card)
+   -------------------------------------------------------------------------- */
+
+.detail-page .evidence {
+  margin: 0;
+  padding: 18px;
+  background: var(--mb-surface);
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+}
+
+.evidence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 0 0 10px;
+  border-bottom: 1.5px solid var(--mb-line);
+}
+
+.evidence-head > strong {
+  color: var(--mb-ink);
+  font-size: 15px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.evidence-line {
+  margin: 6px 0 12px;
+  color: var(--mb-muted);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.evidence-line > strong {
+  color: var(--mb-ink);
+  font-weight: 700;
+}
+
+/* --------------------------------------------------------------------------
+   10. Order link + availability note
+   -------------------------------------------------------------------------- */
+
+.detail-order-link {
+  margin: 18px 0 0;
+  padding-inline-start: clamp(16px, 13cqw, 48px);
+}
+
+.listing-availability-note {
+  margin: 20px 0 0;
+  padding: 14px 16px;
+  background: var(--mb-accent-tint);
+  border: 1.5px solid var(--mb-accent-border);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-ink-2);
   font-size: 13.5px;
   line-height: 1.6;
-  color: var(--ld-muted);
 }
 
-.detail-page .small,
-.detail-page .muted.small {
-  font-size: 12.5px;
-  line-height: 1.5;
-  margin: 4px 0;
+.notice-prefix {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--mb-accent-ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
-.detail-page .detail-order-link { margin: 16px 0 0; }
+/* --------------------------------------------------------------------------
+   11. Buttons — standard style, one look everywhere.
+   Uses #root to out-rank mb-cards.css (1,2,0) → (1,3,0).
+   -------------------------------------------------------------------------- */
 
-/* ── Buttons — white bg, green outline ─────────────────── */
-
-.detail-page .btn {
+#root .detail-page .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: 10px;
-  border: 1px solid var(--ld-line);
-  background: #fff;
-  color: var(--ld-ink);
-  font: 700 13.5px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .01em;
+  gap: 8px;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: var(--mb-radius-field);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
   text-decoration: none;
   cursor: pointer;
-  white-space: nowrap;
-  transition: border-color .15s var(--ld-ease),
-              background .15s var(--ld-ease),
-              color .15s var(--ld-ease),
-              box-shadow .15s var(--ld-ease);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
-.detail-page .btn:hover:not(:disabled) {
-  border-color: var(--ld-accent);
-  background: var(--ld-accent-soft);
-  color: var(--ld-accent-2);
+#root .detail-page .btn.btn-primary {
+  background: var(--mb-accent);
+  border: 1px solid var(--mb-accent);
+  color: #ffffff;
 }
 
-.detail-page .btn:focus-visible { outline: none; box-shadow: var(--ld-ring); }
-.detail-page .btn:disabled { opacity: .55; cursor: not-allowed; }
-
-.detail-page .btn-sm { height: 34px; padding: 0 12px; font-size: 12.5px; }
-
-.detail-page .btn.full,
-.detail-page .btn.full-width { width: 100%; }
-
-.detail-page .btn-primary {
-  background: #fff;
-  color: var(--ld-accent-2);
-  border-color: var(--ld-accent-line);
+#root .detail-page .btn.btn-primary:hover:not(:disabled) {
+  background: var(--mb-accent-ink);
+  border-color: var(--mb-accent-ink);
 }
 
-.detail-page .btn-primary:hover:not(:disabled) {
-  background: var(--ld-accent-soft);
-  color: var(--ld-accent-ink);
-  border-color: var(--ld-accent);
-  box-shadow: 0 1px 2px rgba(30, 158, 90, .12);
+#root .detail-page .btn.btn-light {
+  background: transparent;
+  border: 1px solid var(--mb-accent);
+  color: var(--mb-accent-ink);
 }
 
-.detail-page .btn-light {
-  background: var(--ld-line-soft);
-  border-color: var(--ld-line);
-  color: var(--ld-ink-soft);
+#root .detail-page .btn.btn-light:hover:not(:disabled) {
+  background: var(--mb-accent-tint);
+  border-color: var(--mb-accent-ink);
 }
 
-.detail-page .btn-light:hover:not(:disabled) {
-  background: #fff;
-  border-color: var(--ld-accent);
-  color: var(--ld-accent-2);
+#root .detail-page .btn:focus-visible {
+  outline: 3px solid var(--mb-accent-border);
+  outline-offset: 2px;
 }
 
-/* ── Forms ─────────────────────────────────────────────── */
-
-.detail-page form { margin: 0; }
-
-.detail-page form label {
-  display: block;
-  margin: 12px 0 6px;
-  font: 700 11px/1 var(--mb-font-body, 'DM Sans', sans-serif);
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--ld-muted);
+#root .detail-page .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
-.detail-page form label:first-child { margin-top: 0; }
-
-/* Generic form controls — deliberately EXCLUDES .amount-picker-select so
-   the AmountPicker keeps its native dropdown arrow and inline layout. */
-.detail-page input[type="number"],
-.detail-page input[type="text"],
-.detail-page input[type="search"],
-.detail-page select:not(.amount-picker-select),
-.detail-page textarea {
-  display: block;
-  width: 100%;
-  padding: 10px 12px;
-  box-sizing: border-box;
-  border: 1px solid var(--ld-line);
-  border-radius: 10px;
-  background: #fff;
-  color: var(--ld-ink);
-  font: inherit;
+/* Small button (used inside offer rows). */
+#root .detail-page .btn.btn-sm {
+  min-height: 40px;
+  padding: 0 14px;
   font-size: 14px;
-  line-height: 1.5;
-  transition: border-color .18s var(--ld-ease), box-shadow .18s var(--ld-ease);
-  -webkit-appearance: none;
-  appearance: none;
+  border-radius: var(--mb-radius-sm);
 }
 
-.detail-page input::placeholder,
-.detail-page textarea::placeholder { color: var(--ld-muted-2); }
-
-.detail-page input:focus,
-.detail-page select:focus,
-.detail-page textarea:focus {
-  outline: none;
-  border-color: var(--ld-accent);
-  box-shadow: var(--ld-ring);
-}
-
-.detail-page form textarea {
-  resize: vertical;
-  min-height: 80px;
-  margin: 0 0 12px;
-}
-
-.detail-page form input[type="number"] { margin: 0 0 6px; }
-
-.detail-page form button[type="submit"] { margin-top: 8px; }
-
-/* Inline inputs (counter fields) stay compact */
-.detail-page .inline-input {
-  width: 130px;
-  flex: 0 0 auto;
-  padding: 8px 10px;
-  font-size: 13px;
-}
-
-/* Standalone select (inspection pay method) — also excludes the picker */
-.detail-page select:not(.amount-picker-select) {
-  width: auto;
-  min-width: 130px;
-  max-width: 220px;
-}
-
-/* ── AmountPicker — restore native select affordance ──────
-   The generic rules above strip the browser arrow and force full width.
-   These overrides put back the dropdown arrow and let the component
-   keep its own width inside the inline-flex shell. */
-.detail-page .amount-picker {
+/* Large full-width button — centered in the card body, capped at 420px so
+   it never stretches uncomfortably on wide cards. */
+#root .detail-page .btn.full {
+  display: flex;
   width: 100%;
-  max-width: 100%;
+  max-width: 420px;
+  min-height: 56px;
+  margin-inline: auto;
+  padding: 0 24px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
 }
 
-.detail-page .amount-picker .amount-picker-select {
+/* --------------------------------------------------------------------------
+   12. Negotiation card
+   -------------------------------------------------------------------------- */
+
+.negotiation-note {
+  margin: 12px 0 0;
+  padding-inline-start: clamp(16px, 13cqw, 32px);
+  color: var(--mb-muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.negotiation-note > strong {
+  color: var(--mb-ink);
+  font-weight: 800;
+}
+
+.negotiation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding-inline-start: clamp(16px, 13cqw, 32px);
+}
+
+.negotiation-actions .btn { flex: 0 0 auto; }
+
+/* The AmountPicker used inline in negotiation and offer rows. */
+.inline-picker {
+  flex: 1 1 180px;
+  min-width: 0;
+  max-width: 240px;
+}
+
+/* --------------------------------------------------------------------------
+   13. Form fields inside cards
+   -------------------------------------------------------------------------- */
+
+#root .detail-page .card :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]),
+  select,
+  textarea
+) {
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  max-width: none;
-  padding-right: 32px;
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--ld-muted) 50%),
-    linear-gradient(135deg, var(--ld-muted) 50%, transparent 50%);
-  background-position:
-    calc(100% - 18px) calc(50% - 2px),
-    calc(100% - 13px) calc(50% - 2px);
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-.detail-page .amount-picker .amount-picker-select::-ms-expand { display: none; }
-
-/* ── hr ─────────────────────────────────────────────────── */
-
-.detail-page hr {
-  height: 1px;
-  margin: 20px 0;
-  border: none;
-  background: var(--ld-line-soft);
-}
-
-/* ── Evidence block ────────────────────────────────────── */
-
-.detail-page .evidence {
-  padding: 14px 0 14px 14px;
-  margin: 14px 0 0;
-  border: none;
-  border-left: 3px solid var(--ld-accent-line);
-  border-radius: 0;
-  background: transparent;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--ld-ink-soft);
-}
-
-.detail-page .evidence:first-of-type { margin-top: 6px; }
-
-.detail-page .evidence-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin: 0 0 6px;
-}
-
-.detail-page .evidence-head strong {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 14.5px;
-  font-weight: 800;
-  color: var(--ld-ink);
-  letter-spacing: -.1px;
-}
-
-.detail-page .evidence-line {
-  margin: 4px 0;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--ld-ink-soft);
-}
-
-.detail-page .evidence-line.muted { color: var(--ld-muted); font-size: 12.5px; }
-
-.detail-page .evidence-actions { margin: 10px 0 0; }
-
-/* ── Quote rows (nested inside evidence) ──────────────── */
-
-.detail-page .quotes-block { margin-top: 8px; }
-
-.detail-page .quote-row {
-  padding: 12px 0 12px 12px;
-  margin: 10px 0 0;
-  border: none;
-  border-left: 2px solid var(--ld-line);
-  border-radius: 0;
-  background: transparent;
-}
-
-.detail-page .quote-row-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin: 0 0 4px;
-}
-
-.detail-page .quote-row-head strong {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--ld-ink);
-}
-
-.detail-page .quote-amount {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--ld-ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.detail-page .quote-meta {
-  margin: 4px 0;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--ld-muted);
-}
-
-.detail-page .quote-message {
-  margin: 6px 0;
-  font-size: 13px;
-  font-style: italic;
-  color: var(--ld-ink-soft);
-}
-
-.detail-page .quote-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 8px;
-}
-
-.detail-page .inline-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-/* ── Negotiation card ──────────────────────────────────── */
-
-.detail-page .negotiation-note {
-  margin: 10px 0;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--ld-ink-soft);
-}
-
-.detail-page .negotiation-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-
-/* ── Sticky sidebar ────────────────────────────────────── */
-
-.detail-page .sticky-card {
-  position: sticky;
-  top: 16px;
-}
-
-@media (max-width: 960px) {
-  .detail-page .sticky-card { position: static; }
-}
-
-/* ── Offer row (seller negotiations) ──────────────────── */
-
-.detail-page .negotiations-list { display: grid; gap: 4px; }
-
-.detail-page .offer-row {
-  padding: 14px 0;
-  border-top: 1px solid var(--ld-line-soft);
-}
-
-.detail-page .offer-row:first-child { border-top: none; padding-top: 4px; }
-
-.detail-page .offer-row-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.detail-page .offer-row-head strong {
-  font-family: var(--mb-font-head, Manrope, sans-serif);
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -.2px;
-  color: var(--ld-ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.detail-page .offer-buyer {
-  display: block;
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--ld-muted);
-}
-
-.detail-page .offer-note {
-  margin: 8px 0 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--ld-ink-soft);
-}
-
-.detail-page .offer-note.small {
-  font-size: 12.5px;
-  color: var(--ld-muted);
-}
-
-.detail-page .offer-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 8px;
-}
-
-/* ── Alerts ────────────────────────────────────────────── */
-
-.detail-page .alert {
-  padding: 12px 16px;
-  margin: 14px 0;
-  border-radius: var(--ld-radius-sm);
-  border: 1px solid var(--ld-gold-line);
-  background: var(--ld-gold-soft);
-  color: #7c4f0b;
-  font-size: 13.5px;
-  line-height: 1.55;
-}
-
-.detail-page .alert.error {
-  border-color: var(--ld-danger-line);
-  background: var(--ld-danger-soft);
-  color: var(--ld-danger);
-}
-
-/* ── Responsive ────────────────────────────────────────── */
-
-@media (max-width: 719px) {
-  .detail-page .container-wide { padding: 20px 16px 60px; }
-
-  .detail-page .card { padding: 18px 18px 20px; }
-  .detail-page .detail-content { padding: 20px 18px 22px; }
-
-  .detail-page .ld-card-head { column-gap: 12px; }
-  .detail-page .ld-card-head-side { max-width: 140px; }
-  .detail-page .ld-card-title { font-size: 17px; }
-  .detail-page .detail-content .ld-card-title { font-size: 22px; }
-
-  .detail-page .detail-media { aspect-ratio: 4 / 3; }
-
-  .detail-page .detail-media-thumbs {
-    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
-    gap: 6px;
-  }
-
-  .detail-page .evidence { padding-left: 12px; }
-  .detail-page .quote-row { padding-left: 10px; }
-
-  .detail-page .offer-actions,
-  .detail-page .quote-actions,
-  .detail-page .negotiation-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .detail-page .offer-actions .btn,
-  .detail-page .quote-actions .btn,
-  .detail-page .negotiation-actions .btn { width: 100%; justify-content: center; }
-
-  .detail-page .inline-input { width: 100%; }
-
-  .detail-page form button[type="submit"],
-  .detail-page form .btn.full { width: 100%; }
-}
-
-@media (max-width: 420px) {
-  .detail-page .detail-content .ld-card-title { font-size: 20px; }
-  .detail-page .detail-facts > div > strong { font-size: 14px; }
-  .detail-page .detail-media-thumbs { grid-template-columns: repeat(4, 1fr); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .detail-page .btn,
-  .detail-page .back-link,
-  .detail-page .detail-media-thumb { transition: none; }
-}
-
-/* ── Availability note (end of content card) ──────────── */
-
-.detail-page .listing-availability-note {
-  margin: 18px 0 0;
-  padding: 14px 0 0;
-  border-top: 1px solid var(--ld-line-soft);
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ld-muted);
-}
-
-/* ==========================================================================
-   LISTING INSPECTION SCOPE
-   ========================================================================== */
-.ld-inspection-scope {
-  margin-top: 14px;
-  padding: 12px 14px;
-  border: 1px solid var(--mb-line-soft);
-  border-radius: 10px;
-  background: #f8fafc;
-}
-.ld-inspection-scope-eyebrow {
-  margin: 0 0 4px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--mb-muted);
-}
-.ld-inspection-scope-title {
-  margin: 0 0 10px;
-  font-size: 13.5px;
-  font-weight: 600;
+  min-height: 52px;
+  margin-top: 6px;
+  padding: 10px 14px;
+  background: var(--mb-surface);
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  box-shadow: none;
   color: var(--mb-ink);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.4;
 }
-.ld-inspection-scope-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 10px 14px;
+
+#root .detail-page .card textarea {
+  min-height: 88px;
+  resize: vertical;
 }
-.ld-inspection-scope-grid > div {
+
+#root .detail-page .card :is(input, select, textarea):focus-visible {
+  outline: 3px solid var(--mb-accent-border);
+  outline-offset: 2px;
+  border-color: var(--mb-line);
+}
+
+#root .detail-page .card :is(input, select, textarea)::placeholder {
+  color: #94a3b8;
+}
+
+#root .detail-page .card label {
+  display: block;
+  margin: 14px 0 0;
+  color: var(--mb-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#root .detail-page .card label:first-of-type { margin-top: 0; }
+
+/* Form paragraphs and small notes. */
+.detail-page .card .muted {
+  color: var(--mb-muted);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.detail-page .card .muted.small {
+  font-size: 12.5px;
+}
+
+/* --------------------------------------------------------------------------
+   14. Market reference card (nested inside the buyer card)
+   -------------------------------------------------------------------------- */
+
+#root .detail-page .card .card {
+  padding: 14px 16px;
+  margin: 0 0 12px;
+  background: var(--mb-soft);
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+  box-shadow: none;
+}
+
+#root .detail-page .card .card > strong {
+  display: block;
+  color: var(--mb-ink);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+/* --------------------------------------------------------------------------
+   15. Seller negotiations list
+   -------------------------------------------------------------------------- */
+
+.negotiations-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 12px;
+  margin: 0;
 }
-.ld-inspection-scope-grid > div > span {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--mb-muted);
+
+.offer-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--mb-surface);
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
 }
-.ld-inspection-scope-grid > div > strong {
-  font-size: 13px;
+
+.offer-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.offer-row-head > strong {
   color: var(--mb-ink);
+  font-size: 17px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
-.ld-inspection-scope-full {
-  grid-column: 1 / -1;
+
+.offer-buyer {
+  color: var(--mb-muted);
+  font-size: 13px;
+  font-weight: 700;
 }
-.ld-inspection-scope-chips {
+
+.offer-note {
+  margin: 0;
+  color: var(--mb-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.offer-note.small { font-size: 12.5px; }
+
+.offer-note > strong {
+  color: var(--mb-ink);
+  font-weight: 800;
+}
+
+.offer-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
+  align-items: center;
+  gap: 8px;
 }
-.ld-inspection-scope-chip {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: #e0ecff;
-  color: #1e3a8a;
-  font-size: 12px;
-  font-weight: 600;
+
+/* --------------------------------------------------------------------------
+   16. Responsive
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 720px) {
+  .detail-page .container-wide {
+    padding-inline: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .detail-page .card {
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .ld-card-title { font-size: 18px; }
+  .ld-card-subtitle { font-size: 13.5px; padding-inline-start: 14px; }
+  .ld-section-title { font-size: 14.5px; }
+
+  .listing-description {
+    padding-inline-start: 14px;
+    font-size: 14px;
+  }
+
+  .detail-media-thumb { width: 68px; height: 52px; }
+
+  /* Tighter facts grid so 3 columns still fit on small phones. */
+  .detail-facts {
+    gap: 12px 16px;
+  }
+
+  .detail-facts > div > strong { font-size: 14px; }
+
+  #root .detail-page .btn {
+    font-size: 15px;
+    min-height: 44px;
+    padding: 0 16px;
+  }
+
+  #root .detail-page .btn.full {
+    min-height: 52px;
+    font-size: 16px;
+    padding: 0 20px;
+    max-width: 100%;
+  }
+
+  .negotiation-actions,
+  .negotiation-note { padding-inline-start: 14px; }
+}
+
+@media (max-width: 360px) {
+  .detail-page .card { padding: 14px; }
+  .ld-card-title { font-size: 17px; }
+  .ld-section-title { font-size: 14px; }
+  .detail-facts > div > strong { font-size: 13.5px; }
+
+  #root .detail-page .btn.full {
+    font-size: 15px;
+    padding: 0 18px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   17. Reduced motion
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  #root .detail-page .btn,
+  .detail-media-thumb,
+  .back-link {
+    transition: none;
+  }
 }
