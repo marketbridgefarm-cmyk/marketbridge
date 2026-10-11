@@ -7,6 +7,7 @@
    - Header line = 2px; sub-header line = 1.5px; 44px accent segment.
    - Header status pill in the section header = plain colored text.
    - Meta row at the bottom of the overview: Created (left) + ORD code (right).
+   - Cancel button border matches the 2px line under the card title.
    - Party badge in the header (role + name + avatar), right-aligned.
    - Card title shrinks with card width so long names / numbers wrap cleanly.
    Facts grid: max 3 items per column (grid-auto-flow: column, 3 rows).
@@ -269,6 +270,8 @@
 
 /* --------------------------------------------------------------------------
    Meta row: created date (left) + ORD code (right)
+   Sits close to the details block, with clear breathing room before any
+   action button that follows.
    -------------------------------------------------------------------------- */
 
 .od-order-meta {
@@ -276,13 +279,14 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 22px;
+  margin-top: 14px;
+  margin-bottom: 24px;
+  padding-inline-start: clamp(16px, 13cqw, 48px);
   padding-inline-end: 14px;
 }
 
 .od-order-time {
   min-width: 0;
-  padding-inline-start: clamp(16px, 13cqw, 48px);
   color: var(--mb-muted);
   font-size: 14px;
 }
@@ -293,6 +297,25 @@
   font-size: 14px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
+   Overview action button — border matches the 2px line under the card title
+   -------------------------------------------------------------------------- */
+
+.order-detail-page .od-card-overview .btn-block {
+  border: 2px solid var(--mb-line);
+  color: var(--mb-ink-2);
+  background: transparent;
+}
+
+.order-detail-page .od-card-overview .btn-block:hover {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.order-detail-page .od-card-overview .btn-block:focus-visible {
+  outline: 3px solid var(--mb-accent-border);
+  outline-offset: 2px;
 }
 
 /* --------------------------------------------------------------------------
@@ -370,6 +393,10 @@
 
 /* --------------------------------------------------------------------------
    Findings / facts — max 3 items per column, minimum 2 columns
+   - 4 items → 2 columns (3 + 1)
+   - 6 items → 2 columns (3 + 3)
+   - 7 items → 3 columns (3 + 3 + 1)
+   - 9 items → 3 columns (3 + 3 + 3)
    -------------------------------------------------------------------------- */
 
 .od-detail-facts {
