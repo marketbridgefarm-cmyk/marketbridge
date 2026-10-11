@@ -1,20 +1,24 @@
 /* ==========================================================================
    ListingInspectionScope — flat sub-section of a parent card
    --------------------------------------------------------------------------
-   Absolutely no wrapper surface of its own:
-     • no border, no border-radius, no background, no padding, no shadow
-     • renders as a plain group of facts + chips
-   The parent card (od-card / sd-card / ld-card / etc.) provides the frame.
+   Renders inside the Inspection card on ListingDetail (and any other card
+   that needs the scope summary). Draws NO wrapper surface of its own:
 
-   The defensive reset at the top uses !important so this component stays
-   borderless even if a parent CSS rule (mb-cards.css, old per-page rules,
-   or a `card` wrapper) tries to give it a surface.
+     • no border, no radius, no background, no padding, no shadow
+     • all content sits directly on the parent card
+
+   Layout:
+     • .ld-inspection-scope-head → eyebrow + title over a 1.5px rule
+     • facts grid                → max 3 items per column
+     • .ld-inspection-scope-checks-label → same 1.5px-rule sub-header
+     • chips                     → green pills on their own row
    ========================================================================== */
 
 .ld-inspection-scope {
   --ld-ink: #0f172a;
   --ld-muted: #64748b;
   --ld-line: #cbd5e1;
+  --ld-line-soft: #e2e8f0;
   --ld-ok: #047857;
   --ld-ok-bg: #ecfdf5;
   --ld-ok-border: #a7f3d0;
@@ -25,44 +29,61 @@
   border-radius: 0 !important;
   box-shadow: none !important;
   outline: 0 !important;
+  padding: 0 !important;
 
   display: block;
-  margin: 20px 0 0;
-  padding: 0;
+  margin: 18px 0 0;
   color: var(--ld-ink);
 }
 
 .ld-inspection-scope > * { box-sizing: border-box; }
 
 /* --------------------------------------------------------------------------
-   1. Head — flat eyebrow, no border, no title, no rule
-   Only the small green uppercase label remains, aligned with the other
-   block labels in the card.
+   1. Head — eyebrow + title over a 1.5px rule (matches .ld-section-head)
    -------------------------------------------------------------------------- */
 
 .ld-inspection-scope-head {
-  margin: 0 0 12px;
-  padding: 0;
-  border: 0;
+  margin: 0 0 14px;
+  padding: 0 0 8px;
+  border-bottom: 1.5px solid var(--ld-line);
 }
 
 .ld-inspection-scope-eyebrow {
-  display: block;
-  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 4px;
   color: var(--ld-ok);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.24em;
   text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.ld-inspection-scope-eyebrow::before {
+  content: "";
+  flex: none;
+  width: 16px;
+  height: 3px;
+  background: currentColor;
+  border-radius: 2px;
+}
+
+.ld-inspection-scope-title {
+  margin: 0;
+  color: var(--ld-ink);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0;
 }
 
 /* --------------------------------------------------------------------------
-   2. Facts — max 3 per column, extras spill into a new column
-      (grid-auto-flow: column + exactly 3 rows)
-     4 facts → 2 columns (3 + 1)
-     5 facts → 2 columns (3 + 2)
-     6 facts → 2 columns (3 + 3)
-     7 facts → 3 columns (3 + 3 + 1)
+   2. Facts grid — max 3 items per column
+        4 facts → 2 columns (3 + 1)
+        6 facts → 2 columns (3 + 3)
+        7 facts → 3 columns (3 + 3 + 1)
    -------------------------------------------------------------------------- */
 
 .ld-inspection-scope-facts {
@@ -106,29 +127,33 @@
 }
 
 /* --------------------------------------------------------------------------
-   3. Checks required — flat block, no box, chips wrap on their own row
+   3. Checks — sub-header gets the same 1.5px rule, chips flow beneath it
    -------------------------------------------------------------------------- */
 
 .ld-inspection-scope-checks {
-  margin: 18px 0 0;
+  margin: 20px 0 0;
   padding: 0;
   border: 0;
 }
 
 .ld-inspection-scope-checks-label {
   display: block;
-  color: var(--ld-muted);
-  font-size: 11px;
+  margin: 0 0 14px;
+  padding: 0 0 8px;
+  border-bottom: 1.5px solid var(--ld-line);
+  color: var(--ld-ok);
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
+  line-height: 1.2;
 }
 
 .ld-inspection-scope-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+  margin: 0;
 }
 
 .ld-inspection-scope-chip {
@@ -146,7 +171,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   4. Narrow screens
+   4. Responsive
    -------------------------------------------------------------------------- */
 
 @media (max-width: 480px) {
@@ -154,9 +179,7 @@
     gap: 12px 18px;
   }
 
-  .ld-inspection-scope-fact > strong {
-    font-size: 14px;
-  }
+  .ld-inspection-scope-fact > strong { font-size: 14px; }
 
   .ld-inspection-scope-chip {
     font-size: 12.5px;
@@ -165,11 +188,6 @@
 }
 
 @media (max-width: 360px) {
-  .ld-inspection-scope-facts {
-    gap: 10px 14px;
-  }
-
-  .ld-inspection-scope-fact > strong {
-    font-size: 13.5px;
-  }
+  .ld-inspection-scope-facts { gap: 10px 14px; }
+  .ld-inspection-scope-fact > strong { font-size: 13.5px; }
 }
