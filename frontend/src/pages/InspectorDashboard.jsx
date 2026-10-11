@@ -140,7 +140,7 @@ function AmountRow({ value, unit = 'ETB' }) {
 }
 
 /* Inline "Label: Value" row used on job cards.
-   All facts sit on one line and wrap naturally on narrow cards. */
+   Items stack one per line inside the card body. */
 function InlineMeta({ items }) {
   const visible = (items || []).filter(Boolean);
   if (!visible.length) return null;
@@ -483,7 +483,7 @@ export default function InspectorDashboard() {
     return (
       <div className="sd-dashboard">
         <section>
-          <span className="sd-eyebrow">INSPECTOR DASHBOARD</span>
+          <span className="sd-eyebrow">Verification Role</span>
           <h1>Loading your inspection workspace…</h1>
           <p className="sd-muted">
             Loading available jobs and your accepted inspections.
@@ -508,17 +508,15 @@ export default function InspectorDashboard() {
           emptyText="No inspections accepted yet — check available jobs below."
         />
 
-        <div className="sd-toolbar">
-          <div>
-            <span className="sd-eyebrow">INSPECTOR DASHBOARD</span>
+        <div className="sd-toolbar sd-toolbar--stacked">
+          <div className="sd-toolbar-head">
+            <span className="sd-eyebrow">Verification Role</span>
             <h1>Verify. Document. Report.</h1>
-            <p className="sd-muted" style={{ maxWidth: 780 }}>
-              Inspectors are independent verifiers. They do not own produce,
-              set farmer prices or arrange transport.
-            </p>
           </div>
-
-          <span className="sd-badge sd-blue">VERIFICATION ROLE</span>
+          <p className="sd-toolbar-text">
+            Inspectors are independent verifiers. They do not own produce,
+            set farmer prices or arrange transport.
+          </p>
         </div>
 
         <div className="sd-stat-grid">
@@ -678,11 +676,11 @@ export default function InspectorDashboard() {
                                   {isMyTurn
                                     ? 'The requester countered this price.'
                                     : hasActiveThread || justQuoted
-                                      ? 'Waiting on the requester’s decision.'
+                                      ? 'Waiting on the requester\u2019s decision.'
                                       : 'This quote is no longer active.'}
                                 </p>
                                 <p className="sd-amount-note">
-                                  Quotes are sealed — you won’t see what anyone else bids, and the requester decides.
+                                  Quotes are sealed — you won\u2019t see what anyone else bids, and the requester decides.
                                 </p>
                               </div>
 
@@ -718,7 +716,7 @@ export default function InspectorDashboard() {
                               </div>
                               <div className="sd-card-block-body">
                                 <p className="sd-amount-note">
-                                  The requester compares all inspector bids and selects one for price negotiation. You can’t claim the job directly or see other inspectors’ amounts.
+                                  The requester compares all inspector bids and selects one for price negotiation. You can\u2019t claim the job directly or see other inspectors\u2019 amounts.
                                 </p>
 
                                 <div className="sd-form-grid sd-form-grid--tight">
@@ -764,7 +762,7 @@ export default function InspectorDashboard() {
                           )}
 
                           {(canQuote || isMyTurn) && (
-                            <div className="sd-card-actions">
+                            <div className={`sd-card-actions${canQuote ? ' sd-card-actions--right' : ''}`}>
                               {canQuote && (
                                 <button
                                   type="button"
