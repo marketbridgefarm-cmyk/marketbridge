@@ -762,11 +762,11 @@ export default function InspectorDashboard() {
                           )}
 
                           {(canQuote || isMyTurn) && (
-                            <div className={`sd-card-actions${canQuote ? ' sd-card-actions--right' : ''}`}>
+                            <div className={`sd-card-actions${canQuote ? ' sd-card-actions--center' : ''}`}>
                               {canQuote && (
                                 <button
                                   type="button"
-                                  className="sd-btn"
+                                  className="sd-btn sd-btn--block"
                                   disabled={submittingQuoteId === r.id}
                                   onClick={() => submitQuote(r.id)}
                                 >
