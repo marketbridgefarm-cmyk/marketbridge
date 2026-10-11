@@ -13,8 +13,8 @@ import './ListingInspectionScope.css';
 // text is allowed, preventing bidders from leaking contact info via the
 // quantity field or other inputs.
 //
-// Renders as a SECTION of the parent card — no wrapper surface, no border,
-// no shadow. The parent card provides the frame.
+// Layout: head (title + deadline chip) → category hero → stat tiles →
+// checks list. Renders as a SECTION of the parent card — no outer frame.
 // ============================================================================
 
 const CATEGORY_LABELS = {
@@ -27,8 +27,6 @@ const CATEGORY_LABELS = {
   SAFETY_COMPLIANCE: 'Safety-related checks',
 };
 
-// Labels keep their meaning but drop the "/" so they read cleanly as a
-// stacked list of plain text items (quality grading, size and weight, ...).
 const CHECK_LABELS = {
   QUALITY_GRADE: 'Quality grading',
   SIZE_WEIGHT: 'Size and weight',
@@ -46,6 +44,17 @@ const REPORT_LABELS = {
   FULL_REPORT: 'Full structured inspection report',
 };
 
+function formatDeadline(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export default function ListingInspectionScope({ inspection }) {
   const workDetails = inspection?.workDetails;
   if (!inspection || !workDetails || typeof workDetails !== 'object') return null;
@@ -61,6 +70,7 @@ export default function ListingInspectionScope({ inspection }) {
   } = workDetails;
 
   const hasChecks = Array.isArray(checks) && checks.length > 0;
+  const deadline = requiredBy ? formatDeadline(requiredBy) : null;
 
   const hasAnyField =
     workCategory ||
@@ -68,37 +78,23 @@ export default function ListingInspectionScope({ inspection }) {
     lotCount ||
     hasChecks ||
     reportFormat ||
-    requiredBy;
+    deadline;
 
   if (!hasAnyField) return null;
 
-  const facts = [];
-  if (workCategory) {
-    facts.push({
-      key: 'category',
-      label: 'Category',
-      value: CATEGORY_LABELS[workCategory] || workCategory,
-    });
-  }
+  const stats = [];
   if (quantityValue) {
-    facts.push({
+    stats.push({
       key: 'quantity',
       label: 'Quantity to inspect',
       value: `${quantityValue} ${quantityUnit || 'kg'}`,
     });
   }
   if (lotCount != null && lotCount !== '') {
-    facts.push({ key: 'lots', label: 'Lots', value: lotCount });
-  }
-  if (requiredBy) {
-    facts.push({
-      key: 'deadline',
-      label: 'Deadline',
-      value: new Date(requiredBy).toLocaleString(),
-    });
+    stats.push({ key: 'lots', label: 'Lots', value: lotCount });
   }
   if (reportFormat) {
-    facts.push({
+    stats.push({
       key: 'report',
       label: 'Report',
       value: REPORT_LABELS[reportFormat] || reportFormat,
@@ -108,16 +104,31 @@ export default function ListingInspectionScope({ inspection }) {
   return (
     <div className="ld-inspection-scope" aria-label="Inspection scope">
       <header className="ld-inspection-scope-head">
-        <span className="ld-inspection-scope-eyebrow">Scope to inspect</span>
-        <h3 className="ld-inspection-scope-title">What the inspection covers</h3>
+        <div className="ld-inspection-scope-headtext">
+          <span className="ld-inspection-scope-eyebrow">Scope to inspect</span>
+          <h3 className="ld-inspection-scope-title">What the inspection covers</h3>
+        </div>
+        {deadline && (
+          <div className="ld-inspection-scope-deadline">
+            <span>Deadline</span>
+            <strong>{deadline}</strong>
+          </div>
+        )}
       </header>
 
-      {facts.length > 0 && (
-        <div className="ld-inspection-scope-facts">
-          {facts.map((f) => (
-            <div key={f.key} className="ld-inspection-scope-fact">
-              <span>{f.label}</span>
-              <strong>{f.value}</strong>
+      {workCategory && (
+        <div className="ld-inspection-scope-hero">
+          <span>Category</span>
+          <strong>{CATEGORY_LABELS[workCategory] || workCategory}</strong>
+        </div>
+      )}
+
+      {stats.length > 0 && (
+        <div className="ld-inspection-scope-stats">
+          {stats.map((s) => (
+            <div key={s.key} className="ld-inspection-scope-stat">
+              <span>{s.label}</span>
+              <strong>{s.value}</strong>
             </div>
           ))}
         </div>
@@ -125,7 +136,12 @@ export default function ListingInspectionScope({ inspection }) {
 
       {hasChecks && (
         <div className="ld-inspection-scope-checks">
-          <span className="ld-inspection-scope-checks-label">Checks required</span>
+          <div className="ld-inspection-scope-checks-head">
+            <span className="ld-inspection-scope-checks-label">Checks required</span>
+            <span className="ld-inspection-scope-checks-count">
+              {checks.length} {checks.length === 1 ? 'check' : 'checks'}
+            </span>
+          </div>
           <ul className="ld-inspection-scope-checks-list">
             {checks.map((c) => (
               <li key={c} className="ld-inspection-scope-check">
