@@ -1,0 +1,324 @@
+/* ==========================================================================
+   TransportSetup — form section inside the OrderDetail Transport card
+   --------------------------------------------------------------------------
+   Renders as a flat section of the parent card: no wrapper surface, no
+   outer border, no shadow. Sections are separated by 1.5px hairlines and
+   titles are green, matching the card-block-title pattern used across
+   the app.
+
+   Buttons (od-chip) share the same accent outline used everywhere else.
+   Fields inherit the parent card's input styles.
+   ========================================================================== */
+
+.ts-setup {
+  --ts-ink: #0f172a;
+  --ts-ink-2: #334155;
+  --ts-muted: #64748b;
+  --ts-line: #e5e9ef;
+  --ts-line-strong: #cbd5e1;
+  --ts-accent: #c2410c;
+  --ts-accent-ink: #9a3412;
+  --ts-accent-tint: #fff7ed;
+  --ts-accent-border: #fed7aa;
+  --ts-ok: #047857;
+  --ts-ok-bg: #ecfdf5;
+  --ts-ok-border: #a7f3d0;
+  --ts-radius: 16px;
+
+  display: block;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--ts-ink);
+}
+
+/* --------------------------------------------------------------------------
+   1. Lead paragraph
+   -------------------------------------------------------------------------- */
+
+.ts-lead {
+  margin: 0 0 16px;
+  color: var(--ts-muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+/* --------------------------------------------------------------------------
+   2. Section — flat block separated by hairline, matching card sub-headers
+   -------------------------------------------------------------------------- */
+
+.ts-section {
+  margin: 22px 0 0;
+  padding: 0;
+}
+
+.ts-section:first-of-type { margin-top: 4px; }
+
+.ts-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 0 0 8px;
+  border-bottom: 1.5px solid var(--ts-line-strong);
+}
+
+.ts-section-title {
+  margin: 0;
+  color: var(--ts-ok);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.1px;
+}
+
+.ts-count {
+  color: var(--ts-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
+   3. Choice grid — selection cards with tone-aware states
+   -------------------------------------------------------------------------- */
+
+.ts-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin: 0 0 16px;
+}
+
+.ts-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 14px 16px;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--ts-line);
+  border-radius: 12px;
+  color: var(--ts-ink);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ts-choice:hover:not(:disabled) {
+  border-color: var(--ts-accent-border);
+}
+
+.ts-choice.is-selected {
+  border-color: var(--ts-ok);
+  background: var(--ts-ok-bg);
+}
+
+.ts-choice:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ts-choice:focus-visible {
+  outline: 3px solid var(--ts-accent-border);
+  outline-offset: 2px;
+}
+
+.ts-choice-label {
+  color: var(--ts-ink);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.15px;
+}
+
+.ts-choice.is-selected .ts-choice-label { color: var(--ts-ok); }
+
+.ts-choice-hint {
+  color: var(--ts-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------------------
+   4. Notice (role-separation callout)
+   -------------------------------------------------------------------------- */
+
+.ts-notice {
+  margin: 0 0 16px;
+  padding: 4px 0 4px 14px;
+  border-left: 3px solid var(--ts-ok-border);
+  color: var(--ts-ink-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.ts-notice > strong {
+  color: var(--ts-ink);
+  font-weight: 700;
+}
+
+/* --------------------------------------------------------------------------
+   5. Read-only value rows (Route / Load)
+   -------------------------------------------------------------------------- */
+
+.ts-readonly {
+  margin: 0;
+  color: var(--ts-ink);
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   6. Chips (handling, access, truck selection, "Find matches")
+   Matches the .od-chip baseline: 1.5px accent outline, dark-orange text.
+   -------------------------------------------------------------------------- */
+
+.od-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 14px;
+  background: transparent;
+  border: 1.5px solid var(--ts-accent);
+  border-radius: 999px;
+  color: var(--ts-accent-ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+
+.od-chip:hover:not(:disabled) {
+  background: var(--ts-accent-tint);
+  border-color: var(--ts-accent-ink);
+}
+
+.od-chip:focus-visible {
+  outline: 3px solid var(--ts-accent-border);
+  outline-offset: 2px;
+}
+
+.od-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Selected chip — swaps to a solid green tone (a chip is a state toggle,
+   so its "on" state reads as confirmation, not as the primary CTA). */
+.od-chip.is-on {
+  background: var(--ts-ok-bg);
+  border-color: var(--ts-ok-border);
+  color: var(--ts-ok);
+}
+
+.od-chip.is-on:hover:not(:disabled) {
+  background: var(--ts-ok-bg);
+  border-color: var(--ts-ok);
+}
+
+.od-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   7. Truck / transporter rows
+   -------------------------------------------------------------------------- */
+
+.ts-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border-top: 1px solid #eef1f5;
+}
+
+.ts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 0;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.ts-row:last-child { border-bottom: none; }
+
+.ts-row-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ts-row-name {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ts-ink);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.15px;
+  overflow-wrap: anywhere;
+}
+
+.ts-row-meta {
+  margin: 0;
+  color: var(--ts-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.ts-row-btn { min-width: 96px; }
+
+/* --------------------------------------------------------------------------
+   8. Submit row
+   -------------------------------------------------------------------------- */
+
+.ts-submit {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid #eef1f5;
+}
+
+.ts-alert {
+  margin: 0 0 16px;
+}
+
+/* --------------------------------------------------------------------------
+   9. Responsive
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 480px) {
+  .ts-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ts-row {
+    align-items: flex-start;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   10. Reduced motion
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .ts-choice,
+  .od-chip {
+    transition: none;
+  }
+}
