@@ -472,6 +472,16 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
     : currentStep.label === 'Paid' ? 'wait'
     : 'neutral';
 
+  // If the order was cancelled, the "current" step is meaningless; show
+  // the terminal status instead.
+  const headerStatus =
+    order.status === 'CANCELLED'
+      ? { label: 'Cancelled', tone: 'bad' }
+      : { label: currentStep.label, tone: currentTone };
+
+  // Party shown in the header: buyer when viewing as seller, seller otherwise.
+  const partyRole = showBuyer ? 'Buyer' : 'Seller';
+
   const created = order.createdAt
     ? new Date(order.createdAt).toLocaleDateString()
     : '—';
@@ -482,11 +492,11 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
       eyebrow={role}
       eyebrowClass={isSeller ? 'is-selling' : ''}
       title={title}
-      side={<Avatar name={other?.name} />}
+      side={other?.name ? <PartyBadge role={partyRole} name={other.name} /> : <Avatar name={other?.name} />}
     >
       <Section
         title="Order status"
-        meta={<span className={`od-header-status is-${currentTone}`}>{currentStep.label}</span>}
+        meta={<span className={`od-header-status is-${headerStatus.tone}`}>{headerStatus.label}</span>}
       >
         <OrderProgress steps={steps} />
       </Section>
