@@ -7,8 +7,8 @@
    - Header line = 2px; sub-header line = 1.5px; 44px accent segment.
    - Header status pill in the section header = plain colored text.
    - Meta row at the bottom of the overview: Created (left) + ORD code (right).
-   - All large (block) buttons use the orange accent border (matching the
-     44px segment under the card title). Primary CTAs keep their accent fill.
+   - Large block buttons use the accent (orange) border to echo the accent
+     segment under the card title. Primary CTAs keep the accent fill.
    - Party badge in the header (role + name + avatar), right-aligned.
    - Card title shrinks with card width so long names / numbers wrap cleanly.
    Facts grid: max 3 items per column (grid-auto-flow: column, 3 rows).
@@ -302,14 +302,14 @@
 
 /* --------------------------------------------------------------------------
    Large (block) buttons — every non-primary block button on the page uses
-   the orange accent border, matching the 44px segment under the card title.
-   Primary CTAs keep their accent fill.
+   the accent (orange) border, echoing the accent segment under the card
+   title. Primary CTAs keep their accent fill.
    -------------------------------------------------------------------------- */
 
 .order-detail-page .btn-block:not(.btn-primary) {
   border: 2px solid var(--mb-accent);
   border-radius: var(--mb-radius-field);
-  color: var(--mb-accent);
+  color: var(--mb-accent-ink);
   background: transparent;
   min-height: 48px;
   font-size: 16px;
