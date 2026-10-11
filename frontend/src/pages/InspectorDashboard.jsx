@@ -38,8 +38,6 @@ const CHECKLIST = [
   'Date, time & inspector identity',
 ];
 
-/* ── Small presentational helpers (same card system as Transport) ── */
-
 function modeLabel(mode) {
   const text = String(mode || '').replaceAll('_', ' ').toLowerCase();
   return text.charAt(0).toUpperCase() + text.slice(1);
@@ -137,6 +135,23 @@ function AmountRow({ value, unit = 'ETB' }) {
     <div className="sd-amount">
       <b>{value}</b>
       <span>{unit}</span>
+    </div>
+  );
+}
+
+/* Inline "Label: Value" row used on job cards.
+   All facts sit on one line and wrap naturally on narrow cards. */
+function InlineMeta({ items }) {
+  const visible = (items || []).filter(Boolean);
+  if (!visible.length) return null;
+  return (
+    <div className="sd-job-meta sd-job-meta--inline">
+      {visible.map((it) => (
+        <div className="sd-job-meta-item" key={it.key}>
+          <span>{it.label}:</span>
+          <strong>{it.value}</strong>
+        </div>
+      ))}
     </div>
   );
 }
@@ -482,10 +497,6 @@ export default function InspectorDashboard() {
     <div className="sd-dashboard">
       <ProviderStandingBanner />
 
-      {/* =========================================================
-          HEADER / SUMMARY
-      ========================================================= */}
-
       <section>
         <DashboardWelcome
           user={user}
@@ -533,10 +544,6 @@ export default function InspectorDashboard() {
         </div>
       </section>
 
-      {/* =========================================================
-          MESSAGES
-      ========================================================= */}
-
       {loadError && (
         <section>
           <div className="sd-panel sd-panel--error">
@@ -552,10 +559,6 @@ export default function InspectorDashboard() {
           </div>
         </section>
       )}
-
-      {/* =========================================================
-          TABS
-      ========================================================= */}
 
       <section>
         <div className="sd-tabs">
@@ -580,10 +583,6 @@ export default function InspectorDashboard() {
 
         <div className="sd-workspace">
           <div>
-
-            {/* =====================================================
-                AVAILABLE JOBS
-            ===================================================== */}
 
             {tab === 'available' && (
               <div>
@@ -628,18 +627,12 @@ export default function InspectorDashboard() {
 
                     return (
                       <article className="sd-card sd-job-card" key={r.id}>
-                        {/* Card head */}
                         <div className="sd-card-head">
                           <div className="sd-card-head-text">
                             <span className="sd-eyebrow tone-info">Open request</span>
-                            <div className="sd-card-title-line">
-                              <h3 className="sd-card-title" title={listingTitle(r)}>
-                                {listingTitle(r)}
-                              </h3>
-                              {createdLabel && (
-                                <span className="sd-card-date">{createdLabel}</span>
-                              )}
-                            </div>
+                            <h3 className="sd-card-title" title={listingTitle(r)}>
+                              {listingTitle(r)}
+                            </h3>
                           </div>
 
                           <div className="sd-card-head-party">
@@ -654,35 +647,23 @@ export default function InspectorDashboard() {
                         </div>
 
                         <div className="sd-card-body">
-                          {/* Block 1 — Inspection details */}
                           <section className="sd-card-block">
                             <div className="sd-card-block-title">
                               <h4>Inspection details</h4>
                             </div>
                             <div className="sd-card-block-body">
-                              <div className="sd-job-meta">
-                                {r.mode && (
-                                  <div className="sd-job-meta-item">
-                                    <span>Mode</span>
-                                    <strong>{modeLabel(r.mode)}</strong>
-                                  </div>
-                                )}
-                                {quantity && (
-                                  <div className="sd-job-meta-item">
-                                    <span>Quantity</span>
-                                    <strong>{quantity}</strong>
-                                  </div>
-                                )}
-                                <div className="sd-job-meta-item">
-                                  <span>Location</span>
-                                  <strong>{place}</strong>
-                                </div>
-                              </div>
+                              <InlineMeta
+                                items={[
+                                  r.mode && { key: 'mode', label: 'Mode', value: modeLabel(r.mode) },
+                                  quantity && { key: 'quantity', label: 'Quantity', value: quantity },
+                                  { key: 'location', label: 'Location', value: place },
+                                  createdLabel && { key: 'date', label: 'Date', value: createdLabel },
+                                ]}
+                              />
                               <InspectionRequestSummary inspection={r} title="Scope to inspect" />
                             </div>
                           </section>
 
-                          {/* Block 2 — Your quote (whenever a quote exists) */}
                           {myLeaf && displayAmount && (
                             <section className="sd-card-block">
                               <div className="sd-card-block-title">
@@ -729,7 +710,6 @@ export default function InspectorDashboard() {
                             </section>
                           )}
 
-                          {/* Block 3 — Submit a quote */}
                           {canQuote && (
                             <section className="sd-card-block">
                               <div className="sd-card-block-title">
@@ -783,7 +763,6 @@ export default function InspectorDashboard() {
                             </section>
                           )}
 
-                          {/* Footer */}
                           {(canQuote || isMyTurn) && (
                             <div className="sd-card-actions">
                               {canQuote && (
@@ -845,10 +824,6 @@ export default function InspectorDashboard() {
               </div>
             )}
 
-            {/* =====================================================
-                MY JOBS
-            ===================================================== */}
-
             {tab === 'mine' && (
               <div>
                 <div className="sd-toolbar sd-toolbar--stacked">
@@ -862,8 +837,6 @@ export default function InspectorDashboard() {
                     completing the inspection.
                   </p>
                 </div>
-
-                {/* ── Active jobs (cards) ─────────────────────── */}
 
                 {pendingMine.length > 0 && (
                   <section className="sd-jobs-section">
@@ -894,18 +867,12 @@ export default function InspectorDashboard() {
 
                         return (
                           <article className="sd-card sd-job-card" key={r.id}>
-                            {/* Card head */}
                             <div className="sd-card-head">
                               <div className="sd-card-head-text">
                                 <span className={`sd-eyebrow tone-${tone}`}>Inspection</span>
-                                <div className="sd-card-title-line">
-                                  <h3 className="sd-card-title" title={listingTitle(r)}>
-                                    {listingTitle(r)}
-                                  </h3>
-                                  {createdLabel && (
-                                    <span className="sd-card-date">{createdLabel}</span>
-                                  )}
-                                </div>
+                                <h3 className="sd-card-title" title={listingTitle(r)}>
+                                  {listingTitle(r)}
+                                </h3>
                               </div>
 
                               <div className="sd-card-head-party">
@@ -920,7 +887,6 @@ export default function InspectorDashboard() {
                             </div>
 
                             <div className="sd-card-body">
-                              {/* Block 1 — Inspection status */}
                               <section className="sd-card-block">
                                 <div className="sd-card-block-title">
                                   <h4>Inspection status</h4>
@@ -951,35 +917,23 @@ export default function InspectorDashboard() {
 
                               {r.sellerMessage && <p className="sd-card-foot">Seller instructions: {r.sellerMessage}</p>}
 
-                              {/* Block 2 — Inspection details */}
                               <section className="sd-card-block">
                                 <div className="sd-card-block-title">
                                   <h4>Inspection details</h4>
                                 </div>
                                 <div className="sd-card-block-body">
-                                  <div className="sd-job-meta">
-                                    {r.mode && (
-                                      <div className="sd-job-meta-item">
-                                        <span>Mode</span>
-                                        <strong>{modeLabel(r.mode)}</strong>
-                                      </div>
-                                    )}
-                                    {quantity && (
-                                      <div className="sd-job-meta-item">
-                                        <span>Quantity</span>
-                                        <strong>{quantity}</strong>
-                                      </div>
-                                    )}
-                                    <div className="sd-job-meta-item">
-                                      <span>Location</span>
-                                      <strong>{place}</strong>
-                                    </div>
-                                  </div>
+                                  <InlineMeta
+                                    items={[
+                                      r.mode && { key: 'mode', label: 'Mode', value: modeLabel(r.mode) },
+                                      quantity && { key: 'quantity', label: 'Quantity', value: quantity },
+                                      { key: 'location', label: 'Location', value: place },
+                                      createdLabel && { key: 'date', label: 'Date', value: createdLabel },
+                                    ]}
+                                  />
                                   <InspectionRequestSummary inspection={r} title="Scope to inspect" />
                                 </div>
                               </section>
 
-                              {/* Block 3 — Amount */}
                               {amount && (
                                 <section className="sd-card-block">
                                   <div className="sd-card-block-title">
@@ -992,7 +946,6 @@ export default function InspectorDashboard() {
                                 </section>
                               )}
 
-                              {/* Footer */}
                               <div className="sd-card-actions">
                                 {r.status === 'ACCEPTED' && (
                                   <>
@@ -1045,8 +998,6 @@ export default function InspectorDashboard() {
                     </div>
                   </section>
                 )}
-
-                {/* ── Completed (table) ───────────────────────── */}
 
                 {completedMine.length > 0 && (
                   <section className="sd-jobs-section">
@@ -1103,8 +1054,6 @@ export default function InspectorDashboard() {
                   </section>
                 )}
 
-                {/* ── Empty state ─────────────────────────────── */}
-
                 {pendingMine.length === 0 && completedMine.length === 0 && (
                   <div className="sd-empty-state">
                     <div className="sd-empty-icon" aria-hidden="true">📋</div>
@@ -1129,10 +1078,6 @@ export default function InspectorDashboard() {
                 )}
               </div>
             )}
-
-            {/* =====================================================
-                REPORT MODAL
-            ===================================================== */}
 
             {activeRequestId && (
               <div
@@ -1365,10 +1310,6 @@ export default function InspectorDashboard() {
             )}
           </div>
 
-          {/* =====================================================
-              EVIDENCE CHECKLIST
-          ===================================================== */}
-
           <aside className="sd-aside">
             <div className="sd-card sd-checklist">
               <div className="sd-card-head">
@@ -1390,10 +1331,6 @@ export default function InspectorDashboard() {
           </aside>
         </div>
       </section>
-
-      {/* =========================================================
-          TOAST
-      ========================================================= */}
 
       {(error || msg) && (
         <div
