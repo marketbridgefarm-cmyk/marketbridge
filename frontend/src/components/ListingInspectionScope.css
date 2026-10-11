@@ -20,6 +20,7 @@
   --ld-warn: var(--mb-warn, #b45309);
   --ld-warn-soft: var(--mb-warn-soft, #fffbeb);
   --ld-warn-line: var(--mb-warn-line, #fde68a);
+  --ld-indent: 14px;
 
   display: block;
   margin: 20px 0 0;
@@ -39,7 +40,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 0 16px;
+  margin: 0 0 12px;
 }
 
 .ld-inspection-scope-headtext { min-width: 0; }
@@ -93,8 +94,8 @@
 /* 2. Hero (category) -------------------------------------------------- */
 
 .ld-inspection-scope-hero {
-  margin: 0 0 12px;
-  padding: 14px 0;
+  margin: 0 0 10px;
+  padding: 10px 0;
   border-top: 1px solid var(--ld-line);
   border-bottom: 1px solid var(--ld-line);
 }
@@ -110,7 +111,7 @@
 
 .ld-inspection-scope-hero > strong {
   display: block;
-  margin-top: 4px;
+  margin: 4px 0 0 var(--ld-indent);
   font-size: 18px;
   font-weight: 800;
   line-height: 1.3;
@@ -122,14 +123,14 @@
 .ld-inspection-scope-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0;
+  gap: 6px;
+  margin: 0 0 0 var(--ld-indent);
   padding: 0;
 }
 
 .ld-inspection-scope-stat {
   min-width: 0;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--ld-line);
   border-radius: 12px;
   background: var(--ld-tile);
@@ -157,14 +158,14 @@
 
 /* 4. Checks ----------------------------------------------------------- */
 
-.ld-inspection-scope-checks { margin: 22px 0 0; }
+.ld-inspection-scope-checks { margin: 14px 0 0; }
 
 .ld-inspection-scope-checks-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 0 10px;
+  margin: 0 0 8px;
 }
 
 .ld-inspection-scope-checks-label {
@@ -184,8 +185,8 @@
 .ld-inspection-scope-checks-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0;
+  gap: 6px;
+  margin: 0 0 0 var(--ld-indent);
   padding: 0;
   list-style: none;
 }
@@ -195,8 +196,8 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  min-height: 44px;
-  padding: 8px 12px;
+  min-height: 40px;
+  padding: 6px 12px;
   border: 1px solid var(--ld-ok-line);
   border-radius: 10px;
   background: var(--ld-ok-soft);
