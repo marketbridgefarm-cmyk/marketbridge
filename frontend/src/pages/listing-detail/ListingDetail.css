@@ -1,18 +1,16 @@
 /* ==========================================================================
    ListingDetail — MarketBridge card style
    Matched to pages/orders/Orders.css (the reference look) and to the design
-   tokens in mb-tokens.css. Every card shares:
+   tokens in mb-tokens.css.
 
-     • frosted surface, 22px radius, soft shadow, no border
-     • 2px header rule + 44px accent segment
-     • green eyebrow (16×3 dash, wide tracking)
-     • 1.5px sub-header line, green title
-     • description BELOW the rule, indented to match the card body
-     • one button style everywhere; .full buttons are large, centered,
-       and capped at 420px
-     • facts grid — max 3 items per column, extras spill into a new column
-     • sub-sections (evidence, facts, inspection scope) draw NO box of their
-       own — they are flat content inside the parent card
+   Layout contract:
+     • Card: frosted surface, 22px radius, soft shadow, no border
+     • Head: 2px rule + 44px accent segment
+     • Subtitle / description: BELOW the rule, indented 20px
+     • Facts grid: max 3 items per column on wide, 2 columns on phones
+     • One button style everywhere; .full buttons are centered & capped
+     • Sub-sections draw NO box of their own — everything is flat inside the
+       parent .card
 
    NOTE ON SPECIFICITY: mb-cards.css is loaded last and prefixes every rule
    with #root (1,2,0). Any rule here that must override a card default is
@@ -62,10 +60,14 @@
 
 .back-link:hover { color: var(--mb-accent); }
 
+/* Grid: two columns on desktop, single column stacked on mobile.
+   --detail-gap controls the space between columns AND between stacked
+   sections on mobile. */
 .detail-grid {
+  --detail-gap: 20px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 20px;
+  gap: var(--detail-gap);
   align-items: start;
 }
 
@@ -73,6 +75,28 @@
   .detail-grid {
     grid-template-columns: minmax(0, 1fr) 360px;
   }
+}
+
+.detail-grid > section,
+.detail-grid > aside {
+  display: block;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+/* Cards inside a column: the first one sits flush with the section top,
+   subsequent ones get the column gap above them. The LAST card in each
+   column has no bottom margin, so the grid's own gap is the only space
+   between columns when the layout stacks. */
+.detail-grid > section > .card,
+.detail-grid > aside > .card {
+  margin: 0;
+}
+
+.detail-grid > section > .card + .card,
+.detail-grid > aside > .card + .card {
+  margin-top: var(--detail-gap);
 }
 
 /* --------------------------------------------------------------------------
@@ -115,7 +139,7 @@
   display: flex;
   flex-wrap: nowrap;
   gap: 8px;
-  margin: 0 0 20px;
+  margin: 0 0 var(--detail-gap, 20px);
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
@@ -161,7 +185,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   3. Card shell — same as OrderDetail / Orders
+   3. Card shell
    -------------------------------------------------------------------------- */
 
 .detail-page .card {
@@ -171,7 +195,6 @@
   display: block;
   width: 100%;
   max-width: none;
-  margin: 0 0 20px;
   padding: 24px;
   background: var(--mb-card);
   border: none;
@@ -197,9 +220,7 @@
   }
 }
 
-/* Defensive: a `.card` inside a `.card` on this page becomes a flat sub-block,
-   never a second floating tile. Everything below (facts, evidence, scope)
-   also has its own reset so no box can leak through. */
+/* A nested .card on this page becomes a flat sub-block, never a second tile. */
 #root .detail-page .card .card {
   padding: 14px 16px;
   margin: 0 0 12px;
@@ -210,7 +231,10 @@
 }
 
 /* --------------------------------------------------------------------------
-   4. Card head — 2px rule + 44px accent segment
+   4. Card head — 2px rule + 44px accent segment.
+   When a subtitle follows, the head's bottom margin collapses to 0 and the
+   subtitle carries its own top offset — so the subtitle always sits BELOW
+   the rule, never inside it.
    -------------------------------------------------------------------------- */
 
 .ld-card-head {
@@ -233,6 +257,12 @@
   width: 44px;
   height: 4px;
   background: var(--mb-accent);
+}
+
+/* When the header is followed by a subtitle, remove the header's own gap —
+   the subtitle manages the spacing from the rule down. */
+.ld-card-head:has(+ .ld-card-subtitle) {
+  margin-bottom: 0;
 }
 
 .ld-card-head-main {
@@ -286,6 +316,8 @@
   word-break: break-word;
 }
 
+/* Subtitle — BELOW the rule, indented 20px. Sits between the header and
+   whatever content follows. */
 .ld-card-subtitle {
   margin: 14px 0 0;
   padding-inline-start: 20px;
@@ -293,6 +325,10 @@
   color: var(--mb-muted);
   font-size: 14px;
   line-height: 1.55;
+}
+
+.ld-card-subtitle + * {
+  margin-top: 18px;
 }
 
 .ld-card-side-label {
@@ -413,15 +449,12 @@
 }
 
 /* --------------------------------------------------------------------------
-   8. Facts grid — max 3 items per column, extras spill into a new column.
-   No box, no surface: the facts sit directly on the parent card.
-        4 facts → 2 columns (3 + 1)
-        6 facts → 2 columns (3 + 3)
-        7 facts → 3 columns (3 + 3 + 1)
+   8. Facts grid — flat, no box.
+   Wide: max 3 items per column, extras spill into a new column.
+   Phones (≤480px): 2 columns, left-to-right, so labels never break mid-word.
    -------------------------------------------------------------------------- */
 
 #root .detail-page .detail-facts {
-  /* Defensive — kill any wrapper rule from a parent sheet. */
   background: transparent !important;
   border: 0 !important;
   border-radius: 0 !important;
@@ -443,7 +476,9 @@
   }
 }
 
-#root .detail-page .detail-facts > div { min-width: 0; }
+#root .detail-page .detail-facts > div {
+  min-width: 0;
+}
 
 #root .detail-page .detail-facts > div > span {
   display: block;
@@ -464,9 +499,20 @@
   overflow-wrap: anywhere;
 }
 
+/* On phones, the 3-column layout is too tight for the labels — switch to
+   a plain 2-column grid that flows left→right, top→bottom. */
+@media (max-width: 480px) {
+  #root .detail-page .detail-facts {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+    grid-auto-columns: auto;
+    gap: 14px 16px;
+  }
+}
+
 /* --------------------------------------------------------------------------
    9. Evidence block — FLAT. No box, no surface, no border.
-   The inspection scope inside it does the styling.
    -------------------------------------------------------------------------- */
 
 #root .detail-page .evidence {
@@ -709,7 +755,7 @@
 .detail-page .card .muted.small { font-size: 12.5px; }
 
 /* --------------------------------------------------------------------------
-   14. Market reference tile (nested card)
+   14. Market reference tile
    -------------------------------------------------------------------------- */
 
 #root .detail-page .card .card > strong {
@@ -791,13 +837,15 @@
 }
 
 @media (max-width: 480px) {
+  .detail-grid { --detail-gap: 16px; }
+
   .detail-page .card {
     padding: 18px;
     border-radius: 18px;
   }
 
   .ld-card-title { font-size: 18px; }
-  .ld-card-subtitle { font-size: 13.5px; padding-inline-start: 14px; }
+  .ld-card-subtitle { font-size: 13.5px; padding-inline-start: 14px; margin-top: 12px; }
   .ld-section-title { font-size: 14.5px; }
 
   .listing-description {
@@ -806,10 +854,6 @@
   }
 
   .detail-media-thumb { width: 68px; height: 52px; }
-
-  #root .detail-page .detail-facts {
-    gap: 12px 16px;
-  }
 
   #root .detail-page .detail-facts > div > strong { font-size: 14px; }
 
