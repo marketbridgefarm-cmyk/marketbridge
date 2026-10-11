@@ -1,14 +1,12 @@
 /* ==========================================================================
    OrderDetail — MarketBridge card style
    Matched to pages/orders/Orders.css:
-   - Card eyebrow = GREEN (--card-tone), not orange (orange is only the
-     page-hero eyebrow and the 44px accent segment under the title line).
+   - Card eyebrow = GREEN (--card-tone), not orange.
    - Section sub-headers (h3) = GREEN, matching .card-block-title h3.
-   - Section body content is indented with clamp(16px, 13cqw, 48px), matching
-     .card-block-body / .order-time.
-   - Header line = 2px; sub-header line = 1.5px; 44px accent segment under
-     the header.
-   - Align-items, flex-basis, and margins copied from Orders.
+   - Section body content indented with clamp(16px, 13cqw, 48px).
+   - Header line = 2px; sub-header line = 1.5px; 44px accent segment.
+   - Header status pill in the section header = plain colored text.
+   - Meta row at the bottom of the overview: Created (left) + ORD code (right).
    Facts grid: max 3 items per column (grid-auto-flow: column, 3 rows).
    ========================================================================== */
 
@@ -77,7 +75,6 @@
   border: none;
   border-radius: var(--mb-radius-card);
   box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
-  /* Every card uses the same tone (green), matching Orders list cards. */
   --card-tone: var(--mb-ok);
 }
 
@@ -88,7 +85,7 @@
   min-width: 0;
 }
 
-/* Left-border tone variants (Dispute open, Inspector next step, etc.) */
+/* Left-border tone variants */
 .order-detail-page .card.od-card-warning {
   border-left: 4px solid var(--mb-danger);
   padding-left: 20px;
@@ -143,7 +140,6 @@
 
 /* --------------------------------------------------------------------------
    Eyebrow — GREEN, matching .order-card .eyebrow
-   (Only the page hero on Orders uses orange. Cards use green.)
    -------------------------------------------------------------------------- */
 
 .od-eyebrow {
@@ -191,16 +187,8 @@
   overflow-wrap: anywhere;
 }
 
-.od-card-created {
-  margin: 18px 0 0;
-  padding-inline-start: clamp(16px, 13cqw, 48px);
-  color: var(--mb-muted);
-  font-size: 14px;
-}
-
 /* --------------------------------------------------------------------------
    Sections — sub-header is a 1.5px line only, h3 is GREEN
-   (matches .card-block-title + .card-block-title h3 in Orders)
    -------------------------------------------------------------------------- */
 
 .od-card-section {
@@ -242,19 +230,63 @@
   font-size: 15px;
 }
 
-/* Indent section body content — matches .card-block-body indent in Orders.
-   Every direct child after the header is pushed in by the same clamp. */
+/* Header status — plain colored text (matches .header-pill in Orders) */
+.od-header-status {
+  color: #475569;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.od-header-status.is-good    { color: #047857; }
+.od-header-status.is-wait    { color: #92400e; }
+.od-header-status.is-info    { color: #1d4ed8; }
+.od-header-status.is-bad     { color: #b91c1c; }
+.od-header-status.is-neutral { color: #475569; }
+
+/* Indent section body content — matches .card-block-body indent in Orders. */
 .od-card-section > *:not(.od-card-section-head) {
   padding-inline-start: clamp(16px, 13cqw, 48px);
 }
 
-/* Reset for grids/tables that already have their own layout, so the
-   indent doesn't double on their inner cells. */
+/* Reset for grids/tables that already have their own layout. */
 .od-card-section > .od-card-grid,
 .od-card-section > .payout-table {
   padding-inline-start: 0;
   margin-inline-start: clamp(16px, 13cqw, 48px);
   width: auto;
+}
+
+/* --------------------------------------------------------------------------
+   Meta row: created date (left) + ORD code (right)
+   -------------------------------------------------------------------------- */
+
+.od-order-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 22px;
+  padding-inline-end: 14px;
+}
+
+.od-order-time {
+  min-width: 0;
+  padding-inline-start: clamp(16px, 13cqw, 48px);
+  color: var(--mb-muted);
+  font-size: 14px;
+}
+
+.od-order-code {
+  flex: none;
+  color: var(--mb-muted);
+  font-size: 14px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* --------------------------------------------------------------------------
@@ -323,8 +355,6 @@
 
 /* --------------------------------------------------------------------------
    Findings / facts — max 3 items per column, minimum 2 columns
-   Uses grid-auto-flow: column with 3 fixed rows so items fill top→bottom
-   and spill into a new column when the 3rd row is reached.
    - 4 items → 2 columns (3 + 1)
    - 6 items → 2 columns (3 + 3)
    - 7 items → 3 columns (3 + 3 + 1)
@@ -340,7 +370,6 @@
   width: 100%;
 }
 
-/* On wide-enough containers keep the columns from getting too cramped. */
 @container (min-width: 400px) {
   .od-detail-facts {
     grid-auto-columns: minmax(140px, 1fr);
