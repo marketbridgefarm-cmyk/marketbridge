@@ -7,7 +7,7 @@
    - green eyebrow (16×3 dash, wide tracking)
    - 1.5px sub-header line, green 15px/700 title
    - tone-coloured pills and stat chips
-   - 48px buttons, 52px fields, orange focus ring
+   - ONE button style: 1px orange border, dark-orange text, transparent bg
    - body content indented with clamp(16px, 13cqw, 48px)
    The page shell reuses the same gradient background as OrderDetail.
 
@@ -60,7 +60,6 @@
   font-family: 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
 
-/* Each direct <section> on the page is the page-level spacing block. */
 .sd-dashboard > section {
   display: block;
   margin: 0 0 20px;
@@ -181,6 +180,49 @@
 
 .sd-toolbar .sd-muted { max-width: 62ch; }
 
+/* --- Stacked variant used for tab-content toolbars ---------------------- *
+ * The bordered box only contains the eyebrow + title. The description sits
+ * BELOW the 2px rule and is indented from the left like other body text. */
+
+.sd-toolbar--stacked {
+  display: block;
+  padding: 0;
+  border-bottom: none;
+  margin: 0 0 20px;
+}
+
+.sd-toolbar--stacked::after { display: none; }
+
+.sd-toolbar-head {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px 16px;
+  padding: 0 0 10px;
+  border-bottom: 2px solid var(--mb-line);
+}
+
+.sd-toolbar-head::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 44px;
+  height: 4px;
+  background: var(--mb-accent);
+}
+
+.sd-toolbar-text {
+  margin: 14px 0 0;
+  padding-inline-start: clamp(16px, 13cqw, 48px);
+  max-width: 62ch;
+  color: var(--mb-muted);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
 /* --------------------------------------------------------------------------
    5. Stat grid
    -------------------------------------------------------------------------- */
@@ -263,11 +305,17 @@
 }
 
 /* --------------------------------------------------------------------------
-   7. Buttons
+   7. Buttons — ONE style everywhere.
+   Every button (primary, outline, whatever) uses the same 1px orange border
+   and dark-orange text. Primary / outline variants intentionally do not
+   differ so the page reads as one design system.
+
    Uses #root to out-rank mb-cards.css (1,2,0) → (1,3,0).
    -------------------------------------------------------------------------- */
 
-#root .sd-dashboard .sd-btn {
+#root .sd-dashboard .sd-btn,
+#root .sd-dashboard .sd-btn-primary,
+#root .sd-dashboard .sd-btn-outline {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -276,10 +324,10 @@
   min-height: 48px;
   padding: 0 18px;
   background: transparent;
-  border: 1.5px solid var(--mb-line);
+  border: 1px solid var(--mb-accent);
   border-radius: var(--mb-radius-field);
   box-shadow: none;
-  color: var(--mb-ink-2);
+  color: var(--mb-accent-ink);
   font-family: inherit;
   font-size: 16px;
   font-weight: 700;
@@ -293,45 +341,30 @@
   touch-action: manipulation;
 }
 
-#root .sd-dashboard .sd-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.8);
+#root .sd-dashboard .sd-btn:hover:not(:disabled),
+#root .sd-dashboard .sd-btn-primary:hover:not(:disabled),
+#root .sd-dashboard .sd-btn-outline:hover:not(:disabled) {
+  background: var(--mb-accent-tint);
+  border-color: var(--mb-accent-ink);
+  color: var(--mb-accent-ink);
 }
 
-#root .sd-dashboard .sd-btn:focus-visible {
+#root .sd-dashboard .sd-btn:focus-visible,
+#root .sd-dashboard .sd-btn-primary:focus-visible,
+#root .sd-dashboard .sd-btn-outline:focus-visible {
   outline: 3px solid var(--mb-accent-border);
   outline-offset: 2px;
 }
 
-#root .sd-dashboard .sd-btn:disabled {
+#root .sd-dashboard .sd-btn:disabled,
+#root .sd-dashboard .sd-btn-primary:disabled,
+#root .sd-dashboard .sd-btn-outline:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
 
-#root .sd-dashboard .sd-btn-primary {
-  background: var(--mb-accent);
-  border-color: var(--mb-accent);
-  color: #ffffff;
-}
-
-#root .sd-dashboard .sd-btn-primary:hover:not(:disabled) {
-  background: var(--mb-accent-ink);
-  border-color: var(--mb-accent-ink);
-}
-
-#root .sd-dashboard .sd-btn-outline {
-  background: transparent;
-  border-color: var(--mb-line);
-  color: var(--mb-ink-2);
-}
-
-#root .sd-dashboard .sd-btn-outline:hover:not(:disabled) {
-  border-color: var(--mb-accent);
-  color: var(--mb-accent-ink);
-  background: var(--mb-accent-tint);
-}
-
 /* --------------------------------------------------------------------------
-   8. Tabs
+   8. Tabs (kept as a segmented control — active tab is filled)
    -------------------------------------------------------------------------- */
 
 .sd-tabs {
@@ -391,7 +424,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   9. Workspace grid (cards on the left, aside on the right)
+   9. Workspace grid
    -------------------------------------------------------------------------- */
 
 .sd-workspace {
@@ -440,7 +473,7 @@
   min-width: 0;
 }
 
-/* Card head — same treatment as .order-card-head on the Orders page */
+/* Card head — 2px rule + 44px accent segment */
 .sd-card-head {
   position: relative;
   display: flex;
@@ -468,8 +501,19 @@
   min-width: 0;
 }
 
+/* Title line: title on the left, date on the right (same row). */
+.sd-card-title-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .sd-card-title {
   margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--mb-ink);
   font-size: clamp(17px, 4.6cqw, 20px);
   font-weight: 800;
@@ -477,6 +521,18 @@
   letter-spacing: -0.2px;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Small muted date on the same line as the title, indented slightly from
+   the right edge so it sits just under the avatar block. */
+.sd-card-date {
+  flex: none;
+  color: var(--mb-muted);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding-inline-end: 6px;
+  font-variant-numeric: tabular-nums;
 }
 
 .sd-card-sub {
@@ -487,7 +543,7 @@
   overflow-wrap: anywhere;
 }
 
-/* Party block (right side of the head): role + name + avatar */
+/* Party block on the right: role + name stacked, avatar circle. */
 .sd-card-head-party {
   flex: none;
   display: flex;
@@ -521,7 +577,6 @@
   white-space: nowrap;
 }
 
-/* Avatar circle, tone-aware */
 .sd-avatar {
   flex: none;
   display: inline-flex;
@@ -562,12 +617,10 @@
   color: var(--mb-ink-2);
 }
 
-/* Card body — a sequence of .sd-card-block sub-sections */
 .sd-card-body {
   display: block;
 }
 
-/* Sub-header inside a card — 1.5px line only, green title */
 .sd-card-block {
   margin-top: 22px;
 }
@@ -604,7 +657,6 @@
   white-space: nowrap;
 }
 
-/* Body content indent (matches OrderDetail's card sections) */
 .sd-card-block-body {
   padding-inline-start: clamp(16px, 13cqw, 48px);
 }
@@ -617,7 +669,6 @@
   line-height: 1.5;
 }
 
-/* Actions row at the bottom of a card */
 .sd-card-actions {
   display: flex;
   flex-wrap: wrap;
@@ -696,7 +747,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   12. Form grid (inside cards and the report modal)
+   12. Form grid (inside cards + report modal)
    -------------------------------------------------------------------------- */
 
 .sd-form-grid {
@@ -706,9 +757,7 @@
   margin: 14px 0 0;
 }
 
-.sd-form-grid--tight {
-  gap: 12px;
-}
+.sd-form-grid--tight { gap: 12px; }
 
 .sd-form-grid label {
   display: block;
@@ -718,12 +767,8 @@
   font-weight: 700;
 }
 
-.sd-full {
-  grid-column: 1 / -1;
-}
+.sd-full { grid-column: 1 / -1; }
 
-/* Fields use the same look as OrderDetail's card fields. Prefixed with
-   #root so they beat mb-cards.css defaults. */
 #root .sd-dashboard .sd-card :is(
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]),
   select,
@@ -828,7 +873,6 @@
   color: var(--mb-ink-2);
 }
 
-/* Progress stepper: vertical on narrow, horizontal on wide */
 .sd-progress {
   display: flex;
   flex-direction: column;
@@ -967,7 +1011,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   15. Section heads (Active inspections / Completed inspections)
+   15. Section heads (Active / Completed)
    -------------------------------------------------------------------------- */
 
 .sd-jobs-section {
@@ -1054,26 +1098,33 @@
   font-weight: 700;
 }
 
+/* Table actions render as small outline buttons using the same accent. */
 .sd-table-action {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 0;
+  min-height: 34px;
+  padding: 0 12px;
   background: transparent;
-  border: 0;
+  border: 1px solid var(--mb-accent);
+  border-radius: var(--mb-radius-pill);
   color: var(--mb-accent-ink);
   font-family: inherit;
   font-size: 13.5px;
   font-weight: 700;
   text-decoration: none;
   cursor: pointer;
+  margin-right: 8px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.sd-table-action:hover { text-decoration: underline; }
+.sd-table-action:hover {
+  background: var(--mb-accent-tint);
+  border-color: var(--mb-accent-ink);
+}
 
 .sd-table-action svg { flex: none; }
 
-/* Mobile: table becomes stacked "cards" */
 @media (max-width: 720px) {
   .sd-table--mobile-cards thead { display: none; }
 
@@ -1120,24 +1171,14 @@
    17. Aside / evidence checklist
    -------------------------------------------------------------------------- */
 
-.sd-aside {
-  position: relative;
-}
+.sd-aside { position: relative; }
 
 @media (min-width: 960px) {
-  .sd-aside {
-    position: sticky;
-    top: 24px;
-  }
+  .sd-aside { position: sticky; top: 24px; }
 }
 
-#root .sd-dashboard .sd-checklist {
-  padding: 22px 24px;
-}
-
-#root .sd-dashboard .sd-checklist .sd-card-head {
-  margin-bottom: 14px;
-}
+#root .sd-dashboard .sd-checklist { padding: 22px 24px; }
+#root .sd-dashboard .sd-checklist .sd-card-head { margin-bottom: 14px; }
 
 .sd-check-list {
   list-style: none;
@@ -1227,7 +1268,6 @@
   margin-top: 6px;
 }
 
-/* Report form's own spacing (form-grid + photo evidence + actions) */
 .sd-report-modal .sd-form-grid { margin-top: 20px; }
 
 .sd-check-grid {
@@ -1282,13 +1322,9 @@
   margin-top: 22px;
 }
 
-.sd-report-actions {
-  justify-content: flex-end;
-}
+.sd-report-actions { justify-content: flex-end; }
 
-.sd-modal-actions .sd-btn {
-  min-width: 140px;
-}
+.sd-modal-actions .sd-btn { min-width: 140px; }
 
 /* --------------------------------------------------------------------------
    19. Toast
@@ -1335,17 +1371,12 @@
 .sd-toast-close:hover { color: #ffffff; }
 
 /* --------------------------------------------------------------------------
-   20. Responsive — same breakpoints as OrderDetail
+   20. Responsive
    -------------------------------------------------------------------------- */
 
 @media (max-width: 720px) {
-  .sd-dashboard > section {
-    padding: 0 16px;
-  }
-
-  .sd-workspace {
-    grid-template-columns: 1fr;
-  }
+  .sd-dashboard > section { padding: 0 16px; }
+  .sd-workspace { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {
@@ -1356,6 +1387,7 @@
 
   .sd-card-title { font-size: 17px; }
   .sd-card-sub { font-size: 13.5px; }
+  .sd-card-date { font-size: 12px; padding-inline-end: 4px; }
   .sd-card-block-title h4 { font-size: 14.5px; }
   .sd-eyebrow { gap: 10px; letter-spacing: 0.2em; }
   .sd-eyebrow::before { width: 13px; }
@@ -1369,12 +1401,15 @@
   .sd-amount > b { font-size: 24px; }
   .sd-amount > span { font-size: 14px; }
 
-  .sd-report-modal {
-    padding: 18px;
-    border-radius: 18px;
-  }
-
+  .sd-report-modal { padding: 18px; border-radius: 18px; }
   .sd-report-header h2 { font-size: 18px; }
+
+  #root .sd-dashboard .sd-btn,
+  #root .sd-dashboard .sd-btn-primary,
+  #root .sd-dashboard .sd-btn-outline {
+    font-size: 15px;
+    min-height: 44px;
+  }
 }
 
 @media (max-width: 360px) {
@@ -1390,7 +1425,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   #root .sd-dashboard .sd-btn,
-  #root .sd-dashboard .sd-tab,
+  #root .sd-dashboard .sd-btn-primary,
+  #root .sd-dashboard .sd-btn-outline,
+  .sd-tab,
   .sd-table-action {
     transition: none;
   }
