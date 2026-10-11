@@ -1,29 +1,24 @@
 /* ==========================================================================
    ListingInspectionScope — flat sub-section of a parent card
    --------------------------------------------------------------------------
-   Renders inside the Inspection card on ListingDetail (and any other card
-   that needs the scope summary). Draws NO wrapper surface of its own:
-
-     • no border, no radius, no background, no padding, no shadow
-     • all content sits directly on the parent card
+   Renders inside the Inspection card on ListingDetail. Draws NO wrapper
+   surface of its own — no border, no radius, no background, no padding,
+   no shadow. All content sits directly on the parent card.
 
    Layout:
-     • .ld-inspection-scope-head → eyebrow + title over a 1.5px rule
-     • facts grid                → max 3 items per column
-     • .ld-inspection-scope-checks-label → same 1.5px-rule sub-header
-     • chips                     → green pills on their own row
+     • .ld-inspection-scope-head          eyebrow + title over a 1.5px rule
+     • .ld-inspection-scope-facts         fact grid, max 3 per column
+     • .ld-inspection-scope-checks-label  same 1.5px-rule sub-header
+     • .ld-inspection-scope-checks-list   plain-text checks with ✓ marks,
+                                          in a clean 2-column grid
    ========================================================================== */
 
 .ld-inspection-scope {
   --ld-ink: #0f172a;
   --ld-muted: #64748b;
   --ld-line: #cbd5e1;
-  --ld-line-soft: #e2e8f0;
   --ld-ok: #047857;
-  --ld-ok-bg: #ecfdf5;
-  --ld-ok-border: #a7f3d0;
 
-  /* Defensive reset — the component is intentionally frameless. */
   background: transparent !important;
   border: 0 !important;
   border-radius: 0 !important;
@@ -39,12 +34,12 @@
 .ld-inspection-scope > * { box-sizing: border-box; }
 
 /* --------------------------------------------------------------------------
-   1. Head — eyebrow + title over a 1.5px rule (matches .ld-section-head)
+   1. Head — eyebrow + title over a 1.5px rule
    -------------------------------------------------------------------------- */
 
 .ld-inspection-scope-head {
-  margin: 0 0 14px;
-  padding: 0 0 8px;
+  margin: 0 0 16px;
+  padding: 0 0 10px;
   border-bottom: 1.5px solid var(--ld-line);
 }
 
@@ -52,7 +47,7 @@
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  margin: 0 0 4px;
+  margin: 0 0 6px;
   color: var(--ld-ok);
   font-size: 12px;
   font-weight: 700;
@@ -84,6 +79,10 @@
         4 facts → 2 columns (3 + 1)
         6 facts → 2 columns (3 + 3)
         7 facts → 3 columns (3 + 3 + 1)
+
+   Rows are 16px apart and columns 24px apart, so the block reads as a
+   compact table rather than scattered text. On narrow phones the grid
+   switches to 2 columns left→right so labels never break mid-word.
    -------------------------------------------------------------------------- */
 
 .ld-inspection-scope-facts {
@@ -91,7 +90,7 @@
   grid-auto-flow: column;
   grid-template-rows: repeat(3, auto);
   grid-auto-columns: minmax(0, 1fr);
-  gap: 14px 24px;
+  gap: 16px 24px;
   width: 100%;
   margin: 0;
   padding: 0;
@@ -126,12 +125,29 @@
   overflow-wrap: anywhere;
 }
 
+/* On phones the 3-per-column rule is too tight — switch to a plain
+   2-column grid that flows left→right. */
+@media (max-width: 480px) {
+  .ld-inspection-scope-facts {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+    grid-auto-columns: auto;
+    gap: 14px 16px;
+  }
+
+  .ld-inspection-scope-fact > strong { font-size: 14px; }
+}
+
 /* --------------------------------------------------------------------------
-   3. Checks — sub-header gets the same 1.5px rule, chips flow beneath it
+   3. Checks required — sub-header gets the same 1.5px rule.
+   Items render as plain text with a soft green ✓ mark, laid out in a clean
+   2-column grid so 7 checks read as a compact list instead of scattered
+   pills.
    -------------------------------------------------------------------------- */
 
 .ld-inspection-scope-checks {
-  margin: 20px 0 0;
+  margin: 22px 0 0;
   padding: 0;
   border: 0;
 }
@@ -139,7 +155,7 @@
 .ld-inspection-scope-checks-label {
   display: block;
   margin: 0 0 14px;
-  padding: 0 0 8px;
+  padding: 0 0 10px;
   border-bottom: 1.5px solid var(--ld-line);
   color: var(--ld-ok);
   font-size: 12px;
@@ -149,45 +165,49 @@
   line-height: 1.2;
 }
 
-.ld-inspection-scope-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.ld-inspection-scope-checks-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 20px;
   margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.ld-inspection-scope-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  background: var(--ld-ok-bg);
-  border: 1.5px solid var(--ld-ok-border);
-  border-radius: 999px;
+.ld-inspection-scope-check {
+  position: relative;
+  min-width: 0;
+  padding-left: 20px;
+  color: var(--ld-ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.ld-inspection-scope-check::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  top: 0;
   color: var(--ld-ok);
   font-size: 13px;
-  font-weight: 700;
-  line-height: 1.3;
-  white-space: nowrap;
+  font-weight: 900;
+  line-height: 1.4;
 }
 
-/* --------------------------------------------------------------------------
-   4. Responsive
-   -------------------------------------------------------------------------- */
-
-@media (max-width: 480px) {
-  .ld-inspection-scope-facts {
-    gap: 12px 18px;
-  }
-
-  .ld-inspection-scope-fact > strong { font-size: 14px; }
-
-  .ld-inspection-scope-chip {
-    font-size: 12.5px;
-    padding: 3px 10px;
-  }
-}
-
+/* On very narrow phones switch to a single column so long labels don't
+   squash. */
 @media (max-width: 360px) {
-  .ld-inspection-scope-facts { gap: 10px 14px; }
-  .ld-inspection-scope-fact > strong { font-size: 13.5px; }
+  .ld-inspection-scope-checks-list {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .ld-inspection-scope-check {
+    font-size: 13.5px;
+    padding-left: 18px;
+  }
+
+  .ld-inspection-scope-check::before { font-size: 12px; }
 }
