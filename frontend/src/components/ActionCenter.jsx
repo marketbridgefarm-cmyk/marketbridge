@@ -14,6 +14,10 @@ import api from '../api/client';
 //   3. first ready workflow action       (everyone else)
 //   4. fallback text
 //
+// The header shows "Current Status" as the eyebrow and the live status as
+// plain colored text on the top right (no pill). The progress track is
+// always horizontal, on every device.
+//
 // Styles live in OrderDetail.css, section 19 (.od-next-*).
 // ============================================================================
 
@@ -174,6 +178,24 @@ export default function ActionCenter({
   ];
   const stageCurrent = stages.findIndex((s) => !s.done);
 
+  /* ---- Header status text + tone (plain colored text, no pill) --------- */
+  const currentStageLabel = stageCurrent >= 0 ? stages[stageCurrent].label : 'Completed';
+
+  const statusLabel =
+    status === 'CANCELLED' ? 'Cancelled' :
+    status === 'DISPUTED' ? 'Disputed' :
+    status === 'COMPLETED' ? 'Completed' :
+    currentStageLabel;
+
+  const statusTone =
+    status === 'CANCELLED' ? 'bad' :
+    status === 'DISPUTED' ? 'warn' :
+    status === 'COMPLETED' ? 'good' :
+    currentStageLabel === 'Ordered' ? 'neutral' :
+    currentStageLabel === 'Paid' ? 'wait' :
+    currentStageLabel === 'Delivered' ? 'info' :
+    'good';
+
   const doScroll = (target) => {
     if (onScroll) onScroll(target);
     else document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -238,8 +260,6 @@ export default function ActionCenter({
   };
 
   /* ---- What does the card say? ----------------------------------------- */
-  const stageLabel = workflow?.currentStage ? String(workflow.currentStage).replaceAll('_', ' ') : null;
-
   let mode = 'active';
   let title;
   let text;
@@ -277,19 +297,13 @@ export default function ActionCenter({
     text = 'The next step will appear here as soon as something needs you.';
   }
 
-  const stepNumber = guideCurrent ? currentIndex + 1 : steps.length;
-  const showCount = buyerGuide && mode === 'active';
   const others = terminal || buyerGuide ? [] : readyActions.slice(1);
 
   return (
     <section className={`card od-next od-next--${mode} next-action-card`} id="next-action" aria-labelledby="od-next-title">
       <div className="od-next-top">
-        <span className="od-eyebrow">{buyerGuide ? 'Your next step' : 'Next step'}</span>
-        {showCount ? (
-          <span className="od-next-count">Step {stepNumber} of {steps.length}</span>
-        ) : (
-          stageLabel && <span className="od-next-count">{stageLabel}</span>
-        )}
+        <span className="od-eyebrow">Current Status</span>
+        <span className={`od-next-status is-${statusTone}`}>{statusLabel}</span>
       </div>
 
       <h2 className="od-next-title" id="od-next-title">{title}</h2>
@@ -307,8 +321,8 @@ export default function ActionCenter({
         </button>
       )}
 
-      {/* Order progress (all roles) */}
-      <ol className="od-next-track od-next-track--stages" aria-label="Order progress">
+      {/* Order progress (all roles) — always horizontal */}
+      <ol className="od-next-track" aria-label="Order progress">
         {stages.map((s, i) => {
           const state = s.done ? 'done' : i === stageCurrent ? 'current' : 'todo';
           return (
