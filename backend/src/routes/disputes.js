@@ -12,6 +12,10 @@ const paymentService = require('../services/paymentService');
 
 const router = express.Router();
 
+// ============================================================================
+// CREATE DISPUTE
+// ============================================================================
+
 router.post(
   '/',
   authenticate,
@@ -80,9 +84,6 @@ router.post(
           },
         });
 
-        // Atomic claim: fails with ORDER_STATE_CONFLICT if another
-        // dispute (or any other status change) landed on this order
-        // between the pre-check above and this transaction.
         await transitionOrderStatus(tx, orderId, order.status, 'DISPUTED');
 
         await holdForDispute(tx, { orderId, actorId: req.user.id, disputeType });
@@ -114,11 +115,24 @@ router.post(
   }
 );
 
+// ============================================================================
+// LIST DISPUTES (admin)
+// ============================================================================
+
 router.get('/', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
   try {
     const disputes = await prisma.dispute.findMany({
       include: {
-        order: true,
+        order: {
+          select: {
+            id: true,
+            status: true,
+            buyerId: true,
+            sellerId: true,
+            transportJob: { select: { truckOwnerId: true } },
+            inspectionRequests: { select: { inspectorId: true } },
+          },
+        },
         raisedBy: { select: { id: true, name: true, roles: true } },
         against: { select: { id: true, name: true, roles: true } },
       },
@@ -129,8 +143,8 @@ router.get('/', authenticate, requireRole('ADMIN'), requireMfa(), async (req, re
       if (!user) return null;
       if (user.id === order?.buyerId) return 'BUYER';
       if (user.id === order?.sellerId) return 'SELLER';
-      if (Array.isArray(user.roles) && user.roles.includes('INSPECTOR')) return 'INSPECTOR';
-      if (Array.isArray(user.roles) && user.roles.includes('TRUCK_OWNER')) return 'TRUCK_OWNER';
+      if (order?.inspectionRequests?.some((r) => r.inspectorId === user.id)) return 'INSPECTOR';
+      if (order?.transportJob?.truckOwnerId === user.id) return 'TRUCK_OWNER';
       return Array.isArray(user.roles) ? user.roles[0] || null : null;
     };
 
@@ -147,25 +161,30 @@ router.get('/', authenticate, requireRole('ADMIN'), requireMfa(), async (req, re
   }
 });
 
+// ============================================================================
+// RESOLVE DISPUTE (admin)
+// ----------------------------------------------------------------------------
+// Three resolutions, scoped to what the claim is actually about:
+//   DISMISSED       – unfreeze everything, no cancellation, no refund.
+//   CANCEL_SERVICE  – cancel only the disputed service (inspection or transport),
+//                     refund its paid amount, keep the order alive, resume
+//                     everything else. Goods disputes cannot use this.
+//   CANCEL_ORDER    – cancel the entire order and refund every settled
+//                     payment (previous behaviour).
+//
+// Which services CANCEL_SERVICE can affect is derived from dispute.againstId.
+// If the dispute is against the inspector, only the inspection can be
+// cancelled this way. If against the truck owner, only the transport.
+// If against the buyer or seller, CANCEL_SERVICE is refused; the caller must
+// choose CANCEL_ORDER (or DISMISSED).
+// ============================================================================
+
 router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
   try {
-    const { resolution, status, payoutDecision } = req.body;
+    const { resolutionType, resolution } = req.body;
 
-    if (payoutDecision != null && !['RELEASE', 'CANCEL'].includes(String(payoutDecision).toUpperCase())) {
-      return res.status(400).json({ error: 'payoutDecision must be RELEASE or CANCEL' });
-    }
-
-    const dispute = await prisma.dispute.findUnique({ where: { id: req.params.id } });
-    if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
-
-    if (dispute.status !== 'OPEN' && dispute.status !== 'UNDER_REVIEW') {
-      return res.status(409).json({ error: `Dispute is already ${dispute.status}` });
-    }
-
-    const allowedStatuses = ['RESOLVED', 'REJECTED'];
-    const finalStatus = String(status || 'RESOLVED').toUpperCase();
-    if (!allowedStatuses.includes(finalStatus)) {
-      return res.status(400).json({ error: 'status must be RESOLVED or REJECTED' });
+    if (!['DISMISSED', 'CANCEL_SERVICE', 'CANCEL_ORDER'].includes(resolutionType)) {
+      return res.status(400).json({ error: 'resolutionType must be DISMISSED, CANCEL_SERVICE, or CANCEL_ORDER' });
     }
     if (!resolution || typeof resolution !== 'string' || resolution.trim().length < 5 || resolution.trim().length > 5000) {
       return res.status(400).json({ error: 'resolution must be 5-5000 characters' });
@@ -179,82 +198,202 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
         where: { id: req.params.id },
       });
       if (!dispute) throw Object.assign(new Error('Dispute not found'), { status: 404 });
+      if (dispute.status !== 'OPEN' && dispute.status !== 'UNDER_REVIEW') {
+        throw Object.assign(new Error(`Dispute is already ${dispute.status}`), { status: 409 });
+      }
 
-      const currentOrder = await tx.order.findUnique({
+      const order = await tx.order.findUnique({
         where: { id: dispute.orderId },
         include: {
           transportJob: true,
+          inspectionRequests: true,
           payments: true,
+          listing: true,
         },
       });
-      if (!currentOrder) throw Object.assign(new Error('Order not found'), { status: 404 });
-      if (currentOrder.status !== 'DISPUTED') {
-        throw Object.assign(new Error(`Order is ${currentOrder.status}; the open dispute can no longer be resolved here`), { status: 409, code: 'ORDER_STATE_CONFLICT' });
-      }
-
-      const frozenPayout = await tx.payout.findFirst({
-        where: { orderId: dispute.orderId, status: 'ON_HOLD_DISPUTE' },
-        select: { id: true },
-      });
-      const decision = payoutDecision ? String(payoutDecision).toUpperCase() : null;
-
-      if (frozenPayout && !decision) {
+      if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
+      if (order.status !== 'DISPUTED') {
         throw Object.assign(
-          new Error('This dispute resolution requires payoutDecision RELEASE or CANCEL because order payouts are frozen'),
-          { status: 400, code: 'PAYOUT_DECISION_REQUIRED' }
+          new Error(`Order is ${order.status}; the open dispute can no longer be resolved here`),
+          { status: 409, code: 'ORDER_STATE_CONFLICT' }
         );
       }
 
-      const updated = await tx.dispute.update({
-        where: { id: dispute.id },
-        data: { resolution, status: finalStatus },
+      const againstId = dispute.againstId;
+      const isAgainstBuyer = againstId === order.buyerId;
+      const isAgainstSeller = againstId === order.sellerId;
+      const isAgainstInspector = (order.inspectionRequests || []).some(
+        (r) => r.inspectorId === againstId && r.status !== 'CANCELLED'
+      );
+      const isAgainstTransporter = order.transportJob?.truckOwnerId === againstId;
+
+      const affectedService =
+        isAgainstInspector ? 'INSPECTION' :
+        isAgainstTransporter ? 'TRANSPORT' :
+        'GOODS';
+
+      if (resolutionType === 'CANCEL_SERVICE' && affectedService === 'GOODS') {
+        throw Object.assign(
+          new Error(
+            'A goods dispute cannot be resolved by cancelling only one service. ' +
+            'Use CANCEL_ORDER to cancel the whole order, or DISMISSED to resume without cancelling.'
+          ),
+          { status: 400, code: 'CANCEL_SERVICE_NOT_ALLOWED_FOR_GOODS' }
+        );
+      }
+
+      const frozenPayout = await tx.payout.findFirst({
+        where: { orderId: order.id, status: 'ON_HOLD_DISPUTE' },
+        select: { id: true },
       });
 
       let refundIds = [];
       let restoredOrderStatus = null;
+      let cancelledServiceIds = [];
 
-      if (decision === 'CANCEL') {
-        // CANCEL is an order-level economic decision, not merely a payout
-        // decision. Previously we cancelled payouts/refunds but restored the
-        // order to its old status, which allowed transport, inspection and
-        // payment proceedings to continue after the buyer had been refunded.
-        // A dispute resolved by cancellation now performs the same complete
-        // unwind as a normal order cancellation and leaves the order terminal.
+      if (resolutionType === 'CANCEL_ORDER') {
         const cancelled = await cancelOrderInTransaction(tx, {
-          order: currentOrder,
+          order,
           actorId: req.user.id,
           reason: 'Dispute resolved: order cancelled and buyer refund requested',
           cancelledByRole: 'ADMIN',
         });
         const refunds = await tx.paymentRefund.findMany({
-          where: { payment: { orderId: dispute.orderId } },
+          where: { payment: { orderId: order.id } },
           select: { id: true },
         });
-        refundIds = refunds.map((refund) => refund.id);
+        refundIds = refunds.map((r) => r.id);
         restoredOrderStatus = cancelled.status;
       } else {
-        // RELEASE (or a dispute with no payout to freeze) resumes the exact
-        // pre-dispute order state. The order was frozen while the dispute was
-        // open, so no payment/transport/inspection action can sneak through.
-        if (decision === 'RELEASE') {
-          await resumeAfterDispute(tx, { orderId: dispute.orderId, actorId: req.user.id, disputeType: dispute.disputeType });
-        }
-        restoredOrderStatus = dispute.previousOrderStatus || 'CONFIRMED';
-        await transitionOrderStatus(tx, dispute.orderId, 'DISPUTED', restoredOrderStatus);
+        // DISMISSED or CANCEL_SERVICE — the order stays alive.
 
-        // A provider payment can settle while the order is DISPUTED. Replay
-        // every paid order-level effect (goods, transport, inspection) after
-        // restoring the pre-dispute workflow state.
+        if (resolutionType === 'CANCEL_SERVICE') {
+          if (affectedService === 'INSPECTION') {
+            const inspections = (order.inspectionRequests || []).filter((r) => r.status !== 'CANCELLED');
+            for (const insp of inspections) {
+              const paidInspectorPayments = await tx.payment.findMany({
+                where: { inspectionRequestId: insp.id, type: 'INSPECTOR', status: 'PAID' },
+                select: { id: true },
+              });
+              for (const p of paidInspectorPayments) {
+                const refund = await paymentService.requestRefund(tx, {
+                  paymentId: p.id,
+                  reason: 'Dispute resolved: inspection cancelled, fee refunded',
+                  requestedById: req.user.id,
+                });
+                refundIds.push(refund.id);
+              }
+
+              await tx.inspectionRequest.update({
+                where: { id: insp.id },
+                data: {
+                  inspectorId: null,
+                  fee: null,
+                  sellerConfirmedAt: null,
+                  inspectorOnSiteConfirmedAt: null,
+                  feeTermsLockedAt: null,
+                  lockedFee: null,
+                  lockedFeePayer: null,
+                  lockedBuyerFeeAmount: null,
+                  lockedSellerFeeAmount: null,
+                  startDueAt: null,
+                  completionDueAt: null,
+                  startedAt: null,
+                  status: 'CANCELLED',
+                  acceptedReleaseCount: 0,
+                },
+              });
+
+              await tx.inspectionQuote.updateMany({
+                where: {
+                  inspectionRequestId: insp.id,
+                  status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
+                },
+                data: { status: 'EXPIRED' },
+              });
+
+              cancelledServiceIds.push(insp.id);
+            }
+          } else if (affectedService === 'TRANSPORT') {
+            const job = order.transportJob;
+            if (job && job.status !== 'CANCELLED') {
+              const paidTransportPayments = await tx.payment.findMany({
+                where: { transportJobId: job.id, type: 'TRANSPORT', status: 'PAID' },
+                select: { id: true },
+              });
+              for (const p of paidTransportPayments) {
+                const refund = await paymentService.requestRefund(tx, {
+                  paymentId: p.id,
+                  reason: 'Dispute resolved: transport cancelled, fee refunded',
+                  requestedById: req.user.id,
+                });
+                refundIds.push(refund.id);
+              }
+
+              await tx.transportJob.update({
+                where: { id: job.id },
+                data: {
+                  truckOwnerId: null,
+                  truckId: null,
+                  agreedAmount: null,
+                  truckArrivedAt: null,
+                  truckArrivedConfirmedBy: null,
+                  sellerPickupConfirmedAt: null,
+                  sellerPreparationDueAt: null,
+                  buyerLoadingConfirmedAt: null,
+                  buyerLoadingDueAt: null,
+                  status: 'CANCELLED',
+                  acceptedReleaseCount: 0,
+                },
+              });
+
+              await tx.transportQuote.updateMany({
+                where: {
+                  transportJobId: job.id,
+                  status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
+                },
+                data: { status: 'EXPIRED' },
+              });
+
+              cancelledServiceIds.push(job.id);
+            }
+          }
+        }
+
+        // Unfreeze the payouts that are not tied to the cancelled service.
+        // Anything tied to a service in `cancelledServiceIds` is left to the
+        // refund flow to cancel.
+        await resumeAfterDispute(tx, {
+          orderId: order.id,
+          actorId: req.user.id,
+          disputeType: dispute.disputeType,
+          cancelledServiceIds,
+        });
+
+        restoredOrderStatus = dispute.previousOrderStatus || 'CONFIRMED';
+        await transitionOrderStatus(tx, order.id, 'DISPUTED', restoredOrderStatus);
+
+        // Replay any payments that settled while the dispute was open so
+        // the workflow resumes correctly for services that stayed alive.
         const paidOrderPayments = await tx.payment.findMany({
-          where: { orderId: dispute.orderId, status: 'PAID' },
+          where: { orderId: order.id, status: 'PAID' },
           select: { id: true },
           orderBy: { createdAt: 'asc' },
         });
-
         for (const paidPayment of paidOrderPayments) {
           await paymentService.replayDisputedPaidPayment(tx, paidPayment.id);
         }
       }
+
+      const updated = await tx.dispute.update({
+        where: { id: dispute.id },
+        data: {
+          status: 'RESOLVED',
+          resolution,
+          resolutionType,
+          resolutionAppliedAt: new Date(),
+        },
+      });
 
       await recordAuditEvent(tx, {
         actorId: req.user.id,
@@ -262,12 +401,14 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
         resourceType: 'Dispute',
         resourceId: updated.id,
         metadata: {
-          orderId: updated.orderId,
-          finalStatus,
+          orderId: order.id,
+          resolutionType,
+          affectedService,
           restoredOrderStatus,
-          payoutDecision: decision,
           refundIds,
-          raisedAgainstId: dispute.againstId,
+          cancelledServiceIds,
+          raisedAgainstId: againstId,
+          hadFrozenPayouts: Boolean(frozenPayout),
         },
       });
 
@@ -277,8 +418,12 @@ router.patch('/:id/resolve', authenticate, requireRole('ADMIN'), requireMfa(), a
     return res.json({ dispute: result });
   } catch (error) {
     req.log.error({ err: error }, 'RESOLVE DISPUTE ERROR:');
-    if (error.code === 'ORDER_STATE_CONFLICT' || error.code === 'INVALID_ORDER_TRANSITION' || error.code === 'PAYOUT_DECISION_REQUIRED') {
-      return res.status(error.status || 409).json({ error: error.message });
+    if (
+      error.code === 'ORDER_STATE_CONFLICT' ||
+      error.code === 'CANCEL_SERVICE_NOT_ALLOWED_FOR_GOODS' ||
+      error.code === 'INVALID_ORDER_TRANSITION'
+    ) {
+      return res.status(error.status || 409).json({ error: error.message, code: error.code });
     }
     return res.status(500).json({ error: 'Could not resolve dispute' });
   }
