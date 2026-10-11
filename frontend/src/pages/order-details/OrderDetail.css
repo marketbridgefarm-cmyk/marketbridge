@@ -7,6 +7,8 @@
    - Header line = 2px; sub-header line = 1.5px; 44px accent segment.
    - Header status pill in the section header = plain colored text.
    - Meta row at the bottom of the overview: Created (left) + ORD code (right).
+   - Party badge in the header (role + name + avatar), right-aligned.
+   - Card title shrinks with card width so long names / numbers wrap cleanly.
    Facts grid: max 3 items per column (grid-auto-flow: column, 3 rows).
    ========================================================================== */
 
@@ -166,16 +168,20 @@
 .od-eyebrow.is-selling { color: var(--mb-ok); }
 
 /* --------------------------------------------------------------------------
-   Card title + subtitle — same geometry as .order-title / .order-date
+   Card title + subtitle
+   Title shrinks with card width so long product names / numbers wrap cleanly
+   instead of overflowing.
    -------------------------------------------------------------------------- */
 
 .od-card-title {
   margin: 0;
   color: var(--mb-ink);
-  font-size: 24px;
+  font-size: clamp(17px, 4.6cqw, 20px);
   font-weight: 800;
   line-height: 1.25;
   overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
 }
 
 .od-card-subtitle {
@@ -290,7 +296,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   Avatar / party — matches .order-avatar tone conventions
+   Avatar / party — matches .order-avatar / .order-party-info in Orders
    -------------------------------------------------------------------------- */
 
 .od-party-avatar {
@@ -315,28 +321,37 @@
   font-size: 11px;
 }
 
+/* Party badge in card head: role + name on the left, avatar on the right.
+   Text is right-aligned and truncated so long names don't push the avatar. */
 .od-card-side-party {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+}
+
+.od-card-side-party > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  max-width: 120px;
+  text-align: right;
 }
 
 .od-card-side-label {
-  display: block;
   color: var(--mb-muted);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
 .od-card-side-value {
-  display: block;
-  margin-top: 2px;
+  max-width: 100%;
+  overflow: hidden;
   color: var(--mb-ink);
   font-size: 15px;
   font-weight: 800;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .od-party-you {
@@ -355,10 +370,6 @@
 
 /* --------------------------------------------------------------------------
    Findings / facts — max 3 items per column, minimum 2 columns
-   - 4 items → 2 columns (3 + 1)
-   - 6 items → 2 columns (3 + 3)
-   - 7 items → 3 columns (3 + 3 + 1)
-   - 9 items → 3 columns (3 + 3 + 3)
    -------------------------------------------------------------------------- */
 
 .od-detail-facts {
@@ -1141,11 +1152,15 @@
     border-radius: 18px;
   }
 
-  .od-card-title { font-size: 22px; }
+  .od-card-title { font-size: 17px; }
   .od-card-subtitle { font-size: 14px; }
   .od-card-section-title { font-size: 14.5px; }
   .od-eyebrow { gap: 10px; letter-spacing: 0.2em; }
   .od-eyebrow::before { width: 13px; }
+
+  .od-card-side-party > div { max-width: 90px; }
+  .od-card-side-label { font-size: 12px; }
+  .od-card-side-value { font-size: 14px; }
 
   .od-payout-due-digits { font-size: 22px; }
   .od-confidence-main h2 { font-size: 17px; }
@@ -1153,8 +1168,9 @@
 
 @media (max-width: 360px) {
   .order-detail-page .card { padding: 14px; }
-  .od-card-title { font-size: 20px; }
+  .od-card-title { font-size: 16px; }
   .od-card-section-title { font-size: 14px; }
+  .od-card-side-party > div { max-width: 76px; }
 }
 
 /* --------------------------------------------------------------------------
