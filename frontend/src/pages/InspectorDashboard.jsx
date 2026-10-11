@@ -40,7 +40,6 @@ const CHECKLIST = [
 
 /* ── Small presentational helpers (same card system as Transport) ── */
 
-// BUYER_REQUESTED -> "Buyer requested" (sentence case reads better in cards).
 function modeLabel(mode) {
   const text = String(mode || '').replaceAll('_', ' ').toLowerCase();
   return text.charAt(0).toUpperCase() + text.slice(1);
@@ -65,7 +64,6 @@ function fmtMoney(value) {
   return Number.isFinite(n) ? n.toLocaleString() : null;
 }
 
-// "ORD 25464DE7" style short reference, matching the Orders cards.
 function shortOrder(id) {
   if (!id) return null;
   return `ORD ${String(id).replace(/-/g, '').slice(0, 8).toUpperCase()}`;
@@ -94,11 +92,6 @@ function jobTone(status) {
   }
 }
 
-/*
- * Three-step inspection timeline:
- *   Accepted → In progress → Completed
- * The "current" step is the next thing that still has to happen.
- */
 function jobProgress(status) {
   const labels = ['Accepted', 'In progress', 'Completed'];
   const s = String(status || '').toUpperCase();
@@ -114,7 +107,6 @@ function jobProgress(status) {
   }));
 }
 
-// The agreed inspection fee, once an inspector has been assigned.
 function jobAmount(request) {
   const accepted = (request.quotes || []).find((q) => q.status === 'ACCEPTED');
   const raw = request.fee ?? accepted?.counterAmount ?? accepted?.amount ?? null;
@@ -140,7 +132,6 @@ function ArrowIcon() {
   );
 }
 
-// Big number + small unit, as on the Orders "Amount" block.
 function AmountRow({ value, unit = 'ETB' }) {
   return (
     <div className="sd-amount">
@@ -202,8 +193,6 @@ export default function InspectorDashboard() {
     loadAll();
   }, [loadAll]);
 
-  // Action feedback is shown as a floating toast (always in view, wherever
-  // the person has scrolled) and dismisses itself.
   useEffect(() => {
     if (!msg) return undefined;
     const timer = window.setTimeout(() => setMsg(''), 5000);
@@ -221,9 +210,6 @@ export default function InspectorDashboard() {
     setError('');
   }
 
-  // Order Action Center can deep-link an inspector directly to the report
-  // workspace. This removes the dead-end of being sent to a dashboard and
-  // having to find the inspection manually.
   useEffect(() => {
     const requestedId = searchParams.get('inspectionId');
     if (!requestedId || !mine.length) return;
@@ -234,7 +220,6 @@ export default function InspectorDashboard() {
     }
   }, [searchParams, mine]);
 
-  // Kept for direct-accept flows; the marketplace now runs on sealed quotes.
   async function accept(id) {
     setError('');
     setMsg('');
@@ -242,23 +227,14 @@ export default function InspectorDashboard() {
     const fee = Number(feeInputs[id]);
 
     if (!fee || fee <= 0) {
-      setError(
-        'Enter your fee for this inspection before accepting.'
-      );
+      setError('Enter your fee for this inspection before accepting.');
       return;
     }
 
     try {
-      await api.patch(`/inspections/${id}/accept`, {
-        fee,
-      });
-
-      setMsg(
-        'Job accepted. Start the inspection when you arrive at the inspection location.'
-      );
-
+      await api.patch(`/inspections/${id}/accept`, { fee });
+      setMsg('Job accepted. Start the inspection when you arrive at the inspection location.');
       setTab('mine');
-
       await loadAll();
     } catch (err) {
       setError(
@@ -275,9 +251,7 @@ export default function InspectorDashboard() {
     const amount = Number(quoteAmountInputs[id]);
 
     if (!amount || amount <= 0) {
-      setError(
-        'Enter your quote amount before submitting.'
-      );
+      setError('Enter your quote amount before submitting.');
       return;
     }
 
@@ -306,14 +280,9 @@ export default function InspectorDashboard() {
     }
   }
 
-  // A quote's negotiation thread is only "live" at its leaf: the row that
-  // no later counter-quote points back to as a parent.
   function leafInspectionQuote(quotes) {
     const list = Array.isArray(quotes) ? quotes : [];
     const parentIds = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
-    // The inspector can own several chains on one request (e.g. an earlier
-    // rejected bid and a newer one). `find` returned the OLDEST leaf, so a
-    // rejected bid hid the live one; take the most recent leaf instead.
     return (
       list
         .filter((q) => !parentIds.has(q.id))
@@ -412,17 +381,10 @@ export default function InspectorDashboard() {
 
     try {
       await api.post(`/inspections/${id}/start`);
-
-      setMsg(
-        'Inspection started. You can now complete the evidence report.'
-      );
-
+      setMsg('Inspection started. You can now complete the evidence report.');
       await loadAll();
     } catch (err) {
-      setError(
-        err.response?.data?.error ||
-          'Could not start the inspection.'
-      );
+      setError(err.response?.data?.error || 'Could not start the inspection.');
     }
   }
 
@@ -469,32 +431,18 @@ export default function InspectorDashboard() {
         `/inspections/${activeRequestId}/report`,
         {
           ...report,
-
           quantity: Number(report.quantity),
-
-          moisture:
-            report.moisture !== ''
-              ? Number(report.moisture)
-              : undefined,
-
+          moisture: report.moisture !== '' ? Number(report.moisture) : undefined,
           photos: reportEvidence.photoKeys,
-
           videos: reportEvidence.videoKeys,
         }
       );
 
-      setMsg(
-        'Inspection report submitted and inspection marked complete.'
-      );
-
+      setMsg('Inspection report submitted and inspection marked complete.');
       closeReportForm();
-
       await loadAll();
     } catch (err) {
-      setError(
-        err.response?.data?.error ||
-          'Could not submit report.'
-      );
+      setError(err.response?.data?.error || 'Could not submit report.');
     }
   }
 
@@ -639,15 +587,15 @@ export default function InspectorDashboard() {
 
             {tab === 'available' && (
               <div>
-                <div className="sd-toolbar">
-                  <div>
+                <div className="sd-toolbar sd-toolbar--stacked">
+                  <div className="sd-toolbar-head">
                     <span className="sd-eyebrow">MARKETPLACE</span>
                     <h2>Open inspection requests</h2>
-                    <p className="sd-muted">
-                      Requests from sellers or buyers that no inspector has
-                      accepted yet.
-                    </p>
                   </div>
+                  <p className="sd-toolbar-text">
+                    Requests from sellers or buyers that no inspector has
+                    accepted yet.
+                  </p>
                 </div>
 
                 <div className="sd-cards">
@@ -684,10 +632,14 @@ export default function InspectorDashboard() {
                         <div className="sd-card-head">
                           <div className="sd-card-head-text">
                             <span className="sd-eyebrow tone-info">Open request</span>
-                            <h3 className="sd-card-title" title={listingTitle(r)}>
-                              {listingTitle(r)}
-                            </h3>
-                            {createdLabel && <p className="sd-card-sub">{createdLabel}</p>}
+                            <div className="sd-card-title-line">
+                              <h3 className="sd-card-title" title={listingTitle(r)}>
+                                {listingTitle(r)}
+                              </h3>
+                              {createdLabel && (
+                                <span className="sd-card-date">{createdLabel}</span>
+                              )}
+                            </div>
                           </div>
 
                           <div className="sd-card-head-party">
@@ -831,15 +783,13 @@ export default function InspectorDashboard() {
                             </section>
                           )}
 
-                          {createdLabel && <p className="sd-card-foot">Created {createdLabel}</p>}
-
                           {/* Footer */}
                           {(canQuote || isMyTurn) && (
                             <div className="sd-card-actions">
                               {canQuote && (
                                 <button
                                   type="button"
-                                  className="sd-btn sd-btn-primary"
+                                  className="sd-btn"
                                   disabled={submittingQuoteId === r.id}
                                   onClick={() => submitQuote(r.id)}
                                 >
@@ -851,7 +801,7 @@ export default function InspectorDashboard() {
                                 <>
                                   <button
                                     type="button"
-                                    className="sd-btn sd-btn-primary"
+                                    className="sd-btn"
                                     disabled={responding}
                                     onClick={() => acceptInspectionQuote(r.id, myLeaf.id)}
                                   >
@@ -859,7 +809,7 @@ export default function InspectorDashboard() {
                                   </button>
                                   <button
                                     type="button"
-                                    className="sd-btn sd-btn-outline"
+                                    className="sd-btn"
                                     disabled={responding}
                                     onClick={() => counterInspectionQuote(r.id, myLeaf.id)}
                                   >
@@ -867,7 +817,7 @@ export default function InspectorDashboard() {
                                   </button>
                                   <button
                                     type="button"
-                                    className="sd-btn sd-btn-outline"
+                                    className="sd-btn"
                                     disabled={responding}
                                     onClick={() => rejectInspectionQuote(r.id, myLeaf.id)}
                                   >
@@ -901,16 +851,16 @@ export default function InspectorDashboard() {
 
             {tab === 'mine' && (
               <div>
-                <div className="sd-toolbar">
-                  <div>
+                <div className="sd-toolbar sd-toolbar--stacked">
+                  <div className="sd-toolbar-head">
                     <span className="sd-eyebrow">MY JOBS</span>
                     <h2>My inspection jobs</h2>
-                    <p className="sd-muted">
-                      Start an accepted inspection when you arrive at the
-                      inspection location. Submit the evidence report after
-                      completing the inspection.
-                    </p>
                   </div>
+                  <p className="sd-toolbar-text">
+                    Start an accepted inspection when you arrive at the
+                    inspection location. Submit the evidence report after
+                    completing the inspection.
+                  </p>
                 </div>
 
                 {/* ── Active jobs (cards) ─────────────────────── */}
@@ -948,10 +898,14 @@ export default function InspectorDashboard() {
                             <div className="sd-card-head">
                               <div className="sd-card-head-text">
                                 <span className={`sd-eyebrow tone-${tone}`}>Inspection</span>
-                                <h3 className="sd-card-title" title={listingTitle(r)}>
-                                  {listingTitle(r)}
-                                </h3>
-                                {createdLabel && <p className="sd-card-sub">{createdLabel}</p>}
+                                <div className="sd-card-title-line">
+                                  <h3 className="sd-card-title" title={listingTitle(r)}>
+                                    {listingTitle(r)}
+                                  </h3>
+                                  {createdLabel && (
+                                    <span className="sd-card-date">{createdLabel}</span>
+                                  )}
+                                </div>
                               </div>
 
                               <div className="sd-card-head-party">
@@ -1038,14 +992,12 @@ export default function InspectorDashboard() {
                                 </section>
                               )}
 
-                              {createdLabel && <p className="sd-card-foot">Created {createdLabel}</p>}
-
                               {/* Footer */}
                               <div className="sd-card-actions">
                                 {r.status === 'ACCEPTED' && (
                                   <>
                                     {r.sellerConfirmedAt ? (
-                                      <button type="button" className="sd-btn sd-btn-primary" onClick={() => startInspection(r.id)}>Start inspection</button>
+                                      <button type="button" className="sd-btn" onClick={() => startInspection(r.id)}>Start inspection</button>
                                     ) : (
                                       <p role="status">Waiting for seller confirmation. You cannot start or report yet.</p>
                                     )}
@@ -1053,7 +1005,7 @@ export default function InspectorDashboard() {
                                     {acceptedQuote && !paid && (
                                       <button
                                         type="button"
-                                        className="sd-btn sd-btn-outline"
+                                        className="sd-btn"
                                         disabled={respondingQuoteId === acceptedQuote.id}
                                         onClick={() => cancelAcceptedInspection(r.id, acceptedQuote.id)}
                                       >
@@ -1068,7 +1020,7 @@ export default function InspectorDashboard() {
                                 {r.status === 'IN_PROGRESS' && (
                                   <button
                                     type="button"
-                                    className="sd-btn sd-btn-primary"
+                                    className="sd-btn"
                                     onClick={() => openReportForm(r.id)}
                                   >
                                     Submit report
@@ -1076,19 +1028,13 @@ export default function InspectorDashboard() {
                                 )}
 
                                 {orderId && (
-                                  <Link to={`/orders/${orderId}`} className="sd-btn sd-btn-outline">
+                                  <Link to={`/orders/${orderId}`} className="sd-btn">
                                     View order
                                     <ArrowIcon />
                                   </Link>
                                 )}
                               </div>
 
-                              {/* ★ Site handoff — seller <-> inspector coordination.
-                                  Only the assigned inspector and the listing
-                                  seller can see this; the buyer never does.
-                                  Rendered only on active jobs. The server
-                                  gates access by role and inspection status,
-                                  so this is a UX guard, not security. */}
                               <InspectionCoordinationInspector
                                 inspectionRequestId={r.id}
                               />
@@ -1145,7 +1091,7 @@ export default function InspectorDashboard() {
                                   View listing
                                   <ArrowIcon />
                                 </Link>
-                                <button type="button" className="sd-table-action" style={{ marginLeft: 8, border: 0, background: 'none', cursor: 'pointer' }} onClick={() => addReportAddendum(r.id)}>
+                                <button type="button" className="sd-table-action" onClick={() => addReportAddendum(r.id)}>
                                   Add correction
                                 </button>
                               </td>
@@ -1168,7 +1114,7 @@ export default function InspectorDashboard() {
                     </p>
                     <button
                       type="button"
-                      className="sd-btn sd-btn-primary"
+                      className="sd-btn"
                       onClick={() => setTab('available')}
                     >
                       Browse available jobs
@@ -1177,7 +1123,7 @@ export default function InspectorDashboard() {
                 )}
 
                 {pendingMine.length === 0 && completedMine.length > 0 && (
-                  <p className="sd-muted" style={{ marginTop: 4 }}>
+                  <p className="sd-muted">
                     No accepted or in-progress inspection jobs.
                   </p>
                 )}
@@ -1223,7 +1169,7 @@ export default function InspectorDashboard() {
 
                     <button
                       type="button"
-                      className="btn btn-light btn-sm"
+                      className="sd-btn"
                       onClick={closeReportForm}
                       aria-label="Close report form"
                     >
@@ -1404,12 +1350,12 @@ export default function InspectorDashboard() {
                     <div className="sd-modal-actions sd-report-actions">
                       <button
                         type="button"
-                        className="sd-btn sd-btn-outline"
+                        className="sd-btn"
                         onClick={closeReportForm}
                       >
                         Cancel
                       </button>
-                      <button className="sd-btn sd-btn-primary" type="submit">
+                      <button className="sd-btn" type="submit">
                         Publish evidence report
                       </button>
                     </div>
@@ -1446,7 +1392,7 @@ export default function InspectorDashboard() {
       </section>
 
       {/* =========================================================
-          TOAST — floats in view, above modals and the bottom tab bar
+          TOAST
       ========================================================= */}
 
       {(error || msg) && (
