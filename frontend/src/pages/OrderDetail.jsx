@@ -463,6 +463,19 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
     { label: 'Completed', done: order.status === 'COMPLETED' },
   ];
 
+  // The first step that isn't done is the current stage; if every step is
+  // done, the last step ("Completed") is the current state.
+  const currentStep = steps.find((s) => !s.done) || steps[steps.length - 1];
+  const currentTone =
+    currentStep.label === 'Completed' ? 'good'
+    : currentStep.label === 'Delivered' ? 'info'
+    : currentStep.label === 'Paid' ? 'wait'
+    : 'neutral';
+
+  const created = order.createdAt
+    ? new Date(order.createdAt).toLocaleDateString()
+    : '—';
+
   return (
     <Card
       className="od-card-overview"
@@ -471,11 +484,14 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
       title={title}
       side={<Avatar name={other?.name} />}
     >
-      <Section title="Order status" meta={`ORD ${shortId(order.id).toUpperCase()}`}>
+      <Section
+        title="Order status"
+        meta={<span className={`od-header-status is-${currentTone}`}>{currentStep.label}</span>}
+      >
         <OrderProgress steps={steps} />
       </Section>
 
-      <Section title="Details">
+      <Section title="Order Details">
         <Facts>
           <Fact name="Amount">{money(order.finalPrice)} ETB</Fact>
           <Fact name="Buyer">{order.buyer?.name || '—'}{isBuyer && <YouTag inline />}</Fact>
@@ -487,7 +503,10 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
         </Facts>
       </Section>
 
-      <p className="od-card-created">Created {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}</p>
+      <div className="od-order-meta">
+        <span className="od-order-time">Created {created}</span>
+        <span className="od-order-code">ORD {shortId(order.id).toUpperCase()}</span>
+      </div>
 
       {canCancel && (
         <Button className="btn btn-outline btn-block" disabled={busy === 'cancel'} onClick={onCancel} busy={busy === 'cancel'} busyText="Cancelling…">
