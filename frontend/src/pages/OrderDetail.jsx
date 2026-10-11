@@ -36,6 +36,8 @@ import { InspectionRequestSummary, TransportRequestSummary } from '../components
 import { DEADLINE_WINDOWS, QUANTITY_VALUES, deadlineFromWindow } from '../components/RequestOptions.js';
 import RefundStatusCard from '../components/RefundStatusCard.jsx';
 
+import './order-details/OrderDetail.css';
+
 const PAYMENT_METHODS = [
   { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
   { value: 'QR', label: 'QR Code' },
@@ -314,108 +316,6 @@ function PayoutStatusCard({ payouts, names, you }) {
       : null;
   const duePassed = dueMs !== null && remainingMs === 0;
 
-  const dueStripStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 14,
-    flexWrap: 'wrap',
-    padding: '14px 0 0',
-    margin: '14px 0 0',
-    border: 'none',
-    borderTop: '1px solid #e5e9ef',
-    borderRadius: 0,
-    background: 'transparent',
-    backgroundColor: 'transparent',
-    backgroundImage: 'none',
-    boxShadow: 'none',
-  };
-
-  const dueLabelStyle = {
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 10.5,
-    fontWeight: 700,
-    letterSpacing: '.14em',
-    textTransform: 'uppercase',
-    color: '#64748b',
-  };
-
-  const dueClockStyle = {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: 6,
-    fontVariantNumeric: 'tabular-nums',
-  };
-
-  const dueDigitsStyle = {
-    fontFamily: "'Manrope', system-ui, sans-serif",
-    fontSize: 22,
-    fontWeight: 800,
-    letterSpacing: '-.6px',
-    color: '#0d1b2a',
-    lineHeight: 1,
-  };
-
-  const dueUnitStyle = {
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 11,
-    fontWeight: 700,
-    letterSpacing: '.12em',
-    textTransform: 'uppercase',
-    color: '#64748b',
-  };
-
-  const noticeWrapStyle = {
-    marginTop: 18,
-    paddingTop: 14,
-    border: 'none',
-    borderTop: '1px solid #e5e9ef',
-    borderRadius: 0,
-    background: 'transparent',
-    backgroundColor: 'transparent',
-    backgroundImage: 'none',
-    boxShadow: 'none',
-  };
-
-  const noticePrefixStyle = {
-    display: 'block',
-    margin: '0 0 8px',
-    fontFamily: "'Manrope', system-ui, sans-serif",
-    fontSize: 11,
-    fontWeight: 800,
-    letterSpacing: '.14em',
-    textTransform: 'uppercase',
-    color: '#0f7a44',
-  };
-
-  const noticeListStyle = {
-    listStyle: 'none',
-    margin: 0,
-    padding: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-  };
-
-  const noticeItemStyle = {
-    position: 'relative',
-    paddingLeft: 24,
-    fontFamily: "'DM Sans', system-ui, sans-serif",
-    fontSize: 13,
-    lineHeight: 1.6,
-    color: '#2c3a4a',
-  };
-
-  const noticeNumStyle = {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    fontFamily: "'Manrope', system-ui, sans-serif",
-    fontSize: 12,
-    fontWeight: 800,
-    color: '#0f7a44',
-  };
-
   return (
     <Card
       id="order-payout-status"
@@ -479,17 +379,15 @@ function PayoutStatusCard({ payouts, names, you }) {
       </Section>
 
       {dueMs !== null && (
-        <div style={dueStripStyle} role="group" aria-label="Due date">
-          <span style={dueLabelStyle}>Due Date</span>
-          <div style={dueClockStyle} role="timer" aria-live="off">
+        <div className="od-payout-due" role="group" aria-label="Due date">
+          <span className="od-payout-due-label">Due Date</span>
+          <div className="od-payout-due-clock" role="timer" aria-live="off">
             {duePassed ? (
-              <span style={{ ...dueDigitsStyle, fontSize: 15, letterSpacing: '-.2px', color: '#0f7a44' }}>
-                Hold cleared
-              </span>
+              <span className="od-payout-due-digits is-cleared">Hold cleared</span>
             ) : (
               <>
-                <span style={dueDigitsStyle}>{clock}</span>
-                <span style={dueUnitStyle}>left</span>
+                <span className="od-payout-due-digits">{clock}</span>
+                <span className="od-payout-due-unit">left</span>
               </>
             )}
           </div>
@@ -497,42 +395,31 @@ function PayoutStatusCard({ payouts, names, you }) {
       )}
 
       {dueMs === null && holdNotStarted && (
-        <div style={dueStripStyle} role="group" aria-label="Due date">
-          <span style={dueLabelStyle}>Due Date</span>
-          <span style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: 13, color: '#64748b' }}>
-            Starts after payment settles
-          </span>
+        <div className="od-payout-due" role="group" aria-label="Due date">
+          <span className="od-payout-due-label">Due Date</span>
+          <span className="od-payout-due-placeholder">Starts after payment settles</span>
         </div>
       )}
 
       {anyDispute && (
-        <p
-          style={{
-            marginTop: 12,
-            padding: '8px 0 8px 12px',
-            borderLeft: '3px solid #fecaca',
-            fontSize: 12.5,
-            lineHeight: 1.55,
-            color: '#b42318',
-          }}
-        >
+        <p className="od-payout-dispute-note">
           One or more payouts are frozen while a dispute is open.
         </p>
       )}
 
-      <div style={noticeWrapStyle}>
-        <span style={noticePrefixStyle}>Notice:</span>
-        <ol style={noticeListStyle}>
-          <li style={noticeItemStyle}>
-            <span style={noticeNumStyle}>1)</span>
+      <div className="od-payout-notice">
+        <span className="od-payout-notice-prefix">Notice:</span>
+        <ol className="od-payout-notice-list">
+          <li className="od-payout-notice-item">
+            <span className="od-payout-notice-num">1)</span>
             Each payout is held for 3 days after its payment settles.
           </li>
-          <li style={noticeItemStyle}>
-            <span style={noticeNumStyle}>2)</span>
+          <li className="od-payout-notice-item">
+            <span className="od-payout-notice-num">2)</span>
             Buyer payment is separate from each payout below.
           </li>
-          <li style={noticeItemStyle}>
-            <span style={noticeNumStyle}>3)</span>
+          <li className="od-payout-notice-item">
+            <span className="od-payout-notice-num">3)</span>
             No manual action is required.
           </li>
         </ol>
@@ -763,10 +650,9 @@ function InspectionRequestForm({ workDetails, setWorkDetails, requesting, reques
       <div className="od-actions">
         <Button
           variant="primary"
-          disabled={requesting}
+          disabled={requesting || !workDetails.quantityValue}
           busy={requesting}
           busyText="Requesting…"
-          disabled={!workDetails.quantityValue}
           onClick={() => request(isBuyer ? 'BUYER_REQUESTED' : 'SELLER_REQUESTED')}
         >
           Open inspection competition
@@ -847,9 +733,6 @@ function InspectionCard({ order, title, i }) {
   const acceptedLeaf = leafList.find((q) => q.status === 'ACCEPTED');
   const viewerIsAssignedInspector = request.inspectorId && request.inspectorId === i.currentUserId;
 
-  // The bids section stays visible through REQUESTED / ACCEPTED / IN_PROGRESS /
-  // COMPLETED. Only when the request is CANCELLED/STALLED (or the terminal
-  // COMPLETED with the waiting list already released) does it drop off.
   const showBidsSection =
     !['CANCELLED', 'STALLED'].includes(request.status) &&
     (request.status === 'REQUESTED' ||
@@ -953,7 +836,7 @@ function InspectionCard({ order, title, i }) {
                           Status:{' '}
                           <span className="badge">{label(quote.status || 'PENDING')}</span>
                           {isWaiting && (
-                            <span className="badge" style={{ marginLeft: 6 }}>Waiting</span>
+                            <span className="badge od-badge-inline">Waiting</span>
                           )}
                         </p>
                         {isCounteredByRequester && (
@@ -1056,7 +939,7 @@ function InspectionCard({ order, title, i }) {
                 })}
               </div>
               {pendingLeafCount > 0 && request.status !== 'REQUESTED' && (
-                <p className="muted small" style={{ marginTop: 8 }}>
+                <p className="muted small od-mt-8">
                   {pendingLeafCount} inspector bid(s) are still waiting. They will be
                   released automatically once this inspection is completed.
                 </p>
@@ -1101,7 +984,7 @@ function InspectionCard({ order, title, i }) {
           )}
 
           {isRequester && (
-            <div style={{ marginTop: 12 }}>
+            <div className="od-mt-12">
               <ReleaseAgreementControl
                 acceptedQuote={acceptedLeaf}
                 label="Inspector unavailable — choose another"
@@ -1109,7 +992,7 @@ function InspectionCard({ order, title, i }) {
                 disabled={Boolean(i.busy)}
                 onConfirm={(reason, note) => i.withdrawInspectionAgreement(request.id, { reason, note })}
               />
-              <p className="muted small" style={{ marginTop: 6 }}>
+              <p className="muted small od-mt-6">
                 Provisional agreement — release it if the inspector drops out
                 before payment.
               </p>
@@ -1117,7 +1000,7 @@ function InspectionCard({ order, title, i }) {
           )}
 
           {viewerIsAssignedInspector && acceptedLeaf && (
-            <div style={{ marginTop: 12 }}>
+            <div className="od-mt-12">
               <Button
                 variant="light"
                 size="sm"
@@ -1130,7 +1013,7 @@ function InspectionCard({ order, title, i }) {
               >
                 Cancel provisional agreement
               </Button>
-              <p className="muted small" style={{ marginTop: 6 }}>
+              <p className="muted small od-mt-6">
                 Your provisional agreement is not committed yet. Cancelling it
                 releases the slot for another inspector and is recorded against
                 your standing.
@@ -1287,7 +1170,7 @@ function ReleaseAgreementControl({ acceptedQuote, label, busy, disabled, onConfi
   }
 
   return (
-    <div className="od-release-form" style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+    <div className="od-release-form">
       <label>
         Reason for releasing
         <select value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy}>
@@ -1311,7 +1194,7 @@ function ReleaseAgreementControl({ acceptedQuote, label, busy, disabled, onConfi
         Each release is recorded against your account and visible to MarketBridge admin.
         After 2 releases on this job, further releases need admin review.
       </p>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div className="od-release-actions">
         <Button
           variant="light"
           size="sm"
@@ -1371,7 +1254,7 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
         {quote.message && <p className="muted">{quote.message}</p>}
         <p>
           Status: <span className="badge">{quote.status || 'PENDING'}</span>
-          {isWaitingPending && <span className="badge" style={{ marginLeft: 6 }}>Waiting</span>}
+          {isWaitingPending && <span className="badge od-badge-inline">Waiting</span>}
         </p>
         {quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER' && (
           <p className="muted">You countered {money(amount)} ETB — waiting for the transporter.</p>
@@ -1435,7 +1318,7 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
         )}
 
         {isOwner && quote.status === 'ACCEPTED' && (
-          <div style={{ marginTop: 12 }}>
+          <div className="od-mt-12">
             <Button
               variant="light"
               size="sm"
@@ -1448,7 +1331,7 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
             >
               Cancel provisional agreement
             </Button>
-            <p className="muted small" style={{ marginTop: 6 }}>
+            <p className="muted small od-mt-6">
               Your provisional agreement is not committed yet. Cancelling it
               releases the slot for another transporter and is recorded against
               your standing.
@@ -1547,14 +1430,6 @@ function TransportCard({ order, t }) {
     job.status === 'IN_TRANSIT' ||
     job.status === 'DELIVERED' ||
     job.incidentNotes;
-
-  // The quotes section is visible until the terminal event (DELIVERED) or a
-  // full cancellation. Hiding it once transport payment settled left the
-  // still-PENDING truck owners invisible to the requester.
-  const showQuotesSection =
-    hired &&
-    !['DELIVERED', 'CANCELLED'].includes(job.status) &&
-    job.status !== 'REQUESTED' ? false : hired;
 
   const quotesSectionVisible =
     hired &&
@@ -1769,7 +1644,7 @@ function TransportCard({ order, t }) {
               </p>
             )}
             {pendingLeafCount > 0 && t.paid && (
-              <p className="muted small" style={{ marginTop: 8 }}>
+              <p className="muted small od-mt-8">
                 {pendingLeafCount} transporter bid(s) are still waiting. They will be
                 released automatically once this transport is delivered.
               </p>
