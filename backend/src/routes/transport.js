@@ -11,6 +11,7 @@ const prisma = require('../config/db');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
+const paymentService = require('../services/paymentService');
 const { transitionOrderStatus, lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
 const { signedMediaUrl, privateMediaMetadata } = require('../utils/objectStorage');
 const { authenticate } = require('../middleware/auth');
@@ -356,6 +357,15 @@ router.patch(
   }
 );
 
+// ============================================================================
+// OPEN TRANSPORT JOBS (provider side)
+// ----------------------------------------------------------------------------
+// Two filters combined with OR: (a) open jobs with no transporter selected,
+// (b) jobs the calling truck owner has a live quote on. The second keeps a
+// waiting transporter's job visible on their dashboard after another
+// transporter is accepted, until the goods are delivered or cancelled.
+// ============================================================================
+
 router.get(
   '/open',
   authenticate,
@@ -365,13 +375,24 @@ router.get(
       const jobs = await prisma.transportJob.findMany({
         where: {
           method: 'HIRE_TRANSPORTER',
-          status: { in: ['REQUESTED', 'QUOTED'] },
           payments: {
             none: {
               type: 'TRANSPORT',
               status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
             },
           },
+          OR: [
+            { status: { in: ['REQUESTED', 'QUOTED'] }, truckOwnerId: null },
+            {
+              status: { in: ['REQUESTED', 'QUOTED', 'ACCEPTED', 'PICKUP', 'IN_TRANSIT'] },
+              quotes: {
+                some: {
+                  truckOwnerId: req.user.id,
+                  status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
+                },
+              },
+            },
+          ],
         },
         include: {
           order: {
@@ -1317,6 +1338,15 @@ router.post(
   }
 );
 
+// ============================================================================
+// UPDATE TRANSPORT STATUS
+// ----------------------------------------------------------------------------
+// Cancellation is no longer blocked by a settled transport payment. If the
+// transport was paid, the transaction queues a refund through the normal
+// Chapa flow. Only an in-flight payment (PENDING / PROCESSING) blocks the
+// cancel, so the amount is not duplicated by a second refund request.
+// ============================================================================
+
 router.patch(
   '/:id/status',
   authenticate,
@@ -1408,14 +1438,18 @@ router.patch(
       }
 
       if (next === 'CANCELLED' && job.method === 'HIRE_TRANSPORTER') {
-        const activePayment = await prisma.payment.findFirst({
-          where: { transportJobId: job.id, type: 'TRANSPORT', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } },
+        const inFlightPayment = await prisma.payment.findFirst({
+          where: {
+            transportJobId: job.id,
+            type: 'TRANSPORT',
+            status: { in: ['PENDING', 'PROCESSING'] },
+          },
           select: { id: true, status: true },
         });
-        if (activePayment && !isAdmin(req.user)) {
+        if (inFlightPayment && !isAdmin(req.user)) {
           return res.status(409).json({
             code: 'TRANSPORT_PAYMENT_ACTIVE',
-            error: 'Transport cannot be cancelled while the transport payment is pending, processing, or paid. Resolve the payment/dispute first.',
+            error: 'A transport payment is still in flight. Wait for it to settle or fail, then try again.',
           });
         }
       }
@@ -1497,6 +1531,18 @@ router.patch(
 
         if (next === 'CANCELLED') {
           await releaseTruck(tx, job.truckId);
+
+          const paidTransportPayments = await tx.payment.findMany({
+            where: { transportJobId: job.id, type: 'TRANSPORT', status: 'PAID' },
+            select: { id: true },
+          });
+          for (const p of paidTransportPayments) {
+            await paymentService.requestRefund(tx, {
+              paymentId: p.id,
+              reason: 'Transport cancelled — refunding paid amount',
+              requestedById: req.user.id,
+            });
+          }
         }
 
         await recordAuditEvent(tx, {
@@ -1547,6 +1593,9 @@ router.patch(
 
 // ============================================================================
 // SUBMIT TRANSPORT QUOTE
+// ----------------------------------------------------------------------------
+// Quoting is allowed while the job is REQUESTED, QUOTED, ACCEPTED, PICKUP,
+// or IN_TRANSIT. Waiting bids stay visible until delivery or cancellation.
 // ============================================================================
 
 router.post(
@@ -1570,9 +1619,6 @@ router.post(
 
       if (!job) return res.status(404).json({ error: 'Transport job not found' });
 
-      // [I] — a disputed or cancelled order freezes all transport activity,
-      // including new quotes. Without this check a truck owner could bid on a
-      // frozen order and, downstream, start a payment on it.
       if (job.order && ['DISPUTED', 'CANCELLED'].includes(job.order.status)) {
         return res.status(409).json({
           code: 'ORDER_DISPUTED',
@@ -1586,8 +1632,8 @@ router.post(
         return res.status(400).json({ error: 'Quotes are only for HIRE_TRANSPORTER jobs' });
       }
 
-      if (job.status !== 'REQUESTED' && job.status !== 'QUOTED') {
-        return res.status(400).json({ error: 'This job is not open for quotes' });
+      if (!['REQUESTED', 'QUOTED', 'ACCEPTED', 'PICKUP', 'IN_TRANSIT'].includes(job.status)) {
+        return res.status(400).json({ error: 'This job is no longer accepting quotes' });
       }
 
       let truckId = req.body.truckId;
@@ -1644,8 +1690,6 @@ router.post(
       }
 
       const quote = await prisma.$transaction(async (tx) => {
-        // [I] — lock the order inside the transaction too, so a dispute cannot
-        // slip in between the pre-check above and the write.
         await lockOrderAndAssertNotClosed(tx, job.orderId, 'a transport quote cannot be submitted until that is resolved');
 
         const truck = await tx.truck.findUnique({ where: { id: truckId } });
@@ -1909,7 +1953,7 @@ router.patch(
           );
         }
 
-        const selectedQuote = await tx.transportQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
+        const selectedQuote = await tx.transportQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED', expiresAt: null } });
         await recordAuditEvent(tx, {
           actorId: req.user.id,
           action: 'TRANSPORT_QUOTE_SELECTED',
@@ -2373,9 +2417,6 @@ router.patch(
           job.id
         );
 
-        // [H] — the release cap now applies to any requester release, silent
-        // or accepted. Previously silent releases skipped this block, letting
-        // a requester free the negotiation slot indefinitely.
         let releaseNumber = null;
         if (!isProviderRelease) {
           const { used, allowed } = await releaseAllowance(tx, {
@@ -2487,8 +2528,6 @@ router.patch(
             },
           });
         } else if (isSilentRelease) {
-          // [H] — silent requester releases also increment the durable counter
-          // on the transport job, so they are counted against the cap.
           await tx.transportJob.update({
             where: { id: freshQuote.transportJobId },
             data: { acceptedReleaseCount: { increment: 1 } },
