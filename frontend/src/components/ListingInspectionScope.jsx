@@ -12,6 +12,9 @@ import './ListingInspectionScope.css';
 // SECURITY: All fields here are structured (enums, numbers, dates). No free
 // text is allowed, preventing bidders from leaking contact info via the
 // quantity field or other inputs.
+//
+// This component renders as a SECTION of the parent card — no wrapper
+// surface, no border. It relies on the parent card for its background.
 // ============================================================================
 
 const CATEGORY_LABELS = {
@@ -67,58 +70,71 @@ export default function ListingInspectionScope({ inspection }) {
 
   if (!hasAnyField) return null;
 
+  // Facts are the discrete key/value rows. They flow top → bottom and spill
+  // into a new column after the 3rd row (grid-auto-flow: column).
+  const facts = [];
+  if (workCategory) {
+    facts.push({
+      key: 'category',
+      label: 'Category',
+      value: CATEGORY_LABELS[workCategory] || workCategory,
+    });
+  }
+  if (quantityValue) {
+    facts.push({
+      key: 'quantity',
+      label: 'Quantity to inspect',
+      value: `${quantityValue} ${quantityUnit || 'kg'}`,
+    });
+  }
+  if (lotCount != null && lotCount !== '') {
+    facts.push({ key: 'lots', label: 'Lots', value: lotCount });
+  }
+  if (requiredBy) {
+    facts.push({
+      key: 'deadline',
+      label: 'Deadline',
+      value: new Date(requiredBy).toLocaleString(),
+    });
+  }
+  if (reportFormat) {
+    facts.push({
+      key: 'report',
+      label: 'Report',
+      value: REPORT_LABELS[reportFormat] || reportFormat,
+    });
+  }
+
   return (
-    <div className="ld-inspection-scope">
-      <p className="ld-inspection-scope-eyebrow">INSPECTION SCOPE</p>
-      <p className="ld-inspection-scope-title">What the inspection covers</p>
+    <section className="ld-inspection-scope" aria-label="Inspection scope">
+      <header className="ld-inspection-scope-head">
+        <span className="ld-inspection-scope-eyebrow">INSPECTION SCOPE</span>
+        <h4 className="ld-inspection-scope-title">What the inspection covers</h4>
+      </header>
 
-      <div className="ld-inspection-scope-grid">
-        {workCategory && (
-          <div>
-            <span>Scope</span>
-            <strong>{CATEGORY_LABELS[workCategory] || workCategory}</strong>
-          </div>
-        )}
-        
-        {/* Render exact figure instead of a range */}
-        {quantityValue && (
-          <div>
-            <span>Quantity</span>
-            <strong>{quantityValue} {quantityUnit || 'kg'}</strong>
-          </div>
-        )}
-
-        {lotCount != null && lotCount !== '' && (
-          <div>
-            <span>Lots</span>
-            <strong>{lotCount}</strong>
-          </div>
-        )}
-        {reportFormat && (
-          <div>
-            <span>Report</span>
-            <strong>{REPORT_LABELS[reportFormat] || reportFormat}</strong>
-          </div>
-        )}
-        {requiredBy && (
-          <div>
-            <span>Deadline</span>
-            <strong>{new Date(requiredBy).toLocaleString()}</strong>
-          </div>
-        )}
-        {hasChecks && (
-          <div className="ld-inspection-scope-full">
-            <span>Checks required</span>
-            <div className="ld-inspection-scope-chips">
-              {checks.map((c) => (
-                <span key={c} className="ld-inspection-scope-chip">
-                  {CHECK_LABELS[c] || c}
-                </span>
-              ))}
+      {facts.length > 0 && (
+        <div className="ld-inspection-scope-facts">
+          {facts.map((f) => (
+            <div key={f.key} className="ld-inspection-scope-fact">
+              <span>{f.label}</span>
+              <strong>{f.value}</strong>
             </div>
+          ))}
+        </div>
+      )}
+
+      {hasChecks && (
+        <div className="ld-inspection-scope-checks">
+          <span className="ld-inspection-scope-checks-label">Checks required</span>
+          <div className="ld-inspection-scope-chips">
+            {checks.map((c) => (
+              <span key={c} className="ld-inspection-scope-chip">
+                {CHECK_LABELS[c] || c}
+              </span>
+            ))}
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </section>
   );
 }
