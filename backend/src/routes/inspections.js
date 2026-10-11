@@ -6,6 +6,7 @@ const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
+const paymentService = require('../services/paymentService');
 const {
   noticeWaitingUnlocked,
   noticeInspectionWaitingLocked,
@@ -344,6 +345,11 @@ router.post(
 
 // ============================================================================
 // CANCEL INSPECTION REQUEST
+// ----------------------------------------------------------------------------
+// Only an in-flight payment blocks cancellation. A settled payment is
+// refunded through the normal Chapa flow; the requester is never held
+// hostage by the inspector. The refund is queued inside the same
+// transaction that marks the request CANCELLED.
 // ============================================================================
 
 router.patch('/:id/cancel', authenticate, async (req, res) => {
@@ -355,8 +361,19 @@ router.patch('/:id/cancel', authenticate, async (req, res) => {
     if (request.status === 'CANCELLED') return res.json({ message: 'Inspection request is already cancelled', request });
     if (['COMPLETED', 'IN_PROGRESS'].includes(request.status)) return res.status(409).json({ error: `An inspection cannot be cancelled while it is ${request.status.toLowerCase()}` });
 
-    const activePayment = await prisma.payment.findFirst({ where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: { in: ['PENDING', 'PROCESSING', 'PAID'] } }, select: { id: true, status: true } });
-    if (activePayment) return res.status(409).json({ error: 'This inspection cannot be cancelled after inspection payment has started or completed' });
+    const inFlightPayment = await prisma.payment.findFirst({
+      where: {
+        inspectionRequestId: request.id,
+        type: 'INSPECTOR',
+        status: { in: ['PENDING', 'PROCESSING'] },
+      },
+      select: { id: true, status: true },
+    });
+    if (inFlightPayment) {
+      return res.status(409).json({
+        error: 'An inspection payment is still in flight. Wait for it to settle or fail, then try again.',
+      });
+    }
 
     const cancelled = await prisma.$transaction(async (tx) => {
       await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection cannot be cancelled until the order dispute is resolved');
@@ -366,10 +383,30 @@ router.patch('/:id/cancel', authenticate, async (req, res) => {
       const updated = await tx.inspectionRequest.update({ where: { id: fresh.id }, data: { inspectorId: null, fee: null, feeTermsLockedAt: null, lockedFee: null, lockedFeePayer: null, lockedBuyerFeeAmount: null, lockedSellerFeeAmount: null, status: 'CANCELLED' } });
       await tx.inspectionQuote.updateMany({ where: { inspectionRequestId: fresh.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } }, data: { status: 'EXPIRED' } });
       await closeCoordination(tx, fresh.id, 'INSPECTION_CANCELLED');
-      await recordAuditEvent(tx, { actorId: req.user.id, action: 'INSPECTION_REQUEST_CANCELLED', resourceType: 'InspectionRequest', resourceId: fresh.id, metadata: { orderId: fresh.orderId } });
+
+      const paidInspectorPayments = await tx.payment.findMany({
+        where: { inspectionRequestId: fresh.id, type: 'INSPECTOR', status: 'PAID' },
+        select: { id: true },
+      });
+      for (const p of paidInspectorPayments) {
+        await paymentService.requestRefund(tx, {
+          paymentId: p.id,
+          reason: 'Inspection request cancelled by requester',
+          requestedById: req.user.id,
+        });
+      }
+
+      await recordAuditEvent(tx, {
+        actorId: req.user.id,
+        action: 'INSPECTION_REQUEST_CANCELLED',
+        resourceType: 'InspectionRequest',
+        resourceId: fresh.id,
+        metadata: { orderId: fresh.orderId, refundedPayments: paidInspectorPayments.map((p) => p.id) },
+      });
+
       return updated;
     }, { maxWait: 10000, timeout: 15000 });
-    return res.json({ message: 'Inspection request cancelled. You can open a new inspection request for this order.', request: cancelled });
+    return res.json({ message: 'Inspection request cancelled. The inspector fee is being refunded.', request: cancelled });
   } catch (error) {
     req.log.error({ err: error }, 'CANCEL INSPECTION REQUEST ERROR:');
     return res.status(error.statusCode || 500).json({ error: error.message || 'Could not cancel inspection request' });
@@ -463,6 +500,12 @@ router.get('/inspectors', authenticate, async (req, res) => {
 
 // ============================================================================
 // AVAILABLE INSPECTION REQUESTS
+// ----------------------------------------------------------------------------
+// Two filters combined with OR: (a) requests still open with no inspector
+// selected, (b) requests the calling inspector already has a live quote on.
+// The second keeps a waiting inspector's job visible on their dashboard
+// after another inspector is accepted, until the report is submitted or
+// the request is cancelled.
 // ============================================================================
 
 router.get(
@@ -475,9 +518,19 @@ router.get(
 
       const requests = await prisma.inspectionRequest.findMany({
         where: {
-          status: 'REQUESTED',
-          inspectorId: null,
           ...(location ? { location: { contains: location, mode: 'insensitive' } } : {}),
+          OR: [
+            { status: 'REQUESTED', inspectorId: null },
+            {
+              status: { in: ['REQUESTED', 'ACCEPTED', 'IN_PROGRESS'] },
+              quotes: {
+                some: {
+                  inspectorId: req.user.id,
+                  status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
+                },
+              },
+            },
+          ],
         },
         include: {
           listing: {
@@ -527,6 +580,10 @@ router.get(
 
 // ============================================================================
 // INSPECTOR SUBMITS QUOTE
+// ----------------------------------------------------------------------------
+// Quoting is allowed while the request is REQUESTED, ACCEPTED, or
+// IN_PROGRESS. Waiting bids stay visible until the report is submitted
+// (COMPLETED) or the request is cancelled.
 // ============================================================================
 
 router.post(
@@ -564,7 +621,7 @@ router.post(
 
       await assertProviderCanBid(prisma, req.user.id);
 
-      if (request.status !== 'REQUESTED') {
+      if (!['REQUESTED', 'ACCEPTED', 'IN_PROGRESS'].includes(request.status)) {
         return res.status(400).json({ error: 'This inspection is no longer accepting quotes' });
       }
 
@@ -581,7 +638,7 @@ router.post(
         where: {
           inspectionRequestId: request.id,
           inspectorId: req.user.id,
-          status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
+          status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
           childQuotes: { none: {} },
         },
       });
@@ -701,14 +758,10 @@ router.get(
   }
 );
 
-
 // ============================================================================
 // MY ACTIVE QUOTES (provider side)
-// ----------------------------------------------------------------------------
-// Every live quote the calling inspector owns, regardless of the parent
-// request's status. Without this endpoint a waiting inspector disappears
-// from their own Negotiations page the moment another inspector is selected.
 // ============================================================================
+
 router.get(
   '/my-quotes',
   authenticate,
@@ -744,7 +797,6 @@ router.get(
     }
   }
 );
-
 
 // ============================================================================
 // SHARED LOOKUP
@@ -823,7 +875,7 @@ router.patch(
           );
         }
 
-        return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED' } });
+        return tx.inspectionQuote.update({ where: { id: fresh.id }, data: { status: 'SELECTED', expiresAt: null } });
       }, { maxWait: 10000, timeout: 15000 });
 
       await noticeInspectionWaitingLocked(prisma, {
@@ -1097,7 +1149,6 @@ router.post(
 router.patch(
   '/:id/quotes/:quoteId/withdraw',
   authenticate,
-  // [J] — validator middleware, matching every other quote route.
   [
     param('id').notEmpty(),
     param('quoteId').notEmpty(),
@@ -1155,10 +1206,6 @@ router.patch(
       const result = await prisma.$transaction(async (tx) => {
         await lockOrderAndAssertNotClosed(tx, request.orderId, 'the inspection agreement cannot be released until the order dispute is resolved');
 
-        // [H] — the release cap now applies to any requester release, silent
-        // or accepted. Previously silent releases skipped this block entirely,
-        // letting a requester free the negotiation slot indefinitely without
-        // ever hitting the cap.
         let releaseNumber = null;
         if (!isProviderRelease) {
           const { used, allowed } = await releaseAllowance(tx, {
@@ -1254,9 +1301,6 @@ router.patch(
             },
           });
         } else if (isSilentRelease) {
-          // [H] — silent requester releases also increment the durable counter
-          // on the request, so they are counted the same way as accepted
-          // releases against the cap.
           await tx.inspectionRequest.update({
             where: { id: request.id },
             data: { acceptedReleaseCount: { increment: 1 } },
@@ -1405,7 +1449,6 @@ router.post(
 router.patch(
   '/:id/quotes/:quoteId/reject',
   authenticate,
-  // [J] — validator middleware, matching every other quote route.
   [
     param('id').notEmpty(),
     param('quoteId').notEmpty(),
@@ -1683,11 +1726,6 @@ router.post('/:id/seller-decline', authenticate, requireRole('SELLER'), async (r
       return outcome;
     }, { maxWait: 10000, timeout: 15000 });
 
-    // [G] — this is an inspection-level event, not a listing-level one. Fire
-    // the inspection waiting-list notice (the same one used by every other
-    // inspection release path) so the waiting inspectors learn the slot is
-    // free again. Previously this called the listing-channel notice, which
-    // reached nobody who cared about the inspection.
     await noticeInspectionWaitingUnlocked(prisma, {
       inspectionRequestId: req.params.id,
       reason: 'INSPECTION_SELLER_DECLINED',
