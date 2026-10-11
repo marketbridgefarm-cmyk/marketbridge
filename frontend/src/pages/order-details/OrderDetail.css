@@ -7,11 +7,17 @@
    - Header line = 2px; sub-header line = 1.5px; 44px accent segment.
    - Header status pill in the section header = plain colored text.
    - Meta row at the bottom of the overview: Created (left) + ORD code (right).
-   - Large block buttons use the accent (orange) border, echoing the accent
+   - Large block buttons use a 1px accent (orange) border, echoing the accent
      segment under the card title. Primary CTAs keep their accent fill.
    - Party badge in the header (role + name + avatar), right-aligned.
    - Card title shrinks with card width so long names / numbers wrap cleanly.
+   - ActionCenter lead card (.od-next-*) matches the same card system.
    Facts grid: max 3 items per column (grid-auto-flow: column, 3 rows).
+
+   NOTE ON SPECIFICITY: mb-cards.css is loaded last and every rule there is
+   prefixed with #root (1,2,0). Any rule here that must override a
+   card-button or field default is therefore also prefixed with #root so it
+   becomes (1,3,0) and out-ranks the global sheet.
    ========================================================================== */
 
 .order-detail-page {
@@ -302,19 +308,21 @@
 
 /* --------------------------------------------------------------------------
    Large (block) buttons — every non-primary block button on the page uses
-   the accent (orange) border, echoing the accent segment under the card
+   a 1px accent (orange) border, echoing the accent segment under the card
    title. Primary CTAs keep their accent fill.
 
-   Uses a compound selector (.btn-outline.btn-block) plus the page scope so
-   it beats the global .btn-outline rule from the base stylesheet.
+   IMPORTANT: mb-cards.css is loaded last and its card-button rule is
+   `#root :is(.card, …) :is(.btn, .btn-view)` = specificity (1,2,0).
+   Every selector below MUST include #root so it becomes (1,3,0) and wins.
    -------------------------------------------------------------------------- */
 
-.order-detail-page .btn-outline.btn-block,
-.order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger) {
-  border: 2px solid var(--mb-accent);
+#root .order-detail-page .btn-outline.btn-block,
+#root .order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger) {
+  border: 1px solid var(--mb-accent);
   border-radius: var(--mb-radius-field);
   color: var(--mb-accent-ink);
   background: transparent;
+  box-shadow: none;
   min-height: 48px;
   padding: 0 18px;
   font-size: 16px;
@@ -323,21 +331,21 @@
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.order-detail-page .btn-outline.btn-block:hover,
-.order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger):hover {
+#root .order-detail-page .btn-outline.btn-block:hover:not(:disabled),
+#root .order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger):hover:not(:disabled) {
   background: var(--mb-accent-tint);
   border-color: var(--mb-accent-ink);
   color: var(--mb-accent-ink);
 }
 
-.order-detail-page .btn-outline.btn-block:focus-visible,
-.order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger):focus-visible {
+#root .order-detail-page .btn-outline.btn-block:focus-visible,
+#root .order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger):focus-visible {
   outline: 3px solid var(--mb-accent-border);
   outline-offset: 2px;
 }
 
-.order-detail-page .btn-outline.btn-block:disabled,
-.order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger):disabled {
+#root .order-detail-page .btn-outline.btn-block:disabled,
+#root .order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger):disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -1193,6 +1201,464 @@
 
 .order-detail-toast-close:hover { color: #fff; }
 
+/* ==========================================================================
+   19. ActionCenter — "Your next step" lead card (.od-next-*)
+   Used by pages/OrderDetail.jsx via components/ActionCenter.jsx.
+   Matches the card system:
+   - Same 22px radius, soft shadow, frosted surface as .card
+   - Eyebrow = green (card-tone), like every other card
+   - 2px rule under the header with a 44px accent segment
+   - Progress track = same geometry as the Order status stepper
+   - CTA = full-width accent button, 48px, radius 16px
+   - Mode variants (active / closed / paused / done) tint the left border
+     and the header status only — the surface stays the same
+   ========================================================================== */
+
+#root .order-detail-page .od-next {
+  --od-next-tone: var(--mb-accent);
+  position: relative;
+  box-sizing: border-box;
+  padding: 24px;
+  border-left: 4px solid var(--od-next-tone);
+  padding-left: 20px;
+}
+
+/* Mode variants — only the left border and the current stage pill change */
+#root .order-detail-page .od-next--active { --od-next-tone: var(--mb-accent); }
+#root .order-detail-page .od-next--closed { --od-next-tone: var(--mb-danger); }
+#root .order-detail-page .od-next--paused { --od-next-tone: #b45309; }
+#root .order-detail-page .od-next--done   { --od-next-tone: var(--mb-ok); }
+
+/* ---- Header: eyebrow (left) + step counter / stage (right) ------------- */
+
+.od-next-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin: 0 0 10px;
+  padding: 0 0 10px;
+  border-bottom: 2px solid var(--mb-line);
+  position: relative;
+}
+
+.od-next-top::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 44px;
+  height: 4px;
+  background: var(--od-next-tone);
+}
+
+/* The shared eyebrow already styles itself; keep it green for the card tone */
+.od-next .od-eyebrow {
+  color: var(--od-next-tone, var(--mb-ok));
+  margin: 0;
+}
+
+.od-next-count {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  background: var(--mb-surface, #fff);
+  border: 1.5px solid var(--mb-line);
+  border-radius: 999px;
+  color: var(--mb-ink-2);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ---- Title + supporting text ------------------------------------------ */
+
+.od-next-title {
+  margin: 0;
+  color: var(--mb-ink);
+  font-size: clamp(18px, 5.2cqw, 22px);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+  overflow-wrap: anywhere;
+}
+
+.od-next-text {
+  max-width: 62ch;
+  margin: 8px 0 0;
+  color: var(--mb-muted);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.od-next-text[role="status"] {
+  color: var(--mb-ink-2);
+  font-weight: 700;
+}
+
+/* ---- Inline error ------------------------------------------------------ */
+
+.od-next-error {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--mb-danger-bg, #fef2f2);
+  border: 1.5px solid var(--mb-danger-border, #fecaca);
+  border-radius: var(--mb-radius-field);
+  color: var(--mb-danger);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+/* ---- Primary CTA — full-width accent button ---------------------------- */
+
+.od-next-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 52px;
+  margin: 18px 0 0;
+  padding: 0 20px;
+  background: var(--od-next-tone, var(--mb-accent));
+  border: none;
+  border-radius: var(--mb-radius-field);
+  color: #fff;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.od-next-cta:hover:not(:disabled) {
+  background: var(--mb-accent-ink, #9a3412);
+}
+
+.od-next-cta:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.od-next-cta:focus-visible {
+  outline: 3px solid var(--mb-accent-border, #fed7aa);
+  outline-offset: 2px;
+}
+
+.od-next-cta:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.od-next-cta-arrow {
+  display: inline-block;
+  font-size: 15px;
+  font-weight: 800;
+  transform: translateY(-1px);
+  transition: transform 0.15s ease;
+}
+
+.od-next-cta:hover:not(:disabled) .od-next-cta-arrow {
+  transform: translateY(2px);
+}
+
+/* ---- Progress track: Ordered → Paid → Delivered → Completed ------------ */
+
+.od-next-track {
+  display: flex;
+  flex-direction: column;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  gap: 0;
+}
+
+.od-next-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  color: var(--mb-muted);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.od-next-step:last-child { padding-bottom: 0; }
+
+/* Vertical connector line */
+.od-next-step::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 18px;
+  bottom: 0;
+  width: 2px;
+  background: var(--mb-line);
+}
+.od-next-step:last-child::before { display: none; }
+
+.od-next-dot {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border: 2px solid var(--mb-line);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.od-next-step.is-done { color: var(--mb-ink-2); }
+.od-next-step.is-done::before { background: var(--mb-ok); }
+.od-next-step.is-done .od-next-dot {
+  background: var(--mb-ok);
+  border-color: var(--mb-ok);
+}
+
+.od-next-step.is-current { color: var(--mb-ink); }
+.od-next-step.is-current .od-next-dot {
+  background: var(--od-next-tone, var(--mb-accent));
+  border-color: var(--od-next-tone, var(--mb-accent));
+  box-shadow: inset 0 0 0 3px #fff;
+}
+
+/* Wide card → horizontal stepper (matches OrderDetail's .order-progress) */
+@container (min-width: 520px) {
+  .od-next-track {
+    flex-direction: row;
+  }
+
+  .od-next-step {
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 0 8px 0 0;
+  }
+
+  .od-next-step::before {
+    left: 26px;
+    right: 4px;
+    top: 8px;
+    bottom: auto;
+    width: auto;
+    height: 2px;
+  }
+}
+
+/* ---- <details> blocks: "All steps" and "Other available actions" ------- */
+
+.od-next-all {
+  margin: 20px 0 0;
+  padding: 14px 16px;
+  background: var(--mb-surface, #fff);
+  border: 1.5px solid var(--mb-line);
+  border-radius: var(--mb-radius-field);
+}
+
+.od-next-all > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  color: var(--mb-ink);
+  font-size: 14px;
+  font-weight: 800;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.od-next-all > summary::-webkit-details-marker { display: none; }
+
+.od-next-all > summary::before {
+  content: "▸";
+  display: inline-block;
+  color: var(--mb-muted);
+  font-size: 12px;
+  transition: transform 0.15s ease;
+}
+
+.od-next-all[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.od-next-all[open] > summary {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1.5px solid var(--mb-line);
+}
+
+/* ---- Step list inside "All steps" -------------------------------------- */
+
+.od-next-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.od-next-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  background: transparent;
+  border-radius: var(--mb-radius-sm, 12px);
+  border: 1.5px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.od-next-item.is-current {
+  background: var(--mb-accent-tint, #fff7ed);
+  border-color: var(--mb-accent-border, #fed7aa);
+}
+
+.od-next-item.is-done {
+  opacity: 0.75;
+}
+
+.od-next-item-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  border: 1.5px solid var(--mb-line);
+  color: var(--mb-ink-2);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.od-next-item.is-current .od-next-item-icon {
+  background: var(--od-next-tone, var(--mb-accent));
+  border-color: var(--od-next-tone, var(--mb-accent));
+  color: #fff;
+}
+
+.od-next-item.is-done .od-next-item-icon {
+  background: var(--mb-ok);
+  border-color: var(--mb-ok);
+  color: #fff;
+}
+
+.od-next-item-body {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.od-next-item-body strong {
+  color: var(--mb-ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.od-next-item-body > span {
+  color: var(--mb-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.od-next-item.is-current .od-next-item-body > span {
+  color: var(--mb-accent-ink, #9a3412);
+}
+
+/* ---- "Go" small button on each step ------------------------------------ */
+
+.od-next-item-go {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  background: transparent;
+  border: 1.5px solid var(--mb-line);
+  border-radius: 999px;
+  color: var(--mb-ink-2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.od-next-item-go:hover:not(:disabled) {
+  background: var(--mb-accent-tint, #fff7ed);
+  border-color: var(--mb-accent, #c2410c);
+  color: var(--mb-accent-ink, #9a3412);
+}
+
+.od-next-item-go:focus-visible {
+  outline: 3px solid var(--mb-accent-border, #fed7aa);
+  outline-offset: 2px;
+}
+
+.od-next-item-go:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ---- "Other available actions" list ------------------------------------ */
+
+.od-next-others {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.od-next-other {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: var(--mb-radius-field);
+}
+
+/* ---- Responsive tweaks for the ActionCenter ---------------------------- */
+
+@media (max-width: 480px) {
+  #root .order-detail-page .od-next {
+    padding: 18px;
+    padding-left: 16px;
+    border-radius: 18px;
+  }
+
+  .od-next-title { font-size: 18px; }
+  .od-next-text { font-size: 14px; }
+  .od-next-cta { min-height: 48px; font-size: 15px; }
+  .od-next-count { font-size: 12px; }
+}
+
+@media (max-width: 360px) {
+  #root .order-detail-page .od-next { padding: 14px; padding-left: 12px; }
+  .od-next-title { font-size: 17px; }
+  .od-next-cta { font-size: 14.5px; padding: 0 14px; }
+}
+
 /* --------------------------------------------------------------------------
    Responsive adjustments
    -------------------------------------------------------------------------- */
@@ -1232,4 +1698,10 @@
   .od-flash { animation: none; }
   .od-modal-close,
   .order-detail-page .back-link { transition: none; }
+  .od-next-cta,
+  .od-next-cta-arrow,
+  .od-next-item,
+  .od-next-all > summary::before,
+  .od-next-item-go { transition: none; }
+  .od-next-cta:active:not(:disabled) { transform: none; }
 }
