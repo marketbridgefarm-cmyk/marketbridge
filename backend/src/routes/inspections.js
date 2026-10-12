@@ -501,11 +501,9 @@ router.get('/inspectors', authenticate, async (req, res) => {
 // ============================================================================
 // AVAILABLE INSPECTION REQUESTS
 // ----------------------------------------------------------------------------
-// Two filters combined with OR: (a) requests still open with no inspector
-// selected, (b) requests the calling inspector already has a live quote on.
-// The second keeps a waiting inspector's job visible on their dashboard
-// after another inspector is accepted, until the report is submitted or
-// the request is cancelled.
+// FIXED: Jobs remain visible even after an inspector is ACCEPTED.
+// The list uses a strict `select` to hide sensitive financial data (fee).
+// Quotes are filtered to only show the calling inspector's own bids (sealed).
 // ============================================================================
 
 router.get(
@@ -519,52 +517,44 @@ router.get(
       const requests = await prisma.inspectionRequest.findMany({
         where: {
           ...(location ? { location: { contains: location, mode: 'insensitive' } } : {}),
-          OR: [
-            { status: 'REQUESTED', inspectorId: null },
-            {
-              status: { in: ['REQUESTED', 'ACCEPTED', 'IN_PROGRESS'] },
-              quotes: {
-                some: {
-                  inspectorId: req.user.id,
-                  status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
-                },
-              },
-            },
-          ],
+          // Keep job visible until completed, cancelled, or disputed.
+          // This allows new inspectors to bid while work is in progress.
+          status: { in: ['REQUESTED', 'ACCEPTED', 'IN_PROGRESS'] },
         },
-        include: {
+        // FIXED: Explicitly select only non-sensitive fields
+        select: {
+          id: true,
+          orderId: true,
+          listingId: true,
+          status: true,
+          mode: true,
+          location: true,
+          workDetails: true,
+          createdAt: true,
+          // DO NOT SELECT: fee, lockedFee, buyerFeeAmount, sellerFeeAmount
           listing: {
-            select: {
-              id: true,
-              cropType: true,
-              title: true,
-              quantity: true,
-              unit: true,
-              location: true,
-              category: true,
-            },
+            select: { id: true, cropType: true, title: true, quantity: true, unit: true, location: true, category: true },
           },
           requestedBy: {
             select: { id: true, name: true, rating: true },
           },
+          // Provide the active inspector's name, but NOT their fee
+          inspector: {
+            select: { id: true, name: true, rating: true },
+          },
+          // FIXED: Only return the quotes belonging to the calling inspector (Sealed Bid)
           quotes: {
             where: {
-              status: { in: ['PENDING', 'COUNTERED', 'ACCEPTED', 'REJECTED'] },
               inspectorId: req.user.id,
             },
             select: {
               id: true,
-              inspectorId: true,
               amount: true,
               status: true,
               message: true,
-              parentQuoteId: true,
-              counterAmount: true,
-              counteredBy: true,
-              expiresAt: true,
               createdAt: true,
             },
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: 'desc' },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -581,9 +571,9 @@ router.get(
 // ============================================================================
 // INSPECTOR SUBMITS QUOTE
 // ----------------------------------------------------------------------------
-// Quoting is allowed while the request is REQUESTED, ACCEPTED, or
+// FIXED: Quoting is allowed while the request is REQUESTED, ACCEPTED, or
 // IN_PROGRESS. Waiting bids stay visible until the report is submitted
-// (COMPLETED) or the request is cancelled.
+// (COMPLETED) or the request is cancelled. This creates a waiting list.
 // ============================================================================
 
 router.post(
@@ -621,7 +611,8 @@ router.post(
 
       await assertProviderCanBid(prisma, req.user.id);
 
-      if (!['REQUESTED', 'ACCEPTED', 'IN_PROGRESS'].includes(request.status)) {
+      // FIXED: Only block if the inspection is completely done or cancelled.
+      if (['COMPLETED', 'CANCELLED', 'DISPUTED'].includes(request.status)) {
         return res.status(400).json({ error: 'This inspection is no longer accepting quotes' });
       }
 
@@ -671,7 +662,7 @@ router.post(
             inspectorId: req.user.id,
             amount: Number(req.body.amount),
             message: req.body.message || null,
-            status: 'PENDING',
+            status: 'PENDING', // New quotes after acceptance remain PENDING (Waiting List)
             expiresAt: quoteExpiry(),
           },
           include: {
@@ -935,6 +926,9 @@ router.patch(
         }
 
         const sellerConfirmationDueAt = computeSellerConfirmationDueAt();
+        
+        // This update claims the job for the ACTIVE inspector.
+        // New waiting bids will still be allowed because the GET /available and POST /quote routes are open.
         const claim = await tx.inspectionRequest.updateMany({
           where: {
             id: request.id,
