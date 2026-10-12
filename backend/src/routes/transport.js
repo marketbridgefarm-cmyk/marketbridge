@@ -360,10 +360,9 @@ router.patch(
 // ============================================================================
 // OPEN TRANSPORT JOBS (provider side)
 // ----------------------------------------------------------------------------
-// Two filters combined with OR: (a) open jobs with no transporter selected,
-// (b) jobs the calling truck owner has a live quote on. The second keeps a
-// waiting transporter's job visible on their dashboard after another
-// transporter is accepted, until the goods are delivered or cancelled.
+// FIXED: Jobs remain visible even after a transporter is ACCEPTED.
+// The list uses a strict `select` to hide sensitive financial data (agreedAmount).
+// Quotes are filtered to only show the calling truck owner's own bids (sealed).
 // ============================================================================
 
 router.get(
@@ -381,29 +380,49 @@ router.get(
               status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
             },
           },
-          OR: [
-            { status: { in: ['REQUESTED', 'QUOTED'] }, truckOwnerId: null },
-            {
-              status: { in: ['REQUESTED', 'QUOTED', 'ACCEPTED', 'PICKUP', 'IN_TRANSIT'] },
-              quotes: {
-                some: {
-                  truckOwnerId: req.user.id,
-                  status: { in: ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] },
-                },
-              },
-            },
-          ],
+          // FIXED: Keep the job visible until completed, cancelled, or disputed.
+          // This allows new truck owners to bid while work is in progress.
+          status: { in: ['REQUESTED', 'QUOTED', 'ACCEPTED', 'PICKUP', 'IN_TRANSIT'] },
         },
-        include: {
+        // FIXED: Explicitly select only non-sensitive fields
+        select: {
+          id: true,
+          orderId: true,
+          status: true,
+          method: true,
+          pickupLocation: true,
+          destination: true,
+          load: true,
+          requiredCapacity: true,
+          specialRequirements: true,
+          createdAt: true,
+          // DO NOT SELECT: agreedAmount, sellerPreparationDueAt, buyerLoadingDueAt
           order: {
-            include: {
+            select: {
               buyer: { select: { id: true, name: true } },
               seller: { select: { id: true, name: true } },
             },
           },
+          // Provide the active truck owner's name, but NOT their agreed fee
+          truckOwner: {
+            select: { id: true, name: true, rating: true },
+          },
+          truck: {
+            select: { id: true, registration: true, truckType: true, capacity: true },
+          },
+          // FIXED: Only return the quotes belonging to the calling truck owner (Sealed Bid)
           quotes: {
-            where: { truckOwnerId: req.user.id },
-            orderBy: { createdAt: 'asc' },
+            where: {
+              truckOwnerId: req.user.id,
+            },
+            select: {
+              id: true,
+              amount: true,
+              status: true,
+              message: true,
+              createdAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -1561,6 +1580,15 @@ router.patch(
           transportJobId: job.id,
           actorId: req.user.id,
           reason: 'TRANSPORT_DELIVERED',
+        });
+      }
+
+      // FIXED: Release waiting transporters if the transport job is cancelled
+      if (next === 'CANCELLED') {
+        await releaseWaitingTransporters(prisma, {
+          transportJobId: job.id,
+          actorId: req.user.id,
+          reason: 'TRANSPORT_CANCELLED',
         });
       }
 
