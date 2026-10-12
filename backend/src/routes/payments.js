@@ -516,9 +516,27 @@ router.post(
             }
           }
 
-          // Purchase payment is unlocked only after the required inspection.
-          // Agricultural orders additionally require the explicit BUY decision.
-          // Transport remains a separate negotiated workflow.
+          // FIXED: Goods payment only unlocks after the loading-preparation
+          // report has been approved by the buyer. This is the moment the
+          // buyer has seen physical proof of what is loaded and can safely
+          // release the seller's money.
+          //
+          // For hire-transport orders, the unlock is buyerLoadingConfirmedAt.
+          // For own-truck arrangements there is no loading report; the
+          // equivalent physical checkpoint is the seller's pickup readiness
+          // confirmation.
+          const goodsPaymentUnlocked = order.transportJob
+            ? (order.transportJob.method === 'HIRE_TRANSPORTER'
+                ? Boolean(order.transportJob.buyerLoadingConfirmedAt)
+                : Boolean(order.transportJob.sellerPickupConfirmedAt))
+            : false;
+
+          if (!goodsPaymentUnlocked) {
+            return res.status(409).json({
+              code: 'LOADING_APPROVAL_REQUIRED',
+              error: 'The buyer must approve the loading-preparation report before goods payment can begin.',
+            });
+          }
         }
 
         // --------------------------------------------------------------------
@@ -608,36 +626,16 @@ router.post(
             });
           }
 
-          // Loading-report approval is a hard commercial gate: the buyer must
-          // review the transporter's loading report before any transport money
-          // can be committed. This is deliberately checked here as well as in
-          // paymentService so old/new clients receive the same server response.
-          if (!order.transportJob.buyerLoadingConfirmedAt) {
-            return res.status(409).json({
-              code: 'BUYER_LOADING_CONFIRMATION_REQUIRED',
-              error: 'The buyer must approve the loading report before the transporter can be paid.',
-            });
-          }
-
+          // FIXED: Transport fee is paid immediately after the transporter is
+          // accepted, before coordination and before the loading report.
+          // No goods-payment or loading-approval gate applies here.
+          //
           // Transport is a buyer-to-transporter transaction on MarketBridge.
           // The party who arranged the transport (BUYER, SELLER or JOINT)
           // does not change who pays the hired transporter: the buyer does.
           if (order.buyerId !== req.user.id && !isAdmin(req.user)) {
             return res.status(403).json({
               error: 'Only the buyer may pay the hired transporter',
-            });
-          }
-
-          // The revised agricultural flow requires the seller to be paid
-          // before transport money can be committed for the loading stage.
-          const goodsPayment = await prisma.payment.findFirst({
-            where: { orderId: order.id, type: 'MARKETPLACE', status: 'PAID' },
-            select: { id: true },
-          });
-          if (!goodsPayment) {
-            return res.status(409).json({
-              code: 'GOODS_PAYMENT_REQUIRED',
-              error: 'The seller must be paid before the hired transporter can be paid.',
             });
           }
 
@@ -1162,24 +1160,38 @@ router.post(
         }
       }
 
-      // A transport payment intent may be resumed only after the buyer has
-      // approved the loading report. This protects old PENDING intents created
-      // before the loading gate was introduced.
+      // FIXED: Transport payments can be resumed any time the transport
+      // arrangement is still in ACCEPTED state. No loading-report gate here.
       if (payment.type === 'TRANSPORT' && payment.transportJobId) {
         const transport = await prisma.transportJob.findUnique({
           where: { id: payment.transportJobId },
-          select: { id: true, buyerLoadingConfirmedAt: true, status: true },
+          select: { id: true, status: true },
         });
-        if (!transport?.buyerLoadingConfirmedAt) {
-          return res.status(409).json({
-            code: 'BUYER_LOADING_CONFIRMATION_REQUIRED',
-            error: 'The buyer must approve the loading report before transport payment can begin.',
-          });
-        }
-        if (transport.status !== 'ACCEPTED') {
+        if (!transport || transport.status !== 'ACCEPTED') {
           return res.status(409).json({
             code: 'TRANSPORT_NOT_READY_FOR_PAYMENT',
             error: 'The transport arrangement is no longer ready for payment.',
+          });
+        }
+      }
+
+      // FIXED: A MARKETPLACE payment intent may only be resumed after the
+      // buyer has approved the loading-preparation report. This protects
+      // old PENDING intents created before the gate was introduced.
+      if (payment.type === 'MARKETPLACE' && payment.orderId) {
+        const order = await prisma.order.findUnique({
+          where: { id: payment.orderId },
+          select: { id: true, transportJob: { select: { method: true, buyerLoadingConfirmedAt: true, sellerPickupConfirmedAt: true } } },
+        });
+        const goodsUnlocked = order?.transportJob
+          ? (order.transportJob.method === 'HIRE_TRANSPORTER'
+              ? Boolean(order.transportJob.buyerLoadingConfirmedAt)
+              : Boolean(order.transportJob.sellerPickupConfirmedAt))
+          : false;
+        if (!goodsUnlocked) {
+          return res.status(409).json({
+            code: 'LOADING_APPROVAL_REQUIRED',
+            error: 'The buyer must approve the loading-preparation report before goods payment can begin.',
           });
         }
       }
