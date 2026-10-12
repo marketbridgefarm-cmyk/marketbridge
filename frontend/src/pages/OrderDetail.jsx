@@ -449,6 +449,7 @@ function OrderProgress({ steps }) {
   );
 }
 
+// FIXED: Added inspectionApplies to the destructured props to prevent ReferenceError
 function OverviewCard({ order, title, flags, canCancel, busy, onCancel, inspectionApplies }) {
   const { isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob } = flags;
   const role = isBuyer ? 'Buying' : isSeller ? 'Selling' : 'Order';
@@ -459,10 +460,17 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel, inspecti
   const inspectionDone = order.inspectionRequests?.some(r => r.status === 'COMPLETED' && r.report) || false;
   const decisionDone = order.buyerDecision === 'BUY';
 
+  // FIXED: Progress steps reflect the new physical-reality-gated flow.
+  // Inspected → Decided → Transport → Loaded → Paid → Delivered → Completed.
+  const transportDone = Boolean(transportJob && ['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status));
+  const loadedDone = Boolean(transportJob?.buyerLoadingConfirmedAt) || Boolean(transportJob?.sellerPickupConfirmedAt);
+
   const steps = [
     { label: 'Ordered', done: true },
     { label: 'Inspected', done: inspectionApplies ? inspectionDone : true },
     { label: 'Decided', done: decisionDone },
+    { label: 'Transport', done: transportDone },
+    { label: 'Loaded', done: loadedDone },
     { label: 'Paid', done: marketplacePaid },
     { label: 'Delivered', done: delivered },
     { label: 'Completed', done: order.status === 'COMPLETED' },
@@ -475,6 +483,8 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel, inspecti
     : currentStep.label === 'Paid' ? 'wait'
     : currentStep.label === 'Inspected' ? 'info'
     : currentStep.label === 'Decided' ? 'wait'
+    : currentStep.label === 'Transport' ? 'info'
+    : currentStep.label === 'Loaded' ? 'wait'
     : 'neutral';
 
   const headerStatus =
@@ -1447,7 +1457,7 @@ function TransportCard({ order, t }) {
           </Section>
         ) : (
           <p className="muted">
-            {t.buyerOnly ? 'The buyer requests transport for this order once the inspection is complete.' : 'No transport arrangement recorded yet.'}
+            {t.buyerOnly ? 'The buyer requests transport for this order once the purchase decision is made.' : 'No transport arrangement recorded yet.'}
           </p>
         )}
       </Card>
@@ -1559,7 +1569,7 @@ function TransportCard({ order, t }) {
             transportJobId={job.id}
             jobStatus={job.status}
             sellerConfirmed={Boolean(job.sellerPickupConfirmedAt)}
-            paymentsReady={t.marketplacePaid && t.paid}
+            paymentsReady={t.paid}
             missingPayments={t.missingPayments}
             onSubmitted={t.reload}
           />
@@ -1576,7 +1586,7 @@ function TransportCard({ order, t }) {
                 <div className="od-card-section-head">
                   <h3 className="od-card-section-title">Review before loading</h3>
                 </div>
-                <p className="muted small">Review what the transporter plans to load, the quantity, timing and condition. Approve it before physical loading begins.</p>
+                <p className="muted small">Review what the transporter plans to load, the quantity, timing and condition. Approving this report unlocks the goods payment.</p>
                 <Button
                   variant="primary"
                   disabled={t.busy === 'confirm-loading'}
@@ -1700,10 +1710,9 @@ function TransportCard({ order, t }) {
             strong
           >
             <p className="muted">
-              Transport payment is separate from the seller payment. It becomes
-              available only after the buyer makes the final BUY decision and
-              the seller payment is confirmed. The seller must confirm loading
-              preparation and the truck must be on site before payment.
+              Transport payment is separate from the seller payment. Pay the transporter
+              once the quote is accepted. The seller coordination, driver arrival and
+              loading-prep report all follow this payment.
             </p>
 
             {t.canStartPayment && (
@@ -2113,13 +2122,15 @@ export default function OrderDetail() {
   const inspectionFeesPaid =
     !paidInspections.every((r) => Array.isArray(r.payments)) ||
     paidInspections.every((r) => r.payments.some((p) => p.type === 'INSPECTOR' && p.status === 'PAID'));
+
+  // FIXED: Transport no longer requires the inspection report or its payment.
+  // It unlocks when the buyer has made the BUY decision (the goods are
+  // committed). The inspection report informed that decision upstream.
   const transportBlockedReason = !isPhysicalGoods
     ? null
-    : !inspectionReportDone
-      ? 'Transport opens after the inspection report is published.'
-      : !inspectionFeesPaid
-        ? 'Transport opens after the inspection fee is paid.'
-        : null;
+    : !decisionGateMet
+      ? 'Arrange transport after the buyer confirms the purchase decision.'
+      : null;
 
   const transportInMotion = Boolean(transportJob && ['PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status));
   const acceptedQuote = Array.isArray(transportJob?.quotes) ? transportJob.quotes.find((q) => q.status === 'ACCEPTED') : null;
@@ -2174,6 +2185,15 @@ export default function OrderDetail() {
   const transportProcessing = transportPayments.some((p) => p.status === 'PROCESSING');
   const hiredTransport = transportJob?.method === 'HIRE_TRANSPORTER';
 
+  // FIXED: Goods payment is unlocked by the loading-prep report approval
+  // (hire transport) or by seller pickup confirmation (own-truck). The
+  // backend enforces the same condition; this is only the UI gate.
+  const goodsPaymentUnlocked = transportJob
+    ? (hiredTransport
+        ? Boolean(transportJob.buyerLoadingConfirmedAt)
+        : Boolean(transportJob.sellerPickupConfirmedAt))
+    : false;
+
   const missingPayments = useMemo(() => {
     const missing = [];
     if (!marketplacePaid) missing.push('MARKETPLACE');
@@ -2195,6 +2215,7 @@ export default function OrderDetail() {
     inspectionGateMet &&
     decisionGateMet &&
     negotiatedGateMet &&
+    goodsPaymentUnlocked &&
     !marketplacePayments.some((p) => ['PENDING', 'PROCESSING', 'PAID'].includes(p.status));
 
   const marketplaceBlockedReason =
@@ -2205,9 +2226,15 @@ export default function OrderDetail() {
         ? 'Request and complete the inspection before paying for the goods.'
         : 'Complete the current inspection and make sure its report is published before paying for the goods.'
       : decisionRequired && !decisionGateMet
-      ? `Confirm the price through the price review after reviewing the ${isAgricultural ? 'agricultural ' : ''}inspection report before paying for the goods.`
+      ? `Choose BUY after reviewing the ${isAgricultural ? 'agricultural ' : ''}inspection report before paying for the goods.`
+      : !goodsPaymentUnlocked
+      ? hiredTransport
+        ? 'The goods payment unlocks once the transporter submits the loading-preparation report and the buyer approves it.'
+        : 'The goods payment unlocks once the seller confirms the goods are ready for pickup.'
       : null;
 
+  // FIXED: Transport fee is payable as soon as the transporter's quote is
+  // accepted. No goods-payment or loading-approval gate applies.
   const canStartTransportPayment =
     Boolean(transportJob) &&
     hiredTransport &&
@@ -2215,11 +2242,7 @@ export default function OrderDetail() {
     Boolean(acceptedQuote) &&
     transportJob.agreedAmount != null &&
     Number(transportJob.agreedAmount) > 0 &&
-    ['QUOTED', 'ACCEPTED'].includes(transportJob.status) &&
-    order?.buyerDecision === 'BUY' &&
-    marketplacePaid &&
-    Boolean(transportJob.sellerPickupConfirmedAt) &&
-    Boolean(transportJob.truckArrivedAt) &&
+    transportJob.status === 'ACCEPTED' &&
     !transportPayments.some((p) => ['PENDING', 'PROCESSING', 'PAID'].includes(p.status)) &&
     isBuyer;
 
@@ -2259,12 +2282,6 @@ export default function OrderDetail() {
     if (!isParticipant) return setError('You are not authorized to pay for this transport');
     if (!hiredTransport) return setError('Transport payment is only required for hired transport');
     if (!transportJob.truckOwnerId) return setError('A transporter must be selected before transport payment');
-    if (!transportJob.sellerPickupConfirmedAt) {
-      return setError('The seller must confirm loading preparation before transport payment can begin.');
-    }
-    if (!transportJob.truckArrivedAt) {
-      return setError('The truck must be physically on site before transport payment can begin.');
-    }
     const amount = Number(transportJob.agreedAmount);
     if (!Number.isFinite(amount) || amount <= 0) return setError('Invalid transport payment amount');
     return run('pay-transport', () => startChapaPayment({ type: 'TRANSPORT', orderId: order.id, amount, method: payMethod }), 'Could not start transport payment');
@@ -2342,17 +2359,9 @@ export default function OrderDetail() {
         note:
           !hiredTransport ? null
           : transportPaid ? null
-          : !['QUOTED', 'ACCEPTED'].includes(transportJob.status)
-            ? 'Transporter payment becomes available after the final BUY decision and confirmed seller payment.'
-            : !marketplacePaid
-              ? 'Pay the seller before paying the transporter.'
-              : order?.buyerDecision !== 'BUY'
-                ? 'Final BUY decision is required before transport payment.'
-                : !transportJob.sellerPickupConfirmedAt
-                  ? 'The seller must confirm loading preparation before transport payment can begin.'
-                  : !transportJob.truckArrivedAt
-                    ? 'The truck must be physically on site before transport payment can begin.'
-                    : null,
+          : transportJob.status !== 'ACCEPTED'
+            ? 'Transport payment becomes available once the transporter quote is accepted.'
+            : null,
         canStart: canStartTransportPayment,
         canResume: Boolean(transportPayment) && transportPayment.status === 'PENDING' && isBuyer,
         canCheck: Boolean(transportPayment) && transportPayment.status === 'PROCESSING' && isBuyer,
@@ -2517,9 +2526,6 @@ export default function OrderDetail() {
     },
   };
 
-  // FIXED: decide() is kept for backward compatibility but is no longer
-  // used directly by the inspection decision buttons. The buyer now goes
-  // through the price review flow to formally confirm the price.
   const decide = async (decision) => {
     if (!order || !isBuyer || !decisionRequired) return false;
     if (decision === 'BUY' && !(currentInspection?.report && currentInspection.status === 'COMPLETED')) {
@@ -2532,7 +2538,7 @@ export default function OrderDetail() {
       () => api.patch(`/orders/${order.id}/buyer-decision`, { decision }),
       `Could not record ${decision === 'BUY' ? 'BUY' : 'cancellation'} decision`
     );
-    if (ok) scrollToId(decision === 'BUY' ? 'payment-center' : 'inspection-section', 120);
+    if (ok) scrollToId(decision === 'BUY' ? 'transport-section' : 'inspection-section', 120);
     return ok;
   };
 
@@ -2675,36 +2681,8 @@ export default function OrderDetail() {
       )
     ),
 
-    // FIXED: "Buy at X ETB" no longer directly decides — it now creates a
-    // formal price proposal at the current price. The seller must Accept it
-    // before payment unlocks. This forces bilateral price confirmation
-    // after the inspection report.
-    onBuy: () => run(
-      'price-review-create',
-      () => api.post(`/orders/${order.id}/price-reviews`, {
-        proposedPrice: Number(order.finalPrice),
-        reasonCode: 'OTHER_INSPECTION_FINDING',
-      }),
-      'Could not confirm the price'
-    ),
-
-    // FIXED: "Cancel after inspection" is now a cancellation REQUEST.
-    // The seller has 24h to accept the cancellation or counter with a
-    // reduced price to keep the deal alive.
-    onCancel: async () => {
-      const confirmed = window.confirm(
-        'Request cancellation? The seller will have 24 hours to either accept your request or offer a reduced price to keep the deal alive.'
-      );
-      if (!confirmed) return false;
-      return run(
-        'price-review-create',
-        () => api.post(`/orders/${order.id}/price-reviews`, {
-          reasonCode: 'BUYER_WANTS_CANCELLATION',
-        }),
-        'Could not request cancellation'
-      );
-    },
-
+    onBuy: () => decide('BUY'),
+    onCancel: () => decide('CANCEL'),
     onProposePrice: (proposedPrice, reasonCode) =>
       run(
         'price-review-create',
