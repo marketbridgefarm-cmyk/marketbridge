@@ -167,7 +167,7 @@ function quoteExpiry(hours = 24) {
 
 function transportReleaseAfterHours() {
   const configured = Number(process.env.TRANSPORT_RELEASE_AFTER_HOURS);
-  return Number.isFinite(configured) && configured >= 0 ? configured : 0;
+  return Number.isFinite(configured) && configured >= 0 ? configured : 72;
 }
 
 function transportReleaseAvailableAt(quote) {
