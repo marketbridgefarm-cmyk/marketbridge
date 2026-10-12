@@ -439,6 +439,16 @@ router.post('/:id/price-reviews', authenticate, idempotency('orders.price-review
     if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'A valid proposed price is required. The platform could not calculate a price suggestion from the available market/inspection data.' });
     const minimumTotal = order.listing?.minAcceptablePrice == null ? null : Number(order.listing.minAcceptablePrice) * Number(order.quantity || 0);
     if (Number.isFinite(minimumTotal) && minimumTotal > 0 && amount < minimumTotal) return res.status(409).json({ error: "The proposed price is below the seller's minimum acceptable price" });
+    // FIXED: The buyer's proposed price cannot exceed the provisional agreed price.
+// A buyer pays for inspection to confirm or negotiate DOWN — never up.
+// Proposing a higher price would be economically nonsensical and would
+// reverse the buyer's own negotiating position.
+if (req.user.id === order.buyerId && amount > Number(order.finalPrice)) {
+  return res.status(400).json({
+    error: `As the buyer, you can only propose a price at or below the currently agreed ${Number(order.finalPrice).toLocaleString()} ETB.`,
+    code: 'BUYER_PRICE_CAP_EXCEEDED',
+  });
+}
     if (!PRICE_REVIEW_REASONS.has(reasonCode)) return res.status(400).json({ error: 'A valid price-review reason is required' });
     const snapshot = marketSnapshotData(suggestion?.marketReference, suggestion?.inspectedQuantity || order.quantity);
     const review = await prisma.$transaction(async tx => {
