@@ -5,47 +5,38 @@
 export const QUANTITY_VALUES = [50, 100, 250, 500, 1000, 2500, 5000, 10000];
 export const QUANTITY_UNITS = ['kg', 'tons', 'quintals', 'units', 'crates', 'bags'];
 
-// FIXED: Strict sequence — every step is +1, no jumps.
+// FIXED: Option B — strict +1 from 1 to 20, then +5 up to 150.
 // Must match utils/requestOptions.js on the backend exactly.
 export const WEIGHT_OPTIONS = [
   '1 ton',
-  '2 tons',
-  '3 tons',
-  '4 tons',
-  '5 tons',
-  '6 tons',
-  '7 tons',
-  '8 tons',
-  '9 tons',
-  '10 tons',
-  '11 tons',
-  '12 tons',
-  '13 tons',
-  '14 tons',
-  '15 tons',
-  '16 tons',
-  '17 tons',
-  '18 tons',
-  '19 tons',
-  '20 tons',
+  '2 tons', '3 tons', '4 tons', '5 tons', '6 tons', '7 tons', '8 tons', '9 tons', '10 tons',
+  '11 tons', '12 tons', '13 tons', '14 tons', '15 tons', '16 tons', '17 tons', '18 tons', '19 tons', '20 tons',
+  '25 tons', '30 tons', '35 tons', '40 tons', '45 tons', '50 tons',
+  '55 tons', '60 tons', '65 tons', '70 tons', '75 tons', '80 tons',
+  '85 tons', '90 tons', '95 tons', '100 tons', '105 tons', '110 tons',
+  '115 tons', '120 tons', '125 tons', '130 tons', '135 tons', '140 tons',
+  '145 tons', '150 tons',
 ];
 
-// FIXED: Strict sequence — every step is +1, no jumps.
+// FIXED: Option B — strict +1 from 1 to 20, then +5 up to 150.
 // Must match utils/requestOptions.js on the backend exactly.
 export const PACKAGE_COUNTS = [
   1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
   11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-  21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
-  31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-  41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+  25, 30, 35, 40, 45, 50, 55, 60, 65, 70,
+  75, 80, 85, 90, 95, 100, 105, 110, 115, 120,
+  125, 130, 135, 140, 145, 150,
 ];
 
-// FIXED: Strict sequence — every step is +1, no jumps.
+// FIXED: Option B — strict +1 from 1 to 20, then +5 up to 150.
 // TransportSetup.jsx renders each as "{t} t or more".
 // Must match utils/requestOptions.js on the backend exactly.
 export const CAPACITY_TONS = [
   1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
   11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+  25, 30, 35, 40, 45, 50, 55, 60, 65, 70,
+  75, 80, 85, 90, 95, 100, 105, 110, 115, 120,
+  125, 130, 135, 140, 145, 150,
 ];
 
 export const ACCESS_NOTES = [
