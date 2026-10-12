@@ -28,7 +28,8 @@ const validate = (req, res, next) => {
   next();
 };
 
-// Once an order is COMPLETED or already CANCELLED there is nothing left to cancel.
+// Once an order is COMPLETED or already CANCELLED there is nothing left to
+// cancel.
 const NON_CANCELLABLE_STATUSES = ['COMPLETED', 'CANCELLED'];
 
 // Once the truck has actually picked up, is moving, or has delivered the
@@ -39,103 +40,17 @@ const TRANSPORT_IN_MOTION_STATUSES = ['PICKUP', 'IN_TRANSIT', 'DELIVERED'];
 
 const userSelect = { id: true, name: true, phone: true, location: true, rating: true, verificationStatus: true };
 
-// ============================================================================
-// HEAVY include for the Order Detail page (GET /:id)
-// ============================================================================
-const orderDetailInclude = {
-  listing: {
+const transportInclude = {
+  loadingReport: { include: { submittedBy: { select: { id: true, name: true } } } },
+  truckOwner: { select: { id: true, name: true, phone: true, rating: true, verificationStatus: true } },
+  truck: { select: { id: true, registration: true, truckType: true, capacity: true, operatingArea: true, availability: true, verificationStatus: true, rating: true } },
+  quotes: {
     include: {
-      inspectionRequests: {
-        // FIXED: Removed the filter that hides cancelled requests.
-        // This ensures the seller can still see the report and payment history.
-        include: {
-          report: true,
-          inspector: { select: { id: true, name: true, phone: true } },
-          payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
-          quotes: {
-            // FIXED: Explicitly include WAITING status
-            where: { status: { in: ['PENDING', 'WAITING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } },
-            select: {
-              id: true, inspectorId: true, amount: true, status: true, message: true,
-              parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
-              inspector: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
-              _count: { select: { childQuotes: true } },
-            },
-            orderBy: { createdAt: 'asc' },
-          },
-        },
-      },
-    },
-  },
-  inspectionRequests: {
-    // FIXED: Removed the filter that hides cancelled requests.
-    orderBy: { createdAt: 'desc' },
-    include: {
-      report: true,
-      inspector: { select: { id: true, name: true, phone: true } },
-      payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
-      quotes: {
-        // FIXED: Explicitly include WAITING status
-        where: { status: { in: ['PENDING', 'WAITING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } },
-        select: {
-          id: true, inspectorId: true, amount: true, status: true, message: true, parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
-          inspector: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
-          _count: { select: { childQuotes: true } },
-        },
-        orderBy: { createdAt: 'asc' },
-      },
-    },
-  },
-  agreedOffer: true,
-  priceReviews: { include: { proposedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' } },
-  buyer: { select: userSelect },
-  seller: { select: userSelect },
-  transportJob: { 
-    include: { 
-      loadingReport: { include: { submittedBy: { select: { id: true, name: true } } } },
       truckOwner: { select: { id: true, name: true, phone: true, rating: true, verificationStatus: true } },
       truck: { select: { id: true, registration: true, truckType: true, capacity: true, operatingArea: true, availability: true, verificationStatus: true, rating: true } },
-      quotes: {
-        // FIXED: Explicitly include WAITING status for transport bids
-        where: { status: { in: ['PENDING', 'WAITING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } },
-        include: {
-          truckOwner: { select: { id: true, name: true, phone: true, rating: true, verificationStatus: true } },
-          truck: { select: { id: true, registration: true, truckType: true, capacity: true, operatingArea: true, availability: true, verificationStatus: true, rating: true } },
-          _count: { select: { childQuotes: true } },
-        },
-        orderBy: { amount: 'asc' },
-      },
-      // FIXED: Removed the duplicate `loadingReport: true` that was causing the Prisma validation error
-    } 
-  },
-  payments: {
-    include: {
-      ledgerEntries: true,
+      _count: { select: { childQuotes: true } },
     },
-  },
-  paymentObligations: {
-    include: {
-      payment: { select: { id: true, status: true, amount: true, method: true, reference: true } },
-      payer: { select: { id: true, name: true } },
-      beneficiary: { select: { id: true, name: true } },
-    },
-    orderBy: { createdAt: 'asc' },
-  },
-  events: {
-    orderBy: { createdAt: 'asc' },
-    take: 50,
-    include: { actor: { select: { id: true, name: true } } },
-  },
-  disputes: true,
-  ratings: true,
-  messages: { orderBy: { createdAt: 'asc' }, take: 50 },
-  // Recovery requests — the read model uses this to suppress a duplicate
-  // recovery action while one is already awaiting admin review.
-  recoveryRequests: {
-    where: { status: 'PENDING' },
-    orderBy: { requestedAt: 'desc' },
-    take: 1,
-    select: { id: true, type: true },
+    orderBy: { amount: 'asc' },
   },
 };
 
@@ -165,6 +80,86 @@ const orderListInclude = {
   },
   _count: {
     select: { events: true, disputes: true, messages: true },
+  },
+};
+
+// ============================================================================
+// HEAVY include for the Order Detail page (GET /:id)
+// ============================================================================
+const orderDetailInclude = {
+  listing: {
+    include: {
+      inspectionRequests: {
+        where: { status: { not: 'CANCELLED' } },
+        include: {
+          report: true,
+          inspector: { select: { id: true, name: true, phone: true } },
+          payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
+          quotes: {
+            where: { status: { not: 'REJECTED' } },
+            select: {
+              id: true, inspectorId: true, amount: true, status: true, message: true,
+              parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
+              inspector: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
+              _count: { select: { childQuotes: true } },
+            },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      },
+    },
+  },
+  inspectionRequests: {
+    where: { status: { not: 'CANCELLED' } },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      report: true,
+      inspector: { select: { id: true, name: true, phone: true } },
+      payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
+      quotes: {
+        where: { status: { not: 'REJECTED' } },
+        select: {
+          id: true, inspectorId: true, amount: true, status: true, message: true, parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
+          inspector: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
+          _count: { select: { childQuotes: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+  },
+  agreedOffer: true,
+  priceReviews: { include: { proposedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' } },
+  buyer: { select: userSelect },
+  seller: { select: userSelect },
+  transportJob: { include: { ...transportInclude, loadingReport: true } },
+  payments: {
+    include: {
+      ledgerEntries: true,
+    },
+  },
+  paymentObligations: {
+    include: {
+      payment: { select: { id: true, status: true, amount: true, method: true, reference: true } },
+      payer: { select: { id: true, name: true } },
+      beneficiary: { select: { id: true, name: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  },
+  events: {
+    orderBy: { createdAt: 'asc' },
+    take: 50,
+    include: { actor: { select: { id: true, name: true } } },
+  },
+  disputes: true,
+  ratings: true,
+  messages: { orderBy: { createdAt: 'asc' }, take: 50 },
+  // Recovery requests — the read model uses this to suppress a duplicate
+  // recovery action while one is already awaiting admin review.
+  recoveryRequests: {
+    where: { status: 'PENDING' },
+    orderBy: { requestedAt: 'desc' },
+    take: 1,
+    select: { id: true, type: true },
   },
 };
 
