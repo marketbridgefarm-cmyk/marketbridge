@@ -177,9 +177,6 @@ async function createPayment(data) {
               truckOwnerId: true,
               truckId: true,
               agreedAmount: true,
-              buyerLoadingConfirmedAt: true,
-              sellerPickupConfirmedAt: true,
-              truckArrivedAt: true,
             },
           });
 
@@ -204,22 +201,11 @@ async function createPayment(data) {
             );
           }
 
-          // Physical-arrival gates: the seller must have confirmed goods
-          // preparation and the truck must be on site. Loading and its buyer
-          // approval come AFTER payment, not before.
-          if (!job.sellerPickupConfirmedAt) {
-            throw Object.assign(
-              new Error('The seller must confirm loading preparation before transport payment can begin'),
-              { status: 409, code: 'SELLER_LOADING_PREPARATION_REQUIRED' }
-            );
-          }
-
-          if (!job.truckArrivedAt) {
-            throw Object.assign(
-              new Error('The truck must be physically on site before transport payment can begin'),
-              { status: 409, code: 'TRUCK_ARRIVAL_REQUIRED' }
-            );
-          }
+          // FIXED: The seller-prep and truck-arrival gates have been removed.
+          // The transport fee is now paid immediately after the accepted quote
+          // is confirmed, before coordination, before the driver arrives, and
+          // before the loading-prep report. Those physical steps come AFTER
+          // this payment in the revised flow.
 
           if (
             job.truckOwnerId !== quote.truckOwnerId ||
@@ -1638,8 +1624,12 @@ async function settlePaymentCore({
             data: { status: 'ACCEPTED' },
           });
 
-          // FIXED: Removed the transportQuote.updateMany block that was rejecting
-          // the waiting list. The waiting list should stay active until delivery.
+          // NOTE: The waiting list is intentionally preserved here. Other
+          // pending transporter quotes remain PENDING/WAITING so the buyer can
+          // fall back to one of them if the active transporter withdraws or
+          // fails. The waiting list is only released when the active
+          // transporter delivers (see the transport status route) or when the
+          // transport is cancelled.
 
           const order = await tx.order.findUnique({ where: { id: job.orderId }, select: { id: true, status: true } });
           if (order?.status === 'CONFIRMED') {
@@ -1668,8 +1658,10 @@ async function settlePaymentCore({
             data: { status: 'ACCEPTED' },
           });
 
-          // FIXED: Removed the inspectionQuote.updateMany block that was rejecting
-          // the waiting list. The waiting list should stay active until the report is submitted.
+          // NOTE: The inspection waiting list is intentionally preserved here
+          // too. Other pending inspector quotes remain PENDING/WAITING so the
+          // buyer can fall back to one of them if the active inspector fails
+          // before submitting the report.
         }
 
         // --------------------------------------------------------------------
@@ -1890,7 +1882,7 @@ async function replayDisputedPaidPayment(tx, paymentId) {
           data: { status: 'ACCEPTED' },
         });
         
-        // FIXED: Removed the transportQuote.updateMany block here as well
+        // Waiting list is preserved here too — see the note in settlePaymentCore.
 
         const order = await tx.order.findUnique({ where: { id: job.orderId }, select: { id: true, status: true } });
         if (order?.status === 'CONFIRMED') {
@@ -1920,8 +1912,7 @@ async function replayDisputedPaidPayment(tx, paymentId) {
         where: { id: request.id },
         data: { status: 'ACCEPTED' },
       });
-      
-      // FIXED: Removed the inspectionQuote.updateMany block here as well
+      // Waiting list is preserved here too.
     }
     await payoutService.createPayoutHold(tx, {
       orderId: payment.inspectionRequest.orderId,
