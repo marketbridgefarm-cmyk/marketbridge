@@ -105,7 +105,7 @@ const orderDetailInclude = {
         },
         orderBy: { amount: 'asc' },
       },
-      loadingReport: true 
+      // FIXED: Removed the duplicate `loadingReport: true` that was causing the Prisma validation error
     } 
   },
   payments: {
