@@ -38,15 +38,34 @@ async function syncOrderPaymentObligations(tx, orderId) {
     });
   }
 
-  const desired = [{
-    obligationKey: `ORDER:${order.id}:MARKETPLACE`,
-    type: 'MARKETPLACE',
-    payerId: order.buyerId,
-    beneficiaryId: order.sellerId,
-    amount: order.finalPrice,
-    inspectionRequestId: null,
-    transportJobId: null,
-  }];
+  // FIXED: The MARKETPLACE (goods) obligation only becomes live once the
+  // transporter's loading-preparation report has been approved by the buyer.
+  // This is the moment the buyer has seen physical proof of what is loaded
+  // and can safely release the goods payment.
+  //
+  // For hire-transport orders, the unlock is `buyerLoadingConfirmedAt`.
+  // For own-truck arrangements (no loading report exists), fall back to the
+  // seller's pickup readiness confirmation, which is the equivalent physical
+  // checkpoint in that flow.
+  const goodsPaymentUnlocked = order.transportJob
+    ? (order.transportJob.method === 'HIRE_TRANSPORTER'
+        ? Boolean(order.transportJob.buyerLoadingConfirmedAt)
+        : Boolean(order.transportJob.sellerPickupConfirmedAt))
+    : false;
+
+  const desired = [];
+
+  if (goodsPaymentUnlocked) {
+    desired.push({
+      obligationKey: `ORDER:${order.id}:MARKETPLACE`,
+      type: 'MARKETPLACE',
+      payerId: order.buyerId,
+      beneficiaryId: order.sellerId,
+      amount: order.finalPrice,
+      inspectionRequestId: null,
+      transportJobId: null,
+    });
+  }
 
   for (const r of order.inspectionRequests || []) {
     // The inspection fee is not a live payment obligation until the seller
@@ -153,6 +172,22 @@ async function syncOrderPaymentObligations(tx, orderId) {
   // the obligation keys) or when an inspection request is cancelled: without
   // this the stale full-amount obligation stays OPEN next to the new ones and
   // the payer could be charged twice. PAID obligations are never touched.
+  //
+  // FIXED: Also retire the MARKETPLACE obligation if goods payment has not
+  // yet been unlocked. This ensures a stale MARKETPLACE obligation created by
+  // an earlier sync cannot survive once the unlock condition is no longer met.
+  if (!goodsPaymentUnlocked) {
+    await tx.paymentObligation.updateMany({
+      where: {
+        orderId: order.id,
+        type: 'MARKETPLACE',
+        status: 'OPEN',
+        obligationKey: `ORDER:${order.id}:MARKETPLACE`,
+      },
+      data: { status: 'CANCELLED' },
+    });
+  }
+
   await tx.paymentObligation.updateMany({
     where: {
       orderId: order.id,
