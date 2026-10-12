@@ -242,10 +242,32 @@ router.post(
   // FIXED: Any authenticated user can register a truck. Buyers and sellers
   // who want to use their own vehicle must register it on the platform first.
   [
-    body('registration').isString().trim().notEmpty(),
-    body('truckType').isString().trim().notEmpty(),
-    body('capacity').isFloat({ gt: 0 }),
-    body('operatingArea').optional().isString().trim(),
+    // FIXED: Strict registration format + contact-info leak guard.
+    // Blocks phone numbers (pure 7+ digit strings), emails, URLs, etc.
+    body('registration')
+      .isString().trim().notEmpty()
+      .isLength({ min: 3, max: 15 })
+      .matches(/^[A-Za-z0-9\-\s]+$/)
+      .custom((v) => {
+        if (/^\d{7,}$/.test(String(v).replace(/\s/g, ''))) {
+          throw new Error('Registration cannot be a pure digit sequence');
+        }
+        return true;
+      })
+      .custom(noContactInfo),
+    // FIXED: Contact-info leak guard. Dropdown on the frontend keeps the
+    // value in a small closed set; this guard catches direct API calls.
+    body('truckType')
+      .isString().trim().notEmpty()
+      .isLength({ min: 2, max: 40 })
+      .custom(noContactInfo),
+    body('capacity').isFloat({ gt: 0, lt: 200 }),
+    // FIXED: Contact-info leak guard for free-form area text.
+    body('operatingArea')
+      .optional({ nullable: true })
+      .isString().trim()
+      .isLength({ max: 120 })
+      .custom(noContactInfo),
   ],
   validate,
   async (req, res) => {
