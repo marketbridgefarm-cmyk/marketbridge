@@ -449,7 +449,6 @@ function OrderProgress({ steps }) {
   );
 }
 
-// FIXED: Added inspectionApplies to the destructured props to prevent ReferenceError
 function OverviewCard({ order, title, flags, canCancel, busy, onCancel, inspectionApplies }) {
   const { isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob } = flags;
   const role = isBuyer ? 'Buying' : isSeller ? 'Selling' : 'Order';
@@ -2206,7 +2205,7 @@ export default function OrderDetail() {
         ? 'Request and complete the inspection before paying for the goods.'
         : 'Complete the current inspection and make sure its report is published before paying for the goods.'
       : decisionRequired && !decisionGateMet
-      ? `Choose BUY after reviewing the ${isAgricultural ? 'agricultural ' : ''}inspection report before paying for the goods.`
+      ? `Confirm the price through the price review after reviewing the ${isAgricultural ? 'agricultural ' : ''}inspection report before paying for the goods.`
       : null;
 
   const canStartTransportPayment =
@@ -2518,6 +2517,9 @@ export default function OrderDetail() {
     },
   };
 
+  // FIXED: decide() is kept for backward compatibility but is no longer
+  // used directly by the inspection decision buttons. The buyer now goes
+  // through the price review flow to formally confirm the price.
   const decide = async (decision) => {
     if (!order || !isBuyer || !decisionRequired) return false;
     if (decision === 'BUY' && !(currentInspection?.report && currentInspection.status === 'COMPLETED')) {
@@ -2673,8 +2675,36 @@ export default function OrderDetail() {
       )
     ),
 
-    onBuy: () => decide('BUY'),
-    onCancel: () => decide('CANCEL'),
+    // FIXED: "Buy at X ETB" no longer directly decides — it now creates a
+    // formal price proposal at the current price. The seller must Accept it
+    // before payment unlocks. This forces bilateral price confirmation
+    // after the inspection report.
+    onBuy: () => run(
+      'price-review-create',
+      () => api.post(`/orders/${order.id}/price-reviews`, {
+        proposedPrice: Number(order.finalPrice),
+        reasonCode: 'OTHER_INSPECTION_FINDING',
+      }),
+      'Could not confirm the price'
+    ),
+
+    // FIXED: "Cancel after inspection" is now a cancellation REQUEST.
+    // The seller has 24h to accept the cancellation or counter with a
+    // reduced price to keep the deal alive.
+    onCancel: async () => {
+      const confirmed = window.confirm(
+        'Request cancellation? The seller will have 24 hours to either accept your request or offer a reduced price to keep the deal alive.'
+      );
+      if (!confirmed) return false;
+      return run(
+        'price-review-create',
+        () => api.post(`/orders/${order.id}/price-reviews`, {
+          reasonCode: 'BUYER_WANTS_CANCELLATION',
+        }),
+        'Could not request cancellation'
+      );
+    },
+
     onProposePrice: (proposedPrice, reasonCode) =>
       run(
         'price-review-create',
@@ -2898,7 +2928,6 @@ export default function OrderDetail() {
 
         <div className="od-page-grid">
           <div className="od-span-all">
-            {/* FIXED: Passed inspectionApplies to OverviewCard to prevent ReferenceError */}
             <OverviewCard
               order={order}
               title={title}
