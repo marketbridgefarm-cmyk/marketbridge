@@ -620,10 +620,15 @@ export default function InspectorDashboard() {
                       myLeaf &&
                       !isInspectionQuoteExpired(myLeaf) &&
                       ['PENDING', 'SELECTED', 'COUNTERED'].includes(myLeaf.status);
+                    // FIXED: Treat a missing counteredBy as REQUESTER so older
+                    // rows or a backend that hasn't yet populated the field
+                    // still give the inspector the Accept/Counter/Reject
+                    // buttons. The backend enforces the turn server-side, so a
+                    // wrong click will be rejected with a clear message.
                     const isMyTurn =
                       hasActiveThread &&
                       myLeaf.status === 'COUNTERED' &&
-                      myLeaf.counteredBy === 'REQUESTER';
+                      myLeaf.counteredBy !== 'PROVIDER';
                     const justQuoted = quotedRequestIds.has(r.id) && !myLeaf;
                     const canQuote = !hasActiveThread && !justQuoted;
                     const responding = myLeaf && respondingQuoteId === myLeaf.id;
@@ -720,6 +725,55 @@ export default function InspectorDashboard() {
                                       }
                                       ariaLabel="Your counter in ETB"
                                     />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* FIXED: Show the full negotiation thread so the inspector can see
+                                  every step: their original quote, the requester's counter, their
+                                  counter, etc. Only own-quotes are visible here (the backend
+                                  filters by inspectorId), so no other bidders are ever exposed. */}
+                              {Array.isArray(r.quotes) && r.quotes.length > 0 && (
+                                <div className="sd-card-block">
+                                  <div className="sd-card-block-title">
+                                    <h4>Negotiation history</h4>
+                                  </div>
+                                  <div className="sd-card-block-body">
+                                    <ol className="sd-negotiation-history">
+                                      {[...r.quotes]
+                                        .sort(
+                                          (a, b) =>
+                                            new Date(a.createdAt || 0).getTime() -
+                                            new Date(b.createdAt || 0).getTime()
+                                        )
+                                        .map((q) => {
+                                          const amount = q.status === 'COUNTERED'
+                                            ? (q.counterAmount ?? q.amount)
+                                            : q.amount;
+                                          const label =
+                                            q.status === 'PENDING' ? 'Your quote'
+                                            : q.status === 'COUNTERED'
+                                              ? (q.counteredBy === 'REQUESTER' ? 'Requester countered' : 'You countered')
+                                            : q.status === 'ACCEPTED' ? 'Accepted'
+                                            : q.status === 'REJECTED' ? 'Rejected'
+                                            : q.status === 'WITHDRAWN' ? 'Withdrawn'
+                                            : q.status;
+                                          return (
+                                            <li key={q.id} className="sd-negotiation-history-item">
+                                              <span className="sd-negotiation-history-label">{label}</span>
+                                              <span className="sd-negotiation-history-amount">
+                                                {fmtMoney(amount)} ETB
+                                              </span>
+                                              <span className="sd-negotiation-history-time">
+                                                {new Date(q.createdAt).toLocaleString()}
+                                              </span>
+                                              {q.message && (
+                                                <span className="sd-negotiation-history-message">{q.message}</span>
+                                              )}
+                                            </li>
+                                          );
+                                        })}
+                                    </ol>
                                   </div>
                                 </div>
                               )}
