@@ -96,8 +96,7 @@ const orderDetailInclude = {
           inspector: { select: { id: true, name: true, phone: true } },
           payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
           quotes: {
-            // FIXED: Explicitly include WAITING status so the waiting list survives payment
-            where: { status: { in: ['PENDING', 'WAITING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } },
+            where: { status: { not: 'REJECTED' } },
             select: {
               id: true, inspectorId: true, amount: true, status: true, message: true,
               parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
@@ -118,8 +117,7 @@ const orderDetailInclude = {
       inspector: { select: { id: true, name: true, phone: true } },
       payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
       quotes: {
-        // FIXED: Explicitly include WAITING status so the waiting list survives payment
-        where: { status: { in: ['PENDING', 'WAITING', 'SELECTED', 'COUNTERED', 'ACCEPTED'] } },
+        where: { status: { not: 'REJECTED' } },
         select: {
           id: true, inspectorId: true, amount: true, status: true, message: true, parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
           inspector: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
