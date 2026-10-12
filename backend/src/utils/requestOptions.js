@@ -6,9 +6,39 @@
 const QUANTITY_VALUES = [50, 100, 250, 500, 1000, 2500, 5000, 10000];
 const QUANTITY_UNITS = ['kg', 'tons', 'quintals', 'units', 'crates', 'bags'];
 
-const WEIGHT_OPTIONS = ['100 kg', '250 kg', '500 kg', '1000 kg', '2 tons', '5 tons', '10 tons', '20 tons'];
-const PACKAGE_COUNTS = [1, 5, 10, 20, 50, 100, 200, 500];
-const CAPACITY_TONS = [1, 2, 3, 5, 8, 10, 15, 20];
+// FIXED: Sequential series instead of geometric jumps.
+// Small loads get fine granularity; bulk loads step in practical truck sizes.
+const WEIGHT_OPTIONS = [
+  '500 kg',
+  '1 ton',
+  '2 tons',
+  '3 tons',
+  '4 tons',
+  '5 tons',
+  '6 tons',
+  '7 tons',
+  '8 tons',
+  '10 tons',
+  '12 tons',
+  '15 tons',
+  '20 tons',
+];
+
+// FIXED: Sequential 1–10, then practical lot sizes.
+const PACKAGE_COUNTS = [
+  1, 2, 3, 4, 5,
+  6, 7, 8, 9, 10,
+  12, 15, 20, 25, 30,
+  40, 50, 75, 100,
+];
+
+// FIXED: Sequential 1–10, then common truck capacities.
+// TransportSetup.jsx renders each as "{t} t or more".
+const CAPACITY_TONS = [
+  1, 2, 3, 4, 5,
+  6, 7, 8, 9, 10,
+  12, 15, 20,
+];
 
 const ACCESS_NOTES = [
   'Loading dock available',
