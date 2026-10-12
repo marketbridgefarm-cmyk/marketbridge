@@ -8,12 +8,6 @@ import './OrderTimeline.css';
 // Steps that don't apply to an order are absent from the array.
 // Dots are inline SVG (checkmark / pulsing circle / empty ring) so state is
 // not conveyed by color alone (WCAG 1.4.1). SVGs use currentColor.
-//
-// The extended milestone flow now includes:
-//   ORDERED → INSPECTED → DECIDED → TRANSPORT → LOADED → PAID → DELIVERED
-//   → COMPLETED
-// The backend sends both `code` and `label`, but friendly fallbacks are
-// provided here so a bare code still renders a human label.
 // ============================================================================
 
 const formatDate = (value) => {
@@ -100,10 +94,7 @@ function DotRecorded() {
 // Even index → left of the line, odd → right.
 const sideClass = (index) => (index % 2 === 0 ? 'is-left' : 'is-right');
 
-// FIXED: Accept both `completed` and `done` on a milestone step. Different
-// parts of the codebase use one or the other; treating them as synonyms
-// prevents a milestone from appearing "pending" simply because the workflow
-// service used the other key name.
+// FIXED: Accept both `completed` and `done` on a milestone step.
 const isStepDone = (step) =>
   Boolean(step.completed) || Boolean(step.done);
 
@@ -122,10 +113,6 @@ export default function OrderTimeline({ steps, events = [] }) {
     -1
   );
 
-  // FIXED: If the backend explicitly marks a step as CURRENT, honor it.
-  // Otherwise, the first not-done step after the last completed one is the
-  // current step. This preserves the existing behavior while supporting
-  // the extended milestone set.
   const explicitCurrentIndex = milestoneSteps.findIndex(
     (step) => String(step.state || '').toUpperCase() === 'CURRENT'
   );
