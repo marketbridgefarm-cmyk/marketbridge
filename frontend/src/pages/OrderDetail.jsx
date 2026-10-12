@@ -449,14 +449,14 @@ function OrderProgress({ steps }) {
   );
 }
 
-function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
+// FIXED: Added inspectionApplies to the destructured props to prevent ReferenceError
+function OverviewCard({ order, title, flags, canCancel, busy, onCancel, inspectionApplies }) {
   const { isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob } = flags;
   const role = isBuyer ? 'Buying' : isSeller ? 'Selling' : 'Order';
   const showBuyer = isSeller;
   const other = showBuyer ? order.buyer : order.seller;
   const delivered = ['DELIVERED', 'COMPLETED'].includes(order.status) || transportJob?.status === 'DELIVERED';
 
-  // FIXED: Added 'Inspected' and 'Decided' steps to accurately reflect the workflow
   const inspectionDone = order.inspectionRequests?.some(r => r.status === 'COMPLETED' && r.report) || false;
   const decisionDone = order.buyerDecision === 'BUY';
 
@@ -726,7 +726,6 @@ function InspectionCard({ order, title, i }) {
   }
 
   const report = request.report;
-  // FIXED: Show findings if report exists, even if the request is cancelled
   const reportReady = Boolean(report);
   const leafList = leafQuotes(request.quotes);
   const pendingLeafCount = leafList.filter((q) => ['PENDING', 'WAITING'].includes(q.status)).length;
@@ -2087,7 +2086,6 @@ export default function OrderDetail() {
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [order?.inspectionRequests, order?.listing?.inspectionRequests]
   );
-  // FIXED: Use all inspections including cancelled so history/payments are visible
   const inspections = allInspections;
   const currentInspection = inspections[0] || null;
   const assignedInspection = inspections.find((r) => r.inspectorId === currentUserId) || null;
@@ -2900,6 +2898,7 @@ export default function OrderDetail() {
 
         <div className="od-page-grid">
           <div className="od-span-all">
+            {/* FIXED: Passed inspectionApplies to OverviewCard to prevent ReferenceError */}
             <OverviewCard
               order={order}
               title={title}
@@ -2907,6 +2906,7 @@ export default function OrderDetail() {
               canCancel={canCancelOrder}
               busy={busy}
               onCancel={cancelOrder}
+              inspectionApplies={inspectionApplies}
             />
           </div>
 
